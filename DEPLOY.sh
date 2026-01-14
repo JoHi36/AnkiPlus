@@ -78,3 +78,4 @@ echo "  2. Gehe zu Extras > Add-ons > Installiere aus Datei"
 echo "  3. Wähle: $PACKAGE_NAME"
 echo ""
 
+

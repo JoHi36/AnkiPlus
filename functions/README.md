@@ -205,3 +205,4 @@ functions/
 - Quota system will be fully implemented in Prompt 4
 - Token refresh endpoint needs to be completed in Prompt 3 (Landingpage Integration)
 
+

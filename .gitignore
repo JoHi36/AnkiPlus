@@ -33,6 +33,7 @@ node_modules/
 
 # Build outputs
 frontend/dist/
+Landingpage/dist/
 web/assets/
 web/*.html.bak
 

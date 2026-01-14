@@ -138,3 +138,4 @@ ls -la "$FIREBASE_SERVICE_ACCOUNT_KEY_PATH"
 - [Firebase Dokumentation](https://firebase.google.com/docs)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
 
+
