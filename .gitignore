@@ -1,0 +1,49 @@
+# Firebase Service Account (sensitive credentials)
+firebase-service-account.json
+*service-account*.json
+*firebase*key*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Anki Addon builds
+*.ankiaddon
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+debug.log
+
+# Node modules
+node_modules/
+
+# Build outputs
+frontend/dist/
+web/assets/
+web/*.html.bak
+
+# Sensitive data
+sessions.json
+config.json
+
+# Temporary files
+.tmp.driveupload/
+*.tmp
+
+# Environment files
+.env
+.env.local
