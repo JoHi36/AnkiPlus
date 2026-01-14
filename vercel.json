@@ -1,8 +1,0 @@
-{
-  "buildCommand": "cd Landingpage && npm install && npm run build",
-  "outputDirectory": "Landingpage/dist",
-  "installCommand": "cd Landingpage && npm install",
-  "framework": "vite",
-  "rootDirectory": "Landingpage"
-}
-
