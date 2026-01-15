@@ -7,6 +7,12 @@ export interface UserDocument {
   tier: 'free' | 'tier1' | 'tier2';
   createdAt: Timestamp;
   email?: string;
+  // Stripe fields
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  subscriptionStatus?: 'active' | 'canceled' | 'past_due' | 'trialing' | 'incomplete';
+  subscriptionCurrentPeriodEnd?: Timestamp;
+  subscriptionCancelAtPeriodEnd?: boolean;
 }
 
 export interface DailyUsageDocument {

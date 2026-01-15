@@ -1194,12 +1194,13 @@ class WebBridge(QObject):
             
             print(f"authenticate: Token erhalten (Länge: {len(token)})")
             
-            # Speichere Token in Config
+            # Speichere Token in Config (noch nicht validiert)
             update_config(
                 auth_token=token.strip(),
                 refresh_token=refresh_token.strip() if refresh_token else "",
                 backend_url=DEFAULT_BACKEND_URL,
-                backend_mode=True
+                backend_mode=True,
+                auth_validated=False  # Wird auf True gesetzt, wenn Validierung erfolgreich
             )
             
             # Validiere Token durch Backend-Call (optional - kann auch später validiert werden)
@@ -1216,6 +1217,8 @@ class WebBridge(QObject):
                 
                 if response.status_code == 200:
                     print("✅ authenticate: Token erfolgreich validiert")
+                    # Markiere Token als validiert
+                    update_config(auth_validated=True)
                     # Benachrichtige Frontend
                     if self.widget and self.widget.web_view:
                         payload = {"type": "auth_success", "message": "Authentifizierung erfolgreich"}
@@ -1224,6 +1227,8 @@ class WebBridge(QObject):
                 elif response.status_code == 401:
                     error_msg = "Ungültiger Token - bitte prüfe deinen Token"
                     print(f"❌ authenticate: {error_msg}")
+                    # Markiere Token als nicht validiert
+                    update_config(auth_validated=False)
                     if self.widget and self.widget.web_view:
                         payload = {"type": "auth_error", "message": error_msg}
                         self.widget.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
@@ -1259,9 +1264,11 @@ class WebBridge(QObject):
             auth_token = config.get('auth_token', '').strip()
             backend_url = config.get('backend_url', '').strip() or DEFAULT_BACKEND_URL
             backend_mode = is_backend_mode()
+            auth_validated = config.get('auth_validated', False)  # Wurde Token validiert?
             
+            # Nur als authentifiziert markieren, wenn Token vorhanden UND validiert
             status = {
-                "authenticated": bool(auth_token),
+                "authenticated": bool(auth_token) and auth_validated,
                 "hasToken": bool(auth_token),
                 "backendUrl": backend_url,
                 "backendMode": backend_mode

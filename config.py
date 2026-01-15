@@ -15,6 +15,7 @@ DEFAULT_CONFIG = {
     "auth_token": "",  # Firebase Auth ID Token
     "refresh_token": "",  # Firebase Refresh Token
     "backend_url": "",  # Backend URL (Standard: Firebase Function URL)
+    "auth_validated": False,  # Wurde der Token erfolgreich validiert?
     "response_style": "balanced",  # balanced, concise, detailed, friendly
     "theme": "auto",  # auto, dark, light
     "ai_tools": {

@@ -5,6 +5,12 @@ export interface UserDocument {
   tier: 'free' | 'tier1' | 'tier2';
   createdAt: any; // Firestore Timestamp
   email: string | null;
+  // Stripe fields
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  subscriptionStatus?: 'active' | 'canceled' | 'past_due' | 'trialing' | 'incomplete';
+  subscriptionCurrentPeriodEnd?: any; // Firestore Timestamp
+  subscriptionCancelAtPeriodEnd?: boolean;
 }
 
 /**

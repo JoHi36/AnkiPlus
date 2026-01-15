@@ -9,16 +9,42 @@ import {
   Check, 
   FileText, 
   Sparkles,
-  AlertCircle
+  AlertCircle,
+  Settings,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@shared/components/Button';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { CheckoutButton } from '../components/CheckoutButton';
+import { useEffect, useState } from 'react';
 
 export function SubscriptionPage() {
-  const { user } = useAuth();
+  const { user, getIdToken } = useAuth();
   const [userDoc, setUserDoc] = useState<UserDocument | null>(null);
   const [loading, setLoading] = useState(true);
+  const [portalLoading, setPortalLoading] = useState(false);
   const { quota } = useQuota();
+  const [searchParams] = useSearchParams();
+  
+  // Handle success/cancel from Stripe Checkout
+  useEffect(() => {
+    const success = searchParams.get('success');
+    const canceled = searchParams.get('canceled');
+    
+    if (success) {
+      // Reload user document to get updated subscription
+      if (user) {
+        getUserDocument(user.uid).then((doc) => {
+          setUserDoc(doc);
+        });
+      }
+    }
+    
+    if (canceled) {
+      // User canceled checkout - could show a message
+      console.log('Checkout canceled');
+    }
+  }, [searchParams, user]);
 
   useEffect(() => {
     if (user) {
@@ -200,18 +226,70 @@ export function SubscriptionPage() {
           transition={{ delay: 0.3 }}
           className="flex flex-col sm:flex-row gap-4"
         >
-          {userDoc?.tier !== 'tier2' && (
-            <Button variant="primary" size="lg" asChild className="flex-1">
-              <Link to="/#pricing">Plan upgraden</Link>
+          {userDoc?.tier === 'free' && (
+            <div className="flex flex-col sm:flex-row gap-4 flex-1">
+              <CheckoutButton tier="tier1" className="flex-1" />
+              <CheckoutButton tier="tier2" className="flex-1" variant="secondary" />
+            </div>
+          )}
+          {userDoc?.tier === 'tier1' && (
+            <CheckoutButton tier="tier2" className="flex-1" />
+          )}
+          {userDoc?.tier !== 'free' && userDoc?.stripeCustomerId && (
+            <Button 
+              variant="outline" 
+              size="lg" 
+              className="flex-1"
+              onClick={async () => {
+                setPortalLoading(true);
+                try {
+                  const token = await getIdToken();
+                  if (!token) {
+                    throw new Error('Authentication token not available');
+                  }
+                  
+                  const apiUrl = import.meta.env.VITE_API_URL || 'https://europe-west1-ankiplus-b0ffb.cloudfunctions.net/api';
+                  const response = await fetch(`${apiUrl}/api/stripe/create-portal-session`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${token}`,
+                    },
+                  });
+                  
+                  if (!response.ok) {
+                    throw new Error('Failed to create portal session');
+                  }
+                  
+                  const data = await response.json();
+                  if (data.url) {
+                    window.location.href = data.url;
+                  }
+                } catch (error: any) {
+                  console.error('Portal error:', error);
+                  alert('Fehler beim Öffnen des Abo-Managements. Bitte versuche es erneut.');
+                } finally {
+                  setPortalLoading(false);
+                }
+              }}
+              disabled={portalLoading}
+            >
+              {portalLoading ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  Lädt...
+                </>
+              ) : (
+                <>
+                  <Settings className="w-5 h-5 mr-2" />
+                  Abo verwalten
+                </>
+              )}
             </Button>
           )}
-          <Button variant="outline" size="lg" className="flex-1">
-            <FileText className="w-5 h-5 mr-2" />
-            Rechnung herunterladen
-          </Button>
-          {userDoc?.tier !== 'free' && (
-            <Button variant="ghost" size="lg" className="flex-1 text-red-400 hover:text-red-300">
-              Abo kündigen
+          {userDoc?.tier === 'free' && (
+            <Button variant="outline" size="lg" asChild className="flex-1">
+              <Link to="/#pricing">Alle Pläne ansehen</Link>
             </Button>
           )}
         </motion.div>
@@ -226,42 +304,60 @@ export function SubscriptionPage() {
           >
             <div className="flex items-start gap-4">
               <Sparkles className="w-6 h-6 text-teal-400 flex-shrink-0 mt-1" />
-              <div>
+              <div className="flex-1">
                 <h3 className="text-lg font-bold text-white mb-2">
                   {userDoc?.tier === 'free' ? 'Upgrade auf Student' : 'Upgrade auf Exam Pro'}
                 </h3>
                 <p className="text-neutral-400 text-sm mb-4">
                   {userDoc?.tier === 'free' 
-                    ? 'Erhalte 30x Deep Mode pro Tag, priorisierte Generierung und mehr für nur 4,99€/Monat.'
-                    : 'Erhalte unbegrenzten Deep Mode, Deep Search mit 25 Quellen und 24/7 Support für 14,99€/Monat.'}
+                    ? 'Erhalte 30x Deep Mode pro Tag, priorisierte Generierung und mehr für nur 5€/Monat.'
+                    : 'Erhalte unbegrenzten Deep Mode, Deep Search mit 25 Quellen und 24/7 Support für 15€/Monat.'}
                 </p>
-                <Button variant="secondary" size="sm" asChild>
-                  <Link to="/#pricing">Jetzt upgraden</Link>
-                </Button>
+                {userDoc?.tier === 'free' ? (
+                  <div className="flex gap-3">
+                    <CheckoutButton tier="tier1" size="sm" variant="secondary" />
+                    <CheckoutButton tier="tier2" size="sm" variant="outline" />
+                  </div>
+                ) : (
+                  <CheckoutButton tier="tier2" size="sm" variant="secondary" />
+                )}
               </div>
             </div>
           </motion.div>
         )}
 
-        {/* Cancellation Warning */}
-        {userDoc?.tier !== 'free' && (
+        {/* Subscription Status Info */}
+        {userDoc?.tier !== 'free' && userDoc?.subscriptionStatus && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
-            className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-6"
+            className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-6"
           >
             <div className="flex items-start gap-4">
-              <AlertCircle className="w-6 h-6 text-yellow-400 flex-shrink-0 mt-1" />
-              <div>
-                <h3 className="text-lg font-bold text-white mb-2">Abo kündigen</h3>
-                <p className="text-neutral-400 text-sm mb-4">
-                  Wenn du dein Abo kündigst, behältst du Zugriff bis zum Ende des bezahlten Zeitraums. 
-                  Danach wechselst du automatisch auf den Starter-Plan.
+              <CreditCard className="w-6 h-6 text-blue-400 flex-shrink-0 mt-1" />
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-white mb-2">Abo-Status</h3>
+                <p className="text-neutral-400 text-sm mb-2">
+                  Status: <span className="text-white font-medium capitalize">{userDoc.subscriptionStatus}</span>
                 </p>
-                <Button variant="ghost" size="sm" className="text-red-400 hover:text-red-300">
-                  Abo kündigen
-                </Button>
+                {userDoc.subscriptionCurrentPeriodEnd && (
+                  <p className="text-neutral-400 text-sm mb-4">
+                    Nächste Abrechnung: {new Date(userDoc.subscriptionCurrentPeriodEnd.toDate()).toLocaleDateString('de-DE', { 
+                      day: 'numeric', 
+                      month: 'long', 
+                      year: 'numeric' 
+                    })}
+                  </p>
+                )}
+                {userDoc.subscriptionCancelAtPeriodEnd && (
+                  <p className="text-yellow-400 text-sm mb-4">
+                    ⚠️ Dein Abo wird am Ende der aktuellen Periode gekündigt.
+                  </p>
+                )}
+                <p className="text-neutral-400 text-xs">
+                  Verwende "Abo verwalten" um dein Abonnement zu ändern, zu kündigen oder Rechnungen herunterzuladen.
+                </p>
               </div>
             </div>
           </motion.div>

@@ -8,6 +8,8 @@ import { authHandler } from './handlers/auth';
 import { modelsHandler } from './handlers/models';
 import { quotaHandler } from './handlers/quota';
 import { usageHistoryHandler } from './handlers/usageHistory';
+import { createCheckoutSessionHandler, createPortalSessionHandler } from './handlers/stripe';
+import { stripeWebhookHandler } from './handlers/stripeWebhook';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -51,7 +53,10 @@ app.use(
   })
 );
 
-// Parse JSON bodies
+// Stripe Webhook Route - MUST be before express.json() because it needs raw body
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), stripeWebhookHandler);
+
+// Parse JSON bodies (for all other routes)
 app.use(express.json());
 
 // Health check endpoint
@@ -65,6 +70,10 @@ app.post('/api/auth/refresh', authHandler);
 app.get('/api/models', modelsHandler);
 app.get('/api/user/quota', validateToken, quotaHandler);
 app.get('/api/user/usage-history', validateToken, usageHistoryHandler);
+
+// Stripe routes
+app.post('/api/stripe/create-checkout-session', validateToken, createCheckoutSessionHandler);
+app.post('/api/stripe/create-portal-session', validateToken, createPortalSessionHandler);
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
