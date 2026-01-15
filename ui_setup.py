@@ -78,12 +78,20 @@ def toggle_chatbot():
         _chatbot_widget = chatbot_widget  # Global speichern für Hooks
         _chatbot_dock.setWidget(chatbot_widget)
         
-        # Starte Auth-Server für Handshake mit Landingpage
+        # Starte/aktualisiere Auth-Server für Handshake mit Landingpage
+        # (Server könnte bereits gestartet sein, dann aktualisieren wir nur die Bridge)
         try:
             auth_server = get_auth_server()
-            auth_server.start(chatbot_widget.bridge, chatbot_widget)
+            if not auth_server.running:
+                # Server noch nicht gestartet - starte jetzt
+                auth_server.start(chatbot_widget.bridge, chatbot_widget)
+            else:
+                # Server läuft bereits - aktualisiere nur die Bridge-Referenz
+                from auth_server import set_bridge_instance
+                set_bridge_instance(chatbot_widget.bridge, chatbot_widget)
+                print("✅ Auth-Server Bridge aktualisiert")
         except Exception as e:
-            print(f"⚠️ Fehler beim Starten des Auth-Servers: {e}")
+            print(f"⚠️ Fehler beim Starten/Aktualisieren des Auth-Servers: {e}")
             import traceback
             traceback.print_exc()
         

@@ -14,6 +14,12 @@ try:
 except ImportError:
     from ui_setup import setup_ui, setup_menu, get_chatbot_widget
 
+# Auth-Server Import
+try:
+    from .auth_server import get_auth_server
+except ImportError:
+    from auth_server import get_auth_server
+
 def init_addon():
     """Initialisiert das Addon nach dem Laden des Profils"""
     if mw is None:
@@ -23,6 +29,26 @@ def init_addon():
         mw.addonManager.setWebExports(__name__, r"(web|icons)/.*")
         setup_ui()
         setup_menu()
+        
+        # Starte Auth-Server sofort (auch wenn Panel noch nicht geöffnet ist)
+        # Der Server kann ohne Bridge starten und wird später verbunden
+        try:
+            auth_server = get_auth_server()
+            if not auth_server.running:
+                # Starte Server ohne Bridge (wird später gesetzt)
+                # Erstelle eine Dummy-Bridge für den Start
+                class DummyBridge:
+                    pass
+                dummy_bridge = DummyBridge()
+                dummy_widget = None
+                
+                # Starte Server
+                auth_server.start(dummy_bridge, dummy_widget)
+                print("✅ Auth-Server gestartet (Bridge wird später verbunden)")
+        except Exception as e:
+            print(f"⚠️ Fehler beim Starten des Auth-Servers in init_addon: {e}")
+            import traceback
+            traceback.print_exc()
     except Exception as e:
         from aqt.utils import showInfo
         showInfo(f"Fehler beim Laden des Chatbot-Addons: {str(e)}")

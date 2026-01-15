@@ -63,7 +63,7 @@ class AuthRequestHandler(BaseHTTPRequestHandler):
                     return
                 
                 # Call authenticate on bridge
-                if _bridge_instance:
+                if _bridge_instance and hasattr(_bridge_instance, 'authenticate'):
                     print(f"🔐 Auth-Server: Empfange Token (Länge: {len(token)})")
                     result = _bridge_instance.authenticate(token, refresh_token)
                     result_data = json.loads(result)
@@ -91,7 +91,9 @@ class AuthRequestHandler(BaseHTTPRequestHandler):
                         print(f"❌ Auth-Server: Authentifizierung fehlgeschlagen: {error_msg}")
                         self._send_error(401, error_msg)
                 else:
-                    self._send_error(503, 'Auth server not initialized')
+                    error_msg = 'Plugin-Bridge nicht initialisiert. Bitte öffne das Chatbot-Panel in Anki (Cmd+I / Ctrl+I).'
+                    print(f"❌ Auth-Server: {error_msg}")
+                    self._send_error(503, error_msg)
                     
             except Exception as e:
                 import traceback
@@ -151,11 +153,13 @@ class AuthServer:
     def start(self, bridge, widget):
         """Startet den Auth-Server in einem separaten Thread"""
         if self.running:
-            print("⚠️ Auth-Server läuft bereits")
+            print("⚠️ Auth-Server läuft bereits - aktualisiere Bridge-Referenz")
+            # Aktualisiere Bridge auch wenn Server bereits läuft
+            set_bridge_instance(bridge, widget)
             return
         
         try:
-            # Set bridge instance
+            # Set bridge instance (kann auch None/Dummy sein beim ersten Start)
             set_bridge_instance(bridge, widget)
             
             # Create server
@@ -172,10 +176,14 @@ class AuthServer:
             
             print(f"✅ Auth-Server gestartet auf http://{self.host}:{self.port}")
             print(f"   Endpoint: http://{self.host}:{self.port}/auth/callback")
+            print(f"   Health-Check: http://{self.host}:{self.port}/health")
             
         except OSError as e:
             if e.errno == 48:  # Address already in use
-                print(f"⚠️ Port {self.port} bereits belegt. Auth-Server nicht gestartet.")
+                print(f"⚠️ Port {self.port} bereits belegt. Auth-Server läuft möglicherweise bereits.")
+                # Versuche trotzdem, Bridge zu setzen
+                set_bridge_instance(bridge, widget)
+                self.running = True  # Markiere als laufend, auch wenn Port belegt ist
             else:
                 print(f"❌ Fehler beim Starten des Auth-Servers: {e}")
                 import traceback
