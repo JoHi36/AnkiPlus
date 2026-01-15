@@ -20,7 +20,13 @@ try:
 except ImportError:
     from token_file_handler import read_token_from_file, check_token_file
 
-# Auth-Server Import (primäre Methode)
+# Clipboard-Monitor Import (primäre Methode - funktioniert auch mit HTTPS)
+try:
+    from .clipboard_monitor import check_clipboard_for_token
+except ImportError:
+    from clipboard_monitor import check_clipboard_for_token
+
+# Auth-Server Import (nur für lokale Entwicklung)
 try:
     from .auth_server import get_auth_server
 except ImportError:
@@ -36,11 +42,14 @@ def init_addon():
         setup_ui()
         setup_menu()
         
-        # Starte HTTP-Server für automatische Token-Übertragung (primäre Methode)
-        start_auth_server()
+        # Starte Clipboard-Überwachung (primäre Methode - funktioniert auch mit HTTPS)
+        start_clipboard_monitoring()
         
         # Starte Token-Datei-Überwachung (Fallback-Methode)
         start_token_file_monitoring()
+        
+        # Starte HTTP-Server (nur für lokale Entwicklung, funktioniert nicht mit HTTPS)
+        # start_auth_server()  # Deaktiviert wegen Mixed Content Blocking
     except Exception as e:
         from aqt.utils import showInfo
         showInfo(f"Fehler beim Laden des Chatbot-Addons: {str(e)}")
@@ -149,6 +158,46 @@ def start_auth_server():
         print(f"⚠️ Fehler beim Starten des HTTP-Auth-Servers: {e}")
         import traceback
         traceback.print_exc()
+
+def check_clipboard_for_auth_token():
+    """Prüft Clipboard auf Auth-Token und authentifiziert automatisch"""
+    try:
+        widget = get_chatbot_widget()
+        if widget and widget.bridge:
+            token, is_token = check_clipboard_for_token()
+            if is_token and token:
+                print(f"🔐 Token im Clipboard erkannt, authentifiziere...")
+                result = widget.bridge.authenticate(token, "")
+                result_data = json.loads(result)
+                if result_data.get('success'):
+                    print("✅ Authentifizierung via Clipboard erfolgreich!")
+                    # Benachrichtige Frontend
+                    if widget.web_view:
+                        payload = {
+                            "type": "auth_success",
+                            "message": "Authentifizierung erfolgreich"
+                        }
+                        widget.web_view.page().runJavaScript(
+                            f"window.ankiReceive({json.dumps(payload)});"
+                        )
+                else:
+                    error_msg = result_data.get('error', 'Unbekannter Fehler')
+                    print(f"❌ Authentifizierung fehlgeschlagen: {error_msg}")
+    except Exception as e:
+        print(f"⚠️ Fehler beim Prüfen des Clipboards: {e}")
+        import traceback
+        traceback.print_exc()
+
+def start_clipboard_monitoring():
+    """Startet periodische Überwachung des Clipboards (primäre Methode)"""
+    if mw is None:
+        return
+    
+    # Erstelle Timer für periodische Überwachung
+    clipboard_check_timer = QTimer()
+    clipboard_check_timer.timeout.connect(check_clipboard_for_auth_token)
+    clipboard_check_timer.start(1000)  # Alle 1 Sekunde prüfen (schneller für bessere UX)
+    print("✅ Clipboard-Überwachung gestartet (primäre Methode, prüft alle 1 Sekunde)")
 
 def start_token_file_monitoring():
     """Startet periodische Überwachung der Token-Datei (Fallback-Methode)"""

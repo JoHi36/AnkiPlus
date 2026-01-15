@@ -37,31 +37,26 @@ export function AuthCallbackPage() {
         const link = generateDeepLink(token);
         setDeepLink(link);
         
-        // Versuche automatische Verbindung via HTTP POST (primäre Methode)
+        // Kopiere Token automatisch ins Clipboard (primäre Methode)
+        // Plugin überwacht Clipboard automatisch und erkennt Token
         const tryAutoConnect = async () => {
           setConnecting(true);
           
-          // Versuche direkt Token zu senden (ohne vorherigen Health-Check)
-          // Health-Check kann wegen Mixed Content (HTTPS -> HTTP) fehlschlagen,
-          // aber der POST-Request könnte trotzdem funktionieren
-          const result = await sendTokenToPlugin(token);
-          
-          if (result.success) {
-            setPluginConnected(true);
-            setPluginServerAvailable(true);
-            console.log('✅ Token erfolgreich an Plugin gesendet!');
+          // Kopiere Token ins Clipboard
+          const copied = await copyToClipboard(token);
+          if (copied) {
+            console.log('✅ Token ins Clipboard kopiert! Plugin erkennt ihn automatisch.');
+            setPluginConnected(true); // Optimistisch - Plugin prüft alle 1 Sekunde
+            // Zeige Hinweis
+            setTimeout(() => {
+              setConnecting(false);
+            }, 2000);
           } else {
-            // Prüfe ob Server erreichbar ist (für bessere Fehlermeldung)
-            const serverAvailable = await checkPluginServer();
-            setPluginServerAvailable(serverAvailable);
-            
-            console.log('⚠️ HTTP-Verbindung fehlgeschlagen:', result.error);
-            
+            console.log('⚠️ Fehler beim Kopieren ins Clipboard');
             // Fallback: Token-Datei erstellen
             await writeTokenToFile(token);
+            setConnecting(false);
           }
-          
-          setConnecting(false);
         };
         
         // Starte automatische Verbindung
@@ -155,32 +150,21 @@ export function AuthCallbackPage() {
                 <div className="flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
                   <p className="text-blue-400 text-sm font-medium">
-                    Verbinde mit Plugin...
+                    Token wird ins Clipboard kopiert...
                   </p>
                 </div>
               </div>
             )}
             {pluginConnected && (
               <div className="mt-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
-                <p className="text-green-400 text-sm font-medium">
-                  ✅ Plugin erfolgreich verbunden!
+                <p className="text-green-400 text-sm font-medium mb-2">
+                  ✅ Token ins Clipboard kopiert!
                 </p>
-              </div>
-            )}
-            {pluginServerAvailable === false && !pluginConnected && (
-              <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                <p className="text-yellow-400 text-sm font-medium mb-2">
-                  ⚠️ Anki ist nicht erreichbar
-                </p>
-                <p className="text-yellow-300 text-xs">
-                  Stelle sicher, dass:
-                </p>
-                <ul className="text-yellow-300 text-xs mt-1 ml-4 list-disc">
-                  <li>Anki geöffnet ist</li>
-                  <li>Das Plugin aktiviert ist (Tools → Add-ons → ankibot)</li>
-                </ul>
-                <p className="text-neutral-400 text-xs mt-2">
-                  Eine Token-Datei wurde als Fallback heruntergeladen. Du kannst sie später verwenden, wenn Anki läuft.
+                <p className="text-green-300 text-xs">
+                  Das Plugin erkennt den Token automatisch innerhalb von 1 Sekunde.
+                  <span className="block mt-1">
+                    Prüfe in Anki, ob oben rechts "Verbunden" steht.
+                  </span>
                 </p>
               </div>
             )}
@@ -253,50 +237,43 @@ export function AuthCallbackPage() {
             <p className="text-sm text-teal-300 mb-2 font-medium">So verbindest du das Plugin:</p>
             {pluginConnected ? (
               <p className="text-xs text-green-400">
-                ✅ Die Verbindung wurde automatisch hergestellt! Du kannst jetzt das Plugin verwenden.
+                ✅ Token wurde automatisch ins Clipboard kopiert!
                 <span className="block mt-2">
+                  Das Plugin erkennt den Token automatisch innerhalb von 1 Sekunde.
+                </span>
+                <span className="block mt-1">
                   Prüfe in Anki, ob oben rechts "Verbunden" steht.
                 </span>
               </p>
             ) : (
               <ol className="text-xs text-neutral-400 space-y-2 list-decimal list-inside">
                 <li>
-                  <strong>Automatisch (empfohlen):</strong> Das Plugin versucht sich automatisch zu verbinden.
-                  <span className="block mt-1 text-yellow-400">
-                    ⚠️ Stelle sicher, dass Anki läuft und das Plugin aktiviert ist.
+                  <strong>Automatisch (empfohlen):</strong> Der Token wird automatisch ins Clipboard kopiert.
+                  <span className="block mt-1 text-green-400">
+                    ✅ Das Plugin überwacht das Clipboard automatisch und verbindet sich selbst!
                   </span>
                 </li>
                 <li>
-                  <strong>Fallback:</strong> Falls die automatische Verbindung nicht funktioniert, 
-                  wurde eine Token-Datei heruntergeladen. Kopiere sie ins Addon-Verzeichnis.
+                  <strong>Falls das nicht funktioniert:</strong> Stelle sicher, dass Anki läuft und das Plugin aktiviert ist.
                 </li>
                 <li>
-                  <strong>Manuell:</strong> Alternativ kannst du den Token kopieren und in die Plugin-Einstellungen einfügen.
+                  <strong>Fallback:</strong> Eine Token-Datei wurde heruntergeladen. Kopiere sie ins Addon-Verzeichnis falls nötig.
                 </li>
               </ol>
             )}
           </div>
           
-          {/* Fallback Info */}
-          {pluginServerAvailable === false && !pluginConnected && (
-            <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-              <p className="text-xs text-yellow-400 mb-2 font-medium">
-                ⚠️ Anki ist nicht erreichbar
+          {/* Clipboard Info */}
+          {!pluginConnected && (
+            <div className="mb-6 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+              <p className="text-xs text-blue-400 mb-2">
+                💡 <strong>Wie es funktioniert:</strong>
               </p>
-              <p className="text-xs text-neutral-400 mb-2">
-                Die automatische Verbindung konnte nicht hergestellt werden. Bitte:
+              <p className="text-xs text-neutral-400">
+                Der Token wird automatisch ins Clipboard kopiert. Das Plugin überwacht das Clipboard 
+                kontinuierlich und erkennt Firebase-Tokens automatisch. Innerhalb von 1 Sekunde nach dem 
+                Kopieren sollte die Verbindung hergestellt sein.
               </p>
-              <ol className="text-xs text-neutral-400 space-y-1 ml-4 list-decimal">
-                <li>Öffne Anki</li>
-                <li>Stelle sicher, dass das Plugin aktiviert ist</li>
-                <li>Lade diese Seite neu oder kopiere die Token-Datei ins Addon-Verzeichnis</li>
-              </ol>
-              <p className="text-xs text-neutral-500 mt-3">
-                Eine Token-Datei wurde als Fallback heruntergeladen. Pfad:
-              </p>
-              <code className="block mt-1 px-2 py-1 bg-black/20 rounded text-[10px] font-mono break-all">
-                ~/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.anki-auth-token
-              </code>
             </div>
           )}
           
