@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { getUserDocument, UserDocument } from '../utils/userSetup';
 import { useQuota } from '../hooks/useQuota';
@@ -11,12 +11,13 @@ import {
   Sparkles,
   AlertCircle,
   Settings,
-  Loader2
+  Loader2,
+  CheckCircle2,
+  X
 } from 'lucide-react';
 import { Button } from '@shared/components/Button';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { CheckoutButton } from '../components/CheckoutButton';
-import { useEffect, useState } from 'react';
 
 export function SubscriptionPage() {
   const { user, getAuthToken } = useAuth();
@@ -24,7 +25,10 @@ export function SubscriptionPage() {
   const [loading, setLoading] = useState(true);
   const [portalLoading, setPortalLoading] = useState(false);
   const { quota } = useQuota();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [showCancelMessage, setShowCancelMessage] = useState(false);
   
   // Handle success/cancel from Stripe Checkout
   useEffect(() => {
@@ -32,19 +36,33 @@ export function SubscriptionPage() {
     const canceled = searchParams.get('canceled');
     
     if (success) {
+      setShowSuccessMessage(true);
       // Reload user document to get updated subscription
       if (user) {
-        getUserDocument(user.uid).then((doc) => {
-          setUserDoc(doc);
-        });
+        // Wait a bit for webhook to process
+        setTimeout(() => {
+          getUserDocument(user.uid).then((doc) => {
+            setUserDoc(doc);
+            setLoading(false);
+          });
+        }, 2000);
       }
+      // Remove success param from URL after showing message
+      setTimeout(() => {
+        setSearchParams({}, { replace: true });
+        setShowSuccessMessage(false);
+      }, 5000);
     }
     
     if (canceled) {
-      // User canceled checkout - could show a message
-      console.log('Checkout canceled');
+      setShowCancelMessage(true);
+      // Remove canceled param from URL after showing message
+      setTimeout(() => {
+        setSearchParams({}, { replace: true });
+        setShowCancelMessage(false);
+      }, 5000);
     }
-  }, [searchParams, user]);
+  }, [searchParams, user, setSearchParams]);
 
   useEffect(() => {
     if (user) {
@@ -74,6 +92,68 @@ export function SubscriptionPage() {
   return (
     <DashboardLayout>
       <div className="max-w-5xl mx-auto p-6 space-y-10">
+        {/* Success Message */}
+        <AnimatePresence>
+          {showSuccessMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="bg-green-500/10 border border-green-500/30 rounded-2xl p-6"
+            >
+              <div className="flex items-start gap-4">
+                <CheckCircle2 className="w-6 h-6 text-green-400 flex-shrink-0 mt-1" />
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-white mb-2">Zahlung erfolgreich!</h3>
+                  <p className="text-neutral-300 text-sm">
+                    Dein Abonnement wurde aktiviert. Die Änderungen werden in Kürze sichtbar sein.
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowSuccessMessage(false);
+                    setSearchParams({}, { replace: true });
+                  }}
+                  className="text-neutral-400 hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Cancel Message */}
+        <AnimatePresence>
+          {showCancelMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-6"
+            >
+              <div className="flex items-start gap-4">
+                <AlertCircle className="w-6 h-6 text-yellow-400 flex-shrink-0 mt-1" />
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-white mb-2">Zahlung abgebrochen</h3>
+                  <p className="text-neutral-300 text-sm">
+                    Die Zahlung wurde abgebrochen. Du kannst jederzeit erneut upgraden.
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowCancelMessage(false);
+                    setSearchParams({}, { replace: true });
+                  }}
+                  className="text-neutral-400 hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
