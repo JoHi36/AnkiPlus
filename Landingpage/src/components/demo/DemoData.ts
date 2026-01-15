@@ -58,7 +58,7 @@ export const DEMO_SCENARIOS: Record<string, DemoScenario> = {
         'Synthetisiere pathophysiologische Kette...'
       ],
       citations: ['Herold Innere Medizin', 'Amboss Leitlinien', 'ERC Guidelines 2021'],
-      answerMarkdown: "
+      answerMarkdown: `
 ### Die pathophysiologische Kette der Hyperkaliämie
 
 Die EKG-Veränderungen korrelieren direkt mit der **Verschiebung des Ruhemembranpotentials** (weniger negativ) und der **Inaktivierung von Natriumkanälen**.
@@ -79,8 +79,8 @@ Die EKG-Veränderungen korrelieren direkt mit der **Verschiebung des Ruhemembran
     *   Verschmelzung von QRS und T-Welle zur *"Sinuswelle"*.
 *   **Gefahr:** Asystolie oder Kammerflimmern.
 
-> **Merksatz:** \"Das T zieht das QRS auseinander, bis alles zur Sinuswelle wird.\"
-"
+> **Merksatz:** "Das T zieht das QRS auseinander, bis alles zur Sinuswelle wird."
+`
     }
   },
   law: {
@@ -113,7 +113,7 @@ Die EKG-Veränderungen korrelieren direkt mit der **Verschiebung des Ruhemembran
         'Synthetisiere Definitionen...'
       ],
       citations: ['BGHSt 32, 382', 'Fischer StGB § 211', 'Schönke/Schröder'],
-      answerMarkdown: "
+      answerMarkdown: `
 ### Heimtücke (§ 211 Abs. 2 Gr. 2 Var. 1 StGB)
 
 Heimtücke ist das mit Abstand klausurrelevanteste Mordmerkmal.
@@ -131,7 +131,7 @@ Da § 211 eine **absolute lebenslange Freiheitsstrafe** anordnet, versucht die L
 *   **BGH:** Bleibt bei der Definition, wendet aber bei "außergewöhnlichen Umständen" § 49 StGB analog an (Rechtsfolgenlösung).
 
 > **Klausur-Tipp:** Prüfe immer zuerst die Arglosigkeit. Schlafende sind arglos (nehmen die Arglosigkeit "mit in den Schlaf"), Bewusstlose nicht (können keine Arglosigkeit bilden).
-"
+`
     }
   }
 };
