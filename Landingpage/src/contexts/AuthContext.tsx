@@ -93,7 +93,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         await createUserDocument(userCredential.user.uid, userCredential.user.email || '');
       }
     } catch (error: any) {
-      throw new Error(getAuthErrorMessage(error.code));
+      console.error('Login error:', error);
+      throw new Error(getAuthErrorMessage(error.code, error));
     }
   };
 
@@ -149,7 +150,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       await sendPasswordResetEmail(auth, email);
     } catch (error: any) {
-      throw new Error(getAuthErrorMessage(error.code));
+      console.error('Reset password error:', error);
+      throw new Error(getAuthErrorMessage(error.code, error));
     }
   };
 
