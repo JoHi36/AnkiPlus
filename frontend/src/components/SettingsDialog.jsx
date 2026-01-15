@@ -21,6 +21,8 @@ export default function SettingsDialog({ isOpen, onClose, onSave, bridge, isRead
     backendMode: false
   });
   const [connecting, setConnecting] = useState(false);
+  const [quotaStatus, setQuotaStatus] = useState(null);
+  const [loadingQuota, setLoadingQuota] = useState(false);
 
   // Debug-Log-Funktion (useCallback für Stabilität)
   const addLog = React.useCallback((message, type = 'info') => {
@@ -170,9 +172,15 @@ export default function SettingsDialog({ isOpen, onClose, onSave, bridge, isRead
         }
         if (payload.type === 'authStatusLoaded' && payload.data) {
           handleAuthStatusLoaded({ detail: payload.data });
+      // Fetch quota when auth status is loaded
+      if (payload.data?.authenticated) {
+        setTimeout(() => fetchQuotaStatus(), 500);
+      }
         } else if (payload.type === 'auth_success') {
           addLog('✓ Authentifizierung erfolgreich', 'success');
           checkAuthStatus();
+          // Fetch quota after successful auth
+          setTimeout(() => fetchQuotaStatus(), 500);
         }
       };
       
@@ -186,6 +194,46 @@ export default function SettingsDialog({ isOpen, onClose, onSave, bridge, isRead
     if (bridge && isReady && bridge.getAuthStatus) {
       addLog('Prüfe Auth-Status...');
       bridge.getAuthStatus();
+    }
+  };
+
+  const fetchQuotaStatus = async () => {
+    if (!authStatus.authenticated || !authStatus.backendUrl) {
+      setQuotaStatus(null);
+      return;
+    }
+
+    setLoadingQuota(true);
+    try {
+      // Get auth token from bridge
+      const authToken = authStatus.hasToken ? await bridge.getAuthToken?.() : null;
+      if (!authToken) {
+        addLog('Kein Auth-Token verfügbar für Quota-Abfrage', 'warn');
+        setLoadingQuota(false);
+        return;
+      }
+
+      const response = await fetch(`${authStatus.backendUrl}/api/user/quota`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setQuotaStatus(data);
+        addLog(`Quota-Status geladen: ${data.deep.used}/${data.deep.limit === -1 ? '∞' : data.deep.limit} Deep Requests`);
+      } else {
+        addLog(`Fehler beim Laden der Quota: ${response.status}`, 'error');
+        setQuotaStatus(null);
+      }
+    } catch (error) {
+      addLog(`Fehler beim Abrufen der Quota: ${error.message}`, 'error');
+      setQuotaStatus(null);
+    } finally {
+      setLoadingQuota(false);
     }
   };
 
@@ -344,6 +392,81 @@ export default function SettingsDialog({ isOpen, onClose, onSave, bridge, isRead
               </button>
             )}
           </div>
+
+          {/* Quota Status Section */}
+          {authStatus.authenticated && (
+            <div className="form-control">
+              <label className="label">
+                <span className="label-text text-base-content font-semibold">Nutzungslimit</span>
+              </label>
+              <div className="px-4 py-3 bg-base-300 border border-base-300 rounded-lg">
+                {loadingQuota ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 size={16} className="animate-spin text-base-content/50" />
+                    <span className="text-sm text-base-content/70">Lade Quota-Status...</span>
+                  </div>
+                ) : quotaStatus ? (
+                  <div className="space-y-3">
+                    {/* Deep Requests */}
+                    {quotaStatus.deep.limit !== -1 && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm text-base-content">Deep Requests</span>
+                          <span className={`text-sm font-medium ${
+                            quotaStatus.deep.remaining === 0 ? 'text-error' : 
+                            quotaStatus.deep.remaining <= quotaStatus.deep.limit * 0.2 ? 'text-warning' : 
+                            'text-success'
+                          }`}>
+                            {quotaStatus.deep.used}/{quotaStatus.deep.limit}
+                          </span>
+                        </div>
+                        <div className="w-full bg-base-200 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full transition-all ${
+                              quotaStatus.deep.remaining === 0 ? 'bg-error' : 
+                              quotaStatus.deep.remaining <= quotaStatus.deep.limit * 0.2 ? 'bg-warning' : 
+                              'bg-success'
+                            }`}
+                            style={{ width: `${Math.min(100, (quotaStatus.deep.used / quotaStatus.deep.limit) * 100)}%` }}
+                          />
+                        </div>
+                        {quotaStatus.deep.remaining === 0 && (
+                          <div className="mt-2 p-2 bg-error/10 border border-error/20 rounded text-xs text-error">
+                            <p className="mb-2">Tageslimit erreicht. Upgrade für mehr Requests?</p>
+                            <button
+                              onClick={handleConnect}
+                              className="w-full btn btn-sm btn-error gap-2"
+                            >
+                              <ExternalLink size={14} />
+                              Jetzt upgraden
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {/* Flash Requests - nur anzeigen wenn limitiert */}
+                    {quotaStatus.flash.limit !== -1 && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm text-base-content">Flash Requests</span>
+                          <span className="text-sm font-medium text-base-content/70">
+                            {quotaStatus.flash.used}/{quotaStatus.flash.limit === -1 ? '∞' : quotaStatus.flash.limit}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    <div className="text-xs text-base-content/50 mt-2">
+                      Reset: {new Date(quotaStatus.resetAt).toLocaleString('de-DE')}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-base-content/50">
+                    Quota-Status nicht verfügbar
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="pt-2 text-center">
              <p className="text-[10px] uppercase tracking-widest text-base-content/20 font-medium">

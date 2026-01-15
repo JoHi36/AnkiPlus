@@ -15,8 +15,8 @@ import {
   X
 } from 'lucide-react';
 import { MockupEvaluation, MockupDeepReasoning } from '../components/Mockups';
-import { MultipleChoiceCard, type MultipleChoiceOption } from '../shared/components/MultipleChoiceCard';
-import { Button } from '../shared/components/Button';
+import { MultipleChoiceCard, type MultipleChoiceOption } from '@shared/components/MultipleChoiceCard';
+import { Button } from '@shared/components/Button';
 import { useState } from 'react';
 
 // Animation variants

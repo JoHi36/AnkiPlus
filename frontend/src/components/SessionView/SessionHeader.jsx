@@ -46,6 +46,7 @@ export default function SessionHeader({
     backendUrl: '',
     backendMode: false
   });
+  const [quotaStatus, setQuotaStatus] = useState(null);
 
   // Auth-Status prüfen
   useEffect(() => {
@@ -68,6 +69,40 @@ export default function SessionHeader({
       return () => clearInterval(interval);
     }
   }, [bridge]);
+
+  // Fetch quota status
+  useEffect(() => {
+    if (!authStatus.authenticated || !authStatus.backendUrl || !bridge) {
+      setQuotaStatus(null);
+      return;
+    }
+
+    const fetchQuota = async () => {
+      try {
+        // Get auth token - we need to call the backend endpoint
+        // For now, we'll skip this as it requires async token retrieval
+        // This can be enhanced later with proper token management
+        const response = await fetch(`${authStatus.backendUrl}/api/user/quota`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setQuotaStatus(data);
+        }
+      } catch (error) {
+        console.error('Error fetching quota:', error);
+      }
+    };
+
+    fetchQuota();
+    // Refresh every 60 seconds
+    const interval = setInterval(fetchQuota, 60000);
+    return () => clearInterval(interval);
+  }, [authStatus.authenticated, authStatus.backendUrl, bridge]);
   
   const handleBookButtonClick = () => {
     if (showSessionOverview) {
@@ -120,6 +155,22 @@ export default function SessionHeader({
           >
             {title}
           </h1>
+          
+          {/* Quota Badge - Show Deep Requests if limited */}
+          {quotaStatus && quotaStatus.deep.limit !== -1 && (
+            <div 
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                quotaStatus.deep.remaining === 0 
+                  ? 'bg-error/10 text-error' 
+                  : quotaStatus.deep.remaining <= quotaStatus.deep.limit * 0.2
+                  ? 'bg-warning/10 text-warning'
+                  : 'bg-base-content/10 text-base-content/70'
+              }`}
+              title={`Deep Requests: ${quotaStatus.deep.used}/${quotaStatus.deep.limit} (${quotaStatus.deep.remaining} verbleibend)`}
+            >
+              <span>Deep: {quotaStatus.deep.used}/{quotaStatus.deep.limit}</span>
+            </div>
+          )}
           
           {/* Separator - only show when section is active */}
           {hasActiveSection && (
