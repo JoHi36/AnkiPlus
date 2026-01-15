@@ -197,8 +197,8 @@ class AIHandler:
                 return False
             
             backend_url = get_backend_url()
-            # Backend-URL enthält bereits /api, also nur /auth/refresh hinzufügen
-            refresh_url = f"{backend_url}/auth/refresh"
+            # Backend-URL ist die Cloud Function Base-URL, Express-Routen beginnen mit /api
+            refresh_url = f"{backend_url}/api/auth/refresh"
             
             response = requests.post(
                 refresh_url,
@@ -335,8 +335,8 @@ class AIHandler:
         if use_backend:
             # Backend-Modus: Verwende Backend-URL
             backend_url = get_backend_url()
-            # Backend-URL enthält bereits /api, also nur /chat hinzufügen
-            urls = [f"{backend_url}/chat"]
+            # Backend-URL ist die Cloud Function Base-URL, Express-Routen beginnen mit /api
+            urls = [f"{backend_url}/api/chat"]
             print(f"_get_google_response: Verwende Backend-Modus: {urls[0]}")
         else:
             # Fallback: Direkte Gemini API (API-Key-Modus)
@@ -892,9 +892,9 @@ class AIHandler:
         if use_backend:
             # Backend-Modus: Verwende Backend-URL
             backend_url = get_backend_url()
-            # Backend-URL enthält bereits /api, also nur /chat hinzufügen
-            stream_urls = [f"{backend_url}/chat"]
-            normal_urls = [f"{backend_url}/chat"]  # Backend unterstützt nur Streaming
+            # Backend-URL ist die Cloud Function Base-URL, Express-Routen beginnen mit /api
+            stream_urls = [f"{backend_url}/api/chat"]
+            normal_urls = [f"{backend_url}/api/chat"]  # Backend unterstützt nur Streaming
             print(f"_get_google_response_streaming: Verwende Backend-Modus: {stream_urls[0]}")
         else:
             # Fallback: Direkte Gemini API (API-Key-Modus)

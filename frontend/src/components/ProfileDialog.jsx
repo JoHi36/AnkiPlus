@@ -89,8 +89,8 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
 
     const fetchQuota = async () => {
       try {
-        // Backend-URL enthält bereits /api, also nur /user/quota hinzufügen
-        const response = await fetch(`${authStatus.backendUrl}/user/quota`, {
+        // Backend-URL ist die Cloud Function Base-URL, Express-Routen beginnen mit /api
+        const response = await fetch(`${authStatus.backendUrl}/api/user/quota`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',

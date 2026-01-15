@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
 import { stripe, getPriceIdFromTier, getFrontendUrl } from '../utils/stripe';
-import { getOrCreateUser, getFirestore } from '../utils/firestore';
+import { getOrCreateUser } from '../utils/firestore';
 import { createErrorResponse, ErrorCode } from '../utils/errors';
 import { createLogger } from '../utils/logging';
-import { Timestamp } from 'firebase-admin/firestore';
+import { getFirestore } from 'firebase-admin/firestore';
 
 const db = getFirestore();
 const logger = createLogger();
