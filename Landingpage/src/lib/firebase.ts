@@ -2,14 +2,20 @@ import { initializeApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 
+// Helper function to trim whitespace and newlines from environment variables
+function cleanEnvVar(value: string | undefined, defaultValue?: string): string | undefined {
+  if (!value) return defaultValue;
+  return value.trim().replace(/\r?\n/g, ''); // Remove all newlines and trim
+}
+
 // Firebase configuration from environment variables
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'ankiplus-b0ffb.firebaseapp.com',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'ankiplus-b0ffb',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'ankiplus-b0ffb.appspot.com',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: cleanEnvVar(import.meta.env.VITE_FIREBASE_API_KEY),
+  authDomain: cleanEnvVar(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN, 'ankiplus-b0ffb.firebaseapp.com'),
+  projectId: cleanEnvVar(import.meta.env.VITE_FIREBASE_PROJECT_ID, 'ankiplus-b0ffb'),
+  storageBucket: cleanEnvVar(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET, 'ankiplus-b0ffb.appspot.com'),
+  messagingSenderId: cleanEnvVar(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID),
+  appId: cleanEnvVar(import.meta.env.VITE_FIREBASE_APP_ID),
 };
 
 // Check if Firebase is configured
