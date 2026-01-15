@@ -1569,4 +1569,3 @@ export default function App() {
     </SessionContextProvider>
   );
 }
-
