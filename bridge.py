@@ -1207,12 +1207,15 @@ class WebBridge(QObject):
             try:
                 backend_url = get_backend_url()
                 # Backend-URL ist die Cloud Function Base-URL, Express-Routen haben kein /api/ Präfix
-                # WICHTIG: Token muss UTF-8 encodiert werden, nicht latin-1
+                # Token bereinigen: Entferne alle nicht-ASCII Zeichen (sollte nicht vorkommen bei Firebase Tokens)
                 token_clean = token.strip()
+                # Entferne alle Zeichen, die nicht in latin-1 encodiert werden können
+                token_clean = token_clean.encode('utf-8', errors='ignore').decode('latin-1', errors='ignore')
+                
                 response = requests.get(
                     f"{backend_url}/user/quota",
                     headers={
-                        "Authorization": f"Bearer {token_clean}".encode('utf-8').decode('latin-1', errors='ignore'),
+                        "Authorization": f"Bearer {token_clean}",
                         "Content-Type": "application/json"
                     },
                     timeout=5
