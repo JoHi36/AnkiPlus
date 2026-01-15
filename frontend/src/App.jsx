@@ -11,7 +11,7 @@ import SessionHeader from './components/SessionView/SessionHeader';
 import ChatMessage from './components/ChatMessage';
 import StreamingChatMessage from './components/StreamingChatMessage';
 import ChatInput from './components/ChatInput';
-import SettingsDialog from './components/SettingsDialog';
+import ProfileDialog from './components/ProfileDialog';
 import SettingsButton from './components/SettingsButton';
 import ThoughtStream from './components/ThoughtStream';
 import SessionOverview from './components/SessionOverview';
@@ -30,7 +30,7 @@ function AppInner() {
   const sessionContext = useSessionContext();
   
   // Settings State
-  const [showSettings, setShowSettings] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   
   // Premium State - Lade aus localStorage beim Start
   const [isPremium, setIsPremium] = useState(() => {
@@ -834,13 +834,13 @@ function AppInner() {
 
   // Settings öffnen
   const handleOpenSettings = () => {
-    setShowSettings(true);
+    setShowProfile(true);
   };
 
   // Settings speichern
   const handleSaveSettings = (settings) => {
     console.log('💾 App.jsx: Settings gespeichert:', settings);
-    setShowSettings(false);
+    setShowProfile(false);
     modelsHook.handleSaveSettings(settings);
   };
 
@@ -1054,7 +1054,7 @@ function AppInner() {
             }
           }}
           bridge={bridge}
-          onOpenSettings={() => setShowSettings(true)}
+          onOpenSettings={() => setShowProfile(true)}
         />
       </div>
 
@@ -1444,11 +1444,10 @@ function AppInner() {
         </>
       )}
 
-      {/* Settings Dialog */}
-      <SettingsDialog
-        isOpen={showSettings}
-        onClose={() => setShowSettings(false)}
-        onSave={handleSaveSettings}
+      {/* Profile Dialog */}
+      <ProfileDialog
+        isOpen={showProfile}
+        onClose={() => setShowProfile(false)}
         bridge={bridge}
         isReady={isReady}
       />

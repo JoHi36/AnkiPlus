@@ -14,24 +14,6 @@ try:
 except ImportError:
     from ui_setup import setup_ui, setup_menu, get_chatbot_widget
 
-# Token-Datei-Import (Fallback)
-try:
-    from .token_file_handler import read_token_from_file, check_token_file
-except ImportError:
-    from token_file_handler import read_token_from_file, check_token_file
-
-# Clipboard-Monitor Import (primäre Methode - funktioniert auch mit HTTPS)
-try:
-    from .clipboard_monitor import check_clipboard_for_token
-except ImportError:
-    from clipboard_monitor import check_clipboard_for_token
-
-# Auth-Server Import (nur für lokale Entwicklung)
-try:
-    from .auth_server import get_auth_server
-except ImportError:
-    from auth_server import get_auth_server
-
 def init_addon():
     """Initialisiert das Addon nach dem Laden des Profils"""
     if mw is None:
@@ -41,15 +23,7 @@ def init_addon():
         mw.addonManager.setWebExports(__name__, r"(web|icons)/.*")
         setup_ui()
         setup_menu()
-        
-        # Starte Clipboard-Überwachung (primäre Methode - funktioniert auch mit HTTPS)
-        start_clipboard_monitoring()
-        
-        # Starte Token-Datei-Überwachung (Fallback-Methode)
-        start_token_file_monitoring()
-        
-        # Starte HTTP-Server (nur für lokale Entwicklung, funktioniert nicht mit HTTPS)
-        # start_auth_server()  # Deaktiviert wegen Mixed Content Blocking
+        # Keine automatischen Server/Monitoring mehr - User fügt Token manuell ein
     except Exception as e:
         from aqt.utils import showInfo
         showInfo(f"Fehler beim Laden des Chatbot-Addons: {str(e)}")
@@ -107,132 +81,7 @@ def on_reviewer_did_show_question(card):
             import traceback
             traceback.print_exc()
 
-def check_for_auth_token():
-    """Prüft periodisch auf neue Auth-Token in Datei"""
-    try:
-        widget = get_chatbot_widget()
-        if widget and widget.bridge:
-            if check_token_file():
-                token, refresh_token = read_token_from_file()
-                if token:
-                    print(f"🔐 Token-Datei gefunden, authentifiziere...")
-                    result = widget.bridge.authenticate(token, refresh_token or "")
-                    result_data = json.loads(result)
-                    if result_data.get('success'):
-                        print("✅ Authentifizierung via Token-Datei erfolgreich!")
-                        # Benachrichtige Frontend
-                        if widget.web_view:
-                            payload = {
-                                "type": "auth_success",
-                                "message": "Authentifizierung erfolgreich"
-                            }
-                            widget.web_view.page().runJavaScript(
-                                f"window.ankiReceive({json.dumps(payload)});"
-                            )
-                    else:
-                        error_msg = result_data.get('error', 'Unbekannter Fehler')
-                        print(f"❌ Authentifizierung fehlgeschlagen: {error_msg}")
-    except Exception as e:
-        print(f"⚠️ Fehler beim Prüfen der Token-Datei: {e}")
-        import traceback
-        traceback.print_exc()
-
-def start_auth_server():
-    """Startet HTTP-Server für automatische Token-Übertragung"""
-    if mw is None:
-        return
-    
-    try:
-        auth_server = get_auth_server()
-        if not auth_server.running:
-            # Erstelle Dummy-Bridge für den Start (wird später aktualisiert)
-            class DummyBridge:
-                pass
-            dummy_bridge = DummyBridge()
-            dummy_widget = None
-            
-            # Starte Server
-            auth_server.start(dummy_bridge, dummy_widget)
-            print("✅ HTTP-Auth-Server gestartet (primäre Verbindungsmethode)")
-    except Exception as e:
-        print(f"⚠️ Fehler beim Starten des HTTP-Auth-Servers: {e}")
-        import traceback
-        traceback.print_exc()
-
-def check_clipboard_for_auth_token():
-    """Prüft Clipboard auf Auth-Token und authentifiziert automatisch"""
-    try:
-        widget = get_chatbot_widget()
-        if widget and widget.bridge:
-            token, is_token = check_clipboard_for_token()
-            if is_token and token:
-                print(f"🔐 Token im Clipboard erkannt, authentifiziere...")
-                
-                # Zeige sofortige Benachrichtigung im Frontend
-                if widget.web_view:
-                    payload = {
-                        "type": "auth_pending",
-                        "message": "Token erkannt, verbinde..."
-                    }
-                    widget.web_view.page().runJavaScript(
-                        f"window.ankiReceive({json.dumps(payload)});"
-                    )
-                
-                result = widget.bridge.authenticate(token, "")
-                result_data = json.loads(result)
-                if result_data.get('success'):
-                    print("✅ Authentifizierung via Clipboard erfolgreich!")
-                    # Benachrichtige Frontend mit Erfolg
-                    if widget.web_view:
-                        payload = {
-                            "type": "auth_success",
-                            "message": "✅ Verbunden! Token wurde automatisch erkannt."
-                        }
-                        widget.web_view.page().runJavaScript(
-                            f"window.ankiReceive({json.dumps(payload)});"
-                        )
-                        # Aktualisiere Auth-Status sofort
-                        QTimer.singleShot(500, lambda: widget.web_view.page().runJavaScript(
-                            "if (window.ankiReceive) { window.ankiReceive({type: 'refreshAuthStatus'}); }"
-                        ))
-                else:
-                    error_msg = result_data.get('error', 'Unbekannter Fehler')
-                    print(f"❌ Authentifizierung fehlgeschlagen: {error_msg}")
-                    # Benachrichtige Frontend mit Fehler
-                    if widget.web_view:
-                        payload = {
-                            "type": "auth_error",
-                            "message": f"Fehler: {error_msg}"
-                        }
-                        widget.web_view.page().runJavaScript(
-                            f"window.ankiReceive({json.dumps(payload)});"
-                        )
-    except Exception as e:
-        print(f"⚠️ Fehler beim Prüfen des Clipboards: {e}")
-        import traceback
-        traceback.print_exc()
-
-def start_clipboard_monitoring():
-    """Startet periodische Überwachung des Clipboards (primäre Methode)"""
-    if mw is None:
-        return
-    
-    # Erstelle Timer für periodische Überwachung
-    clipboard_check_timer = QTimer()
-    clipboard_check_timer.timeout.connect(check_clipboard_for_auth_token)
-    clipboard_check_timer.start(1000)  # Alle 1 Sekunde prüfen (schneller für bessere UX)
-    print("✅ Clipboard-Überwachung gestartet (primäre Methode, prüft alle 1 Sekunde)")
-
-def start_token_file_monitoring():
-    """Startet periodische Überwachung der Token-Datei (Fallback-Methode)"""
-    if mw is None:
-        return
-    
-    # Erstelle Timer für periodische Überwachung
-    token_check_timer = QTimer()
-    token_check_timer.timeout.connect(check_for_auth_token)
-    token_check_timer.start(2000)  # Alle 2 Sekunden prüfen
-    print("✅ Token-Datei-Überwachung gestartet (Fallback-Methode, prüft alle 2 Sekunden)")
+# Alte Logik entfernt - User fügt Token manuell in Profil-Dialog ein
 
 def on_state_will_change(new_state, old_state):
     """Wird aufgerufen, wenn sich der Anki-State ändert (z.B. review -> deckBrowser)"""

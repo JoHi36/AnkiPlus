@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, BookOpen, CheckCircle, XCircle } from 'lucide-react';
+import { ChevronLeft, BookOpen, CheckCircle, XCircle, User } from 'lucide-react';
 import SectionNavigation from '../SectionNavigation';
 import SectionDropdown from '../SectionDropdown';
 import { getDeckMainTitle } from '../../utils/deckName';
@@ -232,27 +232,21 @@ export default function SessionHeader({
         <div className="flex-shrink-0 pointer-events-auto relative flex items-center gap-2">
           {!showSessionOverview && (
             <>
-              {/* Auth Status Badge */}
-              {authStatus.backendMode && onOpenSettings && (
+              {/* Profil Button (ersetzt Auth-Status-Badge) */}
+              {onOpenSettings && (
                 <button
                   onClick={onOpenSettings}
                   className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs backdrop-blur-sm border transition-all ${
                     authStatus.authenticated
                       ? 'bg-success/10 text-success border-success/20 hover:bg-success/20'
-                      : 'bg-error/10 text-error border-error/20 hover:bg-error/20'
+                      : 'bg-base-300/50 text-base-content/70 border-base-300 hover:bg-base-300'
                   }`}
-                  title={authStatus.authenticated ? 'Verbunden' : 'Nicht verbunden - Klicken zum Verbinden'}
+                  title={authStatus.authenticated ? 'Profil öffnen' : 'Profil öffnen - Nicht verbunden'}
                 >
-                  {authStatus.authenticated ? (
-                    <>
-                      <CheckCircle size={12} />
-                      <span>Verbunden</span>
-                    </>
-                  ) : (
-                    <>
-                      <XCircle size={12} />
-                      <span>Nicht verbunden</span>
-                    </>
+                  <User size={12} />
+                  <span>Profil</span>
+                  {authStatus.authenticated && (
+                    <CheckCircle size={10} className="text-success" />
                   )}
                 </button>
               )}

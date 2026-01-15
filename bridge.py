@@ -24,9 +24,9 @@ except ImportError:
 
 # Config-Import
 try:
-    from .config import get_config, update_config, is_backend_mode, get_backend_url, get_auth_token, get_refresh_token
+    from .config import get_config, update_config, is_backend_mode, get_backend_url, get_auth_token, get_refresh_token, DEFAULT_BACKEND_URL
 except ImportError:
-    from config import get_config, update_config, is_backend_mode, get_backend_url, get_auth_token, get_refresh_token
+    from config import get_config, update_config, is_backend_mode, get_backend_url, get_auth_token, get_refresh_token, DEFAULT_BACKEND_URL
 
 # Sessions-Import
 try:
@@ -1182,11 +1182,128 @@ class WebBridge(QObject):
                 "error": error_msg
             })
     
+    @pyqtSlot(str, str, result=str)
+    def authenticate(self, token, refresh_token=""):
+        """
+        Authentifiziert User mit Firebase ID Token
+        Speichert Token in Config und validiert durch Backend-Call
+        """
+        try:
+            if not token or not token.strip():
+                return json.dumps({"success": False, "error": "Kein Token angegeben"})
+            
+            print(f"authenticate: Token erhalten (Länge: {len(token)})")
+            
+            # Speichere Token in Config
+            update_config(
+                auth_token=token.strip(),
+                refresh_token=refresh_token.strip() if refresh_token else "",
+                backend_url=DEFAULT_BACKEND_URL,
+                backend_mode=True
+            )
+            
+            # Validiere Token durch Backend-Call (optional - kann auch später validiert werden)
+            try:
+                backend_url = get_backend_url()
+                response = requests.get(
+                    f"{backend_url}/api/user/quota",
+                    headers={
+                        "Authorization": f"Bearer {token.strip()}",
+                        "Content-Type": "application/json"
+                    },
+                    timeout=5
+                )
+                
+                if response.status_code == 200:
+                    print("✅ authenticate: Token erfolgreich validiert")
+                    # Benachrichtige Frontend
+                    if self.widget and self.widget.web_view:
+                        payload = {"type": "auth_success", "message": "Authentifizierung erfolgreich"}
+                        self.widget.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
+                    return json.dumps({"success": True, "message": "Authentifizierung erfolgreich"})
+                elif response.status_code == 401:
+                    error_msg = "Ungültiger Token - bitte prüfe deinen Token"
+                    print(f"❌ authenticate: {error_msg}")
+                    if self.widget and self.widget.web_view:
+                        payload = {"type": "auth_error", "message": error_msg}
+                        self.widget.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
+                    return json.dumps({"success": False, "error": error_msg})
+                else:
+                    # Token gespeichert, aber Validierung fehlgeschlagen (Netzwerkfehler etc.)
+                    print(f"⚠️ authenticate: Token gespeichert, aber Validierung fehlgeschlagen (Status: {response.status_code})")
+                    # Token trotzdem speichern - kann später validiert werden
+                    if self.widget and self.widget.web_view:
+                        payload = {"type": "auth_success", "message": "Token gespeichert (Validierung ausstehend)"}
+                        self.widget.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
+                    return json.dumps({"success": True, "message": "Token gespeichert"})
+            except requests.exceptions.RequestException as e:
+                # Netzwerkfehler - Token trotzdem speichern
+                print(f"⚠️ authenticate: Netzwerkfehler bei Validierung: {e}")
+                print("Token wurde trotzdem gespeichert")
+                if self.widget and self.widget.web_view:
+                    payload = {"type": "auth_success", "message": "Token gespeichert (Validierung ausstehend)"}
+                    self.widget.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
+                return json.dumps({"success": True, "message": "Token gespeichert (Netzwerkfehler bei Validierung)"})
+        except Exception as e:
+            import traceback
+            error_msg = str(e)
+            print(f"❌ authenticate: Fehler: {error_msg}")
+            print(traceback.format_exc())
+            return json.dumps({"success": False, "error": error_msg})
+    
+    @pyqtSlot(result=str)
+    def getAuthStatus(self):
+        """Gibt den aktuellen Auth-Status zurück"""
+        try:
+            config = get_config()
+            auth_token = config.get('auth_token', '').strip()
+            backend_url = config.get('backend_url', '').strip() or DEFAULT_BACKEND_URL
+            backend_mode = is_backend_mode()
+            
+            status = {
+                "authenticated": bool(auth_token),
+                "hasToken": bool(auth_token),
+                "backendUrl": backend_url,
+                "backendMode": backend_mode
+            }
+            
+            return json.dumps(status)
+        except Exception as e:
+            import traceback
+            print(f"Fehler in getAuthStatus: {e}")
+            print(traceback.format_exc())
+            return json.dumps({
+                "authenticated": False,
+                "hasToken": False,
+                "backendUrl": DEFAULT_BACKEND_URL,
+                "backendMode": False
+            })
+    
+    @pyqtSlot(result=str)
+    def refreshAuth(self):
+        """Ruft Token-Refresh auf"""
+        try:
+            from .ai_handler import get_ai_handler
+        except ImportError:
+            from ai_handler import get_ai_handler
+        
+        try:
+            ai = get_ai_handler()
+            if ai._refresh_auth_token():
+                return json.dumps({"success": True, "message": "Token erfolgreich erneuert"})
+            else:
+                return json.dumps({"success": False, "error": "Token-Refresh fehlgeschlagen"})
+        except Exception as e:
+            import traceback
+            error_msg = str(e)
+            print(f"Fehler in refreshAuth: {error_msg}")
+            print(traceback.format_exc())
+            return json.dumps({"success": False, "error": error_msg})
+    
     @pyqtSlot(str)
     def handleAuthDeepLink(self, url):
         """
         Verarbeitet Deep Link für Auth: anki://auth?token=...&refreshToken=...
-        Alternative: Kann auch aus Clipboard oder Datei gelesen werden
         """
         try:
             print(f"handleAuthDeepLink: Verarbeite URL: {url[:100]}...")
