@@ -1212,13 +1212,14 @@ class WebBridge(QObject):
                 # Entferne alle Zeichen, die nicht in latin-1 encodiert werden können
                 token_clean = token_clean.encode('utf-8', errors='ignore').decode('latin-1', errors='ignore')
                 
+                # Timeout erhöht auf 15 Sekunden (Cloud Functions können bei Cold Start länger brauchen)
                 response = requests.get(
                     f"{backend_url}/user/quota",
                     headers={
                         "Authorization": f"Bearer {token_clean}",
                         "Content-Type": "application/json"
                     },
-                    timeout=5
+                    timeout=15
                 )
                 
                 if response.status_code == 200:
