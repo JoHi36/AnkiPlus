@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { generateDeepLink, openDeepLink, copyToClipboard, writeTokenToFile } from '../utils/deepLink';
+import { generateDeepLink, openDeepLink, copyToClipboard, writeTokenToFile, sendTokenToPlugin, checkPluginServer } from '../utils/deepLink';
 import { CheckCircle2, Copy, ExternalLink, Loader2, AlertCircle, Download } from 'lucide-react';
 
 export function AuthCallbackPage() {
@@ -12,7 +12,9 @@ export function AuthCallbackPage() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tokenFileCreated, setTokenFileCreated] = useState(false);
+  const [pluginConnected, setPluginConnected] = useState(false);
+  const [pluginServerAvailable, setPluginServerAvailable] = useState<boolean | null>(null);
+  const [connecting, setConnecting] = useState(false);
 
   useEffect(() => {
     const generateTokens = async () => {
@@ -35,24 +37,36 @@ export function AuthCallbackPage() {
         const link = generateDeepLink(token);
         setDeepLink(link);
         
-        // Erstelle Token-Datei automatisch
-        const createTokenFile = async () => {
-          const result = await writeTokenToFile(token);
-          if (result.success) {
-            setTokenFileCreated(true);
-            console.log('✅ Token-Datei erstellt!');
+        // Versuche automatische Verbindung via HTTP POST (primäre Methode)
+        const tryAutoConnect = async () => {
+          setConnecting(true);
+          
+          // Prüfe ob Plugin-Server erreichbar ist
+          const serverAvailable = await checkPluginServer();
+          setPluginServerAvailable(serverAvailable);
+          
+          if (serverAvailable) {
+            // Versuche Token per HTTP POST zu senden
+            const result = await sendTokenToPlugin(token);
+            if (result.success) {
+              setPluginConnected(true);
+              console.log('✅ Token erfolgreich an Plugin gesendet!');
+            } else {
+              console.log('⚠️ HTTP-Verbindung fehlgeschlagen:', result.error);
+              // Fallback: Token-Datei erstellen
+              await writeTokenToFile(token);
+            }
           } else {
-            console.log('⚠️ Fehler beim Erstellen der Token-Datei:', result.error);
+            console.log('⚠️ Plugin-Server nicht erreichbar, verwende Fallback-Methode');
+            // Fallback: Token-Datei erstellen
+            await writeTokenToFile(token);
           }
+          
+          setConnecting(false);
         };
         
-        // Erstelle Token-Datei
-        createTokenFile();
-        
-        // Versuche auch Deep Link (für Browser die es unterstützen)
-        setTimeout(() => {
-          openDeepLink(link);
-        }, 500);
+        // Starte automatische Verbindung
+        tryAutoConnect();
         
         setLoading(false);
       } catch (err: any) {
@@ -137,10 +151,27 @@ export function AuthCallbackPage() {
             <p className="text-neutral-400 text-sm">
               Verbinde jetzt dein Anki Plugin mit deinem Account
             </p>
-            {tokenFileCreated && (
+            {connecting && (
+              <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+                  <p className="text-blue-400 text-sm font-medium">
+                    Verbinde mit Plugin...
+                  </p>
+                </div>
+              </div>
+            )}
+            {pluginConnected && (
               <div className="mt-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
                 <p className="text-green-400 text-sm font-medium">
-                  ✅ Token-Datei erstellt! Das Plugin verbindet sich automatisch.
+                  ✅ Plugin erfolgreich verbunden!
+                </p>
+              </div>
+            )}
+            {pluginServerAvailable === false && !pluginConnected && (
+              <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                <p className="text-yellow-400 text-sm">
+                  ⚠️ Plugin-Server nicht erreichbar. Stelle sicher, dass Anki läuft.
                 </p>
               </div>
             )}
@@ -211,59 +242,46 @@ export function AuthCallbackPage() {
           {/* Instructions */}
           <div className="mb-6 p-4 bg-teal-500/10 border border-teal-500/20 rounded-lg">
             <p className="text-sm text-teal-300 mb-2 font-medium">So verbindest du das Plugin:</p>
-            <ol className="text-xs text-neutral-400 space-y-3 list-decimal list-inside">
-              <li>
-                <strong>Schritt 1:</strong> Die Token-Datei wurde automatisch heruntergeladen. 
-                <span className="block mt-1 text-yellow-400 font-medium">
-                  ⚠️ WICHTIG: Du musst die Datei manuell ins Addon-Verzeichnis kopieren!
+            {pluginConnected ? (
+              <p className="text-xs text-green-400">
+                ✅ Die Verbindung wurde automatisch hergestellt! Du kannst jetzt das Plugin verwenden.
+                <span className="block mt-2">
+                  Prüfe in Anki, ob oben rechts "Verbunden" steht.
                 </span>
-              </li>
-              <li>
-                <strong>Schritt 2:</strong> Öffne Finder und gehe zu:
-                <code className="block mt-1 px-2 py-1 bg-black/20 rounded text-[10px] font-mono break-all">
-                  ~/Library/Application Support/Anki2/addons21/anki-chatbot-addon/
-                </code>
-                <span className="block mt-1 text-xs text-neutral-500">
-                  Tipp: Drücke Cmd+Shift+G im Finder und füge den Pfad ein
-                </span>
-              </li>
-              <li>
-                <strong>Schritt 3:</strong> Kopiere die heruntergeladene Datei <code className="text-[10px]">.anki-auth-token</code> 
-                in dieses Verzeichnis (überschreibe falls vorhanden).
-              </li>
-              <li>
-                <strong>Schritt 4:</strong> Das Plugin erkennt die Datei automatisch innerhalb von 2 Sekunden und verbindet sich.
-                <span className="block mt-1 text-green-400">
-                  ✅ Prüfe in Anki, ob oben rechts "Verbunden" steht!
-                </span>
-              </li>
-            </ol>
-          </div>
-          
-          {/* Quick Path Helper */}
-          <div className="mb-6 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-            <p className="text-xs text-blue-400 mb-2">
-              <strong>💡 Schnellzugriff:</strong> Kopiere diesen Pfad und öffne ihn im Finder (Cmd+Shift+G):
-            </p>
-            <code 
-              className="block px-3 py-2 bg-black/30 rounded text-[10px] font-mono break-all cursor-pointer hover:bg-black/50 transition-colors"
-              onClick={async () => {
-                const path = '~/Library/Application Support/Anki2/addons21/anki-chatbot-addon/';
-                await copyToClipboard(path);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-              }}
-              title="Klicken zum Kopieren"
-            >
-              ~/Library/Application Support/Anki2/addons21/anki-chatbot-addon/
-            </code>
-            {copied && (
-              <p className="mt-2 text-xs text-green-400 flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" />
-                Pfad kopiert!
               </p>
+            ) : (
+              <ol className="text-xs text-neutral-400 space-y-2 list-decimal list-inside">
+                <li>
+                  <strong>Automatisch (empfohlen):</strong> Das Plugin versucht sich automatisch zu verbinden.
+                  <span className="block mt-1 text-yellow-400">
+                    ⚠️ Stelle sicher, dass Anki läuft und das Plugin aktiviert ist.
+                  </span>
+                </li>
+                <li>
+                  <strong>Fallback:</strong> Falls die automatische Verbindung nicht funktioniert, 
+                  wurde eine Token-Datei heruntergeladen. Kopiere sie ins Addon-Verzeichnis.
+                </li>
+                <li>
+                  <strong>Manuell:</strong> Alternativ kannst du den Token kopieren und in die Plugin-Einstellungen einfügen.
+                </li>
+              </ol>
             )}
           </div>
+          
+          {/* Fallback Info */}
+          {pluginServerAvailable === false && !pluginConnected && (
+            <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+              <p className="text-xs text-yellow-400 mb-2">
+                <strong>Plugin nicht erreichbar:</strong> Die automatische Verbindung konnte nicht hergestellt werden.
+              </p>
+              <p className="text-xs text-neutral-400">
+                Eine Token-Datei wurde als Fallback heruntergeladen. Kopiere sie ins Addon-Verzeichnis:
+              </p>
+              <code className="block mt-2 px-2 py-1 bg-black/20 rounded text-[10px] font-mono break-all">
+                ~/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.anki-auth-token
+              </code>
+            </div>
+          )}
           
           {/* File Download Button */}
           <div className="mb-6">

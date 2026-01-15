@@ -1,11 +1,79 @@
 /**
  * Deep Link Utilities
  * Generates deep links for Anki plugin authentication
- * Also supports file-based token transfer (preferred method)
+ * Supports HTTP POST (preferred) and file-based token transfer (fallback)
  */
 
+const PLUGIN_SERVER_URL = 'http://127.0.0.1:8765';
+
 /**
- * Creates and downloads a token file for the Anki plugin
+ * Sends token directly to plugin via HTTP POST (preferred method)
+ * @param idToken - Firebase ID Token
+ * @param refreshToken - Firebase Refresh Token (optional)
+ * @returns Promise that resolves to success status
+ */
+export async function sendTokenToPlugin(
+  idToken: string,
+  refreshToken?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(`${PLUGIN_SERVER_URL}/auth/callback`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        token: idToken,
+        refreshToken: refreshToken || '',
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        error: errorData.error || `HTTP ${response.status}`,
+      };
+    }
+
+    const data = await response.json();
+    return {
+      success: data.success || false,
+      error: data.error,
+    };
+  } catch (error: any) {
+    // Network error - plugin server might not be running
+    if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
+      return {
+        success: false,
+        error: 'Plugin-Server nicht erreichbar. Stelle sicher, dass Anki läuft und das Plugin aktiviert ist.',
+      };
+    }
+    return {
+      success: false,
+      error: error.message || 'Unbekannter Fehler',
+    };
+  }
+}
+
+/**
+ * Checks if plugin server is available
+ * @returns Promise that resolves to true if server is reachable
+ */
+export async function checkPluginServer(): Promise<boolean> {
+  try {
+    const response = await fetch(`${PLUGIN_SERVER_URL}/health`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(2000), // 2 second timeout
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Creates and downloads a token file for the Anki plugin (fallback method)
  * @param idToken - Firebase ID Token
  * @param refreshToken - Firebase Refresh Token (optional)
  * @returns Promise that resolves to success status

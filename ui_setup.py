@@ -25,6 +25,12 @@ try:
 except ImportError:
     from widget import ChatbotWidget
 
+# Auth-Server Import
+try:
+    from .auth_server import get_auth_server, set_bridge_instance
+except ImportError:
+    from auth_server import get_auth_server, set_bridge_instance
+
 # Style-Funktionen
 def get_dock_widget_style():
     return """
@@ -72,7 +78,19 @@ def toggle_chatbot():
         _chatbot_widget = chatbot_widget  # Global speichern für Hooks
         _chatbot_dock.setWidget(chatbot_widget)
         
-        # Token wird automatisch via Datei-Überwachung verarbeitet (siehe __init__.py)
+        # Verbinde Auth-Server mit Widget-Bridge (falls Server bereits läuft)
+        try:
+            auth_server = get_auth_server()
+            if auth_server.running:
+                set_bridge_instance(chatbot_widget.bridge, chatbot_widget)
+                print("✅ Auth-Server Bridge aktualisiert")
+            else:
+                # Server noch nicht gestartet - starte jetzt
+                auth_server.start(chatbot_widget.bridge, chatbot_widget)
+        except Exception as e:
+            print(f"⚠️ Fehler beim Verbinden des Auth-Servers: {e}")
+            import traceback
+            traceback.print_exc()
         
         # Dock-Widget links positionieren
         mw.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, _chatbot_dock)

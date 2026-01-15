@@ -14,11 +14,17 @@ try:
 except ImportError:
     from ui_setup import setup_ui, setup_menu, get_chatbot_widget
 
-# Token-Datei-Import
+# Token-Datei-Import (Fallback)
 try:
     from .token_file_handler import read_token_from_file, check_token_file
 except ImportError:
     from token_file_handler import read_token_from_file, check_token_file
+
+# Auth-Server Import (primäre Methode)
+try:
+    from .auth_server import get_auth_server
+except ImportError:
+    from auth_server import get_auth_server
 
 def init_addon():
     """Initialisiert das Addon nach dem Laden des Profils"""
@@ -30,7 +36,10 @@ def init_addon():
         setup_ui()
         setup_menu()
         
-        # Starte Token-Datei-Überwachung
+        # Starte HTTP-Server für automatische Token-Übertragung (primäre Methode)
+        start_auth_server()
+        
+        # Starte Token-Datei-Überwachung (Fallback-Methode)
         start_token_file_monitoring()
     except Exception as e:
         from aqt.utils import showInfo
@@ -119,8 +128,30 @@ def check_for_auth_token():
         import traceback
         traceback.print_exc()
 
+def start_auth_server():
+    """Startet HTTP-Server für automatische Token-Übertragung"""
+    if mw is None:
+        return
+    
+    try:
+        auth_server = get_auth_server()
+        if not auth_server.running:
+            # Erstelle Dummy-Bridge für den Start (wird später aktualisiert)
+            class DummyBridge:
+                pass
+            dummy_bridge = DummyBridge()
+            dummy_widget = None
+            
+            # Starte Server
+            auth_server.start(dummy_bridge, dummy_widget)
+            print("✅ HTTP-Auth-Server gestartet (primäre Verbindungsmethode)")
+    except Exception as e:
+        print(f"⚠️ Fehler beim Starten des HTTP-Auth-Servers: {e}")
+        import traceback
+        traceback.print_exc()
+
 def start_token_file_monitoring():
-    """Startet periodische Überwachung der Token-Datei"""
+    """Startet periodische Überwachung der Token-Datei (Fallback-Methode)"""
     if mw is None:
         return
     
@@ -128,7 +159,7 @@ def start_token_file_monitoring():
     token_check_timer = QTimer()
     token_check_timer.timeout.connect(check_for_auth_token)
     token_check_timer.start(2000)  # Alle 2 Sekunden prüfen
-    print("✅ Token-Datei-Überwachung gestartet (prüft alle 2 Sekunden)")
+    print("✅ Token-Datei-Überwachung gestartet (Fallback-Methode, prüft alle 2 Sekunden)")
 
 def on_state_will_change(new_state, old_state):
     """Wird aufgerufen, wenn sich der Anki-State ändert (z.B. review -> deckBrowser)"""
