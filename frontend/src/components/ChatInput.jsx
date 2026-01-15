@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ArrowUp, Square, Lightbulb, List, EyeOff, Eye, Brain, Sparkles, Search, Zap, Toolbox, BrainCircuit } from 'lucide-react';
 import ToolTogglePopup from './ToolTogglePopup';
+import { useQuotaDisplay } from '../hooks/useQuotaDisplay';
+import QuotaLimitDialog from './QuotaLimitDialog';
 
 /**
  * ChatInput Komponente - Toggle Button für Kompakt/Ausführlich Modus
@@ -20,7 +22,9 @@ export default function ChatInput({
   bridge,
   isPremium = false,
   onShowPaywall,
-  onResetPremium
+  onResetPremium,
+  authStatus = {},
+  currentAuthToken = ''
 }) {
   const [input, setInput] = useState('');
   const [isDetailedMode, setIsDetailedMode] = useState(false);
@@ -35,8 +39,12 @@ export default function ChatInput({
   const containerRef = useRef(null);
   const longPressTimerRef = useRef(null);
   const [longPressProgress, setLongPressProgress] = useState(0);
+  const [showQuotaLimitDialog, setShowQuotaLimitDialog] = useState(false);
 
   const isQuestion = cardContext?.isQuestion !== false;
+  
+  // Quota-Anzeige
+  const quotaDisplay = useQuotaDisplay(bridge, authStatus, currentAuthToken, isDetailedMode);
   
   // Ref für vorherigen Premium-Status (um Unlock zu erkennen)
   const prevPremiumRef = useRef(isPremium);
@@ -126,6 +134,17 @@ export default function ChatInput({
     e.preventDefault();
     const text = input.trim();
     if (text) {
+      // Prüfe Quota vor dem Senden
+      if (quotaDisplay && !quotaDisplay.isUnlimited) {
+        const limit = typeof quotaDisplay.limit === 'string' ? Infinity : quotaDisplay.limit;
+        
+        if (quotaDisplay.used >= limit) {
+          // Limit erreicht - zeige Dialog
+          setShowQuotaLimitDialog(true);
+          return;
+        }
+      }
+      
       const mode = isDetailedMode ? 'detailed' : 'compact';
       onSend(text, { mode });
       setInput('');
@@ -307,12 +326,34 @@ export default function ChatInput({
                   <>
                     <BrainCircuit size={14} className="text-teal-400 relative z-10" />
                     <span className="relative z-10">DEEP</span>
+                    {quotaDisplay && (
+                      <span className={`ml-1.5 text-[10px] font-medium relative z-10 ${
+                        quotaDisplay.isUnlimited 
+                          ? 'text-teal-400' 
+                          : quotaDisplay.used >= (typeof quotaDisplay.limit === 'string' ? Infinity : quotaDisplay.limit)
+                            ? 'text-red-400'
+                            : 'text-teal-400/70'
+                      }`}>
+                        {quotaDisplay.used} / {quotaDisplay.limit}
+                      </span>
+                    )}
                     <span className="flex items-center justify-center ml-1.5 min-w-[28px] h-5 px-1.5 text-[10px] bg-teal-500/10 text-teal-400 rounded border border-teal-500/20 font-bold relative z-10">⌘L</span>
                   </>
                 ) : (
                   <>
                     <Zap size={14} className="currentColor relative z-10" />
                     <span className="relative z-10">FLASH</span>
+                    {quotaDisplay && (
+                      <span className={`ml-1.5 text-[10px] font-medium relative z-10 ${
+                        quotaDisplay.isUnlimited 
+                          ? 'text-base-content/50' 
+                          : quotaDisplay.used >= (typeof quotaDisplay.limit === 'string' ? Infinity : quotaDisplay.limit)
+                            ? 'text-red-400'
+                            : 'text-base-content/50'
+                      }`}>
+                        {quotaDisplay.used} / {quotaDisplay.limit}
+                      </span>
+                    )}
                     <span className="flex items-center justify-center ml-1.5 min-w-[28px] h-5 px-1.5 text-[10px] bg-base-300 text-base-content/50 rounded border border-base-content/10 font-bold relative z-10">⌘L</span>
                   </>
                 )}
@@ -434,5 +475,26 @@ export default function ChatInput({
           </div>
         )}
     </div>
+    
+    {/* Quota Limit Dialog */}
+    <QuotaLimitDialog
+      isOpen={showQuotaLimitDialog}
+      onClose={() => setShowQuotaLimitDialog(false)}
+      onEnterCode={() => {
+        setShowQuotaLimitDialog(false);
+        if (onOpenSettings) onOpenSettings();
+      }}
+      onOpenWebsite={() => {
+        const url = 'https://anki-plus.vercel.app';
+        if (bridge && bridge.openUrl) {
+          bridge.openUrl(url);
+        } else {
+          window.open(url, '_blank');
+        }
+      }}
+      limit={quotaDisplay?.limit || 20}
+      used={quotaDisplay?.used || 0}
+    />
+  </>
   );
 }

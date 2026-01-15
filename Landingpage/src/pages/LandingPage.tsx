@@ -150,10 +150,10 @@ export function LandingPage() {
         </AnimatePresence>
       </header>
 
-      <main className="relative z-10 pt-32 sm:pt-40 md:pt-44 pb-20">
+      <main className="relative z-10">
         
         {/* --- Hero Section --- */}
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col items-center text-center relative">
+        <section className="min-h-screen flex items-center justify-center max-w-7xl mx-auto px-4 sm:px-6 flex-col text-center relative pt-32 sm:pt-40 md:pt-44 pb-20">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3/4 h-32 bg-teal-500/20 blur-[80px] -z-10 rounded-full" />
 
           <motion.div 
@@ -207,7 +207,7 @@ export function LandingPage() {
         </section>
 
         {/* --- INTERACTIVE PLAYGROUND --- */}
-        <section id="features" className="mt-20 sm:mt-32 md:mt-40 max-w-7xl mx-auto px-4 sm:px-6">
+        <section id="features" className="min-h-screen flex flex-col items-center justify-center max-w-7xl mx-auto px-4 sm:px-6 py-20">
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -226,13 +226,14 @@ export function LandingPage() {
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
             transition={{ duration: 0.5 }}
+            className="w-full"
           >
             <InteractivePlayground />
           </motion.div>
         </section>
 
         {/* --- Pricing Section --- */}
-        <section id="pricing" className="mt-20 sm:mt-32 md:mt-40 max-w-7xl mx-auto px-4 sm:px-6 relative">
+        <section id="pricing" className="min-h-screen flex flex-col items-center justify-center max-w-7xl mx-auto px-4 sm:px-6 py-20 relative">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full max-w-4xl bg-teal-900/10 blur-[120px] rounded-full -z-10 pointer-events-none" />
 
           <motion.div 
@@ -256,7 +257,7 @@ export function LandingPage() {
         </section>
 
         {/* --- Testimonials Section --- */}
-        <section className="mt-20 sm:mt-32 md:mt-40 max-w-7xl mx-auto px-4 sm:px-6">
+        <section className="min-h-screen flex flex-col items-center justify-center max-w-7xl mx-auto px-4 sm:px-6 py-20">
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -350,12 +351,12 @@ export function LandingPage() {
         </section>
 
         {/* --- CTA Section --- */}
-        <section className="mt-20 sm:mt-32 md:mt-40 mb-20 max-w-4xl mx-auto px-4 sm:px-6 text-center">
+        <section className="min-h-screen flex flex-col items-center justify-center max-w-4xl mx-auto px-4 sm:px-6 text-center py-20">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
-            className="relative"
+            className="relative w-full"
           >
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-teal-500/15 blur-[120px] rounded-full -z-10" />
             

@@ -31,6 +31,98 @@ function AppInner() {
   // Settings State
   const [showProfile, setShowProfile] = useState(false);
   
+  // Auth State für Quota-Anzeige
+  const [authStatus, setAuthStatus] = useState({
+    authenticated: false,
+    hasToken: false,
+    backendUrl: '',
+    backendMode: false
+  });
+  const [currentAuthToken, setCurrentAuthToken] = useState('');
+  
+  // Lade Auth-Status
+  useEffect(() => {
+    if (bridge && bridge.getAuthStatus) {
+      const checkAuth = () => {
+        try {
+          const statusStr = bridge.getAuthStatus();
+          if (statusStr) {
+            const status = JSON.parse(statusStr);
+            setAuthStatus(status);
+          }
+        } catch (e) {
+          console.error('Fehler beim Laden des Auth-Status:', e);
+        }
+      };
+      
+      checkAuth();
+      const interval = setInterval(checkAuth, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [bridge]);
+  
+  // Lade Auth-Token
+  useEffect(() => {
+    if (bridge && bridge.getAuthToken) {
+      bridge.getAuthToken();
+    }
+  }, [bridge]);
+  
+  // Höre auf auth Events
+  useEffect(() => {
+    const handleMessage = (event) => {
+      if (event.detail && event.detail.type === 'authTokenLoaded' && event.detail.data) {
+        setCurrentAuthToken(event.detail.data.token || '');
+      } else if (event.detail && event.detail.type === 'auth_success') {
+        if (bridge && bridge.getAuthStatus) {
+          try {
+            const statusStr = bridge.getAuthStatus();
+            if (statusStr) {
+              const status = JSON.parse(statusStr);
+              setAuthStatus(status);
+            }
+          } catch (e) {
+            console.error('Fehler beim Laden des Auth-Status:', e);
+          }
+        }
+        if (bridge && bridge.getAuthToken) {
+          bridge.getAuthToken();
+        }
+      }
+    };
+    
+    const originalAnkiReceive = window.ankiReceive;
+    window.ankiReceive = (payload) => {
+      if (originalAnkiReceive) {
+        originalAnkiReceive(payload);
+      }
+      if (payload.type === 'authTokenLoaded' && payload.data) {
+        setCurrentAuthToken(payload.data.token || '');
+      } else if (payload.type === 'auth_success') {
+        if (bridge && bridge.getAuthStatus) {
+          try {
+            const statusStr = bridge.getAuthStatus();
+            if (statusStr) {
+              const status = JSON.parse(statusStr);
+              setAuthStatus(status);
+            }
+          } catch (e) {
+            console.error('Fehler beim Laden des Auth-Status:', e);
+          }
+        }
+        if (bridge && bridge.getAuthToken) {
+          bridge.getAuthToken();
+        }
+      }
+    };
+    
+    window.addEventListener('ankiMessage', handleMessage);
+    return () => {
+      window.removeEventListener('ankiMessage', handleMessage);
+      window.ankiReceive = originalAnkiReceive;
+    };
+  }, [bridge]);
+  
   // Premium State - Lade aus localStorage beim Start
   const [isPremium, setIsPremium] = useState(() => {
     try {

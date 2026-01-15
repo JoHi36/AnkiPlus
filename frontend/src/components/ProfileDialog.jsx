@@ -476,8 +476,22 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady, showCo
                 </button>
               </div>
 
-              <div className="text-center text-xs text-base-content/50 pt-4 border-t border-base-content/5">
+              <div className="text-center text-xs text-base-content/50 pt-4 border-t border-base-content/5 space-y-3">
                 <p>Du findest deinen Token auf der Landingpage nach dem Login</p>
+                <button
+                  onClick={() => {
+                    const url = 'https://anki-plus.vercel.app';
+                    if (bridge && bridge.openUrl) {
+                      bridge.openUrl(url);
+                    } else {
+                      window.open(url, '_blank');
+                    }
+                  }}
+                  className="w-full btn btn-outline btn-sm gap-2 text-xs"
+                >
+                  <Sparkles size={14} />
+                  Zur Landingpage gehen
+                </button>
               </div>
             </div>
           ) : (

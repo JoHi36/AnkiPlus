@@ -54,20 +54,39 @@ export function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#030303] text-white flex items-center justify-center p-6 relative">
-      {/* Background Ambience */}
-      <div className="fixed top-0 left-0 w-full h-[500px] bg-teal-900/10 blur-[120px] pointer-events-none z-0" />
+    <div className="min-h-screen bg-[#030303] text-white flex items-center justify-center p-6 relative overflow-hidden">
+      {/* --- LAYER 1: Grid Pattern --- */}
+      <div className="fixed inset-0 z-0 pointer-events-none h-screen">
+        <div 
+          className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:40px_40px]"
+          style={{
+            maskImage: 'radial-gradient(ellipse 60% 50% at 50% 0%, #000 70%, transparent 100%)',
+            WebkitMaskImage: 'radial-gradient(ellipse 60% 50% at 50% 0%, #000 70%, transparent 100%)'
+          }}
+        />
+      </div>
+
+      {/* --- LAYER 2: High-End Atmosphere --- */}
+      <div className="fixed top-[-20%] left-1/2 -translate-x-1/2 w-[100vw] h-[800px] bg-teal-500/15 rounded-full blur-[120px] pointer-events-none z-0 mix-blend-screen opacity-60" />
+      <div className="fixed top-[-10%] left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-teal-400/10 rounded-full blur-[100px] pointer-events-none z-0" />
+
+      {/* Logo in Header */}
+      <header className="absolute top-0 w-full z-50 p-4 sm:p-6 md:px-8">
+        <div className="max-w-7xl mx-auto">
+          <Link to="/" className="flex items-center gap-2 sm:gap-3 font-bold text-lg sm:text-xl tracking-tight cursor-pointer group">
+            <img 
+              src="/anki-logo.png" 
+              alt="ANKI+" 
+              className="h-8 sm:h-9 w-auto object-contain"
+            />
+          </Link>
+        </div>
+      </header>
 
       <div className="w-full max-w-md relative z-10">
         <div className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-8 shadow-2xl">
           {/* Header */}
           <div className="text-center mb-8">
-            <Link to="/" className="inline-flex items-center gap-3 font-bold text-xl tracking-tight mb-6">
-              <div className="w-9 h-9 bg-teal-500/10 rounded-xl flex items-center justify-center border border-teal-500/20">
-                <span className="text-teal-400">A+</span>
-              </div>
-              <span className="text-white">ANKI+</span>
-            </Link>
             <h1 className="text-2xl font-bold mb-2">Account erstellen</h1>
             <p className="text-neutral-400 text-sm">Starte deine Lernreise mit ANKI+</p>
           </div>
