@@ -66,3 +66,4 @@ Nach dem Redeploy sollte die Landingpage ohne "Firebase Auth is not configured" 
 - Für lokale Entwicklung: Erstelle eine `.env`-Datei im `Landingpage/` Verzeichnis
 - Siehe `SETUP.md` für Details
 
+

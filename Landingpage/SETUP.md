@@ -85,3 +85,4 @@ Für Production-Deployments musst du die Environment-Variablen in deinem Hosting
 
 **Wichtig:** Die `.env`-Datei ist in `.gitignore` und wird nicht ins Repository committed.
 
+

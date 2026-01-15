@@ -36,6 +36,7 @@ export interface AuthRefreshRequest {
 export interface AuthRefreshResponse {
   idToken: string;
   expiresIn: number;
+  refreshToken?: string; // New refresh token if provided by Firebase
 }
 
 /**
@@ -65,5 +66,6 @@ export interface QuotaResponse {
   };
   resetAt: string; // ISO timestamp
 }
+
 
 

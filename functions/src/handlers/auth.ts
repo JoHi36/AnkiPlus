@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
-import { AuthRefreshRequest } from '../types';
+import axios from 'axios';
+import * as functions from 'firebase-functions';
+import { AuthRefreshRequest, AuthRefreshResponse } from '../types';
 import { createErrorResponse, ErrorCode } from '../utils/errors';
 import { createLogger } from '../utils/logging';
 import { logTokenRefreshFailed } from '../utils/analytics';
@@ -8,14 +10,9 @@ import { logTokenRefreshFailed } from '../utils/analytics';
  * POST /api/auth/refresh
  * Refreshes Firebase ID Token using refresh token
  * 
- * Note: Firebase Admin SDK doesn't have direct refresh token validation.
- * This implementation uses a simplified approach where we validate the
- * refresh token format and generate a new custom token.
- * 
- * For production, consider:
- * - Storing refresh tokens in Firestore with expiration
- * - Using Firebase Auth REST API for proper refresh token validation
- * - Implementing token rotation
+ * Uses Firebase Auth REST API to exchange refresh token for new ID token.
+ * This allows the plugin to maintain a persistent connection without
+ * requiring the user to re-authenticate every time the token expires.
  */
 export async function authHandler(
   req: Request,
@@ -33,20 +30,8 @@ export async function authHandler(
       return;
     }
 
-    logger.info('Refreshing token');
-
-    // Note: In a real implementation, you would:
-    // 1. Validate the refresh token against Firestore or Firebase Auth REST API
-    // 2. Check if the refresh token is still valid (not expired, not revoked)
-    // 3. Get the user ID associated with the refresh token
-    // 4. Generate a new ID token for that user
-    //
-    // For now, we'll use a simplified approach:
-    // - If the refresh token looks valid (non-empty string), we'll accept it
-    // - In production, this should be replaced with proper validation
-
-    // Simplified validation - in production, validate against Firestore or Firebase Auth
-    if (typeof body.refreshToken !== 'string' || body.refreshToken.length < 10) {
+    // Validate refresh token format
+    if (typeof body.refreshToken !== 'string' || body.refreshToken.trim().length < 10) {
       await logTokenRefreshFailed('unknown', 'Invalid refresh token format');
       res.status(401).json(
         createErrorResponse(ErrorCode.TOKEN_INVALID, 'Invalid refresh token format')
@@ -54,26 +39,101 @@ export async function authHandler(
       return;
     }
 
-    // TODO: Implement proper refresh token validation
-    // For now, we'll return an error indicating this needs to be implemented
-    // This will be properly implemented when the landing page auth flow is set up
-    
-    // Placeholder response - this will be implemented in Prompt 3 (Landingpage Integration)
-    res.status(501).json(
-      createErrorResponse(
-        ErrorCode.BACKEND_ERROR,
-        'Token refresh not yet fully implemented. Will be completed in landing page integration phase.'
-      )
-    );
+    logger.info('Refreshing token via Firebase Auth REST API');
 
-    // When properly implemented, the response should be:
-    // const auth = getAuth();
-    // const customToken = await auth.createCustomToken(userId);
-    // const response: AuthRefreshResponse = {
-    //   idToken: customToken, // Or use Firebase Auth REST API to exchange refresh token
-    //   expiresIn: 3600, // 1 hour
-    // };
-    // res.json(response);
+    // Get Firebase Web API Key from config
+    const config = functions.config();
+    const firebaseApiKey = config.firebase?.web_api_key || process.env.FIREBASE_WEB_API_KEY;
+
+    if (!firebaseApiKey) {
+      logger.error('FIREBASE_WEB_API_KEY not configured');
+      await logTokenRefreshFailed('unknown', 'Firebase API key not configured');
+      res.status(500).json(
+        createErrorResponse(ErrorCode.BACKEND_ERROR, 'Firebase API key not configured')
+      );
+      return;
+    }
+
+    // Use Firebase Auth REST API to exchange refresh token for ID token
+    // Endpoint: https://securetoken.googleapis.com/v1/token?key={API_KEY}
+    const refreshUrl = `https://securetoken.googleapis.com/v1/token?key=${firebaseApiKey}`;
+
+    try {
+      const response = await axios.post(
+        refreshUrl,
+        new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: body.refreshToken,
+        }),
+        {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          timeout: 10000, // 10 second timeout
+        }
+      );
+
+      const { id_token, expires_in, refresh_token: newRefreshToken } = response.data;
+
+      if (!id_token) {
+        logger.error('No id_token in Firebase Auth response');
+        await logTokenRefreshFailed('unknown', 'No id_token in response');
+        res.status(500).json(
+          createErrorResponse(ErrorCode.BACKEND_ERROR, 'Invalid response from Firebase Auth')
+        );
+        return;
+      }
+
+      logger.info('Token successfully refreshed', {
+        expiresIn: expires_in,
+        hasNewRefreshToken: !!newRefreshToken,
+      });
+
+      // Return new ID token and expiration
+      const authResponse: AuthRefreshResponse = {
+        idToken: id_token,
+        expiresIn: parseInt(expires_in) || 3600, // Default to 1 hour if not provided
+        refreshToken: newRefreshToken || body.refreshToken, // Use new refresh token if provided, otherwise keep old one
+      };
+
+      res.json(authResponse);
+    } catch (axiosError: any) {
+      // Handle Firebase Auth API errors
+      if (axiosError.response) {
+        const status = axiosError.response.status;
+        const errorData = axiosError.response.data;
+
+        logger.error('Firebase Auth API error', {
+          status,
+          error: errorData?.error?.message || errorData,
+        });
+
+        if (status === 400) {
+          // Invalid refresh token
+          await logTokenRefreshFailed('unknown', 'Invalid refresh token');
+          res.status(401).json(
+            createErrorResponse(ErrorCode.TOKEN_INVALID, 'Invalid or expired refresh token')
+          );
+          return;
+        }
+
+        if (status === 403) {
+          // API key invalid or quota exceeded
+          await logTokenRefreshFailed('unknown', 'Firebase API key error');
+          res.status(500).json(
+            createErrorResponse(ErrorCode.BACKEND_ERROR, 'Firebase API key error')
+          );
+          return;
+        }
+      }
+
+      // Network or other errors
+      logger.error('Error calling Firebase Auth API', axiosError);
+      await logTokenRefreshFailed('unknown', axiosError.message || 'Network error');
+      res.status(500).json(
+        createErrorResponse(ErrorCode.BACKEND_ERROR, 'Failed to refresh token', axiosError.message)
+      );
+    }
   } catch (error: any) {
     logger.error('Error refreshing token', error);
     await logTokenRefreshFailed('unknown', error.message || 'Unknown error');

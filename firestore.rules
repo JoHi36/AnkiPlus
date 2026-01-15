@@ -12,7 +12,13 @@ service cloud.firestore {
       allow read: if request.auth != null && request.auth.uid == userId;
       allow write: if false; // Only backend can write
     }
+    
+    // Processed events collection - only backend can read/write (for webhook idempotency)
+    match /processed_events/{eventId} {
+      allow read, write: if false; // Only backend can access
+    }
   }
 }
+
 
 

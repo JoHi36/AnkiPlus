@@ -103,10 +103,10 @@ export function PricingComparisonTable() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-white/10">
-                <th className="text-left p-6 font-semibold text-white">Feature</th>
-                <th className="text-center p-6 font-semibold text-neutral-400">Starter</th>
-                <th className="text-center p-6 font-semibold text-teal-400 bg-teal-500/5">Student</th>
-                <th className="text-center p-6 font-semibold text-purple-400 bg-purple-500/5">Exam Pro</th>
+                <th className="sticky top-0 z-10 text-left p-6 font-semibold text-white bg-[#0A0A0A] backdrop-blur-sm">Feature</th>
+                <th className="sticky top-0 z-10 text-center p-6 font-semibold text-neutral-400 bg-[#0A0A0A] backdrop-blur-sm">Starter</th>
+                <th className="sticky top-0 z-10 text-center p-6 font-semibold text-teal-400 bg-[#0A0A0A] backdrop-blur-sm">Student</th>
+                <th className="sticky top-0 z-10 text-center p-6 font-semibold text-purple-400 bg-[#0A0A0A] backdrop-blur-sm">Exam Pro</th>
               </tr>
             </thead>
             <tbody>
@@ -200,4 +200,5 @@ export function PricingComparisonTable() {
     </div>
   );
 }
+
 

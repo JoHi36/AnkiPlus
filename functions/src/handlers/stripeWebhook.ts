@@ -45,7 +45,26 @@ export async function stripeWebhookHandler(
   }
 
   try {
-    logger.info('Processing webhook event', { type: event.type, id: event.id });
+    const eventId = event.id;
+    logger.info('Processing webhook event', { type: event.type, id: eventId });
+
+    // Idempotency check: Prevent processing the same event twice
+    const db = getDb();
+    const processedEventsRef = db.collection('processed_events').doc(eventId);
+    const existing = await processedEventsRef.get();
+
+    if (existing.exists) {
+      logger.info('Event already processed, skipping', { eventId, eventType: event.type });
+      res.json({ received: true, skipped: true });
+      return;
+    }
+
+    // Mark event as processed BEFORE processing (prevents race conditions)
+    await processedEventsRef.set({
+      processedAt: Timestamp.now(),
+      eventType: event.type,
+      status: 'processing',
+    });
 
     switch (event.type) {
       case 'checkout.session.completed': {
@@ -76,6 +95,12 @@ export async function stripeWebhookHandler(
       default:
         logger.info(`Unhandled event type: ${event.type}`);
     }
+
+    // Mark event as completed
+    await processedEventsRef.update({
+      status: 'completed',
+      completedAt: Timestamp.now(),
+    });
 
     res.json({ received: true });
   } catch (error: any) {
@@ -181,8 +206,12 @@ async function updateUserSubscription(userId: string, subscription: Stripe.Subsc
     return;
   }
 
+  // Get customer ID from subscription
+  const customerId = subscription.customer as string;
+  
   const updateData: any = {
     tier,
+    stripeCustomerId: customerId, // Ensure customer ID is set
     stripeSubscriptionId: subscription.id,
     subscriptionStatus: subscription.status,
     subscriptionCurrentPeriodEnd: Timestamp.fromDate(new Date(subscription.current_period_end * 1000)),
@@ -192,7 +221,13 @@ async function updateUserSubscription(userId: string, subscription: Stripe.Subsc
   const db = getDb();
   await db.collection('users').doc(userId).update(updateData);
 
-  logger.info('User subscription updated', { userId, tier, status: subscription.status });
+  logger.info('User subscription updated', { 
+    userId, 
+    tier, 
+    status: subscription.status,
+    customerId,
+    subscriptionId: subscription.id 
+  });
 }
 
 /**

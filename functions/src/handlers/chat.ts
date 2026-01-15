@@ -280,45 +280,117 @@ export async function chatHandler(
 
     // Stream response from Gemini to client
     let buffer = '';
+    let chunkCount = 0;
+    let textChunkCount = 0;
+    
     response.data.on('data', (chunk: Buffer) => {
-      buffer += chunk.toString();
+      const chunkStr = chunk.toString();
+      buffer += chunkStr;
+      chunkCount++;
       
-      // Process complete lines
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || ''; // Keep incomplete line in buffer
-
-      for (const line of lines) {
-        if (line.trim() === '') continue;
+      logger.debug('Received chunk from Gemini', { 
+        chunkSize: chunkStr.length, 
+        chunkCount,
+        preview: chunkStr.substring(0, 100)
+      });
+      
+      // Extract complete JSON objects from buffer
+      // Gemini sends JSON array stream: [{...}, {...}, ...]
+      // We need to extract complete objects as they arrive
+      let processedLength = 0;
+      
+      // Find complete JSON objects in buffer by counting braces
+      let depth = 0;
+      let start = -1;
+      let inString = false;
+      let escapeNext = false;
+      
+      for (let i = 0; i < buffer.length; i++) {
+        const char = buffer[i];
         
-        // Gemini streaming format: data: {...}
-        if (line.startsWith('data: ')) {
-          try {
-            const data = line.substring(6); // Remove 'data: ' prefix
-            if (data === '[DONE]') {
-              res.write('data: [DONE]\n\n');
-              res.end();
-              return;
-            }
-            
-            const jsonData = JSON.parse(data);
-            
-            // Extract text from Gemini response
-            if (jsonData.candidates && jsonData.candidates[0]) {
-              const candidate = jsonData.candidates[0];
-              if (candidate.content && candidate.content.parts) {
-                for (const part of candidate.content.parts) {
-                  if (part.text) {
-                    // Forward text chunk to client
-                    res.write(`data: ${JSON.stringify({ text: part.text })}\n\n`);
+        if (escapeNext) {
+          escapeNext = false;
+          continue;
+        }
+        
+        if (char === '\\') {
+          escapeNext = true;
+          continue;
+        }
+        
+        if (char === '"' && !escapeNext) {
+          inString = !inString;
+          continue;
+        }
+        
+        if (inString) continue;
+        
+        if (char === '{') {
+          if (depth === 0) start = i;
+          depth++;
+        } else if (char === '}') {
+          depth--;
+          if (depth === 0 && start >= 0) {
+            // Found complete JSON object
+            try {
+              const objStr = buffer.substring(start, i + 1);
+              const jsonData = JSON.parse(objStr);
+              
+              logger.debug('Extracted JSON object', { 
+                hasCandidates: !!jsonData.candidates,
+                candidateCount: jsonData.candidates?.length || 0
+              });
+              
+              // Extract text from Gemini response
+              if (jsonData.candidates && jsonData.candidates[0]) {
+                const candidate = jsonData.candidates[0];
+                
+                if (candidate.content && candidate.content.parts) {
+                  for (const part of candidate.content.parts) {
+                    if (part.text) {
+                      textChunkCount++;
+                      logger.info('Forwarding text chunk', { 
+                        textLength: part.text.length,
+                        textChunkCount,
+                        preview: part.text.substring(0, 50)
+                      });
+                      // Forward text chunk to client
+                      res.write(`data: ${JSON.stringify({ text: part.text })}\n\n`);
+                    }
                   }
                 }
+                
+                // Check for finish reason
+                if (candidate.finishReason) {
+                  logger.info('Gemini stream finished', { 
+                    finishReason: candidate.finishReason,
+                    textChunkCount,
+                    chunkCount 
+                  });
+                  res.write('data: [DONE]\n\n');
+                  res.end();
+                  return;
+                }
               }
+              
+              processedLength = i + 1;
+            } catch (error) {
+              logger.debug('Failed to parse JSON object', { 
+                error: (error as Error).message,
+                preview: buffer.substring(start, Math.min(i + 1, start + 100))
+              });
             }
-          } catch (error) {
-            // Ignore JSON parse errors for incomplete chunks
-            logger.debug('Failed to parse chunk', { error: (error as Error).message, line });
+            start = -1;
           }
         }
+      }
+      
+      // Remove processed JSON objects from buffer
+      if (processedLength > 0) {
+        // Also remove leading commas, whitespace, and array brackets
+        let newBuffer = buffer.substring(processedLength);
+        newBuffer = newBuffer.replace(/^[\s,\[\]]+/, '');
+        buffer = newBuffer;
       }
     });
 

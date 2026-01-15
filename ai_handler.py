@@ -1235,7 +1235,10 @@ class AIHandler:
                         response = requests.post(url, json=request_data, headers=headers, stream=True, timeout=60)
                         print(f"_stream_response: Retry nach Token-Refresh - Status: {response.status_code}")
                     else:
-                        raise Exception("Token-Refresh fehlgeschlagen. Bitte melden Sie sich erneut an.")
+                        # Kein Refresh-Token vorhanden - Benutzer muss sich neu authentifizieren
+                        error_msg = "Ihr Authentifizierungs-Token ist abgelaufen. Bitte öffnen Sie das Profil (Profil-Button) und authentifizieren Sie sich erneut."
+                        print(f"⚠️ {error_msg}")
+                        raise Exception(error_msg)
                 
                 # Bei 403: Quota-Fehler
                 if response.status_code == 403:
@@ -1262,21 +1265,20 @@ class AIHandler:
                 # Gemini sendet JSON-Array-Stream
                 if use_backend:
                     # Backend SSE-Format parsen
-                    buffer = ""
-                    for chunk in response.iter_content(chunk_size=1024, decode_unicode=True):
-                        if chunk is None:
-                            continue
-                        if not chunk:
-                            continue
-                        
-                        buffer += chunk
-                        lines = buffer.split('\n')
-                        buffer = lines.pop() if lines else ""  # Behalte unvollständige Zeile
-                        
-                        for line in lines:
+                    print("📡 Starte Backend-Stream-Verarbeitung...")
+                    chunk_received = False
+                    try:
+                        # Verwende iter_lines für bessere SSE-Verarbeitung
+                        for line in response.iter_lines(decode_unicode=True):
+                            if line is None:
+                                continue
+                            
+                            chunk_received = True
                             line = line.strip()
                             if not line:
                                 continue
+                            
+                            print(f"📝 Verarbeite Zeile: {line[:100]}...")
                             
                             # SSE-Format: data: {...}
                             if line.startswith('data: '):
@@ -1284,6 +1286,7 @@ class AIHandler:
                                 
                                 # Prüfe auf [DONE]
                                 if data_str == '[DONE]':
+                                    print("✅ Stream beendet mit [DONE]")
                                     stream_finished = True
                                     if callback:
                                         callback("", True, False)
@@ -1291,11 +1294,13 @@ class AIHandler:
                                 
                                 try:
                                     chunk_data = json.loads(data_str)
+                                    print(f"📦 Chunk-Daten geparst: {list(chunk_data.keys())}")
                                     
                                     # Backend-Format: {"text": "..."}
                                     if "text" in chunk_data:
                                         chunk_text = chunk_data["text"]
                                         if chunk_text:
+                                            print(f"✅ Text-Chunk erhalten (Länge: {len(chunk_text)})")
                                             accumulated_text += chunk_text
                                             full_text = accumulated_text
                                             chunk_count += 1
@@ -1310,16 +1315,23 @@ class AIHandler:
                                             raise Exception(f"Quota überschritten: {error_msg}. Bitte upgraden Sie Ihren Plan.")
                                         raise Exception(f"Backend Fehler: {error_msg}")
                                 
-                                except json.JSONDecodeError:
+                                except json.JSONDecodeError as e:
                                     # Ignoriere JSON-Parse-Fehler für unvollständige Chunks
+                                    print(f"⚠️ JSON-Parse-Fehler (ignoriert): {e}, Zeile: {line[:50]}...")
                                     continue
                                 except Exception as e:
                                     if "Quota" in str(e) or "Token" in str(e):
                                         raise
                                     print(f"⚠️ Fehler beim Verarbeiten von Backend-Chunk: {e}")
-                                    continue
+                    except Exception as stream_error:
+                        print(f"⚠️ Stream-Fehler: {stream_error}")
+                        raise
+                    
+                    if not chunk_received:
+                        print("⚠️ Keine Chunks vom Backend empfangen!")
                     
                     # Stream beendet
+                    print(f"📊 Stream beendet - Chunks: {chunk_count}, Text-Länge: {len(full_text)}")
                     if full_text:
                         if callback:
                             callback("", True, False)
@@ -1909,9 +1921,15 @@ Karteninhalt: {question_clean[:500]}"""
         """
         try:
             self._refresh_config()
-            api_key = self.config.get("api_key", "")
-            if not api_key:
-                return None
+            
+            # Prüfe ob Backend-Modus aktiv ist
+            use_backend = is_backend_mode() and get_auth_token()
+            if not use_backend:
+                api_key = self.config.get("api_key", "")
+                if not api_key:
+                    return None
+            else:
+                api_key = ""  # Nicht benötigt im Backend-Modus
             
             # Force Gemini 2.0 Flash Lite (Fallback: gemini-1.5-flash)
             router_model = "gemini-2.0-flash-lite"

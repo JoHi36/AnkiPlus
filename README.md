@@ -41,3 +41,4 @@ Kopiere `config.json.example` zu `config.json` und fülle die erforderlichen Wer
 [Lizenz hier einfügen]
 
 
+

@@ -233,25 +233,6 @@ export default function SessionHeader({
         <div className="flex-shrink-0 pointer-events-auto relative flex items-center gap-2">
           {!showSessionOverview && (
             <>
-              {/* Profil Button (ersetzt Auth-Status-Badge) */}
-              {onOpenSettings && (
-                <button
-                  onClick={onOpenSettings}
-                  className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs backdrop-blur-sm border transition-all ${
-                    authStatus.authenticated
-                      ? 'bg-success/10 text-success border-success/20 hover:bg-success/20'
-                      : 'bg-base-300/50 text-base-content/70 border-base-300 hover:bg-base-300'
-                  }`}
-                  title={authStatus.authenticated ? 'Profil öffnen' : 'Profil öffnen - Nicht verbunden'}
-                >
-                  <User size={12} />
-                  <span>Profil</span>
-                  {authStatus.authenticated && (
-                    <CheckCircle size={10} className="text-success" />
-                  )}
-                </button>
-              )}
-              
               <button
                 onClick={handleBookButtonClick}
                 className={`w-9 h-9 flex items-center justify-center rounded-lg backdrop-blur-sm border transition-all ${
@@ -279,7 +260,27 @@ export default function SessionHeader({
               />
             </>
           )}
-          {showSessionOverview && <div className="w-9" />}
+          {showSessionOverview && (
+            <>
+              {onOpenSettings && (
+                <button
+                  onClick={onOpenSettings}
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs backdrop-blur-sm border transition-all ${
+                    authStatus.authenticated
+                      ? 'bg-success/10 text-success border-success/20 hover:bg-success/20'
+                      : 'bg-base-300/50 text-base-content/70 border-base-300 hover:bg-base-300'
+                  }`}
+                  title={authStatus.authenticated ? 'Profil öffnen' : 'Profil öffnen - Nicht verbunden'}
+                >
+                  <User size={12} />
+                  <span>Profil</span>
+                  {authStatus.authenticated && (
+                    <CheckCircle size={10} className="text-success" />
+                  )}
+                </button>
+              )}
+            </>
+          )}
         </div>
       </div>
     </header>

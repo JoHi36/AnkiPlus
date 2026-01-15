@@ -177,3 +177,4 @@ export function DashboardActivity({ activities = mockActivities, maxItems = 5 }:
   );
 }
 
+

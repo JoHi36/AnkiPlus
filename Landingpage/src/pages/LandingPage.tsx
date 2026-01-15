@@ -327,6 +327,12 @@ export function LandingPage() {
           </div>
         </section>
 
+import { PricingGrid } from '../components/PricingGrid';
+
+// ... (other imports)
+
+// Inside the LandingPage component, find the Pricing Section:
+
         {/* --- Pricing Section --- */}
         <section id="pricing" className="mt-20 sm:mt-32 md:mt-40 max-w-7xl mx-auto px-4 sm:px-6 relative">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full max-w-4xl bg-teal-900/10 blur-[120px] rounded-full -z-10 pointer-events-none" />
@@ -341,97 +347,8 @@ export function LandingPage() {
             <p className="text-base sm:text-lg md:text-xl text-neutral-400">Wähle den unfairen Vorteil, der zu dir passt.</p>
           </motion.div>
 
-          <motion.div 
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true }}
-            variants={staggerContainer}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 items-start"
-          >
-            
-            {/* Starter (Free) */}
-            <motion.div variants={fadeInUp} className="relative rounded-3xl border border-white/10 bg-neutral-900/40 p-6 sm:p-8 md:p-10 backdrop-blur-sm hover:border-white/20 transition-colors">
-              <div className="mb-6 inline-block px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-neutral-400">
-                Starter
-              </div>
-              <div className="flex items-baseline gap-1 mb-8">
-                <span className="text-5xl font-bold text-white tracking-tight">0€</span>
-                <span className="text-neutral-500 text-lg">/Monat</span>
-              </div>
-              <p className="text-neutral-400 text-sm mb-8 h-10 leading-relaxed">
-                Perfekt, um die Magie von ANKI+ kennenzulernen.
-              </p>
-              <ul className="space-y-4 mb-6 text-sm text-neutral-300">
-                <li className="flex items-center gap-3"><Check className="w-5 h-5 text-neutral-500" /> Unbegrenzt Flash Mode</li>
-                <li className="flex items-center gap-3"><Check className="w-5 h-5 text-white" /> 3x Deep Mode pro Tag</li>
-                <li className="flex items-center gap-3"><Check className="w-5 h-5 text-neutral-500" /> Basis-Support</li>
-              </ul>
-              <LimitInfoBox tier="free" />
-              <Link 
-                to="/register"
-                className="block w-full py-4 rounded-full border border-white/10 font-medium text-white hover:bg-white hover:text-black transition-all text-center mt-6"
-              >
-                Download
-              </Link>
-            </motion.div>
-
-            {/* Student (Most Popular) */}
-            <motion.div variants={fadeInUp} className="relative rounded-3xl border border-teal-500/50 bg-[#0F1110] p-6 sm:p-8 md:p-10 shadow-[0_0_50px_-15px_rgba(20,184,166,0.2)] md:scale-105 z-10 flex flex-col">
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 px-4 py-1.5 bg-teal-500 text-black text-xs font-bold rounded-full uppercase tracking-wider shadow-lg shadow-teal-500/20">
-                Beliebt
-              </div>
-              <div className="mb-6 inline-block px-3 py-1 rounded-full bg-teal-950/50 border border-teal-500/30 text-xs font-medium text-teal-400">
-                Student
-              </div>
-              <div className="flex items-baseline gap-1 mb-8">
-                <span className="text-5xl font-bold text-white tracking-tight">4,99€</span>
-                <span className="text-neutral-500 text-lg">/Monat</span>
-              </div>
-              <p className="text-neutral-400 text-sm mb-8 h-10 leading-relaxed">
-                Für alle, die Prüfungen nicht nur bestehen, sondern rocken wollen.
-              </p>
-              <ul className="space-y-4 mb-6 text-sm text-neutral-200">
-                <li className="flex items-center gap-3"><Check className="w-5 h-5 text-teal-400" /> Alles aus Starter</li>
-                <li className="flex items-center gap-3"><Check className="w-5 h-5 text-teal-400" /> 30x Deep Mode pro Tag</li>
-                <li className="flex items-center gap-3"><Check className="w-5 h-5 text-teal-400" /> Priorisierte Generierung</li>
-                <li className="flex items-center gap-3"><Check className="w-5 h-5 text-teal-400" /> Werbefrei</li>
-              </ul>
-              <LimitInfoBox tier="tier1" />
-              <Link 
-                to="/register"
-                className="w-full py-4 rounded-full bg-teal-500 font-bold text-black text-lg hover:bg-teal-400 hover:shadow-[0_0_30px_rgba(20,184,166,0.4)] transition-all transform hover:-translate-y-1 text-center block mt-6"
-              >
-                Jetzt starten
-              </Link>
-            </motion.div>
-
-            {/* Exam Pro (Ultimate) */}
-            <motion.div variants={fadeInUp} className="relative rounded-3xl border border-white/10 bg-neutral-900/40 p-6 sm:p-8 md:p-10 backdrop-blur-sm hover:border-purple-500/30 transition-colors">
-              <div className="mb-6 inline-block px-3 py-1 rounded-full bg-purple-900/20 border border-purple-500/30 text-xs font-medium text-purple-300">
-                Fürs Examen
-              </div>
-              <div className="flex items-baseline gap-1 mb-8">
-                <span className="text-5xl font-bold text-white tracking-tight">14,99€</span>
-                <span className="text-neutral-500 text-lg">/Monat</span>
-              </div>
-              <p className="text-neutral-400 text-sm mb-8 h-10 leading-relaxed">
-                Das ultimative Werkzeug für Staatsexamen und High-Stakes Tests.
-              </p>
-              <ul className="space-y-4 mb-6 text-sm text-neutral-300">
-                 <li className="flex items-center gap-3"><Check className="w-5 h-5 text-purple-400" /> Alles aus Student</li>
-                 <li className="flex items-center gap-3"><Check className="w-5 h-5 text-purple-400" /> <span className="text-white font-medium">UNBEGRENZT</span> Deep Mode</li>
-                 <li className="flex items-center gap-3"><Check className="w-5 h-5 text-purple-400" /> Deep Search (25 Quellen)</li>
-                 <li className="flex items-center gap-3"><Check className="w-5 h-5 text-purple-400" /> 24/7 Priority Support</li>
-              </ul>
-              <LimitInfoBox tier="tier2" />
-              <Link 
-                to="/register"
-                className="w-full py-4 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 font-medium text-white hover:opacity-90 transition-opacity shadow-lg shadow-purple-900/20 text-center block mt-6"
-              >
-                Pro werden
-              </Link>
-            </motion.div>
-          </motion.div>
+          {/* Pricing Grid Component */}
+          <PricingGrid isLoggedIn={false} />
 
           {/* Feature Comparison Table */}
           <PricingComparisonTable />
