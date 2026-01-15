@@ -117,7 +117,7 @@ export function AccountOverview({ userDoc, quota, onPortal, portalLoading }: Acc
                 {portalLoading ? 'Lädt...' : (
                     <>
                         <CreditCard size={16} />
-                        Abo & Zahlungen verwalten
+                        Vertrag bearbeiten
                     </>
                 )}
               </button>

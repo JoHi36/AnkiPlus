@@ -112,9 +112,9 @@ export function TestimonialEditor({ onSaved }: TestimonialEditorProps) {
   const isPremium = userDoc?.tier === 'tier1' || userDoc?.tier === 'tier2';
   if (!isPremium) {
     return (
-      <div className="rounded-2xl p-6 border border-purple-500/20 bg-purple-900/10">
+      <div className="rounded-2xl p-6 border border-white/5 bg-[#0A0A0A]">
         <div className="flex items-center gap-3 mb-4">
-          <Star className="w-5 h-5 text-purple-400" />
+          <Star className="w-5 h-5 text-teal-400" />
           <h3 className="font-semibold text-white">Hall of Fame</h3>
         </div>
         <p className="text-sm text-neutral-400 mb-4">
@@ -128,19 +128,14 @@ export function TestimonialEditor({ onSaved }: TestimonialEditorProps) {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl p-6 border border-purple-500/20 bg-gradient-to-br from-purple-900/20 to-blue-900/20 relative overflow-hidden"
+      className="rounded-2xl p-8 border border-white/5 bg-[#0A0A0A] relative overflow-hidden"
     >
-      {/* Background Icon */}
-      <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none">
-        <Star size={80} strokeWidth={1} className="text-purple-400" />
-      </div>
-
       <div className="relative z-10">
         {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
-            <Star size={20} />
-          </div>
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold text-white mb-1">Hall of Fame Testimonial</h3>
+          <p className="text-sm text-neutral-400">Teile deine Erfahrung mit ANKI+</p>
+        </div>
           <div>
             <h3 className="font-semibold text-white">Hall of Fame Testimonial</h3>
             <p className="text-xs text-neutral-400">Teile deine Erfahrung mit ANKI+</p>
@@ -201,8 +196,8 @@ export function TestimonialEditor({ onSaved }: TestimonialEditorProps) {
             className={`w-full h-32 px-4 py-3 rounded-xl bg-black/20 border ${
               isOverLimit
                 ? 'border-red-500/50 focus:border-red-500'
-                : 'border-white/10 focus:border-purple-500/50'
-            } text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20 transition-all resize-none`}
+                : 'border-white/5 focus:border-teal-500/50'
+            } text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all resize-none`}
             maxLength={maxLength}
           />
           <div className="flex justify-between items-center mt-2">
@@ -239,7 +234,7 @@ export function TestimonialEditor({ onSaved }: TestimonialEditorProps) {
           <button
             onClick={handleSave}
             disabled={saving || isOverLimit || text.length < 20}
-            className="flex-1 py-3 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="flex-1 py-3 px-4 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {saving ? (
               <>

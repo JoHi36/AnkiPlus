@@ -1521,6 +1521,8 @@ function AppInner() {
                     isPremium={isPremium}
                     onShowPaywall={() => setShowPaywall(true)}
                     onResetPremium={handleResetPremium}
+                    authStatus={authStatus}
+                    currentAuthToken={currentAuthToken}
         />
               </div>
             </div>

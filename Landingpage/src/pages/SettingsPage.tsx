@@ -149,7 +149,7 @@ export function SettingsPage() {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-screen">
-          <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+          <Loader2 className="w-8 h-8 animate-spin text-teal-400" />
         </div>
       </DashboardLayout>
     );
@@ -162,14 +162,9 @@ export function SettingsPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
+          className="mb-12"
         >
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
-              <SettingsIcon size={24} />
-            </div>
-            <h1 className="text-3xl font-bold text-white">Einstellungen</h1>
-          </div>
+          <h1 className="text-3xl md:text-4xl font-bold text-white mb-2 tracking-tight">Einstellungen</h1>
           <p className="text-neutral-400">Verwalte dein Profil, Community-Beiträge und App-Einstellungen</p>
         </motion.div>
 
@@ -200,7 +195,7 @@ export function SettingsPage() {
         )}
 
         {/* Section Tabs */}
-        <div className="flex gap-2 mb-8 border-b border-white/10">
+        <div className="flex gap-1 mb-12 border-b border-white/5">
           {[
             { id: 'account' as const, label: 'Account & Profil', icon: User },
             { id: 'community' as const, label: 'Community', icon: Star },
@@ -211,10 +206,10 @@ export function SettingsPage() {
               <button
                 key={section.id}
                 onClick={() => setActiveSection(section.id)}
-                className={`px-4 py-3 rounded-t-xl font-medium transition-all flex items-center gap-2 ${
+                className={`px-6 py-3 font-medium transition-all flex items-center gap-2 border-b-2 ${
                   activeSection === section.id
-                    ? 'bg-purple-500/10 text-purple-400 border-b-2 border-purple-500'
-                    : 'text-neutral-400 hover:text-white'
+                    ? 'text-white border-teal-500'
+                    : 'text-neutral-400 hover:text-white border-transparent'
                 }`}
               >
                 <Icon size={18} />
@@ -233,15 +228,10 @@ export function SettingsPage() {
             className="space-y-6"
           >
             {/* Email Update */}
-            <div className="rounded-2xl p-6 border border-white/10 bg-[#0A0A0A]">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 rounded-lg bg-teal-500/10 text-teal-400">
-                  <Mail size={20} />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-white">E-Mail-Adresse</h3>
-                  <p className="text-xs text-neutral-400">Aktuelle E-Mail: {user?.email}</p>
-                </div>
+            <div className="rounded-2xl p-8 border border-white/5 bg-[#0A0A0A]">
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-white mb-1">E-Mail-Adresse</h3>
+                <p className="text-sm text-neutral-400">Aktuelle E-Mail: {user?.email}</p>
               </div>
               <form onSubmit={handleUpdateEmail} className="space-y-4">
                 <div>
@@ -278,15 +268,10 @@ export function SettingsPage() {
             </div>
 
             {/* Password Update */}
-            <div className="rounded-2xl p-6 border border-white/10 bg-[#0A0A0A]">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400">
-                  <Lock size={20} />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-white">Passwort ändern</h3>
-                  <p className="text-xs text-neutral-400">Wähle ein sicheres Passwort</p>
-                </div>
+            <div className="rounded-2xl p-8 border border-white/5 bg-[#0A0A0A]">
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-white mb-1">Passwort ändern</h3>
+                <p className="text-sm text-neutral-400">Wähle ein sicheres Passwort</p>
               </div>
               <form onSubmit={handleUpdatePassword} className="space-y-4">
                 <div>
@@ -297,7 +282,7 @@ export function SettingsPage() {
                     type="password"
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl bg-black/20 border border-white/10 text-white placeholder-neutral-500 focus:outline-none focus:border-purple-500/50 transition-colors"
+                    className="w-full px-4 py-3 rounded-xl bg-black/20 border border-white/5 text-white placeholder-neutral-500 focus:outline-none focus:border-teal-500/50 transition-colors"
                     placeholder="••••••••"
                     required
                   />
@@ -310,7 +295,7 @@ export function SettingsPage() {
                     type="password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl bg-black/20 border border-white/10 text-white placeholder-neutral-500 focus:outline-none focus:border-purple-500/50 transition-colors"
+                    className="w-full px-4 py-3 rounded-xl bg-black/20 border border-white/5 text-white placeholder-neutral-500 focus:outline-none focus:border-teal-500/50 transition-colors"
                     placeholder="Mindestens 6 Zeichen"
                     minLength={6}
                     required
@@ -324,7 +309,7 @@ export function SettingsPage() {
                     type="password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl bg-black/20 border border-white/10 text-white placeholder-neutral-500 focus:outline-none focus:border-purple-500/50 transition-colors"
+                    className="w-full px-4 py-3 rounded-xl bg-black/20 border border-white/5 text-white placeholder-neutral-500 focus:outline-none focus:border-teal-500/50 transition-colors"
                     placeholder="Passwort wiederholen"
                     minLength={6}
                     required
@@ -333,7 +318,7 @@ export function SettingsPage() {
                 <button
                   type="submit"
                   disabled={savingPassword}
-                  className="px-6 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="px-6 py-3 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {savingPassword ? (
                     <>
@@ -351,15 +336,10 @@ export function SettingsPage() {
             </div>
 
             {/* Delete Account */}
-            <div className="rounded-2xl p-6 border border-red-500/20 bg-red-900/10">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 rounded-lg bg-red-500/10 text-red-400">
-                  <Trash2 size={20} />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-white">Account löschen</h3>
-                  <p className="text-xs text-neutral-400">Diese Aktion kann nicht rückgängig gemacht werden</p>
-                </div>
+            <div className="rounded-2xl p-8 border border-red-500/20 bg-red-900/10">
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-white mb-1">Account löschen</h3>
+                <p className="text-sm text-neutral-400">Diese Aktion kann nicht rückgängig gemacht werden</p>
               </div>
               <button
                 onClick={handleDeleteAccount}
@@ -391,43 +371,28 @@ export function SettingsPage() {
             animate="visible"
             className="space-y-6"
           >
-            <div className="rounded-2xl p-6 border border-white/10 bg-[#0A0A0A]">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400">
-                  <Bell size={20} />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-white">Benachrichtigungen</h3>
-                  <p className="text-xs text-neutral-400">Coming soon</p>
-                </div>
+            <div className="rounded-2xl p-8 border border-white/5 bg-[#0A0A0A]">
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-white mb-1">Benachrichtigungen</h3>
+                <p className="text-sm text-neutral-400">Coming soon</p>
               </div>
-              <p className="text-sm text-neutral-400">Benachrichtigungseinstellungen werden in einer zukünftigen Version verfügbar sein.</p>
+              <p className="text-sm text-neutral-500">Benachrichtigungseinstellungen werden in einer zukünftigen Version verfügbar sein.</p>
             </div>
 
-            <div className="rounded-2xl p-6 border border-white/10 bg-[#0A0A0A]">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 rounded-lg bg-teal-500/10 text-teal-400">
-                  <Globe size={20} />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-white">Sprache</h3>
-                  <p className="text-xs text-neutral-400">Coming soon</p>
-                </div>
+            <div className="rounded-2xl p-8 border border-white/5 bg-[#0A0A0A]">
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-white mb-1">Sprache</h3>
+                <p className="text-sm text-neutral-400">Coming soon</p>
               </div>
-              <p className="text-sm text-neutral-400">Spracheinstellungen werden in einer zukünftigen Version verfügbar sein.</p>
+              <p className="text-sm text-neutral-500">Spracheinstellungen werden in einer zukünftigen Version verfügbar sein.</p>
             </div>
 
-            <div className="rounded-2xl p-6 border border-white/10 bg-[#0A0A0A]">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400">
-                  <Shield size={20} />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-white">Datenschutz</h3>
-                  <p className="text-xs text-neutral-400">Coming soon</p>
-                </div>
+            <div className="rounded-2xl p-8 border border-white/5 bg-[#0A0A0A]">
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-white mb-1">Datenschutz</h3>
+                <p className="text-sm text-neutral-400">Coming soon</p>
               </div>
-              <p className="text-sm text-neutral-400">Datenschutzeinstellungen werden in einer zukünftigen Version verfügbar sein.</p>
+              <p className="text-sm text-neutral-500">Datenschutzeinstellungen werden in einer zukünftigen Version verfügbar sein.</p>
             </div>
           </motion.div>
         )}

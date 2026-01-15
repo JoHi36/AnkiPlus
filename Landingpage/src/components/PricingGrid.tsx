@@ -31,7 +31,55 @@ const fadeInUp = {
   }
 };
 
-export function PricingGrid({ currentTier, onPortal, isLoggedIn = false }: PricingGridProps) {
+export function PricingGrid({ currentTier = 'free', onPortal, isLoggedIn = false }: PricingGridProps) {
+  // Determine which card should be highlighted based on current tier
+  const getCardStyles = (cardTier: 'free' | 'tier1' | 'tier2') => {
+    if (currentTier === 'free') {
+      // Free: Highlight Student (middle)
+      if (cardTier === 'tier1') {
+        return 'relative rounded-[2rem] border border-teal-500/30 bg-[#0F1312] p-8 flex flex-col h-full shadow-[0_0_60px_-15px_rgba(20,184,166,0.1)] md:-mt-4 md:mb-4 z-10';
+      }
+      return 'group relative rounded-[2rem] border border-white/5 bg-neutral-900/20 p-8 flex flex-col h-full backdrop-blur-md hover:bg-neutral-900/30 transition-all duration-300';
+    } else if (currentTier === 'tier1') {
+      // Student: Highlight Pro (third), Starter and Student same size
+      if (cardTier === 'tier2') {
+        return 'relative rounded-[2rem] border border-purple-500/30 bg-[#0F1312] p-8 flex flex-col h-full shadow-[0_0_60px_-15px_rgba(168,85,247,0.1)] md:-mt-4 md:mb-4 z-10';
+      }
+      return 'group relative rounded-[2rem] border border-white/5 bg-neutral-900/20 p-8 flex flex-col h-full backdrop-blur-md hover:bg-neutral-900/30 transition-all duration-300';
+    } else {
+      // Pro: All same size (no highlighting)
+      return 'group relative rounded-[2rem] border border-white/5 bg-neutral-900/20 p-8 flex flex-col h-full backdrop-blur-md hover:bg-neutral-900/30 transition-all duration-300';
+    }
+  };
+
+  // Get button text and action for each card
+  const getButtonConfig = (cardTier: 'free' | 'tier1' | 'tier2') => {
+    if (!isLoggedIn) {
+      return { type: 'link' as const, text: cardTier === 'free' ? 'Kostenlos starten' : cardTier === 'tier1' ? 'Jetzt durchstarten' : 'Pro werden' };
+    }
+
+    if (currentTier === 'free') {
+      if (cardTier === 'free') {
+        return { type: 'current' as const, text: 'Aktuelles Abo' };
+      }
+      return { type: 'upgrade' as const, tier: cardTier };
+    } else if (currentTier === 'tier1') {
+      if (cardTier === 'free') {
+        return { type: 'downgrade' as const, text: 'Downgraden' };
+      } else if (cardTier === 'tier1') {
+        return { type: 'current' as const, text: 'Aktuelles Abo' };
+      } else {
+        return { type: 'upgrade' as const, tier: cardTier };
+      }
+    } else {
+      // tier2
+      if (cardTier === 'tier2') {
+        return { type: 'current' as const, text: 'Aktueller Plan' };
+      }
+      return { type: 'downgrade' as const, text: 'Downgraden' };
+    }
+  };
+
   return (
     <motion.div 
       initial="hidden"
@@ -44,7 +92,7 @@ export function PricingGrid({ currentTier, onPortal, isLoggedIn = false }: Prici
       {/* Starter (Free) */}
       <motion.div 
         variants={fadeInUp} 
-        className="group relative rounded-[2rem] border border-white/5 bg-neutral-900/20 p-8 flex flex-col h-full backdrop-blur-md hover:bg-neutral-900/30 transition-all duration-300"
+        className={getCardStyles('free')}
       >
         <div className="mb-6">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-neutral-400 mb-6">
@@ -88,42 +136,52 @@ export function PricingGrid({ currentTier, onPortal, isLoggedIn = false }: Prici
         <LimitInfoBox tier="free" />
         
         <div className="mt-8">
-          {isLoggedIn ? (
-            currentTier === 'free' ? (
-              <Button 
-                className="w-full bg-white/5 text-neutral-500 border-white/5 hover:bg-white/5 cursor-default py-6 rounded-2xl"
-                variant="outline"
-              >
-                Aktueller Plan
-              </Button>
-            ) : (
-              <Button 
-                className="w-full py-6 rounded-2xl border-white/10 text-neutral-300 hover:text-white" 
-                variant="outline"
-                onClick={onPortal}
-              >
-                Downgrade
-              </Button>
-            )
-          ) : (
-            <Link 
-              to="/register"
-              className="flex items-center justify-center w-full py-4 rounded-2xl border border-white/10 font-medium text-white hover:bg-white hover:text-black transition-all duration-300 group-hover:border-white/20"
-            >
-              Kostenlos starten
-            </Link>
-          )}
+          {(() => {
+            const config = getButtonConfig('free');
+            if (config.type === 'link') {
+              return (
+                <Link 
+                  to="/register"
+                  className="flex items-center justify-center w-full py-4 rounded-2xl border border-white/10 font-medium text-white hover:bg-white hover:text-black transition-all duration-300 group-hover:border-white/20"
+                >
+                  {config.text}
+                </Link>
+              );
+            } else if (config.type === 'current') {
+              return (
+                <Button 
+                  className="w-full bg-white/5 text-neutral-500 border-white/5 hover:bg-white/5 cursor-default py-6 rounded-2xl"
+                  variant="outline"
+                >
+                  {config.text}
+                </Button>
+              );
+            } else if (config.type === 'downgrade') {
+              return (
+                <Button 
+                  className="w-full py-6 rounded-2xl border-white/10 text-neutral-300 hover:text-white" 
+                  variant="outline"
+                  onClick={onPortal}
+                >
+                  {config.text}
+                </Button>
+              );
+            }
+            return null;
+          })()}
         </div>
       </motion.div>
 
       {/* Student (Most Popular) */}
       <motion.div 
         variants={fadeInUp} 
-        className="relative rounded-[2rem] border border-teal-500/30 bg-[#0F1312] p-8 flex flex-col h-full shadow-[0_0_60px_-15px_rgba(20,184,166,0.1)] md:-mt-4 md:mb-4 z-10"
+        className={getCardStyles('tier1')}
       >
-        <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-gradient-to-r from-teal-500 to-teal-400 text-black text-[10px] font-bold rounded-full uppercase tracking-widest shadow-lg shadow-teal-500/20">
-          Am Beliebtesten
-        </div>
+        {currentTier === 'free' && (
+          <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-gradient-to-r from-teal-500 to-teal-400 text-black text-[10px] font-bold rounded-full uppercase tracking-widest shadow-lg shadow-teal-500/20">
+            Am Beliebtesten
+          </div>
+        )}
         
         <div className="mb-6">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-950/30 border border-teal-500/20 text-xs font-medium text-teal-300 mb-6">
@@ -173,39 +231,63 @@ export function PricingGrid({ currentTier, onPortal, isLoggedIn = false }: Prici
         <LimitInfoBox tier="tier1" />
         
         <div className="mt-8">
-          {isLoggedIn ? (
-            currentTier === 'tier1' ? (
-              <Button 
-                className="w-full bg-teal-500/5 text-teal-500 border-teal-500/20 hover:bg-teal-500/10 cursor-default py-6 rounded-2xl"
-                variant="outline"
-              >
-                Aktueller Plan
-              </Button>
-            ) : (
-              <CheckoutButton 
-                tier="tier1" 
-                className="w-full"
-                variant="primary"
-              >
-                Upgrade auf Student
-              </CheckoutButton>
-            )
-          ) : (
-            <Link 
-              to="/register"
-              className="flex items-center justify-center w-full py-4 rounded-2xl bg-gradient-to-r from-teal-500 to-teal-400 font-bold text-black text-lg hover:shadow-[0_0_40px_-10px_rgba(20,184,166,0.4)] transition-all transform hover:-translate-y-1"
-            >
-              Jetzt durchstarten
-            </Link>
-          )}
+          {(() => {
+            const config = getButtonConfig('tier1');
+            if (config.type === 'link') {
+              return (
+                <Link 
+                  to="/register"
+                  className="flex items-center justify-center w-full py-4 rounded-2xl bg-gradient-to-r from-teal-500 to-teal-400 font-bold text-black text-lg hover:shadow-[0_0_40px_-10px_rgba(20,184,166,0.4)] transition-all transform hover:-translate-y-1"
+                >
+                  {config.text}
+                </Link>
+              );
+            } else if (config.type === 'current') {
+              return (
+                <Button 
+                  className="w-full bg-teal-500/5 text-teal-500 border-teal-500/20 hover:bg-teal-500/10 cursor-default py-6 rounded-2xl"
+                  variant="outline"
+                >
+                  {config.text}
+                </Button>
+              );
+            } else if (config.type === 'upgrade') {
+              return (
+                <CheckoutButton 
+                  tier="tier1" 
+                  className="w-full"
+                  variant="primary"
+                >
+                  Upgrade auf Student
+                </CheckoutButton>
+              );
+            } else if (config.type === 'downgrade') {
+              return (
+                <Button 
+                  className="w-full py-6 rounded-2xl border-white/10 text-neutral-300 hover:text-white" 
+                  variant="outline"
+                  onClick={onPortal}
+                >
+                  {config.text}
+                </Button>
+              );
+            }
+            return null;
+          })()}
         </div>
       </motion.div>
 
       {/* Exam Pro (Ultimate) */}
       <motion.div 
         variants={fadeInUp} 
-        className="group relative rounded-[2rem] border border-purple-500/20 bg-neutral-900/20 p-8 flex flex-col h-full backdrop-blur-md hover:bg-neutral-900/30 hover:border-purple-500/30 transition-all duration-300"
+        className={getCardStyles('tier2')}
       >
+        {currentTier === 'tier1' && (
+          <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-gradient-to-r from-purple-500 to-purple-400 text-white text-[10px] font-bold rounded-full uppercase tracking-widest shadow-lg shadow-purple-500/20">
+            Premium
+          </div>
+        )}
+        
         <div className="mb-6">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-900/20 border border-purple-500/30 text-xs font-medium text-purple-300 mb-6">
             <Crown size={14} />
@@ -260,31 +342,49 @@ export function PricingGrid({ currentTier, onPortal, isLoggedIn = false }: Prici
         <LimitInfoBox tier="tier2" />
         
         <div className="mt-8">
-          {isLoggedIn ? (
-            currentTier === 'tier2' ? (
-              <Button 
-                className="w-full bg-purple-500/5 text-purple-400 border-purple-500/20 hover:bg-purple-500/10 cursor-default py-6 rounded-2xl"
-                variant="outline"
-              >
-                Aktueller Plan
-              </Button>
-            ) : (
-              <CheckoutButton 
-                tier="tier2" 
-                className="w-full"
-                variant="secondary"
-              >
-                Upgrade auf Pro
-              </CheckoutButton>
-            )
-          ) : (
-            <Link 
-              to="/register"
-              className="flex items-center justify-center w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 font-medium text-white hover:opacity-90 transition-all shadow-lg shadow-purple-900/20 transform hover:-translate-y-1"
-            >
-              Pro werden
-            </Link>
-          )}
+          {(() => {
+            const config = getButtonConfig('tier2');
+            if (config.type === 'link') {
+              return (
+                <Link 
+                  to="/register"
+                  className="flex items-center justify-center w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 font-medium text-white hover:opacity-90 transition-all shadow-lg shadow-purple-900/20 transform hover:-translate-y-1"
+                >
+                  {config.text}
+                </Link>
+              );
+            } else if (config.type === 'current') {
+              return (
+                <Button 
+                  className="w-full bg-purple-500/5 text-purple-400 border-purple-500/20 hover:bg-purple-500/10 cursor-default py-6 rounded-2xl"
+                  variant="outline"
+                >
+                  {config.text}
+                </Button>
+              );
+            } else if (config.type === 'upgrade') {
+              return (
+                <CheckoutButton 
+                  tier="tier2" 
+                  className="w-full"
+                  variant="secondary"
+                >
+                  Upgrade auf Pro
+                </CheckoutButton>
+              );
+            } else if (config.type === 'downgrade') {
+              return (
+                <Button 
+                  className="w-full py-6 rounded-2xl border-white/10 text-neutral-300 hover:text-white" 
+                  variant="outline"
+                  onClick={onPortal}
+                >
+                  {config.text}
+                </Button>
+              );
+            }
+            return null;
+          })()}
         </div>
       </motion.div>
     </motion.div>
