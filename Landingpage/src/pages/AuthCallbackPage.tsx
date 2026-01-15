@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { generateDeepLink, openDeepLink, copyToClipboard, sendTokenToPlugin, checkPluginServer } from '../utils/deepLink';
-import { CheckCircle2, Copy, ExternalLink, Loader2, AlertCircle } from 'lucide-react';
+import { generateDeepLink, openDeepLink, copyToClipboard, writeTokenToFile } from '../utils/deepLink';
+import { CheckCircle2, Copy, ExternalLink, Loader2, AlertCircle, Download } from 'lucide-react';
 
 export function AuthCallbackPage() {
   const { user, getAuthToken } = useAuth();
@@ -12,8 +12,7 @@ export function AuthCallbackPage() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pluginConnected, setPluginConnected] = useState(false);
-  const [pluginServerAvailable, setPluginServerAvailable] = useState<boolean | null>(null);
+  const [tokenFileCreated, setTokenFileCreated] = useState(false);
 
   useEffect(() => {
     const generateTokens = async () => {
@@ -36,36 +35,24 @@ export function AuthCallbackPage() {
         const link = generateDeepLink(token);
         setDeepLink(link);
         
-        // Try to connect via HTTP POST first (preferred method)
-        const tryHttpConnection = async () => {
-          // Check if plugin server is available
-          const serverAvailable = await checkPluginServer();
-          setPluginServerAvailable(serverAvailable);
-          
-          if (serverAvailable) {
-            // Try to send token via HTTP POST
-            const result = await sendTokenToPlugin(token);
-            if (result.success) {
-              setPluginConnected(true);
-              console.log('✅ Token erfolgreich an Plugin gesendet!');
-            } else {
-              console.log('⚠️ HTTP-Verbindung fehlgeschlagen:', result.error);
-              // Fallback to deep link
-              setTimeout(() => {
-                openDeepLink(link);
-              }, 500);
-            }
+        // Erstelle Token-Datei automatisch
+        const createTokenFile = async () => {
+          const result = await writeTokenToFile(token);
+          if (result.success) {
+            setTokenFileCreated(true);
+            console.log('✅ Token-Datei erstellt!');
           } else {
-            console.log('⚠️ Plugin-Server nicht erreichbar, verwende Deep Link');
-            // Fallback to deep link
-            setTimeout(() => {
-              openDeepLink(link);
-            }, 500);
+            console.log('⚠️ Fehler beim Erstellen der Token-Datei:', result.error);
           }
         };
         
-        // Try HTTP connection
-        tryHttpConnection();
+        // Erstelle Token-Datei
+        createTokenFile();
+        
+        // Versuche auch Deep Link (für Browser die es unterstützen)
+        setTimeout(() => {
+          openDeepLink(link);
+        }, 500);
         
         setLoading(false);
       } catch (err: any) {
@@ -150,17 +137,10 @@ export function AuthCallbackPage() {
             <p className="text-neutral-400 text-sm">
               Verbinde jetzt dein Anki Plugin mit deinem Account
             </p>
-            {pluginConnected && (
+            {tokenFileCreated && (
               <div className="mt-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
                 <p className="text-green-400 text-sm font-medium">
-                  ✅ Plugin erfolgreich verbunden!
-                </p>
-              </div>
-            )}
-            {pluginServerAvailable === false && (
-              <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                <p className="text-yellow-400 text-sm">
-                  ⚠️ Plugin-Server nicht erreichbar. Stelle sicher, dass Anki läuft.
+                  ✅ Token-Datei erstellt! Das Plugin verbindet sich automatisch.
                 </p>
               </div>
             )}
@@ -231,28 +211,50 @@ export function AuthCallbackPage() {
           {/* Instructions */}
           <div className="mb-6 p-4 bg-teal-500/10 border border-teal-500/20 rounded-lg">
             <p className="text-sm text-teal-300 mb-2 font-medium">So verbindest du das Plugin:</p>
-            {pluginConnected ? (
-              <p className="text-xs text-green-400">
-                ✅ Die Verbindung wurde automatisch hergestellt! Du kannst jetzt das Plugin verwenden.
-              </p>
-            ) : (
-              <ol className="text-xs text-neutral-400 space-y-1 list-decimal list-inside">
-                <li>Das Plugin versucht automatisch, sich zu verbinden</li>
-                <li>Falls das nicht funktioniert, kopiere den Token und füge ihn in die Plugin-Einstellungen ein</li>
-                <li>Alternativ: Kopiere den Deep Link (falls dein Browser Deep Links unterstützt)</li>
-              </ol>
-            )}
+            <ol className="text-xs text-neutral-400 space-y-2 list-decimal list-inside">
+              <li>
+                <strong>Automatisch (empfohlen):</strong> Die Token-Datei wurde automatisch heruntergeladen. 
+                Speichere sie im Anki-Addon-Verzeichnis: 
+                <code className="block mt-1 px-2 py-1 bg-black/20 rounded text-[10px] font-mono">
+                  ~/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.anki-auth-token
+                </code>
+                Das Plugin verbindet sich dann automatisch (innerhalb von 2 Sekunden).
+              </li>
+              <li>
+                <strong>Manuell:</strong> Falls die automatische Verbindung nicht funktioniert, kopiere den Token 
+                und füge ihn in die Plugin-Einstellungen ein.
+              </li>
+              <li>
+                <strong>Deep Link:</strong> Alternativ kannst du den Deep Link verwenden (falls dein Browser Deep Links unterstützt).
+              </li>
+            </ol>
           </div>
           
-          {/* Connection Status */}
-          {pluginServerAvailable === false && (
-            <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-              <p className="text-xs text-yellow-400">
-                <strong>Plugin nicht erreichbar:</strong> Stelle sicher, dass Anki läuft und das Plugin aktiviert ist. 
-                Du kannst den Token manuell kopieren und in den Plugin-Einstellungen einfügen.
+          {/* File Download Button */}
+          <div className="mb-6">
+            <button
+              onClick={async () => {
+                if (idToken) {
+                  const result = await writeTokenToFile(idToken);
+                  if (result.success) {
+                    setTokenFileCreated(true);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }
+                }
+              }}
+              className="w-full py-3 bg-teal-500 hover:bg-teal-400 text-black font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              <Download className="w-5 h-5" />
+              Token-Datei erneut herunterladen
+            </button>
+            {copied && (
+              <p className="mt-2 text-sm text-green-400 flex items-center gap-2 justify-center">
+                <CheckCircle2 className="w-4 h-4" />
+                Datei heruntergeladen!
               </p>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Actions */}
           <div className="flex gap-3">

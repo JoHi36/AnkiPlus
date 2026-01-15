@@ -14,11 +14,11 @@ try:
 except ImportError:
     from ui_setup import setup_ui, setup_menu, get_chatbot_widget
 
-# Auth-Server Import
+# Token-Datei-Import
 try:
-    from .auth_server import get_auth_server
+    from .token_file_handler import read_token_from_file, check_token_file
 except ImportError:
-    from auth_server import get_auth_server
+    from token_file_handler import read_token_from_file, check_token_file
 
 def init_addon():
     """Initialisiert das Addon nach dem Laden des Profils"""
@@ -30,25 +30,8 @@ def init_addon():
         setup_ui()
         setup_menu()
         
-        # Starte Auth-Server sofort (auch wenn Panel noch nicht geöffnet ist)
-        # Der Server kann ohne Bridge starten und wird später verbunden
-        try:
-            auth_server = get_auth_server()
-            if not auth_server.running:
-                # Starte Server ohne Bridge (wird später gesetzt)
-                # Erstelle eine Dummy-Bridge für den Start
-                class DummyBridge:
-                    pass
-                dummy_bridge = DummyBridge()
-                dummy_widget = None
-                
-                # Starte Server
-                auth_server.start(dummy_bridge, dummy_widget)
-                print("✅ Auth-Server gestartet (Bridge wird später verbunden)")
-        except Exception as e:
-            print(f"⚠️ Fehler beim Starten des Auth-Servers in init_addon: {e}")
-            import traceback
-            traceback.print_exc()
+        # Starte Token-Datei-Überwachung
+        start_token_file_monitoring()
     except Exception as e:
         from aqt.utils import showInfo
         showInfo(f"Fehler beim Laden des Chatbot-Addons: {str(e)}")
@@ -105,6 +88,47 @@ def on_reviewer_did_show_question(card):
             print(f"Fehler beim Senden von Deck-Event: {e}")
             import traceback
             traceback.print_exc()
+
+def check_for_auth_token():
+    """Prüft periodisch auf neue Auth-Token in Datei"""
+    try:
+        widget = get_chatbot_widget()
+        if widget and widget.bridge:
+            if check_token_file():
+                token, refresh_token = read_token_from_file()
+                if token:
+                    print(f"🔐 Token-Datei gefunden, authentifiziere...")
+                    result = widget.bridge.authenticate(token, refresh_token or "")
+                    result_data = json.loads(result)
+                    if result_data.get('success'):
+                        print("✅ Authentifizierung via Token-Datei erfolgreich!")
+                        # Benachrichtige Frontend
+                        if widget.web_view:
+                            payload = {
+                                "type": "auth_success",
+                                "message": "Authentifizierung erfolgreich"
+                            }
+                            widget.web_view.page().runJavaScript(
+                                f"window.ankiReceive({json.dumps(payload)});"
+                            )
+                    else:
+                        error_msg = result_data.get('error', 'Unbekannter Fehler')
+                        print(f"❌ Authentifizierung fehlgeschlagen: {error_msg}")
+    except Exception as e:
+        print(f"⚠️ Fehler beim Prüfen der Token-Datei: {e}")
+        import traceback
+        traceback.print_exc()
+
+def start_token_file_monitoring():
+    """Startet periodische Überwachung der Token-Datei"""
+    if mw is None:
+        return
+    
+    # Erstelle Timer für periodische Überwachung
+    token_check_timer = QTimer()
+    token_check_timer.timeout.connect(check_for_auth_token)
+    token_check_timer.start(2000)  # Alle 2 Sekunden prüfen
+    print("✅ Token-Datei-Überwachung gestartet (prüft alle 2 Sekunden)")
 
 def on_state_will_change(new_state, old_state):
     """Wird aufgerufen, wenn sich der Anki-State ändert (z.B. review -> deckBrowser)"""

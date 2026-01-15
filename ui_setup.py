@@ -25,12 +25,6 @@ try:
 except ImportError:
     from widget import ChatbotWidget
 
-# Auth-Server Import
-try:
-    from .auth_server import get_auth_server
-except ImportError:
-    from auth_server import get_auth_server
-
 # Style-Funktionen
 def get_dock_widget_style():
     return """
@@ -78,22 +72,7 @@ def toggle_chatbot():
         _chatbot_widget = chatbot_widget  # Global speichern für Hooks
         _chatbot_dock.setWidget(chatbot_widget)
         
-        # Starte/aktualisiere Auth-Server für Handshake mit Landingpage
-        # (Server könnte bereits gestartet sein, dann aktualisieren wir nur die Bridge)
-        try:
-            auth_server = get_auth_server()
-            if not auth_server.running:
-                # Server noch nicht gestartet - starte jetzt
-                auth_server.start(chatbot_widget.bridge, chatbot_widget)
-            else:
-                # Server läuft bereits - aktualisiere nur die Bridge-Referenz
-                from auth_server import set_bridge_instance
-                set_bridge_instance(chatbot_widget.bridge, chatbot_widget)
-                print("✅ Auth-Server Bridge aktualisiert")
-        except Exception as e:
-            print(f"⚠️ Fehler beim Starten/Aktualisieren des Auth-Servers: {e}")
-            import traceback
-            traceback.print_exc()
+        # Token wird automatisch via Datei-Überwachung verarbeitet (siehe __init__.py)
         
         # Dock-Widget links positionieren
         mw.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, _chatbot_dock)

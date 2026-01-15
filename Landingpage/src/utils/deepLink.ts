@@ -1,74 +1,55 @@
 /**
  * Deep Link Utilities
  * Generates deep links for Anki plugin authentication
- * Also supports direct HTTP POST to local server (preferred method)
+ * Also supports file-based token transfer (preferred method)
  */
 
-const PLUGIN_SERVER_URL = 'http://127.0.0.1:8765';
-
 /**
- * Sends token directly to plugin via HTTP POST (preferred method)
+ * Creates and downloads a token file for the Anki plugin
  * @param idToken - Firebase ID Token
  * @param refreshToken - Firebase Refresh Token (optional)
  * @returns Promise that resolves to success status
  */
-export async function sendTokenToPlugin(
+export async function writeTokenToFile(
   idToken: string,
   refreshToken?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const response = await fetch(`${PLUGIN_SERVER_URL}/auth/callback`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        token: idToken,
-        refreshToken: refreshToken || '',
-      }),
+    // Erstelle JSON-Datei mit Token-Daten
+    const tokenData = {
+      token: idToken,
+      refreshToken: refreshToken || '',
+      timestamp: Date.now(),
+    };
+    
+    // Erstelle Blob mit JSON-Daten
+    const blob = new Blob([JSON.stringify(tokenData, null, 2)], {
+      type: 'application/json',
     });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      return {
-        success: false,
-        error: errorData.error || `HTTP ${response.status}`,
-      };
-    }
-
-    const data = await response.json();
+    
+    // Erstelle Download-Link
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '.anki-auth-token';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    
+    // Cleanup nach kurzer Verzögerung
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 100);
+    
     return {
-      success: data.success || false,
-      error: data.error,
+      success: true,
     };
   } catch (error: any) {
-    // Network error - plugin server might not be running
-    if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
-      return {
-        success: false,
-        error: 'Plugin-Server nicht erreichbar. Stelle sicher, dass Anki läuft und das Plugin aktiviert ist.',
-      };
-    }
     return {
       success: false,
-      error: error.message || 'Unbekannter Fehler',
+      error: error.message || 'Fehler beim Erstellen der Token-Datei',
     };
-  }
-}
-
-/**
- * Checks if plugin server is available
- * @returns Promise that resolves to true if server is reachable
- */
-export async function checkPluginServer(): Promise<boolean> {
-  try {
-    const response = await fetch(`${PLUGIN_SERVER_URL}/health`, {
-      method: 'GET',
-      signal: AbortSignal.timeout(2000), // 2 second timeout
-    });
-    return response.ok;
-  } catch {
-    return false;
   }
 }
 
