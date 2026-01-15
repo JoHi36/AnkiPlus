@@ -149,9 +149,7 @@
     transform: translateY(0);
     opacity: 1;
   }
-}
-
-@keyframes slideInFromTop {
+}@keyframes slideInFromTop {
   from {
     transform: translateY(-100%);
     opacity: 0;
