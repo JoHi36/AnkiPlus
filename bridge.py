@@ -7,6 +7,7 @@ import json
 import base64
 import requests
 import hashlib
+import webbrowser
 from urllib.parse import unquote
 
 # Stelle sicher, dass QObject und pyqtSlot verfügbar sind

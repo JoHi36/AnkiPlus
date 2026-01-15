@@ -106,7 +106,7 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
 
   // Fetch quota status (nur wenn authentifiziert)
   useEffect(() => {
-    if (!authStatus.authenticated || !authStatus.backendUrl || !currentAuthToken) {
+    if (!authStatus.authenticated || !authStatus.backendUrl || !currentAuthToken || !currentAuthToken.trim()) {
       setQuotaStatus(null);
       return;
     }
@@ -125,14 +125,19 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
           const data = await response.json();
           setQuotaStatus(data);
         } else if (response.status === 401) {
-          // Token expired, try to refresh
+          // Token expired or invalid - clear quota status
+          setQuotaStatus(null);
           if (bridge && bridge.refreshAuth) {
             bridge.refreshAuth();
-            // Will retry after refresh
           }
+        } else {
+          // Other error - clear quota status
+          setQuotaStatus(null);
         }
       } catch (error) {
         console.error('Error fetching quota:', error);
+        // On error, clear quota status so we show "not connected" state
+        setQuotaStatus(null);
       }
     };
 
@@ -164,8 +169,22 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
   };
 
   const handleManageSubscription = () => {
-    // Öffne Landingpage Subscription-Seite
-    window.open('https://anki-plus.vercel.app/dashboard/subscription', '_blank');
+    // Öffne Landingpage Dashboard - verwende bridge.openUrl falls verfügbar, sonst window.open
+    const url = 'https://anki-plus.vercel.app/dashboard/subscription';
+    if (bridge && bridge.openUrl) {
+      bridge.openUrl(url);
+    } else {
+      // Fallback für QWebEngine
+      window.open(url, '_blank');
+      // Zusätzlicher Fallback: Versuche direkt zu navigieren
+      if (window.location) {
+        try {
+          window.location.href = url;
+        } catch (e) {
+          console.error('Could not open URL:', e);
+        }
+      }
+    }
   };
 
   const getTierInfo = (tier) => {
@@ -205,7 +224,8 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
 
   if (!isOpen) return null;
 
-  const isAuthenticated = authStatus.authenticated;
+  // Prüfe ob wirklich authentifiziert (sowohl Status als auch Token vorhanden)
+  const isAuthenticated = authStatus.authenticated && currentAuthToken && currentAuthToken.trim() !== '';
   const tierInfo = quotaStatus ? getTierInfo(quotaStatus.tier) : getTierInfo('free');
   const TierIcon = tierInfo.icon;
 
@@ -290,58 +310,52 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
             /* MODUS 2: Authentifiziert - Abo-Status + Abo verwalten */
             <div className="space-y-5">
               {/* Abo-Status Card */}
-              <div className={`p-6 rounded-2xl border ${tierInfo.border} relative overflow-hidden group bg-gradient-to-br ${tierInfo.bg} backdrop-blur-sm`}>
-                <div className={`absolute inset-0 bg-gradient-to-br ${tierInfo.gradient} opacity-30`} />
-                <div className="absolute top-0 right-0 w-32 h-32 opacity-5 group-hover:opacity-10 transition-opacity">
-                  <TierIcon size={128} strokeWidth={1} className="absolute -top-8 -right-8" />
-                </div>
-                
-                <div className="relative z-10">
-                  <div className="flex items-start gap-4 mb-6">
-                    <div className={`p-3.5 rounded-xl bg-base-100/40 backdrop-blur-sm border border-white/20 shadow-lg ${tierInfo.color}`}>
-                      <TierIcon size={28} strokeWidth={2} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-bold text-2xl text-base-content mb-1.5 leading-tight">{tierInfo.name}</h3>
-                      <p className="text-sm text-base-content/70 font-medium">{tierInfo.description}</p>
-                    </div>
+              <div className={`p-5 rounded-xl border ${tierInfo.border} bg-base-200/30 backdrop-blur-sm`}>
+                <div className="flex items-start gap-3 mb-5">
+                  <div className={`p-2.5 rounded-lg bg-base-100/50 border border-base-content/10 ${tierInfo.color}`}>
+                    <TierIcon size={20} strokeWidth={2} />
                   </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-lg text-base-content mb-0.5 leading-tight">{tierInfo.name}</h3>
+                    <p className="text-xs text-base-content/60">{tierInfo.description}</p>
+                  </div>
+                </div>
 
-                  {quotaStatus && (
-                    <div className="space-y-4 pt-4 border-t border-white/10">
+                  {quotaStatus ? (
+                    <div className="space-y-3 pt-4 border-t border-base-content/10">
                       {/* Deep Mode Usage */}
-                      <div className="space-y-2">
+                      <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Sparkles size={16} className="text-teal-400" />
-                            <span className="text-sm font-semibold text-base-content/90">Deep Mode</span>
+                          <div className="flex items-center gap-1.5">
+                            <Sparkles size={14} className="text-base-content/60" />
+                            <span className="text-xs font-medium text-base-content/80">Deep Mode</span>
                           </div>
-                          <div className="flex items-baseline gap-1.5">
-                            <span className="text-base font-bold text-base-content">
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-sm font-semibold text-base-content">
                               {quotaStatus.deep.used}
                             </span>
-                            <span className="text-xs text-base-content/50 font-medium">/</span>
-                            <span className="text-sm text-base-content/70 font-semibold">
+                            <span className="text-xs text-base-content/40">/</span>
+                            <span className="text-xs text-base-content/60 font-medium">
                               {quotaStatus.deep.limit === -1 ? '∞' : quotaStatus.deep.limit}
                             </span>
                             {quotaStatus.deep.limit !== -1 && (
-                              <span className="text-xs text-base-content/50 ml-1.5">
+                              <span className="text-xs text-base-content/40 ml-1">
                                 ({Math.round((quotaStatus.deep.used / quotaStatus.deep.limit) * 100)}%)
                               </span>
                             )}
                           </div>
                         </div>
-                        <div className="h-2.5 w-full bg-base-100/40 rounded-full overflow-hidden shadow-inner">
+                        <div className="h-1.5 w-full bg-base-100/50 rounded-full overflow-hidden">
                           <div 
-                            className={`h-full rounded-full transition-all duration-700 ease-out ${
+                            className={`h-full rounded-full transition-all duration-500 ${
                               quotaStatus.deep.limit === -1 
-                                ? 'bg-teal-500/30' 
+                                ? 'bg-base-content/20' 
                                 : (quotaStatus.deep.used / quotaStatus.deep.limit) > 0.8
-                                  ? 'bg-red-500'
+                                  ? 'bg-red-500/70'
                                   : (quotaStatus.deep.used / quotaStatus.deep.limit) > 0.5
-                                    ? 'bg-yellow-500'
-                                    : 'bg-teal-500'
-                            } shadow-sm`}
+                                    ? 'bg-yellow-500/70'
+                                    : 'bg-base-content/40'
+                            }`}
                             style={{ 
                               width: `${quotaStatus.deep.limit === -1 ? 0 : Math.min(100, (quotaStatus.deep.used / quotaStatus.deep.limit) * 100)}%` 
                             }}
@@ -350,38 +364,38 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
                       </div>
                       
                       {/* Flash Mode Usage */}
-                      <div className="space-y-2">
+                      <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Zap size={16} className="text-yellow-400" />
-                            <span className="text-sm font-semibold text-base-content/90">Flash Mode</span>
+                          <div className="flex items-center gap-1.5">
+                            <Zap size={14} className="text-base-content/60" />
+                            <span className="text-xs font-medium text-base-content/80">Flash Mode</span>
                           </div>
-                          <div className="flex items-baseline gap-1.5">
-                            <span className="text-base font-bold text-base-content">
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-sm font-semibold text-base-content">
                               {quotaStatus.flash.used}
                             </span>
-                            <span className="text-xs text-base-content/50 font-medium">/</span>
-                            <span className="text-sm text-base-content/70 font-semibold">
+                            <span className="text-xs text-base-content/40">/</span>
+                            <span className="text-xs text-base-content/60 font-medium">
                               {quotaStatus.flash.limit === -1 ? '∞' : quotaStatus.flash.limit}
                             </span>
                             {quotaStatus.flash.limit !== -1 && (
-                              <span className="text-xs text-base-content/50 ml-1.5">
+                              <span className="text-xs text-base-content/40 ml-1">
                                 ({Math.round((quotaStatus.flash.used / quotaStatus.flash.limit) * 100)}%)
                               </span>
                             )}
                           </div>
                         </div>
-                        <div className="h-2.5 w-full bg-base-100/40 rounded-full overflow-hidden shadow-inner">
+                        <div className="h-1.5 w-full bg-base-100/50 rounded-full overflow-hidden">
                           <div 
-                            className={`h-full rounded-full transition-all duration-700 ease-out ${
+                            className={`h-full rounded-full transition-all duration-500 ${
                               quotaStatus.flash.limit === -1 
-                                ? 'bg-yellow-500/30' 
+                                ? 'bg-base-content/20' 
                                 : (quotaStatus.flash.used / quotaStatus.flash.limit) > 0.8
-                                  ? 'bg-red-500'
+                                  ? 'bg-red-500/70'
                                   : (quotaStatus.flash.used / quotaStatus.flash.limit) > 0.5
-                                    ? 'bg-yellow-500'
-                                    : 'bg-yellow-400'
-                            } shadow-sm`}
+                                    ? 'bg-yellow-500/70'
+                                    : 'bg-base-content/40'
+                            }`}
                             style={{ 
                               width: `${quotaStatus.flash.limit === -1 ? 0 : Math.min(100, (quotaStatus.flash.used / quotaStatus.flash.limit) * 100)}%` 
                             }}
@@ -389,28 +403,22 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
                         </div>
                       </div>
                     </div>
+                  ) : (
+                    <div className="pt-4 border-t border-base-content/10">
+                      <p className="text-xs text-base-content/50 text-center">Lade Nutzungsdaten...</p>
+                    </div>
                   )}
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="space-y-3">
-                <button
-                  onClick={handleManageSubscription}
-                  className="w-full btn btn-primary btn-lg gap-3 font-semibold rounded-xl shadow-lg shadow-primary/30 hover:shadow-primary/50 transition-all hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <CreditCard size={20} strokeWidth={2} />
-                  Abo verwalten
-                </button>
-                
-                <button
-                  onClick={() => window.open('https://anki-plus.vercel.app', '_blank')}
-                  className="w-full btn btn-ghost btn-md gap-2 font-medium rounded-xl border border-base-content/10 hover:border-base-content/20 hover:bg-base-200/50 transition-all"
-                >
-                  <Sparkles size={16} />
-                  Website öffnen
-                </button>
-              </div>
+              {/* Action Button */}
+              <button
+                onClick={handleManageSubscription}
+                className="w-full px-4 py-3 rounded-xl border border-base-content/20 bg-base-200/30 hover:bg-base-200/50 text-base-content/80 hover:text-base-content transition-all font-medium text-sm flex items-center justify-center gap-2"
+              >
+                <CreditCard size={18} strokeWidth={1.5} />
+                Abo verwalten
+              </button>
             </div>
           )}
         </div>

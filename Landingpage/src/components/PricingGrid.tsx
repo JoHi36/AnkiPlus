@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Check, Zap, GraduationCap, Crown } from 'lucide-react';
+import { Check, Zap, GraduationCap, Crown, Sparkles, Vote } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@shared/components/Button';
 import { CheckoutButton } from './CheckoutButton';
@@ -38,41 +38,67 @@ export function PricingGrid({ currentTier, onPortal, isLoggedIn = false }: Prici
       whileInView="visible"
       viewport={{ once: true }}
       variants={staggerContainer}
-      className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 items-start"
+      className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 items-start max-w-7xl mx-auto"
     >
       
       {/* Starter (Free) */}
-      <motion.div variants={fadeInUp} className="relative rounded-3xl border border-white/10 bg-neutral-900/40 p-6 sm:p-8 md:p-10 backdrop-blur-sm hover:border-white/20 transition-colors h-full flex flex-col">
-        <div className="mb-6 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-neutral-400">
-          <Zap size={14} />
-          Starter
+      <motion.div 
+        variants={fadeInUp} 
+        className="group relative rounded-[2rem] border border-white/5 bg-neutral-900/20 p-8 flex flex-col h-full backdrop-blur-md hover:bg-neutral-900/30 transition-all duration-300"
+      >
+        <div className="mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-neutral-400 mb-6">
+            <Zap size={14} />
+            Starter
+          </div>
+          <div className="flex items-baseline gap-1 mb-2">
+            <span className="text-5xl font-bold text-white tracking-tight">0€</span>
+            <span className="text-neutral-500 text-lg">/Monat</span>
+          </div>
+          <p className="text-neutral-400 text-sm leading-relaxed">
+            Der perfekte Einstieg in KI-gestütztes Lernen.
+          </p>
         </div>
-        <div className="flex items-baseline gap-1 mb-8">
-          <span className="text-5xl font-bold text-white tracking-tight">0€</span>
-          <span className="text-neutral-500 text-lg">/Monat</span>
-        </div>
-        <p className="text-neutral-400 text-sm mb-8 min-h-[40px] leading-relaxed">
-          Perfekt, um die Magie von ANKI+ kennenzulernen.
-        </p>
-        <ul className="space-y-4 mb-6 text-sm text-neutral-300 flex-1">
-          <li className="flex items-center gap-3"><Check className="w-5 h-5 text-neutral-500" /> Unbegrenzt Flash Mode</li>
-          <li className="flex items-center gap-3"><Check className="w-5 h-5 text-white" /> 3x Deep Mode pro Tag</li>
-          <li className="flex items-center gap-3"><Check className="w-5 h-5 text-neutral-500" /> Basis-Support</li>
+
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent mb-8" />
+        
+        <ul className="space-y-4 mb-8 text-sm text-neutral-300 flex-1">
+          <li className="flex items-start gap-3">
+            <div className="p-1 rounded-full bg-neutral-800 text-neutral-400 mt-0.5">
+              <Check size={12} />
+            </div>
+            <span>Unbegrenzt Flash Mode</span>
+          </li>
+          <li className="flex items-start gap-3">
+            <div className="p-1 rounded-full bg-white/10 text-white mt-0.5">
+              <Check size={12} />
+            </div>
+            <span>
+              <strong className="text-white">3x</strong> Deep Mode / Tag
+            </span>
+          </li>
+          <li className="flex items-start gap-3">
+             <div className="p-1 rounded-full bg-neutral-800 text-neutral-400 mt-0.5">
+              <Check size={12} />
+            </div>
+            <span>Basis Support</span>
+          </li>
         </ul>
+
         <LimitInfoBox tier="free" />
         
-        <div className="mt-6">
+        <div className="mt-8">
           {isLoggedIn ? (
             currentTier === 'free' ? (
               <Button 
-                className="w-full bg-white/5 text-neutral-400 border-white/10 hover:bg-white/5 cursor-default"
+                className="w-full bg-white/5 text-neutral-500 border-white/5 hover:bg-white/5 cursor-default py-6 rounded-2xl"
                 variant="outline"
               >
                 Aktueller Plan
               </Button>
             ) : (
               <Button 
-                className="w-full" 
+                className="w-full py-6 rounded-2xl border-white/10 text-neutral-300 hover:text-white" 
                 variant="outline"
                 onClick={onPortal}
               >
@@ -82,43 +108,75 @@ export function PricingGrid({ currentTier, onPortal, isLoggedIn = false }: Prici
           ) : (
             <Link 
               to="/register"
-              className="block w-full py-4 rounded-full border border-white/10 font-medium text-white hover:bg-white hover:text-black transition-all text-center"
+              className="flex items-center justify-center w-full py-4 rounded-2xl border border-white/10 font-medium text-white hover:bg-white hover:text-black transition-all duration-300 group-hover:border-white/20"
             >
-              Download
+              Kostenlos starten
             </Link>
           )}
         </div>
       </motion.div>
 
       {/* Student (Most Popular) */}
-      <motion.div variants={fadeInUp} className="relative rounded-3xl border border-teal-500/50 bg-[#0F1110] p-6 sm:p-8 md:p-10 shadow-[0_0_50px_-15px_rgba(20,184,166,0.2)] md:scale-105 z-10 flex flex-col h-full">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 px-4 py-1.5 bg-teal-500 text-black text-xs font-bold rounded-full uppercase tracking-wider shadow-lg shadow-teal-500/20">
-          Beliebt
+      <motion.div 
+        variants={fadeInUp} 
+        className="relative rounded-[2rem] border border-teal-500/30 bg-[#0F1312] p-8 flex flex-col h-full shadow-[0_0_60px_-15px_rgba(20,184,166,0.1)] md:-mt-4 md:mb-4 z-10"
+      >
+        <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-gradient-to-r from-teal-500 to-teal-400 text-black text-[10px] font-bold rounded-full uppercase tracking-widest shadow-lg shadow-teal-500/20">
+          Am Beliebtesten
         </div>
-        <div className="mb-6 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-950/50 border border-teal-500/30 text-xs font-medium text-teal-400">
-          <GraduationCap size={14} />
-          Student
+        
+        <div className="mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-950/30 border border-teal-500/20 text-xs font-medium text-teal-300 mb-6">
+            <GraduationCap size={14} />
+            Student
+          </div>
+          <div className="flex items-baseline gap-1 mb-2">
+            <span className="text-5xl font-bold text-white tracking-tight">4,99€</span>
+            <span className="text-neutral-500 text-lg">/Monat</span>
+          </div>
+          <p className="text-neutral-400 text-sm leading-relaxed">
+            Für alle, die Prüfungen nicht nur bestehen, sondern rocken wollen.
+          </p>
         </div>
-        <div className="flex items-baseline gap-1 mb-8">
-          <span className="text-5xl font-bold text-white tracking-tight">4,99€</span>
-          <span className="text-neutral-500 text-lg">/Monat</span>
-        </div>
-        <p className="text-neutral-400 text-sm mb-8 min-h-[40px] leading-relaxed">
-          Für alle, die Prüfungen nicht nur bestehen, sondern rocken wollen.
-        </p>
-        <ul className="space-y-4 mb-6 text-sm text-neutral-200 flex-1">
-          <li className="flex items-center gap-3"><Check className="w-5 h-5 text-teal-400" /> Alles aus Starter</li>
-          <li className="flex items-center gap-3"><Check className="w-5 h-5 text-teal-400" /> 30x Deep Mode pro Tag</li>
-          <li className="flex items-center gap-3"><Check className="w-5 h-5 text-teal-400" /> Priorisierte Generierung</li>
-          <li className="flex items-center gap-3"><Check className="w-5 h-5 text-teal-400" /> Werbefrei</li>
+
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-teal-500/20 to-transparent mb-8" />
+        
+        <ul className="space-y-4 mb-8 text-sm text-neutral-200 flex-1">
+          <li className="flex items-start gap-3">
+             <div className="p-1 rounded-full bg-teal-500/10 text-teal-400 mt-0.5 border border-teal-500/20">
+              <Check size={12} />
+            </div>
+            <span>Alles aus Starter</span>
+          </li>
+          <li className="flex items-start gap-3">
+             <div className="p-1 rounded-full bg-teal-500/10 text-teal-400 mt-0.5 border border-teal-500/20">
+              <Check size={12} />
+            </div>
+            <span>
+              <strong className="text-teal-300">30x</strong> Deep Mode / Tag
+            </span>
+          </li>
+          <li className="flex items-start gap-3">
+             <div className="p-1 rounded-full bg-teal-500/10 text-teal-400 mt-0.5 border border-teal-500/20">
+              <Check size={12} />
+            </div>
+            <span>Priority Support</span>
+          </li>
+          <li className="flex items-start gap-3">
+             <div className="p-1 rounded-full bg-teal-500/10 text-teal-400 mt-0.5 border border-teal-500/20">
+              <Sparkles size={12} />
+            </div>
+            <span>Zugriff auf Beta-Features</span>
+          </li>
         </ul>
+        
         <LimitInfoBox tier="tier1" />
         
-        <div className="mt-6">
+        <div className="mt-8">
           {isLoggedIn ? (
             currentTier === 'tier1' ? (
               <Button 
-                className="w-full bg-white/5 text-neutral-400 border-white/10 hover:bg-white/5 cursor-default"
+                className="w-full bg-teal-500/5 text-teal-500 border-teal-500/20 hover:bg-teal-500/10 cursor-default py-6 rounded-2xl"
                 variant="outline"
               >
                 Aktueller Plan
@@ -135,40 +193,77 @@ export function PricingGrid({ currentTier, onPortal, isLoggedIn = false }: Prici
           ) : (
             <Link 
               to="/register"
-              className="w-full py-4 rounded-full bg-teal-500 font-bold text-black text-lg hover:bg-teal-400 hover:shadow-[0_0_30px_rgba(20,184,166,0.4)] transition-all transform hover:-translate-y-1 text-center block"
+              className="flex items-center justify-center w-full py-4 rounded-2xl bg-gradient-to-r from-teal-500 to-teal-400 font-bold text-black text-lg hover:shadow-[0_0_40px_-10px_rgba(20,184,166,0.4)] transition-all transform hover:-translate-y-1"
             >
-              Jetzt starten
+              Jetzt durchstarten
             </Link>
           )}
         </div>
       </motion.div>
 
       {/* Exam Pro (Ultimate) */}
-      <motion.div variants={fadeInUp} className="relative rounded-3xl border border-white/10 bg-neutral-900/40 p-6 sm:p-8 md:p-10 backdrop-blur-sm hover:border-purple-500/30 transition-colors h-full flex flex-col">
-        <div className="mb-6 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-900/20 border border-purple-500/30 text-xs font-medium text-purple-300">
-          <Crown size={14} />
-          Fürs Examen
+      <motion.div 
+        variants={fadeInUp} 
+        className="group relative rounded-[2rem] border border-purple-500/20 bg-neutral-900/20 p-8 flex flex-col h-full backdrop-blur-md hover:bg-neutral-900/30 hover:border-purple-500/30 transition-all duration-300"
+      >
+        <div className="mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-900/20 border border-purple-500/30 text-xs font-medium text-purple-300 mb-6">
+            <Crown size={14} />
+            Exam Pro
+          </div>
+          <div className="flex items-baseline gap-1 mb-2">
+            <span className="text-5xl font-bold text-white tracking-tight">14,99€</span>
+            <span className="text-neutral-500 text-lg">/Monat</span>
+          </div>
+          <p className="text-neutral-400 text-sm leading-relaxed">
+            Das ultimative Werkzeug für Staatsexamen und High-Stakes Tests.
+          </p>
         </div>
-        <div className="flex items-baseline gap-1 mb-8">
-          <span className="text-5xl font-bold text-white tracking-tight">14,99€</span>
-          <span className="text-neutral-500 text-lg">/Monat</span>
-        </div>
-        <p className="text-neutral-400 text-sm mb-8 min-h-[40px] leading-relaxed">
-          Das ultimative Werkzeug für Staatsexamen und High-Stakes Tests.
-        </p>
-        <ul className="space-y-4 mb-6 text-sm text-neutral-300 flex-1">
-           <li className="flex items-center gap-3"><Check className="w-5 h-5 text-purple-400" /> Alles aus Student</li>
-           <li className="flex items-center gap-3"><Check className="w-5 h-5 text-purple-400" /> <span className="text-white font-medium">UNBEGRENZT</span> Deep Mode</li>
-           <li className="flex items-center gap-3"><Check className="w-5 h-5 text-purple-400" /> Deep Search (25 Quellen)</li>
-           <li className="flex items-center gap-3"><Check className="w-5 h-5 text-purple-400" /> 24/7 Priority Support</li>
+
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-purple-500/20 to-transparent mb-8" />
+        
+        <ul className="space-y-4 mb-8 text-sm text-neutral-300 flex-1">
+           <li className="flex items-start gap-3">
+             <div className="p-1 rounded-full bg-purple-500/10 text-purple-400 mt-0.5 border border-purple-500/20">
+               <Check size={12} />
+             </div>
+             <span>Alles aus Student</span>
+           </li>
+           <li className="flex items-start gap-3">
+             <div className="p-1 rounded-full bg-purple-500/10 text-purple-400 mt-0.5 border border-purple-500/20">
+               <Check size={12} />
+             </div>
+             <span>
+                <strong className="text-white">UNBEGRENZT</strong> Deep Mode
+             </span>
+           </li>
+           <li className="flex items-start gap-3">
+             <div className="p-1 rounded-full bg-purple-500/10 text-purple-400 mt-0.5 border border-purple-500/20">
+               <Check size={12} />
+             </div>
+             <span>Priority Support</span>
+           </li>
+           <li className="flex items-start gap-3">
+             <div className="p-1 rounded-full bg-purple-500/10 text-purple-400 mt-0.5 border border-purple-500/20">
+               <Sparkles size={12} />
+             </div>
+             <span>Zugriff auf Beta-Features</span>
+           </li>
+           <li className="flex items-start gap-3">
+             <div className="p-1 rounded-full bg-purple-500/10 text-purple-400 mt-0.5 border border-purple-500/20">
+               <Vote size={12} />
+             </div>
+             <span>Über Features abstimmen</span>
+           </li>
         </ul>
+        
         <LimitInfoBox tier="tier2" />
         
-        <div className="mt-6">
+        <div className="mt-8">
           {isLoggedIn ? (
             currentTier === 'tier2' ? (
               <Button 
-                className="w-full bg-white/5 text-neutral-400 border-white/10 hover:bg-white/5 cursor-default"
+                className="w-full bg-purple-500/5 text-purple-400 border-purple-500/20 hover:bg-purple-500/10 cursor-default py-6 rounded-2xl"
                 variant="outline"
               >
                 Aktueller Plan
@@ -177,7 +272,7 @@ export function PricingGrid({ currentTier, onPortal, isLoggedIn = false }: Prici
               <CheckoutButton 
                 tier="tier2" 
                 className="w-full"
-                variant="secondary" // Blue/Purple gradient style if supported or modify CheckoutButton
+                variant="secondary"
               >
                 Upgrade auf Pro
               </CheckoutButton>
@@ -185,7 +280,7 @@ export function PricingGrid({ currentTier, onPortal, isLoggedIn = false }: Prici
           ) : (
             <Link 
               to="/register"
-              className="w-full py-4 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 font-medium text-white hover:opacity-90 transition-opacity shadow-lg shadow-purple-900/20 text-center block"
+              className="flex items-center justify-center w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 font-medium text-white hover:opacity-90 transition-all shadow-lg shadow-purple-900/20 transform hover:-translate-y-1"
             >
               Pro werden
             </Link>
