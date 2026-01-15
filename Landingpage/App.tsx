@@ -5,6 +5,8 @@ import { LandingPage } from './src/pages/LandingPage';
 import { LoginPage } from './src/pages/LoginPage';
 import { RegisterPage } from './src/pages/RegisterPage';
 import { DashboardPage } from './src/pages/DashboardPage';
+import { SubscriptionPage } from './src/pages/SubscriptionPage';
+import { StatisticsPage } from './src/pages/StatisticsPage';
 import { InstallPage } from './src/pages/InstallPage';
 import { AuthCallbackPage } from './src/pages/AuthCallbackPage';
 
@@ -24,6 +26,22 @@ function App() {
           element={
             <ProtectedRoute>
               <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dashboard/subscription"
+          element={
+            <ProtectedRoute>
+              <SubscriptionPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dashboard/statistics"
+          element={
+            <ProtectedRoute>
+              <StatisticsPage />
             </ProtectedRoute>
           }
         />
