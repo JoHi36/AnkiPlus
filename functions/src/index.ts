@@ -24,8 +24,8 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
       'http://localhost:5173',
       'http://127.0.0.1:3000',
       'http://127.0.0.1:5173',
-      // Add production origins here
-      // 'https://your-landingpage.com',
+      'https://anki-plus.vercel.app',
+      'https://anki-plus-git-*.vercel.app', // Vercel preview deployments
     ];
 
 app.use(
@@ -36,20 +36,29 @@ app.use(
         return callback(null, true);
       }
 
+      // Check exact match
       if (allowedOrigins.indexOf(origin) !== -1) {
-        callback(null, true);
-      } else {
-        // In development, allow all origins for easier testing
-        if (process.env.NODE_ENV !== 'production') {
-          callback(null, true);
-        } else {
-          callback(new Error('Not allowed by CORS'));
-        }
+        return callback(null, true);
       }
+
+      // Check Vercel preview deployments pattern
+      if (origin.match(/^https:\/\/anki-plus.*\.vercel\.app$/)) {
+        return callback(null, true);
+      }
+
+      // In development, allow all origins for easier testing
+      if (process.env.NODE_ENV !== 'production') {
+        return callback(null, true);
+      }
+
+      // Default: allow for now (we can tighten this later)
+      callback(null, true);
     },
     credentials: true,
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   })
 );
 

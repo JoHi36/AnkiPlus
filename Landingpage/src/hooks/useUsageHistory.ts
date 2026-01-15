@@ -33,7 +33,7 @@ export function useUsageHistory() {
       }
 
       const backendUrl = import.meta.env.VITE_BACKEND_URL || DEFAULT_BACKEND_URL;
-      const response = await fetch(`${backendUrl}/api/user/usage-history`, {
+      const response = await fetch(`${backendUrl}/user/usage-history`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',

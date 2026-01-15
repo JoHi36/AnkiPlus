@@ -248,8 +248,8 @@ export function SubscriptionPage() {
                     throw new Error('Authentication token not available');
                   }
                   
-                  const apiUrl = import.meta.env.VITE_API_URL || 'https://europe-west1-ankiplus-b0ffb.cloudfunctions.net/api';
-                  const response = await fetch(`${apiUrl}/api/stripe/create-portal-session`, {
+                  const apiUrl = import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || 'https://europe-west1-ankiplus-b0ffb.cloudfunctions.net/api';
+                  const response = await fetch(`${apiUrl}/stripe/create-portal-session`, {
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',

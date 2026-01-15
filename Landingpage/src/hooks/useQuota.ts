@@ -40,7 +40,7 @@ export function useQuota() {
       }
 
       const backendUrl = import.meta.env.VITE_BACKEND_URL || DEFAULT_BACKEND_URL;
-      const response = await fetch(`${backendUrl}/api/user/quota`, {
+      const response = await fetch(`${backendUrl}/user/quota`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
