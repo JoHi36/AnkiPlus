@@ -1,7 +1,7 @@
 import path from 'path';
 import { defineConfig, loadEnv, Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 
 // #region agent log
 const LOG_ENDPOINT = 'http://127.0.0.1:7242/ingest/e7757e9a-5092-4e4c-9b61-29b99999cd32';
@@ -82,7 +82,8 @@ function fixSharedComponentResolution(): Plugin {
           try {
             const packagePath = path.resolve(landingpageNodeModules, source, 'package.json');
             if (existsSync(packagePath)) {
-              const packageJson = require(packagePath);
+              const packageJsonContent = readFileSync(packagePath, 'utf-8');
+              const packageJson = JSON.parse(packageJsonContent);
               const mainPath = path.resolve(landingpageNodeModules, source, packageJson.main || 'index.js');
               
               // #region agent log
