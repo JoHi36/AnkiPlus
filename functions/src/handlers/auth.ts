@@ -1,9 +1,8 @@
 import { Request, Response } from 'express';
-import { getAuth } from 'firebase-admin/auth';
-import { AuthRefreshRequest, AuthRefreshResponse } from '../types';
+import { AuthRefreshRequest } from '../types';
 import { createErrorResponse, ErrorCode } from '../utils/errors';
 import { createLogger } from '../utils/logging';
-import { logTokenRefresh, logTokenRefreshFailed } from '../utils/analytics';
+import { logTokenRefreshFailed } from '../utils/analytics';
 
 /**
  * POST /api/auth/refresh

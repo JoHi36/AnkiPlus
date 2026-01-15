@@ -1,5 +1,4 @@
 import { Request, Response } from 'express';
-import { validateToken } from '../middleware/auth';
 import { QuotaResponse } from '../types';
 import {
   getOrCreateUser,

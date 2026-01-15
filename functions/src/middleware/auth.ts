@@ -81,7 +81,7 @@ export async function validateRefreshToken(
   refreshToken: string
 ): Promise<string> {
   try {
-    const auth = getAuth();
+    getAuth();
     
     // Note: Firebase Admin SDK doesn't have a direct method to verify refresh tokens
     // We need to use the Firebase Auth REST API or handle this differently

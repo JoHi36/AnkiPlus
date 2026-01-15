@@ -1,5 +1,4 @@
 import { Request, Response } from 'express';
-import { validateToken } from '../middleware/auth';
 import { getOrCreateUser } from '../utils/firestore';
 import { createErrorResponse, ErrorCode } from '../utils/errors';
 import { createLogger } from '../utils/logging';
@@ -29,7 +28,7 @@ export async function usageHistoryHandler(
     logger.info('Fetching usage history', { userId });
 
     // Get user document to verify user exists
-    const user = await getOrCreateUser(userId, (req as any).userEmail);
+    await getOrCreateUser(userId, (req as any).userEmail);
     
     // Calculate date range (last 30 days)
     const today = new Date();

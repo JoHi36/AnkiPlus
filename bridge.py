@@ -1206,9 +1206,9 @@ class WebBridge(QObject):
             # Validiere Token durch Backend-Call (optional - kann auch später validiert werden)
             try:
                 backend_url = get_backend_url()
-                # Backend-URL ist die Cloud Function Base-URL, Express-Routen beginnen mit /api
+                # Backend-URL ist die Cloud Function Base-URL, Express-Routen haben kein /api/ Präfix
                 response = requests.get(
-                    f"{backend_url}/api/user/quota",
+                    f"{backend_url}/user/quota",
                     headers={
                         "Authorization": f"Bearer {token.strip()}",
                         "Content-Type": "application/json"

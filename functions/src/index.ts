@@ -54,7 +54,7 @@ app.use(
 );
 
 // Stripe Webhook Route - MUST be before express.json() because it needs raw body
-app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), stripeWebhookHandler);
+app.post('/stripe/webhook', express.raw({ type: 'application/json' }), stripeWebhookHandler);
 
 // Parse JSON bodies (for all other routes)
 app.use(express.json());
@@ -64,16 +64,16 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// API routes
-app.post('/api/chat', validateToken, chatHandler);
-app.post('/api/auth/refresh', authHandler);
-app.get('/api/models', modelsHandler);
-app.get('/api/user/quota', validateToken, quotaHandler);
-app.get('/api/user/usage-history', validateToken, usageHistoryHandler);
+// API routes (ohne /api/ Präfix, da Cloud Function bereits "api" heißt)
+app.post('/chat', validateToken, chatHandler);
+app.post('/auth/refresh', authHandler);
+app.get('/models', modelsHandler);
+app.get('/user/quota', validateToken, quotaHandler);
+app.get('/user/usage-history', validateToken, usageHistoryHandler);
 
 // Stripe routes
-app.post('/api/stripe/create-checkout-session', validateToken, createCheckoutSessionHandler);
-app.post('/api/stripe/create-portal-session', validateToken, createPortalSessionHandler);
+app.post('/stripe/create-checkout-session', validateToken, createCheckoutSessionHandler);
+app.post('/stripe/create-portal-session', validateToken, createPortalSessionHandler);
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {

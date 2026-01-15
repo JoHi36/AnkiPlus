@@ -15,7 +15,7 @@ const getStripeSecretKey = (): string => {
 
 // Initialize Stripe client
 export const stripe = new Stripe(getStripeSecretKey(), {
-  apiVersion: '2024-11-20.acacia',
+  apiVersion: '2023-10-16',
 });
 
 // Get Price IDs from Firebase Functions config

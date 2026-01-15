@@ -4,9 +4,10 @@ import * as functions from 'firebase-functions';
 import { ChatRequest } from '../types';
 import { createErrorResponse, ErrorCode } from '../utils/errors';
 import { createLogger } from '../utils/logging';
-import { getOrCreateUser, getCurrentDateString } from '../utils/firestore';
+import { getOrCreateUser } from '../utils/firestore';
 import { checkQuota, incrementUsage } from '../utils/quota';
 import { retryHttpRequest } from '../utils/retry';
+import { logQuotaExceeded, logChatRequest, logChatError } from '../utils/analytics';
 
 /**
  * POST /api/chat
