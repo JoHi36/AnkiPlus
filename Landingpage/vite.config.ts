@@ -18,11 +18,19 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
           '@shared': path.resolve(__dirname, '../shared'),
-        }
+        },
+        // Ensure node_modules are resolved correctly
+        preserveSymlinks: false,
       },
       build: {
         outDir: 'dist',
-        sourcemap: false
-      }
+        sourcemap: false,
+        commonjsOptions: {
+          include: [/node_modules/],
+        },
+      },
+      optimizeDeps: {
+        include: ['react-markdown', 'remark-math', 'rehype-katex'],
+      },
     };
 });
