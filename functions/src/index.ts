@@ -7,6 +7,7 @@ import { chatHandler } from './handlers/chat';
 import { authHandler } from './handlers/auth';
 import { modelsHandler } from './handlers/models';
 import { quotaHandler } from './handlers/quota';
+import { usageHistoryHandler } from './handlers/usageHistory';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -63,6 +64,7 @@ app.post('/api/chat', validateToken, chatHandler);
 app.post('/api/auth/refresh', authHandler);
 app.get('/api/models', modelsHandler);
 app.get('/api/user/quota', validateToken, quotaHandler);
+app.get('/api/user/usage-history', validateToken, usageHistoryHandler);
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {

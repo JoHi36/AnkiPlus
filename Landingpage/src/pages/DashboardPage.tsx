@@ -3,6 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { motion, Variants } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { getUserDocument, UserDocument } from '../utils/userSetup';
+import { useQuota } from '../hooks/useQuota';
+import { useUsageHistory } from '../hooks/useUsageHistory';
+import { DashboardActivity } from '../components/DashboardActivity';
+import { UsageChart } from '../components/UsageChart';
+import { UpgradePrompt } from '../components/UpgradePrompt';
 import { 
   LayoutDashboard, 
   CreditCard, 
@@ -42,6 +47,8 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const [userDoc, setUserDoc] = useState<UserDocument | null>(null);
   const [loading, setLoading] = useState(true);
+  const { quota, loading: quotaLoading } = useQuota();
+  const { history, loading: historyLoading } = useUsageHistory();
 
   useEffect(() => {
     if (user) {
@@ -153,12 +160,57 @@ export function DashboardPage() {
                <p className="text-neutral-400">Hier ist dein Lern-Überblick für heute.</p>
             </div>
             
-            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-${tierColor}-900/40 to-${tierColor === 'purple' ? 'blue' : tierColor}-900/40 border border-${tierColor}-500/30 shadow-[0_0_20px_-5px_rgba(20,184,166,0.3)] backdrop-blur-md`}>
-               <Sparkles className={`w-4 h-4 text-${tierColor}-300 fill-${tierColor}-300`} />
-               <span className={`text-sm font-bold text-transparent bg-clip-text bg-gradient-to-r from-${tierColor}-200 to-${tierColor === 'purple' ? 'blue' : tierColor}-200 uppercase tracking-wide`}>
+            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border backdrop-blur-md ${
+              tierColor === 'purple' 
+                ? 'bg-gradient-to-r from-purple-900/40 to-blue-900/40 border-purple-500/30 shadow-[0_0_20px_-5px_rgba(168,85,247,0.3)]'
+                : 'bg-gradient-to-r from-teal-900/40 to-teal-900/40 border-teal-500/30 shadow-[0_0_20px_-5px_rgba(20,184,166,0.3)]'
+            }`}>
+               <Sparkles className={`w-4 h-4 ${tierColor === 'purple' ? 'text-purple-300 fill-purple-300' : 'text-teal-300 fill-teal-300'}`} />
+               <span className={`text-sm font-bold text-transparent bg-clip-text uppercase tracking-wide ${
+                 tierColor === 'purple'
+                   ? 'bg-gradient-to-r from-purple-200 to-blue-200'
+                   : 'bg-gradient-to-r from-teal-200 to-teal-200'
+               }`}>
                  Plan: {tierDisplayName}
                </span>
             </div>
+          </motion.div>
+
+          {/* Quick Actions */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="grid grid-cols-2 md:grid-cols-4 gap-4"
+          >
+            <button
+              onClick={() => window.open('/install', '_blank')}
+              className="p-4 bg-[#0A0A0A] border border-white/10 rounded-xl hover:border-teal-500/50 transition-all group"
+            >
+              <Sparkles className="w-6 h-6 text-teal-400 mx-auto mb-2 group-hover:scale-110 transition-transform" />
+              <span className="text-sm text-white font-medium">Neue Session</span>
+            </button>
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="p-4 bg-[#0A0A0A] border border-white/10 rounded-xl hover:border-teal-500/50 transition-all group"
+            >
+              <Settings className="w-6 h-6 text-teal-400 mx-auto mb-2 group-hover:scale-110 transition-transform" />
+              <span className="text-sm text-white font-medium">Einstellungen</span>
+            </button>
+            <button
+              onClick={() => {}}
+              className="p-4 bg-[#0A0A0A] border border-white/10 rounded-xl hover:border-teal-500/50 transition-all group"
+            >
+              <FileText className="w-6 h-6 text-teal-400 mx-auto mb-2 group-hover:scale-110 transition-transform" />
+              <span className="text-sm text-white font-medium">Rechnung</span>
+            </button>
+            <button
+              onClick={() => navigate('/#pricing')}
+              className="p-4 bg-[#0A0A0A] border border-white/10 rounded-xl hover:border-teal-500/50 transition-all group"
+            >
+              <CreditCard className="w-6 h-6 text-teal-400 mx-auto mb-2 group-hover:scale-110 transition-transform" />
+              <span className="text-sm text-white font-medium">Upgrade</span>
+            </button>
           </motion.div>
 
           {/* Usage Stats */}
@@ -180,14 +232,24 @@ export function DashboardPage() {
                    </div>
                    <div className="text-neutral-400 text-sm font-medium mb-1">Deep Mode Credits</div>
                    <div className="text-2xl font-bold text-white mb-4">
-                     {userDoc?.tier === 'free' ? '3' : userDoc?.tier === 'tier1' ? '50' : '∞'} 
+                     {quotaLoading ? (
+                       <span className="text-neutral-500">Lädt...</span>
+                     ) : quota?.deep.remaining === -1 ? (
+                       '∞'
+                     ) : (
+                       quota?.deep.remaining ?? (userDoc?.tier === 'free' ? 3 : userDoc?.tier === 'tier1' ? 30 : 500)
+                     )}
                      <span className="text-neutral-500 text-lg font-normal"> verfügbar</span>
                    </div>
                    
                    <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
                       <motion.div 
                         initial={{ width: 0 }}
-                        animate={{ width: userDoc?.tier === 'free' ? '100%' : '24%' }}
+                        animate={{ 
+                          width: quota && quota.deep.limit !== -1
+                            ? `${((quota.deep.remaining / quota.deep.limit) * 100)}%`
+                            : userDoc?.tier === 'free' ? '100%' : userDoc?.tier === 'tier1' ? '100%' : '100%'
+                        }}
                         transition={{ duration: 1, delay: 0.5 }}
                         className="h-full bg-gradient-to-r from-purple-500 to-purple-400 rounded-full"
                       />
@@ -205,7 +267,18 @@ export function DashboardPage() {
                       </div>
                    </div>
                    <div className="text-neutral-400 text-sm font-medium mb-1">Gesparte Zeit (Heute)</div>
-                   <div className="text-2xl font-bold text-white mb-2">~ 45 <span className="text-neutral-500 text-lg font-normal">Minuten</span></div>
+                   <div className="text-2xl font-bold text-white mb-2">
+                     {historyLoading ? (
+                       <span className="text-neutral-500">Lädt...</span>
+                     ) : history ? (
+                       <>
+                         ~ {Math.round((history.totalDeep * 3) + (history.totalFlash * 0.5))}{' '}
+                         <span className="text-neutral-500 text-lg font-normal">Minuten</span>
+                       </>
+                     ) : (
+                       <>~ 45 <span className="text-neutral-500 text-lg font-normal">Minuten</span></>
+                     )}
+                   </div>
                    <p className="text-xs text-neutral-500">Durch schnelle KI-Erklärungen statt manueller Recherche.</p>
                 </div>
              </motion.div>
@@ -220,11 +293,43 @@ export function DashboardPage() {
                       </div>
                    </div>
                    <div className="text-neutral-400 text-sm font-medium mb-1">Lern-Streak</div>
-                   <div className="text-2xl font-bold text-white mb-2">14 <span className="text-neutral-500 text-lg font-normal">Tage</span></div>
+                   <div className="text-2xl font-bold text-white mb-2">
+                     {historyLoading ? (
+                       <span className="text-neutral-500">Lädt...</span>
+                     ) : history ? (
+                       <>
+                         {history.streak}{' '}
+                         <span className="text-neutral-500 text-lg font-normal">Tage</span>
+                       </>
+                     ) : (
+                       <>14 <span className="text-neutral-500 text-lg font-normal">Tage</span></>
+                     )}
+                   </div>
                    <p className="text-xs text-neutral-500">Du bist im Flow! Lern morgen weiter um den Streak zu halten.</p>
                 </div>
              </motion.div>
           </motion.div>
+
+          {/* Upgrade Prompt */}
+          {quota && (
+            <UpgradePrompt
+              tier={userDoc?.tier || 'free'}
+              currentUsage={quota.deep.used}
+              limit={quota.deep.limit === -1 ? undefined : quota.deep.limit}
+            />
+          )}
+
+          {/* Usage Chart */}
+          {history && (
+            <UsageChart
+              dailyUsage={history.dailyUsage}
+              deepLimit={quota?.deep.limit === -1 ? undefined : quota?.deep.limit}
+              flashLimit={quota?.flash.limit === -1 ? undefined : quota?.flash.limit}
+            />
+          )}
+
+          {/* Activity Timeline */}
+          <DashboardActivity />
 
           {/* Subscription */}
           <motion.div 
@@ -251,7 +356,7 @@ export function DashboardPage() {
                         {userDoc?.tier === 'free' 
                           ? '3x Deep Mode pro Tag inklusive'
                           : userDoc?.tier === 'tier1'
-                          ? '50x Deep Mode pro Tag inklusive'
+                          ? '30x Deep Mode pro Tag inklusive'
                           : 'Unbegrenzter Deep Mode inklusive'}
                       </span>
                    </div>
