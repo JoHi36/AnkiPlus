@@ -118,7 +118,8 @@ export default function SessionHeader({
         // Get auth token - we need to call the backend endpoint
         // For now, we'll skip this as it requires async token retrieval
         // This can be enhanced later with proper token management
-        const response = await fetch(`${authStatus.backendUrl}/api/user/quota`, {
+        // Backend-URL enthält bereits /api, also nur /user/quota hinzufügen
+        const response = await fetch(`${authStatus.backendUrl}/user/quota`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
