@@ -136,11 +136,6 @@ export function TestimonialEditor({ onSaved }: TestimonialEditorProps) {
           <h3 className="text-lg font-semibold text-white mb-1">Hall of Fame Testimonial</h3>
           <p className="text-sm text-neutral-400">Teile deine Erfahrung mit ANKI+</p>
         </div>
-          <div>
-            <h3 className="font-semibold text-white">Hall of Fame Testimonial</h3>
-            <p className="text-xs text-neutral-400">Teile deine Erfahrung mit ANKI+</p>
-          </div>
-        </div>
 
         {/* Status Badge */}
         {currentTestimonial && (
