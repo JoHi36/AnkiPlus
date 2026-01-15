@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RefreshCcw, Search } from 'lucide-react';
+import { RefreshCcw } from 'lucide-react';
 
 import { DEMO_SCENARIOS } from './DemoData';
 import { DemoAnkiCard } from './DemoAnkiCard';
@@ -29,10 +29,27 @@ export function InteractivePlayground() {
     }
   }, [phase, inputText]);
 
+  // Handle manual typing in IDLE state to trigger simulation
+  const handleUserTyping = (text: string) => {
+    if (phase === 'IDLE') {
+        setInputText(text);
+        // Optional: Trigger auto-completion if user types a few chars
+        if (text.length > 2) {
+             handleStartEval(); 
+        }
+    } else if (phase === 'RESCUE_ACTIVE') {
+        setInputText(text);
+        if (text.length > 2) {
+             handleStartDeep();
+        }
+    }
+  };
+
   // --- PHASE TRANSITION LOGIC ---
 
-  // Phase 1: User "types" eval answer
+  // Phase 1: User "types" eval answer (or we auto-complete it)
   const handleStartEval = () => {
+    if (phase !== 'IDLE') return; // Prevent double trigger
     setPhase('TYPING_EVAL');
     simulateTyping(scenario.evaluation.userTyping, () => {
       setPhase('EVALUATING');
@@ -43,10 +60,12 @@ export function InteractivePlayground() {
   // Phase 2: User chooses Rescue (Quiz)
   const handleStartRescue = () => {
     setPhase('RESCUE_ACTIVE');
+    setInputText('');
   };
 
   // Phase 3: User triggers Deep Mode
   const handleStartDeep = () => {
+    if (phase !== 'RESCUE_ACTIVE') return;
     setPhase('DEEP_TYPING');
     simulateTyping("Erklär mir die Hintergründe bitte.", () => {
       setPhase('DEEP_THINKING');
@@ -140,21 +159,27 @@ export function InteractivePlayground() {
         </div>
 
         {/* Input Area (Bottom Fixed) */}
-        <div className="p-4 border-t border-white/5 bg-[#0A0A0A]">
+        <div className="p-4 border-t border-white/5 bg-[#0A0A0A] relative z-20">
            {/* If we are waiting for user to start deep mode after rescue */}
            {phase === 'RESCUE_ACTIVE' && (
-              <div className="absolute bottom-20 left-1/2 -translate-x-1/2 animate-bounce">
-                 <span className="text-xs text-neutral-500 bg-black/50 px-2 py-1 rounded">👇 Frag nach mehr Details</span>
+              <div className="absolute -top-10 left-1/2 -translate-x-1/2 animate-bounce pointer-events-none">
+                 <span className="text-xs text-teal-400 bg-teal-950/80 border border-teal-500/30 px-3 py-1.5 rounded-full backdrop-blur-sm shadow-lg">
+                   👇 Frag "Erklär mir das"
+                 </span>
               </div>
            )}
 
            <DemoChatInput 
               value={inputText} 
-              onChange={() => {}} 
+              onChange={handleUserTyping} 
               onSend={phase === 'IDLE' ? handleStartEval : phase === 'RESCUE_ACTIVE' ? handleStartDeep : () => {}}
               isLoading={phase === 'TYPING_EVAL' || phase === 'DEEP_TYPING'}
-              placeholder={phase === 'IDLE' ? "Tippe deine Antwort..." : "Frag Anki+..."}
-              mode={phase === 'RESCUE_ACTIVE' || phase === 'DEEP_TYPING' || phase === 'DEEP_THINKING' || phase === 'DEEP_RESULT' ? 'deep' : 'flash'}
+              placeholder={
+                phase === 'IDLE' ? "Antworte..." : 
+                phase === 'RESCUE_ACTIVE' ? "Frag nach Hintergründen..." : 
+                "Warte auf Antwort..."
+              }
+              mode={['DEEP_TYPING', 'DEEP_THINKING', 'DEEP_RESULT'].includes(phase) ? 'deep' : 'flash'}
            />
         </div>
       </div>
@@ -191,6 +216,7 @@ export function InteractivePlayground() {
            <button 
              onClick={handleReset}
              className="absolute top-4 left-4 z-20 p-2 rounded-full bg-black/40 text-neutral-500 hover:text-white border border-white/5 hover:border-white/20 transition-all"
+             title="Demo Neustarten"
            >
              <RefreshCcw size={16} />
            </button>
