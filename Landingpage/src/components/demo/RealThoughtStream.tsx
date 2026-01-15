@@ -109,7 +109,7 @@ export default function RealThoughtStream({
                     className="text-sm"
                     style={{
                         fontWeight: 700,
-                        background: "linear-gradient(to right, #8b5cf6 0%, #8b5cf6 20%, #d8b4fe 50%, #8b5cf6 80%, #8b5cf6 100%)",
+                        background: "linear-gradient(to right, rgb(15, 118, 110) 0%, rgb(15, 118, 110) 20%, rgb(94, 234, 212) 50%, rgb(15, 118, 110) 80%, rgb(15, 118, 110) 100%)",
                         backgroundSize: "200% auto",
                         backgroundClip: "text",
                         WebkitBackgroundClip: "text",
@@ -121,7 +121,7 @@ export default function RealThoughtStream({
                     ANKI+
                 </span>
             ) : (
-                <span className="text-sm" style={{ fontWeight: 700, color: "#a78bfa", WebkitFontSmoothing: "antialiased" }}>
+                <span className="text-sm" style={{ fontWeight: 700, color: "rgb(13, 148, 136)", WebkitFontSmoothing: "antialiased" }}>
                     ANKI+
                 </span>
             )}
@@ -158,13 +158,13 @@ export default function RealThoughtStream({
             <div className="grid grid-cols-[1.5rem_1fr] gap-0">
                 {/* Timeline Column */}
                 <div className="flex flex-col items-center relative self-stretch">
-                    <div className="w-2 h-2 rounded-full bg-purple-500/50 shadow-sm z-10 mb-2 flex-shrink-0" />
+                    <div className="w-2 h-2 rounded-full bg-teal-500/50 shadow-sm z-10 mb-2 flex-shrink-0" />
                     
                     {/* The Growing Line */}
                     <div className="absolute left-1/2 top-2 bottom-0 w-0.5 -translate-x-1/2 -z-0">
                         <div className="absolute inset-0 bg-white/5" />
                         <motion.div 
-                            className="w-full origin-top bg-gradient-to-b from-purple-500/40 to-purple-500/10"
+                            className="w-full origin-top bg-gradient-to-b from-teal-500/40 to-teal-500/10"
                             initial={{ scaleY: 0 }}
                             animate={{ scaleY: visibleStepCount / processedSteps.length || 0 }}
                             transition={{ duration: 0.8, ease: "easeOut" }}
@@ -175,7 +175,7 @@ export default function RealThoughtStream({
                         <motion.div 
                             initial={{ scale: 0 }}
                             animate={{ scale: 1 }}
-                            className="w-2 h-2 rounded-full bg-purple-500/50 shadow-sm z-10 mt-auto mb-0 flex-shrink-0" 
+                            className="w-2 h-2 rounded-full bg-teal-500/50 shadow-sm z-10 mt-auto mb-0 flex-shrink-0" 
                         />
                     )}
                 </div>
@@ -196,9 +196,9 @@ export default function RealThoughtStream({
                         >
                             <div className="flex items-start gap-3">
                                 <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-colors duration-300 mt-0.5
-                                                ${isActiveStep ? 'bg-purple-500/20' : 'bg-[#151515] border border-white/5'}`}>
+                                                ${isActiveStep ? 'bg-teal-500/20' : 'bg-[#151515] border border-white/5'}`}>
                                     {isActiveStep ? (
-                                        <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400" />
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin text-teal-400" />
                                     ) : (
                                         <Icon className="w-3.5 h-3.5 text-white/50" />
                                     )}
@@ -209,7 +209,7 @@ export default function RealThoughtStream({
                                     {/* Badges */}
                                     {(step.id.startsWith('intent') || step.id.startsWith('search')) && step.detail && (
                                         <div className="mt-1">
-                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider bg-teal-500/10 text-teal-400 border border-teal-500/20">
                                                 {step.detail}
                                             </span>
                                         </div>
@@ -235,9 +235,9 @@ export default function RealThoughtStream({
                                                             key={i} 
                                                             className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg border border-white/5 bg-[#1a1a1a]"
                                                         >
-                                                            <Search className="w-3 h-3 text-purple-400/60" />
+                                                            <Search className="w-3 h-3 text-teal-400/60" />
                                                             <span className="text-white/70">{item.query}</span>
-                                                            <div className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-purple-500/10 text-purple-400">
+                                                            <div className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-teal-500/10 text-teal-400">
                                                                 {item.count}
                                                             </div>
                                                         </motion.div>
@@ -271,8 +271,8 @@ export default function RealThoughtStream({
                         className="flex flex-col gap-2 group/step"
                     >
                         <div className="flex items-center gap-3">
-                            <div className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-colors duration-300 border border-purple-500/20 bg-purple-500/10 z-10">
-                                <Check className="w-3.5 h-3.5 text-purple-400" />
+                            <div className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-colors duration-300 border border-teal-500/20 bg-teal-500/10 z-10">
+                                <Check className="w-3.5 h-3.5 text-teal-400" />
                             </div>
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 h-full">

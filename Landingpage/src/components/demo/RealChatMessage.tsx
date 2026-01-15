@@ -90,7 +90,7 @@ export function RealChatMessage({ message, isStreaming, citations }: RealChatMes
 
     // Bold (Highlighter style)
     strong: ({node, children, ...props}: any) => (
-        <strong className="font-bold text-white bg-purple-500/30 px-1 rounded-sm mx-0.5" {...props}>
+        <strong className="font-bold text-white bg-teal-500/20 px-1 rounded-sm mx-0.5" {...props}>
             {children}
         </strong>
     ),
