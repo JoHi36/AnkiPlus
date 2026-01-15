@@ -142,6 +142,10 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
           '@shared': path.resolve(__dirname, '../shared'),
+          // Explicitly resolve problematic packages from Landingpage node_modules
+          'react-markdown': path.resolve(__dirname, 'node_modules/react-markdown'),
+          'remark-math': path.resolve(__dirname, 'node_modules/remark-math'),
+          'rehype-katex': path.resolve(__dirname, 'node_modules/rehype-katex'),
         },
         // Ensure node_modules are resolved from Landingpage directory, not from shared components
         modules: [path.resolve(__dirname, 'node_modules'), 'node_modules'],
