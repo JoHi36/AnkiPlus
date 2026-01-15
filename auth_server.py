@@ -91,8 +91,17 @@ class AuthRequestHandler(BaseHTTPRequestHandler):
                         print(f"❌ Auth-Server: Authentifizierung fehlgeschlagen: {error_msg}")
                         self._send_error(401, error_msg)
                 else:
-                    error_msg = 'Plugin-Bridge nicht initialisiert. Bitte öffne das Chatbot-Panel in Anki (Cmd+I / Ctrl+I).'
-                    print(f"❌ Auth-Server: {error_msg}")
+                    # Bridge noch nicht initialisiert - das ist OK, Server läuft schon
+                    # Token wird gespeichert und später verarbeitet wenn Bridge verfügbar ist
+                    error_msg = 'Plugin wird initialisiert. Bitte warte einen Moment und versuche es erneut, oder öffne das Chatbot-Panel in Anki (Cmd+I / Ctrl+I).'
+                    print(f"⚠️ Auth-Server: Bridge noch nicht initialisiert - Token wird später verarbeitet")
+                    # Speichere Token in Datei als Fallback
+                    try:
+                        from .token_file_handler import write_token_to_file
+                        write_token_to_file(token, refresh_token)
+                        print(f"✅ Token in Datei gespeichert (wird automatisch verarbeitet)")
+                    except:
+                        pass
                     self._send_error(503, error_msg)
                     
             except Exception as e:

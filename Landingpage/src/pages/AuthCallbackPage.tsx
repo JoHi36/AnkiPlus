@@ -170,8 +170,18 @@ export function AuthCallbackPage() {
             )}
             {pluginServerAvailable === false && !pluginConnected && (
               <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                <p className="text-yellow-400 text-sm">
-                  ⚠️ Plugin-Server nicht erreichbar. Stelle sicher, dass Anki läuft.
+                <p className="text-yellow-400 text-sm font-medium mb-2">
+                  ⚠️ Anki ist nicht erreichbar
+                </p>
+                <p className="text-yellow-300 text-xs">
+                  Stelle sicher, dass:
+                </p>
+                <ul className="text-yellow-300 text-xs mt-1 ml-4 list-disc">
+                  <li>Anki geöffnet ist</li>
+                  <li>Das Plugin aktiviert ist (Tools → Add-ons → ankibot)</li>
+                </ul>
+                <p className="text-neutral-400 text-xs mt-2">
+                  Eine Token-Datei wurde als Fallback heruntergeladen. Du kannst sie später verwenden, wenn Anki läuft.
                 </p>
               </div>
             )}
@@ -271,13 +281,21 @@ export function AuthCallbackPage() {
           {/* Fallback Info */}
           {pluginServerAvailable === false && !pluginConnected && (
             <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-              <p className="text-xs text-yellow-400 mb-2">
-                <strong>Plugin nicht erreichbar:</strong> Die automatische Verbindung konnte nicht hergestellt werden.
+              <p className="text-xs text-yellow-400 mb-2 font-medium">
+                ⚠️ Anki ist nicht erreichbar
               </p>
-              <p className="text-xs text-neutral-400">
-                Eine Token-Datei wurde als Fallback heruntergeladen. Kopiere sie ins Addon-Verzeichnis:
+              <p className="text-xs text-neutral-400 mb-2">
+                Die automatische Verbindung konnte nicht hergestellt werden. Bitte:
               </p>
-              <code className="block mt-2 px-2 py-1 bg-black/20 rounded text-[10px] font-mono break-all">
+              <ol className="text-xs text-neutral-400 space-y-1 ml-4 list-decimal">
+                <li>Öffne Anki</li>
+                <li>Stelle sicher, dass das Plugin aktiviert ist</li>
+                <li>Lade diese Seite neu oder kopiere die Token-Datei ins Addon-Verzeichnis</li>
+              </ol>
+              <p className="text-xs text-neutral-500 mt-3">
+                Eine Token-Datei wurde als Fallback heruntergeladen. Pfad:
+              </p>
+              <code className="block mt-1 px-2 py-1 bg-black/20 rounded text-[10px] font-mono break-all">
                 ~/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.anki-auth-token
               </code>
             </div>
