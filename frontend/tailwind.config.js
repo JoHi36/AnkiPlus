@@ -1,13 +1,17 @@
+import sharedConfig from '../shared/config/tailwind.shared.js';
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
+    "../shared/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {
+      ...sharedConfig.theme?.extend,
       colors: {
-        // Anki Chatbot Design-System
+        // Anki Chatbot Design-System (Frontend specific)
         'bg-dark': '#121212',
         'bg-panel': '#1a1a1a',
         'bg-muted': '#252525',
@@ -16,6 +20,8 @@ export default {
         'accent': '#14b8a6',
         'accent-strong': '#0d9488',
         'accent-soft': '#2dd4bf',
+        // Shared colors (merged)
+        ...sharedConfig.theme?.extend?.colors,
       },
       fontFamily: {
         sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],

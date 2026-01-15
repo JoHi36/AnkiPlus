@@ -7,6 +7,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@shared': path.resolve(__dirname, '../shared'),
+    },
+  },
   define: {
     // Force React to use development build
     'process.env.NODE_ENV': JSON.stringify(mode === 'development' ? 'development' : 'production'),

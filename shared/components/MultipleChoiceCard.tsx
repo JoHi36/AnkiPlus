@@ -1,14 +1,44 @@
-// Re-export from shared components
-export { MultipleChoiceCard as default } from '@shared/components/MultipleChoiceCard';
-  const [selectedLetter, setSelectedLetter] = useState(null);
-  const [isCorrect, setIsCorrect] = useState(null);
+import React, { useState } from 'react';
+import { CheckCircle2, XCircle, RotateCcw, Trophy } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 
-  const handleSelect = (option) => {
+export interface MultipleChoiceOption {
+  letter: string;
+  text: string;
+  isCorrect: boolean;
+  explanation?: string;
+}
+
+export interface MultipleChoiceCardProps {
+  question: string;
+  options: MultipleChoiceOption[];
+  onSelect?: (option: MultipleChoiceOption) => void;
+  onRetry?: () => void;
+}
+
+/**
+ * MultipleChoiceCard - High End UI 3.0
+ * Redesigned for maximum clarity and engagement.
+ * Supports 5 options, explanations, and distinct reveal states.
+ * Mobile-optimized with touch targets (min 44px height).
+ */
+export const MultipleChoiceCard: React.FC<MultipleChoiceCardProps> = ({ 
+  question, 
+  options, 
+  onSelect, 
+  onRetry 
+}) => {
+  const [selectedLetter, setSelectedLetter] = useState<string | null>(null);
+  const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
+
+  const handleSelect = (option: MultipleChoiceOption) => {
     if (selectedLetter) return; // Already selected
     
     setSelectedLetter(option.letter);
     setIsCorrect(option.isCorrect);
-    onSelect(option);
+    if (onSelect) onSelect(option);
   };
 
   const handleRetryClick = () => {
@@ -22,7 +52,7 @@ export { MultipleChoiceCard as default } from '@shared/components/MultipleChoice
        {/* Header - Aligned left, no icon */}
        <div className="flex flex-col mb-5 px-1">
             <span className="text-[10px] font-bold text-base-content/40 uppercase tracking-widest mb-1.5">Quiz Time</span>
-            <h3 className="text-[16px] font-bold text-base-content/95 leading-snug">
+            <h3 className="text-base sm:text-lg font-bold text-base-content/95 leading-snug">
                 <ReactMarkdown 
                     remarkPlugins={[remarkMath]}
                     rehypePlugins={[rehypeKatex]}
@@ -81,17 +111,17 @@ export { MultipleChoiceCard as default } from '@shared/components/MultipleChoice
                     key={idx}
                     onClick={() => handleSelect(option)}
                     disabled={showResult}
-                    className={`group relative w-full text-left p-3.5 pr-4 rounded-xl border transition-all duration-300 ease-out ${containerClass} ${showResult ? 'cursor-default' : 'cursor-pointer active:scale-[0.99]'}`}
+                    className={`group relative w-full text-left p-3.5 sm:p-4 pr-4 rounded-xl border transition-all duration-300 ease-out min-h-[44px] ${containerClass} ${showResult ? 'cursor-default' : 'cursor-pointer active:scale-[0.99]'}`}
                 >
                     <div className="flex items-start gap-3.5">
                         {/* Letter Indicator */}
-                         <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-[12px] transition-all duration-300 flex-shrink-0 mt-0.5 ${indicatorClass}`}>
+                         <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center font-bold text-xs sm:text-sm transition-all duration-300 flex-shrink-0 mt-0.5 ${indicatorClass}`}>
                             {option.letter}
                         </div>
                         
                         <div className="flex-1 min-w-0 pt-0.5">
                             {/* Option Text */}
-                            <div className={`text-[14px] leading-relaxed font-medium transition-colors duration-300 ${textClass}`}>
+                            <div className={`text-sm sm:text-base leading-relaxed font-medium transition-colors duration-300 ${textClass}`}>
                                 <ReactMarkdown 
                                     remarkPlugins={[remarkMath]}
                                     rehypePlugins={[rehypeKatex]}
@@ -106,7 +136,7 @@ export { MultipleChoiceCard as default } from '@shared/components/MultipleChoice
                             {/* Explanation (Collapsible) */}
                             <div className={`grid transition-[grid-template-rows] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] ${showExplanation ? 'grid-rows-[1fr] mt-3 pt-3 border-t border-base-content/5' : 'grid-rows-[0fr]'}`}>
                                 <div className="overflow-hidden min-h-0">
-                                    <div className="text-[13px] leading-relaxed">
+                                    <div className="text-xs sm:text-sm leading-relaxed">
                                         <div className={`flex items-center gap-1.5 mb-1 text-xs font-bold uppercase tracking-wider ${isThisCorrect ? 'text-emerald-500' : 'text-red-500'}`}>
                                             {isThisCorrect ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
                                             {isThisCorrect ? 'Richtig' : 'Falsch'}
@@ -143,12 +173,12 @@ export { MultipleChoiceCard as default } from '@shared/components/MultipleChoice
       </div>
       
        {/* Footer / Actions */}
-       <div className="mt-6 flex justify-center min-h-[40px]">
+       <div className="mt-6 flex justify-center min-h-[44px]">
          {/* Retry Button */}
         {selectedLetter && !isCorrect && (
             <button 
                 onClick={handleRetryClick}
-                className="flex items-center gap-2 px-5 py-2 bg-base-200 hover:bg-base-300 text-base-content/80 rounded-full text-xs font-bold transition-all hover:scale-105 active:scale-95 animate-in fade-in slide-in-from-bottom-2 shadow-sm border border-base-300/50"
+                className="flex items-center gap-2 px-5 py-2.5 bg-base-200 hover:bg-base-300 text-base-content/80 rounded-full text-xs sm:text-sm font-bold transition-all hover:scale-105 active:scale-95 animate-in fade-in slide-in-from-bottom-2 shadow-sm border border-base-300/50 min-h-[44px]"
             >
                 <RotateCcw size={14} />
                 <span>Nochmal versuchen</span>
@@ -158,7 +188,7 @@ export { MultipleChoiceCard as default } from '@shared/components/MultipleChoice
         {/* Success / Score */}
          {selectedLetter && isCorrect && (
             <div className="flex flex-col items-center gap-1.5 animate-in fade-in slide-in-from-bottom-2">
-                 <div className="flex items-center gap-2 text-emerald-500 font-bold bg-emerald-500/10 px-5 py-2 rounded-full border border-emerald-500/20 shadow-sm text-sm">
+                 <div className="flex items-center gap-2 text-emerald-500 font-bold bg-emerald-500/10 px-5 py-2.5 rounded-full border border-emerald-500/20 shadow-sm text-sm sm:text-base min-h-[44px]">
                     <Trophy size={16} />
                     <span>Richtig! 100%</span>
                 </div>
@@ -168,4 +198,7 @@ export { MultipleChoiceCard as default } from '@shared/components/MultipleChoice
        </div>
     </div>
   );
-}
+};
+
+export default MultipleChoiceCard;
+

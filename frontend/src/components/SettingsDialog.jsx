@@ -194,12 +194,17 @@ export default function SettingsDialog({ isOpen, onClose, onSave, bridge, isRead
     addLog('Öffne Landingpage zum Verbinden...');
     
     // Öffne Landingpage in Browser
-    // TODO: Ersetze mit echter Landingpage-URL
-    const landingPageUrl = 'https://your-landingpage.com/auth'; // Wird in Prompt 3 implementiert
+    // TODO: Ersetze mit echter Landingpage-URL nach Deployment
+    // Für lokale Entwicklung: 'http://localhost:5173'
+    // Für Production: 'https://your-landingpage.vercel.app' oder die finale URL
+    const landingPageUrl = process.env.NODE_ENV === 'development' 
+      ? 'http://localhost:5173' 
+      : 'https://your-landingpage.vercel.app'; // TODO: Ersetze mit finaler URL nach Deployment
+    
     window.open(landingPageUrl, '_blank');
     
     // Zeige Hinweis für manuelle Token-Übergabe
-    addLog('Bitte loggen Sie sich auf der Landingpage ein und kopieren Sie den Token.', 'info');
+    addLog('Bitte loggen Sie sich auf der Landingpage ein. Das Plugin wird automatisch verbunden.', 'info');
     setConnecting(false);
   };
 
