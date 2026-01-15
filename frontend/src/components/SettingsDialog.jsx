@@ -181,6 +181,13 @@ export default function SettingsDialog({ isOpen, onClose, onSave, bridge, isRead
           checkAuthStatus();
           // Fetch quota after successful auth
           setTimeout(() => fetchQuotaStatus(), 500);
+        } else if (payload.type === 'auth_pending') {
+          addLog('🔄 Token erkannt, verbinde...', 'info');
+        } else if (payload.type === 'auth_error') {
+          addLog(`❌ ${payload.message || 'Authentifizierung fehlgeschlagen'}`, 'error');
+          checkAuthStatus();
+        } else if (payload.type === 'refreshAuthStatus') {
+          checkAuthStatus();
         }
       };
       
