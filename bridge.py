@@ -1223,7 +1223,9 @@ class WebBridge(QObject):
                     # Benachrichtige Frontend
                     if self.widget and self.widget.web_view:
                         payload = {"type": "auth_success", "message": "Authentifizierung erfolgreich"}
-                        self.widget.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
+                        js_code = f"if (window.ankiReceive) {{ window.ankiReceive({json.dumps(payload)}); }}"
+                        self.widget.web_view.page().runJavaScript(js_code)
+                        print(f"✅ authenticate: Frontend benachrichtigt: {payload}")
                     return json.dumps({"success": True, "message": "Authentifizierung erfolgreich"})
                 elif response.status_code == 401:
                     error_msg = "Ungültiger Token - bitte prüfe deinen Token"
