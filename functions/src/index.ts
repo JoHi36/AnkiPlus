@@ -10,6 +10,7 @@ import { quotaHandler } from './handlers/quota';
 import { usageHistoryHandler } from './handlers/usageHistory';
 import { createCheckoutSessionHandler, createPortalSessionHandler } from './handlers/stripe';
 import { stripeWebhookHandler } from './handlers/stripeWebhook';
+import { verifyCheckoutSessionHandler } from './handlers/verifyCheckoutSession';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -83,6 +84,7 @@ app.get('/user/usage-history', validateToken, usageHistoryHandler);
 // Stripe routes
 app.post('/stripe/create-checkout-session', validateToken, createCheckoutSessionHandler);
 app.post('/stripe/create-portal-session', validateToken, createPortalSessionHandler);
+app.post('/stripe/verify-checkout-session', validateToken, verifyCheckoutSessionHandler);
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
