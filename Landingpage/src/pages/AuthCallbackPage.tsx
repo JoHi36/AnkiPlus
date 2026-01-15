@@ -211,23 +211,58 @@ export function AuthCallbackPage() {
           {/* Instructions */}
           <div className="mb-6 p-4 bg-teal-500/10 border border-teal-500/20 rounded-lg">
             <p className="text-sm text-teal-300 mb-2 font-medium">So verbindest du das Plugin:</p>
-            <ol className="text-xs text-neutral-400 space-y-2 list-decimal list-inside">
+            <ol className="text-xs text-neutral-400 space-y-3 list-decimal list-inside">
               <li>
-                <strong>Automatisch (empfohlen):</strong> Die Token-Datei wurde automatisch heruntergeladen. 
-                Speichere sie im Anki-Addon-Verzeichnis: 
-                <code className="block mt-1 px-2 py-1 bg-black/20 rounded text-[10px] font-mono">
-                  ~/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.anki-auth-token
+                <strong>Schritt 1:</strong> Die Token-Datei wurde automatisch heruntergeladen. 
+                <span className="block mt-1 text-yellow-400 font-medium">
+                  ⚠️ WICHTIG: Du musst die Datei manuell ins Addon-Verzeichnis kopieren!
+                </span>
+              </li>
+              <li>
+                <strong>Schritt 2:</strong> Öffne Finder und gehe zu:
+                <code className="block mt-1 px-2 py-1 bg-black/20 rounded text-[10px] font-mono break-all">
+                  ~/Library/Application Support/Anki2/addons21/anki-chatbot-addon/
                 </code>
-                Das Plugin verbindet sich dann automatisch (innerhalb von 2 Sekunden).
+                <span className="block mt-1 text-xs text-neutral-500">
+                  Tipp: Drücke Cmd+Shift+G im Finder und füge den Pfad ein
+                </span>
               </li>
               <li>
-                <strong>Manuell:</strong> Falls die automatische Verbindung nicht funktioniert, kopiere den Token 
-                und füge ihn in die Plugin-Einstellungen ein.
+                <strong>Schritt 3:</strong> Kopiere die heruntergeladene Datei <code className="text-[10px]">.anki-auth-token</code> 
+                in dieses Verzeichnis (überschreibe falls vorhanden).
               </li>
               <li>
-                <strong>Deep Link:</strong> Alternativ kannst du den Deep Link verwenden (falls dein Browser Deep Links unterstützt).
+                <strong>Schritt 4:</strong> Das Plugin erkennt die Datei automatisch innerhalb von 2 Sekunden und verbindet sich.
+                <span className="block mt-1 text-green-400">
+                  ✅ Prüfe in Anki, ob oben rechts "Verbunden" steht!
+                </span>
               </li>
             </ol>
+          </div>
+          
+          {/* Quick Path Helper */}
+          <div className="mb-6 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+            <p className="text-xs text-blue-400 mb-2">
+              <strong>💡 Schnellzugriff:</strong> Kopiere diesen Pfad und öffne ihn im Finder (Cmd+Shift+G):
+            </p>
+            <code 
+              className="block px-3 py-2 bg-black/30 rounded text-[10px] font-mono break-all cursor-pointer hover:bg-black/50 transition-colors"
+              onClick={async () => {
+                const path = '~/Library/Application Support/Anki2/addons21/anki-chatbot-addon/';
+                await copyToClipboard(path);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+              title="Klicken zum Kopieren"
+            >
+              ~/Library/Application Support/Anki2/addons21/anki-chatbot-addon/
+            </code>
+            {copied && (
+              <p className="mt-2 text-xs text-green-400 flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" />
+                Pfad kopiert!
+              </p>
+            )}
           </div>
           
           {/* File Download Button */}

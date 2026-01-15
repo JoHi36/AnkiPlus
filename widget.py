@@ -735,7 +735,12 @@ class ChatbotWidget(QWidget):
 
         ai = get_ai_handler(widget=self)  # Pass widget reference for UI state emission
         if not ai.is_configured():
-            bot_msg = "Bitte konfigurieren Sie zuerst den API-Schlüssel in den Einstellungen."
+            # Unterschiedliche Fehlermeldungen je nach Modus
+            from .config import is_backend_mode
+            if is_backend_mode():
+                bot_msg = "Bitte verbinden Sie sich zuerst mit Ihrem Account in den Einstellungen."
+            else:
+                bot_msg = "Bitte konfigurieren Sie zuerst den API-Schlüssel in den Einstellungen."
             payload = {"type": "bot", "message": bot_msg}
             self.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
             # Lösche Referenz nach Fehler

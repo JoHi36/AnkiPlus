@@ -281,7 +281,11 @@ class AIHandler:
         self._refresh_config()
         
         if not self.is_configured():
-            error_msg = "Bitte konfigurieren Sie zuerst den API-Schlüssel in den Einstellungen."
+            # Unterschiedliche Fehlermeldungen je nach Modus
+            if is_backend_mode():
+                error_msg = "Bitte verbinden Sie sich zuerst mit Ihrem Account in den Einstellungen."
+            else:
+                error_msg = "Bitte konfigurieren Sie zuerst den API-Schlüssel in den Einstellungen."
             if callback:
                 callback(error_msg, True, False)
             return error_msg
