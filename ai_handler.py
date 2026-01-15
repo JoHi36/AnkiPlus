@@ -180,13 +180,21 @@ class AIHandler:
     
     def _get_auth_headers(self):
         """Gibt Authorization Headers zurück für Backend-Requests"""
+        from .config import get_or_create_device_id
+        
         auth_token = get_auth_token()
         if auth_token:
             return {
                 "Authorization": f"Bearer {auth_token}",
                 "Content-Type": "application/json"
             }
-        return {"Content-Type": "application/json"}
+        
+        # Wenn kein Token vorhanden, füge Device-ID für anonyme User hinzu
+        device_id = get_or_create_device_id()
+        return {
+            "Content-Type": "application/json",
+            "X-Device-Id": device_id
+        }
     
     def _refresh_auth_token(self):
         """Ruft Backend Refresh-Endpoint auf und speichert neues Token"""
@@ -576,20 +584,36 @@ class AIHandler:
                 def make_request():
                     return requests.post(url, json=request_data, headers=headers, timeout=30)
                 
-                # Bei 401: Versuche Token-Refresh (kein Retry mit Backoff)
+                # Bei 401: Versuche Token-Refresh oder wechsle zu anonymem Modus
                 if use_backend:
                     response = make_request()
-                    if response.status_code == 401 and retry_count < max_retries:
-                        print("_get_google_response: 401 Unauthorized - Versuche Token-Refresh")
-                        if self._refresh_auth_token():
-                            retry_count += 1
-                            headers = self._get_auth_headers()
-                            response = make_request()
-                            print(f"_get_google_response: Retry nach Token-Refresh - Status: {response.status_code}")
+                    if response.status_code == 401:
+                        if retry_count < max_retries:
+                            print("_get_google_response: 401 Unauthorized - Versuche Token-Refresh")
+                            if self._refresh_auth_token():
+                                retry_count += 1
+                                headers = self._get_auth_headers()
+                                response = make_request()
+                                print(f"_get_google_response: Retry nach Token-Refresh - Status: {response.status_code}")
+                            else:
+                                # Kein Refresh-Token vorhanden - wechsle zu anonymem Modus
+                                print("_get_google_response: Kein Refresh-Token - wechsle zu anonymem Modus")
+                                update_config(auth_token="")  # Token löschen
+                                self._refresh_config()
+                                headers = self._get_auth_headers()  # Jetzt mit Device-ID
+                                retry_count += 1
+                                response = make_request()
+                                print(f"_get_google_response: Retry als anonymer User - Status: {response.status_code}")
                         else:
-                            raise Exception(get_user_friendly_error('TOKEN_EXPIRED'))
-                else:
-                    response = make_request()
+                            # Max Retries erreicht - versuche als anonymer User
+                            print("_get_google_response: Max Retries erreicht - versuche als anonymer User")
+                            update_config(auth_token="")  # Token löschen
+                            self._refresh_config()
+                            headers = self._get_auth_headers()  # Jetzt mit Device-ID
+                            response = make_request()
+                            print(f"_get_google_response: Request als anonymer User - Status: {response.status_code}")
+                    else:
+                        response = make_request()
                 
                 # Bei 403 (Forbidden): Quota-Fehler (kein Retry)
                 if response.status_code == 403:
@@ -1226,19 +1250,32 @@ class AIHandler:
                 
                 response = requests.post(url, json=request_data, headers=headers, stream=True, timeout=60)
                 
-                # Bei 401: Versuche Token-Refresh
-                if response.status_code == 401 and use_backend and retry_count < max_retries:
-                    print("_stream_response: 401 Unauthorized - Versuche Token-Refresh")
-                    if self._refresh_auth_token():
-                        retry_count += 1
-                        headers = self._get_auth_headers()
-                        response = requests.post(url, json=request_data, headers=headers, stream=True, timeout=60)
-                        print(f"_stream_response: Retry nach Token-Refresh - Status: {response.status_code}")
+                # Bei 401: Versuche Token-Refresh oder wechsle zu anonymem Modus
+                if response.status_code == 401 and use_backend:
+                    if retry_count < max_retries:
+                        print("_stream_response: 401 Unauthorized - Versuche Token-Refresh")
+                        if self._refresh_auth_token():
+                            retry_count += 1
+                            headers = self._get_auth_headers()
+                            response = requests.post(url, json=request_data, headers=headers, stream=True, timeout=60)
+                            print(f"_stream_response: Retry nach Token-Refresh - Status: {response.status_code}")
+                        else:
+                            # Kein Refresh-Token vorhanden - wechsle zu anonymem Modus
+                            print("_stream_response: Kein Refresh-Token - wechsle zu anonymem Modus")
+                            update_config(auth_token="")  # Token löschen
+                            self._refresh_config()
+                            headers = self._get_auth_headers()  # Jetzt mit Device-ID
+                            retry_count += 1
+                            response = requests.post(url, json=request_data, headers=headers, stream=True, timeout=60)
+                            print(f"_stream_response: Retry als anonymer User - Status: {response.status_code}")
                     else:
-                        # Kein Refresh-Token vorhanden - Benutzer muss sich neu authentifizieren
-                        error_msg = "Ihr Authentifizierungs-Token ist abgelaufen. Bitte öffnen Sie das Profil (Profil-Button) und authentifizieren Sie sich erneut."
-                        print(f"⚠️ {error_msg}")
-                        raise Exception(error_msg)
+                        # Max Retries erreicht - versuche als anonymer User
+                        print("_stream_response: Max Retries erreicht - versuche als anonymer User")
+                        update_config(auth_token="")  # Token löschen
+                        self._refresh_config()
+                        headers = self._get_auth_headers()  # Jetzt mit Device-ID
+                        response = requests.post(url, json=request_data, headers=headers, stream=True, timeout=60)
+                        print(f"_stream_response: Request als anonymer User - Status: {response.status_code}")
                 
                 # Bei 403: Quota-Fehler
                 if response.status_code == 403:

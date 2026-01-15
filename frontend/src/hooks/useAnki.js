@@ -131,6 +131,12 @@ export function useAnki() {
               window.ankiBridge.addMessage('refreshAuth', null);
             }
           },
+          openUrl: (url) => {
+            console.log('Bridge: openUrl aufgerufen:', url);
+            if (window.ankiBridge) {
+              window.ankiBridge.addMessage('openUrl', url);
+            }
+          },
           handleAuthDeepLink: (url) => {
             console.log('Bridge: handleAuthDeepLink aufgerufen:', url?.substring(0, 100));
             if (window.ankiBridge) {

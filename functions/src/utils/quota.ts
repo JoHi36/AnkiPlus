@@ -1,6 +1,15 @@
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { Timestamp } from 'firebase-admin/firestore';
-import { getUser, getOrCreateDailyUsage, getCurrentDateString } from './firestore';
+import { 
+  getUser, 
+  getOrCreateDailyUsage, 
+  getCurrentDateString,
+  getOrCreateAnonymousUser,
+  getAnonymousDailyUsage,
+  resetAnonymousDailyUsage,
+  incrementAnonymousFlashRequests,
+  incrementAnonymousDeepRequests
+} from './firestore';
 import { createLogger } from './logging';
 
 // Lazy initialization - get Firestore when needed
@@ -9,6 +18,10 @@ function getDb() {
 }
 
 const logger = createLogger();
+
+// Anonymous user limits
+export const ANONYMOUS_FLASH_LIMIT = 20;
+export const ANONYMOUS_DEEP_LIMIT = 0;
 
 export interface QuotaCheckResult {
   allowed: boolean;
@@ -162,6 +175,106 @@ async function resetDailyUsage(userId: string, date: string): Promise<void> {
     deepRequests: 0,
     lastReset: Timestamp.now(),
   });
+}
+
+/**
+ * Check quota for anonymous user (device-based)
+ * @param deviceId - Device ID from client
+ * @param ipAddress - IP address of the client
+ * @param mode - Request mode ('compact' = flash, 'detailed' = deep)
+ * @returns Quota check result
+ */
+export async function checkAnonymousQuota(
+  deviceId: string,
+  ipAddress: string,
+  mode: 'compact' | 'detailed' = 'compact'
+): Promise<QuotaCheckResult> {
+  try {
+    // Determine request type
+    const requestType: 'flash' | 'deep' = mode === 'detailed' ? 'deep' : 'flash';
+
+    // Anonymous users can't use deep mode
+    if (requestType === 'deep') {
+      return {
+        allowed: false,
+        remaining: 0,
+        limit: ANONYMOUS_DEEP_LIMIT,
+        type: 'deep',
+      };
+    }
+
+    // Get current date (UTC)
+    const currentDate = getCurrentDateString();
+
+    // Get or create anonymous user
+    const anonymousUser = await getOrCreateAnonymousUser(deviceId, ipAddress);
+
+    // Check if reset is needed
+    const lastResetDate = anonymousUser.lastReset.toDate();
+    const lastResetDateString = `${lastResetDate.getUTCFullYear()}-${String(lastResetDate.getUTCMonth() + 1).padStart(2, '0')}-${String(lastResetDate.getUTCDate()).padStart(2, '0')}`;
+    
+    let usage = anonymousUser;
+    
+    if (lastResetDateString !== currentDate) {
+      // Reset needed - reset counters
+      logger.info('Resetting anonymous daily usage', { deviceId, currentDate, lastResetDateString });
+      await resetAnonymousDailyUsage(deviceId, currentDate);
+      
+      // Get fresh usage after reset
+      const freshUsage = await getAnonymousDailyUsage(deviceId, currentDate);
+      if (freshUsage) {
+        usage = freshUsage;
+      }
+    }
+
+    // Check quota
+    const limit = ANONYMOUS_FLASH_LIMIT;
+    const used = usage.flashRequests;
+    const remaining = Math.max(0, limit - used);
+    const allowed = remaining > 0;
+
+    return {
+      allowed,
+      remaining,
+      limit,
+      type: 'flash',
+    };
+  } catch (error: any) {
+    logger.error('Error checking anonymous quota', error, { deviceId });
+    // On error, deny request (fail-safe)
+    return {
+      allowed: false,
+      remaining: 0,
+      limit: ANONYMOUS_FLASH_LIMIT,
+      type: 'flash',
+    };
+  }
+}
+
+/**
+ * Increment usage counter atomically for anonymous user
+ * @param deviceId - Device ID from client
+ * @param ipAddress - IP address of the client
+ * @param type - Request type ('flash' or 'deep')
+ * @returns New count after increment
+ */
+export async function incrementAnonymousUsage(
+  deviceId: string,
+  ipAddress: string,
+  type: 'flash' | 'deep'
+): Promise<number> {
+  try {
+    const currentDate = getCurrentDateString();
+
+    if (type === 'flash') {
+      return await incrementAnonymousFlashRequests(deviceId, currentDate);
+    } else {
+      return await incrementAnonymousDeepRequests(deviceId, currentDate);
+    }
+  } catch (error: any) {
+    logger.error('Error incrementing anonymous usage', error, { deviceId, type });
+    throw error;
+  }
 }
 
 /**

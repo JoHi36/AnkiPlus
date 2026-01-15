@@ -1346,6 +1346,15 @@ class WebBridge(QObject):
             print(traceback.format_exc())
             return json.dumps({"success": False, "error": error_msg})
     
+    @pyqtSlot(str, result=str)
+    def openUrl(self, url):
+        """Öffnet eine URL im Standard-Browser"""
+        try:
+            webbrowser.open(url)
+            return json.dumps({"success": True})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+    
     @pyqtSlot(str)
     def handleAuthDeepLink(self, url):
         """

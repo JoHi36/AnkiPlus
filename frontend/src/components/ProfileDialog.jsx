@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, AlertCircle, Loader2, Eye, EyeOff, Zap, GraduationCap, Crown, CreditCard, Sparkles } from 'lucide-react';
+import { X, Save, AlertCircle, Loader2, Eye, EyeOff, Zap, GraduationCap, Crown, CreditCard, Sparkles, Key } from 'lucide-react';
 
 /**
  * Profile Dialog Komponente
@@ -7,11 +7,13 @@ import { X, Save, AlertCircle, Loader2, Eye, EyeOff, Zap, GraduationCap, Crown, 
  * 1. Nicht authentifiziert: Nur Token-Eingabe (zentriert, im Mittelpunkt)
  * 2. Authentifiziert: Abo-Status + "Abo verwalten" Button
  */
-export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
+export default function ProfileDialog({ isOpen, onClose, bridge, isReady, showCodeInput = false, onCodeInputClose }) {
   const [authToken, setAuthToken] = useState('');
+  const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showToken, setShowToken] = useState(false);
+  const [migrationLoading, setMigrationLoading] = useState(false);
   const [authStatus, setAuthStatus] = useState({
     authenticated: false,
     hasToken: false,
@@ -26,6 +28,17 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
     if (isOpen && bridge && isReady) {
       checkAuthStatus();
       loadAuthToken();
+      
+      // Fallback: Wenn nach 500ms kein Token geladen wurde, setze auf leer
+      const timeout = setTimeout(() => {
+        if (!currentAuthToken || !currentAuthToken.trim()) {
+          console.log('ProfileDialog: Token-Timeout - kein Token nach 500ms, setze auf nicht authentifiziert');
+          setCurrentAuthToken('');
+          setAuthStatus(prev => ({ ...prev, authenticated: false, hasToken: false }));
+        }
+      }, 500);
+      
+      return () => clearTimeout(timeout);
     }
   }, [isOpen, bridge, isReady]);
 
@@ -68,8 +81,15 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
 
     const handleAuthTokenLoaded = (event) => {
       const data = event.detail || event.data;
-      if (data && data.token) {
-        setCurrentAuthToken(data.token);
+      if (data) {
+        // Setze Token auch wenn leer (um State zu aktualisieren)
+        const token = data.token || '';
+        setCurrentAuthToken(token);
+        
+        // Wenn Token leer ist, setze auch authStatus auf nicht authentifiziert
+        if (!token || !token.trim()) {
+          setAuthStatus(prev => ({ ...prev, authenticated: false, hasToken: false }));
+        }
       }
     };
 
@@ -84,8 +104,13 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
         handleAuthTokenLoaded({ detail: payload.data });
       } else if (payload.type === 'authTokenLoaded') {
         // Handle direct payload format
-        if (payload.data && payload.data.token) {
-          setCurrentAuthToken(payload.data.token);
+        if (payload.data) {
+          const token = payload.data.token || '';
+          setCurrentAuthToken(token);
+          // Wenn Token leer ist, setze auch authStatus auf nicht authentifiziert
+          if (!token || !token.trim()) {
+            setAuthStatus(prev => ({ ...prev, authenticated: false, hasToken: false }));
+          }
         }
       } else if (payload.type === 'auth_success') {
         checkAuthStatus();
@@ -104,9 +129,10 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
     };
   }, [isOpen]);
 
-  // Fetch quota status (nur wenn authentifiziert)
+  // Fetch quota status (nur wenn wirklich authentifiziert)
   useEffect(() => {
-    if (!authStatus.authenticated || !authStatus.backendUrl || !currentAuthToken || !currentAuthToken.trim()) {
+    const hasValidToken = currentAuthToken && currentAuthToken.trim() !== '';
+    if (!authStatus.authenticated || !authStatus.hasToken || !authStatus.backendUrl || !hasValidToken) {
       setQuotaStatus(null);
       return;
     }
@@ -125,8 +151,10 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
           const data = await response.json();
           setQuotaStatus(data);
         } else if (response.status === 401) {
-          // Token expired or invalid - clear quota status
+          // Token expired or invalid - clear everything and show "not connected"
           setQuotaStatus(null);
+          setCurrentAuthToken(''); // Clear token
+          setAuthStatus(prev => ({ ...prev, authenticated: false, hasToken: false }));
           if (bridge && bridge.refreshAuth) {
             bridge.refreshAuth();
           }
@@ -136,8 +164,17 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
         }
       } catch (error) {
         console.error('Error fetching quota:', error);
-        // On error, clear quota status so we show "not connected" state
-        setQuotaStatus(null);
+        // Bei "Failed to fetch" (CORS/Netzwerk) oder anderen Fehlern:
+        // Wenn kein Token vorhanden ist, zeigen wir "nicht verbunden"
+        if (!currentAuthToken || !currentAuthToken.trim()) {
+          // Kein Token = definitiv nicht verbunden
+          setQuotaStatus(null);
+          setAuthStatus(prev => ({ ...prev, authenticated: false, hasToken: false }));
+        } else {
+          // Token vorhanden, aber Fetch fehlgeschlagen - könnte temporärer Fehler sein
+          // Behalte den Status, aber zeige keine Quota-Daten
+          setQuotaStatus(null);
+        }
       }
     };
 
@@ -187,6 +224,59 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
     }
   };
 
+  const handleCodeSubmit = async () => {
+    if (!code.trim()) {
+      setError('Bitte gib einen Code ein');
+      return;
+    }
+
+    setError('');
+    setMigrationLoading(true);
+
+    try {
+      // Code wird als Token behandelt (später durch echte Code-Verifizierung ersetzen)
+      if (bridge && bridge.saveAuthToken) {
+        bridge.saveAuthToken(code.trim(), ''); // Code als Token (temporär)
+        
+        // Migration durchführen
+        if (bridge && bridge.getDeviceId) {
+          const deviceId = bridge.getDeviceId();
+          if (deviceId && authStatus.backendUrl) {
+            try {
+              const migrationResponse = await fetch(`${authStatus.backendUrl}/migrate-anonymous`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${code.trim()}`,
+                },
+                body: JSON.stringify({ deviceId }),
+              });
+
+              if (migrationResponse.ok) {
+                console.log('Migration erfolgreich');
+              }
+            } catch (migrationError) {
+              console.error('Migration error:', migrationError);
+              // Migration-Fehler nicht kritisch - User ist trotzdem verbunden
+            }
+          }
+        }
+        
+        // Status aktualisieren
+        setTimeout(() => {
+          checkAuthStatus();
+          loadAuthToken();
+          setCode('');
+          if (onCodeInputClose) onCodeInputClose();
+        }, 500);
+      }
+    } catch (err) {
+      setError('Fehler beim Verbinden: ' + err.message);
+    } finally {
+      setMigrationLoading(false);
+    }
+  };
+
   const getTierInfo = (tier) => {
     switch (tier) {
       case 'tier2':
@@ -224,8 +314,30 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
 
   if (!isOpen) return null;
 
-  // Prüfe ob wirklich authentifiziert (sowohl Status als auch Token vorhanden)
-  const isAuthenticated = authStatus.authenticated && currentAuthToken && currentAuthToken.trim() !== '';
+  // Prüfe ob wirklich authentifiziert:
+  // - currentAuthToken muss vorhanden und nicht leer sein (höchste Priorität)
+  // - authStatus.authenticated muss true sein
+  // - authStatus.hasToken muss true sein (Token vorhanden)
+  const hasValidToken = currentAuthToken && currentAuthToken.trim() !== '';
+  
+  // Wenn kein Token vorhanden ist, ist der User definitiv nicht authentifiziert
+  // unabhängig von authStatus.authenticated (kann veraltet sein)
+  // WICHTIG: hasValidToken hat höchste Priorität - wenn leer, dann nicht authentifiziert
+  const isAuthenticated = hasValidToken && authStatus.authenticated && authStatus.hasToken;
+  
+  // Debug: Log State für Troubleshooting
+  if (isOpen) {
+    console.log('🔍 ProfileDialog State:', {
+      hasValidToken,
+      authenticated: authStatus.authenticated,
+      hasToken: authStatus.hasToken,
+      isAuthenticated,
+      currentAuthTokenLength: currentAuthToken?.length || 0,
+      quotaStatus: !!quotaStatus,
+      backendUrl: authStatus.backendUrl
+    });
+  }
+  
   const tierInfo = quotaStatus ? getTierInfo(quotaStatus.tier) : getTierInfo('free');
   const TierIcon = tierInfo.icon;
 
@@ -244,7 +356,69 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
         </div>
 
         <div className="overflow-y-auto p-5">
-          {!isAuthenticated ? (
+          {showCodeInput ? (
+            /* MODUS 1.5: Code-Eingabe für Migration */
+            <div className="flex flex-col items-center justify-center py-8 space-y-6">
+              <div className="text-center space-y-2">
+                <div className="w-16 h-16 bg-teal-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Key className="w-8 h-8 text-teal-400" />
+                </div>
+                <h3 className="text-xl font-bold text-base-content">Code eingeben</h3>
+                <p className="text-sm text-base-content/60 max-w-sm">
+                  Gib den Code ein, den du auf der Website erhalten hast, um dein Konto zu verbinden
+                </p>
+              </div>
+
+              <div className="w-full space-y-4">
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    placeholder="Code eingeben..."
+                    className="w-full pl-4 pr-4 py-4 bg-base-200/50 border-2 border-base-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 transition-all placeholder:text-base-content/30 text-center font-mono tracking-wider"
+                    autoFocus
+                  />
+                </div>
+
+                {error && (
+                  <div className="flex items-center gap-2 text-sm text-error bg-error/5 p-3 rounded-lg border border-error/10">
+                    <AlertCircle size={16} />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleCodeSubmit}
+                  disabled={migrationLoading || !code.trim()}
+                  className="w-full btn btn-primary btn-lg gap-2 font-semibold rounded-xl shadow-lg shadow-primary/20 disabled:opacity-50"
+                >
+                  {migrationLoading ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      Verbinde...
+                    </>
+                  ) : (
+                    <>
+                      <Key size={18} />
+                      Verbinden
+                    </>
+                  )}
+                </button>
+                
+                <button
+                  onClick={() => {
+                    setCode('');
+                    setError('');
+                    if (onCodeInputClose) onCodeInputClose();
+                  }}
+                  className="w-full btn btn-ghost btn-sm text-base-content/60 hover:text-base-content"
+                >
+                  Abbrechen
+                </button>
+              </div>
+            </div>
+          ) : !isAuthenticated ? (
             /* MODUS 1: Nicht authentifiziert - Nur Token-Eingabe */
             <div className="flex flex-col items-center justify-center py-8 space-y-6">
               <div className="text-center space-y-2">
@@ -403,12 +577,11 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
                         </div>
                       </div>
                     </div>
-                  ) : (
+                  ) : isAuthenticated ? (
                     <div className="pt-4 border-t border-base-content/10">
                       <p className="text-xs text-base-content/50 text-center">Lade Nutzungsdaten...</p>
                     </div>
-                  )}
-                </div>
+                  ) : null}
               </div>
 
               {/* Action Button */}

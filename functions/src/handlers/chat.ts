@@ -5,7 +5,7 @@ import { ChatRequest } from '../types';
 import { createErrorResponse, ErrorCode } from '../utils/errors';
 import { createLogger } from '../utils/logging';
 import { getOrCreateUser } from '../utils/firestore';
-import { checkQuota, incrementUsage } from '../utils/quota';
+import { checkQuota, incrementUsage, checkAnonymousQuota, incrementAnonymousUsage } from '../utils/quota';
 import { retryHttpRequest } from '../utils/retry';
 import { logQuotaExceeded, logChatRequest, logChatError } from '../utils/analytics';
 
@@ -22,15 +22,21 @@ export async function chatHandler(
   const logger = createLogger(requestId);
 
   try {
-    // Token validation is handled by middleware in index.ts
-    // userId is attached to req by validateToken middleware
+    // Token validation is handled by middleware (validateTokenOptional)
+    // Either userId (authenticated) or anonymousId (anonymous) should be present
     const userId = (req as any).userId;
-    if (!userId) {
-      res.status(401).json(createErrorResponse(ErrorCode.TOKEN_INVALID, 'User ID not found', undefined, requestId));
+    const anonymousId = (req as any).anonymousId;
+    const ipAddress = (req as any).ipAddress;
+    const isAuthenticated = (req as any).isAuthenticated !== false;
+
+    if (!userId && !anonymousId) {
+      res.status(400).json(
+        createErrorResponse(ErrorCode.VALIDATION_ERROR, 'User ID or Device ID required', undefined, requestId)
+      );
       return;
     }
 
-    logger.info('Chat request received', { userId });
+    logger.info('Chat request received', { userId, anonymousId, isAuthenticated });
 
     // Get request body
     const body: ChatRequest = req.body;
@@ -42,34 +48,54 @@ export async function chatHandler(
       return;
     }
 
-    // Get user to check quota
-    await getOrCreateUser(userId, (req as any).userEmail);
-
     // Get model (default to gemini-3-flash-preview)
     const model = body.model || 'gemini-3-flash-preview';
     const mode = body.mode || 'compact';
 
-    // Check quota BEFORE making API request (save costs)
-    const quotaCheck = await checkQuota(userId, mode);
+    let quotaCheck;
+    let userIdentifier: string;
+
+    // Check quota based on authentication status
+    if (isAuthenticated && userId) {
+      // Authenticated user
+      await getOrCreateUser(userId, (req as any).userEmail);
+      quotaCheck = await checkQuota(userId, mode);
+      userIdentifier = userId;
+    } else if (anonymousId && ipAddress) {
+      // Anonymous user
+      quotaCheck = await checkAnonymousQuota(anonymousId, ipAddress, mode);
+      userIdentifier = anonymousId;
+    } else {
+      res.status(400).json(
+        createErrorResponse(ErrorCode.VALIDATION_ERROR, 'Invalid authentication state', undefined, requestId)
+      );
+      return;
+    }
+
     if (!quotaCheck.allowed) {
-      logger.warn('Quota exceeded', { userId, mode, quotaCheck });
+      logger.warn('Quota exceeded', { userId, anonymousId, mode, quotaCheck });
       
       // Log analytics event
-      const user = await getOrCreateUser(userId, (req as any).userEmail);
-      await logQuotaExceeded(userId, user.tier, quotaCheck.type);
+      if (isAuthenticated && userId) {
+        const user = await getOrCreateUser(userId, (req as any).userEmail);
+        await logQuotaExceeded(userId, user.tier, quotaCheck.type);
+      }
       
-      // Get upgrade URL from environment or use default
-      const upgradeUrl = process.env.UPGRADE_URL || functions.config().app?.upgrade_url || 'https://your-landingpage.com/register';
+      // Get upgrade/register URL from environment or use default
+      const upgradeUrl = process.env.UPGRADE_URL || functions.config().app?.upgrade_url || 'https://anki-plus.vercel.app/register';
       
       res.status(403).json(
         createErrorResponse(
           ErrorCode.QUOTA_EXCEEDED,
-          'Tageslimit erreicht. Upgrade für mehr Requests?',
+          isAuthenticated 
+            ? 'Tageslimit erreicht. Upgrade für mehr Requests?' 
+            : 'Du hast dein Tageslimit erreicht. Kostenlos registrieren für unbegrenzt Flash Mode?',
           {
             remaining: quotaCheck.remaining,
             limit: quotaCheck.limit,
             type: quotaCheck.type,
             upgradeUrl: upgradeUrl,
+            requiresAuth: !isAuthenticated,
           },
           requestId
         )
@@ -77,7 +103,7 @@ export async function chatHandler(
       return;
     }
 
-    logger.info('Quota check passed', { userId, mode, quotaCheck });
+    logger.info('Quota check passed', { userId, anonymousId, mode, quotaCheck });
 
     // Get API key from environment
     const apiKey = process.env.GOOGLE_AI_API_KEY || functions.config().google?.ai_api_key;
@@ -182,10 +208,12 @@ export async function chatHandler(
     // Check if streaming is requested (default: true)
     const shouldStream = body.stream !== false;
     
-    logger.info('Proxying to Gemini API', { userId, model, messageLength: body.message.length, streaming: shouldStream });
+    logger.info('Proxying to Gemini API', { userId, anonymousId, model, messageLength: body.message.length, streaming: shouldStream });
     
     // Log analytics event
-    await logChatRequest(userId, model, mode, body.message.length);
+    if (isAuthenticated && userId) {
+      await logChatRequest(userId, model, mode, body.message.length);
+    }
 
     // Determine request type for usage tracking
     const requestType: 'flash' | 'deep' = mode === 'detailed' ? 'deep' : 'flash';
@@ -210,9 +238,15 @@ export async function chatHandler(
         );
 
         // Increment usage counter
-        incrementUsage(userId, requestType).catch((error) => {
-          logger.error('Failed to increment usage', error, { userId, requestType });
-        });
+        if (isAuthenticated && userId) {
+          incrementUsage(userId, requestType).catch((error) => {
+            logger.error('Failed to increment usage', error, { userId, requestType });
+          });
+        } else if (anonymousId && ipAddress) {
+          incrementAnonymousUsage(anonymousId, ipAddress, requestType).catch((error) => {
+            logger.error('Failed to increment anonymous usage', error, { anonymousId, requestType });
+          });
+        }
 
         // Extract text from response
         const result = response.data;
@@ -345,10 +379,17 @@ export async function chatHandler(
 
     // Increment usage counter AFTER successful API request starts
     // Do this asynchronously to not block streaming
-    incrementUsage(userId, requestType).catch((error) => {
-      logger.error('Failed to increment usage', error, { userId, requestType });
-      // Don't fail the request if usage increment fails
-    });
+    if (isAuthenticated && userId) {
+      incrementUsage(userId, requestType).catch((error) => {
+        logger.error('Failed to increment usage', error, { userId, requestType });
+        // Don't fail the request if usage increment fails
+      });
+    } else if (anonymousId && ipAddress) {
+      incrementAnonymousUsage(anonymousId, ipAddress, requestType).catch((error) => {
+        logger.error('Failed to increment anonymous usage', error, { anonymousId, requestType });
+        // Don't fail the request if usage increment fails
+      });
+    }
 
     // Stream response from Gemini to client
     let buffer = '';

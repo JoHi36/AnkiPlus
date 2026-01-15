@@ -72,6 +72,92 @@ export async function validateToken(
 }
 
 /**
+ * Validates Firebase ID Token optionally - allows anonymous users
+ * If token is present and valid, sets userId
+ * If no token, extracts deviceId and IP for anonymous tracking
+ * @param req - Express request object
+ * @param res - Express response object
+ * @param next - Express next function
+ */
+export async function validateTokenOptional(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const authHeader = req.headers.authorization;
+
+    // If authorization header is present, try to validate token
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const idToken = authHeader.split('Bearer ')[1];
+
+      if (idToken) {
+        try {
+          // Verify the ID token
+          const auth = getAuth();
+          const decodedToken = await auth.verifyIdToken(idToken);
+
+          // Attach user ID to request object
+          (req as any).userId = decodedToken.uid;
+          (req as any).userEmail = decodedToken.email;
+          (req as any).isAuthenticated = true;
+
+          // Log successful authentication
+          await logAuthSuccess(decodedToken.uid, 'token');
+
+          next();
+          return;
+        } catch (error: any) {
+          // Token invalid or expired - fall through to anonymous mode
+          // Don't return error, allow anonymous access
+        }
+      }
+    }
+
+    // No valid token - set up anonymous tracking
+    const deviceId = req.headers['x-device-id'] as string;
+    const ipAddress = req.ip || 
+                     req.headers['x-forwarded-for']?.toString().split(',')[0] || 
+                     req.headers['x-real-ip']?.toString() || 
+                     'unknown';
+
+    if (!deviceId) {
+      res.status(400).json(
+        createErrorResponse('VALIDATION_ERROR', 'Device ID required for anonymous access. Please include X-Device-Id header.')
+      );
+      return;
+    }
+
+    // Attach anonymous identifiers to request
+    (req as any).anonymousId = deviceId;
+    (req as any).ipAddress = ipAddress;
+    (req as any).isAuthenticated = false;
+
+    next();
+  } catch (error: any) {
+    // Fallback to anonymous mode on any error
+    const deviceId = req.headers['x-device-id'] as string;
+    const ipAddress = req.ip || 
+                     req.headers['x-forwarded-for']?.toString().split(',')[0] || 
+                     req.headers['x-real-ip']?.toString() || 
+                     'unknown';
+
+    if (!deviceId) {
+      res.status(400).json(
+        createErrorResponse('VALIDATION_ERROR', 'Device ID required for anonymous access.')
+      );
+      return;
+    }
+
+    (req as any).anonymousId = deviceId;
+    (req as any).ipAddress = ipAddress;
+    (req as any).isAuthenticated = false;
+
+    next();
+  }
+}
+
+/**
  * Validates refresh token
  * @param refreshToken - Firebase refresh token
  * @returns User ID if token is valid

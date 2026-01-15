@@ -24,6 +24,15 @@ export interface DailyUsageDocument {
   lastReset: Timestamp;
 }
 
+export interface AnonymousUserDocument {
+  deviceId: string;
+  ipAddress: string;
+  flashRequests: number;
+  deepRequests: number;
+  lastReset: Timestamp;
+  createdAt: Timestamp;
+}
+
 /**
  * Get or create user document in Firestore
  * @param userId - Firebase Auth User ID
@@ -249,6 +258,226 @@ export function getResetTime(): string {
   tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
   tomorrow.setUTCHours(0, 0, 0, 0);
   return tomorrow.toISOString();
+}
+
+/**
+ * Get or create anonymous user document in Firestore
+ * @param deviceId - Device ID from client
+ * @param ipAddress - IP address of the client
+ * @returns Anonymous user document
+ */
+export async function getOrCreateAnonymousUser(
+  deviceId: string,
+  ipAddress: string
+): Promise<AnonymousUserDocument> {
+  const db = getDb();
+  const currentDate = getCurrentDateString();
+  const anonymousRef = db
+    .collection('anonymous_users')
+    .doc(deviceId)
+    .collection('daily')
+    .doc(currentDate);
+
+  const anonymousDoc = await anonymousRef.get();
+
+  if (!anonymousDoc.exists) {
+    // Create new anonymous user document for today
+    const newAnonymous: AnonymousUserDocument = {
+      deviceId,
+      ipAddress,
+      flashRequests: 0,
+      deepRequests: 0,
+      lastReset: Timestamp.now(),
+      createdAt: Timestamp.now(),
+    };
+    await anonymousRef.set(newAnonymous);
+    return newAnonymous;
+  }
+
+  return anonymousDoc.data() as AnonymousUserDocument;
+}
+
+/**
+ * Get anonymous daily usage document
+ * @param deviceId - Device ID from client
+ * @param date - Date string in format YYYY-MM-DD
+ * @returns Anonymous daily usage document or null if not found
+ */
+export async function getAnonymousDailyUsage(
+  deviceId: string,
+  date: string
+): Promise<AnonymousUserDocument | null> {
+  const db = getDb();
+  const anonymousRef = db
+    .collection('anonymous_users')
+    .doc(deviceId)
+    .collection('daily')
+    .doc(date);
+
+  const anonymousDoc = await anonymousRef.get();
+
+  if (!anonymousDoc.exists) {
+    return null;
+  }
+
+  return anonymousDoc.data() as AnonymousUserDocument;
+}
+
+/**
+ * Increment flash requests for anonymous user
+ * @param deviceId - Device ID from client
+ * @param date - Date string in format YYYY-MM-DD
+ * @returns New flash requests count
+ */
+export async function incrementAnonymousFlashRequests(
+  deviceId: string,
+  date: string
+): Promise<number> {
+  const db = getDb();
+  const anonymousRef = db
+    .collection('anonymous_users')
+    .doc(deviceId)
+    .collection('daily')
+    .doc(date);
+
+  const anonymousDoc = await anonymousRef.get();
+
+  if (!anonymousDoc.exists) {
+    // Create new document if it doesn't exist
+    await anonymousRef.set({
+      flashRequests: 1,
+      deepRequests: 0,
+      lastReset: Timestamp.now(),
+      createdAt: Timestamp.now(),
+    });
+    return 1;
+  }
+
+  // Use FieldValue.increment for atomic operation
+  await anonymousRef.update({
+    flashRequests: FieldValue.increment(1),
+  });
+
+  const updatedDoc = await anonymousRef.get();
+  return (updatedDoc.data()?.flashRequests || 0) as number;
+}
+
+/**
+ * Increment deep requests for anonymous user
+ * @param deviceId - Device ID from client
+ * @param date - Date string in format YYYY-MM-DD
+ * @returns New deep requests count
+ */
+export async function incrementAnonymousDeepRequests(
+  deviceId: string,
+  date: string
+): Promise<number> {
+  const db = getDb();
+  const anonymousRef = db
+    .collection('anonymous_users')
+    .doc(deviceId)
+    .collection('daily')
+    .doc(date);
+
+  const anonymousDoc = await anonymousRef.get();
+
+  if (!anonymousDoc.exists) {
+    // Create new document if it doesn't exist
+    await anonymousRef.set({
+      flashRequests: 0,
+      deepRequests: 1,
+      lastReset: Timestamp.now(),
+      createdAt: Timestamp.now(),
+    });
+    return 1;
+  }
+
+  // Use FieldValue.increment for atomic operation
+  await anonymousRef.update({
+    deepRequests: FieldValue.increment(1),
+  });
+
+  const updatedDoc = await anonymousRef.get();
+  return (updatedDoc.data()?.deepRequests || 0) as number;
+}
+
+/**
+ * Reset anonymous daily usage for a device
+ * @param deviceId - Device ID from client
+ * @param date - Date string in format YYYY-MM-DD
+ */
+export async function resetAnonymousDailyUsage(
+  deviceId: string,
+  date: string
+): Promise<void> {
+  const db = getDb();
+  const anonymousRef = db
+    .collection('anonymous_users')
+    .doc(deviceId)
+    .collection('daily')
+    .doc(date);
+
+  await anonymousRef.set({
+    flashRequests: 0,
+    deepRequests: 0,
+    lastReset: Timestamp.now(),
+    createdAt: Timestamp.now(),
+  });
+}
+
+/**
+ * Migrate anonymous user usage to authenticated user
+ * @param deviceId - Device ID from client
+ * @param userId - Firebase Auth User ID
+ * @returns Migration result with migrated usage
+ */
+export async function migrateAnonymousUsage(
+  deviceId: string,
+  userId: string
+): Promise<{ flashRequests: number; deepRequests: number }> {
+  const db = getDb();
+  const currentDate = getCurrentDateString();
+  
+  // Get anonymous usage for today
+  const anonymousUsage = await getAnonymousDailyUsage(deviceId, currentDate);
+  
+  if (!anonymousUsage) {
+    // No anonymous usage to migrate
+    return { flashRequests: 0, deepRequests: 0 };
+  }
+
+  // Get or create user daily usage
+  const userUsage = await getOrCreateDailyUsage(userId, currentDate);
+  
+  // Add anonymous usage to user usage
+  const migratedFlash = anonymousUsage.flashRequests;
+  const migratedDeep = anonymousUsage.deepRequests;
+  
+  const db_instance = getDb();
+  const userUsageRef = db_instance
+    .collection('usage')
+    .doc(userId)
+    .collection('daily')
+    .doc(currentDate);
+  
+  await userUsageRef.update({
+    flashRequests: FieldValue.increment(migratedFlash),
+    deepRequests: FieldValue.increment(migratedDeep),
+  });
+
+  // Delete anonymous user data after migration
+  const anonymousRef = db
+    .collection('anonymous_users')
+    .doc(deviceId)
+    .collection('daily')
+    .doc(currentDate);
+  
+  await anonymousRef.delete();
+
+  return {
+    flashRequests: migratedFlash,
+    deepRequests: migratedDeep,
+  };
 }
 
 

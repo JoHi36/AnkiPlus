@@ -17,6 +17,11 @@ service cloud.firestore {
     match /processed_events/{eventId} {
       allow read, write: if false; // Only backend can access
     }
+    
+    // Anonymous users collection - only backend can read/write
+    match /anonymous_users/{deviceId}/daily/{date} {
+      allow read, write: if false; // Only backend can access
+    }
   }
 }
 

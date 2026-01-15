@@ -65,10 +65,11 @@ export function LandingPage() {
       <header className="absolute top-0 w-full z-50 p-4 sm:p-6 md:px-8">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2 sm:gap-3 font-bold text-lg sm:text-xl tracking-tight cursor-pointer group">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 bg-teal-500/10 rounded-xl flex items-center justify-center border border-teal-500/20 shadow-[0_0_20px_rgba(20,184,166,0.2)] group-hover:shadow-[0_0_30px_rgba(20,184,166,0.4)] transition-all">
-              <span className="text-teal-400 group-hover:text-teal-300 transition-colors text-sm sm:text-base">A+</span>
-            </div>
-            <span className="text-white drop-shadow-[0_0_15px_rgba(20,184,166,0.3)] group-hover:text-teal-50 transition-colors">ANKI+</span>
+            <img 
+              src="/anki-logo.png" 
+              alt="ANKI+" 
+              className="h-8 sm:h-9 w-auto object-contain"
+            />
           </Link>
           
           {/* Desktop Navigation */}
@@ -162,10 +163,10 @@ export function LandingPage() {
             className="flex flex-col items-center max-w-5xl"
           >
             <motion.div variants={fadeInUp} className="mb-10">
-              <span className="inline-flex items-center gap-3 px-4 py-1.5 rounded-full text-sm font-medium bg-teal-950/40 border border-teal-500/50 text-teal-300 shadow-[0_0_30px_-10px_rgba(45,212,191,0.4)] backdrop-blur-md ring-1 ring-white/10 hover:bg-teal-950/60 transition-colors cursor-default">
+              <span className="inline-flex items-center gap-3 px-4 py-1.5 rounded-full text-sm font-medium bg-purple-900/20 border border-purple-500/30 text-purple-300 shadow-[0_0_30px_-10px_rgba(168,85,247,0.4)] backdrop-blur-md ring-1 ring-white/10 hover:bg-purple-900/30 transition-colors cursor-default">
                 <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-teal-500 shadow-[0_0_8px_2px_rgba(20,184,166,0.6)]"></span>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-purple-500 shadow-[0_0_8px_2px_rgba(168,85,247,0.6)]"></span>
                 </span>
                 Jetzt verfügbar: ANKI+ Deep Mode
               </span>

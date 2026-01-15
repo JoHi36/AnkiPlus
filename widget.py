@@ -611,6 +611,11 @@ class ChatbotWidget(QWidget):
                 "data": result_data
             }
             self.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
+        elif msg_type == 'openUrl':
+            # Öffne URL im Standard-Browser
+            if isinstance(data, str):
+                result = self.bridge.openUrl(data)
+                # openUrl öffnet die URL direkt, keine Antwort nötig
         elif msg_type == 'handleAuthDeepLink':
             # Verarbeite Deep Link für Auth
             if isinstance(data, str):

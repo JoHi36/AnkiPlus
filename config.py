@@ -6,6 +6,7 @@ from aqt import mw
 from aqt.utils import showInfo
 import json
 import os
+import uuid
 
 # Standard-Konfiguration
 DEFAULT_CONFIG = {
@@ -112,6 +113,12 @@ def load_config():
                 if "refresh_token" not in config:
                     config["refresh_token"] = ""
                 
+                # Migration: Device-ID hinzufügen falls nicht vorhanden
+                if "device_id" not in config or not config.get("device_id"):
+                    config["device_id"] = str(uuid.uuid4())
+                    # Speichere sofort, damit Device-ID persistent ist
+                    save_config(config)
+                
                 return config
         except Exception as e:
             showInfo(f"Fehler beim Laden der Konfiguration: {str(e)}")
@@ -215,4 +222,19 @@ def get_refresh_token():
     """Gibt das Refresh-Token zurück"""
     config = get_config()
     return config.get('refresh_token', '').strip()
+
+
+def get_or_create_device_id():
+    """Gibt die Device-ID zurück oder erstellt eine neue falls nicht vorhanden"""
+    config = get_config()
+    device_id = config.get('device_id', '').strip()
+    
+    if not device_id:
+        # Generiere neue Device-ID
+        device_id = str(uuid.uuid4())
+        config['device_id'] = device_id
+        save_config(config)
+        print(f"Device-ID generiert: {device_id}")
+    
+    return device_id
 

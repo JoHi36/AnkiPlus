@@ -2,7 +2,7 @@ import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import express from 'express';
 import cors from 'cors';
-import { validateToken } from './middleware/auth';
+import { validateToken, validateTokenOptional } from './middleware/auth';
 import { chatHandler } from './handlers/chat';
 import { authHandler } from './handlers/auth';
 import { modelsHandler } from './handlers/models';
@@ -11,6 +11,7 @@ import { usageHistoryHandler } from './handlers/usageHistory';
 import { createCheckoutSessionHandler, createPortalSessionHandler } from './handlers/stripe';
 import { stripeWebhookHandler } from './handlers/stripeWebhook';
 import { verifyCheckoutSessionHandler } from './handlers/verifyCheckoutSession';
+import { migrationHandler } from './handlers/migration';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -75,7 +76,7 @@ app.get('/health', (req, res) => {
 });
 
 // API routes (ohne /api/ Präfix, da Cloud Function bereits "api" heißt)
-app.post('/chat', validateToken, chatHandler);
+app.post('/chat', validateTokenOptional, chatHandler);
 app.post('/auth/refresh', authHandler);
 app.get('/models', modelsHandler);
 app.get('/user/quota', validateToken, quotaHandler);
@@ -85,6 +86,9 @@ app.get('/user/usage-history', validateToken, usageHistoryHandler);
 app.post('/stripe/create-checkout-session', validateToken, createCheckoutSessionHandler);
 app.post('/stripe/create-portal-session', validateToken, createPortalSessionHandler);
 app.post('/stripe/verify-checkout-session', validateToken, verifyCheckoutSessionHandler);
+
+// Migration route
+app.post('/migrate-anonymous', validateToken, migrationHandler);
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
