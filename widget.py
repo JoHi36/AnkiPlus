@@ -98,7 +98,12 @@ class ChatbotWidget(QWidget):
         self.web_view.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
 
         html_path = os.path.join(os.path.dirname(__file__), "web", "index.html")
-        self.web_view.load(QUrl.fromLocalFile(html_path))
+        # Cache-Busting: Füge Timestamp hinzu um sicherzustellen, dass neue Dateien geladen werden
+        import time
+        cache_buster = f"?v={int(time.time())}"
+        url = QUrl.fromLocalFile(html_path)
+        url.setQuery(cache_buster)
+        self.web_view.load(url)
         self.web_view.loadFinished.connect(self._init_js_bridge)
         self.web_view.loadFinished.connect(self.push_initial_state)
 
