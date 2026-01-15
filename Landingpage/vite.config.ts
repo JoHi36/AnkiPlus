@@ -19,8 +19,8 @@ export default defineConfig(({ mode }) => {
           '@': path.resolve(__dirname, '.'),
           '@shared': path.resolve(__dirname, '../shared'),
         },
-        // Ensure node_modules are resolved correctly
-        preserveSymlinks: false,
+        // Ensure node_modules are resolved correctly from Landingpage directory
+        dedupe: ['react', 'react-dom'],
       },
       build: {
         outDir: 'dist',
