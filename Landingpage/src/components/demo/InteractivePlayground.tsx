@@ -7,7 +7,7 @@ import { DemoAnkiCard } from './DemoAnkiCard';
 import { DemoThoughtStream } from './DemoThoughtStream';
 import { DemoChatMessage } from './DemoChatMessage';
 import { DemoQuizCard } from './DemoQuizCard';
-import { DemoChatInput } from './DemoChatInput';
+import RealChatInput from './RealChatInput';
 import { DemoEvaluation } from './DemoEvaluation';
 import { Button } from '@shared/components/Button';
 
@@ -169,17 +169,13 @@ export function InteractivePlayground() {
               </div>
            )}
 
-           <DemoChatInput 
+           <RealChatInput 
               value={inputText} 
               onChange={handleUserTyping} 
               onSend={phase === 'IDLE' ? handleStartEval : phase === 'RESCUE_ACTIVE' ? handleStartDeep : () => {}}
               isLoading={phase === 'TYPING_EVAL' || phase === 'DEEP_TYPING'}
-              placeholder={
-                phase === 'IDLE' ? "Antworte..." : 
-                phase === 'RESCUE_ACTIVE' ? "Frag nach Hintergründen..." : 
-                "Warte auf Antwort..."
-              }
-              mode={['DEEP_TYPING', 'DEEP_THINKING', 'DEEP_RESULT'].includes(phase) ? 'deep' : 'flash'}
+              cardContext={{ isQuestion: true }} // Mock context to show question actions
+              onToggleCardState={() => {}} // Dummy handler
            />
         </div>
       </div>
