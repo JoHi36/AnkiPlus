@@ -7,6 +7,7 @@ import { RegisterPage } from './src/pages/RegisterPage';
 import { DashboardPage } from './src/pages/DashboardPage';
 import { SubscriptionPage } from './src/pages/SubscriptionPage';
 import { StatisticsPage } from './src/pages/StatisticsPage';
+import { SettingsPage } from './src/pages/SettingsPage';
 import { InstallPage } from './src/pages/InstallPage';
 import { AuthCallbackPage } from './src/pages/AuthCallbackPage';
 
@@ -42,6 +43,14 @@ function App() {
           element={
             <ProtectedRoute>
               <StatisticsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dashboard/settings"
+          element={
+            <ProtectedRoute>
+              <SettingsPage />
             </ProtectedRoute>
           }
         />

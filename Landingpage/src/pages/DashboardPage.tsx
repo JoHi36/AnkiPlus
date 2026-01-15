@@ -6,6 +6,7 @@ import { getUserDocument, UserDocument } from '../utils/userSetup';
 import { useQuota } from '../hooks/useQuota';
 import { useUsageHistory } from '../hooks/useUsageHistory';
 import { DashboardLayout } from '../components/DashboardLayout';
+import { HallOfFameCard } from '../components/HallOfFameCard';
 import { 
   Sparkles, 
   Brain,
@@ -241,6 +242,15 @@ export function DashboardPage() {
                   <ChevronRight className="w-5 h-5 text-neutral-400 group-hover:text-teal-400 transition-colors" />
                 </div>
              </div>
+          </motion.div>
+
+          {/* Hall of Fame Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+          >
+            <HallOfFameCard />
           </motion.div>
         </div>
       </DashboardLayout>

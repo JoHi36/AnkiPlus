@@ -43,10 +43,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <aside className="fixed bottom-0 w-full z-50 md:relative md:w-72 md:h-screen bg-[#080808]/90 backdrop-blur-xl border-t md:border-t-0 md:border-r border-white/5 flex flex-row md:flex-col justify-between p-4 md:p-6">
         <div className="flex flex-col gap-8">
           <div className="hidden md:flex items-center gap-3 font-bold text-xl tracking-tight cursor-pointer group mb-4" onClick={() => navigate('/dashboard')}>
-            <div className="w-8 h-8 bg-teal-500/10 rounded-lg flex items-center justify-center border border-teal-500/20">
-              <span className="text-teal-400 text-sm">A+</span>
-            </div>
-            <span className="text-white">ANKI+</span>
+            <img 
+              src="/anki-logo.png" 
+              alt="ANKI+" 
+              className="h-6 sm:h-7 w-auto object-contain"
+            />
           </div>
 
           <nav className="flex md:flex-col justify-around md:justify-start w-full gap-2">
@@ -87,10 +88,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         {/* Mobile Header */}
         <div className="md:hidden flex items-center justify-between p-6 pb-2">
           <div className="flex items-center gap-3 font-bold text-xl tracking-tight">
-            <div className="w-8 h-8 bg-teal-500/10 rounded-lg flex items-center justify-center border border-teal-500/20">
-              <span className="text-teal-400 text-sm">A+</span>
-            </div>
-            <span className="text-white">ANKI+</span>
+            <img 
+              src="/anki-logo.png" 
+              alt="ANKI+" 
+              className="h-6 sm:h-7 w-auto object-contain"
+            />
           </div>
           <button onClick={handleLogout} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 text-neutral-400">
             <LogOut className="w-4 h-4" />

@@ -16,6 +16,7 @@ import { PricingFAQ } from '../components/PricingFAQ';
 import { LimitInfoBox } from '../components/LimitExplanation';
 import { PricingGrid } from '../components/PricingGrid';
 import { InteractivePlayground } from '../components/demo/InteractivePlayground';
+import { TestimonialList } from '../components/TestimonialList';
 import { useState } from 'react';
 
 // Animation variants
@@ -68,7 +69,7 @@ export function LandingPage() {
             <img 
               src="/anki-logo.png" 
               alt="ANKI+" 
-              className="h-8 sm:h-9 w-auto object-contain"
+              className="h-6 sm:h-7 w-auto object-contain"
             />
           </Link>
           
@@ -153,7 +154,7 @@ export function LandingPage() {
       <main className="relative z-10">
         
         {/* --- Hero Section --- */}
-        <section className="min-h-screen flex items-center justify-center max-w-7xl mx-auto px-4 sm:px-6 flex-col text-center relative pt-32 sm:pt-40 md:pt-44 pb-20">
+        <section className="min-h-screen flex items-center justify-center max-w-7xl mx-auto px-4 sm:px-6 flex-col text-center relative">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3/4 h-32 bg-teal-500/20 blur-[80px] -z-10 rounded-full" />
 
           <motion.div 
@@ -275,79 +276,7 @@ export function LandingPage() {
             <p className="text-neutral-400 text-sm">4.9/5 Durchschnittsbewertung</p>
           </motion.div>
 
-          <motion.div 
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true }}
-            variants={staggerContainer}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-          >
-            {[
-              {
-                name: "Sarah M.",
-                role: "Medizinstudentin, 4. Jahr",
-                tier: "Exam Pro",
-                useCase: "Staatsexamen",
-                text: "Anki+ hat mein Physikum gerettet. Der Deep Mode ist wie ein persönlicher Professor, der 24/7 in meiner Tasche ist. Komplexe Zusammenhänge endlich verstanden.",
-                image: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=faces",
-                verified: true
-              },
-              {
-                name: "Jonas K.",
-                role: "Jura Student, LMU",
-                tier: "Student",
-                useCase: "Jura",
-                text: "Endlich verstehe ich die Zusammenhänge zwischen den Paragraphen, statt nur auswendig zu lernen. Gamechanger für mein Staatsexamen.",
-                image: "https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=100&h=100&fit=crop&crop=faces",
-                verified: false
-              },
-              {
-                name: "Dr. Lisa Weber",
-                role: "Assistenzärztin",
-                tier: "Exam Pro",
-                useCase: "Facharzt",
-                text: "Ich nutze ANKI+ zum Auffrischen von Facharztwissen. Die Deep Search Funktion spart mir täglich Stunden an Recherchezeit.",
-                image: "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=100&h=100&fit=crop&crop=faces",
-                verified: true
-              }
-            ].map((testimonial, i) => (
-              <motion.div key={i} variants={fadeInUp} className="glass-card p-6 sm:p-8 md:p-10 rounded-3xl relative bg-neutral-900/30 hover:bg-neutral-900/50 transition-colors">
-                <Quote className="w-10 h-10 text-teal-500/10 absolute top-8 right-8" />
-                <p className="text-neutral-300 leading-relaxed mb-6 relative z-10 text-lg font-light">
-                  "{testimonial.text}"
-                </p>
-                <div className="flex flex-wrap gap-2 mb-6">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    testimonial.tier === 'Exam Pro' 
-                      ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                      : testimonial.tier === 'Student'
-                      ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30'
-                      : 'bg-neutral-500/20 text-neutral-300 border border-neutral-500/30'
-                  }`}>
-                    {testimonial.tier}
-                  </span>
-                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-white/5 text-neutral-400 border border-white/10">
-                    {testimonial.useCase}
-                  </span>
-                  {testimonial.verified && (
-                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-300 border border-green-500/30 flex items-center gap-1">
-                      <BadgeCheck className="w-3 h-3" />
-                      Verifiziert
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full overflow-hidden border border-white/10">
-                    <img src={testimonial.image} alt={testimonial.name} className="w-full h-full object-cover" />
-                  </div>
-                  <div>
-                    <div className="font-semibold text-white text-base">{testimonial.name}</div>
-                    <div className="text-teal-500/80 text-sm">{testimonial.role}</div>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
+          <TestimonialList limit={15} showFallback={true} />
         </section>
 
         {/* --- CTA Section --- */}

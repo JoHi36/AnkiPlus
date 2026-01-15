@@ -75,11 +75,20 @@ export function LoginPage() {
             <img 
               src="/anki-logo.png" 
               alt="ANKI+" 
-              className="h-8 sm:h-9 w-auto object-contain"
+              className="h-6 sm:h-7 w-auto object-contain"
             />
           </Link>
         </div>
       </header>
+
+      {/* Logo as Cover - Large, Light Background Element */}
+      <div className="fixed inset-0 z-0 pointer-events-none flex items-center justify-center">
+        <img 
+          src="/anki-logo.png" 
+          alt="ANKI+" 
+          className="w-[600px] h-auto object-contain opacity-[0.03] blur-sm"
+        />
+      </div>
 
       <div className="w-full max-w-md relative z-10">
         <div className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-8 shadow-2xl">
