@@ -17,12 +17,13 @@ function fixSharedComponentResolution() {
       }
       
       // Check if this is one of the problematic packages
-      const problematicPackages = ['react-markdown', 'remark-math', 'rehype-katex', 'framer-motion'];
+      const problematicPackages = ['react-markdown', 'remark-math', 'rehype-katex', 'framer-motion', 'lucide-react'];
       if (problematicPackages.includes(source) || 
           source.startsWith('react-markdown/') || 
           source.startsWith('remark-math/') || 
           source.startsWith('rehype-katex/') ||
-          source.startsWith('framer-motion/')) {
+          source.startsWith('framer-motion/') ||
+          source.startsWith('lucide-react/')) {
         
         // If importer is from shared directory, resolve from Landingpage node_modules
         if (importer && importer.includes('/shared/')) {
@@ -77,7 +78,7 @@ export default defineConfig(({ mode }) => {
           'remark-math': path.resolve(__dirname, 'node_modules/remark-math'),
           'rehype-katex': path.resolve(__dirname, 'node_modules/rehype-katex'),
           'framer-motion': path.resolve(__dirname, 'node_modules/framer-motion'),
-          'framer-motion': path.resolve(__dirname, 'node_modules/framer-motion'),
+          'lucide-react': path.resolve(__dirname, 'node_modules/lucide-react'),
         },
         // Ensure node_modules are resolved from Landingpage directory, not from shared components
         modules: [path.resolve(__dirname, 'node_modules'), 'node_modules'],
@@ -97,7 +98,7 @@ export default defineConfig(({ mode }) => {
         },
       },
       optimizeDeps: {
-        include: ['react-markdown', 'remark-math', 'rehype-katex', 'react', 'react-dom', 'framer-motion'],
+        include: ['react-markdown', 'remark-math', 'rehype-katex', 'react', 'react-dom', 'framer-motion', 'lucide-react'],
       },
     };
 });
