@@ -41,23 +41,22 @@ export function AuthCallbackPage() {
         const tryAutoConnect = async () => {
           setConnecting(true);
           
-          // Prüfe ob Plugin-Server erreichbar ist
-          const serverAvailable = await checkPluginServer();
-          setPluginServerAvailable(serverAvailable);
+          // Versuche direkt Token zu senden (ohne vorherigen Health-Check)
+          // Health-Check kann wegen Mixed Content (HTTPS -> HTTP) fehlschlagen,
+          // aber der POST-Request könnte trotzdem funktionieren
+          const result = await sendTokenToPlugin(token);
           
-          if (serverAvailable) {
-            // Versuche Token per HTTP POST zu senden
-            const result = await sendTokenToPlugin(token);
-            if (result.success) {
-              setPluginConnected(true);
-              console.log('✅ Token erfolgreich an Plugin gesendet!');
-            } else {
-              console.log('⚠️ HTTP-Verbindung fehlgeschlagen:', result.error);
-              // Fallback: Token-Datei erstellen
-              await writeTokenToFile(token);
-            }
+          if (result.success) {
+            setPluginConnected(true);
+            setPluginServerAvailable(true);
+            console.log('✅ Token erfolgreich an Plugin gesendet!');
           } else {
-            console.log('⚠️ Plugin-Server nicht erreichbar, verwende Fallback-Methode');
+            // Prüfe ob Server erreichbar ist (für bessere Fehlermeldung)
+            const serverAvailable = await checkPluginServer();
+            setPluginServerAvailable(serverAvailable);
+            
+            console.log('⚠️ HTTP-Verbindung fehlgeschlagen:', result.error);
+            
             // Fallback: Token-Datei erstellen
             await writeTokenToFile(token);
           }

@@ -26,6 +26,7 @@ export async function sendTokenToPlugin(
         token: idToken,
         refreshToken: refreshToken || '',
       }),
+      // Wichtig: Kein 'no-cors' hier, wir brauchen die Response
     });
 
     if (!response.ok) {
@@ -43,15 +44,30 @@ export async function sendTokenToPlugin(
     };
   } catch (error: any) {
     // Network error - plugin server might not be running
-    if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
+    const errorMsg = error.message || String(error);
+    
+    // Prüfe auf verschiedene Fehlertypen
+    if (errorMsg.includes('Failed to fetch') || 
+        errorMsg.includes('NetworkError') ||
+        errorMsg.includes('ERR_CONNECTION_REFUSED') ||
+        errorMsg.includes('ERR_BLOCKED_BY_CLIENT')) {
       return {
         success: false,
         error: 'Plugin-Server nicht erreichbar. Stelle sicher, dass Anki läuft und das Plugin aktiviert ist.',
       };
     }
+    
+    // Mixed Content Error (HTTPS -> HTTP)
+    if (errorMsg.includes('Mixed Content') || errorMsg.includes('blocked:mixed-content')) {
+      return {
+        success: false,
+        error: 'Browser blockiert Verbindung (Mixed Content). Verwende die Token-Datei als Fallback.',
+      };
+    }
+    
     return {
       success: false,
-      error: error.message || 'Unbekannter Fehler',
+      error: errorMsg || 'Unbekannter Fehler',
     };
   }
 }
@@ -65,9 +81,21 @@ export async function checkPluginServer(): Promise<boolean> {
     const response = await fetch(`${PLUGIN_SERVER_URL}/health`, {
       method: 'GET',
       signal: AbortSignal.timeout(2000), // 2 second timeout
+      mode: 'no-cors', // Bypass CORS for health check (we only care if server responds)
     });
-    return response.ok;
-  } catch {
+    // With no-cors mode, we can't read the response, but if it doesn't throw, server is reachable
+    return true;
+  } catch (error: any) {
+    // Check for specific error types
+    if (error.name === 'TypeError' && error.message?.includes('Failed to fetch')) {
+      // Network error - server not reachable
+      console.log('⚠️ Plugin-Server nicht erreichbar (Netzwerkfehler)');
+    } else if (error.name === 'AbortError') {
+      // Timeout
+      console.log('⚠️ Plugin-Server Health-Check Timeout');
+    } else {
+      console.log('⚠️ Plugin-Server Health-Check Fehler:', error.message);
+    }
     return false;
   }
 }
