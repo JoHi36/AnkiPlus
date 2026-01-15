@@ -1254,10 +1254,20 @@ class WebBridge(QObject):
                         js_code = f"if (window.ankiReceive) {{ window.ankiReceive({json.dumps(payload)}); }}"
                         self.widget.web_view.page().runJavaScript(js_code)
                     return json.dumps({"success": False, "error": error_msg})
+            except requests.exceptions.Timeout as e:
+                # Timeout - Cloud Function könnte Cold Start haben
+                error_msg = "Backend antwortet nicht (Timeout). Bitte versuche es erneut - die erste Anfrage kann länger dauern."
+                print(f"authenticate: {error_msg}")
+                print("Token wurde trotzdem gespeichert - kann später validiert werden")
+                if self.widget and self.widget.web_view:
+                    payload = {"type": "auth_error", "message": error_msg}
+                    js_code = f"if (window.ankiReceive) {{ window.ankiReceive({json.dumps(payload)}); }}"
+                    self.widget.web_view.page().runJavaScript(js_code)
+                return json.dumps({"success": False, "error": error_msg})
             except requests.exceptions.RequestException as e:
                 # Netzwerkfehler - Token trotzdem speichern
                 error_msg = f"Netzwerkfehler bei Validierung: {str(e)}"
-                print(f"⚠️ authenticate: {error_msg}")
+                print(f"authenticate: {error_msg}")
                 print("Token wurde trotzdem gespeichert")
                 if self.widget and self.widget.web_view:
                     payload = {"type": "auth_error", "message": error_msg}
