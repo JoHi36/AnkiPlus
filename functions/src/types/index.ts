@@ -21,6 +21,7 @@ export interface ChatRequest {
   };
   mode?: 'compact' | 'detailed';
   model?: string;
+  stream?: boolean; // Optional: if false, return complete response instead of streaming
 }
 
 /**

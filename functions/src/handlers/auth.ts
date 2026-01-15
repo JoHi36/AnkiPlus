@@ -43,7 +43,7 @@ export async function authHandler(
 
     // Get Firebase Web API Key from config
     const config = functions.config();
-    const firebaseApiKey = config.firebase?.web_api_key || process.env.FIREBASE_WEB_API_KEY;
+    const firebaseApiKey = config.app?.firebase_web_api_key || process.env.FIREBASE_WEB_API_KEY;
 
     if (!firebaseApiKey) {
       logger.error('FIREBASE_WEB_API_KEY not configured');
