@@ -1,4 +1,21 @@
-@import '../../shared/styles/theme.css';
+/* CSS Variables - Landing Page Theme */
+:root {
+  /* Colors */
+  --anki-bg: #030303;
+  --anki-surface: #0A0A0A;
+  --anki-surface-elevated: #111;
+  --anki-teal-400: #2dd4bf;
+  --anki-teal-500: #14b8a6;
+  --anki-teal-900: #134e4a;
+  
+  /* Spacing */
+  --spacing-section: 2.5rem; /* Mobile */
+  --spacing-section-md: 5rem; /* Desktop */
+  
+  /* Typography */
+  --font-family: 'Inter', sans-serif;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
