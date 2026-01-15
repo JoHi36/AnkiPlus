@@ -4,24 +4,18 @@ import {
   ChevronRight, 
   Play, 
   CheckCircle2, 
-  MessageSquare,
-  ListChecks,
-  Brain,
-  Check,
   Star,
   Quote,
-  Sparkles,
   Menu,
   X,
   BadgeCheck
 } from 'lucide-react';
-import { MockupEvaluation, MockupDeepReasoning } from '../components/Mockups';
-import { MultipleChoiceCard, type MultipleChoiceOption } from '@shared/components/MultipleChoiceCard';
 import { Button } from '@shared/components/Button';
 import { PricingComparisonTable } from '../components/PricingComparisonTable';
 import { PricingFAQ } from '../components/PricingFAQ';
 import { LimitInfoBox } from '../components/LimitExplanation';
 import { PricingGrid } from '../components/PricingGrid';
+import { InteractivePlayground } from '../components/demo/InteractivePlayground';
 import { useState } from 'react';
 
 // Animation variants
@@ -48,14 +42,6 @@ const staggerContainer: Variants = {
 export function LandingPage() {
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  
-  // Demo data for MultipleChoiceCard
-  const rescueDemoOptions: MultipleChoiceOption[] = [
-    { letter: 'A', text: 'Vasokonstriktion', isCorrect: false, explanation: 'ADH hat keine direkte vasokonstriktive Wirkung.' },
-    { letter: 'B', text: 'Wasserretention', isCorrect: true, explanation: 'ADH (Antidiuretisches Hormon) wirkt hauptsächlich auf die Nieren und fördert die Wasserretention durch Erhöhung der Wasserdurchlässigkeit der Sammelrohre.' },
-    { letter: 'C', text: 'Natriumausscheidung', isCorrect: false, explanation: 'ADH beeinflusst primär die Wasserretention, nicht die Natriumausscheidung.' },
-    { letter: 'D', text: 'Kaliumretention', isCorrect: false, explanation: 'ADH hat keinen direkten Einfluss auf die Kaliumretention.' },
-  ];
 
   return (
     <div className="min-h-screen bg-[#030303] text-white selection:bg-teal-500/30 overflow-x-hidden relative">
@@ -219,113 +205,29 @@ export function LandingPage() {
           </motion.div>
         </section>
 
-        {/* --- 3-STEP FEATURE JOURNEY --- */}
-        <section id="features" className="mt-20 sm:mt-32 md:mt-40 max-w-7xl mx-auto px-4 sm:px-6 flex flex-col gap-16 sm:gap-24 md:gap-32 lg:gap-40">
-          
-          {/* STEP 1: EVALUATION */}
-          <div className="flex flex-col lg:flex-row items-center gap-12 sm:gap-16 lg:gap-24">
-            <motion.div 
-              initial={{ opacity: 0, y: 40 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-100px" }}
-              className="w-full lg:flex-1"
-            >
-              <div className="aspect-[4/3] lg:aspect-auto lg:h-[450px]">
-                <MockupEvaluation />
-              </div>
-            </motion.div>
+        {/* --- INTERACTIVE PLAYGROUND --- */}
+        <section id="features" className="mt-20 sm:mt-32 md:mt-40 max-w-7xl mx-auto px-4 sm:px-6">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-6 tracking-tight">Dein neuer Lernpartner.</h2>
+            <p className="text-lg text-neutral-400 max-w-2xl mx-auto">
+              Erlebe, wie Anki+ den Frust aus deinen Lernsessions nimmt. <br className="hidden sm:block"/>
+              Probier es direkt hier aus – interaktiv und ohne Anmeldung.
+            </p>
+          </motion.div>
 
-            <motion.div 
-              initial={{ opacity: 0, x: 20 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true, margin: "-100px" }}
-              className="w-full lg:flex-1 space-y-6 sm:space-y-8"
-            >
-              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-yellow-500/10 rounded-2xl flex items-center justify-center border border-yellow-500/20">
-                <MessageSquare className="w-6 h-6 sm:w-7 sm:h-7 text-yellow-400" />
-              </div>
-              <div>
-                <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight mb-4 sm:mb-6">Dein persönlicher Prüfer.</h2>
-                <p className="text-base sm:text-lg md:text-xl text-neutral-400 leading-relaxed">
-                  Schluss mit binärem Richtig/Falsch. Tipp deine Antwort ein – ANKI+ versteht Nuancen, lobt Details und korrigiert Konzepte wie ein echter Tutor.
-                </p>
-              </div>
-            </motion.div>
-          </div>
-
-          {/* STEP 2: RESCUE - Using Real MultipleChoiceCard */}
-          <div className="flex flex-col lg:flex-row-reverse items-center gap-12 sm:gap-16 lg:gap-24">
-            <motion.div 
-              initial={{ opacity: 0, y: 40 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-100px" }}
-              className="w-full lg:flex-1"
-            >
-              <div className="bg-[#0A0A0A] rounded-2xl border border-white/10 p-4 sm:p-6">
-                <MultipleChoiceCard
-                  question="Was ist die Hauptwirkung von ADH?"
-                  options={rescueDemoOptions}
-                  onSelect={(option) => {
-                    // Demo interaction - could add analytics here
-                    console.log('Selected:', option);
-                  }}
-                />
-              </div>
-            </motion.div>
-
-            <motion.div 
-              initial={{ opacity: 0, x: -20 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true, margin: "-100px" }}
-              className="w-full lg:flex-1 space-y-6 sm:space-y-8"
-            >
-              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-teal-500/10 rounded-2xl flex items-center justify-center border border-teal-500/20">
-                <ListChecks className="w-6 h-6 sm:w-7 sm:h-7 text-teal-400" />
-              </div>
-              <div>
-                <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight mb-4 sm:mb-6">Nie wieder Frust-Moment.</h2>
-                <p className="text-base sm:text-lg md:text-xl text-neutral-400 leading-relaxed">
-                  Keine Ahnung? Wandel die Karte sofort in ein Quiz um. Der sanfteste Weg, um Blockaden zu lösen und im Flow zu bleiben.
-                </p>
-              </div>
-            </motion.div>
-          </div>
-
-          {/* STEP 3: DEEP REASONING */}
-          <div className="flex flex-col lg:flex-row items-center gap-12 sm:gap-16 lg:gap-24">
-            <motion.div 
-              initial={{ opacity: 0, y: 40 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-100px" }}
-              className="w-full lg:flex-1"
-            >
-              <div className="aspect-[4/3] lg:aspect-auto lg:h-[550px]">
-                <MockupDeepReasoning />
-              </div>
-            </motion.div>
-
-            <motion.div 
-              initial={{ opacity: 0, x: 20 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true, margin: "-100px" }}
-              className="w-full lg:flex-1 space-y-6 sm:space-y-8"
-            >
-              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-purple-500/10 rounded-2xl flex items-center justify-center border border-purple-500/30 shadow-[0_0_30px_rgba(168,85,247,0.2)]">
-                <Brain className="w-6 h-6 sm:w-7 sm:h-7 text-purple-400" />
-              </div>
-              <div>
-                <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight mb-4 sm:mb-6">
-                  Die Erleuchtung <br/>
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-amber-300">
-                    (Deep Mode).
-                  </span>
-                </h2>
-                <p className="text-base sm:text-lg md:text-xl text-neutral-400 leading-relaxed">
-                  Das ist mehr als eine Antwort. ANKI+ analysiert 10+ Quellen, vernetzt das Wissen und liefert dir eine Synthese auf Facharzt-Niveau.
-                </p>
-              </div>
-            </motion.div>
-          </div>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+          >
+            <InteractivePlayground />
+          </motion.div>
         </section>
 
         {/* --- Pricing Section --- */}
