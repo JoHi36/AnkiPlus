@@ -20,21 +20,32 @@ export async function createUserDocument(
   if (!db) {
     throw new Error('Firebase Firestore is not configured. Please configure Firebase API keys.');
   }
-  const userRef = doc(db, 'users', userId);
-  const userDoc = await getDoc(userRef);
+  
+  try {
+    const userRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userRef);
 
-  if (userDoc.exists()) {
-    // User already exists, return existing document
-    return userDoc.data() as UserDocument;
-  } else {
-    // Create new user document with default tier
-    const newUser: UserDocument = {
-      tier: 'free',
-      createdAt: serverTimestamp(),
-      email: email,
-    };
-    await setDoc(userRef, newUser);
-    return newUser;
+    if (userDoc.exists()) {
+      // User already exists, return existing document
+      return userDoc.data() as UserDocument;
+    } else {
+      // Create new user document with default tier
+      const newUser: UserDocument = {
+        tier: 'free',
+        createdAt: serverTimestamp(),
+        email: email,
+      };
+      await setDoc(userRef, newUser);
+      console.log('✅ User document created in Firestore:', userId);
+      return newUser;
+    }
+  } catch (error: any) {
+    console.error('❌ Error creating user document:', error);
+    // If it's a permission error, provide helpful message
+    if (error.code === 'permission-denied') {
+      throw new Error('Zugriff verweigert. Bitte überprüfe die Firestore-Sicherheitsregeln.');
+    }
+    throw error;
   }
 }
 

@@ -108,7 +108,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         await createUserDocument(userCredential.user.uid, userCredential.user.email || '');
       }
     } catch (error: any) {
-      throw new Error(getAuthErrorMessage(error.code));
+      console.error('Register error:', error);
+      throw new Error(getAuthErrorMessage(error.code, error));
     }
   };
 
@@ -124,7 +125,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         await createUserDocument(userCredential.user.uid, userCredential.user.email || '');
       }
     } catch (error: any) {
-      throw new Error(getAuthErrorMessage(error.code));
+      console.error('Google login error:', error);
+      throw new Error(getAuthErrorMessage(error.code, error));
     }
   };
 
@@ -190,7 +192,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
 /**
  * Converts Firebase Auth error codes to user-friendly messages
  */
-function getAuthErrorMessage(code: string): string {
+function getAuthErrorMessage(code: string, originalError?: any): string {
+  // Log the error for debugging
+  console.error('Firebase Auth Error:', code, originalError);
+  
   switch (code) {
     case 'auth/user-not-found':
       return 'Kein Account mit dieser E-Mail gefunden.';
@@ -208,8 +213,18 @@ function getAuthErrorMessage(code: string): string {
       return 'Netzwerkfehler. Bitte überprüfe deine Internetverbindung.';
     case 'auth/popup-closed-by-user':
       return 'Anmeldung abgebrochen.';
+    case 'auth/operation-not-allowed':
+      return 'Diese Anmeldemethode ist nicht aktiviert. Bitte kontaktiere den Support.';
+    case 'auth/requires-recent-login':
+      return 'Bitte melde dich erneut an, um diese Aktion durchzuführen.';
+    case 'permission-denied':
+      return 'Zugriff verweigert. Bitte kontaktiere den Support.';
     default:
-      return 'Ein Fehler ist aufgetreten. Bitte versuche es erneut.';
+      // Include more details in development
+      if (process.env.NODE_ENV === 'development' && originalError?.message) {
+        return `Fehler: ${originalError.message} (Code: ${code})`;
+      }
+      return `Ein Fehler ist aufgetreten (${code}). Bitte versuche es erneut oder kontaktiere den Support.`;
   }
 }
 
