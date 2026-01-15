@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, X, ChevronRight, HelpCircle } from 'lucide-react';
+import { Check, X, ChevronRight, HelpCircle, RotateCcw } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 
 export interface QuizOption {
   id: string; // "A", "B", "C", "D", "E"
@@ -28,21 +29,29 @@ export interface QuizCardProps {
 export function QuizCard({ question, options, onSelect, className = '' }: QuizCardProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
 
-  const handleSelect = (id: string, isCorrect: boolean) => {
-    if (hasSubmitted) return;
+  const handleSelect = (id: string, correct: boolean) => {
+    if (hasSubmitted && isCorrect) return; // Only allow re-selection if it was wrong
     setSelectedId(id);
     setHasSubmitted(true);
-    if (onSelect) onSelect(id, isCorrect);
+    setIsCorrect(correct);
+    if (onSelect) onSelect(id, correct);
+  };
+
+  const handleReset = () => {
+    setSelectedId(null);
+    setHasSubmitted(false);
+    setIsCorrect(null);
   };
 
   return (
-    <div className={`w-full max-w-3xl mx-auto flex flex-col font-sans ${className}`}>
+    <div className={`w-full max-w-3xl mx-auto flex flex-col font-sans ${className} pb-20`}>
       
       {/* Header Badge */}
-      <div className="flex items-center gap-2 mb-6 text-teal-500/80 px-1">
+      <div className="flex items-center gap-2 mb-6 mt-4 text-teal-500/80 px-1">
         <div className="w-1 h-4 bg-teal-500 rounded-full" />
-        <span className="text-[10px] font-bold tracking-[0.2em] uppercase font-mono">Exam Simulation</span>
+        <span className="text-[10px] font-bold tracking-[0.2em] uppercase font-mono">Multiple Choice</span>
       </div>
 
       {/* Question */}
@@ -54,18 +63,21 @@ export function QuizCard({ question, options, onSelect, className = '' }: QuizCa
       <div className="flex flex-col gap-3">
         {options.map((option, idx) => {
           const isSelected = selectedId === option.id;
-          const isCorrect = option.isCorrect;
+          const isOptionCorrect = option.isCorrect;
           
           // Visual States
-          let state = 'idle'; // idle, selected-correct, selected-wrong, missed-correct, dim
+          let state = 'idle'; 
           
           if (hasSubmitted) {
-            if (isSelected) {
-              state = isCorrect ? 'selected-correct' : 'selected-wrong';
-            } else if (isCorrect) {
-              state = 'missed-correct'; // Show correct answer if wrong was picked
+            if (isCorrect) {
+              // Logic: If correct was picked, show all results
+              if (isSelected) state = 'selected-correct';
+              else if (isOptionCorrect) state = 'missed-correct';
+              else state = 'dim';
             } else {
-              state = 'dim'; // Dim irrelevant options
+              // Logic: If wrong was picked, only show that wrong one
+              if (isSelected) state = 'selected-wrong';
+              else state = 'dim';
             }
           }
 
@@ -81,7 +93,7 @@ export function QuizCard({ question, options, onSelect, className = '' }: QuizCa
               className="relative"
             >
               <button
-                disabled={hasSubmitted}
+                disabled={hasSubmitted && isCorrect}
                 onClick={() => handleSelect(option.id, option.isCorrect)}
                 className={`
                   w-full text-left relative flex items-start group rounded-lg overflow-hidden transition-all duration-200
@@ -164,8 +176,8 @@ export function QuizCard({ question, options, onSelect, className = '' }: QuizCa
                         <div className="mt-0.5 shrink-0 opacity-70">
                           {state === 'selected-correct' || state === 'missed-correct' ? <Check size={14} /> : <HelpCircle size={14} />}
                         </div>
-                        <div>
-                          {option.explanation}
+                        <div className="prose prose-sm prose-invert max-w-none">
+                          <ReactMarkdown>{option.explanation}</ReactMarkdown>
                         </div>
                       </div>
                     </div>
@@ -176,6 +188,35 @@ export function QuizCard({ question, options, onSelect, className = '' }: QuizCa
           );
         })}
       </div>
+
+      {/* Action Buttons at Bottom */}
+      <AnimatePresence>
+        {hasSubmitted && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-8 flex justify-center gap-4"
+          >
+            {!isCorrect ? (
+              <button 
+                onClick={handleReset}
+                className="flex items-center gap-2 px-6 py-3 rounded-full bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 transition-all text-sm font-medium"
+              >
+                <RotateCcw size={14} />
+                Zurücksetzen
+              </button>
+            ) : (
+              <button 
+                onClick={() => onSelect && onSelect('FLIP', true)}
+                className="flex items-center gap-2 px-8 py-3 rounded-full bg-teal-500 text-black hover:bg-teal-400 transition-all text-sm font-bold shadow-lg shadow-teal-500/20"
+              >
+                Karte umdrehen
+                <ChevronRight size={16} />
+              </button>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle2, Search, Zap, Brain, Sparkles, Library, Cpu } from 'lucide-react';
+import { CheckCircle2, Search, Zap, Brain, Sparkles, Library, Cpu, GitCompareArrows } from 'lucide-react';
 
 export const MockupEvaluation = () => (
   <div className="w-full h-full min-h-[340px] bg-[#0A0A0A] rounded-2xl border border-white/10 p-6 relative overflow-hidden flex flex-col justify-center gap-6">
@@ -129,7 +129,7 @@ export const MockupDeepReasoning = () => {
               animate={{ opacity: 1, y: 0 }}
               className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[#111] border border-white/10"
             >
-              {isDeepMode ? <Brain className="w-3.5 h-3.5 text-purple-400" /> : <Zap className="w-3.5 h-3.5 text-teal-400" />}
+              {isDeepMode ? <GitCompareArrows className="w-3.5 h-3.5 text-purple-400" /> : <Zap className="w-3.5 h-3.5 text-teal-400" />}
               <span className={`text-xs font-bold ${isDeepMode ? 'text-purple-100' : 'text-teal-100'}`}>
                 {isDeepMode ? "TIEFES VERSTÄNDNIS" : "SCHNELLE ANTWORT"}
               </span>

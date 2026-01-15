@@ -1,9 +1,8 @@
 import { motion } from 'framer-motion';
-import { Check, Zap, GraduationCap, Crown, Sparkles, Vote } from 'lucide-react';
+import { Check, Zap, GraduationCap, Crown, Sparkles, Vote, BarChart3 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@shared/components/Button';
 import { CheckoutButton } from './CheckoutButton';
-import { LimitInfoBox } from './LimitExplanation';
 
 interface PricingGridProps {
   currentTier?: 'free' | 'tier1' | 'tier2';
@@ -132,8 +131,6 @@ export function PricingGrid({ currentTier = 'free', onPortal, isLoggedIn = false
             <span>Basis Support</span>
           </li>
         </ul>
-
-        <LimitInfoBox tier="free" />
         
         <div className="mt-8">
           {(() => {
@@ -216,19 +213,11 @@ export function PricingGrid({ currentTier = 'free', onPortal, isLoggedIn = false
           </li>
           <li className="flex items-start gap-3">
              <div className="p-1 rounded-full bg-teal-500/10 text-teal-400 mt-0.5 border border-teal-500/20">
-              <Check size={12} />
+              <BarChart3 size={12} />
             </div>
-            <span>Priority Support</span>
-          </li>
-          <li className="flex items-start gap-3">
-             <div className="p-1 rounded-full bg-teal-500/10 text-teal-400 mt-0.5 border border-teal-500/20">
-              <Sparkles size={12} />
-            </div>
-            <span>Zugriff auf Beta-Features</span>
+            <span>Analytics Dashboard</span>
           </li>
         </ul>
-        
-        <LimitInfoBox tier="tier1" />
         
         <div className="mt-8">
           {(() => {
@@ -321,12 +310,6 @@ export function PricingGrid({ currentTier = 'free', onPortal, isLoggedIn = false
            </li>
            <li className="flex items-start gap-3">
              <div className="p-1 rounded-full bg-purple-500/10 text-purple-400 mt-0.5 border border-purple-500/20">
-               <Check size={12} />
-             </div>
-             <span>Priority Support</span>
-           </li>
-           <li className="flex items-start gap-3">
-             <div className="p-1 rounded-full bg-purple-500/10 text-purple-400 mt-0.5 border border-purple-500/20">
                <Sparkles size={12} />
              </div>
              <span>Zugriff auf Beta-Features</span>
@@ -338,8 +321,6 @@ export function PricingGrid({ currentTier = 'free', onPortal, isLoggedIn = false
              <span>Über Features abstimmen</span>
            </li>
         </ul>
-        
-        <LimitInfoBox tier="tier2" />
         
         <div className="mt-8">
           {(() => {

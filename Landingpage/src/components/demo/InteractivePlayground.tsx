@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RefreshCcw, ArrowRight, MessageSquareDashed, Sparkles, Brain } from 'lucide-react';
+import { RefreshCcw, ArrowRight, MessageSquareDashed, Sparkles, Brain, GitCompareArrows } from 'lucide-react';
 
 import { DEMO_SCENARIOS } from './DemoData';
 import { DemoAnkiCard } from './DemoAnkiCard';
@@ -61,13 +61,14 @@ export function InteractivePlayground() {
   };
 
   // Triggered when user selects an answer in the QuizCard
-  const handleQuizCompletion = () => {
-    if (phase === 'RESCUE_ACTIVE') {
-        setPhase('QUIZ_SOLVED'); // New intermediate state
-        // Card stays on Quiz (Solved state) for a moment, then flips back
-        setTimeout(() => {
-            setPhase('DEEP_CTA');
-        }, 2000); 
+  const handleQuizCompletion = (id: string, isCorrect: boolean) => {
+    if (id === 'FLIP') {
+        setPhase('DEEP_CTA');
+        return;
+    }
+    
+    if (phase === 'RESCUE_ACTIVE' && isCorrect) {
+        setPhase('QUIZ_SOLVED'); 
     }
   };
 
@@ -110,23 +111,13 @@ export function InteractivePlayground() {
           
           {/* POLISHED EMPTY STATE CTA - CLEANER VERSION */}
           {phase === 'IDLE' && !inputText && (
-            <div className="h-full flex flex-col items-center justify-center space-y-8">
+            <div className="h-full flex flex-col items-center justify-center space-y-6 opacity-40">
                 {/* Subtle Ghost Icon */}
-                <div className="w-24 h-24 rounded-full bg-white/[0.02] flex items-center justify-center border border-white/[0.05]">
-                    <Sparkles className="w-8 h-8 text-white/10" />
+                <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center border border-white/5 rotate-3">
+                    <Sparkles className="w-6 h-6 text-white/40" />
                 </div>
-                
-                {/* Suggestion Chip - Floating */}
-                <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
-                    <button 
-                        onClick={handleStartEval} 
-                        className="flex items-center gap-3 px-5 py-3 rounded-full bg-[#151515] border border-white/10 hover:border-teal-500/30 hover:bg-teal-500/5 transition-all group shadow-2xl"
-                    >
-                        <span className="text-xs text-neutral-400 group-hover:text-teal-200 font-medium">
-                            Beispiel: "{scenario.evaluation.userTyping.substring(0, 20)}..."
-                        </span>
-                        <ArrowRight size={14} className="text-neutral-600 group-hover:text-teal-500 transition-colors" />
-                    </button>
+                <div className="text-sm font-medium text-white/30 tracking-wide uppercase">
+                    Bereit zum Lernen
                 </div>
             </div>
           )}
@@ -163,8 +154,8 @@ export function InteractivePlayground() {
                     onClick={handleStartDeep}
                     className="flex items-center gap-3 px-6 py-3 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-300 hover:bg-purple-500/20 hover:scale-105 transition-all shadow-lg shadow-purple-900/20 group"
                 >
-                    <Brain size={16} />
-                    <span className="text-xs font-bold uppercase tracking-wider">Erklär mir die Hintergründe</span>
+                    <GitCompareArrows size={16} />
+                    <span className="text-xs font-bold uppercase tracking-wider">Karte erklären</span>
                     <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
                 </button>
              </motion.div>
@@ -173,7 +164,7 @@ export function InteractivePlayground() {
           {/* 4. Deep Mode User Trigger */}
           {['DEEP_THINKING', 'DEEP_RESULT'].includes(phase) && (
             <div className="flex justify-end animate-in fade-in slide-in-from-bottom-2">
-               <div className="bg-purple-900/20 text-purple-200 px-4 py-3 rounded-2xl rounded-tr-sm max-w-[85%] text-sm leading-relaxed border border-purple-500/30">
+               <div className="bg-[#222] text-neutral-200 px-4 py-3 rounded-2xl rounded-tr-sm max-w-[85%] text-sm leading-relaxed border border-white/5">
                  Erklär mir die Hintergründe bitte.
                </div>
             </div>
@@ -273,9 +264,9 @@ export function InteractivePlayground() {
              ) : (
                 <motion.div
                   key="card"
-                  initial={{ opacity: 0, rotateY: 90 }} // Flip in
-                  animate={{ opacity: 1, rotateY: 0 }}
-                  exit={{ opacity: 0, rotateY: -90 }}
+                  initial={{ opacity: 0 }} 
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
                   transition={{ duration: 0.6, ease: "easeInOut" }}
                   className="absolute inset-0"
                 >

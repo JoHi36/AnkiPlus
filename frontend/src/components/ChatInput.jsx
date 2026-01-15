@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowUp, Square, Lightbulb, List, EyeOff, Eye, Brain, Sparkles, Search, Zap, Toolbox, BrainCircuit } from 'lucide-react';
+import { ArrowUp, Square, Lightbulb, List, EyeOff, Eye, Brain, Sparkles, Search, Zap, Briefcase, GitCompareArrows, Toolbox, BrainCircuit } from 'lucide-react';
 import ToolTogglePopup from './ToolTogglePopup';
 import { useQuotaDisplay } from '../hooks/useQuotaDisplay';
 import QuotaLimitDialog from './QuotaLimitDialog';
@@ -208,7 +208,7 @@ export default function ChatInput({
                 }`}
                 title="Agent Tools"
               >
-                <Toolbox size={16} strokeWidth={2} className={showToolPopup ? "text-blue-500" : "currentColor"} />
+                <Briefcase size={16} strokeWidth={2} className={showToolPopup ? "text-blue-500" : "currentColor"} />
               </button>
 
               {/* Vertikale Trennlinie */}
@@ -325,7 +325,7 @@ export default function ChatInput({
                 )}
                 {isDetailedMode ? (
                   <>
-                    <BrainCircuit size={14} className="currentColor relative z-10" />
+                    <GitCompareArrows size={14} className="currentColor relative z-10" />
                     <span className="relative z-10">DEEP</span>
                     <span className="flex items-center justify-center ml-1.5 min-w-[28px] h-5 px-1.5 text-[10px] bg-purple-500/10 text-purple-500 rounded border border-purple-500/20 font-bold relative z-10">⌘L</span>
                   </>

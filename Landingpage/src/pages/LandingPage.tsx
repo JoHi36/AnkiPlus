@@ -13,7 +13,6 @@ import {
 import { Button } from '@shared/components/Button';
 import { PricingComparisonTable } from '../components/PricingComparisonTable';
 import { PricingFAQ } from '../components/PricingFAQ';
-import { LimitInfoBox } from '../components/LimitExplanation';
 import { PricingGrid } from '../components/PricingGrid';
 import { InteractivePlayground } from '../components/demo/InteractivePlayground';
 import { TestimonialList } from '../components/TestimonialList';
@@ -43,6 +42,20 @@ const staggerContainer: Variants = {
 export function LandingPage() {
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const handleScrollToFeatures = () => {
+    const featuresSection = document.getElementById('features');
+    if (featuresSection) {
+      const headerOffset = 100; // Offset für Header-Abstand
+      const elementPosition = featuresSection.getBoundingClientRect().top;
+      const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: 'smooth'
+      });
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#030303] text-white selection:bg-teal-500/30 overflow-x-hidden relative">
@@ -199,7 +212,7 @@ export function LandingPage() {
                 </Link>
               </Button>
               
-              <Button variant="outline" size="lg" fullWidth className="sm:w-auto">
+              <Button variant="outline" size="lg" fullWidth className="sm:w-auto" onClick={handleScrollToFeatures}>
                 <Play className="mr-2 w-4 h-4 fill-white" />
                 Wie es funktioniert
               </Button>

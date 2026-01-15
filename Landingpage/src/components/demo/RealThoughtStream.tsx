@@ -24,14 +24,14 @@ export default function RealThoughtStream({
     const richSteps = steps.map((stepStr: string, idx: number) => {
         let phase = 'intent';
         let icon = Brain;
-        let label = 'Analyse';
+        let label = 'Verarbeitung';
         let detail = stepStr;
         let subItems = null;
 
         if (idx === 0) {
             phase = 'intent';
-            label = 'Intentionsanalyse';
-            detail = 'Erklärung angefordert';
+            label = 'Kartenvorschau';
+            detail = 'Inhalt wird analysiert';
         } else if (stepStr.includes('Scanne') || stepStr.includes('Leitlinien')) {
             phase = 'search';
             icon = Search;
@@ -224,24 +224,46 @@ export default function RealThoughtStream({
 
                                     {/* Sub Items (Search Queries) */}
                                     {step.subItems && (
-                                        <div className="mt-2 flex flex-col gap-3">
+                                        <div className="mt-3 flex flex-col gap-4">
                                             {step.subItems.precise && (
-                                                <div className="flex flex-wrap gap-2">
-                                                    {step.subItems.precise.map((item: any, i: number) => (
-                                                        <motion.div 
-                                                            initial={{ opacity: 0, scale: 0.9 }}
-                                                            animate={{ opacity: 1, scale: 1 }}
-                                                            transition={{ delay: i * 0.1 }}
-                                                            key={i} 
-                                                            className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg border border-white/5 bg-[#1a1a1a]"
-                                                        >
-                                                            <Search className="w-3 h-3 text-teal-400/60" />
-                                                            <span className="text-white/70">{item.query}</span>
-                                                            <div className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-teal-500/10 text-teal-400">
-                                                                {item.count}
-                                                            </div>
-                                                        </motion.div>
-                                                    ))}
+                                                <div className="space-y-2">
+                                                    <div className="text-[10px] font-bold text-white/20 uppercase tracking-[0.15em] ml-1">Präzise Suche</div>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {step.subItems.precise.map((item: any, i: number) => (
+                                                            <motion.div 
+                                                                initial={{ opacity: 0, scale: 0.9 }}
+                                                                animate={{ opacity: 1, scale: 1 }}
+                                                                transition={{ delay: i * 0.1 }}
+                                                                key={i} 
+                                                                className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg border border-white/5 bg-[#1a1a1a] shadow-sm"
+                                                            >
+                                                                <Search className="w-3 h-3 text-teal-400/60" />
+                                                                <span className="text-white/70">{item.query}</span>
+                                                                <div className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-teal-500/10 text-teal-400">
+                                                                    {item.count}
+                                                                </div>
+                                                            </motion.div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {step.subItems.broad && (
+                                                <div className="space-y-2">
+                                                    <div className="text-[10px] font-bold text-white/20 uppercase tracking-[0.15em] ml-1">Allgemeine Suche</div>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {step.subItems.broad.map((item: any, i: number) => (
+                                                            <motion.div 
+                                                                initial={{ opacity: 0, scale: 0.9 }}
+                                                                animate={{ opacity: 1, scale: 1 }}
+                                                                transition={{ delay: i * 0.1 }}
+                                                                key={i} 
+                                                                className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg border border-white/5 bg-[#1a1a1a] opacity-60"
+                                                            >
+                                                                <Search className="w-3 h-3 text-white/20" />
+                                                                <span className="text-white/50">{item.query}</span>
+                                                            </motion.div>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>

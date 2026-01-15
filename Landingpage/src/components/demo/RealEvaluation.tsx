@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { Check, X, AlertCircle, ArrowRight, Lightbulb, List, Trophy, TrendingUp } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
 
 /**
  * RealEvaluation Komponente - Medical Precision Redesign
  * Technisch, clean, kompakt.
  */
 export default function RealEvaluation({ score, feedback, onStartQuiz, onStartHint }: any) {
+  const [showHint, setShowHint] = useState(false);
   
   // Color Logic
   const getTheme = (s: number) => {
@@ -69,28 +71,44 @@ export default function RealEvaluation({ score, feedback, onStartQuiz, onStartHi
             </div>
 
             {/* Feedback Text */}
-            <div className="p-5">
-                <p className="text-[15px] leading-relaxed text-white/80">
-                    {feedback}
-                </p>
+            <div className="p-5 prose prose-sm prose-invert max-w-none">
+                <ReactMarkdown>{feedback}</ReactMarkdown>
             </div>
 
             {/* Action Bar (Footer) */}
-            <div className="px-2 pb-2 grid grid-cols-2 gap-2">
-                <button 
-                    onClick={onStartHint}
-                    className="flex items-center justify-center gap-2 py-3 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/5 transition-all border border-transparent hover:border-white/10"
-                >
-                    <Lightbulb size={14} />
-                    Hinweis geben
-                </button>
-                <button 
-                    onClick={onStartQuiz}
-                    className="flex items-center justify-center gap-2 py-3 rounded-lg text-xs font-bold bg-[#151515] text-white border border-white/10 hover:border-teal-500/50 hover:text-teal-400 hover:shadow-[0_0_15px_-5px_rgba(20,184,166,0.3)] transition-all group"
-                >
-                    <List size={14} className="group-hover:scale-110 transition-transform" />
-                    Quiz starten
-                </button>
+            <div className="px-2 pb-2 flex flex-col gap-2">
+                <div className="grid grid-cols-2 gap-2">
+                    <button 
+                        onClick={() => setShowHint(!showHint)}
+                        className="flex items-center justify-center gap-2 py-3 rounded-lg text-xs font-medium text-white/50 hover:text-white hover:bg-white/5 transition-all"
+                    >
+                        <Lightbulb size={14} />
+                        {showHint ? "Hinweis verbergen" : "Hinweis geben"}
+                    </button>
+                    <button 
+                        onClick={onStartQuiz}
+                        className="flex items-center justify-center gap-2 py-3 rounded-lg text-xs font-bold text-white/80 hover:text-teal-400 hover:bg-teal-500/10 transition-all group"
+                    >
+                        <List size={14} className="group-hover:scale-110 transition-transform" />
+                        Quiz starten
+                    </button>
+                </div>
+
+                {/* Expandable Hint */}
+                <AnimatePresence>
+                    {showHint && (
+                        <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            className="overflow-hidden"
+                        >
+                            <div className="p-3 mx-2 mb-2 rounded bg-white/5 border border-white/5 text-xs text-white/60 text-center">
+                                Du könntest deine Antwort theoretisch noch weiter ausführen...
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
         </div>
     </motion.div>
