@@ -166,6 +166,7 @@ export default function ChatInput({
   };
 
   return (
+    <>
     <div className="w-full relative">
         <form 
           ref={containerRef}
@@ -308,52 +309,30 @@ export default function ChatInput({
                 }}
                 className={`group relative flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold transition-all tracking-wide ${
                   isDetailedMode
-                    ? 'text-teal-400 bg-gradient-to-r from-teal-500/10 to-emerald-500/5 border border-teal-500/30 shadow-lg shadow-teal-500/20'
-                    : 'text-base-content/40 hover:text-base-content/70'
+                    ? 'text-purple-500 hover:bg-purple-500/10' // Active (Deep): Purple Text, Subtle BG on Hover
+                    : 'text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5' // Inactive: Standard
                 }`}
                 title={isDetailedMode ? "DEEP (⌘L zum Umschalten)" : "FLASH (⌘L zum Umschalten - 3s Long Press zum Reset)"}
               >
                 {/* Long Press Progress Bar */}
                 {longPressProgress > 0 && !isDetailedMode && (
-                  <div className="absolute inset-0 rounded-lg bg-teal-500/20 overflow-hidden">
+                  <div className="absolute inset-0 rounded-lg bg-base-content/5 overflow-hidden">
                     <div 
-                      className="h-full bg-teal-500/40 transition-all duration-50"
+                      className="h-full bg-base-content/20 transition-all duration-50"
                       style={{ width: `${longPressProgress}%` }}
                     />
                   </div>
                 )}
                 {isDetailedMode ? (
                   <>
-                    <BrainCircuit size={14} className="text-teal-400 relative z-10" />
+                    <BrainCircuit size={14} className="currentColor relative z-10" />
                     <span className="relative z-10">DEEP</span>
-                    {quotaDisplay && (
-                      <span className={`ml-1.5 text-[10px] font-medium relative z-10 ${
-                        quotaDisplay.isUnlimited 
-                          ? 'text-teal-400' 
-                          : quotaDisplay.used >= (typeof quotaDisplay.limit === 'string' ? Infinity : quotaDisplay.limit)
-                            ? 'text-red-400'
-                            : 'text-teal-400/70'
-                      }`}>
-                        {quotaDisplay.used} / {quotaDisplay.limit}
-                      </span>
-                    )}
-                    <span className="flex items-center justify-center ml-1.5 min-w-[28px] h-5 px-1.5 text-[10px] bg-teal-500/10 text-teal-400 rounded border border-teal-500/20 font-bold relative z-10">⌘L</span>
+                    <span className="flex items-center justify-center ml-1.5 min-w-[28px] h-5 px-1.5 text-[10px] bg-purple-500/10 text-purple-500 rounded border border-purple-500/20 font-bold relative z-10">⌘L</span>
                   </>
                 ) : (
                   <>
                     <Zap size={14} className="currentColor relative z-10" />
                     <span className="relative z-10">FLASH</span>
-                    {quotaDisplay && (
-                      <span className={`ml-1.5 text-[10px] font-medium relative z-10 ${
-                        quotaDisplay.isUnlimited 
-                          ? 'text-base-content/50' 
-                          : quotaDisplay.used >= (typeof quotaDisplay.limit === 'string' ? Infinity : quotaDisplay.limit)
-                            ? 'text-red-400'
-                            : 'text-base-content/50'
-                      }`}>
-                        {quotaDisplay.used} / {quotaDisplay.limit}
-                      </span>
-                    )}
                     <span className="flex items-center justify-center ml-1.5 min-w-[28px] h-5 px-1.5 text-[10px] bg-base-300 text-base-content/50 rounded border border-base-content/10 font-bold relative z-10">⌘L</span>
                   </>
                 )}

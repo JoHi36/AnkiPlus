@@ -1,18 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RefreshCcw } from 'lucide-react';
+import { RefreshCcw, ArrowRight, MessageSquareDashed } from 'lucide-react';
 
 import { DEMO_SCENARIOS } from './DemoData';
 import { DemoAnkiCard } from './DemoAnkiCard';
 import RealThoughtStream from './RealThoughtStream';
-import { DemoChatMessage } from './DemoChatMessage';
+import { RealChatMessage } from './RealChatMessage';
 import { DemoQuizCard } from './DemoQuizCard';
 import RealChatInput from './RealChatInput';
 import RealEvaluation from './RealEvaluation';
 import { Button } from '@shared/components/Button';
 
 // Linear State Machine
-type DemoPhase = 'IDLE' | 'TYPING_EVAL' | 'EVALUATING' | 'SHOW_EVAL' | 'RESCUE_CHOICE' | 'RESCUE_ACTIVE' | 'DEEP_TYPING' | 'DEEP_THINKING' | 'DEEP_RESULT';
+type DemoPhase = 'IDLE' | 'TYPING_EVAL' | 'EVALUATING' | 'SHOW_EVAL' | 'RESCUE_CHOICE' | 'RESCUE_ACTIVE' | 'DEEP_CTA' | 'DEEP_TYPING' | 'DEEP_THINKING' | 'DEEP_RESULT';
 
 export function InteractivePlayground() {
   const [scenarioKey, setScenarioKey] = useState<string>('medicine');
@@ -29,15 +29,14 @@ export function InteractivePlayground() {
     }
   }, [phase, inputText]);
 
-  // Handle manual typing in IDLE state to trigger simulation
+  // Handle manual typing
   const handleUserTyping = (text: string) => {
     if (phase === 'IDLE') {
         setInputText(text);
-        // Optional: Trigger auto-completion if user types a few chars
         if (text.length > 2) {
              handleStartEval(); 
         }
-    } else if (phase === 'RESCUE_ACTIVE') {
+    } else if (phase === 'DEEP_CTA') {
         setInputText(text);
         if (text.length > 2) {
              handleStartDeep();
@@ -47,9 +46,9 @@ export function InteractivePlayground() {
 
   // --- PHASE TRANSITION LOGIC ---
 
-  // Phase 1: User "types" eval answer (or we auto-complete it)
+  // Phase 1: User "types" eval answer
   const handleStartEval = () => {
-    if (phase !== 'IDLE') return; // Prevent double trigger
+    if (phase !== 'IDLE') return;
     setPhase('TYPING_EVAL');
     simulateTyping(scenario.evaluation.userTyping, () => {
       setPhase('EVALUATING');
@@ -60,12 +59,21 @@ export function InteractivePlayground() {
   // Phase 2: User chooses Rescue (Quiz)
   const handleStartRescue = () => {
     setPhase('RESCUE_ACTIVE');
-    setInputText('');
+    setTimeout(() => {
+        // Automatically show CTA after quiz interaction simulation (user picks answer in UI)
+        // In this demo controller, we just wait a bit or let user interaction in QuizCard trigger it?
+        // Since QuizCard is isolated, we need a way to know when quiz is done. 
+        // For now, let's just show CTA after a delay to simulate flow, 
+        // or rely on the user clicking "Deep Mode" later.
+        // Actually, let's transition to DEEP_CTA when user finishes quiz in real app.
+        // Here we simulate it appearing after a delay for smooth flow if user interacts.
+        setPhase('DEEP_CTA');
+    }, 4000); 
   };
 
   // Phase 3: User triggers Deep Mode
   const handleStartDeep = () => {
-    if (phase !== 'RESCUE_ACTIVE') return;
+    if (phase !== 'DEEP_CTA') return;
     setPhase('DEEP_TYPING');
     simulateTyping("Erklär mir die Hintergründe bitte.", () => {
       setPhase('DEEP_THINKING');
@@ -97,11 +105,23 @@ export function InteractivePlayground() {
   const renderRightPanel = () => {
     return (
       <div className="flex flex-col h-full bg-[#0A0A0A] relative">
+        
         {/* Chat Area */}
         <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent pb-32">
           
+          {/* EMPTY STATE CTA */}
+          {phase === 'IDLE' && !inputText && (
+            <div className="h-full flex flex-col items-center justify-center opacity-0 animate-in fade-in zoom-in duration-500 delay-200">
+                <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mb-4 border border-white/5 shadow-inner">
+                    <MessageSquareDashed className="w-8 h-8 text-neutral-600" />
+                </div>
+                <p className="text-neutral-500 font-medium text-sm">Tippe deine Antwort zur Karte...</p>
+                <ArrowRight className="w-4 h-4 text-neutral-700 mt-2 animate-bounce" />
+            </div>
+          )}
+
           {/* 1. User Eval Message */}
-          {['EVALUATING', 'SHOW_EVAL', 'RESCUE_CHOICE', 'RESCUE_ACTIVE', 'DEEP_TYPING', 'DEEP_THINKING', 'DEEP_RESULT'].includes(phase) && (
+          {['EVALUATING', 'SHOW_EVAL', 'RESCUE_CHOICE', 'RESCUE_ACTIVE', 'DEEP_CTA', 'DEEP_TYPING', 'DEEP_THINKING', 'DEEP_RESULT'].includes(phase) && (
             <div className="flex justify-end animate-in fade-in slide-in-from-bottom-2">
               <div className="bg-[#222] text-neutral-200 px-4 py-3 rounded-2xl rounded-tr-sm max-w-[85%] text-sm leading-relaxed border border-white/5">
                 {scenario.evaluation.userTyping}
@@ -110,27 +130,52 @@ export function InteractivePlayground() {
           )}
 
           {/* 2. AI Eval Result */}
-          {['SHOW_EVAL', 'RESCUE_CHOICE', 'RESCUE_ACTIVE', 'DEEP_TYPING', 'DEEP_THINKING', 'DEEP_RESULT'].includes(phase) && (
+          {['SHOW_EVAL', 'RESCUE_CHOICE', 'RESCUE_ACTIVE', 'DEEP_CTA', 'DEEP_TYPING', 'DEEP_THINKING', 'DEEP_RESULT'].includes(phase) && (
              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
                 <RealEvaluation score={scenario.evaluation.score} feedback={scenario.evaluation.feedback} />
                 
-                {/* Contextual Action Button (Only if not moved on) */}
+                {/* Contextual Action Buttons */}
                 {phase === 'SHOW_EVAL' && (
-                  <div className="flex gap-2 justify-center pt-2">
+                  <div className="flex gap-3 justify-center pt-2">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="text-neutral-500 hover:text-white"
+                      disabled
+                    >
+                      Hinweis geben
+                    </Button>
                     <Button 
                       variant="primary" 
                       size="sm" 
                       onClick={handleStartRescue}
-                      className="animate-in zoom-in duration-300"
+                      className="animate-in zoom-in duration-300 shadow-lg shadow-teal-900/20"
                     >
-                      Quiz starten (Rescue Mode)
+                      Quiz starten
                     </Button>
                   </div>
                 )}
              </div>
           )}
 
-          {/* 3. Deep Mode Trigger Message */}
+          {/* 3. Deep Mode CTA */}
+          {phase === 'DEEP_CTA' && (
+             <div className="flex justify-center animate-in fade-in slide-in-from-bottom-2">
+                <div className="bg-[#151515] border border-white/10 rounded-xl p-4 flex flex-col items-center gap-3 shadow-xl">
+                    <p className="text-sm text-neutral-400">Konzept verstanden oder tiefer eintauchen?</p>
+                    <Button 
+                      variant="secondary" 
+                      size="sm" 
+                      onClick={handleStartDeep}
+                      className="w-full bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20"
+                    >
+                      Erklär mir die Hintergründe
+                    </Button>
+                </div>
+             </div>
+          )}
+
+          {/* 4. Deep Mode User Trigger */}
           {['DEEP_THINKING', 'DEEP_RESULT'].includes(phase) && (
             <div className="flex justify-end animate-in fade-in slide-in-from-bottom-2">
                <div className="bg-purple-900/20 text-purple-200 px-4 py-3 rounded-2xl rounded-tr-sm max-w-[85%] text-sm leading-relaxed border border-purple-500/30">
@@ -139,7 +184,7 @@ export function InteractivePlayground() {
             </div>
           )}
 
-          {/* 4. Deep Thinking Stream */}
+          {/* 5. Deep Thinking Stream */}
           {['DEEP_THINKING', 'DEEP_RESULT'].includes(phase) && (
              <RealThoughtStream 
                steps={scenario.deepMode.steps} 
@@ -149,10 +194,10 @@ export function InteractivePlayground() {
              />
           )}
 
-          {/* 5. Final Deep Result */}
+          {/* 6. Final Deep Result */}
           {phase === 'DEEP_RESULT' && (
-             <DemoChatMessage 
-               content={scenario.deepMode.answerMarkdown} 
+             <RealChatMessage 
+               message={scenario.deepMode.answerMarkdown} 
                isStreaming={true} 
                citations={scenario.deepMode.citations}
              />
@@ -161,22 +206,13 @@ export function InteractivePlayground() {
 
         {/* Input Area (Bottom Fixed) */}
         <div className="p-4 border-t border-white/5 bg-[#0A0A0A] relative z-20">
-           {/* If we are waiting for user to start deep mode after rescue */}
-           {phase === 'RESCUE_ACTIVE' && (
-              <div className="absolute -top-10 left-1/2 -translate-x-1/2 animate-bounce pointer-events-none">
-                 <span className="text-xs text-teal-400 bg-teal-950/80 border border-teal-500/30 px-3 py-1.5 rounded-full backdrop-blur-sm shadow-lg">
-                   👇 Frag "Erklär mir das"
-                 </span>
-              </div>
-           )}
-
            <RealChatInput 
               value={inputText} 
               onChange={handleUserTyping} 
-              onSend={phase === 'IDLE' ? handleStartEval : phase === 'RESCUE_ACTIVE' ? handleStartDeep : () => {}}
+              onSend={phase === 'IDLE' ? handleStartEval : phase === 'DEEP_CTA' ? handleStartDeep : () => {}}
               isLoading={phase === 'TYPING_EVAL' || phase === 'DEEP_TYPING'}
-              cardContext={{ isQuestion: true }} // Mock context to show question actions
-              onToggleCardState={() => {}} // Dummy handler
+              cardContext={{ isQuestion: true }} 
+              onToggleCardState={() => {}} 
            />
         </div>
       </div>
@@ -208,11 +244,11 @@ export function InteractivePlayground() {
           </div>
         )}
 
-        {/* Reset Button (Visible when active) */}
+        {/* Reset Button (Top Right to avoid Quiz overlap) */}
         {phase !== 'IDLE' && (
            <button 
              onClick={handleReset}
-             className="absolute top-4 left-4 z-20 p-2 rounded-full bg-black/40 text-neutral-500 hover:text-white border border-white/5 hover:border-white/20 transition-all"
+             className="absolute top-4 right-4 z-20 p-2 rounded-full bg-black/40 text-neutral-500 hover:text-white border border-white/5 hover:border-white/20 transition-all backdrop-blur-md"
              title="Demo Neustarten"
            >
              <RefreshCcw size={16} />
@@ -222,7 +258,7 @@ export function InteractivePlayground() {
         {/* Card Content with 3D Flip Effect */}
         <div className="flex-1 relative perspective-1000">
            <AnimatePresence mode="wait">
-             {phase === 'RESCUE_ACTIVE' || phase === 'DEEP_TYPING' || phase === 'DEEP_THINKING' || phase === 'DEEP_RESULT' ? (
+             {['RESCUE_ACTIVE', 'DEEP_CTA', 'DEEP_TYPING', 'DEEP_THINKING', 'DEEP_RESULT'].includes(phase) ? (
                 <motion.div
                   key="quiz"
                   initial={{ opacity: 0, rotateY: -90 }}

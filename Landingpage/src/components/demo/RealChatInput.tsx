@@ -150,8 +150,8 @@ export default function RealChatInput({
                 }}
                 className={`group relative flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold transition-all tracking-wide ${
                   isDetailedMode
-                    ? 'text-teal-400 bg-teal-500/10 border border-teal-500/30 shadow-lg shadow-teal-500/20'
-                    : 'text-neutral-500 hover:text-white'
+                    ? 'text-purple-500 hover:bg-purple-500/10' // Active (Deep): Purple Text, Subtle BG on Hover
+                    : 'text-neutral-500 hover:text-white hover:bg-white/5' // Inactive: Standard
                 }`}
                 title={isDetailedMode ? "DEEP (⌘L zum Umschalten)" : "FLASH (⌘L zum Umschalten)"}
               >
@@ -166,9 +166,9 @@ export default function RealChatInput({
                 )}
                 {isDetailedMode ? (
                   <>
-                    <BrainCircuit size={14} className="text-teal-400 relative z-10" />
+                    <BrainCircuit size={14} className="currentColor relative z-10" />
                     <span className="relative z-10">DEEP</span>
-                    <span className="flex items-center justify-center ml-1.5 min-w-[28px] h-5 px-1.5 text-[10px] bg-teal-500/10 text-teal-400 rounded border border-teal-500/20 font-bold relative z-10">⌘L</span>
+                    <span className="flex items-center justify-center ml-1.5 min-w-[28px] h-5 px-1.5 text-[10px] bg-purple-500/10 text-purple-500 rounded border border-purple-500/20 font-bold relative z-10">⌘L</span>
                   </>
                 ) : (
                   <>
