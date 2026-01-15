@@ -1,4 +1,4 @@
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { Timestamp } from 'firebase-admin/firestore';
 
 const db = getFirestore();
@@ -143,9 +143,9 @@ export async function incrementFlashRequests(
     return 1;
   }
 
-  // Use Firestore increment for atomic operation
+  // Use FieldValue.increment for atomic operation
   await usageRef.update({
-    flashRequests: (usageDoc.data()?.flashRequests || 0) + 1,
+    flashRequests: FieldValue.increment(1),
   });
 
   const updatedDoc = await usageRef.get();
@@ -180,9 +180,9 @@ export async function incrementDeepRequests(
     return 1;
   }
 
-  // Use Firestore increment for atomic operation
+  // Use FieldValue.increment for atomic operation
   await usageRef.update({
-    deepRequests: (usageDoc.data()?.deepRequests || 0) + 1,
+    deepRequests: FieldValue.increment(1),
   });
 
   const updatedDoc = await usageRef.get();

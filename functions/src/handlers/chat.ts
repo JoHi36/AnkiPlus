@@ -5,6 +5,7 @@ import { ChatRequest } from '../types';
 import { createErrorResponse, ErrorCode } from '../utils/errors';
 import { createLogger } from '../utils/logging';
 import { getOrCreateUser, getCurrentDateString } from '../utils/firestore';
+import { checkQuota, incrementUsage } from '../utils/quota';
 
 /**
  * POST /api/chat
@@ -38,12 +39,37 @@ export async function chatHandler(
       return;
     }
 
-    // Get user to check quota (quota check will be implemented in Prompt 4)
+    // Get user to check quota
     await getOrCreateUser(userId, (req as any).userEmail);
 
     // Get model (default to gemini-3-flash-preview)
     const model = body.model || 'gemini-3-flash-preview';
     const mode = body.mode || 'compact';
+
+    // Check quota BEFORE making API request (save costs)
+    const quotaCheck = await checkQuota(userId, mode);
+    if (!quotaCheck.allowed) {
+      logger.warn('Quota exceeded', { userId, mode, quotaCheck });
+      
+      // Get upgrade URL from environment or use default
+      const upgradeUrl = process.env.UPGRADE_URL || functions.config().app?.upgrade_url || 'https://your-landingpage.com/register';
+      
+      res.status(403).json({
+        error: {
+          code: ErrorCode.QUOTA_EXCEEDED,
+          message: 'Tageslimit erreicht. Upgrade für mehr Requests?',
+          details: {
+            remaining: quotaCheck.remaining,
+            limit: quotaCheck.limit,
+            type: quotaCheck.type,
+            upgradeUrl: upgradeUrl,
+          },
+        },
+      });
+      return;
+    }
+
+    logger.info('Quota check passed', { userId, mode, quotaCheck });
 
     // Get API key from environment
     const apiKey = process.env.GOOGLE_AI_API_KEY || functions.config().google?.ai_api_key;
@@ -147,6 +173,9 @@ export async function chatHandler(
 
     logger.info('Proxying to Gemini API', { userId, model, messageLength: body.message.length });
 
+    // Determine request type for usage tracking
+    const requestType: 'flash' | 'deep' = mode === 'detailed' ? 'deep' : 'flash';
+
     // Make streaming request to Gemini API
     const response: AxiosResponse = await axios.post(
       geminiUrl,
@@ -165,6 +194,13 @@ export async function chatHandler(
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+
+    // Increment usage counter AFTER successful API request starts
+    // Do this asynchronously to not block streaming
+    incrementUsage(userId, requestType).catch((error) => {
+      logger.error('Failed to increment usage', error, { userId, requestType });
+      // Don't fail the request if usage increment fails
+    });
 
     // Stream response from Gemini to client
     let buffer = '';
