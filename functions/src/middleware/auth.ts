@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { getAuth } from 'firebase-admin/auth';
 import { createErrorResponse } from '../utils/errors';
+import { logAuthSuccess, logAuthFailed } from '../utils/analytics';
 
 /**
  * Validates Firebase ID Token from Authorization header
@@ -40,10 +41,14 @@ export async function validateToken(
     (req as any).userId = decodedToken.uid;
     (req as any).userEmail = decodedToken.email;
 
+    // Log successful authentication
+    await logAuthSuccess(decodedToken.uid, 'token');
+
     next();
   } catch (error: any) {
     // Handle token verification errors
     if (error.code === 'auth/id-token-expired') {
+      await logAuthFailed('Token expired', 'token');
       res.status(401).json(
         createErrorResponse('TOKEN_EXPIRED', 'ID token has expired')
       );
@@ -51,6 +56,7 @@ export async function validateToken(
     }
 
     if (error.code === 'auth/id-token-revoked') {
+      await logAuthFailed('Token revoked', 'token');
       res.status(401).json(
         createErrorResponse('TOKEN_INVALID', 'ID token has been revoked')
       );
@@ -58,6 +64,7 @@ export async function validateToken(
     }
 
     // Generic authentication error
+    await logAuthFailed(error.message || 'Invalid token', 'token');
     res.status(401).json(
       createErrorResponse('TOKEN_INVALID', 'Invalid ID token')
     );

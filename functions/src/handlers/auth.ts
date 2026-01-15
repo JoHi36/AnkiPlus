@@ -3,6 +3,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { AuthRefreshRequest, AuthRefreshResponse } from '../types';
 import { createErrorResponse, ErrorCode } from '../utils/errors';
 import { createLogger } from '../utils/logging';
+import { logTokenRefresh, logTokenRefreshFailed } from '../utils/analytics';
 
 /**
  * POST /api/auth/refresh
@@ -47,6 +48,7 @@ export async function authHandler(
 
     // Simplified validation - in production, validate against Firestore or Firebase Auth
     if (typeof body.refreshToken !== 'string' || body.refreshToken.length < 10) {
+      await logTokenRefreshFailed('unknown', 'Invalid refresh token format');
       res.status(401).json(
         createErrorResponse(ErrorCode.TOKEN_INVALID, 'Invalid refresh token format')
       );
@@ -75,6 +77,7 @@ export async function authHandler(
     // res.json(response);
   } catch (error: any) {
     logger.error('Error refreshing token', error);
+    await logTokenRefreshFailed('unknown', error.message || 'Unknown error');
     res.status(500).json(
       createErrorResponse(ErrorCode.BACKEND_ERROR, 'Failed to refresh token', error.message)
     );

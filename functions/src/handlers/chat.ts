@@ -6,6 +6,7 @@ import { createErrorResponse, ErrorCode } from '../utils/errors';
 import { createLogger } from '../utils/logging';
 import { getOrCreateUser, getCurrentDateString } from '../utils/firestore';
 import { checkQuota, incrementUsage } from '../utils/quota';
+import { retryHttpRequest } from '../utils/retry';
 
 /**
  * POST /api/chat
@@ -16,14 +17,15 @@ export async function chatHandler(
   req: Request,
   res: Response
 ): Promise<void> {
-  const logger = createLogger();
+  const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  const logger = createLogger(requestId);
 
   try {
     // Token validation is handled by middleware in index.ts
     // userId is attached to req by validateToken middleware
     const userId = (req as any).userId;
     if (!userId) {
-      res.status(401).json(createErrorResponse(ErrorCode.TOKEN_INVALID, 'User ID not found'));
+      res.status(401).json(createErrorResponse(ErrorCode.TOKEN_INVALID, 'User ID not found', undefined, requestId));
       return;
     }
 
@@ -34,7 +36,7 @@ export async function chatHandler(
 
     if (!body.message) {
       res.status(400).json(
-        createErrorResponse(ErrorCode.VALIDATION_ERROR, 'Message is required')
+        createErrorResponse(ErrorCode.VALIDATION_ERROR, 'Message is required', undefined, requestId)
       );
       return;
     }
@@ -51,21 +53,26 @@ export async function chatHandler(
     if (!quotaCheck.allowed) {
       logger.warn('Quota exceeded', { userId, mode, quotaCheck });
       
+      // Log analytics event
+      const user = await getOrCreateUser(userId, (req as any).userEmail);
+      await logQuotaExceeded(userId, user.tier, quotaCheck.type);
+      
       // Get upgrade URL from environment or use default
       const upgradeUrl = process.env.UPGRADE_URL || functions.config().app?.upgrade_url || 'https://your-landingpage.com/register';
       
-      res.status(403).json({
-        error: {
-          code: ErrorCode.QUOTA_EXCEEDED,
-          message: 'Tageslimit erreicht. Upgrade für mehr Requests?',
-          details: {
+      res.status(403).json(
+        createErrorResponse(
+          ErrorCode.QUOTA_EXCEEDED,
+          'Tageslimit erreicht. Upgrade für mehr Requests?',
+          {
             remaining: quotaCheck.remaining,
             limit: quotaCheck.limit,
             type: quotaCheck.type,
             upgradeUrl: upgradeUrl,
           },
-        },
-      });
+          requestId
+        )
+      );
       return;
     }
 
@@ -76,7 +83,7 @@ export async function chatHandler(
     if (!apiKey) {
       logger.error('Google AI API key not configured');
       res.status(500).json(
-        createErrorResponse(ErrorCode.BACKEND_ERROR, 'API key not configured')
+        createErrorResponse(ErrorCode.BACKEND_ERROR, 'API key not configured', undefined, requestId)
       );
       return;
     }
@@ -172,22 +179,90 @@ export async function chatHandler(
     // For now, we'll keep it simple
 
     logger.info('Proxying to Gemini API', { userId, model, messageLength: body.message.length });
+    
+    // Log analytics event
+    await logChatRequest(userId, model, mode, body.message.length);
 
     // Determine request type for usage tracking
     const requestType: 'flash' | 'deep' = mode === 'detailed' ? 'deep' : 'flash';
 
-    // Make streaming request to Gemini API
-    const response: AxiosResponse = await axios.post(
-      geminiUrl,
-      requestData,
-      {
-        responseType: 'stream',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        timeout: 60000, // 60 second timeout
+    // Make streaming request to Gemini API with retry logic
+    let response: AxiosResponse;
+    try {
+      response = await retryHttpRequest(
+        () =>
+          axios.post(geminiUrl, requestData, {
+            responseType: 'stream',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            timeout: 60000, // 60 second timeout
+          }),
+        {
+          maxRetries: 3,
+          initialDelay: 1000,
+          maxDelay: 8000,
+          retryableStatusCodes: [429, 500, 502, 503], // Retry on rate limit and server errors
+        }
+      );
+    } catch (error: any) {
+      // Handle retry failures
+      logger.error('Gemini API request failed after retries', error, { userId, model });
+      
+      // Log analytics event
+      const user = await getOrCreateUser(userId, (req as any).userEmail);
+      await logChatError(
+        userId,
+        error.response?.status?.toString() || 'UNKNOWN',
+        error.message || 'Gemini API request failed',
+        user.tier
+      );
+
+      if (error.response) {
+        const status = error.response.status;
+        const errorData = error.response.data;
+
+        if (status === 429) {
+          res.status(429).json(
+            createErrorResponse(ErrorCode.RATE_LIMIT_EXCEEDED, 'Rate limit exceeded. Please try again later.', errorData, requestId)
+          );
+          return;
+        }
+
+        if (status === 400) {
+          res.status(400).json(
+            createErrorResponse(ErrorCode.GEMINI_API_ERROR, 'Invalid request to Gemini API', errorData, requestId)
+          );
+          return;
+        }
+
+        if (status >= 500) {
+          res.status(502).json(
+            createErrorResponse(ErrorCode.GEMINI_API_ERROR, 'Gemini API temporarily unavailable. Please try again.', errorData, requestId)
+          );
+          return;
+        }
+
+        res.status(status).json(
+          createErrorResponse(ErrorCode.GEMINI_API_ERROR, 'Gemini API error', errorData, requestId)
+        );
+        return;
       }
-    );
+
+      // Network or timeout error
+      if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+        res.status(504).json(
+          createErrorResponse(ErrorCode.BACKEND_ERROR, 'Request timeout. Please try again.', undefined, requestId)
+        );
+        return;
+      }
+
+      // Generic error
+      res.status(500).json(
+        createErrorResponse(ErrorCode.BACKEND_ERROR, 'Failed to connect to Gemini API. Please try again.', error.message, requestId)
+      );
+      return;
+    }
 
     // Set up SSE headers for streaming response
     res.setHeader('Content-Type', 'text/event-stream');
@@ -290,34 +365,34 @@ export async function chatHandler(
 
       if (status === 429) {
         res.status(429).json(
-          createErrorResponse(ErrorCode.RATE_LIMIT_EXCEEDED, 'Rate limit exceeded', errorData)
+          createErrorResponse(ErrorCode.RATE_LIMIT_EXCEEDED, 'Rate limit exceeded', errorData, requestId)
         );
         return;
       }
 
       if (status === 400) {
         res.status(400).json(
-          createErrorResponse(ErrorCode.GEMINI_API_ERROR, 'Invalid request to Gemini API', errorData)
+          createErrorResponse(ErrorCode.GEMINI_API_ERROR, 'Invalid request to Gemini API', errorData, requestId)
         );
         return;
       }
 
       res.status(500).json(
-        createErrorResponse(ErrorCode.GEMINI_API_ERROR, 'Gemini API error', errorData)
+        createErrorResponse(ErrorCode.GEMINI_API_ERROR, 'Gemini API error', errorData, requestId)
       );
       return;
     }
 
-    if (error.code === 'ECONNABORTED') {
+    if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
       res.status(504).json(
-        createErrorResponse(ErrorCode.BACKEND_ERROR, 'Request timeout')
+        createErrorResponse(ErrorCode.BACKEND_ERROR, 'Request timeout', undefined, requestId)
       );
       return;
     }
 
     // Generic error
     res.status(500).json(
-      createErrorResponse(ErrorCode.BACKEND_ERROR, 'Failed to process chat request', error.message)
+      createErrorResponse(ErrorCode.BACKEND_ERROR, 'Failed to process chat request', error.message, requestId)
     );
   }
 }

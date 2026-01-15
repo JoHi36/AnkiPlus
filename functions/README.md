@@ -1,69 +1,55 @@
 # Firebase Cloud Functions - Anki Chatbot Backend
 
+Backend für das Anki Chatbot Addon mit Firebase Cloud Functions.
+
 ## Setup
 
-### 1. Install Dependencies
+### Voraussetzungen
 
+- Node.js 18+ und npm
+- Firebase CLI (`npm install -g firebase-tools`)
+- Firebase-Projekt mit aktivierten Cloud Functions
+- Service Account Key für Firebase Admin SDK
+
+### Installation
+
+1. Dependencies installieren:
 ```bash
 cd functions
 npm install
 ```
 
-### 2. Environment Variables
-
-#### For Local Development
-
-Create a `.env` file in the `functions/` directory:
-
+2. Firebase-Projekt konfigurieren:
 ```bash
-GOOGLE_AI_API_KEY=your_api_key_here
+firebase use ankiplus-b0ffb
 ```
 
-#### For Firebase Deployment
+3. Service Account Key einrichten:
+   - Erstelle einen Service Account in der Firebase Console
+   - Lade den JSON-Key herunter
+   - Setze die Umgebungsvariable `GOOGLE_APPLICATION_CREDENTIALS` oder verwende `firebase functions:config:set`
 
-Set the environment variable using Firebase CLI:
-
+4. Environment Variables setzen:
 ```bash
-firebase functions:config:set google.ai_api_key="YOUR_API_KEY"
+firebase functions:config:set google.ai_api_key="YOUR_GEMINI_API_KEY"
+firebase functions:config:set app.upgrade_url="https://your-landingpage.com/register"
 ```
 
-Or use the newer environment variables approach (recommended):
+## Deployment
 
-```bash
-firebase functions:secrets:set GOOGLE_AI_API_KEY
-# Then enter your API key when prompted
-```
-
-Update `functions/src/handlers/chat.ts` to use secrets:
-
-```typescript
-const apiKey = process.env.GOOGLE_AI_API_KEY || 
-               functions.config().google?.ai_api_key ||
-               (await functions.secrets.get('GOOGLE_AI_API_KEY'));
-```
-
-### 3. Build
-
-```bash
-npm run build
-```
-
-### 4. Local Development
+### Development
 
 ```bash
 npm run serve
 ```
 
-This will start the Firebase emulator with the functions.
-
-### 5. Deploy
+### Production
 
 ```bash
 npm run deploy
 ```
 
-Or from the project root:
-
+Oder nur Functions deployen:
 ```bash
 firebase deploy --only functions
 ```
@@ -71,73 +57,67 @@ firebase deploy --only functions
 ## API Endpoints
 
 ### POST /api/chat
-
-Proxies chat requests to Google Gemini API with streaming support.
+Proxied Chat-Request zu Google Gemini API mit Streaming-Support.
 
 **Headers:**
-- `Authorization: Bearer {firebaseIdToken}`
+- `Authorization: Bearer <firebase-id-token>`
 
 **Body:**
 ```json
 {
-  "message": "string",
-  "history": [{"role": "user|assistant", "content": "string"}],
+  "message": "User message",
+  "history": [
+    { "role": "user", "content": "..." },
+    { "role": "assistant", "content": "..." }
+  ],
   "context": {
-    "isQuestion": boolean,
-    "question": "string",
-    "answer": "string",
-    "stats": {...}
+    "question": "Card question",
+    "answer": "Card answer",
+    "isQuestion": true,
+    "stats": { ... }
   },
-  "mode": "compact|detailed",
+  "mode": "compact" | "detailed",
   "model": "gemini-3-flash-preview"
 }
 ```
 
-**Response:** Server-Sent Events (SSE) stream
+**Response:** Server-Sent Events (SSE) Stream
 
 ### POST /api/auth/refresh
-
-Refreshes Firebase ID Token.
+Token-Refresh Endpoint (wird in Landingpage-Integration vollständig implementiert).
 
 **Body:**
 ```json
 {
-  "refreshToken": "string"
-}
-```
-
-**Response:**
-```json
-{
-  "idToken": "string",
-  "expiresIn": 3600
+  "refreshToken": "firebase-refresh-token"
 }
 ```
 
 ### GET /api/models
-
-Returns list of available models.
+Liste verfügbarer Modelle (keine Authentifizierung erforderlich).
 
 **Response:**
 ```json
 {
   "models": [
-    {"name": "gemini-3-flash-preview", "label": "Gemini 3 Flash"}
+    {
+      "name": "gemini-3-flash-preview",
+      "label": "Gemini 3 Flash"
+    }
   ]
 }
 ```
 
 ### GET /api/user/quota
-
-Returns user quota status.
+User Quota Status (Authentifizierung erforderlich).
 
 **Headers:**
-- `Authorization: Bearer {firebaseIdToken}`
+- `Authorization: Bearer <firebase-id-token>`
 
 **Response:**
 ```json
 {
-  "tier": "free|tier1|tier2",
+  "tier": "free" | "tier1" | "tier2",
   "flash": {
     "used": 0,
     "limit": -1,
@@ -152,57 +132,107 @@ Returns user quota status.
 }
 ```
 
-## Project Structure
+## Error Handling
 
-```
-functions/
-├── src/
-│   ├── index.ts              # Main entry, Express setup
-│   ├── handlers/
-│   │   ├── chat.ts          # POST /api/chat
-│   │   ├── auth.ts          # POST /api/auth/refresh
-│   │   ├── models.ts        # GET /api/models
-│   │   └── quota.ts         # GET /api/user/quota
-│   ├── middleware/
-│   │   └── auth.ts          # Token validation
-│   ├── utils/
-│   │   ├── firestore.ts     # Firestore helpers
-│   │   ├── errors.ts        # Error handling
-│   │   └── logging.ts       # Logging helpers
-│   └── types/
-│       └── index.ts         # TypeScript types
-├── package.json
-├── tsconfig.json
-└── .gitignore
-```
+Alle Endpoints verwenden strukturierte Error-Responses:
 
-## Firestore Structure
-
-### users/{userId}
-
-```typescript
+```json
 {
-  tier: "free" | "tier1" | "tier2",
-  createdAt: Timestamp,
-  email?: string
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "User-friendly error message",
+    "details": { ... },
+    "requestId": "req-...",
+    "timestamp": "2024-01-01T12:00:00Z"
+  }
 }
 ```
 
-### usage/{userId}/daily/{YYYY-MM-DD}
+### Error Codes
 
-```typescript
-{
-  flashRequests: number,
-  deepRequests: number,
-  lastReset: Timestamp
-}
+- `TOKEN_EXPIRED`: ID Token abgelaufen
+- `TOKEN_INVALID`: Ungültiges Token
+- `QUOTA_EXCEEDED`: Tageslimit erreicht
+- `RATE_LIMIT_EXCEEDED`: Rate Limit überschritten
+- `BACKEND_ERROR`: Allgemeiner Backend-Fehler
+- `GEMINI_API_ERROR`: Gemini API Fehler
+- `VALIDATION_ERROR`: Validierungsfehler
+
+## Quota System
+
+Das System implementiert tägliche Limits basierend auf User-Tiers:
+
+- **Free Tier**: Unlimited Flash, 3x Deep/Tag
+- **Tier1 (5€)**: Unlimited Flash, 30x Deep/Tag
+- **Tier2 (15€)**: Unlimited Flash, Unlimited Deep (Safety: 500 Requests/Tag)
+
+Quotas resetten täglich um Mitternacht UTC.
+
+## Retry Logic
+
+Das Backend implementiert Exponential Backoff für retryable Errors (429, 500, 502, 503):
+
+- Max 3 Retries
+- Initial Delay: 1s
+- Max Delay: 8s
+- Multiplier: 2x
+
+## Monitoring & Analytics
+
+Events werden in Firestore gespeichert:
+
+- `analytics/`: Analytics Events (auth_success, chat_request, etc.)
+- `errors/`: Error Tracking mit Context
+
+## Security
+
+- Token-basierte Authentifizierung für alle geschützten Endpoints
+- Input-Validation und Sanitization
+- CORS-Konfiguration für Production
+- Sensitive Data wird in Logs sanitized
+
+## Performance
+
+- Connection Pooling für Gemini API Requests
+- Caching für Model-Liste (1 Stunde)
+- Atomic Operations für Usage Counters
+
+## Development
+
+### TypeScript Compilation
+
+```bash
+npm run build
 ```
 
-## Notes
+### Linting
 
-- The backend uses Firebase Admin SDK for token validation
-- Streaming responses use Server-Sent Events (SSE)
-- Quota system will be fully implemented in Prompt 4
-- Token refresh endpoint needs to be completed in Prompt 3 (Landingpage Integration)
+```bash
+npm run lint
+```
 
+### Testing
 
+Tests können mit Jest oder ähnlichen Frameworks hinzugefügt werden.
+
+## Troubleshooting
+
+### Functions deployen nicht
+
+- Prüfe Firebase CLI Login: `firebase login`
+- Prüfe Projekt: `firebase use`
+- Prüfe Node.js Version: `node --version` (sollte 18+ sein)
+
+### CORS Errors
+
+- Prüfe `ALLOWED_ORIGINS` Environment Variable
+- In Development werden alle Origins erlaubt
+
+### Token Validation Errors
+
+- Prüfe ob Firebase Admin SDK korrekt initialisiert ist
+- Prüfe Service Account Key
+
+## License
+
+Proprietary - Anki Chatbot Addon

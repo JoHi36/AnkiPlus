@@ -1,6 +1,43 @@
 import * as functions from 'firebase-functions';
 
 /**
+ * Sanitize sensitive data from logs
+ */
+function sanitizeData(data: any): any {
+  if (!data || typeof data !== 'object') {
+    return data;
+  }
+
+  const sensitiveKeys = [
+    'token',
+    'authToken',
+    'refreshToken',
+    'apiKey',
+    'api_key',
+    'password',
+    'secret',
+    'authorization',
+    'Authorization',
+  ];
+
+  const sanitized = { ...data };
+
+  for (const key in sanitized) {
+    const lowerKey = key.toLowerCase();
+    
+    // Check if key contains sensitive information
+    if (sensitiveKeys.some((sk) => lowerKey.includes(sk.toLowerCase()))) {
+      sanitized[key] = '[REDACTED]';
+    } else if (typeof sanitized[key] === 'object' && sanitized[key] !== null) {
+      // Recursively sanitize nested objects
+      sanitized[key] = sanitizeData(sanitized[key]);
+    }
+  }
+
+  return sanitized;
+}
+
+/**
  * Structured logging helper
  */
 export class Logger {
@@ -16,22 +53,26 @@ export class Logger {
    * Log info message
    */
   info(message: string, data?: any): void {
-    functions.logger.info(message, {
+    const logData = {
       requestId: this.requestId,
       userId: this.userId,
-      ...data,
-    });
+      timestamp: new Date().toISOString(),
+      ...sanitizeData(data),
+    };
+    functions.logger.info(message, logData);
   }
 
   /**
    * Log warning message
    */
   warn(message: string, data?: any): void {
-    functions.logger.warn(message, {
+    const logData = {
       requestId: this.requestId,
       userId: this.userId,
-      ...data,
-    });
+      timestamp: new Date().toISOString(),
+      ...sanitizeData(data),
+    };
+    functions.logger.warn(message, logData);
   }
 
   /**
@@ -41,7 +82,8 @@ export class Logger {
     const errorData: any = {
       requestId: this.requestId,
       userId: this.userId,
-      ...data,
+      timestamp: new Date().toISOString(),
+      ...sanitizeData(data),
     };
 
     if (error) {
@@ -49,21 +91,27 @@ export class Logger {
         message: error.message,
         stack: error.stack,
         ...(error.code && { code: error.code }),
+        ...(error.response && {
+          status: error.response.status,
+          statusText: error.response.statusText,
+        }),
       };
     }
 
-    functions.logger.error(message, errorData);
+    functions.logger.error(message, sanitizeData(errorData));
   }
 
   /**
    * Log debug message
    */
   debug(message: string, data?: any): void {
-    functions.logger.debug(message, {
+    const logData = {
       requestId: this.requestId,
       userId: this.userId,
-      ...data,
-    });
+      timestamp: new Date().toISOString(),
+      ...sanitizeData(data),
+    };
+    functions.logger.debug(message, logData);
   }
 }
 

@@ -16,6 +16,7 @@ import { saveRefreshToken, clearRefreshToken } from '../utils/tokenStorage';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  firebaseConfigured: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
@@ -42,10 +43,16 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [firebaseConfigured, setFirebaseConfigured] = useState(!!auth);
 
   useEffect(() => {
+    // Check if Firebase is configured
+    const isConfigured = !!auth;
+    setFirebaseConfigured(isConfigured);
+    
     // If Firebase auth is not available, skip auth initialization
     if (!auth) {
+      console.warn('⚠️ Firebase Auth is not configured. Auth features will be disabled.');
       setLoading(false);
       return;
     }
@@ -167,6 +174,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const value: AuthContextType = {
     user,
     loading,
+    firebaseConfigured,
     login,
     register,
     loginWithGoogle,

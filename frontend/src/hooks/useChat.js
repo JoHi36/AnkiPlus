@@ -19,6 +19,9 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
   const [streamingMessage, setStreamingMessage] = useState('');
   const [currentSteps, setCurrentSteps] = useState([]);  // NEW: Track RAG steps during generation
   const [currentCitations, setCurrentCitations] = useState({});  // NEW: Track citations during generation
+  const [error, setError] = useState(null);  // NEW: Error state
+  const [connectionStatus, setConnectionStatus] = useState('connected');  // NEW: Connection status: 'connected', 'connecting', 'error', 'disconnected'
+  const [lastFailedMessage, setLastFailedMessage] = useState(null);  // NEW: Store last failed message for retry
   
   // Refs to access latest state inside stable callbacks (handleAnkiReceive)
   const currentStepsRef = useRef([]);
@@ -288,14 +291,29 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     // Sende an API
     setIsLoading(true);
     setStreamingMessage('');
+    setError(null);
+    setConnectionStatus('connecting');
     updateCurrentSteps([]);  // Reset steps for new request
     updateCurrentCitations({});  // Reset citations for new request
     
+    // Store message for potential retry
+    setLastFailedMessage({ text, context });
+    
     if (bridge && bridge.sendMessage) {
       console.log('📤 useChat: Sende an API mit Historie:', conversationHistory.length, 'Nachrichten, Modus:', mode);
-      bridge.sendMessage(text, conversationHistory, mode);
+      try {
+        bridge.sendMessage(text, conversationHistory, mode);
+        setConnectionStatus('connected');
+      } catch (err) {
+        console.error('❌ useChat: Error sending message:', err);
+        setError(err.message || 'Fehler beim Senden der Nachricht');
+        setConnectionStatus('error');
+        setIsLoading(false);
+      }
     } else {
       console.warn('⚠️ useChat: bridge.sendMessage nicht verfügbar');
+      setError('Bridge nicht verfügbar');
+      setConnectionStatus('error');
       setIsLoading(false);
     }
   }, [bridge, currentSectionId, setSessions, cardContextHook]);
@@ -305,6 +323,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     console.log('🛑 useChat: Anfrage abbrechen');
     setIsLoading(false);
     setStreamingMessage('');
+    setError(null);
     if (bridge && bridge.cancelRequest) {
       console.log('🛑 useChat: Rufe bridge.cancelRequest auf');
       bridge.cancelRequest();
@@ -315,6 +334,22 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       }
     }
   }, [bridge]);
+
+  // NEW: Retry last failed message
+  const handleRetry = useCallback(() => {
+    if (lastFailedMessage) {
+      console.log('🔄 useChat: Retry last failed message');
+      setError(null);
+      setConnectionStatus('connecting');
+      handleSend(lastFailedMessage.text, lastFailedMessage.context);
+    }
+  }, [lastFailedMessage, handleSend]);
+
+  // NEW: Clear error
+  const clearError = useCallback(() => {
+    setError(null);
+    setConnectionStatus('connected');
+  }, []);
   
   // Verarbeite ankiReceive Events für Chat
   const handleAnkiReceive = useCallback((payload) => {
@@ -431,11 +466,28 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
           return prev;
         });
       }
+    } else if (payload.type === 'error') {
+      // NEW: Handle error payloads
+      console.error('❌ useChat: Error received:', payload.message);
+      setIsLoading(false);
+      setStreamingMessage('');
+      setError(payload.message || 'Ein Fehler ist aufgetreten');
+      setConnectionStatus('error');
+      
+      // Show error message to user
+      if (appendMessageRef.current) {
+        appendMessageRef.current(
+          `Fehler: ${payload.message || 'Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut.'}`,
+          'bot'
+        );
+      }
     } else if (payload.type === 'bot' || payload.type === 'info') {
       console.log('🤖 useChat: Bot-Nachricht erhalten:', payload.message?.substring(0, 50) + '...');
       if (payload.message) {
         setIsLoading(false);
         setStreamingMessage('');
+        setError(null);  // Clear error on success
+        setConnectionStatus('connected');
         if (appendMessageRef.current) {
           appendMessageRef.current(payload.message, 'bot');
         }
@@ -645,10 +697,14 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     streamingMessage,
     currentSteps,  // NEW: Expose current steps for streaming
     currentCitations,  // NEW: Expose current citations for streaming
+    error,  // NEW: Error state
+    connectionStatus,  // NEW: Connection status
     appendMessage,
     appendMessageRef,
     handleSend,
     handleStopRequest,
+    handleRetry,  // NEW: Retry function
+    clearError,  // NEW: Clear error function
     handleAnkiReceive
   };
 }

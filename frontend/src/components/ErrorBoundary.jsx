@@ -1,4 +1,5 @@
 import React from 'react';
+import { AlertCircle, RefreshCw, Home } from 'lucide-react';
 
 /**
  * Error Boundary Komponente
@@ -7,7 +8,7 @@ import React from 'react';
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, errorInfo: null };
   }
 
   static getDerivedStateFromError(error) {
@@ -19,6 +20,22 @@ export default class ErrorBoundary extends React.Component {
   componentDidCatch(error, errorInfo) {
     // Log the error to console
     console.error('ErrorBoundary caught an error:', error, errorInfo);
+    this.setState({ errorInfo });
+    
+    // Optional: Log to backend (can be implemented later)
+    // this.logErrorToBackend(error, errorInfo);
+  }
+
+  handleRetry = () => {
+    this.setState({ hasError: false, error: null, errorInfo: null });
+    // Optionally trigger a re-render or reset
+    if (this.props.onRetry) {
+      this.props.onRetry();
+    }
+  }
+
+  handleReload = () => {
+    window.location.reload();
   }
 
   render() {
@@ -54,23 +71,52 @@ export default class ErrorBoundary extends React.Component {
       // Final validation
       safeErrorMessage = String(safeErrorMessage || 'Ein Fehler ist aufgetreten');
       
+      const isDevelopment = process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost';
+      
       return (
-        <div className="flex flex-col items-center justify-center h-full p-8 text-base-content/70">
-          <div className="text-lg font-semibold mb-2 text-error">
-            Ein Fehler ist aufgetreten
+        <div className="flex flex-col items-center justify-center h-full p-8 bg-base-100">
+          <div className="max-w-md w-full bg-base-200 rounded-xl p-6 shadow-lg border border-error/20">
+            <div className="flex items-center gap-3 mb-4">
+              <AlertCircle className="text-error" size={24} />
+              <h2 className="text-xl font-semibold text-error">
+                Ein Fehler ist aufgetreten
+              </h2>
+            </div>
+            
+            <div className="text-sm text-base-content/70 mb-6 bg-base-300 p-4 rounded-lg">
+              {safeErrorMessage}
+            </div>
+            
+            {isDevelopment && this.state.errorInfo && (
+              <details className="mb-4 text-xs">
+                <summary className="cursor-pointer text-base-content/50 hover:text-base-content mb-2">
+                  Technische Details (Development)
+                </summary>
+                <pre className="bg-base-300 p-3 rounded overflow-auto max-h-48 text-xs">
+                  {this.state.error?.stack || 'No stack trace available'}
+                  {'\n\n'}
+                  {this.state.errorInfo?.componentStack || 'No component stack'}
+                </pre>
+              </details>
+            )}
+            
+            <div className="flex gap-3">
+              <button
+                onClick={this.handleRetry}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-content rounded-lg hover:bg-primary/90 transition-colors"
+              >
+                <RefreshCw size={16} />
+                Erneut versuchen
+              </button>
+              <button
+                onClick={this.handleReload}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-base-300 text-base-content rounded-lg hover:bg-base-300/80 transition-colors"
+              >
+                <Home size={16} />
+                Seite neu laden
+              </button>
+            </div>
           </div>
-          <div className="text-sm text-base-content/50 mb-4">
-            {safeErrorMessage}
-          </div>
-          <button
-            onClick={() => {
-              this.setState({ hasError: false, error: null });
-              window.location.reload();
-            }}
-            className="px-4 py-2 bg-primary text-primary-content rounded-lg hover:bg-primary/90 transition-colors"
-          >
-            Seite neu laden
-          </button>
         </div>
       );
     }

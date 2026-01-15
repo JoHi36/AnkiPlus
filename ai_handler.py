@@ -5,11 +5,88 @@ Implementiert Google Gemini API-Integration
 
 import requests
 import json
+import time
 from .config import (
     get_config, RESPONSE_STYLES, is_backend_mode, get_backend_url,
     get_auth_token, get_refresh_token, update_config
 )
 from .system_prompt import get_system_prompt
+
+# User-friendly error messages
+ERROR_MESSAGES = {
+    'QUOTA_EXCEEDED': 'Tageslimit erreicht. Upgrade für mehr Requests?',
+    'TOKEN_EXPIRED': 'Sitzung abgelaufen. Bitte erneut verbinden.',
+    'TOKEN_INVALID': 'Authentifizierung fehlgeschlagen. Bitte erneut verbinden.',
+    'NETWORK_ERROR': 'Verbindungsfehler. Bitte erneut versuchen.',
+    'RATE_LIMIT_EXCEEDED': 'Zu viele Anfragen. Bitte versuchen Sie es später erneut.',
+    'BACKEND_ERROR': 'Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.',
+    'GEMINI_API_ERROR': 'Der Service ist vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut.',
+    'VALIDATION_ERROR': 'Ungültige Anfrage. Bitte überprüfen Sie Ihre Eingabe.',
+    'TIMEOUT_ERROR': 'Anfrage dauerte zu lange. Bitte versuchen Sie es erneut.',
+}
+
+def get_user_friendly_error(error_code, default_message=None):
+    """Get user-friendly error message for error code"""
+    return ERROR_MESSAGES.get(error_code, default_message or 'Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.')
+
+def retry_with_backoff(func, max_retries=3, initial_delay=1.0, max_delay=8.0, multiplier=2.0, retryable_status_codes=None):
+    """
+    Retry function with exponential backoff
+    @param func: Function to retry (should return response object)
+    @param max_retries: Maximum number of retries
+    @param initial_delay: Initial delay in seconds
+    @param max_delay: Maximum delay in seconds
+    @param multiplier: Backoff multiplier
+    @param retryable_status_codes: List of status codes that should be retried (default: [429, 500, 502, 503])
+    @returns Response object
+    """
+    if retryable_status_codes is None:
+        retryable_status_codes = [429, 500, 502, 503]
+    
+    last_error = None
+    delay = initial_delay
+    
+    for attempt in range(max_retries + 1):
+        try:
+            response = func()
+            
+            # Check if status code is retryable
+            if response.status_code in retryable_status_codes:
+                if attempt < max_retries:
+                    print(f"⚠️ Retry {attempt + 1}/{max_retries} nach {delay:.1f}s für Status {response.status_code}")
+                    time.sleep(delay)
+                    delay = min(delay * multiplier, max_delay)
+                    continue
+                else:
+                    # Last attempt failed
+                    response.raise_for_status()
+            
+            # Success or non-retryable error
+            return response
+            
+        except requests.exceptions.RequestException as e:
+            last_error = e
+            
+            # Check if it's a retryable error
+            if hasattr(e, 'response') and e.response:
+                status_code = e.response.status_code
+                if status_code not in retryable_status_codes:
+                    # Non-retryable error, raise immediately
+                    raise
+            
+            # Network errors are retryable
+            if attempt < max_retries:
+                print(f"⚠️ Retry {attempt + 1}/{max_retries} nach {delay:.1f}s für Netzwerkfehler: {str(e)[:100]}")
+                time.sleep(delay)
+                delay = min(delay * multiplier, max_delay)
+            else:
+                # All retries failed
+                raise
+    
+    # Should not reach here, but just in case
+    if last_error:
+        raise last_error
+    raise Exception("Retry failed without error")
 
 # Import Anki's main window for thread-safe UI access
 try:
@@ -489,31 +566,64 @@ class AIHandler:
                 
                 print(f"_get_google_response: Request-Größe: {len(str(request_data))} Zeichen")
                 
-                response = requests.post(url, json=request_data, headers=headers, timeout=30)
+                # Retry-Logic mit Exponential Backoff für retryable Errors
+                def make_request():
+                    return requests.post(url, json=request_data, headers=headers, timeout=30)
                 
-                # Logge Status-Code
-                print(f"_get_google_response: Response Status: {response.status_code}")
+                # Bei 401: Versuche Token-Refresh (kein Retry mit Backoff)
+                if use_backend:
+                    response = make_request()
+                    if response.status_code == 401 and retry_count < max_retries:
+                        print("_get_google_response: 401 Unauthorized - Versuche Token-Refresh")
+                        if self._refresh_auth_token():
+                            retry_count += 1
+                            headers = self._get_auth_headers()
+                            response = make_request()
+                            print(f"_get_google_response: Retry nach Token-Refresh - Status: {response.status_code}")
+                        else:
+                            raise Exception(get_user_friendly_error('TOKEN_EXPIRED'))
+                else:
+                    response = make_request()
                 
-                # Bei 401 (Unauthorized): Versuche Token-Refresh
-                if response.status_code == 401 and use_backend and retry_count < max_retries:
-                    print("_get_google_response: 401 Unauthorized - Versuche Token-Refresh")
-                    if self._refresh_auth_token():
-                        retry_count += 1
-                        # Retry mit neuem Token
-                        headers = self._get_auth_headers()
-                        response = requests.post(url, json=request_data, headers=headers, timeout=30)
-                        print(f"_get_google_response: Retry nach Token-Refresh - Status: {response.status_code}")
-                    else:
-                        raise Exception("Token-Refresh fehlgeschlagen. Bitte melden Sie sich erneut an.")
-                
-                # Bei 403 (Forbidden): Quota-Fehler
+                # Bei 403 (Forbidden): Quota-Fehler (kein Retry)
                 if response.status_code == 403:
                     try:
                         error_data = response.json()
+                        error_code = error_data.get("error", {}).get("code", "QUOTA_EXCEEDED")
                         error_msg = error_data.get("error", {}).get("message", "Quota überschritten")
-                        raise Exception(f"Quota überschritten: {error_msg}. Bitte upgraden Sie Ihren Plan.")
-                    except:
-                        raise Exception("Quota überschritten. Bitte upgraden Sie Ihren Plan.")
+                        user_msg = get_user_friendly_error(error_code, error_msg)
+                        raise Exception(user_msg)
+                    except Exception as e:
+                        if "Quota" in str(e) or "quota" in str(e).lower():
+                            raise
+                        raise Exception(get_user_friendly_error('QUOTA_EXCEEDED'))
+                
+                # Bei 400: Client-Fehler (kein Retry)
+                if response.status_code == 400:
+                    try:
+                        error_data = response.json()
+                        error_code = error_data.get("error", {}).get("code", "VALIDATION_ERROR")
+                        error_msg = error_data.get("error", {}).get("message", "Ungültige Anfrage")
+                        user_msg = get_user_friendly_error(error_code, error_msg)
+                        raise Exception(user_msg)
+                    except Exception as e:
+                        if "Exception" in str(type(e)):
+                            raise
+                        raise Exception(get_user_friendly_error('VALIDATION_ERROR'))
+                
+                # Für retryable Errors (429, 500, 502, 503): Verwende Retry mit Backoff
+                if response.status_code in [429, 500, 502, 503]:
+                    print(f"_get_google_response: Retryable Error {response.status_code} - Verwende Retry mit Backoff")
+                    response = retry_with_backoff(
+                        make_request,
+                        max_retries=3,
+                        initial_delay=1.0,
+                        max_delay=8.0,
+                        retryable_status_codes=[429, 500, 502, 503]
+                    )
+                
+                # Logge Status-Code
+                print(f"_get_google_response: Response Status: {response.status_code}")
                 
                 # Bei 400-Fehler, logge die vollständige Fehlermeldung
                 if response.status_code == 400:
@@ -547,10 +657,9 @@ class AIHandler:
                 # Prüfe auf Fehler in der Antwort
                 if "error" in result:
                     error_msg = result["error"].get("message", "Unbekannter Fehler")
-                    error_code = result["error"].get("code", "UNKNOWN")
-                    if error_code == "QUOTA_EXCEEDED":
-                        raise Exception(f"Quota überschritten: {error_msg}. Bitte upgraden Sie Ihren Plan.")
-                    raise Exception(f"Backend Fehler: {error_msg}")
+                    error_code = result["error"].get("code", "BACKEND_ERROR")
+                    user_msg = get_user_friendly_error(error_code, error_msg)
+                    raise Exception(user_msg)
                 
                 # Backend-Modus: Antwort-Format ist anders
                 if use_backend:

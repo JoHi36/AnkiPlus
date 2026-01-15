@@ -5,7 +5,7 @@ import { GoogleSignInButton } from '../components/GoogleSignInButton';
 import { Loader2, Mail, Lock, AlertCircle } from 'lucide-react';
 
 export function LoginPage() {
-  const { login, resetPassword } = useAuth();
+  const { login, resetPassword, firebaseConfigured } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -69,6 +69,21 @@ export function LoginPage() {
             <h1 className="text-2xl font-bold mb-2">Willkommen zurück</h1>
             <p className="text-neutral-400 text-sm">Melde dich an, um fortzufahren</p>
           </div>
+
+          {/* Firebase Not Configured Warning */}
+          {!firebaseConfigured && (
+            <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm text-yellow-400 font-medium mb-1">
+                  Firebase Auth is not configured
+                </p>
+                <p className="text-xs text-yellow-400/80">
+                  Please configure Firebase API keys in your environment variables. See SETUP.md for instructions.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Error Message */}
           {error && (

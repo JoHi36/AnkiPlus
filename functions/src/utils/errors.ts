@@ -6,8 +6,23 @@ export interface ErrorResponse {
     code: string;
     message: string;
     details?: any;
+    requestId?: string;
+    timestamp?: string;
   };
 }
+
+/**
+ * User-friendly error messages
+ */
+const USER_FRIENDLY_MESSAGES: Record<string, string> = {
+  TOKEN_EXPIRED: 'Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.',
+  TOKEN_INVALID: 'Authentifizierung fehlgeschlagen. Bitte melden Sie sich erneut an.',
+  QUOTA_EXCEEDED: 'Tageslimit erreicht. Upgrade für mehr Requests?',
+  RATE_LIMIT_EXCEEDED: 'Zu viele Anfragen. Bitte versuchen Sie es später erneut.',
+  BACKEND_ERROR: 'Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.',
+  GEMINI_API_ERROR: 'Der Service ist vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut.',
+  VALIDATION_ERROR: 'Ungültige Anfrage. Bitte überprüfen Sie Ihre Eingabe.',
+};
 
 /**
  * Error codes
@@ -25,20 +40,27 @@ export enum ErrorCode {
 /**
  * Create standardized error response
  * @param code - Error code
- * @param message - Error message
+ * @param message - Error message (will be replaced with user-friendly message if available)
  * @param details - Optional error details
+ * @param requestId - Optional request ID for tracking
  * @returns Error response object
  */
 export function createErrorResponse(
   code: string,
   message: string,
-  details?: any
+  details?: any,
+  requestId?: string
 ): ErrorResponse {
+  // Use user-friendly message if available, otherwise use provided message
+  const userMessage = USER_FRIENDLY_MESSAGES[code] || message;
+
   return {
     error: {
       code,
-      message,
+      message: userMessage,
       ...(details && { details }),
+      ...(requestId && { requestId }),
+      timestamp: new Date().toISOString(),
     },
   };
 }
@@ -47,16 +69,19 @@ export function createErrorResponse(
  * Create error response from Error object
  * @param error - Error object
  * @param defaultCode - Default error code if not specified
+ * @param requestId - Optional request ID for tracking
  * @returns Error response object
  */
 export function createErrorResponseFromError(
   error: Error,
-  defaultCode: ErrorCode = ErrorCode.BACKEND_ERROR
+  defaultCode: ErrorCode = ErrorCode.BACKEND_ERROR,
+  requestId?: string
 ): ErrorResponse {
   return createErrorResponse(
     (error as any).code || defaultCode,
     error.message || 'An unexpected error occurred',
-    (error as any).details
+    (error as any).details,
+    requestId
   );
 }
 
