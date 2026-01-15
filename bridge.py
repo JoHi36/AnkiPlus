@@ -1312,6 +1312,19 @@ class WebBridge(QObject):
             })
     
     @pyqtSlot(result=str)
+    def getAuthToken(self):
+        """Gibt den aktuellen Auth-Token zurück (für API-Calls)"""
+        try:
+            config = get_config()
+            auth_token = config.get('auth_token', '').strip()
+            return json.dumps({"token": auth_token if auth_token else ""})
+        except Exception as e:
+            import traceback
+            print(f"Fehler in getAuthToken: {e}")
+            print(traceback.format_exc())
+            return json.dumps({"token": ""})
+    
+    @pyqtSlot(result=str)
     def refreshAuth(self):
         """Ruft Token-Refresh auf"""
         try:

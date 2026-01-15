@@ -12,7 +12,6 @@ import ChatMessage from './components/ChatMessage';
 import StreamingChatMessage from './components/StreamingChatMessage';
 import ChatInput from './components/ChatInput';
 import ProfileDialog from './components/ProfileDialog';
-import SettingsButton from './components/SettingsButton';
 import ThoughtStream from './components/ThoughtStream';
 import SessionOverview from './components/SessionOverview';
 import CardPreviewModal from './components/CardPreviewModal';
@@ -1059,13 +1058,6 @@ function AppInner() {
       </div>
 
       <main className="flex-1 overflow-hidden relative flex flex-col min-h-0" style={{ height: '100%' }}>
-        {/* Settings Button - nur in Session-Übersicht anzeigen */}
-        {showSessionOverview && (
-        <div className="fixed top-3 left-4 z-50">
-          <SettingsButton onClick={handleOpenSettings} />
-        </div>
-        )}
-
         {showSessionOverview ? (
           /* Session-Übersicht - wenn kein Deck aktiv */
           <div className="flex-1 overflow-hidden pt-16">

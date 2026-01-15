@@ -179,13 +179,85 @@ export async function chatHandler(
     // Add system instruction if needed (simplified - full system prompt logic can be added later)
     // For now, we'll keep it simple
 
-    logger.info('Proxying to Gemini API', { userId, model, messageLength: body.message.length });
+    // Check if streaming is requested (default: true)
+    const shouldStream = body.stream !== false;
+    
+    logger.info('Proxying to Gemini API', { userId, model, messageLength: body.message.length, streaming: shouldStream });
     
     // Log analytics event
     await logChatRequest(userId, model, mode, body.message.length);
 
     // Determine request type for usage tracking
     const requestType: 'flash' | 'deep' = mode === 'detailed' ? 'deep' : 'flash';
+
+    // Handle non-streaming requests
+    if (!shouldStream) {
+      try {
+        const response = await retryHttpRequest(
+          () =>
+            axios.post(geminiUrl.replace(':streamGenerateContent', ':generateContent'), requestData, {
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              timeout: 30000, // 30 second timeout for non-streaming
+            }),
+          {
+            maxRetries: 3,
+            initialDelay: 1000,
+            maxDelay: 8000,
+            retryableStatusCodes: [429, 500, 502, 503],
+          }
+        );
+
+        // Increment usage counter
+        incrementUsage(userId, requestType).catch((error) => {
+          logger.error('Failed to increment usage', error, { userId, requestType });
+        });
+
+        // Extract text from response
+        const result = response.data;
+        let text = '';
+        
+        if (result.candidates && result.candidates[0]) {
+          const candidate = result.candidates[0];
+          if (candidate.content && candidate.content.parts) {
+            for (const part of candidate.content.parts) {
+              if (part.text) {
+                text += part.text;
+              }
+            }
+          }
+        }
+
+        res.json({ text });
+        logger.info('Chat request completed (non-streaming)', { userId });
+        return;
+      } catch (error: any) {
+        logger.error('Non-streaming request failed', error, { userId, model });
+        
+        if (error.response) {
+          const status = error.response.status;
+          const errorData = error.response.data;
+          
+          if (status === 429) {
+            res.status(429).json(
+              createErrorResponse(ErrorCode.RATE_LIMIT_EXCEEDED, 'Rate limit exceeded. Please try again later.', errorData, requestId)
+            );
+            return;
+          }
+          
+          res.status(status).json(
+            createErrorResponse(ErrorCode.GEMINI_API_ERROR, 'Gemini API error', errorData, requestId)
+          );
+          return;
+        }
+        
+        res.status(500).json(
+          createErrorResponse(ErrorCode.BACKEND_ERROR, 'Failed to process chat request', error.message, requestId)
+        );
+        return;
+      }
+    }
 
     // Make streaming request to Gemini API with retry logic
     let response: AxiosResponse;

@@ -117,6 +117,14 @@ export function useAnki() {
               backendMode: false
             });
           },
+          getAuthToken: () => {
+            console.log('Bridge: getAuthToken aufgerufen');
+            if (window.ankiBridge) {
+              window.ankiBridge.addMessage('getAuthToken', null);
+            }
+            // Fallback: Leerer Token
+            return Promise.resolve("");
+          },
           refreshAuth: () => {
             console.log('Bridge: refreshAuth aufgerufen');
             if (window.ankiBridge) {

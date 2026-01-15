@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Save, AlertCircle, Loader2, Eye, EyeOff, CheckCircle, XCircle, ExternalLink, Zap, GraduationCap, Crown, CreditCard } from 'lucide-react';
+import { X, Save, AlertCircle, Loader2, Eye, EyeOff, Zap, GraduationCap, Crown, CreditCard, Sparkles } from 'lucide-react';
 
 /**
  * Profile Dialog Komponente
- * Verwaltet Auth-Token und Profil-Einstellungen
+ * Zwei Modi:
+ * 1. Nicht authentifiziert: Nur Token-Eingabe (zentriert, im Mittelpunkt)
+ * 2. Authentifiziert: Abo-Status + "Abo verwalten" Button
  */
 export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
   const [authToken, setAuthToken] = useState('');
@@ -17,11 +19,13 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
     backendMode: false
   });
   const [quotaStatus, setQuotaStatus] = useState(null);
+  const [currentAuthToken, setCurrentAuthToken] = useState('');
 
   // Lade Auth-Status beim Öffnen
   useEffect(() => {
     if (isOpen && bridge && isReady) {
       checkAuthStatus();
+      loadAuthToken();
     }
   }, [isOpen, bridge, isReady]);
 
@@ -36,6 +40,13 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
           console.error('Fehler beim Parsen des Auth-Status:', e);
         }
       }
+    }
+  };
+
+  const loadAuthToken = () => {
+    if (bridge && bridge.getAuthToken) {
+      // Request token via bridge message
+      bridge.getAuthToken();
     }
   };
 
@@ -55,6 +66,13 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
       }
     };
 
+    const handleAuthTokenLoaded = (event) => {
+      const data = event.detail || event.data;
+      if (data && data.token) {
+        setCurrentAuthToken(data.token);
+      }
+    };
+
     const originalAnkiReceive = window.ankiReceive;
     window.ankiReceive = (payload) => {
       if (originalAnkiReceive) {
@@ -62,10 +80,19 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
       }
       if (payload.type === 'authStatusLoaded' && payload.data) {
         handleAuthStatusLoaded({ detail: payload.data });
+      } else if (payload.type === 'authTokenLoaded' && payload.data) {
+        handleAuthTokenLoaded({ detail: payload.data });
+      } else if (payload.type === 'authTokenLoaded') {
+        // Handle direct payload format
+        if (payload.data && payload.data.token) {
+          setCurrentAuthToken(payload.data.token);
+        }
       } else if (payload.type === 'auth_success') {
         checkAuthStatus();
+        loadAuthToken();
         setError('');
         setLoading(false);
+        setAuthToken(''); // Clear input after success
       } else if (payload.type === 'auth_error') {
         setError(payload.message || 'Authentifizierung fehlgeschlagen');
         setLoading(false);
@@ -77,9 +104,9 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
     };
   }, [isOpen]);
 
-  // Fetch quota status
+  // Fetch quota status (nur wenn authentifiziert)
   useEffect(() => {
-    if (!authStatus.authenticated || !authStatus.backendUrl || !bridge) {
+    if (!authStatus.authenticated || !authStatus.backendUrl || !currentAuthToken) {
       setQuotaStatus(null);
       return;
     }
@@ -90,12 +117,19 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentAuthToken}`,
           },
         });
 
         if (response.ok) {
           const data = await response.json();
           setQuotaStatus(data);
+        } else if (response.status === 401) {
+          // Token expired, try to refresh
+          if (bridge && bridge.refreshAuth) {
+            bridge.refreshAuth();
+            // Will retry after refresh
+          }
         }
       } catch (error) {
         console.error('Error fetching quota:', error);
@@ -105,7 +139,7 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
     fetchQuota();
     const interval = setInterval(fetchQuota, 60000);
     return () => clearInterval(interval);
-  }, [authStatus.authenticated, authStatus.backendUrl, bridge]);
+  }, [authStatus.authenticated, authStatus.backendUrl, currentAuthToken, bridge]);
 
   const handleSave = async () => {
     if (!authToken.trim()) {
@@ -130,23 +164,48 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
   };
 
   const handleManageSubscription = () => {
-    // Öffne Landingpage/Subscription
-    window.open('https://anki-plus.vercel.app/subscription', '_blank');
+    // Öffne Landingpage Subscription-Seite
+    window.open('https://anki-plus.vercel.app/dashboard/subscription', '_blank');
   };
 
   const getTierInfo = (tier) => {
     switch (tier) {
       case 'tier2':
-        return { name: 'Exam Pro', icon: Crown, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' };
+        return { 
+          name: 'Exam Pro', 
+          icon: Crown, 
+          color: 'text-purple-400', 
+          bg: 'bg-purple-500/10', 
+          border: 'border-purple-500/20',
+          gradient: 'from-purple-500/20 to-purple-600/10',
+          description: 'Maximale Power'
+        };
       case 'tier1':
-        return { name: 'Student', icon: GraduationCap, color: 'text-teal-400', bg: 'bg-teal-500/10', border: 'border-teal-500/20' };
+        return { 
+          name: 'Student', 
+          icon: GraduationCap, 
+          color: 'text-teal-400', 
+          bg: 'bg-teal-500/10', 
+          border: 'border-teal-500/20',
+          gradient: 'from-teal-500/20 to-teal-600/10',
+          description: 'Für Studenten'
+        };
       default:
-        return { name: 'Starter', icon: Zap, color: 'text-neutral-400', bg: 'bg-base-300/50', border: 'border-base-300' };
+        return { 
+          name: 'Starter', 
+          icon: Zap, 
+          color: 'text-neutral-400', 
+          bg: 'bg-base-300/50', 
+          border: 'border-base-300',
+          gradient: 'from-neutral-500/20 to-neutral-600/10',
+          description: 'Kostenloser Einstieg'
+        };
     }
   };
 
   if (!isOpen) return null;
 
+  const isAuthenticated = authStatus.authenticated;
   const tierInfo = quotaStatus ? getTierInfo(quotaStatus.tier) : getTierInfo('free');
   const TierIcon = tierInfo.icon;
 
@@ -164,146 +223,196 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
           </button>
         </div>
 
-        <div className="overflow-y-auto p-5 space-y-6">
-          {/* Auth Status & Plan Card */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Aktueller Status</label>
-              {authStatus.authenticated ? (
-                <span className="flex items-center gap-1.5 text-xs font-medium text-success bg-success/10 px-2 py-0.5 rounded-full border border-success/20">
-                  <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-                  Verbunden
-                </span>
-              ) : (
-                <span className="flex items-center gap-1.5 text-xs font-medium text-error bg-error/10 px-2 py-0.5 rounded-full border border-error/20">
-                  <div className="w-1.5 h-1.5 rounded-full bg-error" />
-                  Getrennt
-                </span>
-              )}
-            </div>
-
-            {quotaStatus && (
-              <div className={`p-5 rounded-xl border ${tierInfo.bg} ${tierInfo.border} relative overflow-hidden group`}>
-                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <TierIcon size={80} strokeWidth={1} />
+        <div className="overflow-y-auto p-5">
+          {!isAuthenticated ? (
+            /* MODUS 1: Nicht authentifiziert - Nur Token-Eingabe */
+            <div className="flex flex-col items-center justify-center py-8 space-y-6">
+              <div className="text-center space-y-2">
+                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Sparkles className="w-8 h-8 text-primary" />
                 </div>
-                
-                <div className="relative z-10">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className={`p-2.5 rounded-lg bg-base-100/10 backdrop-blur-sm border border-white/10 ${tierInfo.color}`}>
-                      <TierIcon size={20} />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-lg text-base-content">{tierInfo.name} Plan</h3>
-                      <p className="text-xs text-base-content/60">
-                        {quotaStatus.tier === 'tier2' ? 'Maximale Power' : quotaStatus.tier === 'tier1' ? 'Für Studenten' : 'Kostenloser Einstieg'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Usage Bars */}
-                  <div className="space-y-3">
-                    <div>
-                      <div className="flex justify-between text-xs mb-1.5">
-                        <span className="text-base-content/70 font-medium">Deep Mode</span>
-                        <span className="text-base-content font-bold">
-                          {quotaStatus.deep.used} / {quotaStatus.deep.limit === -1 ? '∞' : quotaStatus.deep.limit}
-                        </span>
-                      </div>
-                      <div className="h-1.5 w-full bg-base-100/20 rounded-full overflow-hidden">
-                        <div 
-                          className={`h-full rounded-full transition-all duration-500 ${tierInfo.color.replace('text-', 'bg-')}`}
-                          style={{ width: `${quotaStatus.deep.limit === -1 ? 0 : Math.min(100, (quotaStatus.deep.used / quotaStatus.deep.limit) * 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <div className="flex justify-between text-xs mb-1.5">
-                        <span className="text-base-content/70 font-medium">Flash Mode</span>
-                        <span className="text-base-content font-bold">
-                          {quotaStatus.flash.used} / {quotaStatus.flash.limit === -1 ? '∞' : quotaStatus.flash.limit}
-                        </span>
-                      </div>
-                      <div className="h-1.5 w-full bg-base-100/20 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-base-content/30 rounded-full transition-all duration-500"
-                          style={{ width: `${quotaStatus.flash.limit === -1 ? 0 : Math.min(100, (quotaStatus.flash.used / quotaStatus.flash.limit) * 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <h3 className="text-xl font-bold text-base-content">Verbinde dein Konto</h3>
+                <p className="text-sm text-base-content/60 max-w-sm">
+                  Füge deinen Auth-Token ein, um dein Anki Plugin mit deinem Account zu verbinden
+                </p>
               </div>
-            )}
-          </div>
 
-          {/* Actions */}
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={handleManageSubscription}
-              className="flex flex-col items-center justify-center p-3 rounded-xl bg-base-200/50 hover:bg-base-200 border border-transparent hover:border-base-content/10 transition-all gap-2 group"
-            >
-              <CreditCard size={20} className="text-base-content/70 group-hover:text-primary transition-colors" />
-              <span className="text-xs font-medium text-base-content/80">Abo verwalten</span>
-            </button>
-            <button
-              onClick={() => window.open('https://anki-plus.vercel.app', '_blank')}
-              className="flex flex-col items-center justify-center p-3 rounded-xl bg-base-200/50 hover:bg-base-200 border border-transparent hover:border-base-content/10 transition-all gap-2 group"
-            >
-              <ExternalLink size={20} className="text-base-content/70 group-hover:text-primary transition-colors" />
-              <span className="text-xs font-medium text-base-content/80">Website öffnen</span>
-            </button>
-          </div>
+              <div className="w-full space-y-4">
+                <div className="relative">
+                  <input
+                    type={showToken ? "text" : "password"}
+                    value={authToken}
+                    onChange={(e) => setAuthToken(e.target.value)}
+                    placeholder="Auth-Token einfügen..."
+                    className="w-full pl-4 pr-10 py-4 bg-base-200/50 border-2 border-base-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all placeholder:text-base-content/30"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowToken(!showToken)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-base-content/40 hover:text-base-content/70 transition-colors rounded-lg hover:bg-base-200/50"
+                  >
+                    {showToken ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
 
-          {/* Token Input (Collapsible or Bottom) */}
-          <div className="pt-2 border-t border-base-content/5">
-             <label className="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-3 block">Authentifizierung</label>
-            
-             <div className="space-y-3">
-              <div className="relative group">
-                <input
-                  type={showToken ? "text" : "password"}
-                  value={authToken}
-                  onChange={(e) => setAuthToken(e.target.value)}
-                  placeholder="Auth-Token einfügen..."
-                  className="w-full pl-4 pr-10 py-3 bg-base-200/50 border border-base-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all placeholder:text-base-content/30"
-                />
+                {error && (
+                  <div className="flex items-center gap-2 text-sm text-error bg-error/5 p-3 rounded-lg border border-error/10">
+                    <AlertCircle size={16} />
+                    <span>{error}</span>
+                  </div>
+                )}
+
                 <button
-                  type="button"
-                  onClick={() => setShowToken(!showToken)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-base-content/40 hover:text-base-content/70 transition-colors"
+                  onClick={handleSave}
+                  disabled={loading || !authToken.trim()}
+                  className="w-full btn btn-primary btn-lg gap-2 font-semibold rounded-xl shadow-lg shadow-primary/20 disabled:opacity-50"
                 >
-                  {showToken ? <EyeOff size={14} /> : <Eye size={14} />}
+                  {loading ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      Verifiziere...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={18} />
+                      Token verifizieren
+                    </>
+                  )}
                 </button>
               </div>
 
-              {error && (
-                <div className="flex items-center gap-2 text-xs text-error bg-error/5 p-2 rounded-lg border border-error/10">
-                  <AlertCircle size={12} />
-                  <span>{error}</span>
-                </div>
-              )}
-
-              <button
-                onClick={handleSave}
-                disabled={loading || !authToken.trim()}
-                className="w-full btn btn-primary btn-sm h-10 gap-2 font-medium rounded-xl shadow-lg shadow-primary/20"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    Speichere...
-                  </>
-                ) : (
-                  <>
-                    <Save size={16} />
-                    Token speichern
-                  </>
-                )}
-              </button>
+              <div className="text-center text-xs text-base-content/50 pt-4 border-t border-base-content/5">
+                <p>Du findest deinen Token auf der Landingpage nach dem Login</p>
+              </div>
             </div>
-          </div>
+          ) : (
+            /* MODUS 2: Authentifiziert - Abo-Status + Abo verwalten */
+            <div className="space-y-5">
+              {/* Abo-Status Card */}
+              <div className={`p-6 rounded-2xl border ${tierInfo.border} relative overflow-hidden group bg-gradient-to-br ${tierInfo.bg} backdrop-blur-sm`}>
+                <div className={`absolute inset-0 bg-gradient-to-br ${tierInfo.gradient} opacity-30`} />
+                <div className="absolute top-0 right-0 w-32 h-32 opacity-5 group-hover:opacity-10 transition-opacity">
+                  <TierIcon size={128} strokeWidth={1} className="absolute -top-8 -right-8" />
+                </div>
+                
+                <div className="relative z-10">
+                  <div className="flex items-start gap-4 mb-6">
+                    <div className={`p-3.5 rounded-xl bg-base-100/40 backdrop-blur-sm border border-white/20 shadow-lg ${tierInfo.color}`}>
+                      <TierIcon size={28} strokeWidth={2} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-2xl text-base-content mb-1.5 leading-tight">{tierInfo.name}</h3>
+                      <p className="text-sm text-base-content/70 font-medium">{tierInfo.description}</p>
+                    </div>
+                  </div>
+
+                  {quotaStatus && (
+                    <div className="space-y-4 pt-4 border-t border-white/10">
+                      {/* Deep Mode Usage */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Sparkles size={16} className="text-teal-400" />
+                            <span className="text-sm font-semibold text-base-content/90">Deep Mode</span>
+                          </div>
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="text-base font-bold text-base-content">
+                              {quotaStatus.deep.used}
+                            </span>
+                            <span className="text-xs text-base-content/50 font-medium">/</span>
+                            <span className="text-sm text-base-content/70 font-semibold">
+                              {quotaStatus.deep.limit === -1 ? '∞' : quotaStatus.deep.limit}
+                            </span>
+                            {quotaStatus.deep.limit !== -1 && (
+                              <span className="text-xs text-base-content/50 ml-1.5">
+                                ({Math.round((quotaStatus.deep.used / quotaStatus.deep.limit) * 100)}%)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="h-2.5 w-full bg-base-100/40 rounded-full overflow-hidden shadow-inner">
+                          <div 
+                            className={`h-full rounded-full transition-all duration-700 ease-out ${
+                              quotaStatus.deep.limit === -1 
+                                ? 'bg-teal-500/30' 
+                                : (quotaStatus.deep.used / quotaStatus.deep.limit) > 0.8
+                                  ? 'bg-red-500'
+                                  : (quotaStatus.deep.used / quotaStatus.deep.limit) > 0.5
+                                    ? 'bg-yellow-500'
+                                    : 'bg-teal-500'
+                            } shadow-sm`}
+                            style={{ 
+                              width: `${quotaStatus.deep.limit === -1 ? 0 : Math.min(100, (quotaStatus.deep.used / quotaStatus.deep.limit) * 100)}%` 
+                            }}
+                          />
+                        </div>
+                      </div>
+                      
+                      {/* Flash Mode Usage */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Zap size={16} className="text-yellow-400" />
+                            <span className="text-sm font-semibold text-base-content/90">Flash Mode</span>
+                          </div>
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="text-base font-bold text-base-content">
+                              {quotaStatus.flash.used}
+                            </span>
+                            <span className="text-xs text-base-content/50 font-medium">/</span>
+                            <span className="text-sm text-base-content/70 font-semibold">
+                              {quotaStatus.flash.limit === -1 ? '∞' : quotaStatus.flash.limit}
+                            </span>
+                            {quotaStatus.flash.limit !== -1 && (
+                              <span className="text-xs text-base-content/50 ml-1.5">
+                                ({Math.round((quotaStatus.flash.used / quotaStatus.flash.limit) * 100)}%)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="h-2.5 w-full bg-base-100/40 rounded-full overflow-hidden shadow-inner">
+                          <div 
+                            className={`h-full rounded-full transition-all duration-700 ease-out ${
+                              quotaStatus.flash.limit === -1 
+                                ? 'bg-yellow-500/30' 
+                                : (quotaStatus.flash.used / quotaStatus.flash.limit) > 0.8
+                                  ? 'bg-red-500'
+                                  : (quotaStatus.flash.used / quotaStatus.flash.limit) > 0.5
+                                    ? 'bg-yellow-500'
+                                    : 'bg-yellow-400'
+                            } shadow-sm`}
+                            style={{ 
+                              width: `${quotaStatus.flash.limit === -1 ? 0 : Math.min(100, (quotaStatus.flash.used / quotaStatus.flash.limit) * 100)}%` 
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-3">
+                <button
+                  onClick={handleManageSubscription}
+                  className="w-full btn btn-primary btn-lg gap-3 font-semibold rounded-xl shadow-lg shadow-primary/30 hover:shadow-primary/50 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <CreditCard size={20} strokeWidth={2} />
+                  Abo verwalten
+                </button>
+                
+                <button
+                  onClick={() => window.open('https://anki-plus.vercel.app', '_blank')}
+                  className="w-full btn btn-ghost btn-md gap-2 font-medium rounded-xl border border-base-content/10 hover:border-base-content/20 hover:bg-base-200/50 transition-all"
+                >
+                  <Sparkles size={16} />
+                  Website öffnen
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

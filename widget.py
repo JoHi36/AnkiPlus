@@ -593,6 +593,15 @@ class ChatbotWidget(QWidget):
                 "data": status
             }
             self.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
+        elif msg_type == 'getAuthToken':
+            # Hole Auth-Token für API-Calls
+            result = self.bridge.getAuthToken()
+            token_data = json.loads(result)
+            payload = {
+                "type": "authTokenLoaded",
+                "data": token_data
+            }
+            self.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
         elif msg_type == 'refreshAuth':
             # Rufe Token-Refresh auf
             result = self.bridge.refreshAuth()

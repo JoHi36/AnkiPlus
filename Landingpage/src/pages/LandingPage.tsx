@@ -21,6 +21,7 @@ import { Button } from '@shared/components/Button';
 import { PricingComparisonTable } from '../components/PricingComparisonTable';
 import { PricingFAQ } from '../components/PricingFAQ';
 import { LimitInfoBox } from '../components/LimitExplanation';
+import { PricingGrid } from '../components/PricingGrid';
 import { useState } from 'react';
 
 // Animation variants
@@ -326,12 +327,6 @@ export function LandingPage() {
             </motion.div>
           </div>
         </section>
-
-import { PricingGrid } from '../components/PricingGrid';
-
-// ... (other imports)
-
-// Inside the LandingPage component, find the Pricing Section:
 
         {/* --- Pricing Section --- */}
         <section id="pricing" className="mt-20 sm:mt-32 md:mt-40 max-w-7xl mx-auto px-4 sm:px-6 relative">

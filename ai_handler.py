@@ -1568,7 +1568,10 @@ class AIHandler:
             print(f"⚠️ get_section_title: API-Key ist sehr lang ({len(api_key)} Zeichen)!")
             print(f"   Erste 30 Zeichen: {api_key[:30]}...")
         
-        if not api_key:
+        # Prüfe ob Backend-Modus aktiv ist
+        use_backend = is_backend_mode() and get_auth_token()
+        
+        if not use_backend and not api_key:
             print("❌ get_section_title: API-Key ist leer nach Trimmen")
             return "Lernkarte"
         
@@ -1579,32 +1582,56 @@ class AIHandler:
         
         print(f"get_section_title: Schritt 4 - Request vorbereiten")
         print(f"  Modell: {model}")
-        print(f"  API-Key Länge: {len(api_key)}")
+        if not use_backend:
+            print(f"  API-Key Länge: {len(api_key)}")
         print(f"  Frage-Länge: {len(question_clean)}")
         print(f"  Frage-Inhalt (erste 100 Zeichen): {question_clean[:100]}...")
-        
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-        print(f"  URL (ohne Key): {url.split('?')[0]}...")
         
         # Erstelle Prompt für kurzen Titel - EINFACHER
         prompt = f"""Erstelle einen Kurztitel (2-4 Wörter) für diese Lernkarte. Nur den Titel, nichts anderes.
 
 Karteninhalt: {question_clean[:500]}"""
         
-        data = {
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": 0.1,
-                "maxOutputTokens": 20
+        if use_backend:
+            # Backend-Modus: Verwende Backend-URL
+            backend_url = get_backend_url()
+            url = f"{backend_url}/chat"
+            print(f"  URL: {url}")
+            
+            # Backend-Format: message, model, mode, stream=false für non-streaming
+            backend_data = {
+                "message": prompt,
+                "model": model,
+                "mode": "compact",
+                "history": [],
+                "stream": False  # Non-streaming für Titel-Generierung
             }
-        }
-        print(f"  Request-Daten Größe: {len(str(data))} Zeichen")
+            headers = self._get_auth_headers()
+        else:
+            # Fallback: Direkte Gemini API (API-Key-Modus)
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+            print(f"  URL (ohne Key): {url.split('?')[0]}...")
+            
+            data = {
+                "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "temperature": 0.1,
+                    "maxOutputTokens": 20
+                }
+            }
+            backend_data = None
+            headers = {"Content-Type": "application/json"}
+        
+        print(f"  Request-Daten Größe: {len(str(backend_data if use_backend else data))} Zeichen")
         print(f"  Prompt Länge: {len(prompt)} Zeichen")
         
         try:
             print(f"get_section_title: Schritt 5 - API-Request senden")
             print(f"  Sende Request an {model}...")
-            response = requests.post(url, json=data, timeout=15)
+            if use_backend:
+                response = requests.post(url, json=backend_data, headers=headers, timeout=15)
+            else:
+                response = requests.post(url, json=data, headers=headers, timeout=15)
             print(f"  Response Status: {response.status_code}")
             print(f"  Response Headers: {dict(response.headers)}")
             
@@ -1634,37 +1661,61 @@ Karteninhalt: {question_clean[:500]}"""
                 return "Lernkarte"
             
             print(f"get_section_title: Schritt 7 - Response validieren")
-            if "candidates" not in result:
-                print(f"❌ get_section_title: Kein 'candidates' Feld in Response")
-                print(f"  Response Struktur: {list(result.keys())}")
-                print(f"  Vollständige Response: {result}")
-                return "Lernkarte"
             
-            if len(result["candidates"]) == 0:
-                print(f"❌ get_section_title: 'candidates' Array ist leer")
-                print(f"  Response: {result}")
-                return "Lernkarte"
-            
-            candidate = result["candidates"][0]
-            print(f"  Candidate Keys: {list(candidate.keys()) if isinstance(candidate, dict) else 'Nicht ein Dict'}")
-            
-            if "content" not in candidate:
-                print(f"❌ get_section_title: Kein 'content' Feld in Candidate")
-                print(f"  Candidate: {candidate}")
-                return "Lernkarte"
-            
-            if "parts" not in candidate["content"]:
-                print(f"❌ get_section_title: Kein 'parts' Feld in Content")
-                print(f"  Content: {candidate['content']}")
-                return "Lernkarte"
-            
-            if len(candidate["content"]["parts"]) == 0:
-                print(f"❌ get_section_title: 'parts' Array ist leer")
-                print(f"  Content: {candidate['content']}")
-                return "Lernkarte"
+            # Extrahiere Titel aus Response (Backend oder direkte API)
+            title = ""
+            if use_backend:
+                # Backend-Format: Prüfe verschiedene mögliche Formate
+                if "text" in result:
+                    title = result["text"].strip()
+                elif "message" in result:
+                    title = result["message"].strip()
+                elif "candidates" in result and len(result["candidates"]) > 0:
+                    candidate = result["candidates"][0]
+                    if "content" in candidate and "parts" in candidate["content"]:
+                        parts = candidate["content"]["parts"]
+                        if len(parts) > 0:
+                            title = parts[0].get("text", "").strip()
+                
+                if not title:
+                    print(f"❌ get_section_title: Konnte Titel nicht aus Backend-Response extrahieren")
+                    print(f"  Response Struktur: {list(result.keys())}")
+                    print(f"  Vollständige Response: {result}")
+                    return "Lernkarte"
+            else:
+                # Direkte Gemini API
+                if "candidates" not in result:
+                    print(f"❌ get_section_title: Kein 'candidates' Feld in Response")
+                    print(f"  Response Struktur: {list(result.keys())}")
+                    print(f"  Vollständige Response: {result}")
+                    return "Lernkarte"
+                
+                if len(result["candidates"]) == 0:
+                    print(f"❌ get_section_title: 'candidates' Array ist leer")
+                    print(f"  Response: {result}")
+                    return "Lernkarte"
+                
+                candidate = result["candidates"][0]
+                print(f"  Candidate Keys: {list(candidate.keys()) if isinstance(candidate, dict) else 'Nicht ein Dict'}")
+                
+                if "content" not in candidate:
+                    print(f"❌ get_section_title: Kein 'content' Feld in Candidate")
+                    print(f"  Candidate: {candidate}")
+                    return "Lernkarte"
+                
+                if "parts" not in candidate["content"]:
+                    print(f"❌ get_section_title: Kein 'parts' Feld in Content")
+                    print(f"  Content: {candidate['content']}")
+                    return "Lernkarte"
+                
+                if len(candidate["content"]["parts"]) == 0:
+                    print(f"❌ get_section_title: 'parts' Array ist leer")
+                    print(f"  Content: {candidate['content']}")
+                    return "Lernkarte"
+                
+                title = candidate["content"]["parts"][0].get("text", "").strip()
             
             print(f"get_section_title: Schritt 8 - Titel extrahieren")
-            title = candidate["content"]["parts"][0].get("text", "").strip()
             print(f"  Roher Titel: '{title}' (Länge: {len(title)})")
             
             if not title:
@@ -1734,19 +1785,29 @@ Karteninhalt: {question_clean[:500]}"""
     
     def _fetch_google_models(self, api_key):
         """Ruft Google-Modelle ab"""
-        # Trimme API-Key nochmal sicherheitshalber
-        api_key = api_key.strip()
+        # Prüfe ob Backend-Modus aktiv ist
+        use_backend = is_backend_mode() and get_auth_token()
         
-        print(f"_fetch_google_models: API-Key Länge: {len(api_key)}")
-        if len(api_key) > 50:
-            print(f"⚠️ WARNUNG: API-Key ist sehr lang! Erste 30 Zeichen: {api_key[:30]}...")
-            print(f"⚠️ Normalerweise sind Google API-Keys ~39 Zeichen lang")
-        
-        # Versuche zuerst v1beta, dann v1 als Fallback
-        urls = [
-            f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}",
-            f"https://generativelanguage.googleapis.com/v1/models?key={api_key}"
-        ]
+        if use_backend:
+            # Backend-Modus: Verwende Backend-URL
+            backend_url = get_backend_url()
+            urls = [f"{backend_url}/models"]
+            print(f"_fetch_google_models: Verwende Backend-Modus: {urls[0]}")
+            headers = self._get_auth_headers()
+        else:
+            # Fallback: Direkte Gemini API (API-Key-Modus)
+            api_key = api_key.strip()
+            print(f"_fetch_google_models: API-Key Länge: {len(api_key)}")
+            if len(api_key) > 50:
+                print(f"⚠️ WARNUNG: API-Key ist sehr lang! Erste 30 Zeichen: {api_key[:30]}...")
+                print(f"⚠️ Normalerweise sind Google API-Keys ~39 Zeichen lang")
+            
+            # Versuche zuerst v1beta, dann v1 als Fallback
+            urls = [
+                f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}",
+                f"https://generativelanguage.googleapis.com/v1/models?key={api_key}"
+            ]
+            headers = {"Content-Type": "application/json"}
         
         # Gewünschte Modelle mit Labels
         # NUR Gemini 3 Flash für Chat (2.0 wird nur intern für Titel verwendet)
@@ -1758,7 +1819,10 @@ Karteninhalt: {question_clean[:500]}"""
         for url in urls:
             try:
                 print(f"_fetch_google_models: Versuche URL: {url.split('?')[0]}...")
-                response = requests.get(url, timeout=10)
+                if use_backend:
+                    response = requests.get(url, headers=headers, timeout=10)
+                else:
+                    response = requests.get(url, timeout=10)
                 print(f"_fetch_google_models: Response Status: {response.status_code}")
                 
                 # Bei Fehler, logge Details
@@ -1774,10 +1838,18 @@ Karteninhalt: {question_clean[:500]}"""
                 response.raise_for_status()
                 data = response.json()
                 
+                # Backend gibt möglicherweise direkt models-Array zurück
+                if use_backend and "models" in data:
+                    models_list = data["models"]
+                elif "models" in data:
+                    models_list = data["models"]
+                else:
+                    models_list = []
+                
                 models = []
                 found_models = set()
                 
-                for model in data.get("models", []):
+                for model in models_list:
                     model_name = model.get("name", "")
                     # Entferne "models/" Präfix falls vorhanden
                     if model_name.startswith("models/"):
@@ -2049,33 +2121,109 @@ Regeln für Suchstrategien:
 - NIEMALS die Nutzeranfrage wörtlich als Query verwenden, wenn eine Karte vorhanden ist!"""
             
             # URLs für Router-Modell
-            urls = [
-                f"https://generativelanguage.googleapis.com/v1beta/models/{router_model}:generateContent?key={api_key}",
-                f"https://generativelanguage.googleapis.com/v1/models/{router_model}:generateContent?key={api_key}",
-                f"https://generativelanguage.googleapis.com/v1beta/models/{fallback_model}:generateContent?key={api_key}",
-                f"https://generativelanguage.googleapis.com/v1/models/{fallback_model}:generateContent?key={api_key}",
-            ]
-            
-            data = {
-                "contents": [{"role": "user", "parts": [{"text": router_prompt}]}],
-                "generationConfig": {
-                    "temperature": 0.1,
-                    "maxOutputTokens": 200
+            if use_backend:
+                # Backend-Modus: Verwende Backend-URL
+                backend_url = get_backend_url()
+                urls = [f"{backend_url}/chat"]
+                print(f"🔍 Router: Verwende Backend-Modus: {urls[0]}")
+                
+                # Backend-Format: message, model, mode
+                backend_data = {
+                    "message": router_prompt,
+                    "model": router_model,  # Backend kann verschiedene Modelle unterstützen
+                    "mode": "compact",
+                    "history": []
                 }
-            }
-            
-            # Versuche responseMimeType (nur wenn API es unterstützt)
-            try:
-                data["generationConfig"]["responseMimeType"] = "application/json"
-            except:
-                pass
+                headers = self._get_auth_headers()
+            else:
+                # Fallback: Direkte Gemini API (API-Key-Modus)
+                urls = [
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{router_model}:generateContent?key={api_key}",
+                    f"https://generativelanguage.googleapis.com/v1/models/{router_model}:generateContent?key={api_key}",
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{fallback_model}:generateContent?key={api_key}",
+                    f"https://generativelanguage.googleapis.com/v1/models/{fallback_model}:generateContent?key={api_key}",
+                ]
+                backend_data = None
+                headers = {"Content-Type": "application/json"}
+                
+                data = {
+                    "contents": [{"role": "user", "parts": [{"text": router_prompt}]}],
+                    "generationConfig": {
+                        "temperature": 0.1,
+                        "maxOutputTokens": 200
+                    }
+                }
+                
+                # Versuche responseMimeType (nur wenn API es unterstützt)
+                try:
+                    data["generationConfig"]["responseMimeType"] = "application/json"
+                except:
+                    pass
             
             last_error = None
             for url in urls:
                 try:
-                    response = requests.post(url, json=data, timeout=10)
-                    response.raise_for_status()
-                    result = response.json()
+                    if use_backend:
+                        # Backend-Request (non-streaming)
+                        response = requests.post(url, json=backend_data, headers=headers, timeout=10)
+                        response.raise_for_status()
+                        result = response.json()
+                        # Backend gibt direkt text zurück oder in einem anderen Format
+                        # Prüfe Format
+                        if "text" in result:
+                            text = result["text"]
+                        elif "message" in result:
+                            text = result["message"]
+                        elif "candidates" in result:
+                            # Backend könnte auch Gemini-Format zurückgeben
+                            if result["candidates"] and len(result["candidates"]) > 0:
+                                candidate = result["candidates"][0]
+                                if "content" in candidate and "parts" in candidate["content"]:
+                                    parts = candidate["content"]["parts"]
+                                    if len(parts) > 0:
+                                        text = parts[0].get("text", "")
+                                    else:
+                                        continue
+                                else:
+                                    continue
+                            else:
+                                continue
+                        else:
+                            # Versuche direkt als Text zu parsen
+                            text = str(result)
+                        
+                        # Parse JSON aus Text (wie bei direkter API)
+                        import re
+                        text = re.sub(r'```json\s*', '', text)
+                        text = re.sub(r'```\s*', '', text)
+                        json_match = re.search(r'\{.*?"search_needed".*?\}', text, re.DOTALL)
+                        if json_match:
+                            text = json_match.group(0)
+                        text = re.sub(r',(\s*[}\]])', r'\1', text)
+                        
+                        try:
+                            router_result = json.loads(text)
+                        except json.JSONDecodeError as json_err:
+                            print(f"⚠️ Router: JSON-Parse-Fehler nach Bereinigung: {json_err}, Text: {text[:300]}")
+                            text = re.sub(r'//.*?$', '', text, flags=re.MULTILINE)
+                            text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
+                            text = re.sub(r',(\s*[}\]])', r'\1', text)
+                            try:
+                                router_result = json.loads(text)
+                            except json.JSONDecodeError:
+                                continue
+                        
+                        # Validierung
+                        if router_result.get("intent") and router_result.get("search_needed") is not None:
+                            print(f"✅ Router: Intent={router_result.get('intent')}, search_needed={router_result.get('search_needed')}")
+                            return router_result
+                        else:
+                            continue
+                    else:
+                        # Direkte Gemini API
+                        response = requests.post(url, json=data, headers=headers, timeout=10)
+                        response.raise_for_status()
+                        result = response.json()
                     
                     if "error" in result:
                         continue
