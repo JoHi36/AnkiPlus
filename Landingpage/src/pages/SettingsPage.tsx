@@ -39,6 +39,9 @@ export function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<'account' | 'community' | 'app'>('account');
   
+  // Check if user signed in with Google
+  const isGoogleAccount = user?.providerData?.some(provider => provider.providerId === 'google.com') ?? false;
+  
   // Account Settings
   const [newEmail, setNewEmail] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -61,6 +64,13 @@ export function SettingsPage() {
   const handleUpdateEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !auth) return;
+
+    // Check if user is signed in with Google
+    const isGoogle = user.providerData?.some(provider => provider.providerId === 'google.com') ?? false;
+    if (isGoogle) {
+      setMessage({ type: 'error', text: 'E-Mail kann nicht geändert werden. Google-Accounts werden von Google verwaltet.' });
+      return;
+    }
 
     if (newEmail === user.email) {
       setMessage({ type: 'error', text: 'Das ist bereits deine aktuelle E-Mail' });
@@ -87,6 +97,13 @@ export function SettingsPage() {
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !auth) return;
+
+    // Check if user is signed in with Google
+    const isGoogle = user.providerData?.some(provider => provider.providerId === 'google.com') ?? false;
+    if (isGoogle) {
+      setMessage({ type: 'error', text: 'Passwort kann nicht geändert werden. Google-Accounts werden von Google verwaltet.' });
+      return;
+    }
 
     if (newPassword !== confirmPassword) {
       setMessage({ type: 'error', text: 'Passwörter stimmen nicht überein' });
@@ -227,13 +244,45 @@ export function SettingsPage() {
             animate="visible"
             className="space-y-6"
           >
-            {/* Email Update */}
+            {/* Account Info */}
             <div className="rounded-2xl p-8 border border-white/5 bg-[#0A0A0A]">
               <div className="mb-6">
-                <h3 className="text-lg font-semibold text-white mb-1">E-Mail-Adresse</h3>
+                <h3 className="text-lg font-semibold text-white mb-1">Account-Informationen</h3>
                 <p className="text-sm text-neutral-400">Aktuelle E-Mail: {user?.email}</p>
               </div>
-              <form onSubmit={handleUpdateEmail} className="space-y-4">
+              <div className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/5">
+                {isGoogleAccount ? (
+                  <>
+                    <div className="p-2 rounded-lg bg-teal-500/10 text-teal-400 border border-teal-500/20">
+                      <Mail size={20} />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-white">Google Account</p>
+                      <p className="text-xs text-neutral-400">Du hast dich mit Google angemeldet. E-Mail und Passwort werden von Google verwaltet.</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="p-2 rounded-lg bg-teal-500/10 text-teal-400 border border-teal-500/20">
+                      <Mail size={20} />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-white">E-Mail/Passwort Account</p>
+                      <p className="text-xs text-neutral-400">Du kannst deine E-Mail-Adresse und dein Passwort unten ändern.</p>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Email Update - Only for Email/Password accounts */}
+            {!isGoogleAccount && (
+              <div className="rounded-2xl p-8 border border-white/5 bg-[#0A0A0A]">
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-white mb-1">E-Mail-Adresse ändern</h3>
+                  <p className="text-sm text-neutral-400">Aktuelle E-Mail: {user?.email}</p>
+                </div>
+                <form onSubmit={handleUpdateEmail} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium mb-2 text-neutral-300">
                     Neue E-Mail-Adresse
@@ -266,9 +315,11 @@ export function SettingsPage() {
                 </button>
               </form>
             </div>
+            )}
 
-            {/* Password Update */}
-            <div className="rounded-2xl p-8 border border-white/5 bg-[#0A0A0A]">
+            {/* Password Update - Only for Email/Password accounts */}
+            {!isGoogleAccount && (
+              <div className="rounded-2xl p-8 border border-white/5 bg-[#0A0A0A]">
               <div className="mb-6">
                 <h3 className="text-lg font-semibold text-white mb-1">Passwort ändern</h3>
                 <p className="text-sm text-neutral-400">Wähle ein sicheres Passwort</p>
@@ -334,6 +385,7 @@ export function SettingsPage() {
                 </button>
               </form>
             </div>
+            )}
 
             {/* Delete Account */}
             <div className="rounded-2xl p-8 border border-red-500/20 bg-red-900/10">

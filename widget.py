@@ -80,8 +80,24 @@ class ChatbotWidget(QWidget):
         self.current_card_context = None  # Aktueller Karten-Kontext
         self.setup_ui()
         # Card-Tracking wird nach UI-Setup initialisiert
+        # #region agent log
+        import time
+        log_path = "/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log"
+        try:
+            with open(log_path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps({"location": "widget.py:83", "message": "ChatbotWidget.__init__: before CardTracker init", "data": {"has_web_view": self.web_view is not None}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "A"}) + "\n")
+        except:
+            pass
+        # #endregion
         if self.web_view:
             self.card_tracker = CardTracker(self)
+            # #region agent log
+            try:
+                with open(log_path, 'a', encoding='utf-8') as f:
+                    f.write(json.dumps({"location": "widget.py:85", "message": "ChatbotWidget.__init__: CardTracker initialized", "data": {"has_card_tracker": self.card_tracker is not None}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "A"}) + "\n")
+            except:
+                pass
+            # #endregion
 
     def setup_ui(self):
         layout = QVBoxLayout()
@@ -268,6 +284,37 @@ class ChatbotWidget(QWidget):
                     # Sende Ergebnis über ankiReceive zurück
                     payload = {"type": "cardDetails", "data": json.loads(result), "callbackId": callback_id}
                     self.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
+        elif msg_type == 'saveMultipleChoice':
+            # Speichere Multiple-Choice-Daten in Card
+            if isinstance(data, dict):
+                card_id = data.get('cardId')
+                quiz_data_json = data.get('quizDataJson')
+                callback_id = data.get('callbackId')
+                if card_id and quiz_data_json:
+                    result = self.bridge.saveMultipleChoice(int(card_id), quiz_data_json)
+                    # Sende Ergebnis über ankiReceive zurück
+                    payload = {"type": "saveMultipleChoiceResult", "data": json.loads(result), "callbackId": callback_id}
+                    self.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
+        elif msg_type == 'loadMultipleChoice':
+            # Lade Multiple-Choice-Daten aus Card
+            if isinstance(data, dict):
+                card_id = data.get('cardId')
+                callback_id = data.get('callbackId')
+                if card_id:
+                    result = self.bridge.loadMultipleChoice(int(card_id))
+                    # Sende Ergebnis über ankiReceive zurück
+                    payload = {"type": "loadMultipleChoiceResult", "data": json.loads(result), "callbackId": callback_id}
+                    self.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
+        elif msg_type == 'hasMultipleChoice':
+            # Prüfe ob Multiple-Choice-Daten vorhanden
+            if isinstance(data, dict):
+                card_id = data.get('cardId')
+                callback_id = data.get('callbackId')
+                if card_id:
+                    result = self.bridge.hasMultipleChoice(int(card_id))
+                    # Sende Ergebnis über ankiReceive zurück
+                    payload = {"type": "hasMultipleChoiceResult", "data": json.loads(result), "callbackId": callback_id}
+                    self.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
         elif msg_type == 'goToCard':
             # Springe zu einer bestimmten Lernkarte
             if data:
@@ -310,12 +357,39 @@ class ChatbotWidget(QWidget):
                 with open(log_path, 'a', encoding='utf-8') as f:
                     import json as json_module
                     import time
-                    log_entry = {"location": "widget.py:272", "message": "Sending sessionsLoaded event to frontend", "data": {"payloadDataLength": len(sessions) if isinstance(sessions, list) else 0, "payloadDataIsArray": isinstance(sessions, list)}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "B"}
+                    log_entry = {"location": "widget.py:272", "message": "Sending sessionsLoaded event to frontend", "data": {"payloadDataLength": len(sessions) if isinstance(sessions, list) else 0, "payloadDataIsArray": isinstance(sessions, list), "payloadType": payload.get("type"), "hasPayloadData": "data" in payload}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "B"}
                     f.write(json_module.dumps(log_entry) + "\n")
             except Exception as e:
                 pass
             # #endregion
-            self.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
+            js_code = f"window.ankiReceive({json.dumps(payload)});"
+            # #region agent log
+            try:
+                with open(log_path, 'a', encoding='utf-8') as f:
+                    import json as json_module
+                    import time
+                    log_entry = {"location": "widget.py:275", "message": "Executing JavaScript to send sessionsLoaded", "data": {"jsCodeLength": len(js_code), "jsCodePreview": js_code[:200], "hasAnkiReceive": "window.ankiReceive" in js_code}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "B"}
+                    f.write(json_module.dumps(log_entry) + "\n")
+            except Exception as e:
+                pass
+            # #endregion
+            # Add check if window.ankiReceive exists before calling
+            js_code_with_check = f"""
+            (function() {{
+              console.error('🔵 DEBUG widget.py: Attempting to call window.ankiReceive', typeof window !== 'undefined', typeof window.ankiReceive !== 'undefined');
+              if (typeof window !== 'undefined' && typeof window.ankiReceive === 'function') {{
+                try {{
+                  window.ankiReceive({json.dumps(payload)});
+                  console.error('🔵 DEBUG widget.py: window.ankiReceive called successfully');
+                }} catch (e) {{
+                  console.error('🔵 DEBUG widget.py: Error calling window.ankiReceive', e);
+                }}
+              }} else {{
+                console.error('🔵 DEBUG widget.py: window.ankiReceive not available', typeof window, typeof window?.ankiReceive);
+              }}
+            }})();
+            """
+            self.web_view.page().runJavaScript(js_code_with_check)
         elif msg_type == 'saveSessions':
             # Speichere Sessions in Datei
             # #region agent log

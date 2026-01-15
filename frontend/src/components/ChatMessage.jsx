@@ -1253,6 +1253,33 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
     }
   }, [steps]);
   
+  // Save Multiple Choice data to card when generated
+  useEffect(() => {
+    if (quizData && quizData.options && cardContext && cardContext.cardId && bridge && bridge.saveMultipleChoice) {
+      // Prüfe ob MC-Daten bereits gespeichert wurden (verhindert mehrfaches Speichern)
+      const saveKey = `mc_saved_${cardContext.cardId}_${quizData.question?.substring(0, 50)}`;
+      if (sessionStorage.getItem(saveKey)) {
+        return; // Bereits gespeichert
+      }
+      
+      // Speichere MC-Daten in Anki Card
+      const quizDataJson = JSON.stringify(quizData);
+      bridge.saveMultipleChoice(cardContext.cardId, quizDataJson, (result) => {
+        try {
+          const data = JSON.parse(result);
+          if (data.success) {
+            console.log('MC-Daten erfolgreich in Card gespeichert');
+            sessionStorage.setItem(saveKey, 'true');
+          } else {
+            console.error('Fehler beim Speichern von MC-Daten:', data.error);
+          }
+        } catch (e) {
+          console.error('Fehler beim Parsen von saveMultipleChoice:', e);
+        }
+      });
+    }
+  }, [quizData, cardContext, bridge]);
+  
   // Sicherheitsüberprüfung: Stelle sicher dass message ein String ist
   const safeMessage = typeof message === 'string' ? message : (message ? String(message) : '');
   

@@ -7,6 +7,7 @@ import { useQuota } from '../hooks/useQuota';
 import { useUsageHistory } from '../hooks/useUsageHistory';
 import { DashboardLayout } from '../components/DashboardLayout';
 import { HallOfFameCard } from '../components/HallOfFameCard';
+import { ConnectionStatusCard } from '../components/ConnectionStatusCard';
 import { 
   Sparkles, 
   Brain,
@@ -109,6 +110,44 @@ export function DashboardPage() {
             </div>
           </motion.div>
 
+          {/* Subscription Card - Oben */}
+          <motion.div 
+             initial={{ opacity: 0, y: 20 }}
+             animate={{ opacity: 1, y: 0 }}
+             transition={{ delay: 0.2 }}
+             onClick={() => navigate('/dashboard/subscription')}
+             className="bg-[#0A0A0A] border border-white/10 rounded-3xl p-8 relative overflow-hidden cursor-pointer hover:border-teal-500/50 transition-all group"
+          >
+             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative z-10">
+                <div className="flex-1">
+                   <div className="flex items-center gap-3 mb-2">
+                      <h3 className="text-xl font-bold text-white">{tierDisplayName} (Monatlich)</h3>
+                      <span className="px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-bold uppercase tracking-wider flex items-center gap-1">
+                        <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                        Aktiv
+                      </span>
+                   </div>
+                   <div className="text-neutral-400 text-sm mb-4">
+                     {userDoc?.tier === 'free' ? '0€' : userDoc?.tier === 'tier1' ? '4,99€' : '14,99€'} pro Monat
+                   </div>
+                   <div className="flex items-center gap-2 text-xs text-neutral-500">
+                      <Check className="w-3 h-3 text-teal-500" />
+                      <span>
+                        {userDoc?.tier === 'free' 
+                          ? '3x Deep Mode pro Tag inklusive'
+                          : userDoc?.tier === 'tier1'
+                          ? '30x Deep Mode pro Tag inklusive'
+                          : 'Unbegrenzter Deep Mode inklusive'}
+                      </span>
+                   </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <ChevronRight className="w-5 h-5 text-neutral-400 group-hover:text-teal-400 transition-colors" />
+                </div>
+             </div>
+          </motion.div>
+
           {/* Usage Stats */}
           <motion.div 
              variants={staggerContainer}
@@ -206,52 +245,24 @@ export function DashboardPage() {
              </motion.div>
           </motion.div>
 
-          {/* Subscription Card - Klickbar */}
-          <motion.div 
-             initial={{ opacity: 0, y: 20 }}
-             animate={{ opacity: 1, y: 0 }}
-             transition={{ delay: 0.4 }}
-             onClick={() => navigate('/dashboard/subscription')}
-             className="bg-[#0A0A0A] border border-white/10 rounded-3xl p-8 relative overflow-hidden cursor-pointer hover:border-teal-500/50 transition-all group"
-          >
-             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative z-10">
-                <div className="flex-1">
-                   <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-xl font-bold text-white">{tierDisplayName} (Monatlich)</h3>
-                      <span className="px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-bold uppercase tracking-wider flex items-center gap-1">
-                        <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                        Aktiv
-                      </span>
-                   </div>
-                   <div className="text-neutral-400 text-sm mb-4">
-                     {userDoc?.tier === 'free' ? '0€' : userDoc?.tier === 'tier1' ? '4,99€' : '14,99€'} pro Monat
-                   </div>
-                   <div className="flex items-center gap-2 text-xs text-neutral-500">
-                      <Check className="w-3 h-3 text-teal-500" />
-                      <span>
-                        {userDoc?.tier === 'free' 
-                          ? '3x Deep Mode pro Tag inklusive'
-                          : userDoc?.tier === 'tier1'
-                          ? '30x Deep Mode pro Tag inklusive'
-                          : 'Unbegrenzter Deep Mode inklusive'}
-                      </span>
-                   </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <ChevronRight className="w-5 h-5 text-neutral-400 group-hover:text-teal-400 transition-colors" />
-                </div>
-             </div>
-          </motion.div>
-
-          {/* Hall of Fame Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-          >
-            <HallOfFameCard />
-          </motion.div>
+          {/* Connection & Hall of Fame - 2 Spalten */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+            >
+              <ConnectionStatusCard />
+            </motion.div>
+            
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+            >
+              <HallOfFameCard />
+            </motion.div>
+          </div>
         </div>
       </DashboardLayout>
   );

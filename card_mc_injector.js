@@ -12,59 +12,62 @@
     }
     window.ankiMCInitialized = true;
     
-    // Warte auf QWebChannel Bridge
+    // Warte auf Card-ID und initialisiere MC-Integration
     function initMCIntegration() {
-        if (typeof pybridge === 'undefined' || !pybridge) {
-            console.log('ankiMC: Warte auf Bridge...');
-            setTimeout(initMCIntegration, 100);
-            return;
-        }
-        
-        console.log('ankiMC: Bridge gefunden, initialisiere MC-Integration...');
-        
         // Finde Card-Container
         const cardContainer = document.querySelector('.card') || document.querySelector('#qa');
         if (!cardContainer) {
-            console.log('ankiMC: Card-Container nicht gefunden');
+            console.log('ankiMC: Card-Container nicht gefunden, versuche erneut...');
+            setTimeout(initMCIntegration, 500);
             return;
         }
         
-        // Hole Card-ID aus URL oder Card-Element
+        // Hole Card-ID aus window.anki (wird von Python gesetzt)
         let cardId = null;
         try {
-            // Versuche Card-ID aus verschiedenen Quellen zu extrahieren
-            const cardElement = document.querySelector('[data-card-id]');
-            if (cardElement) {
-                cardId = cardElement.getAttribute('data-card-id');
-            } else {
-                // Fallback: Versuche aus Anki's internem State
-                if (window.anki && window.anki.currentCardId) {
-                    cardId = window.anki.currentCardId;
-                }
+            if (window.anki && window.anki.currentCardId) {
+                cardId = window.anki.currentCardId;
             }
         } catch (e) {
             console.error('ankiMC: Fehler beim Extrahieren der Card-ID:', e);
         }
         
         if (!cardId) {
-            console.log('ankiMC: Card-ID nicht gefunden, überspringe MC-Integration');
+            console.log('ankiMC: Card-ID nicht gefunden, versuche erneut...');
+            setTimeout(initMCIntegration, 500);
             return;
         }
         
-        // Prüfe ob MC vorhanden
-        pybridge.hasMultipleChoice(parseInt(cardId), function(result) {
-            try {
-                const data = JSON.parse(result);
-                if (data.hasMC) {
-                    console.log('ankiMC: Multiple Choice gefunden für Card', cardId);
-                    injectMCBadge(cardContainer, cardId);
-                } else {
-                    console.log('ankiMC: Keine Multiple Choice für Card', cardId);
-                }
-            } catch (e) {
-                console.error('ankiMC: Fehler beim Parsen von hasMultipleChoice:', e);
+        console.log('ankiMC: Card-ID gefunden:', cardId, 'prüfe auf MC...');
+        
+        // Prüfe ob MC vorhanden über Python-Bridge (via Anki's web.eval)
+        // Wir verwenden einen indirekten Aufruf über ein Custom Event
+        const checkMC = function() {
+            // Versuche Bridge-Zugriff über verschiedene Methoden
+            if (typeof pybridge !== 'undefined' && pybridge && pybridge.hasMultipleChoice) {
+                pybridge.hasMultipleChoice(parseInt(cardId), function(result) {
+                    try {
+                        const data = JSON.parse(result);
+                        if (data.hasMC) {
+                            console.log('ankiMC: Multiple Choice gefunden für Card', cardId);
+                            injectMCBadge(cardContainer, cardId);
+                        } else {
+                            console.log('ankiMC: Keine Multiple Choice für Card', cardId);
+                        }
+                    } catch (e) {
+                        console.error('ankiMC: Fehler beim Parsen von hasMultipleChoice:', e);
+                    }
+                });
+            } else {
+                // Fallback: Versuche über Custom Event (wird von Python gehandled)
+                console.log('ankiMC: Bridge nicht verfügbar, verwende Fallback-Methode');
+                // Für jetzt: Zeige Badge nicht an wenn Bridge nicht verfügbar
+                // Später können wir hier eine alternative Methode implementieren
             }
-        });
+        };
+        
+        // Warte kurz bevor wir prüfen (Card muss vollständig geladen sein)
+        setTimeout(checkMC, 300);
     }
     
     /**
@@ -121,20 +124,25 @@
         }
         
         // Lade MC-Daten
-        pybridge.loadMultipleChoice(parseInt(cardId), function(result) {
-            try {
-                const data = JSON.parse(result);
-                if (data.success && data.quizData) {
-                    renderMCQuiz(container, data.quizData, badge);
-                } else {
-                    console.error('ankiMC: Fehler beim Laden:', data.error);
-                    showError(container, 'Multiple Choice konnte nicht geladen werden.');
+        if (typeof pybridge !== 'undefined' && pybridge && pybridge.loadMultipleChoice) {
+            pybridge.loadMultipleChoice(parseInt(cardId), function(result) {
+                try {
+                    const data = JSON.parse(result);
+                    if (data.success && data.quizData) {
+                        renderMCQuiz(container, data.quizData, badge);
+                    } else {
+                        console.error('ankiMC: Fehler beim Laden:', data.error);
+                        showError(container, 'Multiple Choice konnte nicht geladen werden.');
+                    }
+                } catch (e) {
+                    console.error('ankiMC: Fehler beim Parsen von loadMultipleChoice:', e);
+                    showError(container, 'Fehler beim Laden der Multiple Choice.');
                 }
-            } catch (e) {
-                console.error('ankiMC: Fehler beim Parsen von loadMultipleChoice:', e);
-                showError(container, 'Fehler beim Laden der Multiple Choice.');
-            }
-        });
+            });
+        } else {
+            console.error('ankiMC: Bridge nicht verfügbar für loadMultipleChoice');
+            showError(container, 'Bridge nicht verfügbar. Bitte öffne den Chatbot-Panel.');
+        }
     }
     
     /**

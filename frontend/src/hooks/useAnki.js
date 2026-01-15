@@ -235,6 +235,69 @@ export function useAnki() {
               }
             });
           },
+          saveMultipleChoice: (cardId, quizDataJson, callback) => {
+            console.log('Bridge: saveMultipleChoice aufgerufen', cardId);
+            if (window.ankiBridge) {
+              // Speichere Callback für Antwort
+              const callbackId = `saveMultipleChoice_${Date.now()}_${Math.random()}`;
+              window._saveMultipleChoiceCallbacks = window._saveMultipleChoiceCallbacks || {};
+              window._saveMultipleChoiceCallbacks[callbackId] = callback;
+              
+              // Setze Timeout für Fehlerbehandlung
+              setTimeout(() => {
+                if (window._saveMultipleChoiceCallbacks && window._saveMultipleChoiceCallbacks[callbackId]) {
+                  delete window._saveMultipleChoiceCallbacks[callbackId];
+                  if (callback) callback(JSON.stringify({ success: false, error: 'Timeout' }));
+                }
+              }, 5000); // 5 Sekunden Timeout
+              
+              window.ankiBridge.addMessage('saveMultipleChoice', { cardId, quizDataJson, callbackId });
+            } else if (callback) {
+              callback(JSON.stringify({ success: false, error: 'Bridge nicht verfügbar' }));
+            }
+          },
+          loadMultipleChoice: (cardId, callback) => {
+            console.log('Bridge: loadMultipleChoice aufgerufen', cardId);
+            if (window.ankiBridge) {
+              // Speichere Callback für Antwort
+              const callbackId = `loadMultipleChoice_${Date.now()}_${Math.random()}`;
+              window._loadMultipleChoiceCallbacks = window._loadMultipleChoiceCallbacks || {};
+              window._loadMultipleChoiceCallbacks[callbackId] = callback;
+              
+              // Setze Timeout für Fehlerbehandlung
+              setTimeout(() => {
+                if (window._loadMultipleChoiceCallbacks && window._loadMultipleChoiceCallbacks[callbackId]) {
+                  delete window._loadMultipleChoiceCallbacks[callbackId];
+                  if (callback) callback(JSON.stringify({ success: false, quizData: null, error: 'Timeout' }));
+                }
+              }, 5000); // 5 Sekunden Timeout
+              
+              window.ankiBridge.addMessage('loadMultipleChoice', { cardId, callbackId });
+            } else if (callback) {
+              callback(JSON.stringify({ success: false, quizData: null, error: 'Bridge nicht verfügbar' }));
+            }
+          },
+          hasMultipleChoice: (cardId, callback) => {
+            console.log('Bridge: hasMultipleChoice aufgerufen', cardId);
+            if (window.ankiBridge) {
+              // Speichere Callback für Antwort
+              const callbackId = `hasMultipleChoice_${Date.now()}_${Math.random()}`;
+              window._hasMultipleChoiceCallbacks = window._hasMultipleChoiceCallbacks || {};
+              window._hasMultipleChoiceCallbacks[callbackId] = callback;
+              
+              // Setze Timeout für Fehlerbehandlung
+              setTimeout(() => {
+                if (window._hasMultipleChoiceCallbacks && window._hasMultipleChoiceCallbacks[callbackId]) {
+                  delete window._hasMultipleChoiceCallbacks[callbackId];
+                  if (callback) callback(JSON.stringify({ hasMC: false }));
+                }
+              }, 5000); // 5 Sekunden Timeout
+              
+              window.ankiBridge.addMessage('hasMultipleChoice', { cardId, callbackId });
+            } else if (callback) {
+              callback(JSON.stringify({ hasMC: false }));
+            }
+          },
           showAnswer: () => {
             console.log('Bridge: showAnswer aufgerufen');
             if (window.ankiBridge) {

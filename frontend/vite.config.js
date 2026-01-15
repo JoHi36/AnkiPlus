@@ -11,8 +11,11 @@ export default defineConfig(({ mode }) => ({
     alias: {
       '@shared': path.resolve(__dirname, '../shared'),
     },
-    dedupe: ['react', 'react-dom', 'lucide-react', 'react-markdown', 'remark-math', 'rehype-katex'], // Dedupe common dependencies
+    dedupe: ['react', 'react-dom', 'lucide-react', 'react-markdown', 'remark-math', 'rehype-katex', 'framer-motion'], // Dedupe common dependencies
     preserveSymlinks: false, // Ensure proper module resolution
+  },
+  optimizeDeps: {
+    include: ['framer-motion']
   },
   define: {
     // Force React to use development build

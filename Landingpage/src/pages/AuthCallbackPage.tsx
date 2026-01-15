@@ -19,6 +19,16 @@ export function AuthCallbackPage() {
         return;
       }
 
+      // Prüfe ob User gerade erst registriert wurde (nur beim ersten Mal zeigen)
+      // Wenn creationTime === lastSignInTime, ist es eine neue Registrierung
+      const isNewUser = user.metadata.creationTime === user.metadata.lastSignInTime;
+      
+      if (!isNewUser) {
+        // User hat sich bereits vorher eingeloggt - direkt zum Dashboard
+        navigate('/dashboard');
+        return;
+      }
+
       try {
         const token = await getAuthToken();
         if (!token) {

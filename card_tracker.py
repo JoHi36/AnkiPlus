@@ -13,6 +13,15 @@ class CardTracker:
     """Verwaltet Card-Tracking für ein Widget"""
     
     def __init__(self, widget):
+        # #region agent log
+        import time
+        log_path = "/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log"
+        try:
+            with open(log_path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps({"location": "card_tracker.py:15", "message": "CardTracker.__init__ called", "data": {"has_widget": widget is not None, "widget_type": type(widget).__name__ if widget else None}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "A"}) + "\n")
+        except:
+            pass
+        # #endregion
         self.widget = widget
         self.card_tracking_timer = None
         self.current_card_context = None
@@ -25,6 +34,15 @@ class CardTracker:
         # Hook für Karten-Anzeige (nur card als Argument)
         def on_card_shown(card):
             """Wird aufgerufen, wenn eine Karte angezeigt wird"""
+            # #region agent log
+            import time
+            log_path = "/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log"
+            try:
+                with open(log_path, 'a', encoding='utf-8') as f:
+                    f.write(json.dumps({"location": "card_tracker.py:26", "message": "on_card_shown hook called", "data": {"has_card": card is not None, "card_id": card.id if card else None, "has_widget": self.widget is not None, "has_web_view": self.widget.web_view is not None if self.widget else False}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "B"}) + "\n")
+            except:
+                pass
+            # #endregion
             if card and self.widget.web_view:
                 self.send_card_context(card, is_question=True)
             # Injiziere CSS/JS in Reviewer
@@ -178,54 +196,99 @@ class CardTracker:
     
     def _inject_card_styles(self, card):
         """Injiziert CSS für modernes Card-Design"""
+        # #region agent log
+        import time
+        log_path = "/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log"
+        try:
+            with open(log_path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps({"location": "card_tracker.py:179", "message": "_inject_card_styles called", "data": {"card_id": card.id if card else None, "has_mw": True}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}) + "\n")
+        except:
+            pass
+        # #endregion
         try:
             from aqt import mw
             if not mw or not mw.reviewer:
+                # #region agent log
+                try:
+                    with open(log_path, 'a', encoding='utf-8') as f:
+                        f.write(json.dumps({"location": "card_tracker.py:183", "message": "_inject_card_styles: mw or reviewer missing", "data": {"has_mw": mw is not None, "has_reviewer": mw.reviewer is not None if mw else False}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}) + "\n")
+                except:
+                    pass
+                # #endregion
                 return
             
-            # Lade CSS-Datei
+            # Lade Premium CSS-Datei
             addon_dir = os.path.dirname(os.path.abspath(__file__))
-            css_path = os.path.join(addon_dir, 'card_styles.css')
+            css_path = os.path.join(addon_dir, 'reviewer_premium.css')
             
             if not os.path.exists(css_path):
+                # #region agent log
+                try:
+                    with open(log_path, 'a', encoding='utf-8') as f:
+                        f.write(json.dumps({"location": "card_tracker.py:191", "message": "_inject_card_styles: CSS file not found", "data": {"css_path": css_path}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}) + "\n")
+                except:
+                    pass
+                # #endregion
                 print(f"card_tracker: CSS-Datei nicht gefunden: {css_path}")
                 return
             
             with open(css_path, 'r', encoding='utf-8') as f:
                 css_content = f.read()
             
-            # Injiziere CSS in Reviewer
+            # Injiziere Premium CSS in Reviewer
             css_js = f"""
             (function() {{
-                if (document.getElementById('anki-card-modern-styles')) {{
+                if (document.getElementById('anki-premium-styles')) {{
                     return; // Bereits injiziert
                 }}
                 const style = document.createElement('style');
-                style.id = 'anki-card-modern-styles';
+                style.id = 'anki-premium-styles';
                 style.textContent = {json.dumps(css_content)};
                 document.head.appendChild(style);
-                
-                // Wende modernes Design auf Card-Container an
-                setTimeout(function() {{
-                    const cardContainer = document.querySelector('.card') || document.querySelector('#qa');
-                    if (cardContainer && !cardContainer.classList.contains('anki-card-modern')) {{
-                        cardContainer.classList.add('anki-card-modern');
-                    }}
-                }}, 100);
+                console.log('ankiPremium: CSS injiziert');
             }})();
             """
             
             # Verwende reviewer.web.eval() für Injection
-            if hasattr(mw.reviewer, 'web') and mw.reviewer.web:
+            has_web = hasattr(mw.reviewer, 'web') and mw.reviewer.web
+            # #region agent log
+            try:
+                with open(log_path, 'a', encoding='utf-8') as f:
+                    f.write(json.dumps({"location": "card_tracker.py:219", "message": "_inject_card_styles: before eval", "data": {"has_web": has_web, "css_injected": self.css_injected}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}) + "\n")
+            except:
+                pass
+            # #endregion
+            if has_web:
                 mw.reviewer.web.eval(css_js)
                 if not self.css_injected:
                     self.css_injected = True
+                    # #region agent log
+                    try:
+                        with open(log_path, 'a', encoding='utf-8') as f:
+                            f.write(json.dumps({"location": "card_tracker.py:223", "message": "_inject_card_styles: CSS injected successfully", "data": {}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}) + "\n")
+                    except:
+                        pass
+                    # #endregion
                     print("card_tracker: CSS injiziert")
             else:
+                # #region agent log
+                try:
+                    with open(log_path, 'a', encoding='utf-8') as f:
+                        f.write(json.dumps({"location": "card_tracker.py:225", "message": "_inject_card_styles: reviewer.web not available", "data": {"has_reviewer_web_attr": hasattr(mw.reviewer, 'web'), "reviewer_web_value": mw.reviewer.web is not None if hasattr(mw.reviewer, 'web') else None}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}) + "\n")
+                except:
+                    pass
+                # #endregion
                 print("card_tracker: Reviewer web nicht verfügbar")
                     
         except Exception as e:
             import traceback
+            # #region agent log
+            try:
+                with open(log_path, 'a', encoding='utf-8') as f:
+                    f.write(json.dumps({"location": "card_tracker.py:227", "message": "_inject_card_styles: exception", "data": {"error": str(e)}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}) + "\n")
+            except:
+                pass
+            # #endregion
             print(f"Fehler beim Injizieren von Card-Styles: {e}")
             print(traceback.format_exc())
     
@@ -236,51 +299,57 @@ class CardTracker:
             if not mw or not mw.reviewer:
                 return
             
-            # Prüfe ob bereits injiziert (nur einmal pro Session)
-            if self.js_injected:
-                # Re-initialisiere MC für neue Karte
-                if hasattr(mw.reviewer, 'web') and mw.reviewer.web:
-                    mw.reviewer.web.eval("""
-                        if (window.ankiMCInitialized && typeof initMCIntegration === 'function') {
-                            setTimeout(initMCIntegration, 300);
-                        }
-                    """)
-                return
-            
-            # Lade JS-Datei
-            addon_dir = os.path.dirname(os.path.abspath(__file__))
-            js_path = os.path.join(addon_dir, 'card_mc_injector.js')
-            
-            if not os.path.exists(js_path):
-                print(f"card_tracker: JS-Datei nicht gefunden: {js_path}")
-                return
-            
-            with open(js_path, 'r', encoding='utf-8') as f:
-                js_content = f.read()
-            
-            # Injiziere JS in Reviewer
-            # Füge Card-ID zu Window-Objekt hinzu für JS-Zugriff
-            js_with_card_id = f"""
-            (function() {{
-                // Setze Card-ID für JS-Zugriff
-                window.anki = window.anki || {{}};
-                window.anki.currentCardId = {card.id};
+            # Lade Premium JS-Datei (nur einmal)
+            if not self.js_injected:
+                addon_dir = os.path.dirname(os.path.abspath(__file__))
                 
-                {js_content}
-            }})();
-            """
-            
-            # Verwende reviewer.web.eval() für Injection
-            if hasattr(mw.reviewer, 'web') and mw.reviewer.web:
-                mw.reviewer.web.eval(js_with_card_id)
+                # 1. Lade HTML-Transformer JS (WICHTIG: Zuerst!)
+                html_transformer_js_path = os.path.join(addon_dir, 'reviewer_html_transformer.js')
+                if os.path.exists(html_transformer_js_path):
+                    with open(html_transformer_js_path, 'r', encoding='utf-8') as f:
+                        html_transformer_js_content = f.read()
+                    
+                    if hasattr(mw.reviewer, 'web') and mw.reviewer.web:
+                        mw.reviewer.web.eval(html_transformer_js_content)
+                        print("card_tracker: HTML-Transformer JS injiziert")
+                
+                # 2. Lade Premium JS (Interaktivität)
+                premium_js_path = os.path.join(addon_dir, 'reviewer_premium.js')
+                if os.path.exists(premium_js_path):
+                    with open(premium_js_path, 'r', encoding='utf-8') as f:
+                        premium_js_content = f.read()
+                    
+                    if hasattr(mw.reviewer, 'web') and mw.reviewer.web:
+                        mw.reviewer.web.eval(premium_js_content)
+                        print("card_tracker: Premium JS injiziert")
+                
+                # 3. Lade MC-Injector JS (für Multiple Choice)
+                mc_js_path = os.path.join(addon_dir, 'card_mc_injector.js')
+                if os.path.exists(mc_js_path):
+                    with open(mc_js_path, 'r', encoding='utf-8') as f:
+                        mc_js_content = f.read()
+                    
+                    if hasattr(mw.reviewer, 'web') and mw.reviewer.web:
+                        mw.reviewer.web.eval(mc_js_content)
+                        print("card_tracker: MC-JS injiziert")
+                
                 self.js_injected = True
-                print("card_tracker: MC-JS injiziert")
+            
+            # Setze Card-ID für JS-Zugriff (bei jeder Karte)
+            if hasattr(mw.reviewer, 'web') and mw.reviewer.web:
+                set_card_id_js = f"""
+                (function() {{
+                    window.anki = window.anki || {{}};
+                    window.anki.currentCardId = {card.id};
+                    // Re-initialisiere MC für neue Karte
+                    if (window.ankiMCInitialized && typeof initMCIntegration === 'function') {{
+                        setTimeout(initMCIntegration, 500);
+                    }}
+                }})();
+                """
+                mw.reviewer.web.eval(set_card_id_js)
             else:
-                # Fallback: Direkt über web_view
-                if self.widget.web_view:
-                    self.widget.web_view.page().runJavaScript(js_with_card_id)
-                    self.js_injected = True
-                    print("card_tracker: MC-JS injiziert (Fallback)")
+                print("card_tracker: Reviewer web nicht verfügbar")
                     
         except Exception as e:
             import traceback

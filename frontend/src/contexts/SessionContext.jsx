@@ -126,11 +126,21 @@ export function SessionContextProvider({ children, bridge, isReady }) {
     window.ankiReceive = (payload) => {
       // #region agent log
       const timestamp = Date.now();
+      console.error('🔵 DEBUG SessionContext: window.ankiReceive called', {
+        payloadType: payload?.type,
+        hasPayloadData: !!payload?.data,
+        payloadDataType: typeof payload?.data,
+        payloadDataIsArray: Array.isArray(payload?.data),
+        payloadDataLength: Array.isArray(payload?.data) ? payload.data.length : null
+      });
       fetch('http://127.0.0.1:7242/ingest/e7757e9a-5092-4e4c-9b61-29b99999cd32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SessionContext.jsx:101',message:'window.ankiReceive called',data:{payloadType:payload?.type,hasPayloadData:!!payload?.data,payloadDataType:typeof payload?.data,payloadDataIsArray:Array.isArray(payload?.data),payloadDataLength:Array.isArray(payload?.data)?payload.data.length:null},timestamp:timestamp,sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
       // #endregion
       if (payload.type === 'sessionsLoaded') {
         // #region agent log
         const timestamp2 = Date.now();
+        console.error('🔵 DEBUG SessionContext: sessionsLoaded event detected, calling handleSessionsLoaded', {
+          payloadDataLength: Array.isArray(payload.data) ? payload.data.length : null
+        });
         fetch('http://127.0.0.1:7242/ingest/e7757e9a-5092-4e4c-9b61-29b99999cd32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SessionContext.jsx:103',message:'sessionsLoaded event detected, calling handleSessionsLoaded',data:{payloadDataLength:Array.isArray(payload.data)?payload.data.length:null},timestamp:timestamp2,sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
         // #endregion
         handleSessionsLoaded({ detail: { sessions: payload.data || [] } });
@@ -195,25 +205,61 @@ export function SessionContextProvider({ children, bridge, isReady }) {
    * 3. If NO: Create temp session, set currentSession = tempSession, isTemporary = true
    */
   const handleDeckSelected = useCallback((deckData) => {
+    // #region agent log
+    console.error('🔵 DEBUG SessionContext: handleDeckSelected called', {
+      hasDeckData: !!deckData,
+      deckId: deckData?.deckId,
+      deckName: deckData?.deckName,
+      sessionsCount: sessions.length,
+      sessionsLoaded: sessionsLoaded
+    });
+    fetch('http://127.0.0.1:7242/ingest/e7757e9a-5092-4e4c-9b61-29b99999cd32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SessionContext.jsx:197',message:'handleDeckSelected called',data:{hasDeckData:!!deckData,deckId:deckData?.deckId,deckName:deckData?.deckName,sessionsCount:sessions.length,sessionsLoaded:sessionsLoaded},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
     console.log('🔄 SessionContext: handleDeckSelected:', deckData);
     
     if (!deckData || !deckData.deckId) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/e7757e9a-5092-4e4c-9b61-29b99999cd32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SessionContext.jsx:201',message:'handleDeckSelected: missing deckId',data:{hasDeckData:!!deckData},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       console.warn('SessionContext: handleDeckSelected ohne deckId');
       return;
     }
     
     const { deckId, deckName, totalCards } = deckData;
     
+    // CRITICAL FIX: If sessions are not loaded yet, reload them and retry
+    if (!sessionsLoaded && bridgeRef.current && bridgeRef.current.loadSessions) {
+      console.log('⏳ SessionContext: Sessions noch nicht geladen, lade sie jetzt...');
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/e7757e9a-5092-4e4c-9b61-29b99999cd32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SessionContext.jsx:207',message:'handleDeckSelected: sessions not loaded, reloading',data:{deckId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+      bridgeRef.current.loadSessions();
+      // Retry after a short delay to allow sessions to load
+      setTimeout(() => {
+        handleDeckSelected(deckData);
+      }, 500);
+      return;
+    }
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/e7757e9a-5092-4e4c-9b61-29b99999cd32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SessionContext.jsx:211',message:'handleDeckSelected: searching for session',data:{deckId,sessionsCount:sessions.length,sessionsLoaded:sessionsLoaded,sessionIds:sessions.map(s=>s.id),sessionDeckIds:sessions.map(s=>s.deckId)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
     // Check if session exists
     const existingSession = findSessionByDeck(sessions, deckId);
     
     if (existingSession) {
       // Session exists - use it
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/e7757e9a-5092-4e4c-9b61-29b99999cd32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SessionContext.jsx:212',message:'handleDeckSelected: existing session found',data:{sessionId:existingSession.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       console.log('📖 SessionContext: Session gefunden:', existingSession.id);
       setCurrentSession(existingSession);
       setIsTemporary(false);
     } else {
       // No session - create temporary one
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/e7757e9a-5092-4e4c-9b61-29b99999cd32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SessionContext.jsx:217',message:'handleDeckSelected: creating temp session',data:{deckName},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       console.log('⏳ SessionContext: Erstelle temporäre Session für Deck:', deckName);
       
       // Create temp session object (not saved to disk yet)
@@ -231,8 +277,11 @@ export function SessionContextProvider({ children, bridge, isReady }) {
       
       setCurrentSession(tempSession);
       setIsTemporary(true);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/e7757e9a-5092-4e4c-9b61-29b99999cd32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SessionContext.jsx:233',message:'handleDeckSelected: temp session set',data:{tempSessionId:tempSession.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
     }
-  }, [sessions]);
+  }, [sessions, sessionsLoaded]);
   
   /**
    * Handle deckExited event from Anki
@@ -366,6 +415,11 @@ export function SessionContextProvider({ children, bridge, isReady }) {
     
     const originalAnkiReceive = window.ankiReceive;
     window.ankiReceive = (payload) => {
+      // #region agent log
+      if (payload.type === 'deckSelected' || payload.type === 'deckExited') {
+        fetch('http://127.0.0.1:7242/ingest/e7757e9a-5092-4e4c-9b61-29b99999cd32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SessionContext.jsx:368',message:'deckSelected/deckExited event received',data:{type:payload.type,hasData:!!payload.data,deckId:payload.data?.deckId,deckName:payload.data?.deckName},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      }
+      // #endregion
       if (payload.type === 'deckSelected') {
         handleDeckSelected(payload.data);
       } else if (payload.type === 'deckExited') {

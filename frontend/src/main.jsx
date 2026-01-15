@@ -21,7 +21,10 @@ if (typeof window !== 'undefined') {
       // Queue die Nachricht, wird in App.jsx verarbeitet
       if (window._ankiReceiveQueue) {
         window._ankiReceiveQueue.push(payload);
+        console.error('🔵 DEBUG main.jsx: Nachricht gequeued (vor React):', payload.type, 'Queue length:', window._ankiReceiveQueue.length);
         console.log('📥 main.jsx: Nachricht gequeued (vor React):', payload.type);
+      } else {
+        console.error('🔵 DEBUG main.jsx: Queue nicht verfügbar!');
       }
     };
     console.log('✅ main.jsx: window.ankiReceive initialisiert (Queue-System)');

@@ -372,11 +372,41 @@ function AppInner() {
     
     // Definiere die vollständige Handler-Funktion nur einmal
     if (!ankiReceiveRef.current) {
+    // Store original handler (from main.jsx) to call it first
+    const originalMainHandler = window.ankiReceive;
     window.ankiReceive = (payload) => {
+      console.error('🔵 DEBUG App.jsx: ankiReceive aufgerufen:', payload?.type, payload);
       console.log('🔵 App.jsx: ankiReceive aufgerufen:', payload.type, payload);
+      
       if (!payload || typeof payload !== 'object') {
         console.warn('⚠️ App.jsx: Ungültiges Payload:', payload);
         return;
+      }
+      
+      // CRITICAL: Process sessionsLoaded and deckSelected immediately, don't queue them
+      // These events are time-sensitive and need to be processed as soon as possible
+      if (payload.type === 'sessionsLoaded') {
+        console.error('🔵 DEBUG App.jsx: Processing sessionsLoaded IMMEDIATELY', payload.data?.length);
+        window.dispatchEvent(new CustomEvent('sessionsLoaded', { 
+          detail: { sessions: payload.data || [] } 
+        }));
+      }
+      
+      if (payload.type === 'deckSelected') {
+        console.error('🔵 DEBUG App.jsx: Processing deckSelected IMMEDIATELY', payload.data);
+        window.dispatchEvent(new CustomEvent('deckSelected', { 
+          detail: payload.data 
+        }));
+      }
+      
+      // If original handler exists and it's the queue handler, call it for other events
+      // This ensures other events are queued if React isn't ready yet
+      if (originalMainHandler && typeof originalMainHandler === 'function') {
+        try {
+          originalMainHandler(payload);
+        } catch (e) {
+          console.error('🔵 DEBUG App.jsx: Error calling original handler', e);
+        }
       }
 
         // Models Events
@@ -430,10 +460,38 @@ function AppInner() {
         // Sessions Events - Sessions wurden von Python geladen
         if (payload.type === 'sessionsLoaded') {
           console.log('📚 App.jsx: Sessions geladen:', payload.data?.length || 0);
+          // #region agent log
+          const timestamp = Date.now();
+          console.error('🔵 DEBUG: sessionsLoaded event received in App.jsx', {
+            payloadDataType: typeof payload.data,
+            payloadDataIsArray: Array.isArray(payload.data),
+            payloadDataLength: Array.isArray(payload.data) ? payload.data.length : null,
+            hasPayloadData: !!payload.data
+          });
+          fetch('http://127.0.0.1:7242/ingest/e7757e9a-5092-4e4c-9b61-29b99999cd32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.jsx:431',message:'sessionsLoaded event received in App.jsx',data:{payloadDataType:typeof payload.data,payloadDataIsArray:Array.isArray(payload.data),payloadDataLength:Array.isArray(payload.data)?payload.data.length:null,hasPayloadData:!!payload.data},timestamp:timestamp,sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
           // Sessions werden direkt in useSessions verarbeitet via Event
+          // #region agent log
+          const timestamp2 = Date.now();
+          console.error('🔵 DEBUG: Dispatching sessionsLoaded CustomEvent', {
+            sessionsCount: Array.isArray(payload.data) ? payload.data.length : 0
+          });
+          fetch('http://127.0.0.1:7242/ingest/e7757e9a-5092-4e4c-9b61-29b99999cd32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.jsx:433',message:'Dispatching sessionsLoaded CustomEvent',data:{sessionsCount:Array.isArray(payload.data)?payload.data.length:0},timestamp:timestamp2,sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
           window.dispatchEvent(new CustomEvent('sessionsLoaded', { 
             detail: { sessions: payload.data || [] } 
           }));
+        }
+        
+        // Deck Events - deckSelected
+        if (payload.type === 'deckSelected') {
+          // #region agent log
+          console.error('🔵 DEBUG: deckSelected event received in App.jsx', {
+            deckId: payload.data?.deckId,
+            deckName: payload.data?.deckName,
+            hasData: !!payload.data
+          });
+          // #endregion
         }
         
         // Card Details Events - Karten-Details wurden geladen
@@ -445,6 +503,42 @@ function AppInner() {
             if (callback) {
               delete window._getCardDetailsCallbacks[payload.callbackId];
               callback.resolve(JSON.stringify(payload.data));
+            }
+          }
+        }
+        
+        // Save Multiple Choice Result
+        if (payload.type === 'saveMultipleChoiceResult') {
+          console.log('💾 App.jsx: Save Multiple Choice Result erhalten:', payload.data);
+          if (window._saveMultipleChoiceCallbacks && payload.callbackId) {
+            const callback = window._saveMultipleChoiceCallbacks[payload.callbackId];
+            if (callback) {
+              delete window._saveMultipleChoiceCallbacks[payload.callbackId];
+              callback(JSON.stringify(payload.data));
+            }
+          }
+        }
+        
+        // Load Multiple Choice Result
+        if (payload.type === 'loadMultipleChoiceResult') {
+          console.log('📥 App.jsx: Load Multiple Choice Result erhalten:', payload.data);
+          if (window._loadMultipleChoiceCallbacks && payload.callbackId) {
+            const callback = window._loadMultipleChoiceCallbacks[payload.callbackId];
+            if (callback) {
+              delete window._loadMultipleChoiceCallbacks[payload.callbackId];
+              callback(JSON.stringify(payload.data));
+            }
+          }
+        }
+        
+        // Has Multiple Choice Result
+        if (payload.type === 'hasMultipleChoiceResult') {
+          console.log('❓ App.jsx: Has Multiple Choice Result erhalten:', payload.data);
+          if (window._hasMultipleChoiceCallbacks && payload.callbackId) {
+            const callback = window._hasMultipleChoiceCallbacks[payload.callbackId];
+            if (callback) {
+              delete window._hasMultipleChoiceCallbacks[payload.callbackId];
+              callback(JSON.stringify(payload.data));
             }
           }
         }
@@ -505,22 +599,59 @@ function AppInner() {
       ankiReceiveRef.current = true;
     }
     
-    // Verarbeite gequeuete Nachrichten
-    if (window._ankiReceiveQueue && window._ankiReceiveQueue.length > 0) {
-      const queued = window._ankiReceiveQueue.splice(0);
-      queued.forEach(payload => {
-        if (payload.type === 'init') {
-          modelsHook.handleAnkiReceive(payload);
-          if (payload.currentDeck) {
-            deckTrackingHook.setCurrentDeck(payload.currentDeck);
-            deckTrackingHook.handleDeckChange(payload.currentDeck);
+    // Function to process queued messages
+    const processQueue = () => {
+      if (window._ankiReceiveQueue && window._ankiReceiveQueue.length > 0) {
+        console.error('🔵 DEBUG App.jsx: Processing queued messages', window._ankiReceiveQueue.length);
+        const queued = window._ankiReceiveQueue.splice(0);
+        queued.forEach(payload => {
+          console.error('🔵 DEBUG App.jsx: Processing queued payload', payload?.type);
+          // Process ALL queued messages, not just 'init'
+          if (payload.type === 'sessionsLoaded') {
+            console.error('🔵 DEBUG App.jsx: Processing queued sessionsLoaded', payload.data?.length);
+            // Handle sessionsLoaded from queue
+            window.dispatchEvent(new CustomEvent('sessionsLoaded', { 
+              detail: { sessions: payload.data || [] } 
+            }));
+        } else if (payload.type === 'deckSelected') {
+          console.error('🔵 DEBUG App.jsx: Processing queued deckSelected', payload.data);
+          // Handle deckSelected from queue - dispatch event for SessionContext
+          window.dispatchEvent(new CustomEvent('deckSelected', { 
+            detail: payload.data 
+          }));
+        } else if (payload.type === 'init') {
+            modelsHook.handleAnkiReceive(payload);
+            if (payload.currentDeck) {
+              deckTrackingHook.setCurrentDeck(payload.currentDeck);
+              deckTrackingHook.handleDeckChange(payload.currentDeck);
+            }
           }
-        }
-      });
-    }
+        });
+      }
+    };
+    
+    // Process queue immediately
+    console.error('🔵 DEBUG App.jsx: Initial queue processing, queue length:', window._ankiReceiveQueue?.length || 0);
+    processQueue();
+    
+    // Also poll the queue periodically to catch events that arrive after initial render
+    const queuePollInterval = setInterval(() => {
+      if (window._ankiReceiveQueue && window._ankiReceiveQueue.length > 0) {
+        console.error('🔵 DEBUG App.jsx: Polling found queued messages', window._ankiReceiveQueue.length);
+      }
+      processQueue();
+    }, 100); // Check every 100ms
+    
+    // Store interval ID for cleanup
+    window._ankiReceiveQueuePollInterval = queuePollInterval;
+    console.error('🔵 DEBUG App.jsx: Queue polling started');
 
     return () => {
-      // Cleanup: Setze auf null, aber die initiale Definition bleibt
+      // Cleanup: Clear polling interval
+      if (window._ankiReceiveQueuePollInterval) {
+        clearInterval(window._ankiReceiveQueuePollInterval);
+        window._ankiReceiveQueuePollInterval = null;
+      }
     };
   }, [modelsHook, chatHook, deckTrackingHook, cardContextHook]);
   
