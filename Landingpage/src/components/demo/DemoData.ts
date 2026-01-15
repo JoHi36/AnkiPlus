@@ -13,11 +13,11 @@ export interface DemoScenario {
   };
   rescue: {
     question: string;
-    options: Array<{
+    options: Array<{ 
       id: string;
       text: string;
       correct: boolean;
-      explanation?: string;
+      explanation: string;
     }>;
   };
   deepMode: {
@@ -44,47 +44,21 @@ export const DEMO_SCENARIOS: Record<string, DemoScenario> = {
     rescue: {
       question: 'Welches ist das **früheste** typische EKG-Zeichen einer Hyperkaliämie (> 5.5 mmol/l)?',
       options: [
-        { id: 'A', text: 'QRS-Verbreiterung', correct: false, explanation: 'Tritt meist erst bei schwerer Hyperkaliämie (> 7.0 mmol/l) auf.' },
-        { id: 'B', text: 'Hohe, spitze T-Wellen ("Zelt-T")', correct: true, explanation: 'Korrekt! Das Zelt-T ist oft das erste Warnzeichen.' },
-        { id: 'C', text: 'Kammerflimmern', correct: false, explanation: 'Dies ist eine späte, lebensbedrohliche Komplikation.' },
-        { id: 'D', text: 'U-Wellen', correct: false, explanation: 'Typisch für Hypokaliämie, nicht Hyperkaliämie.' }
+        { id: 'A', text: 'QRS-Verbreiterung', correct: false, explanation: 'Tritt meist erst bei fortgeschrittener Hyperkaliämie (> 7.0 mmol/l) auf.' },
+        { id: 'B', text: 'Hohe, spitze T-Wellen ("Zelt-T")', correct: true, explanation: 'Korrekt! Das Zelt-T durch schnellere Repolarisation ist oft das erste Warnzeichen.' },
+        { id: 'C', text: 'Kammerflimmern', correct: false, explanation: 'Dies ist ein terminales Ereignis bei extremen Werten, kein Frühzeichen.' },
+        { id: 'D', text: 'U-Wellen', correct: false, explanation: 'U-Wellen sind typisch für eine Hypokaliämie (zu wenig Kalium).' }
       ]
     },
     deepMode: {
       steps: [
-        'Analysiere Ruhemembranpotential...', 
-        'Scanne Leitlinien (ERC / ESC 2021)...',
-        'Korreliere Kaliumspiegel mit EKG-Phasen...', 
+        'Initialisiere anatomischen Kontext...', 
+        'Scanne kardiologische Leitlinien (ERC 2024)...',
+        'Analysiere Ruhemembranpotential-Verschiebung...', 
         'Synthetisiere pathophysiologische Kette...'
       ],
       citations: ['Herold Innere Medizin', 'Amboss Leitlinien', 'ERC Guidelines 2021'],
-      answerMarkdown: `
-### Die pathophysiologische Kette der Hyperkaliämie
-
-Die EKG-Veränderungen korrelieren direkt mit der **Verschiebung des Ruhemembranpotentials** (weniger negativ) und der **Inaktivierung von Natriumkanälen**.
-
-\`\`\`ecgimage\`\`\`
-
-#### 1. Milde Hyperkaliämie (5,5 - 6,5 mmol/l)
-*   **Zelt-T:** Durch die erhöhte extrazelluläre Kaliumkonzentration erhöht sich die Repolarisationsgeschwindigkeit (verkürzte Phase 3 des Aktionspotentials).
-*   **Klinik:** Meist noch asymptomatisch, aber im EKG als *hohe, spitze T-Welle* mit schmaler Basis sichtbar.
-
-\`\`\`mermaiddiagram\`\`\`
-
-#### 2. Moderate Hyperkaliämie (6,5 - 7,5 mmol/l)
-*   **Vorhof-Blockade:** Das Ruhepotential im Vorhof wird instabil.
-    *   P-Welle flacht ab und wird breiter.
-    *   PQ-Zeit verlängert sich (AV-Überleitungsstörung).
-*   **Wichtig:** *P-Wellen können komplett verschwinden (sinoventrikuläre Leitung).*
-
-#### 3. Schwere Hyperkaliämie (> 7,5 mmol/l)
-*   **Intraventrikuläre Leitungsverzögerung:**
-    *   **QRS-Verbreiterung:** Das Herz leitet immer langsamer.
-    *   Verschmelzung von QRS und T-Welle zur *"Sinuswelle"*.
-*   **Gefahr:** Asystolie oder Kammerflimmern.
-
-> **Merksatz:** "Das T zieht das QRS auseinander, bis alles zur Sinuswelle wird."
-`
+      answerMarkdown: "\n### Die pathophysiologische Kette der Hyperkaliämie\n\nDie EKG-Veränderungen korrelieren direkt mit der **Verschiebung des Ruhemembranpotentials** (weniger negativ) und der **Inaktivierung von Natriumkanälen**.\n\n````ecgimage````\n\n#### 1. Milde Hyperkaliämie (5,5 - 6,5 mmol/l)\n*   **Zelt-T:** Durch die erhöhte extrazelluläre Kaliumkonzentration erhöht sich die Repolarisationsgeschwindigkeit (verkürzte Phase 3 des Aktionspotentials).\n*   **Klinik:** Meist noch asymptomatisch, aber im EKG als *hohe, spitze T-Welle* mit schmaler Basis sichtbar.\n\n````mermaiddiagram````\n\n#### 2. Moderate Hyperkaliämie (6,5 - 7,5 mmol/l)\n*   **Vorhof-Blockade:** Das Ruhepotential im Vorhof wird instabil.\n    *   P-Welle flacht ab und wird breiter.\n    *   PQ-Zeit verlängert sich (AV-Überleitungsstörung).\n*   **Wichtig:** *P-Wellen können komplett verschwinden (sinoventrikuläre Leitung).*\n\n#### 3. Schwere Hyperkaliämie (> 7,5 mmol/l)\n*   **Intraventrikuläre Leitungsverzögerung:**\n    *   **QRS-Verbreiterung:** Das Herz leitet immer langsamer.\n    *   Verschmelzung von QRS und T-Welle zur \"Sinuswelle\".\n*   **Gefahr:** Asystolie oder Kammerflimmern.\n\n> **Merksatz:** \"Das T zieht das QRS auseinander, bis alles zur Sinuswelle wird.\"\n"
     }
   },
   law: {
@@ -103,39 +77,21 @@ Die EKG-Veränderungen korrelieren direkt mit der **Verschiebung des Ruhemembran
     rescue: {
       question: 'Wann handelt ein Täter "heimtückisch"?',
       options: [
-        { id: 'A', text: 'Wenn er die Arg- und Wehrlosigkeit des Opfers bewusst ausnutzt', correct: true, explanation: 'Klassische Definition in feindlicher Willensrichtung.' },
-        { id: 'B', text: 'Wenn er besonders grausam vorgeht', correct: false, explanation: 'Das wäre das Merkmal der Grausamkeit.' },
-        { id: 'C', text: 'Wenn er eine Waffe benutzt', correct: false, explanation: 'Waffenbesitz allein begründet keine Heimtücke.' },
+        { id: 'A', text: 'Wenn er die Arg- und Wehrlosigkeit des Opfers bewusst ausnutzt', correct: true, explanation: 'Klassische Definition: Ausnutzen der Arglosigkeit in feindlicher Willensrichtung.' },
+        { id: 'B', text: 'Wenn er besonders grausam vorgeht', correct: false, explanation: 'Dies erfüllt das eigenständige Merkmal der Grausamkeit.' },
+        { id: 'C', text: 'Wenn er eine Waffe benutzt', correct: false, explanation: 'Waffengebrauch allein begründet noch keine Heimtücke.' },
         { id: 'D', text: 'Wenn er aus Habgier handelt', correct: false, explanation: 'Habgier gehört zur 1. Gruppe (niedrige Beweggründe).' }
       ]
     },
     deepMode: {
       steps: [
-        'Analysiere § 211 StGB Struktur...', 
-        'Prüfe BGH Rechtsprechung zu Heimtücke...', 
-        'Vergleiche "Restriktive Auslegung"...', 
-        'Synthetisiere Definitionen...'
+        'Analysiere § 211 StGB Deliktsstruktur...', 
+        'Prüfe BGH-Rechtsprechung zu Heimtücke...', 
+        'Vergleiche restriktive Auslegungstheorien...', 
+        'Synthetisiere Definitionen für Klausur...'
       ],
       citations: ['BGHSt 32, 382', 'Fischer StGB § 211', 'Schönke/Schröder'],
-      answerMarkdown: `
-### Heimtücke (§ 211 Abs. 2 Gr. 2 Var. 1 StGB)
-
-Heimtücke ist das mit Abstand klausurrelevanteste Mordmerkmal.
-
-#### 1. Definition (BGH)
-Heimtückisch handelt, wer die **Arg-** und **Wehrlosigkeit** des Opfers in feindlicher Willensrichtung bewusst ausnutzt.
-
-*   **Arglos:** Wer sich zum Zeitpunkt der Tat keines Angriffs auf Leib oder Leben versieht.
-*   **Wehrlos:** Wer infolge seiner Arglosigkeit in seiner Verteidigungsfähigkeit zumindest stark eingeschränkt ist.
-
-#### 2. Problem: "Lehre vom Rechtsfolgenlösung"
-Da § 211 eine **absolute lebenslange Freiheitsstrafe** anordnet, versucht die Lehre (und teils der BGH), das Merkmal restriktiv auszulegen, um "gerechte" Ergebnisse bei Haustyrannen-Fällen zu erzielen.
-
-*   **Lit:** Fordert einen *besonders verwerflichen Vertrauensbruch*.
-*   **BGH:** Bleibt bei der Definition, wendet aber bei "außergewöhnlichen Umständen" § 49 StGB analog an (Rechtsfolgenlösung).
-
-> **Klausur-Tipp:** Prüfe immer zuerst die Arglosigkeit. Schlafende sind arglos (nehmen die Arglosigkeit "mit in den Schlaf"), Bewusstlose nicht (können keine Arglosigkeit bilden).
-`
+      answerMarkdown: "\n### Heimtücke (§ 211 Abs. 2 Gr. 2 Var. 1 StGB)\n\nHeimtücke ist das mit Abstand klausurrelevanteste Mordmerkmal.\n\n#### 1. Definition (BGH)\nHeimtückisch handelt, wer die **Arg-** und **Wehrlosigkeit** des Opfers in feindlicher Willensrichtung bewusst zur Tötung ausnutzt.\n\n*   **Arglos:** Wer sich zum Zeitpunkt der Tat keines Angriffs auf Leib oder Leben versieht.\n*   **Wehrlos:** Wer infolge seiner Arglosigkeit in seiner Verteidigungsfähigkeit zumindest stark eingeschränkt ist.\n\n#### 2. Problem: \"Lehre vom Rechtsfolgenlösung\"\nDa § 211 eine **absolute lebenslange Freiheitsstrafe** anordnet, versucht die Lehre (und teils der BGH), das Merkmal restriktiv auszulegen, um \"gerechte\" Ergebnisse bei Haustyrannen-Fällen zu erzielen.\n\n*   **Lit:** Fordert einen *besonders verwerflichen Vertrauensbruch*.\n*   **BGH:** Bleibt bei der Definition, wendet aber bei \"außergewöhnlichen Umständen\" § 49 StGB analog an (Rechtsfolgenlösung).\n\n> **Klausur-Tipp:** Prüfe immer zuerst die Arglosigkeit. Schlafende sind arglos (nehmen die Arglosigkeit \"mit in den Schlaf\"), Bewusstlose nicht (können keine Arglosigkeit bilden).\n"
     }
   }
 };

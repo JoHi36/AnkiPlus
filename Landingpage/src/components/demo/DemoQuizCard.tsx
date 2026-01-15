@@ -12,15 +12,21 @@ interface QuizOption {
 interface DemoQuizCardProps {
   question: string;
   options: QuizOption[];
+  onSelect?: (id: string) => void;
 }
 
-export function DemoQuizCard({ question, options }: DemoQuizCardProps) {
+export function DemoQuizCard({ question, options, onSelect }: DemoQuizCardProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const handleSelect = (id: string) => {
+    setSelectedId(id);
+    if (onSelect) onSelect(id);
+  };
 
   return (
     <div className="w-full h-full flex flex-col items-center justify-center p-6 sm:p-8 bg-[#1A1A1A] relative overflow-hidden overflow-y-auto">
       <div className="w-full max-w-2xl mx-auto flex flex-col items-center">
-        {/* Rescue Header */}
+        {/* ... (rest of header) */}
         <div className="flex items-center gap-2 mb-8 text-teal-500">
           <HelpCircle size={18} />
           <span className="text-xs font-bold tracking-widest uppercase">Rescue Mode</span>
@@ -65,7 +71,7 @@ export function DemoQuizCard({ question, options }: DemoQuizCardProps) {
               >
                 <button
                   disabled={showResult}
-                  onClick={() => setSelectedId(option.id)}
+                  onClick={() => handleSelect(option.id)}
                   className={`w-full p-4 rounded-xl border text-left transition-all duration-200 flex items-center justify-between group ${borderClass} ${bgClass}`}
                 >
                   <div className="flex items-center gap-4">

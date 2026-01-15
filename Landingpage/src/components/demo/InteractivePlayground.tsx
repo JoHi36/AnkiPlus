@@ -12,7 +12,7 @@ import RealEvaluation from './RealEvaluation';
 import { Button } from '@shared/components/Button';
 
 // Linear State Machine
-type DemoPhase = 'IDLE' | 'TYPING_EVAL' | 'EVALUATING' | 'SHOW_EVAL' | 'RESCUE_CHOICE' | 'RESCUE_ACTIVE' | 'DEEP_CTA' | 'DEEP_TYPING' | 'DEEP_THINKING' | 'DEEP_RESULT';
+type DemoPhase = 'IDLE' | 'TYPING_EVAL' | 'EVALUATING' | 'SHOW_EVAL' | 'RESCUE_CHOICE' | 'RESCUE_ACTIVE' | 'QUIZ_SOLVED' | 'DEEP_CTA' | 'DEEP_TYPING' | 'DEEP_THINKING' | 'DEEP_RESULT';
 
 export function InteractivePlayground() {
   const [scenarioKey, setScenarioKey] = useState<string>('medicine');
@@ -63,7 +63,11 @@ export function InteractivePlayground() {
   // Triggered when user selects an answer in the QuizCard
   const handleQuizCompletion = () => {
     if (phase === 'RESCUE_ACTIVE') {
-        setTimeout(() => setPhase('DEEP_CTA'), 1500);
+        setPhase('QUIZ_SOLVED'); // New intermediate state
+        // Card stays on Quiz (Solved state) for a moment, then flips back
+        setTimeout(() => {
+            setPhase('DEEP_CTA');
+        }, 2000); 
     }
   };
 
@@ -72,7 +76,6 @@ export function InteractivePlayground() {
     setPhase('DEEP_TYPING');
     simulateTyping("Erklär mir die Hintergründe bitte.", () => {
       setPhase('DEEP_THINKING');
-      // Timing: ThoughtStream animates for approx 3s, then result appears
       setTimeout(() => setPhase('DEEP_RESULT'), 3500);
     });
   };
@@ -105,40 +108,31 @@ export function InteractivePlayground() {
         {/* Chat Area */}
         <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent pb-32">
           
-          {/* POLISHED EMPTY STATE CTA */}
+          {/* POLISHED EMPTY STATE CTA - CLEANER VERSION */}
           {phase === 'IDLE' && !inputText && (
-            <div className="h-full flex flex-col items-center justify-center space-y-6">
-                <motion.div 
-                    initial={{ scale: 0.8, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    className="w-20 h-20 rounded-3xl bg-teal-500/5 flex items-center justify-center border border-teal-500/10 shadow-[inner_0_0_20px_rgba(20,184,166,0.1)] relative"
-                >
-                    <MessageSquareDashed className="w-10 h-10 text-teal-500/40" />
-                    <motion.div 
-                        animate={{ opacity: [0.2, 1, 0.2] }}
-                        transition={{ duration: 2, repeat: Infinity }}
-                        className="absolute inset-0 rounded-3xl border-2 border-teal-500/20" 
-                    />
-                </motion.div>
-                
-                <div className="text-center space-y-2">
-                    <h4 className="text-white font-semibold">Bereit für Active Recall?</h4>
-                    <p className="text-neutral-500 text-sm max-w-[240px]">Beantworte die Karte links oder lass dir vom Tutor helfen.</p>
+            <div className="h-full flex flex-col items-center justify-center space-y-8">
+                {/* Subtle Ghost Icon */}
+                <div className="w-24 h-24 rounded-full bg-white/[0.02] flex items-center justify-center border border-white/[0.05]">
+                    <Sparkles className="w-8 h-8 text-white/10" />
                 </div>
-
-                <div className="grid grid-cols-1 gap-2 w-full max-w-[280px]">
-                    <button onClick={handleStartEval} className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 hover:border-white/10 transition-all text-left group">
-                        <div className="w-8 h-8 rounded-lg bg-teal-500/10 flex items-center justify-center text-teal-500">
-                            <Sparkles size={16} />
-                        </div>
-                        <span className="text-xs text-neutral-400 group-hover:text-neutral-200 transition-colors">Beispiel-Antwort prüfen</span>
+                
+                {/* Suggestion Chip - Floating */}
+                <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
+                    <button 
+                        onClick={handleStartEval} 
+                        className="flex items-center gap-3 px-5 py-3 rounded-full bg-[#151515] border border-white/10 hover:border-teal-500/30 hover:bg-teal-500/5 transition-all group shadow-2xl"
+                    >
+                        <span className="text-xs text-neutral-400 group-hover:text-teal-200 font-medium">
+                            Beispiel: "{scenario.evaluation.userTyping.substring(0, 20)}..."
+                        </span>
+                        <ArrowRight size={14} className="text-neutral-600 group-hover:text-teal-500 transition-colors" />
                     </button>
                 </div>
             </div>
           )}
 
           {/* 1. User Eval Message */}
-          {['EVALUATING', 'SHOW_EVAL', 'RESCUE_CHOICE', 'RESCUE_ACTIVE', 'DEEP_CTA', 'DEEP_TYPING', 'DEEP_THINKING', 'DEEP_RESULT'].includes(phase) && (
+          {['EVALUATING', 'SHOW_EVAL', 'RESCUE_CHOICE', 'RESCUE_ACTIVE', 'QUIZ_SOLVED', 'DEEP_CTA', 'DEEP_TYPING', 'DEEP_THINKING', 'DEEP_RESULT'].includes(phase) && (
             <div className="flex justify-end animate-in fade-in slide-in-from-bottom-2">
               <div className="bg-[#222] text-neutral-200 px-4 py-3 rounded-2xl rounded-tr-sm max-w-[85%] text-sm leading-relaxed border border-white/5">
                 {scenario.evaluation.userTyping}
@@ -147,13 +141,13 @@ export function InteractivePlayground() {
           )}
 
           {/* 2. AI Eval Result */}
-          {['SHOW_EVAL', 'RESCUE_CHOICE', 'RESCUE_ACTIVE', 'DEEP_CTA', 'DEEP_TYPING', 'DEEP_THINKING', 'DEEP_RESULT'].includes(phase) && (
+          {['SHOW_EVAL', 'RESCUE_CHOICE', 'RESCUE_ACTIVE', 'QUIZ_SOLVED', 'DEEP_CTA', 'DEEP_TYPING', 'DEEP_THINKING', 'DEEP_RESULT'].includes(phase) && (
              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
                 <RealEvaluation 
                     score={scenario.evaluation.score} 
                     feedback={scenario.evaluation.feedback} 
                     onStartQuiz={handleStartRescue}
-                    onStartHint={() => {}} // Disabled for demo
+                    onStartHint={() => {}} 
                 />
              </div>
           )}
@@ -161,28 +155,18 @@ export function InteractivePlayground() {
           {/* 3. Deep Mode CTA (Appears after Quiz selection) */}
           {phase === 'DEEP_CTA' && (
              <motion.div 
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="flex justify-center"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex justify-center pt-4"
              >
-                <div className="bg-[#151515] border border-purple-500/20 rounded-2xl p-6 flex flex-col items-center text-center gap-4 shadow-2xl relative overflow-hidden group">
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-purple-500 to-transparent opacity-50" />
-                    <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-400">
-                        <Brain size={24} className="animate-pulse" />
-                    </div>
-                    <div>
-                        <h5 className="text-white font-bold mb-1">Tiefer eintauchen?</h5>
-                        <p className="text-xs text-neutral-500 max-w-[200px]">Lerne die medizinischen Zusammenhänge im Deep Mode kennen.</p>
-                    </div>
-                    <Button 
-                      variant="primary" 
-                      size="md" 
-                      onClick={handleStartDeep}
-                      className="w-full bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-900/40"
-                    >
-                      Deep Mode starten
-                    </Button>
-                </div>
+                <button 
+                    onClick={handleStartDeep}
+                    className="flex items-center gap-3 px-6 py-3 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-300 hover:bg-purple-500/20 hover:scale-105 transition-all shadow-lg shadow-purple-900/20 group"
+                >
+                    <Brain size={16} />
+                    <span className="text-xs font-bold uppercase tracking-wider">Erklär mir die Hintergründe</span>
+                    <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                </button>
              </motion.div>
           )}
 
@@ -266,16 +250,17 @@ export function InteractivePlayground() {
            </button>
         )}
 
-        {/* Card Content */}
+        {/* Card Content with 3D Flip Effect */}
         <div className="flex-1 relative perspective-1000">
            <AnimatePresence mode="wait">
-             {['RESCUE_ACTIVE', 'DEEP_CTA', 'DEEP_TYPING', 'DEEP_THINKING', 'DEEP_RESULT'].includes(phase) ? (
+             {/* Show Quiz during active quiz AND solved state */}
+             {['RESCUE_ACTIVE', 'QUIZ_SOLVED'].includes(phase) ? (
                 <motion.div
                   key="quiz"
                   initial={{ opacity: 0, rotateY: -90 }}
                   animate={{ opacity: 1, rotateY: 0 }}
-                  exit={{ opacity: 0, rotateY: 90 }}
-                  transition={{ duration: 0.5 }}
+                  exit={{ opacity: 0, rotateY: 90 }} // Flip away when done
+                  transition={{ duration: 0.6, ease: "easeInOut" }}
                   className="absolute inset-0"
                 >
                    <QuizCard 
@@ -288,10 +273,10 @@ export function InteractivePlayground() {
              ) : (
                 <motion.div
                   key="card"
-                  initial={{ opacity: 0, rotateY: 90 }}
+                  initial={{ opacity: 0, rotateY: 90 }} // Flip in
                   animate={{ opacity: 1, rotateY: 0 }}
                   exit={{ opacity: 0, rotateY: -90 }}
-                  transition={{ duration: 0.5 }}
+                  transition={{ duration: 0.6, ease: "easeInOut" }}
                   className="absolute inset-0"
                 >
                    <DemoAnkiCard content={scenario.card.front} tags={scenario.card.tags} />
@@ -301,7 +286,7 @@ export function InteractivePlayground() {
         </div>
       </div>
 
-      {/* --- RIGHT SIDE --- */}
+      {/* --- RIGHT SIDE: CHAT INTERFACE --- */}
       <div className="w-full md:w-1/2 h-[60%] md:h-full">
          {renderRightPanel()}
       </div>
