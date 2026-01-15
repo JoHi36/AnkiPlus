@@ -44,6 +44,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // If Firebase auth is not available, skip auth initialization
+    if (!auth) {
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       setLoading(false);
@@ -69,6 +75,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const login = async (email: string, password: string): Promise<void> => {
+    if (!auth) {
+      throw new Error('Firebase Auth is not configured. Please configure Firebase API keys.');
+    }
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       // User document will be created if it doesn't exist (handled in register)
@@ -82,6 +91,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   const register = async (email: string, password: string): Promise<void> => {
+    if (!auth) {
+      throw new Error('Firebase Auth is not configured. Please configure Firebase API keys.');
+    }
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       // Create user document in Firestore
@@ -94,6 +106,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   const loginWithGoogle = async (): Promise<void> => {
+    if (!auth) {
+      throw new Error('Firebase Auth is not configured. Please configure Firebase API keys.');
+    }
     try {
       const provider = new GoogleAuthProvider();
       const userCredential = await signInWithPopup(auth, provider);
@@ -107,6 +122,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   const logout = async (): Promise<void> => {
+    if (!auth) {
+      return; // No-op if Firebase is not configured
+    }
     try {
       await signOut(auth);
       clearRefreshToken();
@@ -116,6 +134,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   const resetPassword = async (email: string): Promise<void> => {
+    if (!auth) {
+      throw new Error('Firebase Auth is not configured. Please configure Firebase API keys.');
+    }
     try {
       await sendPasswordResetEmail(auth, email);
     } catch (error: any) {

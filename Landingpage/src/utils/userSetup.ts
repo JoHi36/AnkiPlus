@@ -17,6 +17,9 @@ export async function createUserDocument(
   userId: string,
   email: string
 ): Promise<UserDocument> {
+  if (!db) {
+    throw new Error('Firebase Firestore is not configured. Please configure Firebase API keys.');
+  }
   const userRef = doc(db, 'users', userId);
   const userDoc = await getDoc(userRef);
 
@@ -43,6 +46,9 @@ export async function createUserDocument(
 export async function getUserDocument(
   userId: string
 ): Promise<UserDocument | null> {
+  if (!db) {
+    throw new Error('Firebase Firestore is not configured. Please configure Firebase API keys.');
+  }
   const userRef = doc(db, 'users', userId);
   const userDoc = await getDoc(userRef);
 
