@@ -167,22 +167,46 @@ def check_clipboard_for_auth_token():
             token, is_token = check_clipboard_for_token()
             if is_token and token:
                 print(f"🔐 Token im Clipboard erkannt, authentifiziere...")
+                
+                # Zeige sofortige Benachrichtigung im Frontend
+                if widget.web_view:
+                    payload = {
+                        "type": "auth_pending",
+                        "message": "Token erkannt, verbinde..."
+                    }
+                    widget.web_view.page().runJavaScript(
+                        f"window.ankiReceive({json.dumps(payload)});"
+                    )
+                
                 result = widget.bridge.authenticate(token, "")
                 result_data = json.loads(result)
                 if result_data.get('success'):
                     print("✅ Authentifizierung via Clipboard erfolgreich!")
-                    # Benachrichtige Frontend
+                    # Benachrichtige Frontend mit Erfolg
                     if widget.web_view:
                         payload = {
                             "type": "auth_success",
-                            "message": "Authentifizierung erfolgreich"
+                            "message": "✅ Verbunden! Token wurde automatisch erkannt."
                         }
                         widget.web_view.page().runJavaScript(
                             f"window.ankiReceive({json.dumps(payload)});"
                         )
+                        # Aktualisiere Auth-Status sofort
+                        QTimer.singleShot(500, lambda: widget.web_view.page().runJavaScript(
+                            "if (window.ankiReceive) { window.ankiReceive({type: 'refreshAuthStatus'}); }"
+                        ))
                 else:
                     error_msg = result_data.get('error', 'Unbekannter Fehler')
                     print(f"❌ Authentifizierung fehlgeschlagen: {error_msg}")
+                    # Benachrichtige Frontend mit Fehler
+                    if widget.web_view:
+                        payload = {
+                            "type": "auth_error",
+                            "message": f"Fehler: {error_msg}"
+                        }
+                        widget.web_view.page().runJavaScript(
+                            f"window.ankiReceive({json.dumps(payload)});"
+                        )
     except Exception as e:
         print(f"⚠️ Fehler beim Prüfen des Clipboards: {e}")
         import traceback

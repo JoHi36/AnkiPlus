@@ -64,10 +64,46 @@ export default function SessionHeader({
       };
       
       checkAuth();
-      // Prüfe alle 30 Sekunden
-      const interval = setInterval(checkAuth, 30000);
+      // Prüfe häufiger wenn nicht verbunden (für Clipboard-Monitoring)
+      const interval = setInterval(checkAuth, authStatus.authenticated ? 30000 : 2000);
       return () => clearInterval(interval);
     }
+  }, [bridge, authStatus.authenticated]);
+  
+  // Höre auf auth_success Events
+  useEffect(() => {
+    const handleMessage = (event) => {
+      if (event.detail && event.detail.type === 'auth_success') {
+        // Aktualisiere Status sofort
+        if (bridge && bridge.getAuthStatus) {
+          try {
+            const statusStr = bridge.getAuthStatus();
+            if (statusStr) {
+              const status = JSON.parse(statusStr);
+              setAuthStatus(status);
+            }
+          } catch (e) {
+            console.error('Fehler beim Laden des Auth-Status:', e);
+          }
+        }
+      } else if (event.detail && event.detail.type === 'refreshAuthStatus') {
+        // Manueller Refresh
+        if (bridge && bridge.getAuthStatus) {
+          try {
+            const statusStr = bridge.getAuthStatus();
+            if (statusStr) {
+              const status = JSON.parse(statusStr);
+              setAuthStatus(status);
+            }
+          } catch (e) {
+            console.error('Fehler beim Laden des Auth-Status:', e);
+          }
+        }
+      }
+    };
+    
+    window.addEventListener('ankiMessage', handleMessage);
+    return () => window.removeEventListener('ankiMessage', handleMessage);
   }, [bridge]);
 
   // Fetch quota status

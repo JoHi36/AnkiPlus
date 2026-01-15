@@ -190,6 +190,20 @@ export default function SettingsDialog({ isOpen, onClose, onSave, bridge, isRead
     }
   }, [isOpen, addLog]);
 
+  // Höre auf auth Events
+  useEffect(() => {
+    const handleMessage = (event) => {
+      if (event.detail && event.detail.type === 'auth_success') {
+        checkAuthStatus();
+      } else if (event.detail && event.detail.type === 'refreshAuthStatus') {
+        checkAuthStatus();
+      }
+    };
+    
+    window.addEventListener('ankiMessage', handleMessage);
+    return () => window.removeEventListener('ankiMessage', handleMessage);
+  }, []);
+  
   const checkAuthStatus = () => {
     if (bridge && isReady && bridge.getAuthStatus) {
       addLog('Prüfe Auth-Status...');

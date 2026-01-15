@@ -160,12 +160,17 @@ export function AuthCallbackPage() {
                 <p className="text-green-400 text-sm font-medium mb-2">
                   ✅ Token ins Clipboard kopiert!
                 </p>
-                <p className="text-green-300 text-xs">
+                <p className="text-green-300 text-xs mb-2">
                   Das Plugin erkennt den Token automatisch innerhalb von 1 Sekunde.
-                  <span className="block mt-1">
-                    Prüfe in Anki, ob oben rechts "Verbunden" steht.
-                  </span>
                 </p>
+                <div className="mt-3 p-2 bg-green-500/5 border border-green-500/10 rounded text-xs">
+                  <p className="text-green-400 font-medium mb-1">📍 Wo sehe ich den Status?</p>
+                  <ol className="text-green-300 space-y-1 ml-4 list-decimal">
+                    <li>Öffne das Chatbot-Panel in Anki (Cmd+I / Ctrl+I)</li>
+                    <li>Oben rechts siehst du einen Badge: <span className="font-mono bg-green-500/20 px-1 rounded">✓ Verbunden</span> oder <span className="font-mono bg-red-500/20 px-1 rounded">✗ Nicht verbunden</span></li>
+                    <li>Alternativ: Öffne die Einstellungen (Zahnrad-Icon) → "Authentifizierung"</li>
+                  </ol>
+                </div>
               </div>
             )}
           </div>
@@ -236,15 +241,20 @@ export function AuthCallbackPage() {
           <div className="mb-6 p-4 bg-teal-500/10 border border-teal-500/20 rounded-lg">
             <p className="text-sm text-teal-300 mb-2 font-medium">So verbindest du das Plugin:</p>
             {pluginConnected ? (
-              <p className="text-xs text-green-400">
-                ✅ Token wurde automatisch ins Clipboard kopiert!
-                <span className="block mt-2">
+              <div className="text-xs text-green-400">
+                <p className="mb-2">
+                  ✅ Token wurde automatisch ins Clipboard kopiert!
+                </p>
+                <p className="mb-2">
                   Das Plugin erkennt den Token automatisch innerhalb von 1 Sekunde.
-                </span>
-                <span className="block mt-1">
-                  Prüfe in Anki, ob oben rechts "Verbunden" steht.
-                </span>
-              </p>
+                </p>
+                <div className="mt-2 p-2 bg-green-500/5 border border-green-500/10 rounded">
+                  <p className="text-green-300 font-medium mb-1">📍 Status prüfen:</p>
+                  <p className="text-green-200 text-[11px]">
+                    Öffne das Chatbot-Panel (Cmd+I) → Oben rechts siehst du <span className="font-mono bg-green-500/20 px-1 rounded">✓ Verbunden</span>
+                  </p>
+                </div>
+              </div>
             ) : (
               <ol className="text-xs text-neutral-400 space-y-2 list-decimal list-inside">
                 <li>
