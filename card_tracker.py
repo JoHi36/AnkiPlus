@@ -4,6 +4,7 @@ Verwaltet das Tracking von Anki-Karten und sendet Kontext an das Frontend
 """
 
 import json
+import os
 from aqt import gui_hooks
 from aqt.qt import QTimer
 
@@ -15,6 +16,8 @@ class CardTracker:
         self.widget = widget
         self.card_tracking_timer = None
         self.current_card_context = None
+        self.css_injected = False
+        self.js_injected = False
         self.setup_card_tracking()
     
     def setup_card_tracking(self):
@@ -24,6 +27,10 @@ class CardTracker:
             """Wird aufgerufen, wenn eine Karte angezeigt wird"""
             if card and self.widget.web_view:
                 self.send_card_context(card, is_question=True)
+            # Injiziere CSS/JS in Reviewer
+            if card:
+                self._inject_card_styles(card)
+                self._inject_mc_script(card)
         
         # Hook für Karten-Antwort (wenn Karte umgedreht wird)
         def on_answer_shown(card):
@@ -163,8 +170,120 @@ class CardTracker:
             
             js = f"window.ankiReceive({json.dumps(payload)});"
             self.widget.web_view.page().runJavaScript(js)
+            
         except Exception as e:
             import traceback
             print(f"Fehler beim Senden des Karten-Kontexts: {e}")
+            print(traceback.format_exc())
+    
+    def _inject_card_styles(self, card):
+        """Injiziert CSS für modernes Card-Design"""
+        try:
+            from aqt import mw
+            if not mw or not mw.reviewer:
+                return
+            
+            # Lade CSS-Datei
+            addon_dir = os.path.dirname(os.path.abspath(__file__))
+            css_path = os.path.join(addon_dir, 'card_styles.css')
+            
+            if not os.path.exists(css_path):
+                print(f"card_tracker: CSS-Datei nicht gefunden: {css_path}")
+                return
+            
+            with open(css_path, 'r', encoding='utf-8') as f:
+                css_content = f.read()
+            
+            # Injiziere CSS in Reviewer
+            css_js = f"""
+            (function() {{
+                if (document.getElementById('anki-card-modern-styles')) {{
+                    return; // Bereits injiziert
+                }}
+                const style = document.createElement('style');
+                style.id = 'anki-card-modern-styles';
+                style.textContent = {json.dumps(css_content)};
+                document.head.appendChild(style);
+                
+                // Wende modernes Design auf Card-Container an
+                setTimeout(function() {{
+                    const cardContainer = document.querySelector('.card') || document.querySelector('#qa');
+                    if (cardContainer && !cardContainer.classList.contains('anki-card-modern')) {{
+                        cardContainer.classList.add('anki-card-modern');
+                    }}
+                }}, 100);
+            }})();
+            """
+            
+            # Verwende reviewer.web.eval() für Injection
+            if hasattr(mw.reviewer, 'web') and mw.reviewer.web:
+                mw.reviewer.web.eval(css_js)
+                if not self.css_injected:
+                    self.css_injected = True
+                    print("card_tracker: CSS injiziert")
+            else:
+                print("card_tracker: Reviewer web nicht verfügbar")
+                    
+        except Exception as e:
+            import traceback
+            print(f"Fehler beim Injizieren von Card-Styles: {e}")
+            print(traceback.format_exc())
+    
+    def _inject_mc_script(self, card):
+        """Injiziert JavaScript für MC-Integration"""
+        try:
+            from aqt import mw
+            if not mw or not mw.reviewer:
+                return
+            
+            # Prüfe ob bereits injiziert (nur einmal pro Session)
+            if self.js_injected:
+                # Re-initialisiere MC für neue Karte
+                if hasattr(mw.reviewer, 'web') and mw.reviewer.web:
+                    mw.reviewer.web.eval("""
+                        if (window.ankiMCInitialized && typeof initMCIntegration === 'function') {
+                            setTimeout(initMCIntegration, 300);
+                        }
+                    """)
+                return
+            
+            # Lade JS-Datei
+            addon_dir = os.path.dirname(os.path.abspath(__file__))
+            js_path = os.path.join(addon_dir, 'card_mc_injector.js')
+            
+            if not os.path.exists(js_path):
+                print(f"card_tracker: JS-Datei nicht gefunden: {js_path}")
+                return
+            
+            with open(js_path, 'r', encoding='utf-8') as f:
+                js_content = f.read()
+            
+            # Injiziere JS in Reviewer
+            # Füge Card-ID zu Window-Objekt hinzu für JS-Zugriff
+            js_with_card_id = f"""
+            (function() {{
+                // Setze Card-ID für JS-Zugriff
+                window.anki = window.anki || {{}};
+                window.anki.currentCardId = {card.id};
+                
+                {js_content}
+            }})();
+            """
+            
+            # Verwende reviewer.web.eval() für Injection
+            if hasattr(mw.reviewer, 'web') and mw.reviewer.web:
+                mw.reviewer.web.eval(js_with_card_id)
+                self.js_injected = True
+                print("card_tracker: MC-JS injiziert")
+            else:
+                # Fallback: Direkt über web_view
+                if self.widget.web_view:
+                    self.widget.web_view.page().runJavaScript(js_with_card_id)
+                    self.js_injected = True
+                    print("card_tracker: MC-JS injiziert (Fallback)")
+                    
+        except Exception as e:
+            import traceback
+            print(f"Fehler beim Injizieren von MC-Script: {e}")
             print(traceback.format_exc())
 

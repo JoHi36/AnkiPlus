@@ -1,0 +1,272 @@
+/* Modern Card Design - Native Multiple Choice Integration */
+
+/* Grid Pattern Background */
+.anki-card-modern {
+  background: #1A1A1A;
+  background-image: radial-gradient(#fff 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: 0 0;
+  opacity: 0.03;
+  position: relative;
+}
+
+.anki-card-modern::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: radial-gradient(#fff 1px, transparent 1px);
+  background-size: 24px 24px;
+  opacity: 0.03;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Card Container */
+.anki-card-container {
+  position: relative;
+  z-index: 1;
+  padding: 2rem;
+  color: #FFFFFF;
+}
+
+/* Card Title (Main Question) - Serif Font */
+.anki-card-title {
+  font-family: 'Georgia', 'Charter', serif;
+  font-size: 1.5rem;
+  line-height: 1.75;
+  font-weight: 500;
+  color: #FFFFFF;
+  margin-bottom: 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .anki-card-title {
+    font-size: 1.875rem; /* text-3xl */
+  }
+}
+
+/* Card Body - Sans-Serif Font */
+.anki-card-body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 16px;
+  line-height: 1.75;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+/* Tags Styling */
+.anki-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.anki-card-tag {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-family: 'Courier New', monospace;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Deck Info */
+.anki-card-deck-info {
+  font-size: 10px;
+  font-family: 'Courier New', monospace;
+  color: rgba(115, 115, 115, 0.8);
+  position: absolute;
+  bottom: 1rem;
+  left: 2rem;
+}
+
+/* Multiple Choice Badge */
+.anki-mc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(20, 184, 166, 0.1); /* teal-500/10 */
+  border: 1px solid rgba(20, 184, 166, 0.3); /* teal-500/30 */
+  border-radius: 0.5rem;
+  color: #14b8a6; /* teal-500 */
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 1rem;
+}
+
+.anki-mc-badge:hover {
+  background: rgba(20, 184, 166, 0.2);
+  border-color: rgba(20, 184, 166, 0.5);
+  transform: translateY(-1px);
+}
+
+/* Multiple Choice Container */
+.anki-mc-container {
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 0.75rem;
+  animation: fadeInSlideDown 0.3s ease-out;
+}
+
+@keyframes fadeInSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* MC Option Styling */
+.anki-mc-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.anki-mc-option:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.anki-mc-option-letter {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.25rem;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.anki-mc-option-text {
+  flex: 1;
+  font-size: 15px;
+  line-height: 1.75;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Selected States */
+.anki-mc-option.selected-correct {
+  background: rgba(16, 185, 129, 0.1); /* emerald-500/10 */
+  border-color: rgba(16, 185, 129, 0.5);
+}
+
+.anki-mc-option.selected-wrong {
+  background: rgba(239, 68, 68, 0.1); /* red-500/10 */
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.anki-mc-option.missed-correct {
+  background: rgba(16, 185, 129, 0.05);
+  border-color: rgba(16, 185, 129, 0.3);
+  border-style: dashed;
+}
+
+/* Markdown Styling for Cards */
+.anki-card-markdown h3 {
+  font-family: 'Georgia', 'Charter', serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+  color: #FFFFFF;
+}
+
+.anki-card-markdown p {
+  margin-bottom: 1rem;
+  line-height: 1.8;
+}
+
+.anki-card-markdown ul,
+.anki-card-markdown ol {
+  margin-bottom: 1rem;
+  padding-left: 1.5rem;
+  line-height: 1.8;
+}
+
+.anki-card-markdown li {
+  margin-bottom: 0.5rem;
+}
+
+/* Amboss-Style Boxes */
+.anki-card-markdown .amboss-box {
+  padding: 1rem;
+  margin: 1rem 0;
+  border-radius: 0.5rem;
+  border-left: 4px solid;
+}
+
+.anki-card-markdown .amboss-box.merke {
+  background: rgba(234, 179, 8, 0.1); /* yellow-500/10 */
+  border-left-color: #eab308; /* yellow-500 */
+  color: rgba(234, 179, 8, 0.9);
+}
+
+.anki-card-markdown .amboss-box.warnung {
+  background: rgba(239, 68, 68, 0.1); /* red-500/10 */
+  border-left-color: #ef4444; /* red-500 */
+  color: rgba(239, 68, 68, 0.9);
+}
+
+.anki-card-markdown .amboss-box.tipp {
+  background: rgba(59, 130, 246, 0.1); /* blue-500/10 */
+  border-left-color: #3b82f6; /* blue-500 */
+  color: rgba(59, 130, 246, 0.9);
+}
+
+.anki-card-markdown .amboss-box.definition {
+  background: rgba(115, 115, 115, 0.1); /* gray-500/10 */
+  border-left-color: #737373; /* gray-500 */
+  color: rgba(115, 115, 115, 0.9);
+}
+
+/* Term Highlighting ([[term]] syntax) */
+.anki-card-markdown .term-highlight {
+  font-weight: 600;
+  color: #14b8a6; /* teal-500 */
+  background: rgba(20, 184, 166, 0.1);
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.125rem;
+}
+
+/* Responsive Design */
+@media (max-width: 640px) {
+  .anki-card-container {
+    padding: 1.5rem;
+  }
+  
+  .anki-card-title {
+    font-size: 1.25rem;
+  }
+  
+  .anki-card-body {
+    font-size: 15px;
+  }
+}

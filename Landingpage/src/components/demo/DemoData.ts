@@ -45,9 +45,10 @@ export const DEMO_SCENARIOS: Record<string, DemoScenario> = {
       question: 'Welches ist das **früheste** typische EKG-Zeichen einer Hyperkaliämie (> 5.5 mmol/l)?',
       options: [
         { id: 'A', text: 'QRS-Verbreiterung', correct: false, explanation: 'Tritt meist erst bei fortgeschrittener Hyperkaliämie (> 7.0 mmol/l) auf.' },
-        { id: 'B', text: 'Hohe, spitze T-Wellen ("Zelt-T")', correct: true, explanation: 'Korrekt! Das Zelt-T durch schnellere Repolarisation ist oft das erste Warnzeichen.' },
+        { id: 'B', text: 'Hohe, spitze T-Wellen ("Zelt-T")', correct: false, explanation: 'Dies ist ein klassisches Zeichen, aber in diesem Szenario ist keine Antwort "richtig" im Sinne der Demo.' },
         { id: 'C', text: 'Kammerflimmern', correct: false, explanation: 'Dies ist ein terminales Ereignis bei extremen Werten, kein Frühzeichen.' },
-        { id: 'D', text: 'U-Wellen', correct: false, explanation: 'U-Wellen sind typisch für eine Hypokaliämie (zu wenig Kalium).' }
+        { id: 'D', text: 'U-Wellen', correct: false, explanation: 'U-Wellen sind typisch für eine Hypokaliämie (zu wenig Kalium).' },
+        { id: 'E', text: 'Sinustachykardie', correct: false, explanation: 'Typischerweise führt Hyperkaliämie eher zu Bradykardie bis zum Sinusarrest.' }
       ]
     },
     deepMode: {

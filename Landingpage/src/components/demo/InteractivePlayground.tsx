@@ -231,10 +231,10 @@ export function InteractivePlayground() {
         )}
 
         {/* Reset Button */}
-        {phase !== 'IDLE' && (
+        {phase === 'DEEP_RESULT' && (
            <button 
              onClick={handleReset}
-             className="absolute top-4 right-4 z-20 p-2 rounded-full bg-black/40 text-neutral-500 hover:text-white border border-white/5 hover:border-white/20 transition-all backdrop-blur-md"
+             className="absolute top-4 left-4 z-20 p-2 rounded-full bg-black/40 text-neutral-500 hover:text-white border border-white/5 hover:border-white/20 transition-all backdrop-blur-md"
              title="Demo Neustarten"
            >
              <RefreshCcw size={16} />
@@ -257,7 +257,12 @@ export function InteractivePlayground() {
                    <QuizCard 
                       question={scenario.rescue.question} 
                       options={scenario.rescue.options}
-                      onSelect={() => handleQuizCompletion()}
+                      onSelect={(id, correct) => handleQuizCompletion(id, correct)}
+                      customWrongAction={{
+                        label: "Deep Mode Analyse",
+                        onClick: () => setPhase('DEEP_CTA'),
+                        icon: <GitCompareArrows size={14} />
+                      }}
                       className="h-full overflow-y-auto p-4"
                    />
                 </motion.div>

@@ -1397,4 +1397,153 @@ class WebBridge(QObject):
             print(f"Fehler in handleAuthDeepLink: {error_msg}")
             print(traceback.format_exc())
             return json.dumps({"success": False, "error": error_msg})
+    
+    @pyqtSlot(int, str, result=str)
+    def saveMultipleChoice(self, card_id, quiz_data_json):
+        """
+        Speichert Multiple-Choice-Daten in einem Custom Field der Anki-Note.
+        
+        Args:
+            card_id: Die Karten-ID
+            quiz_data_json: JSON-String mit Quiz-Daten im Format:
+                {"question": "...", "options": [...], "createdAt": timestamp}
+        
+        Returns:
+            JSON mit success-Status
+        """
+        try:
+            from aqt import mw
+            if mw is None or mw.col is None:
+                return json.dumps({"success": False, "error": "No collection"})
+            
+            card_id_int = int(card_id)
+            card = mw.col.get_card(card_id_int)
+            if not card:
+                return json.dumps({"success": False, "error": "Card not found"})
+            
+            note = card.note()
+            model = note.model()
+            
+            # Prüfe ob Custom Field existiert, erstelle es falls nicht
+            field_name = "_multipleChoice"
+            if field_name not in model['flds']:
+                # Erstelle neues Custom Field
+                field = {
+                    'name': field_name,
+                    'ord': len(model['flds']),
+                    'sticky': False,
+                    'rtl': False,
+                    'font': 'Arial',
+                    'size': 20,
+                    'media': []
+                }
+                model['flds'].append(field)
+                mw.col.models.save(model)
+                print(f"saveMultipleChoice: Custom Field '{field_name}' erstellt")
+            
+            # Validiere JSON-Format
+            try:
+                quiz_data = json.loads(quiz_data_json)
+                if not isinstance(quiz_data, dict):
+                    return json.dumps({"success": False, "error": "Invalid JSON format"})
+                if 'question' not in quiz_data or 'options' not in quiz_data:
+                    return json.dumps({"success": False, "error": "Missing required fields: question, options"})
+            except json.JSONDecodeError as e:
+                return json.dumps({"success": False, "error": f"Invalid JSON: {str(e)}"})
+            
+            # Füge Timestamp hinzu falls nicht vorhanden
+            if 'createdAt' not in quiz_data:
+                import time
+                quiz_data['createdAt'] = int(time.time())
+            
+            # Speichere in Note Field
+            note[field_name] = json.dumps(quiz_data)
+            note.flush()
+            
+            print(f"saveMultipleChoice: MC-Daten für Card {card_id_int} gespeichert")
+            return json.dumps({"success": True, "error": None})
+            
+        except Exception as e:
+            import traceback
+            error_msg = str(e)
+            print(f"Fehler in saveMultipleChoice: {error_msg}")
+            print(traceback.format_exc())
+            return json.dumps({"success": False, "error": error_msg})
+    
+    @pyqtSlot(int, result=str)
+    def loadMultipleChoice(self, card_id):
+        """
+        Lädt Multiple-Choice-Daten aus dem Custom Field der Anki-Note.
+        
+        Args:
+            card_id: Die Karten-ID
+        
+        Returns:
+            JSON mit quiz_data oder error
+        """
+        try:
+            from aqt import mw
+            if mw is None or mw.col is None:
+                return json.dumps({"success": False, "quizData": None, "error": "No collection"})
+            
+            card_id_int = int(card_id)
+            card = mw.col.get_card(card_id_int)
+            if not card:
+                return json.dumps({"success": False, "quizData": None, "error": "Card not found"})
+            
+            note = card.note()
+            field_name = "_multipleChoice"
+            
+            # Prüfe ob Field existiert
+            if field_name not in note.keys():
+                return json.dumps({"success": False, "quizData": None, "error": "No multiple choice data"})
+            
+            field_value = note[field_name]
+            if not field_value or not field_value.strip():
+                return json.dumps({"success": False, "quizData": None, "error": "Field is empty"})
+            
+            # Parse JSON
+            try:
+                quiz_data = json.loads(field_value)
+                return json.dumps({"success": True, "quizData": quiz_data, "error": None})
+            except json.JSONDecodeError as e:
+                return json.dumps({"success": False, "quizData": None, "error": f"Invalid JSON: {str(e)}"})
+            
+        except Exception as e:
+            import traceback
+            error_msg = str(e)
+            print(f"Fehler in loadMultipleChoice: {error_msg}")
+            print(traceback.format_exc())
+            return json.dumps({"success": False, "quizData": None, "error": error_msg})
+    
+    @pyqtSlot(int, result=str)
+    def hasMultipleChoice(self, card_id):
+        """
+        Prüft ob Multiple-Choice-Daten für eine Karte vorhanden sind.
+        
+        Args:
+            card_id: Die Karten-ID
+        
+        Returns:
+            JSON mit hasMC (boolean)
+        """
+        try:
+            from aqt import mw
+            if mw is None or mw.col is None:
+                return json.dumps({"hasMC": False})
+            
+            card_id_int = int(card_id)
+            card = mw.col.get_card(card_id_int)
+            if not card:
+                return json.dumps({"hasMC": False})
+            
+            note = card.note()
+            field_name = "_multipleChoice"
+            
+            has_mc = field_name in note.keys() and note[field_name] and note[field_name].strip()
+            return json.dumps({"hasMC": bool(has_mc)})
+            
+        except Exception as e:
+            # Bei Fehler: assume no MC
+            return json.dumps({"hasMC": False})
 

@@ -15,6 +15,11 @@ export interface QuizCardProps {
   options: QuizOption[];
   onSelect?: (id: string, isCorrect: boolean) => void;
   className?: string;
+  customWrongAction?: {
+    label: string;
+    onClick: () => void;
+    icon?: React.ReactNode;
+  };
 }
 
 /**
@@ -26,7 +31,7 @@ export interface QuizCardProps {
  * - Inline explanations
  * - 5-Option Standard
  */
-export function QuizCard({ question, options, onSelect, className = '' }: QuizCardProps) {
+export function QuizCard({ question, options, onSelect, className = '', customWrongAction }: QuizCardProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
@@ -198,13 +203,23 @@ export function QuizCard({ question, options, onSelect, className = '' }: QuizCa
             className="mt-8 flex justify-center gap-4"
           >
             {!isCorrect ? (
-              <button 
-                onClick={handleReset}
-                className="flex items-center gap-2 px-6 py-3 rounded-full bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 transition-all text-sm font-medium"
-              >
-                <RotateCcw size={14} />
-                Zurücksetzen
-              </button>
+              customWrongAction ? (
+                <button 
+                  onClick={customWrongAction.onClick}
+                  className="flex items-center gap-2 px-6 py-3 rounded-full bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 transition-all text-sm font-medium"
+                >
+                  {customWrongAction.icon || <RotateCcw size={14} />}
+                  {customWrongAction.label}
+                </button>
+              ) : (
+                <button 
+                  onClick={handleReset}
+                  className="flex items-center gap-2 px-6 py-3 rounded-full bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 transition-all text-sm font-medium"
+                >
+                  <RotateCcw size={14} />
+                  Zurücksetzen
+                </button>
+              )
             ) : (
               <button 
                 onClick={() => onSelect && onSelect('FLIP', true)}
