@@ -1206,8 +1206,9 @@ class WebBridge(QObject):
             # Validiere Token durch Backend-Call (optional - kann auch später validiert werden)
             try:
                 backend_url = get_backend_url()
+                # Backend-URL enthält bereits /api, also nur /user/quota hinzufügen
                 response = requests.get(
-                    f"{backend_url}/api/user/quota",
+                    f"{backend_url}/user/quota",
                     headers={
                         "Authorization": f"Bearer {token.strip()}",
                         "Content-Type": "application/json"
@@ -1226,29 +1227,37 @@ class WebBridge(QObject):
                     return json.dumps({"success": True, "message": "Authentifizierung erfolgreich"})
                 elif response.status_code == 401:
                     error_msg = "Ungültiger Token - bitte prüfe deinen Token"
-                    print(f"❌ authenticate: {error_msg}")
+                    print(f"❌ authenticate: {error_msg} (Status: {response.status_code})")
+                    print(f"❌ authenticate: Response: {response.text[:200]}")
                     # Markiere Token als nicht validiert
                     update_config(auth_validated=False)
                     if self.widget and self.widget.web_view:
                         payload = {"type": "auth_error", "message": error_msg}
-                        self.widget.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
+                        js_code = f"if (window.ankiReceive) {{ window.ankiReceive({json.dumps(payload)}); }}"
+                        self.widget.web_view.page().runJavaScript(js_code)
+                        print(f"❌ authenticate: Frontend benachrichtigt: {payload}")
                     return json.dumps({"success": False, "error": error_msg})
                 else:
                     # Token gespeichert, aber Validierung fehlgeschlagen (Netzwerkfehler etc.)
-                    print(f"⚠️ authenticate: Token gespeichert, aber Validierung fehlgeschlagen (Status: {response.status_code})")
+                    error_msg = f"Token gespeichert, aber Validierung fehlgeschlagen (Status: {response.status_code})"
+                    print(f"⚠️ authenticate: {error_msg}")
+                    print(f"⚠️ authenticate: Response: {response.text[:200]}")
                     # Token trotzdem speichern - kann später validiert werden
                     if self.widget and self.widget.web_view:
-                        payload = {"type": "auth_success", "message": "Token gespeichert (Validierung ausstehend)"}
-                        self.widget.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
-                    return json.dumps({"success": True, "message": "Token gespeichert"})
+                        payload = {"type": "auth_error", "message": error_msg}
+                        js_code = f"if (window.ankiReceive) {{ window.ankiReceive({json.dumps(payload)}); }}"
+                        self.widget.web_view.page().runJavaScript(js_code)
+                    return json.dumps({"success": False, "error": error_msg})
             except requests.exceptions.RequestException as e:
                 # Netzwerkfehler - Token trotzdem speichern
-                print(f"⚠️ authenticate: Netzwerkfehler bei Validierung: {e}")
+                error_msg = f"Netzwerkfehler bei Validierung: {str(e)}"
+                print(f"⚠️ authenticate: {error_msg}")
                 print("Token wurde trotzdem gespeichert")
                 if self.widget and self.widget.web_view:
-                    payload = {"type": "auth_success", "message": "Token gespeichert (Validierung ausstehend)"}
-                    self.widget.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
-                return json.dumps({"success": True, "message": "Token gespeichert (Netzwerkfehler bei Validierung)"})
+                    payload = {"type": "auth_error", "message": error_msg}
+                    js_code = f"if (window.ankiReceive) {{ window.ankiReceive({json.dumps(payload)}); }}"
+                    self.widget.web_view.page().runJavaScript(js_code)
+                return json.dumps({"success": False, "error": error_msg})
         except Exception as e:
             import traceback
             error_msg = str(e)

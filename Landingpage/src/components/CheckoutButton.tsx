@@ -18,7 +18,7 @@ export function CheckoutButton({
   variant = 'primary',
   children 
 }: CheckoutButtonProps) {
-  const { user, getIdToken } = useAuth();
+  const { user, getAuthToken } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,7 +32,7 @@ export function CheckoutButton({
     setError(null);
     
     try {
-      const token = await getIdToken();
+      const token = await getAuthToken();
       if (!token) {
         throw new Error('Authentication token not available');
       }

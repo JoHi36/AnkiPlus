@@ -19,7 +19,7 @@ import { CheckoutButton } from '../components/CheckoutButton';
 import { useEffect, useState } from 'react';
 
 export function SubscriptionPage() {
-  const { user, getIdToken } = useAuth();
+  const { user, getAuthToken } = useAuth();
   const [userDoc, setUserDoc] = useState<UserDocument | null>(null);
   const [loading, setLoading] = useState(true);
   const [portalLoading, setPortalLoading] = useState(false);
@@ -243,7 +243,7 @@ export function SubscriptionPage() {
               onClick={async () => {
                 setPortalLoading(true);
                 try {
-                  const token = await getIdToken();
+                  const token = await getAuthToken();
                   if (!token) {
                     throw new Error('Authentication token not available');
                   }

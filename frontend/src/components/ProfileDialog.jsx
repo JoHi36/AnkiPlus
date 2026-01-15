@@ -60,13 +60,16 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
       if (originalAnkiReceive) {
         originalAnkiReceive(payload);
       }
+      console.log('ProfileDialog: ankiReceive Event:', payload.type, payload);
       if (payload.type === 'authStatusLoaded' && payload.data) {
         handleAuthStatusLoaded({ detail: payload.data });
       } else if (payload.type === 'auth_success') {
+        console.log('ProfileDialog: auth_success Event erhalten');
         checkAuthStatus();
         setError('');
         setLoading(false);
       } else if (payload.type === 'auth_error') {
+        console.log('ProfileDialog: auth_error Event erhalten:', payload.message);
         setError(payload.message || 'Authentifizierung fehlgeschlagen');
         setLoading(false);
       }
