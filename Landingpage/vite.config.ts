@@ -25,12 +25,15 @@ export default defineConfig(({ mode }) => {
       build: {
         outDir: 'dist',
         sourcemap: false,
-        commonjsOptions: {
-          include: [/node_modules/],
+        rollupOptions: {
+          // Ensure external dependencies are bundled correctly
+          output: {
+            manualChunks: undefined,
+          },
         },
       },
       optimizeDeps: {
-        include: ['react-markdown', 'remark-math', 'rehype-katex'],
+        include: ['react-markdown', 'remark-math', 'rehype-katex', 'react', 'react-dom'],
       },
     };
 });
