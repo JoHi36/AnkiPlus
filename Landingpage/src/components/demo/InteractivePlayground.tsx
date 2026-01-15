@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RefreshCcw, ArrowRight, MessageSquareDashed } from 'lucide-react';
+import { RefreshCcw, ArrowRight, MessageSquareDashed, Sparkles, Brain } from 'lucide-react';
 
 import { DEMO_SCENARIOS } from './DemoData';
 import { DemoAnkiCard } from './DemoAnkiCard';
 import RealThoughtStream from './RealThoughtStream';
 import { RealChatMessage } from './RealChatMessage';
-import { DemoQuizCard } from './DemoQuizCard';
+import { QuizCard } from '@shared/components/QuizCard';
 import RealChatInput from './RealChatInput';
 import RealEvaluation from './RealEvaluation';
 import { Button } from '@shared/components/Button';
@@ -33,12 +33,12 @@ export function InteractivePlayground() {
   const handleUserTyping = (text: string) => {
     if (phase === 'IDLE') {
         setInputText(text);
-        if (text.length > 2) {
+        if (text.length > 5) {
              handleStartEval(); 
         }
     } else if (phase === 'DEEP_CTA') {
         setInputText(text);
-        if (text.length > 2) {
+        if (text.length > 5) {
              handleStartDeep();
         }
     }
@@ -46,7 +46,6 @@ export function InteractivePlayground() {
 
   // --- PHASE TRANSITION LOGIC ---
 
-  // Phase 1: User "types" eval answer
   const handleStartEval = () => {
     if (phase !== 'IDLE') return;
     setPhase('TYPING_EVAL');
@@ -56,27 +55,24 @@ export function InteractivePlayground() {
     });
   };
 
-  // Phase 2: User chooses Rescue (Quiz)
   const handleStartRescue = () => {
     setPhase('RESCUE_ACTIVE');
-    setTimeout(() => {
-        // Automatically show CTA after quiz interaction simulation (user picks answer in UI)
-        // In this demo controller, we just wait a bit or let user interaction in QuizCard trigger it?
-        // Since QuizCard is isolated, we need a way to know when quiz is done. 
-        // For now, let's just show CTA after a delay to simulate flow, 
-        // or rely on the user clicking "Deep Mode" later.
-        // Actually, let's transition to DEEP_CTA when user finishes quiz in real app.
-        // Here we simulate it appearing after a delay for smooth flow if user interacts.
-        setPhase('DEEP_CTA');
-    }, 4000); 
+    setInputText('');
   };
 
-  // Phase 3: User triggers Deep Mode
+  // Triggered when user selects an answer in the QuizCard
+  const handleQuizCompletion = () => {
+    if (phase === 'RESCUE_ACTIVE') {
+        setTimeout(() => setPhase('DEEP_CTA'), 1500);
+    }
+  };
+
   const handleStartDeep = () => {
     if (phase !== 'DEEP_CTA') return;
     setPhase('DEEP_TYPING');
     simulateTyping("Erklär mir die Hintergründe bitte.", () => {
       setPhase('DEEP_THINKING');
+      // Timing: ThoughtStream animates for approx 3s, then result appears
       setTimeout(() => setPhase('DEEP_RESULT'), 3500);
     });
   };
@@ -109,14 +105,35 @@ export function InteractivePlayground() {
         {/* Chat Area */}
         <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent pb-32">
           
-          {/* EMPTY STATE CTA */}
+          {/* POLISHED EMPTY STATE CTA */}
           {phase === 'IDLE' && !inputText && (
-            <div className="h-full flex flex-col items-center justify-center opacity-0 animate-in fade-in zoom-in duration-500 delay-200">
-                <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mb-4 border border-white/5 shadow-inner">
-                    <MessageSquareDashed className="w-8 h-8 text-neutral-600" />
+            <div className="h-full flex flex-col items-center justify-center space-y-6">
+                <motion.div 
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="w-20 h-20 rounded-3xl bg-teal-500/5 flex items-center justify-center border border-teal-500/10 shadow-[inner_0_0_20px_rgba(20,184,166,0.1)] relative"
+                >
+                    <MessageSquareDashed className="w-10 h-10 text-teal-500/40" />
+                    <motion.div 
+                        animate={{ opacity: [0.2, 1, 0.2] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                        className="absolute inset-0 rounded-3xl border-2 border-teal-500/20" 
+                    />
+                </motion.div>
+                
+                <div className="text-center space-y-2">
+                    <h4 className="text-white font-semibold">Bereit für Active Recall?</h4>
+                    <p className="text-neutral-500 text-sm max-w-[240px]">Beantworte die Karte links oder lass dir vom Tutor helfen.</p>
                 </div>
-                <p className="text-neutral-500 font-medium text-sm">Tippe deine Antwort zur Karte...</p>
-                <ArrowRight className="w-4 h-4 text-neutral-700 mt-2 animate-bounce" />
+
+                <div className="grid grid-cols-1 gap-2 w-full max-w-[280px]">
+                    <button onClick={handleStartEval} className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 hover:border-white/10 transition-all text-left group">
+                        <div className="w-8 h-8 rounded-lg bg-teal-500/10 flex items-center justify-center text-teal-500">
+                            <Sparkles size={16} />
+                        </div>
+                        <span className="text-xs text-neutral-400 group-hover:text-neutral-200 transition-colors">Beispiel-Antwort prüfen</span>
+                    </button>
+                </div>
             </div>
           )}
 
@@ -132,47 +149,41 @@ export function InteractivePlayground() {
           {/* 2. AI Eval Result */}
           {['SHOW_EVAL', 'RESCUE_CHOICE', 'RESCUE_ACTIVE', 'DEEP_CTA', 'DEEP_TYPING', 'DEEP_THINKING', 'DEEP_RESULT'].includes(phase) && (
              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                <RealEvaluation score={scenario.evaluation.score} feedback={scenario.evaluation.feedback} />
-                
-                {/* Contextual Action Buttons */}
-                {phase === 'SHOW_EVAL' && (
-                  <div className="flex gap-3 justify-center pt-2">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="text-neutral-500 hover:text-white"
-                      disabled
-                    >
-                      Hinweis geben
-                    </Button>
-                    <Button 
-                      variant="primary" 
-                      size="sm" 
-                      onClick={handleStartRescue}
-                      className="animate-in zoom-in duration-300 shadow-lg shadow-teal-900/20"
-                    >
-                      Quiz starten
-                    </Button>
-                  </div>
-                )}
+                <RealEvaluation 
+                    score={scenario.evaluation.score} 
+                    feedback={scenario.evaluation.feedback} 
+                    onStartQuiz={handleStartRescue}
+                    onStartHint={() => {}} // Disabled for demo
+                />
              </div>
           )}
 
-          {/* 3. Deep Mode CTA */}
+          {/* 3. Deep Mode CTA (Appears after Quiz selection) */}
           {phase === 'DEEP_CTA' && (
-             <div className="flex justify-center animate-in fade-in slide-in-from-bottom-2">
-                <div className="bg-[#151515] border border-white/10 rounded-xl p-4 flex flex-col items-center gap-3 shadow-xl">
-                    <p className="text-sm text-neutral-400">Konzept verstanden oder tiefer eintauchen?</p>
+             <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="flex justify-center"
+             >
+                <div className="bg-[#151515] border border-purple-500/20 rounded-2xl p-6 flex flex-col items-center text-center gap-4 shadow-2xl relative overflow-hidden group">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-purple-500 to-transparent opacity-50" />
+                    <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-400">
+                        <Brain size={24} className="animate-pulse" />
+                    </div>
+                    <div>
+                        <h5 className="text-white font-bold mb-1">Tiefer eintauchen?</h5>
+                        <p className="text-xs text-neutral-500 max-w-[200px]">Lerne die medizinischen Zusammenhänge im Deep Mode kennen.</p>
+                    </div>
                     <Button 
-                      variant="secondary" 
-                      size="sm" 
+                      variant="primary" 
+                      size="md" 
                       onClick={handleStartDeep}
-                      className="w-full bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20"
+                      className="w-full bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-900/40"
                     >
-                      Erklär mir die Hintergründe
+                      Deep Mode starten
                     </Button>
                 </div>
-             </div>
+             </motion.div>
           )}
 
           {/* 4. Deep Mode User Trigger */}
@@ -225,7 +236,7 @@ export function InteractivePlayground() {
       {/* --- LEFT SIDE: CARD / QUIZ --- */}
       <div className="relative w-full md:w-1/2 h-[40%] md:h-full bg-[#111] border-b md:border-b-0 md:border-r border-white/5 flex flex-col">
         
-        {/* Scenario Selector (Only visible in IDLE) */}
+        {/* Scenario Selector */}
         {phase === 'IDLE' && (
           <div className="absolute top-4 left-4 z-10 flex gap-2 animate-in fade-in">
             {Object.values(DEMO_SCENARIOS).map((s) => (
@@ -244,7 +255,7 @@ export function InteractivePlayground() {
           </div>
         )}
 
-        {/* Reset Button (Top Right to avoid Quiz overlap) */}
+        {/* Reset Button */}
         {phase !== 'IDLE' && (
            <button 
              onClick={handleReset}
@@ -255,7 +266,7 @@ export function InteractivePlayground() {
            </button>
         )}
 
-        {/* Card Content with 3D Flip Effect */}
+        {/* Card Content */}
         <div className="flex-1 relative perspective-1000">
            <AnimatePresence mode="wait">
              {['RESCUE_ACTIVE', 'DEEP_CTA', 'DEEP_TYPING', 'DEEP_THINKING', 'DEEP_RESULT'].includes(phase) ? (
@@ -267,9 +278,11 @@ export function InteractivePlayground() {
                   transition={{ duration: 0.5 }}
                   className="absolute inset-0"
                 >
-                   <DemoQuizCard 
+                   <QuizCard 
                       question={scenario.rescue.question} 
-                      options={scenario.rescue.options} 
+                      options={scenario.rescue.options}
+                      onSelect={() => handleQuizCompletion()}
+                      className="h-full overflow-y-auto p-4"
                    />
                 </motion.div>
              ) : (
@@ -288,7 +301,7 @@ export function InteractivePlayground() {
         </div>
       </div>
 
-      {/* --- RIGHT SIDE: CHAT INTERFACE --- */}
+      {/* --- RIGHT SIDE --- */}
       <div className="w-full md:w-1/2 h-[60%] md:h-full">
          {renderRightPanel()}
       </div>

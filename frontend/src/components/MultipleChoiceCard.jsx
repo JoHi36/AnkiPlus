@@ -1,2 +1,3 @@
-// Re-export from shared components
-export { MultipleChoiceCard as default } from '@shared/components/MultipleChoiceCard';
+// Re-export from shared components with correct path alias
+import { MultipleChoiceCard } from '../../../../shared/components/MultipleChoiceCard';
+export default MultipleChoiceCard;

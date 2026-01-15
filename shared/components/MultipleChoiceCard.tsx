@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { CheckCircle2, XCircle, RotateCcw, Trophy } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Check, X, HelpCircle, Trophy, RotateCcw } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
@@ -19,10 +20,13 @@ export interface MultipleChoiceCardProps {
 }
 
 /**
- * MultipleChoiceCard - High End UI 3.0
- * Redesigned for maximum clarity and engagement.
- * Supports 5 options, explanations, and distinct reveal states.
- * Mobile-optimized with touch targets (min 44px height).
+ * MultipleChoiceCard - High End UI 4.0 ("Medical Precision" Style)
+ * Unified High-End Quiz Component for App and Landing Page.
+ * Features:
+ * - Monospace indices
+ * - Focus dimming
+ * - Inline explanations (Accordion)
+ * - Clean, professional layout
  */
 export const MultipleChoiceCard: React.FC<MultipleChoiceCardProps> = ({ 
   question, 
@@ -31,151 +35,192 @@ export const MultipleChoiceCard: React.FC<MultipleChoiceCardProps> = ({
   onRetry 
 }) => {
   const [selectedLetter, setSelectedLetter] = useState<string | null>(null);
+  const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
 
   const handleSelect = (option: MultipleChoiceOption) => {
-    if (selectedLetter) return; // Already selected
+    if (hasSubmitted) return;
     
     setSelectedLetter(option.letter);
+    setHasSubmitted(true);
     setIsCorrect(option.isCorrect);
+    
     if (onSelect) onSelect(option);
   };
 
   const handleRetryClick = () => {
     setSelectedLetter(null);
+    setHasSubmitted(false);
     setIsCorrect(null);
     if (onRetry) onRetry();
   };
 
   return (
-    <div className="my-6 w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
-       {/* Header - Aligned left, no icon */}
-       <div className="flex flex-col mb-5 px-1">
-            <span className="text-[10px] font-bold text-base-content/40 uppercase tracking-widest mb-1.5">Quiz Time</span>
-            <h3 className="text-base sm:text-lg font-bold text-base-content/95 leading-snug">
-                <ReactMarkdown 
-                    remarkPlugins={[remarkMath]}
-                    rehypePlugins={[rehypeKatex]}
-                    components={{
-                        p: ({node, ...props}) => <span {...props} />
-                    }}>
-                    {typeof question === 'string' ? question : "Wähle die richtige Antwort"}
-                </ReactMarkdown>
-            </h3>
+    <div className="w-full max-w-3xl mx-auto flex flex-col font-sans my-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      
+      {/* Header Badge */}
+      <div className="flex items-center gap-2 mb-6 px-1">
+        <div className="w-1 h-4 bg-primary rounded-full" />
+        <span className="text-[10px] font-bold tracking-[0.2em] uppercase font-mono text-primary/80">Exam Simulation</span>
       </div>
 
-      {/* Options Stack */}
+      {/* Question */}
+      <h3 className="text-xl sm:text-2xl font-medium text-base-content/95 mb-10 leading-snug px-1">
+        <ReactMarkdown 
+            remarkPlugins={[remarkMath]}
+            rehypePlugins={[rehypeKatex]}
+            components={{
+                p: ({node, ...props}) => <span {...props} />
+            }}>
+            {typeof question === 'string' ? question : "Wähle die richtige Antwort"}
+        </ReactMarkdown>
+      </h3>
+
+      {/* Options List */}
       <div className="flex flex-col gap-3">
         {options.map((option, idx) => {
-            const isSelected = selectedLetter === option.letter;
-            const showResult = selectedLetter !== null;
-            const isThisCorrect = option.isCorrect;
-            
-            // Visibility Logic:
-            // 1. Show explanation for the SELECTED option always.
-            // 2. If User is CORRECT (isCorrect===true), show explanations for ALL options.
-            const showExplanation = showResult && (isSelected || isCorrect === true);
-            
-            // Styling Logic
-            let containerClass = "bg-base-200/40 border-base-300/60 hover:bg-base-200/80 hover:border-base-300 hover:shadow-sm";
-            let indicatorClass = "bg-base-300/50 text-base-content/70";
-            let textClass = "text-base-content/90";
-            
-            if (showResult) {
-                if (isSelected) {
-                    if (isThisCorrect) {
-                         // User Selected CORRECT -> Green High End
-                         containerClass = "bg-emerald-500/10 border-emerald-500/50 shadow-[0_0_20px_rgba(16,185,129,0.15)] ring-1 ring-emerald-500/20";
-                         indicatorClass = "bg-emerald-500 text-white shadow-md scale-105";
-                         textClass = "text-base-content"; 
-                    } else {
-                         // User Selected WRONG -> Red High End
-                         containerClass = "bg-red-500/10 border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.15)] ring-1 ring-red-500/20";
-                         indicatorClass = "bg-red-500 text-white shadow-md scale-105";
-                         textClass = "text-base-content";
-                    }
-                } else if (isCorrect === true) {
-                    // User was RIGHT, this is another option (Wrong) -> Reveal explanation but keep neutral
-                    containerClass = "bg-base-200/30 border-base-300/30";
-                    indicatorClass = "bg-base-300/30 text-base-content/40";
-                    textClass = "text-base-content/60";
-                } else {
-                    // User was WRONG, this is another option -> Fade out
-                    containerClass = "opacity-30 border-transparent bg-base-200/10 grayscale filter blur-[0.5px]";
-                    indicatorClass = "bg-base-200 text-base-content/20";
-                }
+          const isSelected = selectedLetter === option.letter;
+          
+          // Visual States
+          let state = 'idle'; // idle, selected-correct, selected-wrong, missed-correct, dim
+          
+          if (hasSubmitted) {
+            if (isSelected) {
+              state = option.isCorrect ? 'selected-correct' : 'selected-wrong';
+            } else if (option.isCorrect) {
+              state = 'missed-correct'; // Show correct answer if wrong was picked
+            } else {
+              state = 'dim'; // Dim irrelevant options
             }
+          }
 
-            return (
-                <button
-                    key={idx}
-                    onClick={() => handleSelect(option)}
-                    disabled={showResult}
-                    className={`group relative w-full text-left p-3.5 sm:p-4 pr-4 rounded-xl border transition-all duration-300 ease-out min-h-[44px] ${containerClass} ${showResult ? 'cursor-default' : 'cursor-pointer active:scale-[0.99]'}`}
-                >
-                    <div className="flex items-start gap-3.5">
-                        {/* Letter Indicator */}
-                         <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center font-bold text-xs sm:text-sm transition-all duration-300 flex-shrink-0 mt-0.5 ${indicatorClass}`}>
-                            {option.letter}
-                        </div>
-                        
-                        <div className="flex-1 min-w-0 pt-0.5">
-                            {/* Option Text */}
-                            <div className={`text-sm sm:text-base leading-relaxed font-medium transition-colors duration-300 ${textClass}`}>
-                                <ReactMarkdown 
-                                    remarkPlugins={[remarkMath]}
-                                    rehypePlugins={[rehypeKatex]}
-                                    components={{ 
-                                        p: ({node, ...props}) => <p className="m-0 inline" {...props} />,
-                                        code: ({node, ...props}) => <code className="bg-base-content/10 px-1 py-0.5 rounded text-xs font-mono" {...props} />
-                                    }}>
-                                    {typeof option.text === 'string' ? option.text : String(option.text || '')}
-                                </ReactMarkdown>
-                            </div>
-                            
-                            {/* Explanation (Collapsible) */}
-                            <div className={`grid transition-[grid-template-rows] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] ${showExplanation ? 'grid-rows-[1fr] mt-3 pt-3 border-t border-base-content/5' : 'grid-rows-[0fr]'}`}>
-                                <div className="overflow-hidden min-h-0">
-                                    <div className="text-xs sm:text-sm leading-relaxed">
-                                        <div className={`flex items-center gap-1.5 mb-1 text-xs font-bold uppercase tracking-wider ${isThisCorrect ? 'text-emerald-500' : 'text-red-500'}`}>
-                                            {isThisCorrect ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
-                                            {isThisCorrect ? 'Richtig' : 'Falsch'}
-                                        </div>
-                                        <div className="text-base-content/70">
-                                            <ReactMarkdown 
-                                                remarkPlugins={[remarkMath]}
-                                                rehypePlugins={[rehypeKatex]}
-                                                components={{
-                                                    p: ({node, ...props}) => <p className="m-0" {...props} />
-                                                }}>
-                                                {typeof option.explanation === 'string' ? option.explanation : "Keine Erklärung verfügbar."}
-                                            </ReactMarkdown>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+          return (
+            <motion.div
+              key={idx}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ 
+                opacity: state === 'dim' ? 0.4 : 1, 
+                y: 0 
+              }}
+              transition={{ delay: idx * 0.05, duration: 0.3 }}
+              className="relative"
+            >
+              <button
+                disabled={hasSubmitted}
+                onClick={() => handleSelect(option)}
+                className={`
+                  w-full text-left relative flex items-start group rounded-lg overflow-hidden transition-all duration-200
+                  border
+                  ${state === 'idle' 
+                    ? 'bg-base-200/40 hover:bg-base-200/80 border-base-300/60 hover:border-base-300' 
+                    : ''}
+                  ${state === 'selected-correct' 
+                    ? 'bg-emerald-500/10 border-emerald-500/50 shadow-[0_0_15px_-5px_rgba(16,185,129,0.3)]' 
+                    : ''}
+                  ${state === 'selected-wrong' 
+                    ? 'bg-red-500/10 border-red-500/50' 
+                    : ''}
+                  ${state === 'missed-correct' 
+                    ? 'bg-emerald-500/5 border-emerald-500/30 border-dashed' 
+                    : ''}
+                  ${state === 'dim' 
+                    ? 'bg-base-200/20 border-transparent opacity-50 grayscale' 
+                    : ''}
+                `}
+              >
+                {/* Active Indicator Bar (Left) */}
+                <div className={`absolute left-0 top-0 bottom-0 w-1 transition-colors duration-200
+                  ${state === 'idle' ? 'bg-transparent group-hover:bg-base-content/10' : ''}
+                  ${state === 'selected-correct' ? 'bg-emerald-500' : ''}
+                  ${state === 'selected-wrong' ? 'bg-red-500' : ''}
+                  ${state === 'missed-correct' ? 'bg-emerald-500/50' : ''}
+                `} />
 
-                         {/* Status Icon for Selected */}
-                        {showResult && isSelected && (
-                            <div className="absolute right-3 top-3 animate-in zoom-in duration-300">
-                                {isThisCorrect ? (
-                                    <CheckCircle2 size={18} className="text-emerald-500 drop-shadow-sm" />
-                                ) : (
-                                    <XCircle size={18} className="text-red-500 drop-shadow-sm" />
-                                )}
-                            </div>
-                        )}
+                <div className="flex w-full p-4 pl-5">
+                  {/* Index Box (A, B, C...) */}
+                  <div className={`
+                    flex-shrink-0 w-8 h-8 mr-4 rounded flex items-center justify-center font-mono text-sm font-bold border transition-colors
+                    ${state === 'idle' ? 'bg-base-300/50 border-base-300 text-base-content/60 group-hover:text-base-content/80' : ''}
+                    ${state === 'selected-correct' ? 'bg-emerald-500 text-base-100 border-emerald-500' : ''}
+                    ${state === 'selected-wrong' ? 'bg-red-500 text-base-100 border-red-500' : ''}
+                    ${state === 'missed-correct' ? 'bg-emerald-500/20 text-emerald-600 border-emerald-500/30' : ''}
+                    ${state === 'dim' ? 'bg-base-200 border-base-200 text-base-content/30' : ''}
+                  `}>
+                    {option.letter}
+                  </div>
+
+                  {/* Text Content */}
+                  <div className="flex-1 py-1">
+                    <div className={`text-[15px] leading-relaxed transition-colors ${
+                      state === 'selected-correct' ? 'text-base-content font-medium' :
+                      state === 'selected-wrong' ? 'text-base-content font-medium' :
+                      state === 'missed-correct' ? 'text-emerald-700 dark:text-emerald-400' :
+                      'text-base-content/80 group-hover:text-base-content'
+                    }`}>
+                      <ReactMarkdown 
+                          remarkPlugins={[remarkMath]}
+                          rehypePlugins={[rehypeKatex]}
+                          components={{ 
+                              p: ({node, ...props}) => <p className="m-0 inline" {...props} />,
+                              code: ({node, ...props}) => <code className="bg-base-content/10 px-1 py-0.5 rounded text-xs font-mono" {...props} />
+                          }}>
+                          {typeof option.text === 'string' ? option.text : String(option.text || '')}
+                      </ReactMarkdown>
                     </div>
-                </button>
-            )
+                  </div>
+
+                  {/* Status Icon (Right) */}
+                  <div className="flex-shrink-0 w-6 flex items-center justify-center ml-2">
+                    {state === 'selected-correct' && <Check size={18} className="text-emerald-500" strokeWidth={3} />}
+                    {state === 'selected-wrong' && <X size={18} className="text-red-500" strokeWidth={3} />}
+                    {state === 'missed-correct' && <Check size={16} className="text-emerald-500/50" />}
+                  </div>
+                </div>
+              </button>
+
+              {/* Inline Explanation (Accordion) */}
+              <AnimatePresence>
+                {hasSubmitted && (state === 'selected-correct' || state === 'selected-wrong' || state === 'missed-correct') && option.explanation && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                    className="overflow-hidden"
+                  >
+                    <div className={`
+                      mx-5 mb-2 p-3 rounded-b-lg border-x border-b text-sm leading-relaxed
+                      ${state === 'selected-correct' || state === 'missed-correct' 
+                        ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-700/90 dark:text-emerald-300/90' 
+                        : 'bg-red-500/5 border-red-500/20 text-red-700/90 dark:text-red-300/90'}
+                    `}>
+                      <div className="flex gap-2">
+                        <div className="mt-0.5 shrink-0 opacity-70">
+                          {state === 'selected-correct' || state === 'missed-correct' ? <Check size={14} /> : <HelpCircle size={14} />}
+                        </div>
+                        <div>
+                          <ReactMarkdown 
+                              remarkPlugins={[remarkMath]}
+                              rehypePlugins={[rehypeKatex]}
+                              components={{
+                                  p: ({node, ...props}) => <p className="m-0" {...props} />
+                              }}>
+                              {typeof option.explanation === 'string' ? option.explanation : "Keine Erklärung verfügbar."}
+                          </ReactMarkdown>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          );
         })}
       </div>
-      
-       {/* Footer / Actions */}
-       <div className="mt-6 flex justify-center min-h-[44px]">
+
+      {/* Footer / Actions */}
+      <div className="mt-8 flex justify-center min-h-[44px]">
          {/* Retry Button */}
-        {selectedLetter && !isCorrect && (
+        {hasSubmitted && !isCorrect && (
             <button 
                 onClick={handleRetryClick}
                 className="flex items-center gap-2 px-5 py-2.5 bg-base-200 hover:bg-base-300 text-base-content/80 rounded-full text-xs sm:text-sm font-bold transition-all hover:scale-105 active:scale-95 animate-in fade-in slide-in-from-bottom-2 shadow-sm border border-base-300/50 min-h-[44px]"
@@ -186,20 +231,15 @@ export const MultipleChoiceCard: React.FC<MultipleChoiceCardProps> = ({
         )}
         
         {/* Success / Score */}
-         {selectedLetter && isCorrect && (
+         {hasSubmitted && isCorrect && (
             <div className="flex flex-col items-center gap-1.5 animate-in fade-in slide-in-from-bottom-2">
-                 <div className="flex items-center gap-2 text-emerald-500 font-bold bg-emerald-500/10 px-5 py-2.5 rounded-full border border-emerald-500/20 shadow-sm text-sm sm:text-base min-h-[44px]">
+                 <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10 px-5 py-2.5 rounded-full border border-emerald-500/20 shadow-sm text-sm sm:text-base min-h-[44px]">
                     <Trophy size={16} />
                     <span>Richtig! 100%</span>
                 </div>
-                 <span className="text-[10px] text-base-content/40 font-bold uppercase tracking-wide">Karte wird umgedreht...</span>
             </div>
         )}
        </div>
     </div>
   );
 };
-
-export default MultipleChoiceCard;
-
-
