@@ -25,6 +25,12 @@ try:
 except ImportError:
     from widget import ChatbotWidget
 
+# Auth-Server Import
+try:
+    from .auth_server import get_auth_server
+except ImportError:
+    from auth_server import get_auth_server
+
 # Style-Funktionen
 def get_dock_widget_style():
     return """
@@ -71,6 +77,15 @@ def toggle_chatbot():
         chatbot_widget = ChatbotWidget()
         _chatbot_widget = chatbot_widget  # Global speichern für Hooks
         _chatbot_dock.setWidget(chatbot_widget)
+        
+        # Starte Auth-Server für Handshake mit Landingpage
+        try:
+            auth_server = get_auth_server()
+            auth_server.start(chatbot_widget.bridge, chatbot_widget)
+        except Exception as e:
+            print(f"⚠️ Fehler beim Starten des Auth-Servers: {e}")
+            import traceback
+            traceback.print_exc()
         
         # Dock-Widget links positionieren
         mw.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, _chatbot_dock)

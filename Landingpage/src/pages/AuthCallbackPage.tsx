@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { generateDeepLink, openDeepLink, copyToClipboard } from '../utils/deepLink';
+import { generateDeepLink, openDeepLink, copyToClipboard, sendTokenToPlugin, checkPluginServer } from '../utils/deepLink';
 import { CheckCircle2, Copy, ExternalLink, Loader2, AlertCircle } from 'lucide-react';
 
 export function AuthCallbackPage() {
@@ -12,6 +12,8 @@ export function AuthCallbackPage() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pluginConnected, setPluginConnected] = useState(false);
+  const [pluginServerAvailable, setPluginServerAvailable] = useState<boolean | null>(null);
 
   useEffect(() => {
     const generateTokens = async () => {
@@ -30,21 +32,40 @@ export function AuthCallbackPage() {
 
         setIdToken(token);
         
-        // Note: Firebase Auth doesn't expose refresh tokens in the client SDK
-        // For now, we'll use the ID token and handle refresh on the backend
-        // The backend can use Firebase Admin SDK to refresh tokens
-        // For the deep link, we'll pass only the ID token (refreshToken is optional)
+        // Generate deep link as fallback
         const link = generateDeepLink(token);
         setDeepLink(link);
         
-        // Try to open deep link automatically
-        setTimeout(() => {
-          const opened = openDeepLink(link);
-          if (!opened) {
-            // If deep link doesn't work, show fallback UI
-            console.log('Deep link opening not supported, showing fallback');
+        // Try to connect via HTTP POST first (preferred method)
+        const tryHttpConnection = async () => {
+          // Check if plugin server is available
+          const serverAvailable = await checkPluginServer();
+          setPluginServerAvailable(serverAvailable);
+          
+          if (serverAvailable) {
+            // Try to send token via HTTP POST
+            const result = await sendTokenToPlugin(token);
+            if (result.success) {
+              setPluginConnected(true);
+              console.log('✅ Token erfolgreich an Plugin gesendet!');
+            } else {
+              console.log('⚠️ HTTP-Verbindung fehlgeschlagen:', result.error);
+              // Fallback to deep link
+              setTimeout(() => {
+                openDeepLink(link);
+              }, 500);
+            }
+          } else {
+            console.log('⚠️ Plugin-Server nicht erreichbar, verwende Deep Link');
+            // Fallback to deep link
+            setTimeout(() => {
+              openDeepLink(link);
+            }, 500);
           }
-        }, 500);
+        };
+        
+        // Try HTTP connection
+        tryHttpConnection();
         
         setLoading(false);
       } catch (err: any) {
@@ -129,6 +150,20 @@ export function AuthCallbackPage() {
             <p className="text-neutral-400 text-sm">
               Verbinde jetzt dein Anki Plugin mit deinem Account
             </p>
+            {pluginConnected && (
+              <div className="mt-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                <p className="text-green-400 text-sm font-medium">
+                  ✅ Plugin erfolgreich verbunden!
+                </p>
+              </div>
+            )}
+            {pluginServerAvailable === false && (
+              <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                <p className="text-yellow-400 text-sm">
+                  ⚠️ Plugin-Server nicht erreichbar. Stelle sicher, dass Anki läuft.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Deep Link Section */}
@@ -196,22 +231,28 @@ export function AuthCallbackPage() {
           {/* Instructions */}
           <div className="mb-6 p-4 bg-teal-500/10 border border-teal-500/20 rounded-lg">
             <p className="text-sm text-teal-300 mb-2 font-medium">So verbindest du das Plugin:</p>
-            <ol className="text-xs text-neutral-400 space-y-1 list-decimal list-inside">
-              <li>Klicke auf "Deep Link öffnen" oder kopiere den Deep Link</li>
-              <li>Das Plugin sollte sich automatisch öffnen und verbinden</li>
-              <li>
-                <strong>Falls Safari einen Fehler zeigt:</strong> Das ist normal. Kopiere den Deep Link und füge ihn in die Anki-Einstellungen ein, oder kopiere den Token direkt.
-              </li>
-              <li>Alternativ: Kopiere den Token und füge ihn manuell in den Plugin-Einstellungen ein</li>
-            </ol>
+            {pluginConnected ? (
+              <p className="text-xs text-green-400">
+                ✅ Die Verbindung wurde automatisch hergestellt! Du kannst jetzt das Plugin verwenden.
+              </p>
+            ) : (
+              <ol className="text-xs text-neutral-400 space-y-1 list-decimal list-inside">
+                <li>Das Plugin versucht automatisch, sich zu verbinden</li>
+                <li>Falls das nicht funktioniert, kopiere den Token und füge ihn in die Plugin-Einstellungen ein</li>
+                <li>Alternativ: Kopiere den Deep Link (falls dein Browser Deep Links unterstützt)</li>
+              </ol>
+            )}
           </div>
           
-          {/* Safari Warning */}
-          <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-            <p className="text-xs text-yellow-400">
-              <strong>Hinweis für Safari:</strong> Safari kann Deep Links nicht direkt öffnen. Kopiere den Deep Link und füge ihn in die Anki-Einstellungen ein, oder verwende den Token direkt.
-            </p>
-          </div>
+          {/* Connection Status */}
+          {pluginServerAvailable === false && (
+            <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+              <p className="text-xs text-yellow-400">
+                <strong>Plugin nicht erreichbar:</strong> Stelle sicher, dass Anki läuft und das Plugin aktiviert ist. 
+                Du kannst den Token manuell kopieren und in den Plugin-Einstellungen einfügen.
+              </p>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex gap-3">
