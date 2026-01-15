@@ -4,11 +4,11 @@ import { RefreshCcw } from 'lucide-react';
 
 import { DEMO_SCENARIOS } from './DemoData';
 import { DemoAnkiCard } from './DemoAnkiCard';
-import { DemoThoughtStream } from './DemoThoughtStream';
+import RealThoughtStream from './RealThoughtStream';
 import { DemoChatMessage } from './DemoChatMessage';
 import { DemoQuizCard } from './DemoQuizCard';
 import RealChatInput from './RealChatInput';
-import { DemoEvaluation } from './DemoEvaluation';
+import RealEvaluation from './RealEvaluation';
 import { Button } from '@shared/components/Button';
 
 // Linear State Machine
@@ -112,7 +112,7 @@ export function InteractivePlayground() {
           {/* 2. AI Eval Result */}
           {['SHOW_EVAL', 'RESCUE_CHOICE', 'RESCUE_ACTIVE', 'DEEP_TYPING', 'DEEP_THINKING', 'DEEP_RESULT'].includes(phase) && (
              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                <DemoEvaluation score={scenario.evaluation.score} feedback={scenario.evaluation.feedback} />
+                <RealEvaluation score={scenario.evaluation.score} feedback={scenario.evaluation.feedback} />
                 
                 {/* Contextual Action Button (Only if not moved on) */}
                 {phase === 'SHOW_EVAL' && (
@@ -141,8 +141,9 @@ export function InteractivePlayground() {
 
           {/* 4. Deep Thinking Stream */}
           {['DEEP_THINKING', 'DEEP_RESULT'].includes(phase) && (
-             <DemoThoughtStream 
+             <RealThoughtStream 
                steps={scenario.deepMode.steps} 
+               citations={scenario.deepMode.citations}
                isVisible={true} 
                isComplete={phase === 'DEEP_RESULT'} 
              />
