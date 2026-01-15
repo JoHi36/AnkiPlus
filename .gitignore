@@ -45,6 +45,10 @@ config.json
 .tmp.driveupload/
 *.tmp
 
+# Token-Dateien (sollten nicht committed werden)
+.anki-auth-token
+.anki-auth-token.tmp
+
 # Environment files
 .env
 .env.local
