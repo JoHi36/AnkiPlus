@@ -33,10 +33,8 @@ export function AuthCallbackPage() {
         // Note: Firebase Auth doesn't expose refresh tokens in the client SDK
         // For now, we'll use the ID token and handle refresh on the backend
         // The backend can use Firebase Admin SDK to refresh tokens
-        // For the deep link, we'll pass the ID token and let the backend handle refresh
-        const refreshToken = ''; // Placeholder - will be handled by backend
-        
-        const link = generateDeepLink(token, refreshToken);
+        // For the deep link, we'll pass only the ID token (refreshToken is optional)
+        const link = generateDeepLink(token);
         setDeepLink(link);
         
         // Try to open deep link automatically
@@ -201,8 +199,18 @@ export function AuthCallbackPage() {
             <ol className="text-xs text-neutral-400 space-y-1 list-decimal list-inside">
               <li>Klicke auf "Deep Link öffnen" oder kopiere den Deep Link</li>
               <li>Das Plugin sollte sich automatisch öffnen und verbinden</li>
-              <li>Falls nicht, kopiere den Token und füge ihn manuell in den Plugin-Einstellungen ein</li>
+              <li>
+                <strong>Falls Safari einen Fehler zeigt:</strong> Das ist normal. Kopiere den Deep Link und füge ihn in die Anki-Einstellungen ein, oder kopiere den Token direkt.
+              </li>
+              <li>Alternativ: Kopiere den Token und füge ihn manuell in den Plugin-Einstellungen ein</li>
             </ol>
+          </div>
+          
+          {/* Safari Warning */}
+          <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+            <p className="text-xs text-yellow-400">
+              <strong>Hinweis für Safari:</strong> Safari kann Deep Links nicht direkt öffnen. Kopiere den Deep Link und füge ihn in die Anki-Einstellungen ein, oder verwende den Token direkt.
+            </p>
           </div>
 
           {/* Actions */}
