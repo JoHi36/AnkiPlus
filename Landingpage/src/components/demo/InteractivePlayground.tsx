@@ -1,280 +1,239 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Brain, MessageSquare, Zap, RefreshCcw, Search, ChevronRight, X, ArrowUpRight } from 'lucide-react';
+import { RefreshCcw, Search } from 'lucide-react';
 
 import { DEMO_SCENARIOS } from './DemoData';
 import { DemoAnkiCard } from './DemoAnkiCard';
 import { DemoThoughtStream } from './DemoThoughtStream';
 import { DemoChatMessage } from './DemoChatMessage';
 import { DemoQuizCard } from './DemoQuizCard';
+import { DemoChatInput } from './DemoChatInput';
+import { DemoEvaluation } from './DemoEvaluation';
 import { Button } from '@shared/components/Button';
 
-type DemoMode = 'IDLE' | 'EVAL' | 'RESCUE' | 'DEEP';
-type DemoPhase = 'INPUT' | 'PROCESSING' | 'RESULT';
+// Linear State Machine
+type DemoPhase = 'IDLE' | 'TYPING_EVAL' | 'EVALUATING' | 'SHOW_EVAL' | 'RESCUE_CHOICE' | 'RESCUE_ACTIVE' | 'DEEP_TYPING' | 'DEEP_THINKING' | 'DEEP_RESULT';
 
 export function InteractivePlayground() {
   const [scenarioKey, setScenarioKey] = useState<string>('medicine');
-  const [mode, setMode] = useState<DemoMode>('IDLE');
-  const [phase, setPhase] = useState<DemoPhase>('INPUT');
+  const [phase, setPhase] = useState<DemoPhase>('IDLE');
   const [inputText, setInputText] = useState('');
-  const [showMobileSheet, setShowMobileSheet] = useState(false);
-
+  
   const scenario = DEMO_SCENARIOS[scenarioKey];
+  const chatScrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-typing effect for EVAL mode
+  // Auto-scroll logic
   useEffect(() => {
-    if (mode === 'EVAL' && phase === 'INPUT') {
-      const targetText = scenario.evaluation.userTyping;
-      let idx = 0;
-      setInputText('');
-      
-      const interval = setInterval(() => {
-        if (idx < targetText.length) {
-          setInputText(targetText.slice(0, idx + 1));
-          idx++;
-        } else {
-          clearInterval(interval);
-          setTimeout(() => setPhase('PROCESSING'), 500);
-        }
-      }, 30); // Typing speed
-
-      return () => clearInterval(interval);
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }
-  }, [mode, phase, scenario]);
+  }, [phase, inputText]);
 
-  // Processing simulation
-  useEffect(() => {
-    if (phase === 'PROCESSING') {
-      const delay = mode === 'DEEP' ? 4000 : 1500;
-      const timer = setTimeout(() => {
-        setPhase('RESULT');
-      }, delay);
-      return () => clearTimeout(timer);
-    }
-  }, [phase, mode]);
+  // --- PHASE TRANSITION LOGIC ---
+
+  // Phase 1: User "types" eval answer
+  const handleStartEval = () => {
+    setPhase('TYPING_EVAL');
+    simulateTyping(scenario.evaluation.userTyping, () => {
+      setPhase('EVALUATING');
+      setTimeout(() => setPhase('SHOW_EVAL'), 1000);
+    });
+  };
+
+  // Phase 2: User chooses Rescue (Quiz)
+  const handleStartRescue = () => {
+    setPhase('RESCUE_ACTIVE');
+  };
+
+  // Phase 3: User triggers Deep Mode
+  const handleStartDeep = () => {
+    setPhase('DEEP_TYPING');
+    simulateTyping("Erklär mir die Hintergründe bitte.", () => {
+      setPhase('DEEP_THINKING');
+      setTimeout(() => setPhase('DEEP_RESULT'), 3500);
+    });
+  };
 
   const handleReset = () => {
-    setMode('IDLE');
-    setPhase('INPUT');
+    setPhase('IDLE');
     setInputText('');
-    setShowMobileSheet(false);
   };
 
-  const startMode = (newMode: DemoMode) => {
-    setMode(newMode);
-    setPhase('INPUT');
-    setShowMobileSheet(true); // Open sheet on mobile
-    
-    // For Rescue and Deep, skip manual input simulation
-    if (newMode === 'RESCUE') {
-      setPhase('RESULT'); // Immediate flip
-    } else if (newMode === 'DEEP') {
-      setPhase('PROCESSING'); // Start thinking
-    }
-    // EVAL will trigger the typing effect via useEffect
+  const simulateTyping = (fullText: string, onComplete: () => void) => {
+    let idx = 0;
+    setInputText('');
+    const interval = setInterval(() => {
+      if (idx < fullText.length) {
+        setInputText(fullText.slice(0, idx + 1));
+        idx++;
+      } else {
+        clearInterval(interval);
+        onComplete();
+      }
+    }, 25);
   };
 
-  // --- COMPONENT RENDERERS ---
+  // --- RENDER HELPERS ---
 
-  const renderContent = () => {
-    if (mode === 'RESCUE' && phase === 'RESULT') {
-      return (
-        <DemoQuizCard 
-          question={scenario.rescue.question} 
-          options={scenario.rescue.options} 
-        />
-      );
-    }
-
-    if (mode === 'DEEP' || mode === 'EVAL') {
-      return (
-        <div className="flex flex-col h-full overflow-y-auto p-6 space-y-6 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+  const renderRightPanel = () => {
+    return (
+      <div className="flex flex-col h-full bg-[#0A0A0A] relative">
+        {/* Chat Area */}
+        <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent pb-32">
           
-          {/* User Input Bubble */}
-          {(mode === 'EVAL' || (mode === 'DEEP' && phase !== 'INPUT')) && (
+          {/* 1. User Eval Message */}
+          {['EVALUATING', 'SHOW_EVAL', 'RESCUE_CHOICE', 'RESCUE_ACTIVE', 'DEEP_TYPING', 'DEEP_THINKING', 'DEEP_RESULT'].includes(phase) && (
             <div className="flex justify-end animate-in fade-in slide-in-from-bottom-2">
-              <div className="bg-[#222] text-neutral-200 px-4 py-3 rounded-2xl rounded-tr-sm max-w-[80%] text-sm leading-relaxed border border-white/5">
-                {mode === 'EVAL' ? inputText : "Deep Mode: Erkläre mir die Zusammenhänge."}
-                {phase === 'INPUT' && mode === 'EVAL' && <span className="animate-pulse">|</span>}
+              <div className="bg-[#222] text-neutral-200 px-4 py-3 rounded-2xl rounded-tr-sm max-w-[85%] text-sm leading-relaxed border border-white/5">
+                {scenario.evaluation.userTyping}
               </div>
             </div>
           )}
 
-          {/* Deep Thinking Stream */}
-          {mode === 'DEEP' && (phase === 'PROCESSING' || phase === 'RESULT') && (
-            <DemoThoughtStream 
-              steps={scenario.deepMode.steps} 
-              isVisible={true} 
-              isComplete={phase === 'RESULT'} 
-            />
+          {/* 2. AI Eval Result */}
+          {['SHOW_EVAL', 'RESCUE_CHOICE', 'RESCUE_ACTIVE', 'DEEP_TYPING', 'DEEP_THINKING', 'DEEP_RESULT'].includes(phase) && (
+             <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                <DemoEvaluation score={scenario.evaluation.score} feedback={scenario.evaluation.feedback} />
+                
+                {/* Contextual Action Button (Only if not moved on) */}
+                {phase === 'SHOW_EVAL' && (
+                  <div className="flex gap-2 justify-center pt-2">
+                    <Button 
+                      variant="primary" 
+                      size="sm" 
+                      onClick={handleStartRescue}
+                      className="animate-in zoom-in duration-300"
+                    >
+                      Quiz starten (Rescue Mode)
+                    </Button>
+                  </div>
+                )}
+             </div>
           )}
 
-          {/* AI Result */}
-          {phase === 'RESULT' && (
-            mode === 'DEEP' ? (
-              <DemoChatMessage 
-                content={scenario.deepMode.answerMarkdown} 
-                isStreaming={true} 
-                citations={scenario.deepMode.citations}
-              />
-            ) : (
-              <div className="flex gap-4 animate-in fade-in slide-in-from-bottom-2">
-                 <div className="w-8 h-8 rounded-lg bg-yellow-500/10 flex items-center justify-center border border-yellow-500/20 shrink-0">
-                    <MessageSquare size={16} className="text-yellow-500" />
-                 </div>
-                 <div className="p-4 bg-yellow-500/5 border border-yellow-500/10 rounded-lg text-sm text-neutral-300 leading-relaxed whitespace-pre-wrap">
-                    {scenario.evaluation.feedback}
-                 </div>
+          {/* 3. Deep Mode Trigger Message */}
+          {['DEEP_THINKING', 'DEEP_RESULT'].includes(phase) && (
+            <div className="flex justify-end animate-in fade-in slide-in-from-bottom-2">
+               <div className="bg-purple-900/20 text-purple-200 px-4 py-3 rounded-2xl rounded-tr-sm max-w-[85%] text-sm leading-relaxed border border-purple-500/30">
+                 Erklär mir die Hintergründe bitte.
+               </div>
+            </div>
+          )}
+
+          {/* 4. Deep Thinking Stream */}
+          {['DEEP_THINKING', 'DEEP_RESULT'].includes(phase) && (
+             <DemoThoughtStream 
+               steps={scenario.deepMode.steps} 
+               isVisible={true} 
+               isComplete={phase === 'DEEP_RESULT'} 
+             />
+          )}
+
+          {/* 5. Final Deep Result */}
+          {phase === 'DEEP_RESULT' && (
+             <DemoChatMessage 
+               content={scenario.deepMode.answerMarkdown} 
+               isStreaming={true} 
+               citations={scenario.deepMode.citations}
+             />
+          )}
+        </div>
+
+        {/* Input Area (Bottom Fixed) */}
+        <div className="p-4 border-t border-white/5 bg-[#0A0A0A]">
+           {/* If we are waiting for user to start deep mode after rescue */}
+           {phase === 'RESCUE_ACTIVE' && (
+              <div className="absolute bottom-20 left-1/2 -translate-x-1/2 animate-bounce">
+                 <span className="text-xs text-neutral-500 bg-black/50 px-2 py-1 rounded">👇 Frag nach mehr Details</span>
               </div>
-            )
-          )}
-        </div>
-      );
-    }
+           )}
 
-    // Default Idle State
-    return (
-      <div className="h-full flex flex-col items-center justify-center text-neutral-500 space-y-4">
-        <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center">
-           <Search size={24} className="opacity-20" />
+           <DemoChatInput 
+              value={inputText} 
+              onChange={() => {}} 
+              onSend={phase === 'IDLE' ? handleStartEval : phase === 'RESCUE_ACTIVE' ? handleStartDeep : () => {}}
+              isLoading={phase === 'TYPING_EVAL' || phase === 'DEEP_TYPING'}
+              placeholder={phase === 'IDLE' ? "Tippe deine Antwort..." : "Frag Anki+..."}
+              mode={phase === 'RESCUE_ACTIVE' || phase === 'DEEP_TYPING' || phase === 'DEEP_THINKING' || phase === 'DEEP_RESULT' ? 'deep' : 'flash'}
+           />
         </div>
-        <p className="text-sm">Wähle eine Aktion, um Anki+ zu starten.</p>
       </div>
     );
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto h-[600px] md:h-[700px] bg-[#0A0A0A] rounded-3xl border border-white/10 shadow-2xl flex flex-col md:flex-row overflow-hidden relative group">
+    <div className="w-full max-w-6xl mx-auto h-[700px] md:h-[800px] bg-[#0A0A0A] rounded-3xl border border-white/10 shadow-2xl flex flex-col md:flex-row overflow-hidden relative group">
       
-      {/* --- LEFT SIDE: CARD (Desktop) / FULL (Mobile) --- */}
-      <div className="relative w-full md:w-1/2 h-full bg-[#111] border-r border-white/5 flex flex-col">
+      {/* --- LEFT SIDE: CARD / QUIZ --- */}
+      <div className="relative w-full md:w-1/2 h-[40%] md:h-full bg-[#111] border-b md:border-b-0 md:border-r border-white/5 flex flex-col">
         
-        {/* Scenario Selector */}
-        <div className="absolute top-4 left-4 z-10 flex gap-2">
-          {Object.values(DEMO_SCENARIOS).map((s) => (
-            <button
-              key={s.id}
-              onClick={() => { setScenarioKey(s.id as any); handleReset(); }}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
-                scenarioKey === s.id 
-                  ? 'bg-teal-500/10 text-teal-400 border-teal-500/30' 
-                  : 'bg-black/40 text-neutral-500 border-white/5 hover:bg-white/5'
-              }`}
-            >
-              {s.category}
-            </button>
-          ))}
-        </div>
-
-        {/* The Card */}
-        <div className={`flex-1 transition-all duration-500 ${showMobileSheet ? 'scale-95 opacity-50 md:scale-100 md:opacity-100' : ''}`}>
-           <DemoAnkiCard content={scenario.card.front} tags={scenario.card.tags} />
-        </div>
-
-        {/* Mobile Action Bar (Bottom) */}
-        <div className="md:hidden p-4 pb-6 grid grid-cols-3 gap-3 bg-[#0A0A0A] border-t border-white/10 z-20">
-           <button onClick={() => startMode('EVAL')} className="flex flex-col items-center gap-1 p-2 rounded-lg bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 active:scale-95 transition-transform">
-              <MessageSquare size={20} />
-              <span className="text-[10px] font-bold">Eval</span>
-           </button>
-           <button onClick={() => startMode('RESCUE')} className="flex flex-col items-center gap-1 p-2 rounded-lg bg-teal-500/10 text-teal-500 border border-teal-500/20 active:scale-95 transition-transform">
-              <Zap size={20} />
-              <span className="text-[10px] font-bold">Rescue</span>
-           </button>
-           <button onClick={() => startMode('DEEP')} className="flex flex-col items-center gap-1 p-2 rounded-lg bg-purple-500/10 text-purple-500 border border-purple-500/20 active:scale-95 transition-transform">
-              <Brain size={20} />
-              <span className="text-[10px] font-bold">Deep</span>
-           </button>
-        </div>
-      </div>
-
-      {/* --- RIGHT SIDE: INTERACTION (Desktop) --- */}
-      <div className="hidden md:flex w-1/2 h-full flex-col bg-[#0A0A0A] relative">
-        
-        {/* Interaction Area */}
-        <div className="flex-1 relative overflow-hidden">
-          {renderContent()}
-        </div>
-
-        {/* Desktop Controls */}
-        <div className="p-6 border-t border-white/5 bg-[#050505]">
-           {mode === 'IDLE' ? (
-             <div className="grid grid-cols-3 gap-4">
-                <Button variant="outline" onClick={() => startMode('EVAL')} className="h-auto py-4 flex flex-col gap-2 hover:border-yellow-500/50 hover:bg-yellow-500/5 group">
-                   <MessageSquare className="w-5 h-5 text-yellow-500" />
-                   <div className="flex flex-col items-start">
-                      <span className="text-xs font-bold text-white">Evaluation</span>
-                      <span className="text-[10px] text-neutral-500 group-hover:text-yellow-200/70">Check my answer</span>
-                   </div>
-                </Button>
-
-                <Button variant="outline" onClick={() => startMode('RESCUE')} className="h-auto py-4 flex flex-col gap-2 hover:border-teal-500/50 hover:bg-teal-500/5 group">
-                   <Zap className="w-5 h-5 text-teal-500" />
-                   <div className="flex flex-col items-start">
-                      <span className="text-xs font-bold text-white">Rescue</span>
-                      <span className="text-[10px] text-neutral-500 group-hover:text-teal-200/70">Quiz Mode</span>
-                   </div>
-                </Button>
-
-                <Button variant="outline" onClick={() => startMode('DEEP')} className="h-auto py-4 flex flex-col gap-2 hover:border-purple-500/50 hover:bg-purple-500/5 group">
-                   <Brain className="w-5 h-5 text-purple-500" />
-                   <div className="flex flex-col items-start">
-                      <span className="text-xs font-bold text-white">Deep Mode</span>
-                      <span className="text-[10px] text-neutral-500 group-hover:text-purple-200/70">Explain Concept</span>
-                   </div>
-                </Button>
-             </div>
-           ) : (
-             <div className="flex justify-between items-center animate-in fade-in">
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full animate-pulse ${mode === 'DEEP' ? 'bg-purple-500' : mode === 'RESCUE' ? 'bg-teal-500' : 'bg-yellow-500'}`} />
-                  <span className="text-xs font-mono text-neutral-400">SESSION ACTIVE</span>
-                </div>
-                <Button variant="ghost" size="sm" onClick={handleReset} className="text-neutral-500 hover:text-white">
-                  <RefreshCcw size={14} className="mr-2" />
-                  Reset
-                </Button>
-             </div>
-           )}
-        </div>
-      </div>
-
-      {/* --- MOBILE BOTTOM SHEET --- */}
-      <AnimatePresence>
-        {showMobileSheet && (
-          <>
-            <motion.div 
-               initial={{ opacity: 0 }} 
-               animate={{ opacity: 1 }} 
-               exit={{ opacity: 0 }} 
-               className="md:hidden absolute inset-0 bg-black/60 z-30 backdrop-blur-sm"
-               onClick={() => setShowMobileSheet(false)}
-            />
-            <motion.div
-               initial={{ y: '100%' }}
-               animate={{ y: '0%' }}
-               exit={{ y: '100%' }}
-               transition={{ type: "spring", damping: 25, stiffness: 300 }}
-               className="md:hidden absolute bottom-0 left-0 right-0 h-[85%] bg-[#151515] rounded-t-3xl z-40 flex flex-col border-t border-white/10 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]"
-            >
-               {/* Drag Handle */}
-               <div className="w-full h-8 flex items-center justify-center shrink-0" onClick={() => setShowMobileSheet(false)}>
-                  <div className="w-12 h-1.5 bg-neutral-700 rounded-full" />
-               </div>
-               
-               {/* Close Button */}
-               <button onClick={() => setShowMobileSheet(false)} className="absolute top-4 right-4 p-2 text-neutral-500 hover:text-white">
-                  <X size={20} />
-               </button>
-
-               {/* Sheet Content */}
-               <div className="flex-1 overflow-y-auto p-4 pb-20">
-                  {renderContent()}
-               </div>
-            </motion.div>
-          </>
+        {/* Scenario Selector (Only visible in IDLE) */}
+        {phase === 'IDLE' && (
+          <div className="absolute top-4 left-4 z-10 flex gap-2 animate-in fade-in">
+            {Object.values(DEMO_SCENARIOS).map((s) => (
+              <button
+                key={s.id}
+                onClick={() => { setScenarioKey(s.id as any); handleReset(); }}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                  scenarioKey === s.id 
+                    ? 'bg-teal-500/10 text-teal-400 border-teal-500/30' 
+                    : 'bg-black/40 text-neutral-500 border-white/5 hover:bg-white/5'
+                }`}
+              >
+                {s.category}
+              </button>
+            ))}
+          </div>
         )}
-      </AnimatePresence>
+
+        {/* Reset Button (Visible when active) */}
+        {phase !== 'IDLE' && (
+           <button 
+             onClick={handleReset}
+             className="absolute top-4 left-4 z-20 p-2 rounded-full bg-black/40 text-neutral-500 hover:text-white border border-white/5 hover:border-white/20 transition-all"
+           >
+             <RefreshCcw size={16} />
+           </button>
+        )}
+
+        {/* Card Content with 3D Flip Effect */}
+        <div className="flex-1 relative perspective-1000">
+           <AnimatePresence mode="wait">
+             {phase === 'RESCUE_ACTIVE' || phase === 'DEEP_TYPING' || phase === 'DEEP_THINKING' || phase === 'DEEP_RESULT' ? (
+                <motion.div
+                  key="quiz"
+                  initial={{ opacity: 0, rotateY: -90 }}
+                  animate={{ opacity: 1, rotateY: 0 }}
+                  exit={{ opacity: 0, rotateY: 90 }}
+                  transition={{ duration: 0.5 }}
+                  className="absolute inset-0"
+                >
+                   <DemoQuizCard 
+                      question={scenario.rescue.question} 
+                      options={scenario.rescue.options} 
+                   />
+                </motion.div>
+             ) : (
+                <motion.div
+                  key="card"
+                  initial={{ opacity: 0, rotateY: 90 }}
+                  animate={{ opacity: 1, rotateY: 0 }}
+                  exit={{ opacity: 0, rotateY: -90 }}
+                  transition={{ duration: 0.5 }}
+                  className="absolute inset-0"
+                >
+                   <DemoAnkiCard content={scenario.card.front} tags={scenario.card.tags} />
+                </motion.div>
+             )}
+           </AnimatePresence>
+        </div>
+      </div>
+
+      {/* --- RIGHT SIDE: CHAT INTERFACE --- */}
+      <div className="w-full md:w-1/2 h-[60%] md:h-full">
+         {renderRightPanel()}
+      </div>
+
     </div>
   );
 }

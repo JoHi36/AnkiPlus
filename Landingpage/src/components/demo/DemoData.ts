@@ -63,9 +63,13 @@ export const DEMO_SCENARIOS: Record<string, DemoScenario> = {
 
 Die EKG-Veränderungen korrelieren direkt mit der **Verschiebung des Ruhemembranpotentials** (weniger negativ) und der **Inaktivierung von Natriumkanälen**.
 
+```ecgimage```
+
 #### 1. Milde Hyperkaliämie (5,5 - 6,5 mmol/l)
 *   **Zelt-T:** Durch die erhöhte extrazelluläre Kaliumkonzentration erhöht sich die Repolarisationsgeschwindigkeit (verkürzte Phase 3 des Aktionspotentials).
 *   **Klinik:** Meist noch asymptomatisch, aber im EKG als *hohe, spitze T-Welle* mit schmaler Basis sichtbar.
+
+```mermaiddiagram```
 
 #### 2. Moderate Hyperkaliämie (6,5 - 7,5 mmol/l)
 *   **Vorhof-Blockade:** Das Ruhepotential im Vorhof wird instabil.

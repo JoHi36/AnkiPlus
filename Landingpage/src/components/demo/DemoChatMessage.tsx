@@ -6,6 +6,8 @@ import { Bot, BookOpen, ExternalLink, Copy, ThumbsUp } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 import 'katex/dist/katex.min.css';
+import { DemoMermaidDiagram } from './DemoMermaidDiagram';
+import { DemoECGImage } from './DemoECGImage';
 
 interface DemoChatMessageProps {
   content: string;
@@ -22,8 +24,8 @@ export function DemoChatMessage({ content, isStreaming, citations }: DemoChatMes
       let charIndex = 0;
       const intervalId = setInterval(() => {
         if (charIndex < content.length) {
-          setDisplayedContent(prev => content.slice(0, charIndex + 3)); // 3 chars at a time for speed
-          charIndex += 3;
+          setDisplayedContent(prev => content.slice(0, charIndex + 5)); // Faster streaming
+          charIndex += 5;
         } else {
           clearInterval(intervalId);
           setDisplayedContent(content);
@@ -34,6 +36,33 @@ export function DemoChatMessage({ content, isStreaming, citations }: DemoChatMes
       setDisplayedContent(content);
     }
   }, [content, isStreaming]);
+
+  // Custom renderer to inject components
+  const components = {
+    code({ node, inline, className, children, ...props }: any) {
+      // Check for mermaid code block or special placeholders
+      const match = /language-(\w+)/.exec(className || '');
+      const codeContent = String(children).replace(/\n$/, '');
+
+      if (codeContent.includes('mermaiddiagram')) {
+        return <DemoMermaidDiagram />;
+      }
+      
+      if (codeContent.includes('ecgimage')) {
+        return <DemoECGImage />;
+      }
+
+      return !inline ? (
+        <code className={className} {...props}>
+          {children}
+        </code>
+      ) : (
+        <code className={className} {...props}>
+          {children}
+        </code>
+      );
+    }
+  };
 
   return (
     <motion.div 
@@ -67,6 +96,7 @@ export function DemoChatMessage({ content, isStreaming, citations }: DemoChatMes
           <ReactMarkdown
             remarkPlugins={[remarkMath]}
             rehypePlugins={[rehypeKatex]}
+            components={components}
           >
             {displayedContent}
           </ReactMarkdown>
