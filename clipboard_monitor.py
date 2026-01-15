@@ -45,7 +45,11 @@ def is_firebase_token(text):
             # Oder prüfe auf andere Firebase-Indikatoren
             if 'aud' in payload_json and 'user_id' in payload_json:
                 return True
-            # Oder einfach: sehr langer Token (typisch für Firebase)
+            # Oder prüfe auf sub (user ID) - Firebase hat immer sub
+            if 'sub' in payload_json and 'iat' in payload_json:
+                # Sehr wahrscheinlich ein Firebase Token
+                return True
+            # Oder einfach: sehr langer Token (typisch für Firebase ID Tokens)
             if len(text) > 500:
                 return True
     except:
