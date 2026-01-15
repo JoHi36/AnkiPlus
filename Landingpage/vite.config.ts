@@ -19,7 +19,8 @@ export default defineConfig(({ mode }) => {
           '@': path.resolve(__dirname, '.'),
           '@shared': path.resolve(__dirname, '../shared'),
         },
-        // Ensure node_modules are resolved correctly from Landingpage directory
+        // Ensure node_modules are resolved from Landingpage directory, not from shared components
+        modules: [path.resolve(__dirname, 'node_modules'), 'node_modules'],
         dedupe: ['react', 'react-dom'],
       },
       build: {
