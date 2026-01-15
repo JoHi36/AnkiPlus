@@ -5,7 +5,11 @@ import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { createLogger } from '../utils/logging';
 import * as functions from 'firebase-functions';
 
-const db = getFirestore();
+// Lazy initialization - get Firestore when needed
+function getDb() {
+  return getFirestore();
+}
+
 const logger = createLogger();
 
 /**
@@ -134,6 +138,7 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   logger.info('Subscription deleted, downgrading to free', { userId: user.id, subscriptionId: subscription.id });
 
   // Downgrade to free tier
+  const db = getDb();
   await db.collection('users').doc(user.id).update({
     tier: 'free',
     subscriptionStatus: 'canceled',
@@ -184,6 +189,7 @@ async function updateUserSubscription(userId: string, subscription: Stripe.Subsc
     subscriptionCancelAtPeriodEnd: subscription.cancel_at_period_end || false,
   };
 
+  const db = getDb();
   await db.collection('users').doc(userId).update(updateData);
 
   logger.info('User subscription updated', { userId, tier, status: subscription.status });
@@ -194,6 +200,7 @@ async function updateUserSubscription(userId: string, subscription: Stripe.Subsc
  */
 async function getUserByStripeCustomerId(customerId: string): Promise<{ id: string; [key: string]: any } | null> {
   try {
+    const db = getDb();
     const usersRef = db.collection('users');
     const snapshot = await usersRef.where('stripeCustomerId', '==', customerId).limit(1).get();
     

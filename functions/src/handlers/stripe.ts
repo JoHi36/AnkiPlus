@@ -5,7 +5,11 @@ import { createErrorResponse, ErrorCode } from '../utils/errors';
 import { createLogger } from '../utils/logging';
 import { getFirestore } from 'firebase-admin/firestore';
 
-const db = getFirestore();
+// Lazy initialization - get Firestore when needed
+function getDb() {
+  return getFirestore();
+}
+
 const logger = createLogger();
 
 /**
@@ -50,6 +54,7 @@ export async function createCheckoutSessionHandler(
       customerId = customer.id;
       
       // Update user document with customer ID
+      const db = getDb();
       await db.collection('users').doc(userId).update({
         stripeCustomerId: customerId,
       });

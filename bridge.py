@@ -1207,17 +1207,19 @@ class WebBridge(QObject):
             try:
                 backend_url = get_backend_url()
                 # Backend-URL ist die Cloud Function Base-URL, Express-Routen haben kein /api/ Präfix
+                # WICHTIG: Token muss UTF-8 encodiert werden, nicht latin-1
+                token_clean = token.strip()
                 response = requests.get(
                     f"{backend_url}/user/quota",
                     headers={
-                        "Authorization": f"Bearer {token.strip()}",
+                        "Authorization": f"Bearer {token_clean}".encode('utf-8').decode('latin-1', errors='ignore'),
                         "Content-Type": "application/json"
                     },
                     timeout=5
                 )
                 
                 if response.status_code == 200:
-                    print("✅ authenticate: Token erfolgreich validiert")
+                    print("authenticate: Token erfolgreich validiert")
                     # Markiere Token als validiert
                     update_config(auth_validated=True)
                     # Benachrichtige Frontend
@@ -1225,25 +1227,23 @@ class WebBridge(QObject):
                         payload = {"type": "auth_success", "message": "Authentifizierung erfolgreich"}
                         js_code = f"if (window.ankiReceive) {{ window.ankiReceive({json.dumps(payload)}); }}"
                         self.widget.web_view.page().runJavaScript(js_code)
-                        print(f"✅ authenticate: Frontend benachrichtigt: {payload}")
+                        print(f"authenticate: Frontend benachrichtigt")
                     return json.dumps({"success": True, "message": "Authentifizierung erfolgreich"})
                 elif response.status_code == 401:
                     error_msg = "Ungültiger Token - bitte prüfe deinen Token"
-                    print(f"❌ authenticate: {error_msg} (Status: {response.status_code})")
-                    print(f"❌ authenticate: Response: {response.text[:200]}")
+                    print(f"authenticate: {error_msg} (Status: {response.status_code})")
                     # Markiere Token als nicht validiert
                     update_config(auth_validated=False)
                     if self.widget and self.widget.web_view:
                         payload = {"type": "auth_error", "message": error_msg}
                         js_code = f"if (window.ankiReceive) {{ window.ankiReceive({json.dumps(payload)}); }}"
                         self.widget.web_view.page().runJavaScript(js_code)
-                        print(f"❌ authenticate: Frontend benachrichtigt: {payload}")
+                        print(f"authenticate: Frontend benachrichtigt")
                     return json.dumps({"success": False, "error": error_msg})
                 else:
                     # Token gespeichert, aber Validierung fehlgeschlagen (Netzwerkfehler etc.)
                     error_msg = f"Token gespeichert, aber Validierung fehlgeschlagen (Status: {response.status_code})"
-                    print(f"⚠️ authenticate: {error_msg}")
-                    print(f"⚠️ authenticate: Response: {response.text[:200]}")
+                    print(f"authenticate: {error_msg}")
                     # Token trotzdem speichern - kann später validiert werden
                     if self.widget and self.widget.web_view:
                         payload = {"type": "auth_error", "message": error_msg}

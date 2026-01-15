@@ -1,7 +1,10 @@
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { Timestamp } from 'firebase-admin/firestore';
 
-const db = getFirestore();
+// Lazy initialization - get Firestore when needed
+function getDb() {
+  return getFirestore();
+}
 
 export interface UserDocument {
   tier: 'free' | 'tier1' | 'tier2';
@@ -31,6 +34,7 @@ export async function getOrCreateUser(
   userId: string,
   email?: string
 ): Promise<UserDocument> {
+  const db = getDb();
   const userRef = db.collection('users').doc(userId);
   const userDoc = await userRef.get();
 
@@ -54,6 +58,7 @@ export async function getOrCreateUser(
  * @returns User document or null if not found
  */
 export async function getUser(userId: string): Promise<UserDocument | null> {
+  const db = getDb();
   const userRef = db.collection('users').doc(userId);
   const userDoc = await userRef.get();
 
@@ -74,6 +79,7 @@ export async function getOrCreateDailyUsage(
   userId: string,
   date: string
 ): Promise<DailyUsageDocument> {
+  const db = getDb();
   const usageRef = db
     .collection('usage')
     .doc(userId)
@@ -106,6 +112,7 @@ export async function getDailyUsage(
   userId: string,
   date: string
 ): Promise<DailyUsageDocument | null> {
+  const db = getDb();
   const usageRef = db
     .collection('usage')
     .doc(userId)
@@ -131,6 +138,7 @@ export async function incrementFlashRequests(
   userId: string,
   date: string
 ): Promise<number> {
+  const db = getDb();
   const usageRef = db
     .collection('usage')
     .doc(userId)
@@ -168,6 +176,7 @@ export async function incrementDeepRequests(
   userId: string,
   date: string
 ): Promise<number> {
+  const db = getDb();
   const usageRef = db
     .collection('usage')
     .doc(userId)
@@ -204,6 +213,7 @@ export async function resetDailyUsage(
   userId: string,
   date: string
 ): Promise<void> {
+  const db = getDb();
   const usageRef = db
     .collection('usage')
     .doc(userId)

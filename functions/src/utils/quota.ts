@@ -3,7 +3,11 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { getUser, getOrCreateDailyUsage, getCurrentDateString } from './firestore';
 import { createLogger } from './logging';
 
-const db = getFirestore();
+// Lazy initialization - get Firestore when needed
+function getDb() {
+  return getFirestore();
+}
+
 const logger = createLogger();
 
 export interface QuotaCheckResult {
@@ -146,6 +150,7 @@ function checkQuotaWithUsage(
  * @param date - Date string in format YYYY-MM-DD
  */
 async function resetDailyUsage(userId: string, date: string): Promise<void> {
+  const db = getDb();
   const usageRef = db
     .collection('usage')
     .doc(userId)
@@ -170,6 +175,7 @@ export async function incrementUsage(
   type: 'flash' | 'deep'
 ): Promise<number> {
   try {
+    const db = getDb();
     const currentDate = getCurrentDateString();
     const usageRef = db
       .collection('usage')

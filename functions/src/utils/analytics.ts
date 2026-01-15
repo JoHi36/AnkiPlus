@@ -6,7 +6,15 @@
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { createLogger } from './logging';
 
-const db = getFirestore();
+// Lazy initialization - get Firestore when needed (not at module load time)
+let _db: ReturnType<typeof getFirestore> | null = null;
+function getDb() {
+  if (!_db) {
+    _db = getFirestore();
+  }
+  return _db;
+}
+
 const logger = createLogger();
 
 export interface AnalyticsEvent {
@@ -36,6 +44,7 @@ export async function logAnalyticsEvent(
     };
 
     // Log to Firestore collection
+    const db = getDb();
     await db.collection('analytics').add(analyticsEvent);
 
     // Also log to console for debugging

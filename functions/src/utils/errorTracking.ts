@@ -6,7 +6,11 @@
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { createLogger } from './logging';
 
-const db = getFirestore();
+// Lazy initialization - get Firestore when needed
+function getDb() {
+  return getFirestore();
+}
+
 const logger = createLogger();
 
 export interface ErrorDocument {
@@ -50,6 +54,7 @@ export async function trackError(
     };
 
     // Log to Firestore collection
+    const db = getDb();
     await db.collection('errors').add(errorDoc);
 
     // Also log to console for debugging
