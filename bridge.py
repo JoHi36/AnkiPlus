@@ -285,93 +285,27 @@ class WebBridge(QObject):
         Returns:
             JSON mit front, back, deckName, etc.
         """
-        # #region agent log
-        import json as json_module
-        import traceback
-        try:
-            debug_data = {"card_id_input": card_id, "card_id_type": type(card_id).__name__}
-            with open("/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log", "a") as f:
-                f.write(json_module.dumps({"location": "bridge.py:277", "message": "getCardDetails called", "data": debug_data, "timestamp": int(__import__('time').time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}) + "\n")
-        except:
-            pass
-        # #endregion
         try:
             from aqt import mw
             if mw is None or mw.col is None:
-                # #region agent log
-                try:
-                    with open("/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log", "a") as f:
-                        f.write(json_module.dumps({"location": "bridge.py:290", "message": "getCardDetails: No collection", "data": {}, "timestamp": int(__import__('time').time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}) + "\n")
-                except:
-                    pass
-                # #endregion
                 return json.dumps({"error": "No collection"})
             
             card_id_int = int(card_id)
-            # #region agent log
-            try:
-                with open("/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log", "a") as f:
-                    f.write(json_module.dumps({"location": "bridge.py:292", "message": "getCardDetails: trying card_id_int", "data": {"card_id_int": card_id_int}, "timestamp": int(__import__('time').time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}) + "\n")
-            except:
-                pass
-            # #endregion
             try:
                 card = mw.col.get_card(card_id_int)
-                # #region agent log
-                try:
-                    with open("/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log", "a") as f:
-                        f.write(json_module.dumps({"location": "bridge.py:294", "message": "getCardDetails: card found", "data": {"card_id": card.id if card else None}, "timestamp": int(__import__('time').time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}) + "\n")
-                except:
-                    pass
-                # #endregion
             except Exception as e:
-                # #region agent log
-                try:
-                    with open("/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log", "a") as f:
-                        f.write(json_module.dumps({"location": "bridge.py:296", "message": "getCardDetails: card not found, trying note_id", "data": {"error": str(e), "card_id_int": card_id_int}, "timestamp": int(__import__('time').time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}) + "\n")
-                except:
-                    pass
-                # #endregion
                 # Fallback: Versuche als Note-ID
                 try:
                     note = mw.col.get_note(card_id_int)
                     cards = note.cards()
                     if cards:
                         card = cards[0]  # Erste Card der Note
-                        # #region agent log
-                        try:
-                            with open("/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log", "a") as f:
-                                f.write(json_module.dumps({"location": "bridge.py:301", "message": "getCardDetails: note found, using first card", "data": {"note_id": card_id_int, "card_id": card.id, "cards_count": len(cards)}, "timestamp": int(__import__('time').time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}) + "\n")
-                        except:
-                            pass
-                        # #endregion
                     else:
-                        # #region agent log
-                        try:
-                            with open("/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log", "a") as f:
-                                f.write(json_module.dumps({"location": "bridge.py:303", "message": "getCardDetails: note found but no cards", "data": {"note_id": card_id_int}, "timestamp": int(__import__('time').time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}) + "\n")
-                        except:
-                            pass
-                        # #endregion
                         return json.dumps({"error": "No cards for note"})
                 except Exception as e2:
-                    # #region agent log
-                    try:
-                        with open("/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log", "a") as f:
-                            f.write(json_module.dumps({"location": "bridge.py:305", "message": "getCardDetails: note not found either", "data": {"error": str(e2), "card_id_int": card_id_int}, "timestamp": int(__import__('time').time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}) + "\n")
-                    except:
-                        pass
-                    # #endregion
                     return json.dumps({"error": "Card or Note not found"})
             
             if not card:
-                # #region agent log
-                try:
-                    with open("/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log", "a") as f:
-                        f.write(json_module.dumps({"location": "bridge.py:307", "message": "getCardDetails: card is None", "data": {}, "timestamp": int(__import__('time').time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}) + "\n")
-                except:
-                    pass
-                # #endregion
                 return json.dumps({"error": "Card not found"})
             
             # Render content using Anki's template engine
@@ -404,13 +338,6 @@ class WebBridge(QObject):
                 "deckName": deck_name,
                 "modelName": model_name
             }
-            # #region agent log
-            try:
-                with open("/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log", "a") as f:
-                    f.write(json_module.dumps({"location": "bridge.py:333", "message": "getCardDetails: success", "data": {"card_id": card_id_int, "front_length": len(front) if front else 0, "back_length": len(back) if back else 0, "deck_name": deck_name}, "timestamp": int(__import__('time').time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}) + "\n")
-            except:
-                pass
-            # #endregion
             return json.dumps(result)
             
         except Exception as e:

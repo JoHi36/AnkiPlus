@@ -10,6 +10,7 @@ import Header from './components/Header';
 import SessionHeader from './components/SessionView/SessionHeader';
 import ChatMessage from './components/ChatMessage';
 import StreamingChatMessage from './components/StreamingChatMessage';
+import { getOrCreateDeviceId } from './utils/deviceId';
 import ChatInput from './components/ChatInput';
 import ProfileDialog from './components/ProfileDialog';
 import ThoughtStream from './components/ThoughtStream';
@@ -27,6 +28,14 @@ import { Sparkles, Brain, BookOpen } from 'lucide-react';
 function AppInner() {
   const { bridge, isReady } = useAnki();
   const sessionContext = useSessionContext();
+  
+  // Initialize Device-ID for anonymous users
+  useEffect(() => {
+    const deviceId = getOrCreateDeviceId();
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/e7757e9a-5092-4e4c-9b61-29b99999cd32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.jsx:35',message:'App mounted - Device-ID initialized',data:{deviceId:deviceId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+  }, []);
   
   // Settings State
   const [showProfile, setShowProfile] = useState(false);

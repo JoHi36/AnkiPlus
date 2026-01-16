@@ -14,11 +14,13 @@ try:
 except ImportError:
     from ui_setup import setup_ui, setup_menu, get_chatbot_widget
 
-# Card HTML Transformer Import - DEAKTIVIERT (verwenden jetzt JavaScript)
-# try:
-#     from .card_html_transformer import transform_card_html
-# except ImportError:
-#     from card_html_transformer import transform_card_html
+# Global Theme Import
+try:
+    from .anki_global_theme import setup_global_theme
+except ImportError:
+    from anki_global_theme import setup_global_theme
+
+# Card Styling - Nur CSS (kein HTML-Transformer mehr)
 
 def init_addon():
     """Initialisiert das Addon nach dem Laden des Profils"""
@@ -29,6 +31,7 @@ def init_addon():
         mw.addonManager.setWebExports(__name__, r"(web|icons)/.*")
         setup_ui()
         setup_menu()
+        setup_global_theme()  # Globales Theme anwenden (styled ALLES)
         # Keine automatischen Server/Monitoring mehr - User fügt Token manuell ein
     except Exception as e:
         from aqt.utils import showInfo
@@ -67,7 +70,7 @@ def _emit_deck_selected(widget, deck_id, deck_name):
             try {{
               window.ankiReceive({json.dumps(payload)});
             }} catch (e) {{
-              console.error('🔵 DEBUG __init__.py: Error calling window.ankiReceive for deckSelected', e);
+              console.error('Error calling window.ankiReceive for deckSelected', e);
             }}
           }} else {{
             // Queue the event if window.ankiReceive is not ready yet
@@ -76,7 +79,6 @@ def _emit_deck_selected(widget, deck_id, deck_name):
                 window._ankiReceiveQueue = [];
               }}
               window._ankiReceiveQueue.push({json.dumps(payload)});
-              console.error('🔵 DEBUG __init__.py: deckSelected queued (window.ankiReceive not ready)');
             }}
           }}
         }})();
@@ -90,34 +92,11 @@ def _emit_deck_selected(widget, deck_id, deck_name):
 
 def on_reviewer_did_show_question(card):
     """Wird aufgerufen, wenn eine Karte im Reviewer angezeigt wird - sendet deckSelected Event"""
-    # #region agent log
-    import time
-    log_path = "/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log"
-    try:
-        with open(log_path, 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"location": "__init__.py:64", "message": "on_reviewer_did_show_question hook called", "data": {"has_card": card is not None, "card_id": card.id if card else None}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "B"}) + "\n")
-    except:
-        pass
-    # #endregion
     widget = get_chatbot_widget()
-    # #region agent log
-    try:
-        with open(log_path, 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"location": "__init__.py:67", "message": "on_reviewer_did_show_question: widget check", "data": {"has_widget": widget is not None, "has_bridge": widget.bridge is not None if widget else False, "has_web_view": widget.web_view is not None if widget else False}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "D"}) + "\n")
-    except:
-        pass
-    # #endregion
     if widget and widget.bridge and widget.web_view:
         try:
             deck_info = widget.bridge.getCurrentDeck()
             deck_data = json.loads(deck_info)
-            # #region agent log
-            try:
-                with open(log_path, 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({"location": "__init__.py:73", "message": "on_reviewer_did_show_question: deck data", "data": {"deck_id": deck_data.get("deckId"), "deck_name": deck_data.get("deckName"), "is_in_deck": deck_data.get("isInDeck")}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "D"}) + "\n")
-            except:
-                pass
-            # #endregion
             
             # Nur senden wenn wirklich ein Deck aktiv ist
             if deck_data.get("deckId") and deck_data.get("isInDeck"):
@@ -127,13 +106,6 @@ def on_reviewer_did_show_question(card):
                     deck_data["deckName"]
                 )
         except Exception as e:
-            # #region agent log
-            try:
-                with open(log_path, 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({"location": "__init__.py:80", "message": "on_reviewer_did_show_question: exception", "data": {"error": str(e)}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "D"}) + "\n")
-            except:
-                pass
-            # #endregion
             print(f"Fehler beim Senden von Deck-Event: {e}")
             import traceback
             traceback.print_exc()
@@ -190,10 +162,9 @@ if mw is not None:
     else:
         print("⚠️ WARNUNG: state_will_change Hook nicht verfügbar")
     
-    # Premium UI: JavaScript-basierte HTML-Transformation (robuster als card_will_show)
-    # Der JavaScript-Transformer wird in card_tracker.py injiziert
-    # card_will_show Hook ist nicht mehr nötig
-    print("✅ Premium UI: JavaScript-Transformer wird verwendet (kein card_will_show Hook)")
+    # Premium UI: CSS-Only Styling (robust & kompatibel mit allen Decks)
+    # CSS wird in card_tracker.py injiziert
+    print("✅ Premium UI: CSS-Only Styling aktiv")
     
     # Falls Profil bereits geladen ist, sofort initialisieren
     if hasattr(mw, 'col') and mw.col is not None:

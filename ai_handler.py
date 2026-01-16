@@ -617,11 +617,27 @@ class AIHandler:
                 
                 # Bei 403 (Forbidden): Quota-Fehler (kein Retry)
                 if response.status_code == 403:
+                    # #region agent log
+                    import time
+                    log_path = "/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log"
+                    try:
+                        with open(log_path, 'a', encoding='utf-8') as f:
+                            f.write(json.dumps({"location": "ai_handler.py:619", "message": "403 QUOTA_EXCEEDED received from backend", "data": {"status_code": response.status_code, "response_text": response.text[:200]}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "A"}) + "\n")
+                    except:
+                        pass
+                    # #endregion
                     try:
                         error_data = response.json()
                         error_code = error_data.get("error", {}).get("code", "QUOTA_EXCEEDED")
                         error_msg = error_data.get("error", {}).get("message", "Quota überschritten")
                         user_msg = get_user_friendly_error(error_code, error_msg)
+                        # #region agent log
+                        try:
+                            with open(log_path, 'a', encoding='utf-8') as f:
+                                f.write(json.dumps({"location": "ai_handler.py:624", "message": "Raising QUOTA_EXCEEDED exception", "data": {"error_code": error_code, "error_msg": error_msg, "user_msg": user_msg}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "A"}) + "\n")
+                        except:
+                            pass
+                        # #endregion
                         raise Exception(user_msg)
                     except Exception as e:
                         if "Quota" in str(e) or "quota" in str(e).lower():
@@ -1279,6 +1295,15 @@ class AIHandler:
                 
                 # Bei 403: Quota-Fehler
                 if response.status_code == 403:
+                    # #region agent log
+                    import time
+                    log_path = "/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log"
+                    try:
+                        with open(log_path, 'a', encoding='utf-8') as f:
+                            f.write(json.dumps({"location": "ai_handler.py:1281", "message": "403 QUOTA_EXCEEDED in stream_response", "data": {"status_code": response.status_code}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "A"}) + "\n")
+                    except:
+                        pass
+                    # #endregion
                     try:
                         error_text = response.text[:500]
                         error_data = json.loads(error_text) if error_text.startswith('{') else {}
@@ -1532,9 +1557,11 @@ class AIHandler:
         """Prüft, ob die AI-Konfiguration vollständig ist"""
         # Prüfe Backend-Modus
         if is_backend_mode():
-            auth_token = get_auth_token()
-            return bool(auth_token.strip())
-        # Fallback: API-Key-Modus
+            # Im Backend-Modus: Anonyme User sind erlaubt (Device-ID wird verwendet)
+            # Backend-URL wird standardmäßig gesetzt (DEFAULT_BACKEND_URL)
+            # Daher ist Backend-Modus immer "konfiguriert", auch ohne Auth-Token
+            return True  # Backend-Modus = immer konfiguriert (unterstützt anonyme User)
+        # Fallback: API-Key-Modus (benötigt API-Key)
         api_key = self.config.get("api_key", "")
         return bool(api_key.strip())
     
@@ -3038,24 +3065,6 @@ Regeln für Suchstrategien:
                         # Erste 100 Zeichen pro Feld für Citation
                         citation_fields[field_name] = field_clean[:100] if field_clean else ""
                     
-                    # #region agent log
-                    card_ids_list = note_data.get('card_ids', [])
-                    first_card_id = card_ids_list[0] if card_ids_list else None
-                    import json
-                    import traceback
-                    try:
-                        debug_data = {
-                            "note_id": note_id,
-                            "card_ids_count": len(card_ids_list),
-                            "card_ids": card_ids_list[:5],  # First 5 only
-                            "first_card_id": first_card_id,
-                            "citation_key": str(note_id)
-                        }
-                        with open("/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log", "a") as f:
-                            f.write(json.dumps({"location": "ai_handler.py:2463", "message": "citation created", "data": debug_data, "timestamp": int(__import__('time').time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "B"}) + "\n")
-                    except:
-                        pass
-                    # #endregion
                     citations[str(note_id)] = {
                         "noteId": note_id,
                         "cardId": first_card_id,  # Erste Card-ID

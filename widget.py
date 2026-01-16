@@ -80,25 +80,8 @@ class ChatbotWidget(QWidget):
         self.current_card_context = None  # Aktueller Karten-Kontext
         self.setup_ui()
         # Card-Tracking wird nach UI-Setup initialisiert
-        # #region agent log
-        import time
-        log_path = "/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log"
-        try:
-            with open(log_path, 'a', encoding='utf-8') as f:
-                f.write(json.dumps({"location": "widget.py:83", "message": "ChatbotWidget.__init__: before CardTracker init", "data": {"has_web_view": self.web_view is not None}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "A"}) + "\n")
-        except:
-            pass
-        # #endregion
         if self.web_view:
             self.card_tracker = CardTracker(self)
-            # #region agent log
-            try:
-                with open(log_path, 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({"location": "widget.py:85", "message": "ChatbotWidget.__init__: CardTracker initialized", "data": {"has_card_tracker": self.card_tracker is not None}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "A"}) + "\n")
-            except:
-                pass
-            # #endregion
-
     def setup_ui(self):
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
@@ -327,52 +310,9 @@ class ChatbotWidget(QWidget):
             self.bridge.hideAnswer()
         elif msg_type == 'loadSessions':
             # Lade Sessions aus Datei und sende an Frontend
-            # #region agent log
-            import os
-            log_path = os.path.join(os.path.dirname(__file__), '.cursor', 'debug.log')
-            try:
-                os.makedirs(os.path.dirname(log_path), exist_ok=True)
-                with open(log_path, 'a', encoding='utf-8') as f:
-                    import json as json_module
-                    import time
-                    log_entry = {"location": "widget.py:267", "message": "loadSessions called", "data": {}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "A"}
-                    f.write(json_module.dumps(log_entry) + "\n")
-            except Exception as e:
-                pass
-            # #endregion
             sessions = load_sessions()
-            # #region agent log
-            try:
-                with open(log_path, 'a', encoding='utf-8') as f:
-                    import json as json_module
-                    import time
-                    log_entry = {"location": "widget.py:270", "message": "Sessions loaded from file", "data": {"sessionsCount": len(sessions), "sessionsIsArray": isinstance(sessions, list)}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}
-                    f.write(json_module.dumps(log_entry) + "\n")
-            except Exception as e:
-                pass
-            # #endregion
             payload = {"type": "sessionsLoaded", "data": sessions}
-            # #region agent log
-            try:
-                with open(log_path, 'a', encoding='utf-8') as f:
-                    import json as json_module
-                    import time
-                    log_entry = {"location": "widget.py:272", "message": "Sending sessionsLoaded event to frontend", "data": {"payloadDataLength": len(sessions) if isinstance(sessions, list) else 0, "payloadDataIsArray": isinstance(sessions, list), "payloadType": payload.get("type"), "hasPayloadData": "data" in payload}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "B"}
-                    f.write(json_module.dumps(log_entry) + "\n")
-            except Exception as e:
-                pass
-            # #endregion
             js_code = f"window.ankiReceive({json.dumps(payload)});"
-            # #region agent log
-            try:
-                with open(log_path, 'a', encoding='utf-8') as f:
-                    import json as json_module
-                    import time
-                    log_entry = {"location": "widget.py:275", "message": "Executing JavaScript to send sessionsLoaded", "data": {"jsCodeLength": len(js_code), "jsCodePreview": js_code[:200], "hasAnkiReceive": "window.ankiReceive" in js_code}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "B"}
-                    f.write(json_module.dumps(log_entry) + "\n")
-            except Exception as e:
-                pass
-            # #endregion
             # Add check if window.ankiReceive exists before calling
             js_code_with_check = f"""
             (function() {{
@@ -392,110 +332,27 @@ class ChatbotWidget(QWidget):
             self.web_view.page().runJavaScript(js_code_with_check)
         elif msg_type == 'saveSessions':
             # Speichere Sessions in Datei
-            # #region agent log
-            import os
-            log_path = os.path.join(os.path.dirname(__file__), '.cursor', 'debug.log')
-            try:
-                os.makedirs(os.path.dirname(log_path), exist_ok=True)
-                with open(log_path, 'a', encoding='utf-8') as f:
-                    import json as json_module
-                    import time
-                    log_entry = {"location": "widget.py:271", "message": "saveSessions called", "data": {"dataType": type(data).__name__, "dataIsString": isinstance(data, str), "dataIsList": isinstance(data, list), "dataLength": len(data) if (isinstance(data, str) or isinstance(data, list)) else 0}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}
-                    f.write(json_module.dumps(log_entry) + "\n")
-            except Exception as e:
-                pass
-            # #endregion
             sessions = None
             try:
                 # Handle both string (JSON) and list (direct array) formats
                 if isinstance(data, str):
-                    # #region agent log
-                    try:
-                        with open(log_path, 'a', encoding='utf-8') as f:
-                            import json as json_module
-                            import time
-                            log_entry = {"location": "widget.py:285", "message": "Parsing JSON string", "data": {"dataLength": len(data), "dataPreview": data[:100] if len(data) > 100 else data}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}
-                            f.write(json_module.dumps(log_entry) + "\n")
-                    except Exception as e:
-                        pass
-                    # #endregion
                     # Parse JSON string - may need double parsing if string was double-escaped
                     try:
                         sessions = json.loads(data)
-                        # #region agent log
-                        try:
-                            with open(log_path, 'a', encoding='utf-8') as f:
-                                import json as json_module
-                                import time
-                                log_entry = {"location": "widget.py:292", "message": "First JSON parse result", "data": {"sessionsType": type(sessions).__name__, "sessionsIsArray": isinstance(sessions, list), "sessionsIsDict": isinstance(sessions, dict), "sessionsIsString": isinstance(sessions, str), "sessionsCount": len(sessions) if isinstance(sessions, (list, dict, str)) else 0}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}
-                                f.write(json_module.dumps(log_entry) + "\n")
-                        except Exception as e:
-                            pass
-                        # #endregion
                         # If result is still a string, it was double-escaped - parse again
                         if isinstance(sessions, str):
-                            # #region agent log
-                            try:
-                                with open(log_path, 'a', encoding='utf-8') as f:
-                                    import json as json_module
-                                    import time
-                                    log_entry = {"location": "widget.py:301", "message": "Result is still string, parsing again", "data": {"stringLength": len(sessions), "stringPreview": sessions[:100] if len(sessions) > 100 else sessions}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}
-                                    f.write(json_module.dumps(log_entry) + "\n")
-                            except Exception as e:
-                                pass
-                            # #endregion
                             sessions = json.loads(sessions)
-                            # #region agent log
-                            try:
-                                with open(log_path, 'a', encoding='utf-8') as f:
-                                    import json as json_module
-                                    import time
-                                    log_entry = {"location": "widget.py:307", "message": "Second JSON parse result", "data": {"sessionsType": type(sessions).__name__, "sessionsIsArray": isinstance(sessions, list), "sessionsIsDict": isinstance(sessions, dict), "sessionsCount": len(sessions) if isinstance(sessions, (list, dict)) else 0}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}
-                                    f.write(json_module.dumps(log_entry) + "\n")
-                            except Exception as e:
-                                pass
-                            # #endregion
                     except json.JSONDecodeError as e:
                         print(f"_handle_js_message: JSON-Fehler beim Parsen: {e}")
-                        # #region agent log
-                        try:
-                            with open(log_path, 'a', encoding='utf-8') as f:
-                                import json as json_module
-                                import time
-                                log_entry = {"location": "widget.py:315", "message": "JSON decode error", "data": {"error": str(e)}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}
-                                f.write(json_module.dumps(log_entry) + "\n")
-                        except Exception as e2:
-                            pass
-                        # #endregion
                         return
                 elif isinstance(data, list):
                     sessions = data
                 else:
                     print(f"_handle_js_message: saveSessions - Ungültiger Datentyp: {type(data)}")
-                    # #region agent log
-                    try:
-                        with open(log_path, 'a', encoding='utf-8') as f:
-                            import json as json_module
-                            import time
-                            log_entry = {"location": "widget.py:323", "message": "saveSessions FAILED - invalid data type", "data": {"dataType": type(data).__name__}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}
-                            f.write(json_module.dumps(log_entry) + "\n")
-                    except Exception as e:
-                        pass
-                    # #endregion
                     return
                 
                 # If parsed result is a dict (not array), try to extract sessions array
                 if isinstance(sessions, dict):
-                    # #region agent log
-                    try:
-                        with open(log_path, 'a', encoding='utf-8') as f:
-                            import json as json_module
-                            import time
-                            log_entry = {"location": "widget.py:333", "message": "Parsed result is dict, trying to extract sessions", "data": {"dictKeys": list(sessions.keys())}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}
-                            f.write(json_module.dumps(log_entry) + "\n")
-                    except Exception as e:
-                        pass
-                    # #endregion
                     # Try common keys that might contain the sessions array
                     if 'sessions' in sessions:
                         sessions = sessions['sessions']
@@ -503,68 +360,17 @@ class ChatbotWidget(QWidget):
                         sessions = sessions['data']
                     else:
                         print(f"_handle_js_message: saveSessions - Parsed dict but no 'sessions' or 'data' key found. Keys: {list(sessions.keys())}")
-                        # #region agent log
-                        try:
-                            with open(log_path, 'a', encoding='utf-8') as f:
-                                import json as json_module
-                                import time
-                                log_entry = {"location": "widget.py:343", "message": "Dict has no sessions/data key", "data": {"dictKeys": list(sessions.keys())}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}
-                                f.write(json_module.dumps(log_entry) + "\n")
-                        except Exception as e:
-                            pass
-                        # #endregion
                         return
-                
-                # #region agent log
-                try:
-                    with open(log_path, 'a', encoding='utf-8') as f:
-                        import json as json_module
-                        import time
-                        log_entry = {"location": "widget.py:325", "message": "Sessions parsed/prepared", "data": {"sessionsCount": len(sessions) if isinstance(sessions, list) else 0, "sessionsIsArray": isinstance(sessions, list)}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}
-                        f.write(json_module.dumps(log_entry) + "\n")
-                except Exception as e:
-                    pass
-                # #endregion
                 
                 if sessions is not None:
                     success = save_sessions(sessions)
-                    # #region agent log
-                    try:
-                        with open(log_path, 'a', encoding='utf-8') as f:
-                            import json as json_module
-                            import time
-                            log_entry = {"location": "widget.py:295", "message": "save_sessions completed", "data": {"success": success, "sessionsCount": len(sessions) if isinstance(sessions, list) else 0}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}
-                            f.write(json_module.dumps(log_entry) + "\n")
-                    except Exception as e:
-                        pass
-                    # #endregion
                     print(f"_handle_js_message: Sessions gespeichert, Erfolg: {success}")
             except json.JSONDecodeError as e:
                 print(f"_handle_js_message: JSON-Fehler beim Parsen von Sessions: {e}")
-                # #region agent log
-                try:
-                    with open(log_path, 'a', encoding='utf-8') as f:
-                        import json as json_module
-                        import time
-                        log_entry = {"location": "widget.py:300", "message": "JSON decode error in saveSessions", "data": {"error": str(e)}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}
-                        f.write(json_module.dumps(log_entry) + "\n")
-                except Exception as e2:
-                    pass
-                # #endregion
             except Exception as e:
                 print(f"_handle_js_message: Fehler beim Speichern von Sessions: {e}")
                 import traceback
                 traceback.print_exc()
-                # #region agent log
-                try:
-                    with open(log_path, 'a', encoding='utf-8') as f:
-                        import json as json_module
-                        import time
-                        log_entry = {"location": "widget.py:308", "message": "Exception in saveSessions", "data": {"error": str(e)}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}
-                        f.write(json_module.dumps(log_entry) + "\n")
-                except Exception as e2:
-                    pass
-                # #endregion
         elif msg_type == 'fetchImage':
             # Lade Bild über Python-Proxy und sende als Base64 zurück
             if isinstance(data, str):
@@ -924,12 +730,6 @@ class ChatbotWidget(QWidget):
                 timestamp_before = time.time() * 1000
                 print(f"📤 widget.py: Sende Streaming-Chunk an Frontend (Länge: {len(chunk) if chunk else 0}, done: {done})")
                 
-                # #region agent log
-                log_data = {"sessionId": "debug-session", "runId": "run1", "hypothesisId": "A", "location": "widget.py:562", "message": "Before runJavaScript", "data": {"chunk_len": len(chunk) if chunk else 0, "done": done, "timestamp": timestamp_before}, "timestamp": timestamp_before}
-                with open("/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log", "a") as f:
-                    f.write(json.dumps(log_data) + "\n")
-                # #endregion
-                
                 # Markiere dass Streaming verwendet wurde
                 if done:
                     self._streaming_sent_message = True
@@ -937,13 +737,6 @@ class ChatbotWidget(QWidget):
                 # Sende an Frontend
                 js_code = f"window.ankiReceive({json.dumps(payload)});"
                 self.web_view.page().runJavaScript(js_code)
-                
-                # #region agent log
-                timestamp_after = time.time() * 1000
-                log_data = {"sessionId": "debug-session", "runId": "run1", "hypothesisId": "A", "location": "widget.py:570", "message": "After runJavaScript", "data": {"chunk_len": len(chunk) if chunk else 0, "done": done, "timestamp": timestamp_after, "delay_ms": timestamp_after - timestamp_before}, "timestamp": timestamp_after}
-                with open("/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log", "a") as f:
-                    f.write(json.dumps(log_data) + "\n")
-                # #endregion
             
             # Track ob Streaming bereits die Nachricht gesendet hat
             self._streaming_sent_message = False

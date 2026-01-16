@@ -1,0 +1,326 @@
+/* ============================================
+   MINIMALISTISCH: Nur Hintergrund + Anki's UI
+   Karten-Inhalt bleibt unberührt!
+   ============================================ */
+
+/* ============================================
+   NUR HINTERGRUND - Kein Inhalt!
+   ============================================ */
+
+/* Basis-Hintergrund */
+html {
+  background: #1A1A1A !important;
+  background-color: #1A1A1A !important;
+}
+
+body {
+  background: #1A1A1A !important;
+  background-color: #1A1A1A !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Anki's Outer Container (außerhalb der Karte) */
+body > table,
+body > #innertable,
+body > table > tbody,
+body > table > tbody > tr,
+body > table > tbody > tr > td {
+  background: #1A1A1A !important;
+  background-color: #1A1A1A !important;
+  border: none !important;
+}
+
+/* Top & Bottom Bars (außerhalb der Karte) */
+#top,
+#bottom {
+  background: #1A1A1A !important;
+  background-color: #1A1A1A !important;
+  border: none !important;
+}
+
+/* ============================================
+   CARD CONTENT - ZENTRIERT & MODERN
+   ============================================ */
+
+/* #qa ist der Card-Container - ZENTRIERT */
+#qa {
+  background: #1A1A1A !important;
+  background-color: #1A1A1A !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-items: center !important;
+  min-height: 100vh !important;
+  padding: 4rem 2rem !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+}
+
+/* .card - Zentriert & mit Padding */
+.card {
+  background: #1A1A1A !important;
+  background-color: #1A1A1A !important;
+  max-width: 900px !important;
+  width: 100% !important;
+  margin: 0 auto !important;
+  padding: 2rem !important;
+  box-sizing: border-box !important;
+}
+
+/* ============================================
+   ANKI'S NATIVE BUTTONS (außerhalb #qa)
+   Nur Buttons in #bottom stylen!
+   ============================================ */
+
+/* Nur Buttons im Bottom-Bereich (Anki's Rating Buttons) */
+#bottom button,
+#bottom input[type="button"] {
+  background: rgba(255, 255, 255, 0.08) !important;
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  background-image: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+  padding: 0.75rem 1.5rem !important;
+  border-radius: 8px !important;
+  font-size: 0.9375rem !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+  text-shadow: none !important;
+  margin: 0.25rem !important;
+}
+
+#bottom button:hover,
+#bottom input[type="button"]:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  background-color: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Farbcodierung für Rating Buttons */
+#bottom button[title*="1"] {
+  background: rgba(239, 68, 68, 0.2) !important;
+  background-color: rgba(239, 68, 68, 0.2) !important;
+  border-color: rgba(239, 68, 68, 0.4) !important;
+}
+
+#bottom button[title*="1"]:hover {
+  background: rgba(239, 68, 68, 0.3) !important;
+  background-color: rgba(239, 68, 68, 0.3) !important;
+}
+
+#bottom button[title*="2"] {
+  background: rgba(251, 146, 60, 0.2) !important;
+  background-color: rgba(251, 146, 60, 0.2) !important;
+  border-color: rgba(251, 146, 60, 0.4) !important;
+}
+
+#bottom button[title*="2"]:hover {
+  background: rgba(251, 146, 60, 0.3) !important;
+  background-color: rgba(251, 146, 60, 0.3) !important;
+}
+
+#bottom button[title*="3"] {
+  background: rgba(34, 197, 94, 0.2) !important;
+  background-color: rgba(34, 197, 94, 0.2) !important;
+  border-color: rgba(34, 197, 94, 0.4) !important;
+}
+
+#bottom button[title*="3"]:hover {
+  background: rgba(34, 197, 94, 0.3) !important;
+  background-color: rgba(34, 197, 94, 0.3) !important;
+}
+
+#bottom button[title*="4"] {
+  background: rgba(59, 130, 246, 0.2) !important;
+  background-color: rgba(59, 130, 246, 0.2) !important;
+  border-color: rgba(59, 130, 246, 0.4) !important;
+}
+
+#bottom button[title*="4"]:hover {
+  background: rgba(59, 130, 246, 0.3) !important;
+  background-color: rgba(59, 130, 246, 0.3) !important;
+}
+
+/* Show Answer Button */
+#bottom button#ansbut {
+  background: rgba(20, 184, 166, 0.2) !important;
+  background-color: rgba(20, 184, 166, 0.2) !important;
+  border-color: rgba(20, 184, 166, 0.4) !important;
+  font-weight: 600 !important;
+}
+
+#bottom button#ansbut:hover {
+  background: rgba(20, 184, 166, 0.3) !important;
+  background-color: rgba(20, 184, 166, 0.3) !important;
+}
+
+/* ============================================
+   SCROLLBAR
+   ============================================ */
+
+::-webkit-scrollbar {
+  width: 8px !important;
+  background: #1A1A1A !important;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-radius: 4px !important;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25) !important;
+}
+
+/* ============================================
+   TYPOGRAPHY - MODERN & CLEAN
+   ============================================ */
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Roboto', sans-serif !important;
+  font-size: 17px !important;
+  line-height: 1.7 !important;
+  letter-spacing: -0.01em !important;
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+}
+
+#qa {
+  font-size: 17px !important;
+  line-height: 1.7 !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600 !important;
+  letter-spacing: -0.02em !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+  margin-top: 1.5rem !important;
+  margin-bottom: 1rem !important;
+}
+
+p {
+  margin-bottom: 1.25rem !important;
+  color: rgba(255, 255, 255, 0.88) !important;
+}
+
+/* ============================================
+   CARD - MODERNES DESIGN
+   ============================================ */
+
+/* Weiße Karte mit subtilem Schatten */
+#qa > *,
+.card > * {
+  background: rgba(255, 255, 255, 0.98) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+  padding: 2.5rem !important;
+  margin: 0 auto !important;
+  max-width: 800px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+#qa > *:hover,
+.card > *:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), 0 2px 6px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* Text in der Karte - dunkel für Kontrast */
+#qa > * *,
+.card > * * {
+  color: rgba(0, 0, 0, 0.85) !important;
+}
+
+/* ============================================
+   BUTTONS - NOCH MODERNER
+   ============================================ */
+
+#bottom button,
+#bottom input[type="button"] {
+  font-weight: 500 !important;
+  letter-spacing: 0.01em !important;
+  text-transform: none !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+}
+
+#bottom button:hover,
+#bottom input[type="button"]:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+
+#bottom button:active,
+#bottom input[type="button"]:active {
+  transform: translateY(0) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* ============================================
+   LINKS - MODERN
+   ============================================ */
+
+a {
+  color: rgba(20, 184, 166, 0.9) !important;
+  text-decoration: none !important;
+  border-bottom: 1px solid rgba(20, 184, 166, 0.3) !important;
+  transition: all 0.2s ease !important;
+}
+
+a:hover {
+  color: rgba(20, 184, 166, 1) !important;
+  border-bottom-color: rgba(20, 184, 166, 0.6) !important;
+}
+
+/* ============================================
+   CLOZE - SUBTILER & MODERNER
+   ============================================ */
+
+.cloze {
+  background: linear-gradient(120deg, rgba(20, 184, 166, 0.15) 0%, rgba(20, 184, 166, 0.25) 100%) !important;
+  padding: 0.2rem 0.5rem !important;
+  border-radius: 4px !important;
+  font-weight: 600 !important;
+  color: rgba(0, 0, 0, 0.9) !important;
+  box-shadow: 0 1px 3px rgba(20, 184, 166, 0.2) !important;
+}
+
+/* ============================================
+   SELECTION
+   ============================================ */
+
+::selection {
+  background: rgba(20, 184, 166, 0.3) !important;
+  color: rgba(0, 0, 0, 0.9) !important;
+}
+
+/* ============================================
+   SMOOTH SCROLLING
+   ============================================ */
+
+html {
+  scroll-behavior: smooth !important;
+}
+
+/* ============================================
+   FOCUS STATES - ACCESSIBILITY
+   ============================================ */
+
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid rgba(20, 184, 166, 0.6) !important;
+  outline-offset: 2px !important;
+  border-radius: 4px !important;
+}

@@ -35,16 +35,16 @@ except ImportError:
 def get_dock_widget_style():
     return """
     QDockWidget {
-        background-color: #1b1b1b;
+        background-color: #1A1A1A;
         color: #e6e6e6;
     }
-    /* Extrem subtile Resize-Bar */
+    /* Ultra-subtile Resize-Bar - kaum sichtbar */
     QDockWidget::separator {
-        background: rgba(255, 255, 255, 0.02);
+        background: rgba(255, 255, 255, 0.01);
         width: 1px;
     }
     QDockWidget::separator:hover {
-        background: rgba(255, 255, 255, 0.05);
+        background: rgba(255, 255, 255, 0.03);
         width: 1px;
     }
     """
@@ -99,6 +99,18 @@ def toggle_chatbot():
         _chatbot_dock.setMinimumWidth(350)
         _chatbot_dock.setMaximumWidth(800)
         _chatbot_dock.resize(450, mw.height())  # Standardbreite
+        
+        # Style für Main Window Splitter (zwischen Dock und Reviewer)
+        mw.setStyleSheet(mw.styleSheet() + """
+            QMainWindow::separator {
+                background: rgba(255, 255, 255, 0.01);
+                width: 1px;
+                height: 1px;
+            }
+            QMainWindow::separator:hover {
+                background: rgba(255, 255, 255, 0.03);
+            }
+        """)
         
         # Erlauben, dass das Panel geschlossen, bewegt und in der Größe geändert werden kann
         _chatbot_dock.setFeatures(

@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowUp, Square, Lightbulb, List, EyeOff, Eye, Brain, Sparkles, Search, Zap, Briefcase, GitCompareArrows, Toolbox, BrainCircuit } from 'lucide-react';
+import { ArrowUp, Square, Lightbulb, List, EyeOff, Eye, Brain, Sparkles, Search, Zap, Briefcase, GitCompareArrows, Toolbox, BrainCircuit, Lock } from 'lucide-react';
 import ToolTogglePopup from './ToolTogglePopup';
 import { useQuotaDisplay } from '../hooks/useQuotaDisplay';
 import QuotaLimitDialog from './QuotaLimitDialog';
+import { incrementQuotaUsage } from '../utils/deviceId';
 
 /**
  * ChatInput Komponente - Toggle Button für Kompakt/Ausführlich Modus
@@ -134,19 +135,36 @@ export default function ChatInput({
     e.preventDefault();
     const text = input.trim();
     if (text) {
-      // Prüfe Quota vor dem Senden
+      const mode = isDetailedMode ? 'detailed' : 'compact';
+      
+      // Prüfe Quota vor dem Senden (für beide Modi)
       if (quotaDisplay && !quotaDisplay.isUnlimited) {
         const limit = typeof quotaDisplay.limit === 'string' ? Infinity : quotaDisplay.limit;
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e7757e9a-5092-4e4c-9b61-29b99999cd32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatInput.jsx:140',message:'Checking quota before send',data:{used:quotaDisplay.used,limit:limit,isUnlimited:quotaDisplay.isUnlimited,willBlock:quotaDisplay.used>=limit,mode:mode},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         
-        if (quotaDisplay.used >= limit) {
+        // Prüfe ob Limit erreicht (auch für Deep Mode mit 0 von 0)
+        if (limit === 0 || quotaDisplay.used >= limit) {
           // Limit erreicht - zeige Dialog
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/e7757e9a-5092-4e4c-9b61-29b99999cd32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatInput.jsx:145',message:'Quota limit reached - opening QuotaLimitDialog',data:{used:quotaDisplay.used,limit:limit,mode:mode},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
           setShowQuotaLimitDialog(true);
           return;
         }
       }
       
-      const mode = isDetailedMode ? 'detailed' : 'compact';
       onSend(text, { mode });
+      
+      // Increment quota for anonymous users (only Flash mode)
+      if (!authStatus?.authenticated && mode === 'compact') {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e7757e9a-5092-4e4c-9b61-29b99999cd32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatInput.jsx:153',message:'Incrementing quota after send',data:{mode:mode,isAuthenticated:authStatus?.authenticated},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+        incrementQuotaUsage();
+      }
+      
       setInput('');
       setIsDetailedMode(false); // Auto-Reset nach Senden
       if (textareaRef.current) textareaRef.current.style.height = 'auto';
@@ -218,20 +236,8 @@ export default function ChatInput({
               <button
                 type="button"
                 onClick={() => {
-                  if (isDetailedMode) {
-                    // FLASH-Modus: Immer erlaubt
-                    setIsDetailedMode(false);
-                  } else {
-                    // DEEP-Modus: Nur wenn Premium
-                    if (isPremium) {
-                      setIsDetailedMode(true);
-                    } else {
-                      // Zeige Paywall
-                      if (onShowPaywall) {
-                        onShowPaywall();
-                      }
-                    }
-                  }
+                  // Deep Mode ist jetzt immer aktivierbar
+                  setIsDetailedMode(!isDetailedMode);
                 }}
                 onMouseDown={(e) => {
                   // Long Press nur auf FLASH Button (nicht im DEEP Modus)
@@ -307,7 +313,7 @@ export default function ChatInput({
                     setLongPressProgress(0);
                   }
                 }}
-                className={`group relative flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold transition-all tracking-wide ${
+                className={`group relative flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-semibold transition-all tracking-wide ${
                   isDetailedMode
                     ? 'text-purple-500 hover:bg-purple-500/10' // Active (Deep): Purple Text, Subtle BG on Hover
                     : 'text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5' // Inactive: Standard
@@ -316,7 +322,7 @@ export default function ChatInput({
               >
                 {/* Long Press Progress Bar */}
                 {longPressProgress > 0 && !isDetailedMode && (
-                  <div className="absolute inset-0 rounded-lg bg-base-content/5 overflow-hidden">
+                  <div className="absolute inset-0 rounded-md bg-base-content/5 overflow-hidden">
                     <div 
                       className="h-full bg-base-content/20 transition-all duration-50"
                       style={{ width: `${longPressProgress}%` }}
@@ -328,11 +334,41 @@ export default function ChatInput({
                     <GitCompareArrows size={14} className="currentColor relative z-10" />
                     <span className="relative z-10">DEEP</span>
                     <span className="flex items-center justify-center ml-1.5 min-w-[28px] h-5 px-1.5 text-[10px] bg-purple-500/10 text-purple-500 rounded border border-purple-500/20 font-bold relative z-10">⌘L</span>
+                    {/* Quota-Anzeige für Deep Mode - IMMER anzeigen */}
+                    <span className="ml-1.5 text-[10px] text-base-content/50 relative z-10 flex items-center">
+                      {quotaDisplay ? (
+                        quotaDisplay.isUnlimited ? (
+                          <span className="text-purple-500/70">∞</span>
+                        ) : quotaDisplay.limit === 0 ? (
+                          <Lock size={10} className="text-base-content/30" />
+                        ) : (
+                          <span className="text-purple-500/70">
+                            {quotaDisplay.used || 0}/{quotaDisplay.limit || 0}
+                          </span>
+                        )
+                      ) : (
+                        <Lock size={10} className="text-base-content/30" />
+                      )}
+                    </span>
                   </>
                 ) : (
                   <>
                     <Zap size={14} className="currentColor relative z-10" />
                     <span className="relative z-10">FLASH</span>
+                    {/* Quota-Anzeige für Flash Mode - IMMER anzeigen (NACH FLASH, VOR ⌘L) */}
+                    <span className="ml-1.5 text-[10px] text-base-content/50 relative z-10">
+                      {quotaDisplay ? (
+                        quotaDisplay.isUnlimited ? (
+                          <span className="text-base-content/60">∞</span>
+                        ) : (
+                          <span className="text-base-content/60">
+                            {quotaDisplay.used || 0}/{quotaDisplay.limit || 20}
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-base-content/60">0/20</span>
+                      )}
+                    </span>
                     <span className="flex items-center justify-center ml-1.5 min-w-[28px] h-5 px-1.5 text-[10px] bg-base-300 text-base-content/50 rounded border border-base-content/10 font-bold relative z-10">⌘L</span>
                   </>
                 )}
@@ -460,15 +496,27 @@ export default function ChatInput({
       isOpen={showQuotaLimitDialog}
       onClose={() => setShowQuotaLimitDialog(false)}
       onEnterCode={() => {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e7757e9a-5092-4e4c-9b61-29b99999cd32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatInput.jsx:462',message:'onEnterCode clicked - opening settings',data:{hasOnOpenSettings:!!onOpenSettings},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
         setShowQuotaLimitDialog(false);
         if (onOpenSettings) onOpenSettings();
       }}
       onOpenWebsite={() => {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e7757e9a-5092-4e4c-9b61-29b99999cd32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatInput.jsx:469',message:'onOpenWebsite clicked',data:{url:'https://anki-plus.vercel.app',hasBridge:!!bridge,hasOpenUrl:!!(bridge&&bridge.openUrl)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
         const url = 'https://anki-plus.vercel.app';
         if (bridge && bridge.openUrl) {
           bridge.openUrl(url);
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/e7757e9a-5092-4e4c-9b61-29b99999cd32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatInput.jsx:476',message:'URL opened via bridge.openUrl',data:{url:url},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+          // #endregion
         } else {
           window.open(url, '_blank');
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/e7757e9a-5092-4e4c-9b61-29b99999cd32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatInput.jsx:481',message:'URL opened via window.open',data:{url:url},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+          // #endregion
         }
       }}
       limit={quotaDisplay?.limit || 20}
