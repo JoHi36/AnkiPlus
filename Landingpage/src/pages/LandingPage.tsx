@@ -30,10 +30,10 @@ export function LandingPage() {
   return (
     <div className={`min-h-screen bg-[#0F0F0F] text-white/[0.92] ${introDone ? '' : 'overflow-hidden h-screen'}`}>
 
-      {/* ═══ INTRO OVERLAY — fullscreen particle "+" ═══ */}
+      {/* ═══ INTRO + AMBIENT PARTICLES — single canvas, persists ═══ */}
       <div
-        className={`fixed inset-0 z-50 bg-[#0F0F0F] transition-opacity duration-700 ${
-          introDone ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        className={`fixed inset-0 z-40 transition-none ${
+          introDone ? 'pointer-events-none' : ''
         }`}
       >
         <ParticlePlus
@@ -42,19 +42,20 @@ export function LandingPage() {
         />
       </div>
 
-      <main>
+      {/* Black overlay that fades as explosion starts */}
+      <div
+        className={`fixed inset-0 z-30 bg-[#0F0F0F] transition-opacity duration-500 ease-out ${
+          introDone ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        }`}
+        style={{ mixBlendMode: 'normal' }}
+      />
+
+      <main className="relative z-20">
 
         {/* ═══ HERO ═══ */}
         <section className="relative pt-[18vh] sm:pt-[22vh] pb-20 sm:pb-28 mx-auto px-6 text-center">
-          {/* Residual particles behind content after intro */}
-          {introDone && (
-            <div className="absolute inset-0 pointer-events-none opacity-30">
-              <ParticlePlus className="absolute inset-0" />
-            </div>
-          )}
-
-          <div className={`relative z-10 transition-all duration-1000 ${
-            introDone ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
+          <div className={`relative z-10 transition-all duration-500 ease-out ${
+            introDone ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
           }`}>
             <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-[5.5rem] font-bold tracking-[-0.04em] leading-none mb-8 text-white whitespace-nowrap">
               Anki auf <span className="text-[#0a84ff]">Steroiden</span>.
