@@ -73,44 +73,6 @@
   }
 }
 
-/* ═══ Blue glow — behind the demo, rising from below ═══ */
-@property --glow-angle {
-  syntax: '<angle>';
-  initial-value: 0deg;
-  inherits: false;
-}
-@keyframes glowRotate {
-  from { --glow-angle: 0deg; }
-  to   { --glow-angle: 360deg; }
-}
-.demo-glow-wrap {
-  position: relative;
-}
-.demo-glow-wrap::before {
-  content: '';
-  position: absolute;
-  top: -40%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 80%;
-  height: 500px;
-  background: conic-gradient(
-    from var(--glow-angle) at 50% 40%,
-    rgba(10,132,255,0.0) 0deg,
-    rgba(10,132,255,0.14) 60deg,
-    rgba(10,132,255,0.0) 120deg,
-    rgba(10,132,255,0.10) 200deg,
-    rgba(10,132,255,0.0) 280deg,
-    rgba(10,132,255,0.12) 340deg,
-    rgba(10,132,255,0.0) 360deg
-  );
-  filter: blur(100px);
-  border-radius: 50%;
-  pointer-events: none;
-  animation: glowRotate 10s linear infinite;
-  z-index: 0;
-}
-
 /* ═══ Dot grid — ONLY inside demo surfaces ═══ */
 .demo-dot-grid {
   position: relative;

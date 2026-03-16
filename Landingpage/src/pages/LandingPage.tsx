@@ -26,10 +26,9 @@ export function LandingPage() {
       <main>
 
         {/* ═══ HERO ═══ */}
-        <section className="pt-[18vh] sm:pt-[22vh] pb-20 sm:pb-28 max-w-3xl mx-auto px-6 text-center">
-          <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-bold tracking-[-0.04em] leading-[0.95] mb-8 text-white">
-            Anki auf{' '}
-            <span className="text-[#0a84ff]">Steroiden</span>.
+        <section className="pt-[18vh] sm:pt-[22vh] pb-20 sm:pb-28 mx-auto px-6 text-center">
+          <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-[5.5rem] font-bold tracking-[-0.04em] leading-none mb-8 text-white whitespace-nowrap">
+            Anki auf <span className="text-[#0a84ff]">Steroiden</span>.
           </h1>
 
           <p className="text-base sm:text-lg text-white/[0.35] max-w-lg mx-auto leading-relaxed mb-12 font-light">
@@ -52,7 +51,7 @@ export function LandingPage() {
         </section>
 
         {/* ═══ INTERACTIVE DEMO — with blue glow behind ═══ */}
-        <section id="demo" className="demo-glow-wrap max-w-6xl mx-auto px-4 sm:px-6 pb-24 sm:pb-32">
+        <section id="demo" className="max-w-6xl mx-auto px-4 sm:px-6 pb-24 sm:pb-32">
           <div className="demo-dot-grid rounded-2xl relative z-10">
             <InteractivePlayground />
           </div>
