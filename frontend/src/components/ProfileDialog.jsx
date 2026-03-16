@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, AlertCircle, Loader2, Eye, EyeOff, Zap, GraduationCap, Crown, CreditCard, Sparkles, Key } from 'lucide-react';
+import { X, Save, AlertCircle, Loader2, Eye, EyeOff, Zap, GraduationCap, Crown, CreditCard, Sparkles, Key, LogOut, ExternalLink } from 'lucide-react';
 
 /**
  * Profile Dialog Komponente
@@ -121,6 +121,10 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady, showCo
       } else if (payload.type === 'auth_error') {
         setError(payload.message || 'Authentifizierung fehlgeschlagen');
         setLoading(false);
+      } else if (payload.type === 'auth_logout') {
+        setCurrentAuthToken('');
+        setAuthStatus(prev => ({ ...prev, authenticated: false, hasToken: false }));
+        setQuotaStatus(null);
       }
     };
 
@@ -203,6 +207,23 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady, showCo
       setError('Fehler beim Speichern: ' + err.message);
       setLoading(false);
     }
+  };
+
+  const handleLogout = () => {
+    if (bridge && bridge.logout) bridge.logout();
+    setCurrentAuthToken('');
+    setAuthStatus({ authenticated: false, hasToken: false, backendUrl: authStatus.backendUrl, backendMode: authStatus.backendMode });
+    setQuotaStatus(null);
+    setAuthToken('');
+    setError('');
+  };
+
+  const handleRelogin = () => {
+    // Abmelden und Landing Page öffnen
+    handleLogout();
+    const url = 'https://anki-plus.vercel.app/login';
+    if (bridge && bridge.openUrl) bridge.openUrl(url);
+    else window.open(url, '_blank');
   };
 
   const handleManageSubscription = () => {
@@ -598,13 +619,31 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady, showCo
                   ) : null}
               </div>
 
-              {/* Action Button */}
+              {/* Action Buttons */}
               <button
                 onClick={handleManageSubscription}
                 className="w-full px-4 py-3 rounded-xl border border-base-content/20 bg-base-200/30 hover:bg-base-200/50 text-base-content/80 hover:text-base-content transition-all font-medium text-sm flex items-center justify-center gap-2"
               >
                 <CreditCard size={18} strokeWidth={1.5} />
                 Abo verwalten
+              </button>
+
+              {/* Neu anmelden Button */}
+              <button
+                onClick={handleRelogin}
+                className="w-full px-4 py-3 rounded-xl border border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary hover:text-primary transition-all font-medium text-sm flex items-center justify-center gap-2"
+              >
+                <ExternalLink size={16} strokeWidth={1.5} />
+                Neu anmelden
+              </button>
+
+              {/* Abmelden */}
+              <button
+                onClick={handleLogout}
+                className="w-full px-4 py-2 rounded-xl text-xs text-base-content/40 hover:text-error/70 hover:bg-error/5 transition-all flex items-center justify-center gap-1.5"
+              >
+                <LogOut size={13} />
+                Abmelden
               </button>
             </div>
           )}
