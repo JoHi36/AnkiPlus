@@ -42,24 +42,22 @@ export function LandingPage() {
           onIntroComplete={handleIntroComplete}
         />
 
-        {/* "Anki" text — positioned so particle + completes "Anki+" */}
+        {/* "Anki+" watermark — massive, barely visible background text */}
         <div
-          className={`absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-500 ${
+          className={`absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-700 ${
             introDone ? 'opacity-0' : 'opacity-100'
           }`}
-          style={{ top: '-12%' /* align vertically with particle plus at 38% */ }}
+          style={{ top: '-12%' }}
         >
           <span
-            className="font-bold tracking-[-0.04em] select-none"
+            className="font-bold tracking-[-0.05em] select-none"
             style={{
-              fontSize: 'clamp(5rem, 12vw, 11rem)',
-              color: 'transparent',
-              WebkitTextStroke: '1.5px rgba(255,255,255,0.06)',
-              marginRight: 'clamp(1rem, 4vw, 4rem)',
-              transform: 'translateX(-12%)',
+              fontSize: 'clamp(8rem, 22vw, 20rem)',
+              color: 'rgba(255,255,255,0.025)',
+              lineHeight: 1,
             }}
           >
-            Anki
+            Anki+
           </span>
         </div>
       </div>
