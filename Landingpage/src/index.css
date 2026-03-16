@@ -89,13 +89,13 @@
 .demo-glow-wrap::before {
   content: '';
   position: absolute;
-  bottom: -10%;
+  top: -40%;
   left: 50%;
   transform: translateX(-50%);
-  width: 70%;
+  width: 80%;
   height: 500px;
   background: conic-gradient(
-    from var(--glow-angle) at 50% 60%,
+    from var(--glow-angle) at 50% 40%,
     rgba(10,132,255,0.0) 0deg,
     rgba(10,132,255,0.14) 60deg,
     rgba(10,132,255,0.0) 120deg,
