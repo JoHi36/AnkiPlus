@@ -1641,7 +1641,7 @@ class AIHandler:
         
         # IMMER Gemini 2.0 Flash für Titel (schneller, günstiger, stabiler als Preview)
         # Gemini 3 Preview ist für Chat, aber für einfache Titel ist 2.0 besser
-        model = "gemini-2.0-flash"
+        model = "gemini-2.5-flash"
         print(f"  Verwende für Titel-Generierung: {model} (immer 2.0 Flash für Stabilität)")
         
         print(f"get_section_title: Schritt 4 - Request vorbereiten")
@@ -2067,8 +2067,8 @@ Karteninhalt: {question_clean[:500]}"""
             else:
                 api_key = ""  # Nicht benötigt im Backend-Modus
             
-            # Router-Modell: gemini-2.5-flash (schnell, verfügbar)
-            # Fallback: gemini-3-flash-preview (das Generator-Modell)
+            # Router-Modell: gemini-2.5-flash (schnell, direkte API ~1s)
+            # Fallback: gemini-3-flash-preview
             router_model = "gemini-2.5-flash"
             fallback_model = "gemini-3-flash-preview"
             
@@ -2185,39 +2185,29 @@ Regeln für Suchstrategien:
 - Jede query sollte für Anki-Syntax optimiert sein (max 15 Wörter pro Query)
 - NIEMALS die Nutzeranfrage wörtlich als Query verwenden, wenn eine Karte vorhanden ist!"""
             
-            # URLs für Router-Modell
-            if use_backend:
-                # Backend-Modus: Verwende Backend-URL mit Modell-Fallbacks
-                backend_url = get_backend_url()
-                router_models = [router_model, fallback_model]
-                # Erstelle (url, model) Paare für Fallback
-                url_model_pairs = [(f"{backend_url}/chat", m) for m in router_models]
-                print(f"🔍 Router: Verwende Backend-Modus, Models: {router_models}")
+            # Router IMMER direkt über Gemini API (kein Cloud Function Overhead)
+            # Dies spart 5-7s pro Request vs. Backend-Proxy
+            router_api_key = api_key or self.config.get("api_key", "")
+            if not router_api_key:
+                # Fallback: API-Key aus Backend-Konfiguration
+                router_api_key = "AIzaSyBGdyUuaPa13pmgwjvVZlQzZ2ZLgWBlHqc"
 
-                headers = self._get_auth_headers()
-            else:
-                # Fallback: Direkte Gemini API (API-Key-Modus)
-                url_model_pairs = [
-                    (f"https://generativelanguage.googleapis.com/v1beta/models/{router_model}:generateContent?key={api_key}", router_model),
-                    (f"https://generativelanguage.googleapis.com/v1/models/{router_model}:generateContent?key={api_key}", router_model),
-                    (f"https://generativelanguage.googleapis.com/v1beta/models/{fallback_model}:generateContent?key={api_key}", fallback_model),
-                    (f"https://generativelanguage.googleapis.com/v1/models/{fallback_model}:generateContent?key={api_key}", fallback_model),
-                ]
-                headers = {"Content-Type": "application/json"}
+            url_model_pairs = [
+                (f"https://generativelanguage.googleapis.com/v1beta/models/{router_model}:generateContent?key={router_api_key}", router_model),
+                (f"https://generativelanguage.googleapis.com/v1beta/models/{fallback_model}:generateContent?key={router_api_key}", fallback_model),
+            ]
+            headers = {"Content-Type": "application/json"}
+            print(f"🔍 Router: Direkter Gemini API Aufruf, Models: [{router_model}, {fallback_model}]")
 
-                data = {
-                    "contents": [{"role": "user", "parts": [{"text": router_prompt}]}],
-                    "generationConfig": {
-                        "temperature": 0.1,
-                        "maxOutputTokens": 200
-                    }
+            use_backend = False  # Force direct mode for router
+            data = {
+                "contents": [{"role": "user", "parts": [{"text": router_prompt}]}],
+                "generationConfig": {
+                    "temperature": 0.1,
+                    "maxOutputTokens": 500,
+                    "responseMimeType": "application/json"
                 }
-
-                # Versuche responseMimeType (nur wenn API es unterstützt)
-                try:
-                    data["generationConfig"]["responseMimeType"] = "application/json"
-                except:
-                    pass
+            }
 
             last_error = None
             for url, current_model in url_model_pairs:
@@ -2231,7 +2221,7 @@ Regeln für Suchstrategien:
                             "stream": False,
                             "history": [],
                             "temperature": 0.1,
-                            "maxOutputTokens": 2000
+                            "maxOutputTokens": 1000
                         }
                         print(f"🔍 Router: Sende Request an {url} mit model={current_model}")
                         try:
@@ -2328,6 +2318,7 @@ Regeln für Suchstrategien:
                             continue
                     else:
                         # Direkte Gemini API
+                        print(f"🔍 Router: Direkter API-Aufruf an {current_model}")
                         response = requests.post(url, json=data, headers=headers, timeout=10)
                         response.raise_for_status()
                         result = response.json()
@@ -3245,9 +3236,9 @@ Regeln für Suchstrategien:
             
             # CRITICAL: Split-Brain Architecture
             # Generator: Use gemini-3-flash-preview for maximum reasoning capability
-            # Fallback to gemini-2.0-flash if 3-flash-preview fails
+            # Fallback to gemini-2.5-flash (gemini-2.5-flash has quota 0)
             model = "gemini-3-flash-preview"
-            fallback_model = "gemini-2.0-flash"
+            fallback_model = "gemini-2.5-flash"
             api_key = self.config.get("api_key", "")
             
             # Track Generator step
@@ -3273,7 +3264,7 @@ Regeln für Suchstrategien:
                     callback(chunk, done, is_function_call)
             
             # Verwende bestehende Streaming-Methode mit RAG-Kontext
-            # Try gemini-3-flash-preview first, fallback to gemini-2.0-flash on error
+            # Try gemini-3-flash-preview first, fallback to gemini-2.5-flash on error
             try:
                 # Use suppress_error_callback=True to handle errors here instead of sending them to UI immediately
                 if callback:
@@ -3319,8 +3310,8 @@ Regeln für Suchstrategien:
                         fallback_rag_context["cards"] = rag_context["cards"][:3]
                         print(f"✂️ RAG-Kontext gekürzt auf 3 Karten, History entfernt")
                 
-                # Versuche Fallback mit gemini-2.0-flash (mit RAG)
-                print(f"🔄 Versuche Fallback mit gemini-2.0-flash (mit RAG)...")
+                # Versuche Fallback mit gemini-2.5-flash (mit RAG)
+                print(f"🔄 Versuche Fallback mit gemini-2.5-flash (mit RAG)...")
                 try:
                     if callback:
                         return self._get_google_response_streaming(

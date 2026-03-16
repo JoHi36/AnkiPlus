@@ -225,9 +225,12 @@ div[id^="bottom"]:not(#reviewer *) {
 
                 <!-- Loading: EVALUATING / MC_LOADING state -->
                 <div id="dc-loading" class="dock-section">
-                    <div class="flex items-center justify-center py-4 gap-2">
-                        <span class="loading loading-dots loading-sm text-base-content/[0.3]"></span>
-                        <span id="loading-text" class="text-[13px] text-base-content/[0.35]">KI bewertet</span>
+                    <div class="px-4 py-3">
+                        <div id="thought-stream"></div>
+                        <div id="loading-fallback" class="flex items-center justify-center py-1 gap-2">
+                            <span class="loading loading-dots loading-sm text-base-content/[0.3]"></span>
+                            <span id="loading-text" class="text-[13px] text-base-content/[0.35]">KI bewertet</span>
+                        </div>
                     </div>
                 </div>
 

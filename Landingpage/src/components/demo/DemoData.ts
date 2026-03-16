@@ -5,94 +5,104 @@ export interface DemoScenario {
     front: string;
     back: string;
     tags: string[];
+    deckName: string;
   };
   evaluation: {
     userTyping: string;
+    score: number;
+    label: string;
     feedback: string;
-    score: number; // 0-100
+    missing?: string;
   };
-  rescue: {
-    question: string;
-    options: Array<{ 
+  timer: {
+    seconds: number;
+    ease: number;
+    label: string;
+    color: string;
+  };
+  mc: {
+    options: Array<{
       id: string;
       text: string;
       correct: boolean;
       explanation: string;
     }>;
   };
-  deepMode: {
-    steps: string[];
-    answerMarkdown: string;
-    citations: string[];
+  chat: {
+    userQuestion: string;
+    aiResponse: string;
   };
 }
 
 export const DEMO_SCENARIOS: Record<string, DemoScenario> = {
   medicine: {
-    id: 'med_hyperkalemia',
+    id: 'medicine',
     category: 'Medizin',
     card: {
-      front: 'EKG-Veränderungen bei Hyperkaliämie',
-      back: '1. Hohe, spitze T-Wellen ("Zelt-T")\n2. PQ-Verlängerung & P-Abflachung\n3. QRS-Verbreiterung\n4. Sinusarrest / Kammerflimmern',
-      tags: ['Kardiologie', 'Notfallmedizin', 'Elektrolyte']
+      front: '<span class="text-yellow-400">Wie</span> kann eine <span class="text-orange-400 font-bold">Bandscheibe</span> (<span class="text-teal-400">Discus intervertebralis</span>) <span class="text-green-400">langfristigen Belastungen</span> <span class="text-blue-400">entgegenwirken</span>?',
+      back: '<h3 class="text-orange-400 font-bold text-lg mb-4">Flüssigkeitsabgabe</h3><p class="text-white/80 italic leading-relaxed">Körpergröße nimmt während des Tages um 1\u20132 cm ab<br/>Flüssigkeitsaufnahme der Bandscheibe bei Entlastung<br/><span class="text-green-400 underline">Kurzfristige Belastungen</span>: Durch Stoßdämpferfunktion von der Bandscheibe abgefangen</p>',
+      tags: ['Wirbelsäule'],
+      deckName: 'Wirbelsäule',
     },
     evaluation: {
-      userTyping: 'Also... man sieht auf jeden Fall hohe T-Wellen. Ich glaube auch eine QRS-Verbreiterung? Und am Ende Herzstillstand.',
-      feedback: 'Sehr gut erkannt! ✅ **Hohe T-Wellen (Zelt-T)** und **QRS-Verbreiterung** sind korrekt. \n\n⚠️ **Ergänzung:** Du hast die **P-Wellen-Veränderungen** (Abflachung/Verlust) und die **PQ-Verlängerung** vergessen, die oft vor der QRS-Verbreiterung auftreten.',
-      score: 75
+      userTyping: 'Die Bandscheibe gibt tagsüber Flüssigkeit ab und nimmt sie nachts wieder auf. Dadurch wirkt sie wie ein Stoßdämpfer.',
+      score: 75,
+      label: 'Good',
+      feedback: 'Stoßdämpferfunktion und Flüssigkeitsabgabe korrekt erkannt.',
+      missing: 'Körpergröße-Abnahme um 1\u20132 cm und Unterschied kurzfristige vs. langfristige Belastung fehlt.',
     },
-    rescue: {
-      question: 'Welches ist das **früheste** typische EKG-Zeichen einer Hyperkaliämie (> 5.5 mmol/l)?',
+    timer: {
+      seconds: 8,
+      ease: 3,
+      label: 'Good',
+      color: '#30d158',
+    },
+    mc: {
       options: [
-        { id: 'A', text: 'QRS-Verbreiterung', correct: false, explanation: 'Tritt meist erst bei fortgeschrittener Hyperkaliämie (> 7.0 mmol/l) auf.' },
-        { id: 'B', text: 'Hohe, spitze T-Wellen ("Zelt-T")', correct: false, explanation: 'Dies ist ein klassisches Zeichen, aber in diesem Szenario ist keine Antwort "richtig" im Sinne der Demo.' },
-        { id: 'C', text: 'Kammerflimmern', correct: false, explanation: 'Dies ist ein terminales Ereignis bei extremen Werten, kein Frühzeichen.' },
-        { id: 'D', text: 'U-Wellen', correct: false, explanation: 'U-Wellen sind typisch für eine Hypokaliämie (zu wenig Kalium).' },
-        { id: 'E', text: 'Sinustachykardie', correct: false, explanation: 'Typischerweise führt Hyperkaliämie eher zu Bradykardie bis zum Sinusarrest.' }
-      ]
-    },
-    deepMode: {
-      steps: [
-        'Initialisiere anatomischen Kontext...', 
-        'Scanne kardiologische Leitlinien (ERC 2024)...',
-        'Analysiere Ruhemembranpotential-Verschiebung...', 
-        'Synthetisiere pathophysiologische Kette...'
+        { id: 'A', text: 'Durch Verknöcherung des Anulus fibrosus', correct: false, explanation: 'Die Bandscheibe bleibt flexibel \u2013 Verknöcherung wäre pathologisch.' },
+        { id: 'B', text: 'Durch Flüssigkeitsabgabe und -aufnahme (Tag/Nacht-Zyklus)', correct: true, explanation: 'Korrekt! Tagsüber gibt die Bandscheibe unter Last Flüssigkeit ab, nachts wird sie bei Entlastung resorbiert.' },
+        { id: 'C', text: 'Durch Fusion mit den Wirbelkörpern', correct: false, explanation: 'Die Bandscheibe liegt zwischen den Wirbeln und ist nicht mit ihnen fusioniert.' },
+        { id: 'D', text: 'Durch permanente Knorpelneubildung', correct: false, explanation: 'Die Bandscheibe hat nur begrenzte Regenerationsfähigkeit.' },
       ],
-      citations: ['Herold Innere Medizin', 'Amboss Leitlinien', 'ERC Guidelines 2021'],
-      answerMarkdown: "\n### Die pathophysiologische Kette der Hyperkaliämie\n\nDie EKG-Veränderungen korrelieren direkt mit der **Verschiebung des Ruhemembranpotentials** (weniger negativ) und der **Inaktivierung von Natriumkanälen**.\n\n````ecgimage````\n\n#### 1. Milde Hyperkaliämie (5,5 - 6,5 mmol/l)\n*   **Zelt-T:** Durch die erhöhte extrazelluläre Kaliumkonzentration erhöht sich die Repolarisationsgeschwindigkeit (verkürzte Phase 3 des Aktionspotentials).\n*   **Klinik:** Meist noch asymptomatisch, aber im EKG als *hohe, spitze T-Welle* mit schmaler Basis sichtbar.\n\n````mermaiddiagram````\n\n#### 2. Moderate Hyperkaliämie (6,5 - 7,5 mmol/l)\n*   **Vorhof-Blockade:** Das Ruhepotential im Vorhof wird instabil.\n    *   P-Welle flacht ab und wird breiter.\n    *   PQ-Zeit verlängert sich (AV-Überleitungsstörung).\n*   **Wichtig:** *P-Wellen können komplett verschwinden (sinoventrikuläre Leitung).*\n\n#### 3. Schwere Hyperkaliämie (> 7,5 mmol/l)\n*   **Intraventrikuläre Leitungsverzögerung:**\n    *   **QRS-Verbreiterung:** Das Herz leitet immer langsamer.\n    *   Verschmelzung von QRS und T-Welle zur \"Sinuswelle\".\n*   **Gefahr:** Asystolie oder Kammerflimmern.\n\n> **Merksatz:** \"Das T zieht das QRS auseinander, bis alles zur Sinuswelle wird.\"\n"
-    }
+    },
+    chat: {
+      userQuestion: 'Was genau passiert mit der Bandscheibe bei Belastung?',
+      aiResponse: "### Bandscheibe unter Belastung\n\nDie **Bandscheibe** (Discus intervertebralis) besteht aus zwei Hauptkomponenten:\n\n1. **Äußerer Faserring (Anulus fibrosus):** Zähe, faserige Hülle, die wie ein fester Ring die Bandscheibe umschließt und Stabilität gibt.\n2. **Gallertkern (Nucleus pulposus):** Weicher, gelartiger Kern im Inneren \u2013 sehr elastisch und wasserreich.\n\n#### Bei langfristiger Belastung (tagsüber):\n- Der Nucleus pulposus gibt **Flüssigkeit an die Umgebung ab**\n- Die Bandscheibe wird dadurch flacher\n- Die **Körpergröße nimmt um 1\u20132 cm ab**\n\n#### Bei Entlastung (nachts):\n- Der Nucleus pulposus **saugt Flüssigkeit zurück**\n- Die Bandscheibe quillt wieder auf\n- Morgens ist man daher etwas größer\n\n> **Merksatz:** Die Bandscheibe funktioniert wie ein Schwamm \u2013 tagsüber wird sie ausgepresst, nachts saugt sie sich wieder voll.",
+    },
   },
   law: {
-    id: 'law_mord',
+    id: 'law',
     category: 'Jura',
     card: {
-      front: 'Mordmerkmale (§ 211 StGB) - 2. Gruppe (Tatbegehung)',
-      back: '1. Heimtücke\n2. Grausamkeit\n3. Gemeingefährliche Mittel',
-      tags: ['Strafrecht', 'BT', 'Tötungsdelikte']
+      front: 'Nenne die <span class="text-orange-400 font-bold">Mordmerkmale</span> der <span class="text-teal-400">2. Gruppe</span> (<span class="text-green-400">Tatbegehung</span>) nach <span class="text-blue-400">§ 211 StGB</span>.',
+      back: '<p class="text-white/80 italic leading-relaxed"><strong>1. Heimtücke</strong><br/><strong>2. Grausamkeit</strong><br/><strong>3. Gemeingefährliche Mittel</strong></p>',
+      tags: ['Strafrecht', 'BT'],
+      deckName: 'Strafrecht BT',
     },
     evaluation: {
       userTyping: 'Heimtücke und Grausamkeit fallen mir ein. War da nicht noch was mit Waffen?',
-      feedback: 'Guter Anfang! ✅ **Heimtücke** und **Grausamkeit** sind korrekt. \n\n⚠️ **Korrektur:** "Waffen" ist kein eigenständiges Merkmal. Das dritte Merkmal der 2. Gruppe sind **gemeingefährliche Mittel** (Mittel, deren Wirkung der Täter nicht beherrschen kann, z.B. Bombe, Brandstiftung).',
-      score: 60
+      score: 60,
+      label: 'Hard',
+      feedback: 'Heimtücke und Grausamkeit korrekt. "Waffen" ist kein eigenständiges Merkmal.',
+      missing: 'Das dritte Merkmal sind gemeingefährliche Mittel (z.B. Bombe, Brandstiftung).',
     },
-    rescue: {
-      question: 'Wann handelt ein Täter "heimtückisch"?',
+    timer: {
+      seconds: 14,
+      ease: 2,
+      label: 'Hard',
+      color: '#ffd60a',
+    },
+    mc: {
       options: [
-        { id: 'A', text: 'Wenn er die Arg- und Wehrlosigkeit des Opfers bewusst ausnutzt', correct: true, explanation: 'Klassische Definition: Ausnutzen der Arglosigkeit in feindlicher Willensrichtung.' },
-        { id: 'B', text: 'Wenn er besonders grausam vorgeht', correct: false, explanation: 'Dies erfüllt das eigenständige Merkmal der Grausamkeit.' },
-        { id: 'C', text: 'Wenn er eine Waffe benutzt', correct: false, explanation: 'Waffengebrauch allein begründet noch keine Heimtücke.' },
-        { id: 'D', text: 'Wenn er aus Habgier handelt', correct: false, explanation: 'Habgier gehört zur 1. Gruppe (niedrige Beweggründe).' }
-      ]
-    },
-    deepMode: {
-      steps: [
-        'Analysiere § 211 StGB Deliktsstruktur...', 
-        'Prüfe BGH-Rechtsprechung zu Heimtücke...', 
-        'Vergleiche restriktive Auslegungstheorien...', 
-        'Synthetisiere Definitionen für Klausur...'
+        { id: 'A', text: 'Habgier, Mordlust, Befriedigung des Geschlechtstriebs', correct: false, explanation: 'Diese gehören zur 1. Gruppe (niedrige Beweggründe).' },
+        { id: 'B', text: 'Heimtücke, Grausamkeit, gemeingefährliche Mittel', correct: true, explanation: 'Korrekt! Dies sind die drei Mordmerkmale der 2. Gruppe (Art der Tatbegehung).' },
+        { id: 'C', text: 'Verdeckungsabsicht, Ermöglichungsabsicht', correct: false, explanation: 'Diese gehören zur 3. Gruppe (Tatzweck).' },
+        { id: 'D', text: 'Heimtücke, Grausamkeit, Hinterlist', correct: false, explanation: 'Hinterlist ist kein eigenständiges Mordmerkmal in § 211 StGB.' },
       ],
-      citations: ['BGHSt 32, 382', 'Fischer StGB § 211', 'Schönke/Schröder'],
-      answerMarkdown: "\n### Heimtücke (§ 211 Abs. 2 Gr. 2 Var. 1 StGB)\n\nHeimtücke ist das mit Abstand klausurrelevanteste Mordmerkmal.\n\n#### 1. Definition (BGH)\nHeimtückisch handelt, wer die **Arg-** und **Wehrlosigkeit** des Opfers in feindlicher Willensrichtung bewusst zur Tötung ausnutzt.\n\n*   **Arglos:** Wer sich zum Zeitpunkt der Tat keines Angriffs auf Leib oder Leben versieht.\n*   **Wehrlos:** Wer infolge seiner Arglosigkeit in seiner Verteidigungsfähigkeit zumindest stark eingeschränkt ist.\n\n#### 2. Problem: \"Lehre vom Rechtsfolgenlösung\"\nDa § 211 eine **absolute lebenslange Freiheitsstrafe** anordnet, versucht die Lehre (und teils der BGH), das Merkmal restriktiv auszulegen, um \"gerechte\" Ergebnisse bei Haustyrannen-Fällen zu erzielen.\n\n*   **Lit:** Fordert einen *besonders verwerflichen Vertrauensbruch*.\n*   **BGH:** Bleibt bei der Definition, wendet aber bei \"außergewöhnlichen Umständen\" § 49 StGB analog an (Rechtsfolgenlösung).\n\n> **Klausur-Tipp:** Prüfe immer zuerst die Arglosigkeit. Schlafende sind arglos (nehmen die Arglosigkeit \"mit in den Schlaf\"), Bewusstlose nicht (können keine Arglosigkeit bilden).\n"
-    }
-  }
+    },
+    chat: {
+      userQuestion: 'Was genau bedeutet Heimtücke?',
+      aiResponse: "### Heimtücke (§ 211 Abs. 2 Gr. 2 Var. 1 StGB)\n\nHeimtücke ist das klausurrelevanteste Mordmerkmal.\n\n#### Definition (BGH)\nHeimtückisch handelt, wer die **Arg- und Wehrlosigkeit** des Opfers in feindlicher Willensrichtung bewusst zur Tötung ausnutzt.\n\n- **Arglos:** Wer sich zum Zeitpunkt der Tat keines Angriffs auf Leib oder Leben versieht.\n- **Wehrlos:** Wer infolge seiner Arglosigkeit in seiner Verteidigungsfähigkeit stark eingeschränkt ist.\n\n#### Wichtige Fallgruppen\n1. **Schlafende** \u2192 arglos (nehmen Arglosigkeit \"mit in den Schlaf\")\n2. **Bewusstlose** \u2192 nicht arglos (können keine Arglosigkeit bilden)\n3. **Kleinkinder** \u2192 str., h.M. (+) analog\n\n> **Klausur-Tipp:** Immer zuerst die Arglosigkeit prüfen. Die Wehrlosigkeit folgt daraus.",
+    },
+  },
 };

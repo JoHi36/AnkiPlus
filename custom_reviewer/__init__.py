@@ -22,8 +22,14 @@ def _evaluate_answer_async(data):
         user_answer = data.get('userAnswer', '')
         correct_answer = data.get('correctAnswer', '')
 
+        _inject_ai_step('analyzing', 'Analysiere Antwort…')
+        _inject_ai_step('comparing', 'Vergleiche mit korrekter Antwort…')
+        _inject_ai_step('evaluating', 'KI bewertet…')
+
         # Try to use the addon's AI handler
         result = _call_ai_evaluation(question, user_answer, correct_answer)
+
+        _inject_ai_step('done', 'Bewertung abgeschlossen')
 
         # Inject result back into reviewer webview (must be on main thread)
         def inject():
@@ -73,13 +79,124 @@ def _evaluate_answer_async(data):
         mw.taskman.run_on_main(inject_error)
 
 
-def _generate_mc_async(data):
-    """Background thread: generate MC options via AI and inject back."""
+def _inject_ai_step(phase, label):
+    """Inject a ThoughtStream step into the dock loading UI.
+    Uses threading.Event to wait until the main thread has processed the step,
+    ensuring steps appear one at a time with visible delays."""
+    import time as _time
+    import threading as _threading
+    try:
+        step = {"phase": phase, "label": label}
+        done_event = _threading.Event()
+
+        def _inject():
+            try:
+                if mw and mw.reviewer and mw.reviewer.web:
+                    mw.reviewer.web.eval(f'window.onAIStep({json.dumps(step)});')
+            except Exception:
+                pass
+            finally:
+                done_event.set()
+
+        mw.taskman.run_on_main(_inject)
+        # Wait for main thread to execute the injection (max 2s)
+        done_event.wait(timeout=2.0)
+        # Additional delay so the user can read each step
+        _time.sleep(0.8)
+    except Exception:
+        pass
+
+
+def _get_deck_context_answers_sync(card_id=None, max_answers=8):
+    """Get answers from other cards in the same deck. MUST be called on main thread."""
+    try:
+        if not mw or not mw.col or not mw.reviewer or not mw.reviewer.card:
+            return []
+        import re
+        import random as _rand
+        card = mw.reviewer.card
+        deck_id = card.did
+        deck_name = mw.col.decks.name(deck_id)
+        # Get card IDs from the same deck (excluding current card)
+        card_ids = mw.col.find_cards(f'"deck:{deck_name}"')
+        # Shuffle and take a sample
+        sampled = [cid for cid in card_ids if cid != card.id]
+        _rand.shuffle(sampled)
+        sampled = sampled[:max_answers]
+
+        answers = []
+        for cid in sampled:
+            try:
+                c = mw.col.get_card(cid)
+                note = c.note()
+                fields = list(note.keys())
+                if len(fields) >= 2:
+                    ans_text = note[fields[1]]
+                    if ans_text and ans_text.strip():
+                        clean = re.sub(r'<[^>]+>', ' ', ans_text)
+                        clean = re.sub(r'\s+', ' ', clean).strip()
+                        if clean and len(clean) < 200:
+                            answers.append(clean)
+            except Exception:
+                continue
+        return answers[:max_answers]
+    except Exception as e:
+        print(f"CustomReviewer: Error getting deck context: {e}")
+        return []
+
+
+def _generate_mc_async(data, deck_answers=None):
+    """Background thread: generate MC options via AI and inject back.
+    deck_answers must be pre-collected on the main thread (Anki collection is not thread-safe).
+    """
     try:
         question = data.get('question', '')
         correct_answer = data.get('correctAnswer', '')
+        card_id = data.get('cardId', None)
 
-        result = _call_ai_mc_generation(question, correct_answer)
+        # Step 1: Check cache
+        _inject_ai_step('cache', 'Prüfe gespeicherte Optionen…')
+        from ..mc_cache import get_cached_mc, save_mc_cache
+        cached = get_cached_mc(card_id, question, correct_answer) if card_id else None
+        if cached:
+            print(f"CustomReviewer: MC cache hit for card {card_id}")
+            _inject_ai_step('done', 'Aus Cache geladen')
+            def inject_cached():
+                try:
+                    if mw and mw.reviewer and mw.reviewer.web:
+                        mw.reviewer.web.eval(f'window.onMCOptions({json.dumps(cached)});')
+                except Exception as e:
+                    print(f"CustomReviewer: Error injecting cached MC: {e}")
+            mw.taskman.run_on_main(inject_cached)
+            return
+
+        # Step 2: Show deck context step
+        if deck_answers:
+            _inject_ai_step('context', f'{len(deck_answers)} Karten als Kontext geladen')
+        else:
+            _inject_ai_step('context', 'Kein Deck-Kontext verfügbar')
+
+        # Step 3: Generate via AI
+        _inject_ai_step('generating', 'Generiere Multiple-Choice-Optionen…')
+        print(f"CustomReviewer: MC gen input — question_len={len(question)}, answer_len={len(correct_answer)}, deck_answers={len(deck_answers) if deck_answers else 0}")
+        result = _call_ai_mc_generation(question, correct_answer, deck_answers)
+
+        # Check if result is fallback (detect by checking if any option text matches fallback patterns)
+        is_fallback = any(opt.get('text', '') in ('Keine der genannten Optionen', 'Alle genannten Optionen sind richtig', 'Die Frage kann nicht beantwortet werden') for opt in result)
+        if is_fallback:
+            _inject_ai_step('error', 'KI nicht verfügbar — Fallback verwendet')
+            print("CustomReviewer: MC generation used fallback!")
+        else:
+            _inject_ai_step('synthesis', 'Erklärungen erstellt')
+
+        # Step 5: Cache result (but NOT fallback results)
+        if card_id and result and len(result) >= 4 and not is_fallback:
+            save_mc_cache(card_id, question, correct_answer, result)
+            print(f"CustomReviewer: MC cached for card {card_id}")
+
+        # Shuffle before sending to frontend
+        import random as _rand
+        _rand.shuffle(result)
 
         def inject():
             try:
@@ -103,12 +220,53 @@ def _generate_mc_async(data):
         mw.taskman.run_on_main(inject_error)
 
 
-def _call_ai_evaluation(question, user_answer, correct_answer):
-    """Call AI to evaluate the user's answer. Returns {score, feedback}."""
-    try:
-        from ..ai_handler import get_ai_handler
-        ai = get_ai_handler()
+def _ai_get_response_sync(prompt):
+    """Get a synchronous AI response, works in both API-key and backend mode.
+    Backend mode only supports streaming, so we collect chunks via a blocking callback."""
+    from ..ai_handler import get_ai_handler
+    ai = get_ai_handler()
 
+    print(f"CustomReviewer: _ai_get_response_sync called, is_configured={ai.is_configured()}")
+
+    collected = []
+    errors = []
+
+    def _collector(chunk, is_done, is_function_call=False, **kwargs):
+        print(f"CustomReviewer: _collector chunk={repr(chunk[:80]) if chunk else None}, is_done={is_done}")
+        if chunk:
+            collected.append(chunk)
+        if is_done and not collected:
+            errors.append("No chunks received before done signal")
+
+    try:
+        result = ai.get_response(prompt, callback=_collector)
+        print(f"CustomReviewer: get_response returned, collected {len(collected)} chunks, result_len={len(result) if result else 0}")
+    except Exception as e:
+        import traceback
+        print(f"CustomReviewer: AI response error: {e}")
+        traceback.print_exc()
+
+    if errors:
+        print(f"CustomReviewer: Callback errors: {errors}")
+
+    full = ''.join(collected) if collected else None
+    if full:
+        print(f"CustomReviewer: AI response ({len(full)} chars): {full[:200]}...")
+        # Detect error messages returned as text (not real AI responses)
+        error_patterns = ['Bitte verbinden', 'Bitte konfigurieren', 'Fehler bei', 'Quota überschritten', 'nicht konfiguriert']
+        for pattern in error_patterns:
+            if pattern in full:
+                print(f"CustomReviewer: AI response looks like an error message: {full[:100]}")
+                _inject_ai_step('error', full[:80])
+                return None
+    else:
+        print("CustomReviewer: AI response is None/empty — will use fallback")
+    return full
+
+
+def _call_ai_evaluation(question, user_answer, correct_answer):
+    """Call AI to evaluate the user's answer. Returns {score, feedback, missing}."""
+    try:
         prompt = f"""Du bist ein Lernassistent. Bewerte die Antwort des Studenten auf die Karteikarten-Frage.
 
 FRAGE:
@@ -122,16 +280,17 @@ ANTWORT DES STUDENTEN:
 
 Bewerte die Antwort des Studenten im Vergleich zur korrekten Antwort.
 Antworte NUR mit einem JSON-Objekt (kein Markdown, kein Code-Block):
-{{"score": <0-100>, "feedback": "<1-2 Sätze Feedback auf Deutsch>"}}
+{{"score": <0-100>, "feedback": "<1-2 Sätze Feedback auf Deutsch>", "missing": "<was fehlt oder falsch ist, nur bei score < 70, sonst leerer String>"}}
 
 Bewertungskriterien:
 - 90-100: Exzellent, alle wesentlichen Punkte korrekt
 - 70-89: Gut, die wichtigsten Punkte stimmen
-- 40-69: Teilweise richtig, wichtige Aspekte fehlen
-- 0-39: Größtenteils falsch oder unvollständig"""
+- 40-69: Teilweise richtig, wichtige Aspekte fehlen — erkläre konkret was fehlt
+- 0-39: Größtenteils falsch oder unvollständig — erkläre was die richtige Antwort wäre
 
-        # Use non-streaming call (no callback = synchronous response)
-        response = ai.get_response(prompt)
+Sei spezifisch im Feedback: nenne konkret was richtig/falsch ist, nicht nur allgemeine Phrasen."""
+
+        response = _ai_get_response_sync(prompt)
 
         if response:
             # Try to parse JSON from response
@@ -147,7 +306,8 @@ Bewertungskriterien:
             result = json.loads(cleaned)
             return {
                 "score": max(0, min(100, int(result.get("score", 50)))),
-                "feedback": result.get("feedback", "Bewertung abgeschlossen.")
+                "feedback": result.get("feedback", "Bewertung abgeschlossen."),
+                "missing": result.get("missing", "")
             }
 
     except json.JSONDecodeError as e:
@@ -193,11 +353,14 @@ def _fallback_evaluation(user_answer, correct_answer):
     return {"score": score, "feedback": feedback}
 
 
-def _call_ai_mc_generation(question, correct_answer):
-    """Call AI to generate MC options. Returns [{text, correct}, ...]."""
+def _call_ai_mc_generation(question, correct_answer, deck_answers=None):
+    """Call AI to generate MC options with explanations. Returns [{text, correct, explanation}, ...]."""
     try:
-        from ..ai_handler import get_ai_handler
-        ai = get_ai_handler()
+        deck_context = ""
+        if deck_answers:
+            deck_context = "\n\nANTWORTEN AUS DEM GLEICHEN DECK (als Inspiration für plausible Distraktoren):\n"
+            for i, ans in enumerate(deck_answers, 1):
+                deck_context += f"- {ans}\n"
 
         prompt = f"""Du bist ein Lernassistent. Erstelle 4 Multiple-Choice-Optionen für diese Karteikarten-Frage.
 
@@ -205,24 +368,26 @@ FRAGE:
 {question}
 
 KORREKTE ANTWORT:
-{correct_answer}
+{correct_answer}{deck_context}
 
 Erstelle genau 4 Antwortoptionen (1 korrekt, 3 plausible aber falsche).
+Jede Option braucht eine kurze Erklärung (1 Satz), warum sie richtig oder falsch ist.
 Die falschen Optionen sollen plausibel und lehrreich sein.
 Antworte NUR mit einem JSON-Array (kein Markdown, kein Code-Block):
 [
-  {{"text": "Option A (korrekt)", "correct": true}},
-  {{"text": "Option B (falsch)", "correct": false}},
-  {{"text": "Option C (falsch)", "correct": false}},
-  {{"text": "Option D (falsch)", "correct": false}}
+  {{"text": "Antworttext", "correct": true, "explanation": "Richtig, weil..."}},
+  {{"text": "Antworttext", "correct": false, "explanation": "Falsch, weil..."}},
+  {{"text": "Antworttext", "correct": false, "explanation": "Falsch, weil..."}},
+  {{"text": "Antworttext", "correct": false, "explanation": "Falsch, weil..."}}
 ]
 
 Mische die Position der korrekten Antwort zufällig."""
 
-        response = ai.get_response(prompt)
+        response = _ai_get_response_sync(prompt)
 
         if response:
             cleaned = response.strip()
+            # Try to extract JSON from various wrapper formats
             if cleaned.startswith('```'):
                 cleaned = cleaned.split('\n', 1)[1] if '\n' in cleaned else cleaned[3:]
                 if cleaned.endswith('```'):
@@ -231,9 +396,24 @@ Mische die Position der korrekten Antwort zufällig."""
             if cleaned.startswith('json'):
                 cleaned = cleaned[4:].strip()
 
+            # Find the JSON array in the response (may have leading text)
+            bracket_start = cleaned.find('[')
+            bracket_end = cleaned.rfind(']')
+            if bracket_start >= 0 and bracket_end > bracket_start:
+                cleaned = cleaned[bracket_start:bracket_end + 1]
+
             options = json.loads(cleaned)
             if isinstance(options, list) and len(options) >= 4:
+                # Ensure all options have explanation field
+                for opt in options:
+                    if 'explanation' not in opt:
+                        opt['explanation'] = ''
+                print(f"CustomReviewer: AI MC generation SUCCESS — {len(options)} options")
                 return options[:4]
+            else:
+                print(f"CustomReviewer: AI returned invalid options list (len={len(options) if isinstance(options, list) else 'not-list'})")
+        else:
+            print("CustomReviewer: AI returned no response for MC generation")
 
     except json.JSONDecodeError as e:
         print(f"CustomReviewer: JSON parse error in MC generation: {e}")
@@ -248,10 +428,10 @@ def _fallback_mc_generation(correct_answer):
     """Simple fallback MC generation without AI."""
     short = correct_answer[:80] if len(correct_answer) > 80 else correct_answer
     return [
-        {"text": short, "correct": True},
-        {"text": "Keine der genannten Optionen", "correct": False},
-        {"text": "Alle genannten Optionen sind richtig", "correct": False},
-        {"text": "Die Frage kann nicht beantwortet werden", "correct": False},
+        {"text": short, "correct": True, "explanation": "Dies ist die korrekte Antwort."},
+        {"text": "Keine der genannten Optionen", "correct": False, "explanation": "Die korrekte Antwort ist oben aufgeführt."},
+        {"text": "Alle genannten Optionen sind richtig", "correct": False, "explanation": "Nur eine der Optionen ist korrekt."},
+        {"text": "Die Frage kann nicht beantwortet werden", "correct": False, "explanation": "Die Frage hat eine klare Antwort."},
     ]
 
 
@@ -517,11 +697,13 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
 
     elif message.startswith("mc:generate:"):
         # AI generation of MC options
+        # IMPORTANT: Collect deck context on main thread (Anki collection is not thread-safe)
         try:
             data = json.loads(message[12:])
-            thread = threading.Thread(target=_generate_mc_async, args=(data,), daemon=True)
+            deck_answers = _get_deck_context_answers_sync(data.get('cardId'))
+            thread = threading.Thread(target=_generate_mc_async, args=(data, deck_answers), daemon=True)
             thread.start()
-            print(f"CustomReviewer: MC generation started in background")
+            print(f"CustomReviewer: MC generation started in background (deck_answers={len(deck_answers)})")
         except Exception as e:
             print(f"CustomReviewer: Error starting MC generation: {e}")
             if mw and mw.reviewer and mw.reviewer.web:

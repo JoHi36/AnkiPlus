@@ -195,13 +195,15 @@ export async function chatHandler(
       ? body.temperature : 0.7;
     const maxTokens = (body.maxOutputTokens !== undefined && body.maxOutputTokens > 0 && body.maxOutputTokens <= 8192)
       ? body.maxOutputTokens : defaultMaxTokens;
-    const requestData = {
+    const requestData: any = {
       contents,
       generationConfig: {
         temperature,
         maxOutputTokens: maxTokens,
       },
     };
+
+    // Note: thinkingConfig removed - not supported on v1beta generateContent API
 
     // Add system instruction if needed (simplified - full system prompt logic can be added later)
     // For now, we'll keep it simple

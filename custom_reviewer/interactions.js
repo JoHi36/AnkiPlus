@@ -26,9 +26,12 @@
     let transitioning = false;
     let mcAttempts = 0;
     let mcCorrectIndex = -1;
+    let mcOptions = [];      // Store full options with explanations
+    let mcWrongPicks = [];    // Track which wrong options were picked
     let autoRateEase = 0;
     let questionStartTime = Date.now();
     let chatOpen = false;
+    let aiSteps = [];         // ThoughtStream steps
 
     const $ = (s) => document.querySelector(s);
     const $$ = (s) => document.querySelectorAll(s);
@@ -161,7 +164,9 @@
     // ═══════════════════════════════════════════════
 
     function getTextContent(selector) {
-        const el = $(selector);
+        let el = $(selector);
+        // Fallback: if .answer not found, try #answer-section
+        if (!el && selector === '.answer') el = $('#answer-section');
         if (!el) return '';
         const clone = el.cloneNode(true);
         clone.querySelectorAll('script, style').forEach(e => e.remove());
@@ -288,6 +293,8 @@
 
         ta.disabled = true;
         ta.classList.add('opacity-40');
+        aiSteps = [];
+        renderThoughtStream();
         setState(S.EVALUATING);
 
         pycmd('evaluate:' + JSON.stringify({
@@ -299,13 +306,17 @@
 
     window.startMCMode = function() {
         if (current !== S.QUESTION) return;
+        aiSteps = [];
+        renderThoughtStream();
         setState(S.MC_LOADING);
         mcAttempts = 0;
         mcCorrectIndex = -1;
 
+        const cardId = window.cardInfo ? window.cardInfo.cardId : null;
         pycmd('mc:generate:' + JSON.stringify({
             question: getTextContent('.question'),
-            correctAnswer: getTextContent('.answer')
+            correctAnswer: getTextContent('.answer'),
+            cardId: cardId
         }));
     };
 
@@ -364,6 +375,7 @@
         setState(S.EVALUATED);
         const score = result.score || 0;
         const feedback = result.feedback || '';
+        const missing = result.missing || '';
 
         if (score >= 90)      autoRateEase = 4;
         else if (score >= 70) autoRateEase = 3;
@@ -373,6 +385,11 @@
         const labels = { 1: 'Again', 2: 'Hard', 3: 'Good', 4: 'Easy' };
         const colors = { 1: 'text-error', 2: 'text-warning', 3: 'text-success', 4: 'text-primary' };
         const barColors = { 1: '#ff453a', 2: '#ffd60a', 3: '#30d158', 4: '#0a84ff' };
+
+        let missingHtml = '';
+        if (missing && score < 70) {
+            missingHtml = `<p class="text-xs text-base-content/40 leading-relaxed mt-1" style="border-left:2px solid rgba(255,255,255,0.08);padding-left:8px;">${missing}</p>`;
+        }
 
         const el = $('#eval-result');
         if (el) {
@@ -385,6 +402,7 @@
                     <span class="text-xs font-semibold uppercase tracking-wide ${colors[autoRateEase]}">${labels[autoRateEase]}</span>
                 </div>
                 <p class="text-xs text-base-content/55 leading-relaxed">${feedback}</p>
+                ${missingHtml}
             `;
         }
     };
@@ -397,19 +415,35 @@
 
         setState(S.MC_ACTIVE);
         mcAttempts = 0;
+        mcOptions = options;
+        mcWrongPicks = [];
         mcCorrectIndex = options.findIndex(o => o.correct);
+        aiSteps = [];
 
         const area = $('#mc-area');
         if (area) {
             area.innerHTML = options.map((opt, i) => `
-                <button class="btn btn-ghost justify-start gap-3 h-auto py-3 px-4 rounded-xl text-left font-normal text-sm text-base-content no-animation"
-                        data-index="${i}" onclick="selectMCOption(${i})">
-                    <span class="badge badge-sm badge-ghost font-mono font-semibold">${String.fromCharCode(65 + i)}</span>
-                    <span class="flex-1">${opt.text}</span>
-                </button>
+                <div class="mc-option-wrapper" data-index="${i}">
+                    <button class="btn btn-ghost justify-start gap-3 h-auto py-3 px-4 rounded-xl text-left font-normal text-sm text-base-content no-animation w-full"
+                            data-index="${i}" onclick="selectMCOption(${i})">
+                        <span class="badge badge-sm badge-ghost font-mono font-semibold">${String.fromCharCode(65 + i)}</span>
+                        <span class="flex-1">${opt.text}</span>
+                    </button>
+                    <div class="mc-explanation hidden" data-exp-index="${i}"></div>
+                </div>
             `).join('');
         }
     };
+
+    function showExplanation(index) {
+        const opt = mcOptions[index];
+        if (!opt || !opt.explanation) return;
+        const expEl = $(`[data-exp-index="${index}"]`);
+        if (expEl) {
+            expEl.innerHTML = `<p class="text-xs text-base-content/45 px-4 pb-2 pl-12 leading-relaxed">${opt.explanation}</p>`;
+            expEl.classList.remove('hidden');
+        }
+    }
 
     window.selectMCOption = function(index) {
         if (current !== S.MC_ACTIVE) return;
@@ -424,12 +458,16 @@
             sel.querySelector('.badge')?.classList.add('badge-success');
             all.forEach(o => o.disabled = true);
             autoRateEase = mcAttempts === 1 ? 3 : 2;
+            showExplanation(index);
             finishMC(true);
         } else {
+            mcWrongPicks.push(index);
             sel.classList.remove('btn-ghost');
             sel.classList.add('btn-error', 'opacity-40');
             sel.querySelector('.badge')?.classList.add('badge-error');
             sel.disabled = true;
+            // Show explanation for the wrong pick
+            showExplanation(index);
 
             if (mcAttempts >= 2) {
                 autoRateEase = 1;
@@ -439,6 +477,7 @@
                     correct.classList.add('btn-success', 'text-success-content');
                     correct.querySelector('.badge')?.classList.add('badge-success');
                 }
+                showExplanation(mcCorrectIndex);
                 all.forEach(o => o.disabled = true);
                 finishMC(false);
             }
@@ -457,14 +496,74 @@
                 ? (mcAttempts === 1 ? 'Beim ersten Versuch richtig!' : 'Beim zweiten Versuch richtig.')
                 : 'Nicht richtig.';
 
+            let wrongSummary = '';
+            if (!wasCorrect && mcWrongPicks.length > 0) {
+                const wrongExps = mcWrongPicks
+                    .map(i => mcOptions[i])
+                    .filter(o => o && o.explanation)
+                    .map(o => `<span class="text-base-content/35">${o.text}:</span> ${o.explanation}`)
+                    .join('<br>');
+                if (wrongExps) {
+                    wrongSummary = `<div class="text-xs text-base-content/40 mt-2 leading-relaxed">${wrongExps}</div>`;
+                }
+            }
+
             el.innerHTML = `
                 <div class="flex items-center justify-center gap-2 py-1">
                     <span class="text-lg ${colors[autoRateEase]}">${icon}</span>
                     <span class="text-xs font-semibold uppercase tracking-wide ${colors[autoRateEase]}">${labels[autoRateEase]}</span>
                     <span class="text-xs text-base-content/55">${msg}</span>
                 </div>
+                ${wrongSummary}
             `;
         }
+    }
+
+
+    // ═══ Mini-ThoughtStream ═══
+
+    window.onAIStep = function(step) {
+        if (!step || !step.phase || !step.label) return;
+        // Mark previous steps as done
+        aiSteps.forEach(s => { s.status = 'done'; });
+        aiSteps.push({ phase: step.phase, label: step.label, status: 'loading' });
+        renderThoughtStream();
+    };
+
+    function renderThoughtStream() {
+        const container = $('#thought-stream');
+        if (!container) return;
+        const fallback = $('#loading-fallback');
+        if (aiSteps.length === 0) {
+            container.innerHTML = '';
+            if (fallback) fallback.style.display = 'flex';
+            return;
+        }
+        if (fallback) fallback.style.display = 'none';
+
+        container.innerHTML = aiSteps.map((step, idx) => {
+            const isLast = idx === aiSteps.length - 1;
+            const isLoading = step.status === 'loading';
+            const isError = step.phase === 'error';
+            const dot = isLoading
+                ? '<span class="loading loading-spinner loading-xs text-base-content/30" style="width:10px;height:10px;"></span>'
+                : isError
+                ? '<div style="width:6px;height:6px;border-radius:50%;background:rgba(255,69,58,0.6);"></div>'
+                : '<div style="width:5px;height:5px;border-radius:50%;background:rgba(48,209,88,0.4);"></div>';
+            const line = !isLast
+                ? '<div style="flex:1;width:1px;background:rgba(255,255,255,0.06);min-height:8px;"></div>'
+                : '';
+            const color = isError ? 'rgba(255,69,58,0.6)' : `rgba(255,255,255,${isLoading ? '0.5' : '0.3'})`;
+
+            return `<div style="display:flex;gap:8px;">
+                <div style="display:flex;flex-direction:column;align-items:center;width:14px;padding-top:5px;">
+                    ${dot}${line}
+                </div>
+                <div style="flex:1;padding-bottom:${isLast ? '0' : '4px'};">
+                    <span style="font-size:12px;color:${color};">${step.label}</span>
+                </div>
+            </div>`;
+        }).join('');
     }
 
 
@@ -628,6 +727,9 @@
         current = S.QUESTION;
         mcAttempts = 0;
         mcCorrectIndex = -1;
+        mcOptions = [];
+        mcWrongPicks = [];
+        aiSteps = [];
         autoRateEase = 0;
         questionStartTime = Date.now();
         chatOpen = false;
