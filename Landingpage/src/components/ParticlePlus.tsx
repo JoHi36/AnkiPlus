@@ -26,23 +26,27 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
   const phaseRef = useRef<Phase>('GATHER');
   const phaseTimeRef = useRef(0);
   const calledCompleteRef = useRef(false);
+  const centerRef = useRef({ cx: 0, cy: 0 });
 
   const PARTICLE_COUNT = 500;
-  const PLUS_ARM_LEN = 120;  // arm length
-  const PLUS_ARM_WIDTH = 70; // much thicker arms — clearly a plus, not a cross
+  const PLUS_ARM_LEN = 120;
+  const PLUS_ARM_WIDTH = 70;
   const FOCAL_LENGTH = 600;
 
   const GATHER_DURATION = 1.2;
   const HOLD_DURATION = 0.6;
   const EXPLODE_DURATION = 0.6;
 
+  // Gap between AN and KI when fully split (matches plus bounding box + padding)
+  const TEXT_GAP_FINAL = PLUS_ARM_LEN * 2 + 40;
+
   const initParticles = useCallback((w: number, h: number) => {
     const particles: Particle[] = [];
     const cx = w / 2;
-    const cy = h * 0.38; // shifted up so plus feels centered above the old Anki mock
+    const cy = h * 0.38;
+    centerRef.current = { cx, cy };
 
     for (let i = 0; i < PARTICLE_COUNT; i++) {
-      // Plus shape
       let px: number, py: number;
       if (Math.random() < 0.5) {
         px = (Math.random() - 0.5) * PLUS_ARM_WIDTH;
@@ -53,11 +57,9 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
       }
       const pz = (Math.random() - 0.5) * 30;
 
-      // Spawn from edges
       const spawnAngle = Math.random() * Math.PI * 2;
       const spawnDist = 350 + Math.random() * 250;
 
-      // Explosion velocity
       const dx = px;
       const dy = py;
       const explodeAngle = Math.atan2(dy, dx) + (Math.random() - 0.5) * 0.6;
@@ -137,18 +139,65 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
         phaseRef.current = 'DONE'; phaseTimeRef.current = 0;
       }
 
-      // Stop rendering when done
       if (phaseRef.current === 'DONE') {
         ctx.clearRect(0, 0, dW, dH);
-        return; // stop animation loop
+        return;
       }
 
       ctx.clearRect(0, 0, dW, dH);
 
-      const particles = particlesRef.current;
+      const { cx, cy } = centerRef.current;
       const phase = phaseRef.current;
       const cpt = phaseTimeRef.current;
       const t = timeRef.current;
+
+      // ── Draw "AN  KI" text on canvas ──
+      // Font size scales with viewport width, capped
+      const fontSize = Math.min(dW * 0.14, 180);
+      ctx.font = `800 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif`;
+      ctx.textBaseline = 'middle';
+
+      // Measure text widths to position perfectly
+      const anWidth = ctx.measureText('AN').width;
+      const kiWidth = ctx.measureText('KI').width;
+
+      // Calculate split progress: 0 = together, 1 = fully apart
+      let splitProgress = 0;
+      let textAlpha = 0.5; // start visible
+
+      if (phase === 'GATHER') {
+        // Delay 0.3s, then split over remaining GATHER time
+        const splitStart = 0.3;
+        const splitDuration = GATHER_DURATION - splitStart;
+        const rawProg = Math.max(0, (cpt - splitStart) / splitDuration);
+        splitProgress = 1 - Math.pow(1 - Math.min(rawProg, 1), 3); // ease-out cubic
+        // Fade from 0.5 to 0.12 as it splits
+        textAlpha = 0.5 - splitProgress * 0.38;
+      } else if (phase === 'HOLD') {
+        splitProgress = 1;
+        textAlpha = 0.12;
+      } else if (phase === 'EXPLODE') {
+        splitProgress = 1;
+        const prog = cpt / EXPLODE_DURATION;
+        textAlpha = 0.12 * Math.max(0, 1 - prog * 2);
+      }
+
+      if (textAlpha > 0.005) {
+        // Half-gap on each side of center
+        const halfGap = (splitProgress * TEXT_GAP_FINAL) / 2;
+
+        // AN: right edge sits at cx - halfGap
+        const anX = cx - halfGap - anWidth;
+        // KI: left edge sits at cx + halfGap
+        const kiX = cx + halfGap;
+
+        ctx.fillStyle = `rgba(255,255,255,${textAlpha})`;
+        ctx.fillText('AN', anX, cy);
+        ctx.fillText('KI', kiX, cy);
+      }
+
+      // ── Draw particles ──
+      const particles = particlesRef.current;
 
       for (let i = 0; i < particles.length; i++) {
         const p = particles[i];
@@ -175,11 +224,9 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
           p.x = p.hx + p.evx * ease;
           p.y = p.hy + p.evy * ease;
           p.z = p.hz + p.evz * ease;
-          // Full fadeout
           p.alpha = p.baseAlpha * Math.max(0, 1 - prog * 1.8);
         }
 
-        // 3D projection
         const scale = FOCAL_LENGTH / (FOCAL_LENGTH + p.z);
         const sx = dW / 2 + (p.x - dW / 2) * scale;
         const sy = dH / 2 + (p.y - dH / 2) * scale;
