@@ -42,22 +42,43 @@ export function LandingPage() {
           onIntroComplete={handleIntroComplete}
         />
 
-        {/* "Anki+" watermark — massive, barely visible background text */}
+        {/* "AN _ KI" — particle plus fills the gap to spell AN+KI */}
         <div
           className={`absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-700 ${
             introDone ? 'opacity-0' : 'opacity-100'
           }`}
-          style={{ top: '-12%' }}
+          style={{ top: '-12%' /* align with particle cy at 38% */ }}
         >
+          {/* AN on the left */}
           <span
-            className="font-bold tracking-[-0.05em] select-none"
+            className="font-bold tracking-[-0.03em] select-none"
             style={{
-              fontSize: 'clamp(8rem, 22vw, 20rem)',
-              color: 'rgba(255,255,255,0.025)',
+              fontSize: 'clamp(5rem, 14vw, 13rem)',
+              color: 'rgba(255,255,255,0.07)',
               lineHeight: 1,
             }}
           >
-            Anki+
+            AN
+          </span>
+
+          {/* Gap for the particle plus — matches particle area width */}
+          <span
+            style={{
+              display: 'inline-block',
+              width: 'clamp(4rem, 10vw, 10rem)',
+            }}
+          />
+
+          {/* KI on the right */}
+          <span
+            className="font-bold tracking-[-0.03em] select-none"
+            style={{
+              fontSize: 'clamp(5rem, 14vw, 13rem)',
+              color: 'rgba(255,255,255,0.07)',
+              lineHeight: 1,
+            }}
+          >
+            KI
           </span>
         </div>
       </div>
