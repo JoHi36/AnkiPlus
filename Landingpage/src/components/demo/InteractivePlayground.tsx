@@ -220,7 +220,7 @@ export function InteractivePlayground() {
                 onClick={() => { setScenarioKey(s.id as any); handleReset(); }}
                 className={`px-3 py-[5px] rounded-md text-xs font-medium border-none transition-colors ${
                   scenarioKey === s.id
-                    ? 'bg-white/[0.08] text-white/[0.88] font-semibold'
+                    ? 'bg-white/[0.08] text-white/[0.92] font-semibold'
                     : 'bg-transparent text-white/[0.35] hover:text-white/[0.55]'
                 }`}
               >

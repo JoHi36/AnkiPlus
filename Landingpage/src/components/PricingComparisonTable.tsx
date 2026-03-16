@@ -92,7 +92,7 @@ export function PricingComparisonTable() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-white/[0.06]">
-                <th className="text-left p-5 font-semibold text-sm text-white/[0.88]">Feature</th>
+                <th className="text-left p-5 font-semibold text-sm text-white/[0.92]">Feature</th>
                 <th className="text-center p-5 font-medium text-sm text-white/[0.35]">Starter</th>
                 <th className="text-center p-5 font-medium text-sm text-[#0a84ff]/70">Student</th>
                 <th className="text-center p-5 font-medium text-sm text-purple-400/70">Exam Pro</th>
@@ -110,7 +110,7 @@ export function PricingComparisonTable() {
                     <div className="flex flex-col">
                       <span className="font-medium text-sm text-white/[0.75] mb-0.5">{feature.name}</span>
                       {feature.description && (
-                        <span className="text-xs text-white/[0.22]">{feature.description}</span>
+                        <span className="text-xs text-white/[0.18]">{feature.description}</span>
                       )}
                     </div>
                   </td>
@@ -140,13 +140,13 @@ export function PricingComparisonTable() {
               <div className="flex-1 text-left">
                 <div className="font-medium text-sm text-white/[0.75] mb-0.5">{feature.name}</div>
                 {feature.description && (
-                  <div className="text-xs text-white/[0.22]">{feature.description}</div>
+                  <div className="text-xs text-white/[0.18]">{feature.description}</div>
                 )}
               </div>
               {expandedMobile === index ? (
-                <ChevronUp className="w-4 h-4 text-white/[0.22] flex-shrink-0 ml-4" />
+                <ChevronUp className="w-4 h-4 text-white/[0.18] flex-shrink-0 ml-4" />
               ) : (
-                <ChevronDown className="w-4 h-4 text-white/[0.22] flex-shrink-0 ml-4" />
+                <ChevronDown className="w-4 h-4 text-white/[0.18] flex-shrink-0 ml-4" />
               )}
             </button>
             {expandedMobile === index && (

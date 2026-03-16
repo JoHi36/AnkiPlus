@@ -69,7 +69,7 @@ export function PricingFAQ() {
             onClick={() => setSelectedCategory('all')}
             className={`px-4 py-[5px] text-xs font-medium border-none rounded-md cursor-pointer transition-colors ${
               selectedCategory === 'all'
-                ? 'text-white/[0.88] font-semibold bg-white/[0.08]'
+                ? 'text-white/[0.92] font-semibold bg-white/[0.08]'
                 : 'text-white/[0.35] bg-transparent hover:text-white/[0.55]'
             }`}
           >
@@ -81,7 +81,7 @@ export function PricingFAQ() {
               onClick={() => setSelectedCategory(key as any)}
               className={`px-4 py-[5px] text-xs font-medium border-none rounded-md cursor-pointer transition-colors ${
                 selectedCategory === key
-                  ? 'text-white/[0.88] font-semibold bg-white/[0.08]'
+                  ? 'text-white/[0.92] font-semibold bg-white/[0.08]'
                   : 'text-white/[0.35] bg-transparent hover:text-white/[0.55]'
               }`}
             >
@@ -106,9 +106,9 @@ export function PricingFAQ() {
               >
                 <span className="font-medium text-sm text-white/[0.75] flex-1">{item.question}</span>
                 {isExpanded ? (
-                  <ChevronUp className="w-4 h-4 text-white/[0.22] flex-shrink-0 mt-0.5" />
+                  <ChevronUp className="w-4 h-4 text-white/[0.18] flex-shrink-0 mt-0.5" />
                 ) : (
-                  <ChevronDown className="w-4 h-4 text-white/[0.22] flex-shrink-0 mt-0.5" />
+                  <ChevronDown className="w-4 h-4 text-white/[0.18] flex-shrink-0 mt-0.5" />
                 )}
               </button>
               {isExpanded && (

@@ -4,14 +4,14 @@
   --lp-bg: #0F0F0F;
   --lp-surface: #1A1A1A; /* = app bg, used for demo/cards */
 
-  /* Borders */
+  /* Borders — from design-system.css */
   --anki-border: rgba(255,255,255,0.06);
   --anki-border-medium: rgba(255,255,255,0.12);
 
-  /* Text — Opacity Hierarchy */
-  --anki-text-primary: rgba(255,255,255,0.88);
-  --anki-text-secondary: rgba(255,255,255,0.45);
-  --anki-text-tertiary: rgba(255,255,255,0.22);
+  /* Text — Opacity Hierarchy — matched to design-system.css */
+  --anki-text-primary: rgba(255,255,255,0.92);
+  --anki-text-secondary: rgba(255,255,255,0.55);
+  --anki-text-tertiary: rgba(255,255,255,0.35);
 
   /* Accent */
   --anki-accent: #0a84ff;
@@ -29,12 +29,12 @@
 
   html, body {
     @apply m-0 p-0 w-full h-full;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
   }
 
   body {
     background: var(--lp-bg);
-    color: rgba(255,255,255,0.88);
+    color: rgba(255,255,255,0.92);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -73,7 +73,7 @@
   }
 }
 
-/* ═══ Hero blue glow — animated snake-style shimmer ═══ */
+/* ═══ Blue glow — behind the demo, rising from below ═══ */
 @property --glow-angle {
   syntax: '<angle>';
   initial-value: 0deg;
@@ -83,29 +83,31 @@
   from { --glow-angle: 0deg; }
   to   { --glow-angle: 360deg; }
 }
-.hero-glow {
+.demo-glow-wrap {
   position: relative;
 }
-.hero-glow::before {
+.demo-glow-wrap::before {
   content: '';
   position: absolute;
-  top: -20%;
+  bottom: -10%;
   left: 50%;
   transform: translateX(-50%);
-  width: 600px;
-  height: 600px;
+  width: 70%;
+  height: 500px;
   background: conic-gradient(
-    from var(--glow-angle) at 50% 50%,
+    from var(--glow-angle) at 50% 60%,
     rgba(10,132,255,0.0) 0deg,
-    rgba(10,132,255,0.08) 90deg,
-    rgba(10,132,255,0.0) 180deg,
-    rgba(10,132,255,0.06) 270deg,
+    rgba(10,132,255,0.14) 60deg,
+    rgba(10,132,255,0.0) 120deg,
+    rgba(10,132,255,0.10) 200deg,
+    rgba(10,132,255,0.0) 280deg,
+    rgba(10,132,255,0.12) 340deg,
     rgba(10,132,255,0.0) 360deg
   );
-  filter: blur(80px);
+  filter: blur(100px);
   border-radius: 50%;
   pointer-events: none;
-  animation: glowRotate 8s linear infinite;
+  animation: glowRotate 10s linear infinite;
   z-index: 0;
 }
 
@@ -125,4 +127,3 @@
   z-index: 0;
   border-radius: inherit;
 }
-

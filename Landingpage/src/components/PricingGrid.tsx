@@ -95,7 +95,7 @@ export function PricingGrid({ currentTier = 'free', onPortal, isLoggedIn = false
           </div>
           <div className="flex items-baseline gap-1 mb-2">
             <span className="text-4xl font-bold text-white tracking-tight">0€</span>
-            <span className="text-white/[0.22] text-base">/Monat</span>
+            <span className="text-white/[0.18] text-base">/Monat</span>
           </div>
           <p className="text-white/[0.35] text-sm leading-relaxed">
             Der perfekte Einstieg in KI-gestütztes Lernen.
@@ -106,15 +106,15 @@ export function PricingGrid({ currentTier = 'free', onPortal, isLoggedIn = false
 
         <ul className="space-y-3 mb-8 text-sm text-white/[0.55] flex-1">
           <li className="flex items-start gap-3">
-            <Check size={14} className="text-white/[0.22] mt-0.5 flex-shrink-0" />
+            <Check size={14} className="text-white/[0.18] mt-0.5 flex-shrink-0" />
             <span>Unbegrenzt Flash Mode</span>
           </li>
           <li className="flex items-start gap-3">
-            <Check size={14} className="text-white/[0.22] mt-0.5 flex-shrink-0" />
+            <Check size={14} className="text-white/[0.18] mt-0.5 flex-shrink-0" />
             <span><strong className="text-white/80">3x</strong> Deep Mode / Tag</span>
           </li>
           <li className="flex items-start gap-3">
-            <Check size={14} className="text-white/[0.22] mt-0.5 flex-shrink-0" />
+            <Check size={14} className="text-white/[0.18] mt-0.5 flex-shrink-0" />
             <span>Basis Support</span>
           </li>
         </ul>
@@ -137,7 +137,7 @@ export function PricingGrid({ currentTier = 'free', onPortal, isLoggedIn = false
           </div>
           <div className="flex items-baseline gap-1 mb-2">
             <span className="text-4xl font-bold text-white tracking-tight">4,99€</span>
-            <span className="text-white/[0.22] text-base">/Monat</span>
+            <span className="text-white/[0.18] text-base">/Monat</span>
           </div>
           <p className="text-white/[0.35] text-sm leading-relaxed">
             Für alle, die Prüfungen nicht nur bestehen wollen.
@@ -179,7 +179,7 @@ export function PricingGrid({ currentTier = 'free', onPortal, isLoggedIn = false
           </div>
           <div className="flex items-baseline gap-1 mb-2">
             <span className="text-4xl font-bold text-white tracking-tight">14,99€</span>
-            <span className="text-white/[0.22] text-base">/Monat</span>
+            <span className="text-white/[0.18] text-base">/Monat</span>
           </div>
           <p className="text-white/[0.35] text-sm leading-relaxed">
             Maximale Power für Staatsexamen und High-Stakes Tests.

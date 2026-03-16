@@ -17,19 +17,19 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
   asChild = false,
   ...props
 }, ref) => {
-  const baseClasses = 'font-medium rounded-xl transition-all duration-200 focus:outline-none inline-flex items-center justify-center';
+  const baseClasses = 'font-medium rounded-full transition-all duration-200 focus:outline-none inline-flex items-center justify-center';
 
   const variantClasses = {
     primary: 'bg-[#0a84ff] text-white hover:brightness-110 active:scale-[0.98]',
     secondary: 'bg-white/[0.06] border border-white/[0.08] text-white/90 hover:bg-white/[0.10] hover:border-white/[0.12]',
     ghost: 'bg-transparent text-white/60 hover:text-white/90 hover:bg-white/[0.04]',
-    outline: 'border border-white/[0.08] text-white/80 hover:bg-white/[0.04] hover:border-white/[0.12]',
+    outline: 'border border-white/[0.10] text-white/[0.55] hover:text-white/[0.80] hover:bg-white/[0.04] hover:border-white/[0.15]',
   };
 
   const sizeClasses = {
-    sm: 'h-10 px-5 text-sm',
-    md: 'h-12 px-8 text-base',
-    lg: 'h-14 px-10 text-lg',
+    sm: 'h-8 px-4 text-xs',
+    md: 'h-9 px-5 text-sm',
+    lg: 'h-10 px-6 text-sm',
   };
 
   const widthClass = fullWidth ? 'w-full sm:w-auto' : '';
