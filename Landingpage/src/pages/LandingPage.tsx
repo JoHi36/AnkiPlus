@@ -30,17 +30,15 @@ export function LandingPage() {
   return (
     <div className={`min-h-screen bg-[#0F0F0F] text-white/[0.92] ${introDone ? '' : 'overflow-hidden h-screen'}`}>
 
-      {/* ═══ INTRO + AMBIENT PARTICLES — single canvas, persists ═══ */}
-      <div
-        className={`fixed inset-0 z-40 transition-none ${
-          introDone ? 'pointer-events-none' : ''
-        }`}
-      >
-        <ParticlePlus
-          className="absolute inset-0"
-          onIntroComplete={handleIntroComplete}
-        />
-      </div>
+      {/* ═══ INTRO PARTICLE ANIMATION ═══ */}
+      {!introDone && (
+        <div className="fixed inset-0 z-40">
+          <ParticlePlus
+            className="absolute inset-0"
+            onIntroComplete={handleIntroComplete}
+          />
+        </div>
+      )}
 
       {/* Black overlay that fades as explosion starts */}
       <div
@@ -82,7 +80,7 @@ export function LandingPage() {
         </section>
 
         {/* ═══ INTERACTIVE DEMO — with snake border ═══ */}
-        <section id="demo" className="max-w-6xl mx-auto px-4 sm:px-6 pb-24 sm:pb-32">
+        <section id="demo" className="max-w-6xl mx-auto px-4 sm:px-6 pb-24 sm:pb-32 demo-glow">
           <div className="snake-border-wrap demo-dot-grid rounded-2xl relative">
             <InteractivePlayground />
           </div>
