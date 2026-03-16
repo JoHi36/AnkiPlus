@@ -421,64 +421,52 @@ export function InteractivePlayground() {
         background: 'radial-gradient(ellipse 60% 40% at 50% 50%, rgba(10,132,255,0.12) 0%, rgba(10,132,255,0.04) 40%, transparent 70%)',
         filter: 'blur(40px)',
       }} />
-      <div className="relative z-10 h-[600px] md:h-[750px] bg-[#0F0F0F] rounded-2xl border border-white/[0.08] overflow-hidden">
+      <div className="relative z-10 h-[600px] md:h-[750px] rounded-2xl border border-white/[0.08] overflow-hidden">
 
-      {/* ── Top Bar ── */}
-      <div className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-5 h-11" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-        {/* Scenario selector (left) */}
-        <div className="flex gap-0 p-[2px] bg-white/[0.04] rounded-md">
-          {Object.values(DEMO_SCENARIOS).map((s) => (
-            <button
-              key={s.id}
-              onClick={() => {
-                if (scenarioKey === s.id) return;
-                if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
-                setScenarioKey(s.id);
-                setState('QUESTION');
-                setShowAnswer(false);
-                setChatOpen(false);
-                setInputText('');
-                setChatMessages([]);
-                setMcResult(null);
-                setAutoRateEase(0);
-                setIsFocused(false);
-              }}
-              className={`px-2.5 py-[3px] rounded text-[11px] font-medium transition-colors border-none cursor-pointer ${
-                scenarioKey === s.id
-                  ? 'bg-white/[0.08] text-white/90 font-semibold'
-                  : 'bg-transparent text-white/30 hover:text-white/50'
-              }`}
-            >
-              {s.category}
-            </button>
-          ))}
-        </div>
-        {/* Center tabs */}
-        <div className="flex gap-0 p-[2px] bg-white/[0.04] rounded-md">
-          {['Stapel', 'Session', 'Statistik'].map((tab, i) => (
-            <span
-              key={tab}
-              className={`px-3 py-[3px] rounded text-[11px] font-medium transition-colors ${
-                i === 1 ? 'bg-white/[0.08] text-white/90' : 'text-white/30'
-              }`}
-            >
-              {tab}
-            </span>
-          ))}
-        </div>
-        <div className="flex gap-2 text-[11px] font-mono tabular-nums">
-          <span className="text-green-500">4890</span>
-          <span className="text-red-500">5</span>
-          <span className="text-blue-500">3012</span>
-        </div>
-      </div>
-
-      {/* ── Card Area ── */}
+      {/* ── Card Area (includes its own header) ── */}
       <motion.div
-        className="absolute top-11 bottom-0 left-0 overflow-y-auto bg-[#1A1A1A]"
+        className="absolute top-0 bottom-0 left-0 overflow-y-auto bg-[#1A1A1A] rounded-l-2xl"
         animate={{ width: chatOpen ? '60%' : '100%' }}
         transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+        style={{ borderRight: chatOpen ? '1px solid rgba(255,255,255,0.06)' : 'none' }}
       >
+        {/* ── Header (inside card area) ── */}
+        <div className="sticky top-0 z-30 flex items-center justify-between px-5 h-11 bg-[#1A1A1A]" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <span className="text-xs font-bold text-white/50 tracking-wide">AnkiPlus</span>
+          {/* Scenario selector (center) */}
+          <div className="flex gap-0 p-[2px] bg-white/[0.04] rounded-md">
+            {Object.values(DEMO_SCENARIOS).map((s) => (
+              <button
+                key={s.id}
+                onClick={() => {
+                  if (scenarioKey === s.id) return;
+                  if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
+                  setScenarioKey(s.id);
+                  setState('QUESTION');
+                  setShowAnswer(false);
+                  setChatOpen(false);
+                  setInputText('');
+                  setChatMessages([]);
+                  setMcResult(null);
+                  setAutoRateEase(0);
+                  setIsFocused(false);
+                }}
+                className={`px-2.5 py-[3px] rounded text-[11px] font-medium transition-colors border-none cursor-pointer ${
+                  scenarioKey === s.id
+                    ? 'bg-white/[0.08] text-white/90 font-semibold'
+                    : 'bg-transparent text-white/30 hover:text-white/50'
+                }`}
+              >
+                {s.category}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2 text-[11px] font-mono tabular-nums">
+            <span className="text-green-500">4890</span>
+            <span className="text-red-500">5</span>
+            <span className="text-blue-500">3012</span>
+          </div>
+        </div>
         {/* Dot grid background */}
         <div
           className="absolute inset-0 opacity-[0.03] pointer-events-none"
@@ -617,8 +605,7 @@ export function InteractivePlayground() {
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
-            className="absolute right-0 top-11 bottom-0 w-[40%] bg-[#111111] flex flex-col z-20"
-            style={{ borderLeft: '1px solid rgba(255,255,255,0.06)' }}
+            className="absolute right-0 top-0 bottom-0 w-[40%] bg-[#111111] rounded-r-2xl flex flex-col z-20"
           >
             {/* Chat Messages */}
             <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-5 space-y-6 pb-4">
