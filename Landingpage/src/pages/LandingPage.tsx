@@ -48,10 +48,10 @@ export function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#1A1A1A] text-white/[0.88] overflow-x-hidden relative dot-grid">
+    <div className="min-h-screen bg-[#0F0F0F] text-white/[0.88] overflow-x-hidden relative">
 
       {/* ═══ NAVBAR ═══ */}
-      <header className="fixed top-0 w-full z-50 bg-[#1A1A1A]/80 backdrop-blur-lg border-b border-white/[0.06]">
+      <header className="fixed top-0 w-full z-50 bg-[#0F0F0F]/80 backdrop-blur-lg border-b border-white/[0.06]">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 font-semibold text-base tracking-tight">
@@ -114,7 +114,7 @@ export function LandingPage() {
 
         {/* Mobile Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-white/[0.06] bg-[#1A1A1A]/95 backdrop-blur-lg">
+          <div className="md:hidden border-t border-white/[0.06] bg-[#0F0F0F]/95 backdrop-blur-lg">
             <nav className="flex flex-col p-4 gap-1">
               {[
                 { id: 'features', label: 'Features' },
@@ -154,44 +154,39 @@ export function LandingPage() {
 
       <main className="relative z-10">
 
-        {/* ═══ HERO ═══ */}
-        <section className="pt-32 pb-10 max-w-4xl mx-auto px-6 text-center">
-          <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tighter leading-[1.05] mb-6 text-white">
-            Anki, neu gedacht.
-          </h1>
+        {/* ═══ HERO + DEMO (one unit) ═══ */}
+        <section id="features" className="hero-glow pt-32 pb-16 sm:pb-24">
+          <div className="max-w-4xl mx-auto px-6 text-center relative z-10 mb-12 sm:mb-16">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tighter leading-[1.05] mb-6 text-white">
+              Anki auf <span className="text-[#0a84ff]">Steroiden</span>.
+            </h1>
 
-          <p className="text-base sm:text-lg md:text-xl text-white/[0.45] max-w-2xl mx-auto leading-relaxed mb-10">
-            KI-gestütztes Lernen für Medizin, Jura und komplexe Themen.{' '}
-            <br className="hidden md:block"/>
-            Verstehe Zusammenhänge, statt nur Fakten zu pauken.
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-3 justify-center mb-6">
-            <Button variant="primary" size="md" asChild>
-              <Link to="/register">
-                <span className="mr-2">Kostenlos starten</span>
-                <ChevronRight className="w-4 h-4" />
-              </Link>
-            </Button>
-
-            <Button variant="outline" size="md" onClick={() => handleScrollTo('features')}>
-              Ausprobieren
-            </Button>
-          </div>
-        </section>
-
-        {/* ═══ INTERACTIVE PLAYGROUND ═══ */}
-        <section id="features" className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-24">
-          <div className="text-center mb-12">
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4 tracking-tight">
-              Probier es aus.
-            </h2>
-            <p className="text-base text-white/[0.35] max-w-xl mx-auto">
-              Interaktive Demo — kein Account nötig.
+            <p className="text-base sm:text-lg md:text-xl text-white/[0.45] max-w-2xl mx-auto leading-relaxed mb-10">
+              KI-gestütztes Lernen für Medizin, Jura und komplexe Themen.{' '}
+              <br className="hidden md:block"/>
+              Verstehe Zusammenhänge, statt nur Fakten zu pauken.
             </p>
+
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Button variant="primary" size="md" asChild>
+                <Link to="/register">
+                  <span className="mr-2">Kostenlos starten</span>
+                  <ChevronRight className="w-4 h-4" />
+                </Link>
+              </Button>
+
+              <Button variant="outline" size="md" onClick={() => handleScrollTo('demo')}>
+                Ausprobieren
+              </Button>
+            </div>
           </div>
 
-          <InteractivePlayground />
+          {/* Demo directly under hero — no section header */}
+          <div id="demo" className="max-w-6xl mx-auto px-4 sm:px-6 relative z-10">
+            <div className="demo-dot-grid rounded-2xl">
+              <InteractivePlayground />
+            </div>
+          </div>
         </section>
 
         {/* ═══ PRICING ═══ */}

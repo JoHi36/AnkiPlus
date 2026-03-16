@@ -1,9 +1,8 @@
-/* CSS Variables - Landing Page Theme (aligned with design-system.css) */
+/* CSS Variables - Landing Page Theme */
 :root {
-  /* Backgrounds — Elevation Stack */
-  --anki-bg: #1A1A1A;
-  --anki-surface: rgba(255,255,255,0.03);
-  --anki-surface-elevated: #222224;
+  /* Page bg is darker than app, so app surfaces "pop" */
+  --lp-bg: #0F0F0F;
+  --lp-surface: #1A1A1A; /* = app bg, used for demo/cards */
 
   /* Borders */
   --anki-border: rgba(255,255,255,0.06);
@@ -16,13 +15,6 @@
 
   /* Accent */
   --anki-accent: #0a84ff;
-  --anki-teal-400: #2dd4bf;
-  --anki-teal-500: #14b8a6;
-  --anki-teal-900: #134e4a;
-
-  /* Spacing */
-  --spacing-section: 2.5rem;
-  --spacing-section-md: 5rem;
 }
 
 @tailwind base;
@@ -37,11 +29,11 @@
 
   html, body {
     @apply m-0 p-0 w-full h-full;
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
   }
 
   body {
-    background: #1A1A1A;
+    background: var(--lp-bg);
     color: rgba(255,255,255,0.88);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -57,16 +49,13 @@
   ::-webkit-scrollbar {
     width: 6px;
   }
-
   ::-webkit-scrollbar-track {
     background: transparent;
   }
-
   ::-webkit-scrollbar-thumb {
     background: rgba(255,255,255,0.08);
     border-radius: 3px;
   }
-
   ::-webkit-scrollbar-thumb:hover {
     background: rgba(255,255,255,0.14);
   }
@@ -84,19 +73,56 @@
   }
 }
 
-/* Dot grid background — same as app canvas */
-.dot-grid {
+/* ═══ Hero blue glow — animated snake-style shimmer ═══ */
+@property --glow-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes glowRotate {
+  from { --glow-angle: 0deg; }
+  to   { --glow-angle: 360deg; }
+}
+.hero-glow {
   position: relative;
 }
-.dot-grid::before {
+.hero-glow::before {
   content: '';
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
+  position: absolute;
+  top: -20%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 600px;
+  height: 600px;
+  background: conic-gradient(
+    from var(--glow-angle) at 50% 50%,
+    rgba(10,132,255,0.0) 0deg,
+    rgba(10,132,255,0.08) 90deg,
+    rgba(10,132,255,0.0) 180deg,
+    rgba(10,132,255,0.06) 270deg,
+    rgba(10,132,255,0.0) 360deg
+  );
+  filter: blur(80px);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: glowRotate 8s linear infinite;
+  z-index: 0;
+}
+
+/* ═══ Dot grid — ONLY inside demo surfaces ═══ */
+.demo-dot-grid {
+  position: relative;
+}
+.demo-dot-grid::before {
+  content: '';
+  position: absolute;
+  inset: 0;
   background-image: radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px);
   background-size: 24px 24px;
   -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 0%, transparent 100%);
   mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 0%, transparent 100%);
   pointer-events: none;
   z-index: 0;
+  border-radius: inherit;
 }
 
