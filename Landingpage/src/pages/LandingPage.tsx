@@ -30,15 +30,15 @@ export function LandingPage() {
   return (
     <div className={`min-h-screen bg-[#0F0F0F] text-white/[0.92] ${introDone ? '' : 'overflow-hidden h-screen'}`}>
 
-      {/* ═══ INTRO PARTICLE ANIMATION ═══ */}
-      {!introDone && (
-        <div className="fixed inset-0 z-40">
-          <ParticlePlus
-            className="absolute inset-0"
-            onIntroComplete={handleIntroComplete}
-          />
-        </div>
-      )}
+      {/* ═══ INTRO PARTICLE ANIMATION — stays mounted so explosion is visible ═══ */}
+      <div
+        className={`fixed inset-0 z-40 ${introDone ? 'pointer-events-none' : ''}`}
+      >
+        <ParticlePlus
+          className="absolute inset-0"
+          onIntroComplete={handleIntroComplete}
+        />
+      </div>
 
       {/* Black overlay that fades as explosion starts */}
       <div
