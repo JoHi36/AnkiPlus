@@ -139,6 +139,15 @@ class SettingsBridge(QObject):
             print(f"getQuota error: {e}")
             return json.dumps(None)
 
+    @pyqtSlot()
+    def logout(self):
+        """Clear auth token and reset auth status."""
+        try:
+            update_config(auth_token="", refresh_token="", auth_validated=False)
+            print("SettingsBridge.logout: Auth cleared")
+        except Exception as e:
+            print(f"logout error: {e}")
+
     @pyqtSlot(str)
     def openUrl(self, url):
         import webbrowser

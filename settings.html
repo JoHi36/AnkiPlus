@@ -299,6 +299,11 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
         Abo verwalten
       </button>
+      <button class="btn btn-primary" style="margin-top:8px;" onclick="handleRelogin()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+        Neu anmelden
+      </button>
+      <button class="link-btn" style="margin-top:8px;width:100%;text-align:center;color:rgba(239,68,68,0.5);" onclick="handleLogout()">Abmelden</button>
     </div>
   </div>
 
@@ -440,6 +445,19 @@ function sparklesSvg() {
 }
 function zapSvg() {
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>';
+}
+
+function handleLogout() {
+  bridge.logout();
+  config.isAuthenticated = false;
+  renderProfile();
+}
+
+function handleRelogin() {
+  bridge.logout();
+  config.isAuthenticated = false;
+  renderProfile();
+  bridge.openUrl('https://anki-plus.vercel.app/login');
 }
 
 function verifyToken() {
