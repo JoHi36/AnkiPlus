@@ -13,6 +13,7 @@ import { InteractivePlayground } from '../components/demo/InteractivePlayground'
 import { TestimonialList } from '../components/TestimonialList';
 import { ParticlePlus } from '../components/ParticlePlus';
 import { OldAnkiMock } from '../components/demo/OldAnkiMock';
+import { InstallSection } from '../components/InstallSection';
 
 export function LandingPage() {
   const [introDone, setIntroDone] = useState(false);
@@ -118,6 +119,9 @@ export function LandingPage() {
 
           </div>
         </section>
+
+        {/* ═══ INSTALLATION ═══ */}
+        <InstallSection />
 
         {/* ═══ PRICING ═══ */}
         <section id="pricing" className="max-w-6xl mx-auto px-4 sm:px-6 py-20 sm:py-28">
