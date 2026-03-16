@@ -231,10 +231,10 @@ export async function chatHandler(
               timeout: 30000, // 30 second timeout for non-streaming
             }),
           {
-            maxRetries: 3,
-            initialDelay: 1000,
-            maxDelay: 8000,
-            retryableStatusCodes: [429, 500, 502, 503],
+            maxRetries: 1,
+            initialDelay: 500,
+            maxDelay: 2000,
+            retryableStatusCodes: [500, 502, 503],
           }
         );
 

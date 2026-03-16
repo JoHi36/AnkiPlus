@@ -2067,9 +2067,10 @@ Karteninhalt: {question_clean[:500]}"""
             else:
                 api_key = ""  # Nicht benötigt im Backend-Modus
             
-            # Force Gemini 2.0 Flash Lite (Fallback: gemini-1.5-flash)
-            router_model = "gemini-2.0-flash-lite"
-            fallback_model = "gemini-1.5-flash"
+            # Router-Modell: gemini-2.5-flash (schnell, verfügbar)
+            # Fallback: gemini-3-flash-preview (das Generator-Modell)
+            router_model = "gemini-2.5-flash"
+            fallback_model = "gemini-3-flash-preview"
             
             # Emit UI State
             self._emit_ai_state("Analysiere Anfrage...", phase=self.PHASE_INTENT)
