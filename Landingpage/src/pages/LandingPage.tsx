@@ -9,6 +9,7 @@ import { PricingFAQ } from '../components/PricingFAQ';
 import { PricingGrid } from '../components/PricingGrid';
 import { InteractivePlayground } from '../components/demo/InteractivePlayground';
 import { TestimonialList } from '../components/TestimonialList';
+import { ParticlePlus } from '../components/ParticlePlus';
 
 export function LandingPage() {
 
@@ -25,34 +26,40 @@ export function LandingPage() {
 
       <main>
 
-        {/* ═══ HERO ═══ */}
-        <section className="pt-[18vh] sm:pt-[22vh] pb-20 sm:pb-28 mx-auto px-6 text-center">
-          <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-[5.5rem] font-bold tracking-[-0.04em] leading-none mb-8 text-white whitespace-nowrap">
-            Anki auf <span className="text-[#0a84ff]">Steroiden</span>.
-          </h1>
+        {/* ═══ HERO with Particle "+" ═══ */}
+        <section className="relative pt-[18vh] sm:pt-[22vh] pb-20 sm:pb-28 mx-auto px-6 text-center">
+          {/* Particle "+" background */}
+          <ParticlePlus className="absolute inset-0 pointer-events-auto" />
 
-          <p className="text-base sm:text-lg text-white/[0.35] max-w-lg mx-auto leading-relaxed mb-12 font-light">
-            KI-gestütztes Lernen für Medizin, Jura und komplexe Themen.
-            Verstehe Zusammenhänge, statt nur Fakten zu pauken.
-          </p>
+          {/* Hero content on top */}
+          <div className="relative z-10">
+            <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-[5.5rem] font-bold tracking-[-0.04em] leading-none mb-8 text-white whitespace-nowrap">
+              Anki auf <span className="text-[#0a84ff]">Steroiden</span>.
+            </h1>
 
-          <div className="flex gap-3 justify-center">
-            <Button variant="primary" size="md" asChild>
-              <Link to="/register">
-                Kostenlos starten
-                <ChevronRight className="w-3.5 h-3.5 ml-1.5" />
-              </Link>
-            </Button>
+            <p className="text-base sm:text-lg text-white/[0.35] max-w-lg mx-auto leading-relaxed mb-12 font-light">
+              KI-gestütztes Lernen für Medizin, Jura und komplexe Themen.
+              Verstehe Zusammenhänge, statt nur Fakten zu pauken.
+            </p>
 
-            <Button variant="outline" size="md" onClick={() => handleScrollTo('demo')}>
-              Ausprobieren
-            </Button>
+            <div className="flex gap-3 justify-center">
+              <Button variant="primary" size="md" asChild>
+                <Link to="/register">
+                  Kostenlos starten
+                  <ChevronRight className="w-3.5 h-3.5 ml-1.5" />
+                </Link>
+              </Button>
+
+              <Button variant="outline" size="md" onClick={() => handleScrollTo('demo')}>
+                Ausprobieren
+              </Button>
+            </div>
           </div>
         </section>
 
-        {/* ═══ INTERACTIVE DEMO — with blue glow behind ═══ */}
+        {/* ═══ INTERACTIVE DEMO — with snake border ═══ */}
         <section id="demo" className="max-w-6xl mx-auto px-4 sm:px-6 pb-24 sm:pb-32">
-          <div className="demo-dot-grid rounded-2xl relative z-10">
+          <div className="snake-border-wrap demo-dot-grid rounded-2xl relative">
             <InteractivePlayground />
           </div>
         </section>
@@ -106,12 +113,12 @@ export function LandingPage() {
       {/* ═══ FOOTER ═══ */}
       <footer className="border-t border-white/[0.06] py-8">
         <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="text-white/[0.22] text-xs">
+          <div className="text-white/[0.18] text-xs">
             &copy; 2025 ANKI+
           </div>
-          <div className="flex gap-6 text-white/[0.22] text-xs">
-            <a href="#" className="hover:text-white/[0.45] transition-colors">Privacy</a>
-            <a href="#" className="hover:text-white/[0.45] transition-colors">Terms</a>
+          <div className="flex gap-6 text-white/[0.18] text-xs">
+            <a href="#" className="hover:text-white/[0.35] transition-colors">Privacy</a>
+            <a href="#" className="hover:text-white/[0.35] transition-colors">Terms</a>
           </div>
         </div>
       </footer>

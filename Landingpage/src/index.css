@@ -73,6 +73,45 @@
   }
 }
 
+/* ═══ Snake border — animated conic-gradient edge (from app's floating dock) ═══ */
+@property --border-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes borderRotate {
+  from { --border-angle: 0deg; }
+  to   { --border-angle: 360deg; }
+}
+.snake-border-wrap {
+  position: relative;
+}
+.snake-border-wrap::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 17px;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--border-angle) at 50% 100%,
+    rgba(10,132,255,0.0) 0deg,
+    rgba(10,132,255,0.4) 60deg,
+    rgba(10,132,255,0.08) 120deg,
+    rgba(10,132,255,0.0) 180deg,
+    rgba(10,132,255,0.08) 240deg,
+    rgba(10,132,255,0.35) 300deg,
+    rgba(10,132,255,0.0) 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: borderRotate 4s linear infinite;
+  z-index: 1;
+}
+
 /* ═══ Dot grid — ONLY inside demo surfaces ═══ */
 .demo-dot-grid {
   position: relative;
