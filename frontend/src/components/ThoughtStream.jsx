@@ -185,18 +185,18 @@ function useAutoCollapse(isStreaming, message) {
 
 /* ── Status text helper ── */
 
-function getStatusText(steps, citations, isStreaming, intent) {
-  if (!steps || steps.length === 0) {
+function getStatusText(rawSteps, displaySteps, citations, isStreaming, intent) {
+  if (!rawSteps || rawSteps.length === 0) {
     return intent ? 'Analysiere Anfrage…' : 'Bereit';
   }
-  const last = steps[steps.length - 1];
+  const last = rawSteps[rawSteps.length - 1];
   const phase = last?.phase;
   if (phase === 'intent') return 'Analysiere Anfrage…';
   if (phase === 'search') return 'Durchsuche Wissensdatenbank…';
   if (phase === 'retrieval') return 'Analysiere Quellen…';
   if (phase === 'generating') return 'Formuliere Antwort…';
   if (phase === 'finished') {
-    const n = steps.length;
+    const n = displaySteps.length;
     return `${n} Schritt${n !== 1 ? 'e' : ''} abgeschlossen`;
   }
   return 'Verarbeite…';
@@ -224,7 +224,7 @@ export default function ThoughtStream({
   const isThinking = isStreaming && lastPhase !== 'generating' && lastPhase !== 'finished';
   const hasCitations = Object.keys(citations).length > 0;
   const hasContent = displaySteps.length > 0 || hasCitations || !!intent || isThinking;
-  const statusText = getStatusText(steps, citations, isStreaming, intent);
+  const statusText = getStatusText(steps, displaySteps, citations, isStreaming, intent);
 
   if (!hasContent) return null;
 
@@ -253,6 +253,18 @@ export default function ThoughtStream({
           {statusText}
         </span>
       </button>
+
+      {/* ── Sources carousel — always visible outside collapse ── */}
+      {!isExpanded && hasCitations && (
+        <div className="mt-1 mb-1 max-w-full overflow-hidden">
+          <SourcesCarousel
+            citations={citations}
+            citationIndices={citationIndices}
+            bridge={bridge}
+            onPreviewCard={onPreviewCard}
+          />
+        </div>
+      )}
 
       {/* ── Expanded content ── */}
       <AnimatePresence initial={false}>
