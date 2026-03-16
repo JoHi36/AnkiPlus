@@ -42,45 +42,43 @@ export function LandingPage() {
           onIntroComplete={handleIntroComplete}
         />
 
-        {/* "AN _ KI" — particle plus fills the gap to spell AN+KI */}
-        <div
-          className={`absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-700 ${
-            introDone ? 'opacity-0' : 'opacity-100'
-          }`}
+        {/* AN+KI — starts as "ANKI", splits apart as particle plus forms in the gap */}
+        <motion.div
+          className="absolute inset-0 flex items-center justify-center pointer-events-none"
           style={{ top: '-12%' /* align with particle cy at 38% */ }}
+          animate={{ opacity: introDone ? 0 : 1 }}
+          transition={{ duration: 0.5 }}
         >
-          {/* AN on the left */}
-          <span
+          {/* AN slides left */}
+          <motion.span
             className="font-bold tracking-[-0.03em] select-none"
-            style={{
-              fontSize: 'clamp(5rem, 14vw, 13rem)',
-              color: 'rgba(255,255,255,0.07)',
-              lineHeight: 1,
-            }}
+            style={{ fontSize: 'clamp(5rem, 14vw, 13rem)', lineHeight: 1 }}
+            initial={{ x: 'clamp(2rem, 5vw, 5rem)', color: 'rgba(255,255,255,0.5)' }}
+            animate={{ x: 0, color: 'rgba(255,255,255,0.12)' }}
+            transition={{ duration: 1.0, delay: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
           >
             AN
-          </span>
+          </motion.span>
 
-          {/* Gap for the particle plus — matches particle area width */}
-          <span
-            style={{
-              display: 'inline-block',
-              width: 'clamp(4rem, 10vw, 10rem)',
-            }}
+          {/* Gap grows as letters split — particle plus fills this space */}
+          <motion.span
+            style={{ display: 'inline-block' }}
+            initial={{ width: 0 }}
+            animate={{ width: 'clamp(4rem, 10vw, 10rem)' }}
+            transition={{ duration: 1.0, delay: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
           />
 
-          {/* KI on the right */}
-          <span
+          {/* KI slides right */}
+          <motion.span
             className="font-bold tracking-[-0.03em] select-none"
-            style={{
-              fontSize: 'clamp(5rem, 14vw, 13rem)',
-              color: 'rgba(255,255,255,0.07)',
-              lineHeight: 1,
-            }}
+            style={{ fontSize: 'clamp(5rem, 14vw, 13rem)', lineHeight: 1 }}
+            initial={{ x: 'clamp(-2rem, -5vw, -5rem)', color: 'rgba(255,255,255,0.5)' }}
+            animate={{ x: 0, color: 'rgba(255,255,255,0.12)' }}
+            transition={{ duration: 1.0, delay: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
           >
             KI
-          </span>
-        </div>
+          </motion.span>
+        </motion.div>
       </div>
 
       {/* Semi-transparent overlay — dims but doesn't fully hide old Anki below */}
