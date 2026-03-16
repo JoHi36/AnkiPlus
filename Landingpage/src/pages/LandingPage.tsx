@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   ChevronRight,
   CheckCircle2,
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@shared/components/Button';
 import { PricingComparisonTable } from '../components/PricingComparisonTable';
 import { PricingFAQ } from '../components/PricingFAQ';
@@ -11,13 +12,23 @@ import { PricingGrid } from '../components/PricingGrid';
 import { InteractivePlayground } from '../components/demo/InteractivePlayground';
 import { TestimonialList } from '../components/TestimonialList';
 import { ParticlePlus } from '../components/ParticlePlus';
+import { OldAnkiMock } from '../components/demo/OldAnkiMock';
 
 export function LandingPage() {
   const [introDone, setIntroDone] = useState(false);
+  const [transformed, setTransformed] = useState(false);
 
   const handleIntroComplete = useCallback(() => {
     setIntroDone(true);
   }, []);
+
+  // Delay the old→new transformation so the old Anki is briefly visible after explosion
+  useEffect(() => {
+    if (introDone && !transformed) {
+      const timer = setTimeout(() => setTransformed(true), 600);
+      return () => clearTimeout(timer);
+    }
+  }, [introDone, transformed]);
 
   const handleScrollTo = (id: string) => {
     const el = document.getElementById(id);
@@ -30,7 +41,7 @@ export function LandingPage() {
   return (
     <div className={`min-h-screen bg-[#0F0F0F] text-white/[0.92] ${introDone ? '' : 'overflow-hidden h-screen'}`}>
 
-      {/* ═══ INTRO PARTICLE ANIMATION — stays mounted so explosion is visible ═══ */}
+      {/* ═══ INTRO PARTICLE ANIMATION ═══ */}
       <div
         className={`fixed inset-0 z-40 ${introDone ? 'pointer-events-none' : ''}`}
       >
@@ -40,7 +51,7 @@ export function LandingPage() {
         />
       </div>
 
-      {/* Black overlay that fades as explosion starts */}
+      {/* Black overlay — covers old Anki, fades on explosion to reveal it */}
       <div
         className={`fixed inset-0 z-30 bg-[#0F0F0F] transition-opacity duration-500 ease-out ${
           introDone ? 'opacity-0 pointer-events-none' : 'opacity-100'
@@ -79,10 +90,47 @@ export function LandingPage() {
           </div>
         </section>
 
-        {/* ═══ INTERACTIVE DEMO — with snake border ═══ */}
+        {/* ═══ DEMO SECTION — Old Anki transforms into modern InteractivePlayground ═══ */}
         <section id="demo" className="max-w-6xl mx-auto px-4 sm:px-6 pb-24 sm:pb-32 demo-glow">
-          <div className="snake-border-wrap demo-dot-grid rounded-2xl relative">
-            <InteractivePlayground />
+          <div className="relative rounded-2xl" style={{ perspective: '1200px' }}>
+
+            {/* Old Anki — visible during intro, flips away on transform */}
+            <AnimatePresence>
+              {!transformed && (
+                <motion.div
+                  key="old-anki"
+                  initial={{ opacity: 1, rotateX: 0, scale: 1 }}
+                  exit={{
+                    opacity: 0,
+                    rotateX: -8,
+                    scale: 0.95,
+                    filter: 'blur(8px) brightness(2)',
+                  }}
+                  transition={{ duration: 0.7, ease: [0.25, 0.1, 0.25, 1] }}
+                  className="w-full h-[600px] md:h-[750px] rounded-2xl overflow-hidden border border-white/[0.08]"
+                  style={{ transformOrigin: 'center bottom' }}
+                >
+                  <OldAnkiMock />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Modern Demo — appears after old Anki exits */}
+            <AnimatePresence>
+              {transformed && (
+                <motion.div
+                  key="new-demo"
+                  initial={{ opacity: 0, rotateX: 8, scale: 0.95, filter: 'blur(8px)' }}
+                  animate={{ opacity: 1, rotateX: 0, scale: 1, filter: 'blur(0px)' }}
+                  transition={{ duration: 0.7, ease: [0.25, 0.1, 0.25, 1] }}
+                  className="snake-border-wrap demo-dot-grid rounded-2xl relative"
+                  style={{ transformOrigin: 'center top' }}
+                >
+                  <InteractivePlayground />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
           </div>
         </section>
 
