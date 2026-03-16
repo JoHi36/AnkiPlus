@@ -431,7 +431,7 @@ export function InteractivePlayground() {
         style={{ borderRight: chatOpen ? '1px solid rgba(255,255,255,0.06)' : 'none' }}
       >
         {/* ── Header (inside card area) ── */}
-        <div className="sticky top-0 z-30 flex items-center justify-between px-5 h-11 bg-[#1A1A1A]" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="sticky top-0 z-30 flex items-center justify-between px-5 h-11 bg-[#1A1A1A]">
           <span className="text-xs font-bold text-white/50 tracking-wide">AnkiPlus</span>
           {/* Scenario selector (center) */}
           <div className="flex gap-0 p-[2px] bg-white/[0.04] rounded-md">

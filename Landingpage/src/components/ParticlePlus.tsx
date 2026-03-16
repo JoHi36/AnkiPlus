@@ -28,8 +28,8 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
   const calledCompleteRef = useRef(false);
 
   const PARTICLE_COUNT = 500;
-  const PLUS_ARM_LEN = 140;  // wider plus
-  const PLUS_ARM_WIDTH = 38; // thicker arms
+  const PLUS_ARM_LEN = 120;  // arm length
+  const PLUS_ARM_WIDTH = 70; // much thicker arms — clearly a plus, not a cross
   const FOCAL_LENGTH = 600;
 
   const GATHER_DURATION = 1.2;
