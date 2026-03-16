@@ -39,7 +39,7 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
   const initParticles = useCallback((w: number, h: number) => {
     const particles: Particle[] = [];
     const cx = w / 2;
-    const cy = h / 2;
+    const cy = h * 0.38; // shifted up so plus feels centered above the old Anki mock
 
     for (let i = 0; i < PARTICLE_COUNT; i++) {
       // Plus shape
