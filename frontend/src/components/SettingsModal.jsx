@@ -120,6 +120,10 @@ export default function SettingsModal({ isOpen, onClose, bridge, isReady, showCo
       } else if (payload.type === 'auth_error') {
         setError(payload.message || 'Authentifizierung fehlgeschlagen');
         setLoading(false);
+      } else if (payload.type === 'auth_logout') {
+        setCurrentAuthToken('');
+        setAuthStatus(prev => ({ ...prev, authenticated: false, hasToken: false }));
+        setQuotaStatus(null);
       }
     };
 
@@ -204,6 +208,15 @@ export default function SettingsModal({ isOpen, onClose, bridge, isReady, showCo
       }
     } catch (err) { setError('Fehler: ' + err.message); }
     finally { setMigrationLoading(false); }
+  };
+
+  const handleLogout = () => {
+    if (bridge && bridge.logout) bridge.logout();
+    setCurrentAuthToken('');
+    setAuthStatus({ authenticated: false, hasToken: false, backendUrl: authStatus.backendUrl, backendMode: authStatus.backendMode });
+    setQuotaStatus(null);
+    setAuthToken('');
+    setError('');
   };
 
   const handleManageSubscription = () => {
@@ -456,6 +469,15 @@ export default function SettingsModal({ isOpen, onClose, bridge, isReady, showCo
                       onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(255,255,255,0.8)'; }}
                       onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.color = 'rgba(255,255,255,0.6)'; }}>
                       <CreditCard size={16} strokeWidth={1.5} /> Abo verwalten
+                    </button>
+
+                    {/* Logout */}
+                    <button onClick={handleLogout}
+                      className="w-full px-4 py-2.5 rounded-xl text-xs font-medium flex items-center justify-center gap-2 transition-all"
+                      style={{ color: 'rgba(239,68,68,0.6)' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.06)'; e.currentTarget.style.color = 'rgba(239,68,68,0.8)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(239,68,68,0.6)'; }}>
+                      Abmelden & neu verbinden
                     </button>
                   </div>
                 )}

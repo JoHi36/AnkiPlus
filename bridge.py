@@ -1228,7 +1228,7 @@ class WebBridge(QObject):
                 # Token bereinigen: Entferne alle nicht-ASCII Zeichen (sollte nicht vorkommen bei Firebase Tokens)
                 token_clean = token.strip()
                 # Entferne alle Zeichen, die nicht in latin-1 encodiert werden können
-                token_clean = token_clean.encode('utf-8', errors='ignore').decode('latin-1', errors='ignore')
+                # Token ist bereits ein sauberer ASCII/Base64 JWT - keine Konvertierung nötig
                 
                 # Timeout erhöht auf 15 Sekunden (Cloud Functions können bei Cold Start länger brauchen)
                 response = requests.get(
@@ -1363,6 +1363,28 @@ class WebBridge(QObject):
             print(traceback.format_exc())
             return json.dumps({"success": False, "error": error_msg})
     
+    @pyqtSlot(result=str)
+    def logout(self):
+        """Löscht Auth-Token und setzt Auth-Status zurück"""
+        try:
+            update_config(
+                auth_token="",
+                refresh_token="",
+                auth_validated=False
+            )
+            print("logout: Auth-Token gelöscht")
+            # Benachrichtige Frontend
+            if self.widget and self.widget.web_view:
+                payload = {"type": "auth_logout", "message": "Abgemeldet"}
+                js_code = f"if (window.ankiReceive) {{ window.ankiReceive({json.dumps(payload)}); }}"
+                self.widget.web_view.page().runJavaScript(js_code)
+            return json.dumps({"success": True})
+        except Exception as e:
+            import traceback
+            print(f"Fehler in logout: {e}")
+            print(traceback.format_exc())
+            return json.dumps({"success": False, "error": str(e)})
+
     @pyqtSlot(str, result=str)
     def openUrl(self, url):
         """Öffnet eine URL im Standard-Browser"""
