@@ -2231,7 +2231,7 @@ Regeln für Suchstrategien:
                             "stream": False,
                             "history": [],
                             "temperature": 0.1,
-                            "maxOutputTokens": 300
+                            "maxOutputTokens": 2000
                         }
                         print(f"🔍 Router: Sende Request an {url} mit model={current_model}")
                         try:
