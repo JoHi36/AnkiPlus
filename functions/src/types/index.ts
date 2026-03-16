@@ -22,6 +22,8 @@ export interface ChatRequest {
   mode?: 'compact' | 'detailed';
   model?: string;
   stream?: boolean; // Optional: if false, return complete response instead of streaming
+  temperature?: number; // Optional: override temperature (0.0-2.0)
+  maxOutputTokens?: number; // Optional: override max output tokens
 }
 
 /**

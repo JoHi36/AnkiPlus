@@ -2186,31 +2186,24 @@ Regeln für Suchstrategien:
             
             # URLs für Router-Modell
             if use_backend:
-                # Backend-Modus: Verwende Backend-URL
+                # Backend-Modus: Verwende Backend-URL mit Modell-Fallbacks
                 backend_url = get_backend_url()
-                urls = [f"{backend_url}/chat"]
-                print(f"🔍 Router: Verwende Backend-Modus: {urls[0]}")
-                
-                # Backend-Format: message, model, mode (non-streaming für schnelle Antwort)
-                backend_data = {
-                    "message": router_prompt,
-                    "model": router_model,
-                    "mode": "compact",
-                    "stream": False,
-                    "history": []
-                }
+                router_models = [router_model, fallback_model]
+                # Erstelle (url, model) Paare für Fallback
+                url_model_pairs = [(f"{backend_url}/chat", m) for m in router_models]
+                print(f"🔍 Router: Verwende Backend-Modus, Models: {router_models}")
+
                 headers = self._get_auth_headers()
             else:
                 # Fallback: Direkte Gemini API (API-Key-Modus)
-                urls = [
-                    f"https://generativelanguage.googleapis.com/v1beta/models/{router_model}:generateContent?key={api_key}",
-                    f"https://generativelanguage.googleapis.com/v1/models/{router_model}:generateContent?key={api_key}",
-                    f"https://generativelanguage.googleapis.com/v1beta/models/{fallback_model}:generateContent?key={api_key}",
-                    f"https://generativelanguage.googleapis.com/v1/models/{fallback_model}:generateContent?key={api_key}",
+                url_model_pairs = [
+                    (f"https://generativelanguage.googleapis.com/v1beta/models/{router_model}:generateContent?key={api_key}", router_model),
+                    (f"https://generativelanguage.googleapis.com/v1/models/{router_model}:generateContent?key={api_key}", router_model),
+                    (f"https://generativelanguage.googleapis.com/v1beta/models/{fallback_model}:generateContent?key={api_key}", fallback_model),
+                    (f"https://generativelanguage.googleapis.com/v1/models/{fallback_model}:generateContent?key={api_key}", fallback_model),
                 ]
-                backend_data = None
                 headers = {"Content-Type": "application/json"}
-                
+
                 data = {
                     "contents": [{"role": "user", "parts": [{"text": router_prompt}]}],
                     "generationConfig": {
@@ -2218,21 +2211,44 @@ Regeln für Suchstrategien:
                         "maxOutputTokens": 200
                     }
                 }
-                
+
                 # Versuche responseMimeType (nur wenn API es unterstützt)
                 try:
                     data["generationConfig"]["responseMimeType"] = "application/json"
                 except:
                     pass
-            
+
             last_error = None
-            for url in urls:
+            for url, current_model in url_model_pairs:
                 try:
                     if use_backend:
                         # Backend-Request (non-streaming)
-                        response = requests.post(url, json=backend_data, headers=headers, timeout=10)
-                        response.raise_for_status()
+                        backend_data = {
+                            "message": router_prompt,
+                            "model": current_model,
+                            "mode": "compact",
+                            "stream": False,
+                            "history": [],
+                            "temperature": 0.1,
+                            "maxOutputTokens": 300
+                        }
+                        print(f"🔍 Router: Sende Request an {url} mit model={current_model}")
+                        try:
+                            response = requests.post(url, json=backend_data, headers=headers, timeout=15)
+                        except requests.exceptions.Timeout:
+                            print(f"⚠️ Router: Timeout nach 15s für {url}")
+                            continue
+                        except requests.exceptions.ConnectionError as ce:
+                            print(f"⚠️ Router: Verbindungsfehler: {ce}")
+                            continue
+
+                        print(f"🔍 Router: Response Status={response.status_code}")
+                        if response.status_code != 200:
+                            print(f"⚠️ Router: Fehler-Response: {response.text[:500]}")
+                            response.raise_for_status()
+
                         result = response.json()
+                        print(f"🔍 Router: Response-Keys: {list(result.keys())}, text_length={len(result.get('text', ''))}")
                         # Backend gibt direkt text zurück oder in einem anderen Format
                         # Prüfe Format
                         if "text" in result:
@@ -2259,11 +2275,36 @@ Regeln für Suchstrategien:
                         
                         # Parse JSON aus Text (wie bei direkter API)
                         import re
+                        print(f"🔍 Router: Raw text from backend: {text[:400]}")
                         text = re.sub(r'```json\s*', '', text)
                         text = re.sub(r'```\s*', '', text)
-                        json_match = re.search(r'\{.*?"search_needed".*?\}', text, re.DOTALL)
-                        if json_match:
-                            text = json_match.group(0)
+                        text = text.strip()
+                        # Extrahiere vollständiges JSON-Objekt mit Bracket-Matching
+                        json_start = text.find('{')
+                        if json_start >= 0:
+                            depth = 0
+                            in_str = False
+                            esc = False
+                            for i in range(json_start, len(text)):
+                                c = text[i]
+                                if esc:
+                                    esc = False
+                                    continue
+                                if c == '\\':
+                                    esc = True
+                                    continue
+                                if c == '"' and not esc:
+                                    in_str = not in_str
+                                    continue
+                                if in_str:
+                                    continue
+                                if c == '{':
+                                    depth += 1
+                                elif c == '}':
+                                    depth -= 1
+                                    if depth == 0:
+                                        text = text[json_start:i+1]
+                                        break
                         text = re.sub(r',(\s*[}\]])', r'\1', text)
                         
                         try:
@@ -2544,13 +2585,14 @@ Regeln für Suchstrategien:
                 
                 except requests.exceptions.HTTPError as e:
                     last_error = e
-                    if e.response.status_code == 404:
-                        continue
+                    print(f"⚠️ Router: HTTP-Fehler {e.response.status_code}: {e.response.text[:300]}")
+                    continue
                 except json.JSONDecodeError as e:
                     print(f"⚠️ Router: JSON-Parse-Fehler: {e}, Text: {text[:200]}")
                     continue
                 except Exception as e:
                     last_error = e
+                    print(f"⚠️ Router: Unerwarteter Fehler: {type(e).__name__}: {e}")
                     continue
             
             print(f"⚠️ Router: Alle URLs fehlgeschlagen, verwende Fallback")

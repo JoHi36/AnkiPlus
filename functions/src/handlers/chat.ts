@@ -190,11 +190,15 @@ export async function chatHandler(
     });
 
     // Build request payload
-    const maxTokens = model.includes('gemini-3-flash-preview') ? 8192 : 2000;
+    const defaultMaxTokens = model.includes('gemini-3-flash-preview') ? 8192 : 2000;
+    const temperature = (body.temperature !== undefined && body.temperature >= 0 && body.temperature <= 2)
+      ? body.temperature : 0.7;
+    const maxTokens = (body.maxOutputTokens !== undefined && body.maxOutputTokens > 0 && body.maxOutputTokens <= 8192)
+      ? body.maxOutputTokens : defaultMaxTokens;
     const requestData = {
       contents,
       generationConfig: {
-        temperature: 0.7,
+        temperature,
         maxOutputTokens: maxTokens,
       },
     };
