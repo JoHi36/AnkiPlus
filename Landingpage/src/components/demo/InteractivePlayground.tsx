@@ -415,11 +415,45 @@ export function InteractivePlayground() {
   // ─── Render ───
 
   return (
-    <div className="w-full max-w-6xl mx-auto h-[600px] md:h-[750px] bg-[#0F0F0F] rounded-2xl border border-white/[0.08] overflow-hidden relative" data-theme="dark">
+    <div className="w-full max-w-6xl mx-auto relative" data-theme="dark">
+      {/* Blue nebula glow behind widget */}
+      <div className="absolute -inset-20 pointer-events-none z-0" style={{
+        background: 'radial-gradient(ellipse 60% 40% at 50% 50%, rgba(10,132,255,0.12) 0%, rgba(10,132,255,0.04) 40%, transparent 70%)',
+        filter: 'blur(40px)',
+      }} />
+      <div className="relative z-10 h-[600px] md:h-[750px] bg-[#0F0F0F] rounded-2xl border border-white/[0.08] overflow-hidden">
 
       {/* ── Top Bar ── */}
       <div className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-5 h-11" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-        <span className="text-xs font-medium text-white/40">{scenario.card.deckName}</span>
+        {/* Scenario selector (left) */}
+        <div className="flex gap-0 p-[2px] bg-white/[0.04] rounded-md">
+          {Object.values(DEMO_SCENARIOS).map((s) => (
+            <button
+              key={s.id}
+              onClick={() => {
+                if (scenarioKey === s.id) return;
+                if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
+                setScenarioKey(s.id);
+                setState('QUESTION');
+                setShowAnswer(false);
+                setChatOpen(false);
+                setInputText('');
+                setChatMessages([]);
+                setMcResult(null);
+                setAutoRateEase(0);
+                setIsFocused(false);
+              }}
+              className={`px-2.5 py-[3px] rounded text-[11px] font-medium transition-colors border-none cursor-pointer ${
+                scenarioKey === s.id
+                  ? 'bg-white/[0.08] text-white/90 font-semibold'
+                  : 'bg-transparent text-white/30 hover:text-white/50'
+              }`}
+            >
+              {s.category}
+            </button>
+          ))}
+        </div>
+        {/* Center tabs */}
         <div className="flex gap-0 p-[2px] bg-white/[0.04] rounded-md">
           {['Stapel', 'Session', 'Statistik'].map((tab, i) => (
             <span
@@ -441,7 +475,7 @@ export function InteractivePlayground() {
 
       {/* ── Card Area ── */}
       <motion.div
-        className="absolute top-11 bottom-0 left-0 overflow-y-auto"
+        className="absolute top-11 bottom-0 left-0 overflow-y-auto bg-[#1A1A1A]"
         animate={{ width: chatOpen ? '60%' : '100%' }}
         transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
       >
@@ -450,33 +484,6 @@ export function InteractivePlayground() {
           className="absolute inset-0 opacity-[0.03] pointer-events-none"
           style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '24px 24px' }}
         />
-
-        {/* Scenario Selector */}
-        {state === 'QUESTION' && !chatOpen && (
-          <div className="absolute top-4 left-4 z-10 flex gap-0.5 p-[3px] bg-white/[0.04] rounded-lg">
-            {Object.values(DEMO_SCENARIOS).map((s) => (
-              <button
-                key={s.id}
-                onClick={() => {
-                  setScenarioKey(s.id);
-                  setState('QUESTION');
-                  setShowAnswer(false);
-                  setInputText('');
-                  setChatMessages([]);
-                  setMcResult(null);
-                  setAutoRateEase(0);
-                }}
-                className={`px-3 py-[5px] rounded-md text-xs font-medium border-none transition-colors ${
-                  scenarioKey === s.id
-                    ? 'bg-white/[0.08] text-white/[0.92] font-semibold'
-                    : 'bg-transparent text-white/[0.35] hover:text-white/[0.55]'
-                }`}
-              >
-                {s.category}
-              </button>
-            ))}
-          </div>
-        )}
 
         {/* Reset Button */}
         {state !== 'QUESTION' && !chatOpen && (
@@ -567,16 +574,10 @@ export function InteractivePlayground() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 12 }}
             transition={{ duration: 0.25, ease: 'easeOut' }}
-            className="absolute z-20"
-            style={{
-              bottom: '24px',
-              left: chatOpen ? '30%' : '50%',
-              transform: 'translateX(-50%)',
-              width: '100%',
-              maxWidth: '480px',
-              padding: '0 16px',
-            }}
+            className="absolute z-20 bottom-6 left-0 flex justify-center pointer-events-none"
+            style={{ width: chatOpen ? '60%' : '100%' }}
           >
+          <div className="w-full max-w-[480px] px-4 pointer-events-auto">
             <div
               className="relative backdrop-blur-xl rounded-2xl overflow-visible transition-all duration-300"
               style={{
@@ -603,6 +604,7 @@ export function InteractivePlayground() {
 
               {renderDockContent()}
             </div>
+          </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -615,7 +617,7 @@ export function InteractivePlayground() {
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
-            className="absolute right-0 top-11 bottom-0 w-[40%] bg-[#1A1A1A] flex flex-col z-20"
+            className="absolute right-0 top-11 bottom-0 w-[40%] bg-[#111111] flex flex-col z-20"
             style={{ borderLeft: '1px solid rgba(255,255,255,0.06)' }}
           >
             {/* Chat Messages */}
@@ -660,6 +662,7 @@ export function InteractivePlayground() {
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
     </div>
   );
 }

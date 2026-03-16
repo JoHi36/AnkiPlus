@@ -105,4 +105,39 @@ export const DEMO_SCENARIOS: Record<string, DemoScenario> = {
       aiResponse: "### Heimtücke (§ 211 Abs. 2 Gr. 2 Var. 1 StGB)\n\nHeimtücke ist das klausurrelevanteste Mordmerkmal.\n\n#### Definition (BGH)\nHeimtückisch handelt, wer die **Arg- und Wehrlosigkeit** des Opfers in feindlicher Willensrichtung bewusst zur Tötung ausnutzt.\n\n- **Arglos:** Wer sich zum Zeitpunkt der Tat keines Angriffs auf Leib oder Leben versieht.\n- **Wehrlos:** Wer infolge seiner Arglosigkeit in seiner Verteidigungsfähigkeit stark eingeschränkt ist.\n\n#### Wichtige Fallgruppen\n1. **Schlafende** \u2192 arglos (nehmen Arglosigkeit \"mit in den Schlaf\")\n2. **Bewusstlose** \u2192 nicht arglos (können keine Arglosigkeit bilden)\n3. **Kleinkinder** \u2192 str., h.M. (+) analog\n\n> **Klausur-Tipp:** Immer zuerst die Arglosigkeit prüfen. Die Wehrlosigkeit folgt daraus.",
     },
   },
+  business: {
+    id: 'business',
+    category: 'BWL',
+    card: {
+      front: 'Erkläre den Unterschied zwischen <span class="text-orange-400 font-bold">WACC</span> und <span class="text-teal-400">CAPM</span> bei der <span class="text-green-400">Unternehmensbewertung</span>.',
+      back: '<h3 class="text-orange-400 font-bold text-lg mb-4">WACC vs. CAPM</h3><p class="text-white/80 italic leading-relaxed"><strong>WACC</strong> = gewichtete durchschnittliche Kapitalkosten (EK + FK)<br/><strong>CAPM</strong> = Modell zur Bestimmung der EK-Rendite<br/><span class="text-green-400 underline">CAPM fließt als EK-Komponente in den WACC ein</span></p>',
+      tags: ['Corporate Finance'],
+      deckName: 'Corporate Finance',
+    },
+    evaluation: {
+      userTyping: 'WACC sind die Gesamtkapitalkosten und CAPM berechnet die Eigenkapitalkosten. CAPM ist Teil vom WACC.',
+      score: 85,
+      label: 'Good',
+      feedback: 'Kernaussage korrekt: CAPM bestimmt EK-Kosten, die in den WACC einfließen.',
+      missing: 'Formel-Bestandteile (risikofreier Zins, Beta, Marktprämie) und FK-Gewichtung nicht erwähnt.',
+    },
+    timer: {
+      seconds: 6,
+      ease: 3,
+      label: 'Good',
+      color: '#30d158',
+    },
+    mc: {
+      options: [
+        { id: 'A', text: 'WACC ist ein Teilmodell des CAPM', correct: false, explanation: 'Umgekehrt: CAPM liefert die EK-Rendite, die in den WACC einfließt.' },
+        { id: 'B', text: 'CAPM bestimmt die EK-Kosten, die als Komponente in den WACC eingehen', correct: true, explanation: 'Korrekt! WACC = EK-Anteil \u00d7 CAPM-Rendite + FK-Anteil \u00d7 FK-Zinssatz \u00d7 (1\u2013Steuersatz).' },
+        { id: 'C', text: 'Beide Modelle sind unabhängig voneinander', correct: false, explanation: 'Sie sind direkt verknüpft \u2013 CAPM liefert eine zentrale WACC-Inputgröße.' },
+        { id: 'D', text: 'WACC berücksichtigt nur Eigenkapital', correct: false, explanation: 'WACC gewichtet sowohl Eigen- als auch Fremdkapitalkosten.' },
+      ],
+    },
+    chat: {
+      userQuestion: 'Wie berechnet man den WACC konkret?',
+      aiResponse: "### WACC-Berechnung\n\nDer **Weighted Average Cost of Capital** berechnet sich als:\n\n`WACC = (E/V) \u00d7 Re + (D/V) \u00d7 Rd \u00d7 (1 \u2013 Tc)`\n\n#### Variablen:\n- **E/V** = Eigenkapitalanteil am Gesamtkapital\n- **Re** = Eigenkapitalkosten (via **CAPM**: `Re = Rf + \u03b2 \u00d7 (Rm \u2013 Rf)`)\n- **D/V** = Fremdkapitalanteil\n- **Rd** = Fremdkapitalkosten (Zinssatz)\n- **Tc** = Unternehmenssteuersatz (Tax Shield)\n\n#### Praxisbeispiel:\n- EK-Quote: 60%, FK-Quote: 40%\n- CAPM-Rendite: 8%, FK-Zins: 4%, Steuersatz: 30%\n- **WACC** = 0,6 \u00d7 8% + 0,4 \u00d7 4% \u00d7 0,7 = **5,92%**\n\n> **Merksatz:** Der WACC ist der Diskontierungssatz für die DCF-Bewertung \u2013 er spiegelt das Risiko des gesamten Unternehmens wider.",
+    },
+  },
 };
