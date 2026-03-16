@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Review</title>
+    <style>
+{{CSS}}
+
+/* ═══ Anki Native UI: Nuclear Hide ═══ */
+#top, #topbutt, #outer-top, .top-area,
+#bottom, #bottombutt, #outer-bottom, .bottom-area,
+#qa-controls, .bottom-bar, .top-bar,
+div[id^="top"]:not(#reviewer *),
+div[id^="bottom"]:not(#reviewer *) {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    max-height: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+    position: absolute !important;
+    left: -9999px !important;
+    opacity: 0 !important;
+}
+
+/* ═══ Scrollbar hide ═══ */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { scrollbar-width: none; -ms-overflow-style: none; }
+
+/* ═══ Canvas background: dot grid fading out radially ═══ */
+.canvas-bg {
+    background-color: #1A1A1A;
+    position: relative;
+}
+.canvas-bg::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image: radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px);
+    background-size: 24px 24px;
+    -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 0%, transparent 100%);
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 0%, transparent 100%);
+    pointer-events: none;
+    z-index: 0;
+}
+.canvas-content {
+    position: relative;
+    z-index: 1;
+}
+
+/* ═══ Unified Dock ═══ */
+#unified-dock {
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+#unified-dock.dock-hidden {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+    pointer-events: none;
+}
+
+/* Content sections — hidden by default, shown per state */
+.dock-section { display: none; }
+.dock-section.active { display: block; }
+
+/* Action row buttons — hover fills clean to container edges.
+   Border-radius is set inline per button by setActions() to match ChatInput.jsx exactly. */
+.dock-action {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 44px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    transition: background 0.1s;
+    padding: 0 12px;
+}
+.dock-action:hover {
+    background: rgba(255,255,255,0.04);
+}
+.dock-action .shortcut {
+    font-family: ui-monospace, monospace;
+    font-size: 10px;
+    color: rgba(255,255,255,0.18);
+    margin-left: 4px;
+}
+
+/* ═══ Animated Snake Border ═══ */
+@keyframes borderRotate {
+    from { --border-angle: 0deg; }
+    to   { --border-angle: 360deg; }
+}
+@property --border-angle {
+    syntax: '<angle>';
+    initial-value: 0deg;
+    inherits: false;
+}
+.snake-border {
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    padding: 1px;
+    background: conic-gradient(
+        from var(--border-angle) at 50% 100%,
+        rgba(10,132,255,0.0) 0deg,
+        rgba(10,132,255,0.5) 60deg,
+        rgba(10,132,255,0.1) 120deg,
+        rgba(10,132,255,0.0) 180deg,
+        rgba(10,132,255,0.1) 240deg,
+        rgba(10,132,255,0.5) 300deg,
+        rgba(10,132,255,0.0) 360deg
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    animation: borderRotate 4s linear infinite;
+}
+.snake-border.active {
+    opacity: 1;
+}
+    </style>
+</head>
+<body class="bg-base-100 text-base-content overflow-hidden m-0 p-0 {{IS_DARK_MODE}}">
+
+    <div id="reviewer" data-state="question" data-button-count="{{BUTTON_COUNT}}" class="h-screen flex flex-col overflow-hidden">
+
+        <!-- ═══ TOP BAR ═══ -->
+        <div class="flex items-center justify-between px-5 h-12 bg-base-100 z-50 flex-shrink-0">
+            <!-- Left: Deck Name (unified style) -->
+            <div class="flex-1 flex items-center">
+                <span style="font-size:11px;font-weight:600;color:rgba(255,255,255,0.35);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{DECK_NAME}}</span>
+            </div>
+            <!-- Center: Tabs -->
+            <div class="flex items-center gap-0.5 p-[3px] bg-base-content/[0.04] rounded-lg">
+                <button class="px-4 py-[5px] text-xs font-medium text-base-content/[0.35] bg-transparent border-none rounded-md cursor-pointer hover:text-base-content/[0.55] transition-colors"
+                        onclick="try{sessionStorage.removeItem('ap_session_active')}catch(e){};pycmd('deck:home')">Stapel</button>
+                <button class="px-4 py-[5px] text-xs font-semibold text-base-content bg-base-content/[0.08] border-none rounded-md cursor-pointer">Session</button>
+                <button class="px-4 py-[5px] text-xs font-medium text-base-content/[0.35] bg-transparent border-none rounded-md cursor-pointer hover:text-base-content/[0.55] transition-colors"
+                        onclick="try{sessionStorage.removeItem('ap_session_active')}catch(e){};pycmd('deck:stats')">Statistik</button>
+            </div>
+            <!-- Right: Stats (numbers only) -->
+            <div class="flex-1 flex justify-end items-center">
+                <div class="flex items-baseline gap-2.5">
+                    <span class="font-mono text-xs font-semibold" style="color: rgba(10,132,255,0.85)">{{PROGRESS_NEW}}</span>
+                    <span class="font-mono text-xs font-semibold" style="color: rgba(255,159,10,0.85)">{{PROGRESS_LEARNING}}</span>
+                    <span class="font-mono text-xs font-semibold" style="color: rgba(48,209,88,0.85)">{{PROGRESS_REVIEW}}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══ CANVAS ═══ -->
+        <main class="canvas-bg flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide">
+            <div class="canvas-content max-w-[720px] w-full mx-auto px-10 pt-10 pb-52">
+                <article class="anki-card">
+                    <section class="question">
+                        {{QUESTION}}
+                    </section>
+                    <div class="h-px my-8 opacity-0 transition-opacity duration-300" id="card-divider"
+                         style="background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08) 20%, rgba(255,255,255,0.08) 80%, transparent);"></div>
+                    <section class="hidden" id="answer-section">
+                        {{ANSWER}}
+                    </section>
+                </article>
+            </div>
+        </main>
+
+        <!-- ═══ UNIFIED FLOATING DOCK ═══ -->
+        <div id="unified-dock" class="fixed bottom-6 left-1/2 w-full max-w-[480px] px-5 z-[9999]"
+             style="transform: translateX(-50%);">
+            <div class="relative flex flex-col rounded-2xl"
+                 style="background: rgba(21,21,21,0.75); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 4px 24px rgba(0,0,0,0.4);">
+
+                <!-- Animated snake border for the entire dock (positioned outside via inset:-1px) -->
+                <div id="dock-snake-border" class="snake-border" style="inset:-1px;border-radius:17px;"></div>
+
+                <!-- ── Content Area (top) — swapped per state ── -->
+
+                <!-- Input: QUESTION state -->
+                <div id="dc-input" class="dock-section">
+                    <div class="relative px-4 py-3">
+                        <textarea id="user-answer"
+                                  class="w-full min-h-[24px] max-h-[120px] p-0 pr-10 bg-transparent border-none text-base-content text-[15px] leading-relaxed resize-none outline-none placeholder:text-base-content/[0.25]"
+                                  placeholder="Antwort eingeben..."
+                                  rows="1"
+                                  onfocus="document.getElementById('dock-snake-border').classList.add('active')"
+                                  onblur="document.getElementById('dock-snake-border').classList.remove('active')"></textarea>
+                        <button id="send-btn"
+                                class="absolute right-3 bottom-2.5 w-[30px] h-[30px] rounded-full bg-primary flex items-center justify-center border-none cursor-pointer opacity-0 scale-75 pointer-events-none transition-all duration-150"
+                                onclick="submitTextAnswer()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Timer/Rating: ANSWER state -->
+                <div id="dc-timer" class="dock-section">
+                    <div id="timer-display" class="flex items-center justify-center gap-3 px-4 py-3 cursor-pointer select-none"
+                         onclick="cycleRating()">
+                        <span id="timer-seconds" class="font-mono text-xl font-bold text-base-content/[0.5]"></span>
+                        <span id="timer-rating" class="text-xs font-semibold uppercase tracking-wide"></span>
+                        <span class="text-[10px] text-base-content/[0.12] ml-1">klick zum Ändern</span>
+                    </div>
+                </div>
+
+                <!-- Eval result: EVALUATED / MC_RESULT state -->
+                <div id="dc-eval" class="dock-section">
+                    <div id="eval-result" class="px-4 pt-3 pb-1"></div>
+                </div>
+
+                <!-- MC options: MC_ACTIVE state -->
+                <div id="dc-mc" class="dock-section">
+                    <div id="mc-area" class="flex flex-col p-1 gap-0.5"></div>
+                </div>
+
+                <!-- Loading: EVALUATING / MC_LOADING state -->
+                <div id="dc-loading" class="dock-section">
+                    <div class="flex items-center justify-center py-4 gap-2">
+                        <span class="loading loading-dots loading-sm text-base-content/[0.3]"></span>
+                        <span id="loading-text" class="text-[13px] text-base-content/[0.35]">KI bewertet</span>
+                    </div>
+                </div>
+
+                <!-- ── Action Row (bottom) — always present, content changes ── -->
+                <div id="dock-actions" class="flex items-center" style="border-top: 1px solid rgba(255,255,255,0.06);">
+                    <!-- Filled dynamically by JS -->
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ═══ SETTINGS WIDGET — Fixed bottom-right ═══ -->
+    <style>
+        .ap-settings-btn {
+            display:flex;align-items:center;gap:7px;padding:6px 11px;border-radius:6px;
+            background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);
+            cursor:pointer;font-family:inherit;transition:all 0.15s ease;
+        }
+        .ap-settings-btn:hover {
+            background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.08);
+        }
+        .ap-settings-btn:hover .ap-uname { color:rgba(255,255,255,0.5)!important; }
+        .ap-settings-btn:active { transform:scale(0.97); }
+    </style>
+    <div style="position:fixed;bottom:0;right:0;padding:12px 18px;z-index:9998;">
+        <button class="ap-settings-btn" onclick="pycmd('settings')">
+            <span class="ap-uname" style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.3);white-space:nowrap;transition:color 0.15s;">AnkiPlus</span>
+            {{ACCOUNT_BADGE_HTML}}
+        </button>
+    </div>
+
+    <script>
+        window.cardInfo = {{CARD_INFO}};
+        window.buttonCount = {{BUTTON_COUNT}};
+{{JS}}
+    </script>
+</body>
+</html>

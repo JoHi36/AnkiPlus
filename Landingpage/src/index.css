@@ -1,0 +1,102 @@
+/* CSS Variables - Landing Page Theme (aligned with design-system.css) */
+:root {
+  /* Backgrounds — Elevation Stack */
+  --anki-bg: #1A1A1A;
+  --anki-surface: rgba(255,255,255,0.03);
+  --anki-surface-elevated: #222224;
+
+  /* Borders */
+  --anki-border: rgba(255,255,255,0.06);
+  --anki-border-medium: rgba(255,255,255,0.12);
+
+  /* Text — Opacity Hierarchy */
+  --anki-text-primary: rgba(255,255,255,0.88);
+  --anki-text-secondary: rgba(255,255,255,0.45);
+  --anki-text-tertiary: rgba(255,255,255,0.22);
+
+  /* Accent */
+  --anki-accent: #0a84ff;
+  --anki-teal-400: #2dd4bf;
+  --anki-teal-500: #14b8a6;
+  --anki-teal-900: #134e4a;
+
+  /* Spacing */
+  --spacing-section: 2.5rem;
+  --spacing-section-md: 5rem;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base Styles */
+@layer base {
+  * {
+    @apply box-border;
+  }
+
+  html, body {
+    @apply m-0 p-0 w-full h-full;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+  }
+
+  body {
+    background: #1A1A1A;
+    color: rgba(255,255,255,0.88);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root {
+    @apply w-full h-full;
+  }
+}
+
+/* Custom Scrollbar */
+@layer utilities {
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.08);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,0.14);
+  }
+}
+
+/* Surface card utility */
+@layer components {
+  .surface-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .surface-card:hover {
+    background: rgba(255,255,255,0.05);
+    border-color: rgba(255,255,255,0.10);
+  }
+}
+
+/* Dot grid background — same as app canvas */
+.dot-grid {
+  position: relative;
+}
+.dot-grid::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-image: radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 0%, transparent 100%);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 0%, transparent 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+

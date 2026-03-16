@@ -1,0 +1,248 @@
+/**
+ * Deep Link Utilities
+ * Generates deep links for Anki plugin authentication
+ * Supports HTTP POST (preferred) and file-based token transfer (fallback)
+ */
+
+const PLUGIN_SERVER_URL = 'http://127.0.0.1:8765';
+
+/**
+ * Sends token directly to plugin via HTTP POST (preferred method)
+ * @param idToken - Firebase ID Token
+ * @param refreshToken - Firebase Refresh Token (optional)
+ * @returns Promise that resolves to success status
+ */
+export async function sendTokenToPlugin(
+  idToken: string,
+  refreshToken?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(`${PLUGIN_SERVER_URL}/auth/callback`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        token: idToken,
+        refreshToken: refreshToken || '',
+      }),
+      // Wichtig: Kein 'no-cors' hier, wir brauchen die Response
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        error: errorData.error || `HTTP ${response.status}`,
+      };
+    }
+
+    const data = await response.json();
+    return {
+      success: data.success || false,
+      error: data.error,
+    };
+  } catch (error: any) {
+    // Network error - plugin server might not be running
+    const errorMsg = error.message || String(error);
+    
+    // Prüfe auf verschiedene Fehlertypen
+    if (errorMsg.includes('Failed to fetch') || 
+        errorMsg.includes('NetworkError') ||
+        errorMsg.includes('ERR_CONNECTION_REFUSED') ||
+        errorMsg.includes('ERR_BLOCKED_BY_CLIENT')) {
+      return {
+        success: false,
+        error: 'Plugin-Server nicht erreichbar. Stelle sicher, dass Anki läuft und das Plugin aktiviert ist.',
+      };
+    }
+    
+    // Mixed Content Error (HTTPS -> HTTP)
+    if (errorMsg.includes('Mixed Content') || errorMsg.includes('blocked:mixed-content')) {
+      return {
+        success: false,
+        error: 'Browser blockiert Verbindung (Mixed Content). Verwende die Token-Datei als Fallback.',
+      };
+    }
+    
+    return {
+      success: false,
+      error: errorMsg || 'Unbekannter Fehler',
+    };
+  }
+}
+
+/**
+ * Checks if plugin server is available
+ * @returns Promise that resolves to true if server is reachable
+ */
+export async function checkPluginServer(): Promise<boolean> {
+  try {
+    const response = await fetch(`${PLUGIN_SERVER_URL}/health`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(2000), // 2 second timeout
+      mode: 'no-cors', // Bypass CORS for health check (we only care if server responds)
+    });
+    // With no-cors mode, we can't read the response, but if it doesn't throw, server is reachable
+    return true;
+  } catch (error: any) {
+    // Check for specific error types
+    if (error.name === 'TypeError' && error.message?.includes('Failed to fetch')) {
+      // Network error - server not reachable
+      console.log('⚠️ Plugin-Server nicht erreichbar (Netzwerkfehler)');
+    } else if (error.name === 'AbortError') {
+      // Timeout
+      console.log('⚠️ Plugin-Server Health-Check Timeout');
+    } else {
+      console.log('⚠️ Plugin-Server Health-Check Fehler:', error.message);
+    }
+    return false;
+  }
+}
+
+/**
+ * Creates and downloads a token file for the Anki plugin (fallback method)
+ * @param idToken - Firebase ID Token
+ * @param refreshToken - Firebase Refresh Token (optional)
+ * @returns Promise that resolves to success status
+ */
+export async function writeTokenToFile(
+  idToken: string,
+  refreshToken?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Erstelle JSON-Datei mit Token-Daten
+    const tokenData = {
+      token: idToken,
+      refreshToken: refreshToken || '',
+      timestamp: Date.now(),
+    };
+    
+    // Erstelle Blob mit JSON-Daten
+    const blob = new Blob([JSON.stringify(tokenData, null, 2)], {
+      type: 'application/json',
+    });
+    
+    // Erstelle Download-Link
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '.anki-auth-token';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    
+    // Cleanup nach kurzer Verzögerung
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 100);
+    
+    return {
+      success: true,
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error.message || 'Fehler beim Erstellen der Token-Datei',
+    };
+  }
+}
+
+/**
+ * Generates a deep link URL for Anki plugin authentication (fallback method)
+ * @param idToken - Firebase ID Token
+ * @param refreshToken - Firebase Refresh Token (optional, can be empty)
+ * @returns Deep link URL: anki://auth?token=...
+ */
+export function generateDeepLink(
+  idToken: string,
+  refreshToken?: string
+): string {
+  const params = new URLSearchParams({
+    token: idToken,
+  });
+  
+  // Only add refreshToken if it's not empty
+  if (refreshToken && refreshToken.trim() !== '') {
+    params.append('refreshToken', refreshToken);
+  }
+  
+  return `anki://auth?${params.toString()}`;
+}
+
+/**
+ * Attempts to open a deep link using multiple methods
+ * @param url - Deep link URL
+ * @returns true if attempted, false if not supported
+ */
+export function openDeepLink(url: string): boolean {
+  try {
+    // Method 1: Try using a hidden anchor tag (works better in Safari)
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.style.display = 'none';
+    document.body.appendChild(anchor);
+    
+    // Try to click it
+    anchor.click();
+    
+    // Clean up after a short delay
+    setTimeout(() => {
+      document.body.removeChild(anchor);
+    }, 100);
+    
+    // Method 2: Fallback to window.location (for other browsers)
+    // Note: Safari may show an error, but we'll try anyway
+    setTimeout(() => {
+      try {
+        window.location.href = url;
+      } catch (e) {
+        // Safari will fail here, but that's expected
+        console.log('Deep link opening may not be supported in this browser');
+      }
+    }, 50);
+    
+    return true;
+  } catch (error) {
+    console.error('Error opening deep link:', error);
+    // Last resort: try window.location directly
+    try {
+      window.location.href = url;
+      return true;
+    } catch (e) {
+      console.error('All deep link methods failed:', e);
+      return false;
+    }
+  }
+}
+
+/**
+ * Copies text to clipboard
+ * @param text - Text to copy
+ * @returns Promise that resolves when copied
+ */
+export async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (error) {
+    console.error('Error copying to clipboard:', error);
+    // Fallback for older browsers
+    try {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.opacity = '0';
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      return true;
+    } catch (fallbackError) {
+      console.error('Fallback copy failed:', fallbackError);
+      return false;
+    }
+  }
+}
+

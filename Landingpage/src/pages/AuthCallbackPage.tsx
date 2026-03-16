@@ -1,0 +1,256 @@
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { sendTokenToPlugin, checkPluginServer, copyToClipboard } from '../utils/deepLink';
+import { CheckCircle2, Copy, Loader2, AlertCircle, ExternalLink } from 'lucide-react';
+
+type TransferStatus = 'checking' | 'sending' | 'success' | 'manual';
+
+export function AuthCallbackPage() {
+  const { user, getAuthToken, getRefreshToken } = useAuth();
+  const navigate = useNavigate();
+  const [idToken, setIdToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [transferStatus, setTransferStatus] = useState<TransferStatus>('checking');
+  const [transferError, setTransferError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const connectPlugin = async () => {
+      if (!user) {
+        navigate('/login');
+        return;
+      }
+
+      try {
+        // Get ID token and refresh token
+        const token = await getAuthToken();
+        if (!token) {
+          setError('Token-Generierung fehlgeschlagen');
+          setLoading(false);
+          return;
+        }
+
+        setIdToken(token);
+        const refreshToken = getRefreshToken() || '';
+
+        // Try automatic transfer to plugin
+        setTransferStatus('checking');
+        const serverAvailable = await checkPluginServer();
+
+        if (serverAvailable) {
+          setTransferStatus('sending');
+          const result = await sendTokenToPlugin(token, refreshToken);
+
+          if (result.success) {
+            setTransferStatus('success');
+            setLoading(false);
+            return;
+          } else {
+            // Plugin server reachable but transfer failed
+            setTransferError(result.error || 'Transfer fehlgeschlagen');
+            setTransferStatus('manual');
+          }
+        } else {
+          // Plugin server not reachable — show manual instructions
+          setTransferStatus('manual');
+        }
+
+        setLoading(false);
+      } catch (err: any) {
+        setError('Fehler: ' + err.message);
+        setLoading(false);
+      }
+    };
+
+    connectPlugin();
+  }, [user, getAuthToken, getRefreshToken, navigate]);
+
+  const handleCopyToken = async () => {
+    if (idToken) {
+      const success = await copyToClipboard(idToken);
+      if (success) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 3000);
+      }
+    }
+  };
+
+  const handleRetryTransfer = async () => {
+    if (!idToken) return;
+    setTransferStatus('sending');
+    setTransferError(null);
+    const refreshToken = getRefreshToken() || '';
+    const result = await sendTokenToPlugin(idToken, refreshToken);
+    if (result.success) {
+      setTransferStatus('success');
+    } else {
+      setTransferError(result.error || 'Transfer fehlgeschlagen');
+      setTransferStatus('manual');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#030303] text-white flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-teal-500 mx-auto mb-4" />
+          <p className="text-neutral-400">
+            {transferStatus === 'checking' && 'Suche Anki Plugin...'}
+            {transferStatus === 'sending' && 'Verbinde mit Anki...'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-[#030303] text-white flex items-center justify-center p-6">
+        <div className="w-full max-w-md bg-[#0A0A0A] border border-red-500/20 rounded-2xl p-8">
+          <div className="flex items-start gap-3 mb-4">
+            <AlertCircle className="w-6 h-6 text-red-400 flex-shrink-0" />
+            <div>
+              <h2 className="text-xl font-bold mb-2">Fehler</h2>
+              <p className="text-red-400">{error}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/login')}
+            className="w-full py-3 bg-teal-500 hover:bg-teal-400 text-black font-semibold rounded-lg transition-colors"
+          >
+            Zurück zum Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Success — auto-connected
+  if (transferStatus === 'success') {
+    return (
+      <div className="min-h-screen bg-[#030303] text-white flex items-center justify-center p-6 relative">
+        <div className="fixed top-0 left-0 w-full h-[500px] bg-green-900/10 blur-[120px] pointer-events-none z-0" />
+        <div className="w-full max-w-md relative z-10">
+          <div className="bg-[#0A0A0A] border border-green-500/20 rounded-2xl p-8 shadow-2xl text-center">
+            <div className="w-16 h-16 bg-green-500/10 border border-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle2 className="w-8 h-8 text-green-400" />
+            </div>
+            <h2 className="text-2xl font-bold mb-2">Verbunden!</h2>
+            <p className="text-neutral-400 text-sm mb-6">
+              Dein Anki Plugin wurde automatisch mit deinem Account verbunden.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="flex-1 py-3 bg-white/5 border border-white/10 text-white font-medium rounded-lg hover:bg-white/10 transition-colors"
+              >
+                Dashboard
+              </button>
+              <button
+                onClick={() => navigate('/')}
+                className="flex-1 py-3 bg-teal-500 hover:bg-teal-400 text-black font-semibold rounded-lg transition-colors"
+              >
+                Startseite
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Manual fallback — plugin not reachable or transfer failed
+  return (
+    <div className="min-h-screen bg-[#030303] text-white flex items-center justify-center p-6 relative">
+      <div className="fixed top-0 left-0 w-full h-[500px] bg-teal-900/10 blur-[120px] pointer-events-none z-0" />
+
+      <div className="w-full max-w-md relative z-10">
+        <div className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-8 shadow-2xl">
+          {/* Header */}
+          <div className="text-center mb-6">
+            <div className="w-16 h-16 bg-amber-500/10 border border-amber-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <ExternalLink className="w-8 h-8 text-amber-400" />
+            </div>
+            <h2 className="text-2xl font-bold mb-2">Manuell verbinden</h2>
+            <p className="text-neutral-400 text-sm">
+              {transferError
+                ? 'Automatische Verbindung fehlgeschlagen. Kopiere den Token manuell.'
+                : 'Anki Plugin nicht erreichbar. Stelle sicher, dass Anki läuft.'}
+            </p>
+          </div>
+
+          {/* Retry Button */}
+          <button
+            onClick={handleRetryTransfer}
+            className="w-full py-3 mb-4 bg-teal-500/10 border border-teal-500/20 text-teal-400 font-medium rounded-lg hover:bg-teal-500/20 transition-colors text-sm"
+          >
+            Erneut automatisch verbinden
+          </button>
+
+          {/* Token Section */}
+          <div className="space-y-4 mb-6">
+            <div>
+              <label className="block text-sm font-medium mb-2 text-neutral-300">
+                Auth-Token
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={idToken || ''}
+                  readOnly
+                  className="flex-1 px-4 py-3 bg-[#111] border border-white/10 rounded-lg text-white text-xs font-mono"
+                />
+                <button
+                  onClick={handleCopyToken}
+                  className={`px-4 py-3 border rounded-lg transition-colors ${
+                    copied
+                      ? 'bg-green-500/10 border-green-500/20 text-green-400'
+                      : 'bg-white/5 border-white/10 hover:bg-white/10'
+                  }`}
+                  title="Token kopieren"
+                >
+                  {copied ? <CheckCircle2 className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                </button>
+              </div>
+              {copied && (
+                <p className="mt-2 text-sm text-green-400 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Token kopiert! Füge ihn in Anki ein.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Instructions */}
+          <div className="mb-6 p-4 bg-teal-500/10 border border-teal-500/20 rounded-lg">
+            <p className="text-sm text-teal-300 mb-3 font-medium">So verbindest du manuell:</p>
+            <ol className="text-xs text-neutral-400 space-y-2 list-decimal list-inside">
+              <li><strong>Kopiere den Token</strong> oben</li>
+              <li><strong>Öffne Anki</strong> und das Chat-Panel (Cmd+I / Ctrl+I)</li>
+              <li><strong>Öffne Einstellungen</strong> → Profil Tab</li>
+              <li><strong>Füge den Token ein</strong> und klicke "Token verifizieren"</li>
+            </ol>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3">
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="flex-1 py-3 bg-white/5 border border-white/10 text-white font-medium rounded-lg hover:bg-white/10 transition-colors"
+            >
+              Dashboard
+            </button>
+            <button
+              onClick={() => navigate('/')}
+              className="flex-1 py-3 bg-teal-500 hover:bg-teal-400 text-black font-semibold rounded-lg transition-colors"
+            >
+              Startseite
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

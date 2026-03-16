@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Anki Chatbot</title>
+  <!-- QWebChannel für Anki-Bridge (nur in Anki verfügbar) -->
+  <script>
+    // Nur laden wenn in Anki (qrc:// Protokoll verfügbar)
+    // Im Browser wird das Script nicht geladen, was OK ist
+    try {
+      if (window.location.protocol === 'qrc:') {
+        const script = document.createElement('script');
+        script.src = 'qrc:///qtwebchannel/qwebchannel.js';
+        script.onerror = () => console.log('QWebChannel nicht verfügbar (Browser-Modus)');
+        document.head.appendChild(script);
+      }
+    } catch (e) {
+      console.log('QWebChannel kann nicht geladen werden (Browser-Modus)');
+    }
+  </script>
+  <!-- CACHE BUSTING: Append timestamp to force reload -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <script type="module" crossorigin src="./assets/main.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/main.css">
+</head>
+<body>
+  <div id="root"></div>
+</body>
+</html>
+

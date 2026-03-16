@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Reviewer-specific overrides that DaisyUI doesn't handle:
+ * - Anki native UI hiding
+ * - Card content transparency (for AMBOSS decks etc.)
+ * - State-based visibility
+ */
+
+/* Hide native Anki chrome */
+#outer-top, .top-area, #top, #topbutt,
+div[id^="top"]:not(#reviewer *) {
+    display: none !important;
+    height: 0 !important;
+    position: absolute !important;
+    left: -9999px !important;
+}
+
+#bottom, #bottombutt, #qa-controls, .bottom-bar, .bottom-area, #outer-bottom,
+div[id^="bottom"]:not(.dock):not(.dock-wrapper) {
+    display: none !important;
+    height: 0 !important;
+    position: absolute !important;
+    left: -9999px !important;
+}
+
+/* Larger card content font */
+.question, .answer, #answer-section {
+    font-size: 20px !important;
+    line-height: 1.7 !important;
+}
+
+/* Force transparent card content backgrounds */
+.question, .answer, .card, .card.nightMode {
+    background: transparent !important;
+    background-color: transparent !important;
+}
+
+.question *, .answer *, .card * {
+    background: transparent !important;
+    background-color: transparent !important;
+}
+
+/* Preserve special elements (AMBOSS buttons, images, etc.) */
+.question img, .answer img,
+.question table, .answer table,
+.question pre, .answer pre,
+.question code, .answer code,
+.question button, .answer button,
+.question [class*="button-"], .answer [class*="button-"],
+.question .zusatz, .answer .zusatz,
+.question .hammer, .answer .hammer,
+.question .klinik, .answer .klinik,
+.question .histo, .answer .histo {
+    background: initial !important;
+    background-color: initial !important;
+}

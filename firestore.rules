@@ -1,0 +1,57 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users collection - users can read their own data, admins can write
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false; // Only backend can write
+    }
+    
+    // Usage collection - users can read their own usage, backend writes
+    match /usage/{userId}/daily/{date} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false; // Only backend can write
+    }
+    
+    // Processed events collection - only backend can read/write (for webhook idempotency)
+    match /processed_events/{eventId} {
+      allow read, write: if false; // Only backend can access
+    }
+    
+    // Anonymous users collection - only backend can read/write
+    match /anonymous_users/{deviceId}/daily/{date} {
+      allow read, write: if false; // Only backend can access
+    }
+    
+    // Testimonials collection - Hall of Fame
+    match /testimonials/{testimonialId} {
+      // Anyone can read approved testimonials
+      allow read: if resource.data.status == 'approved';
+      
+      // Users can create their own testimonial (will be moderated)
+      allow create: if request.auth != null 
+                   && request.auth.uid == request.resource.data.userId
+                   && request.resource.data.status == 'pending'
+                   && request.resource.data.text.size() <= 500
+                   && request.resource.data.text.size() > 0;
+      
+      // Users can update their own testimonial (only if pending or approved)
+      allow update: if request.auth != null 
+                   && request.auth.uid == resource.data.userId
+                   && (resource.data.status == 'pending' || resource.data.status == 'approved')
+                   && request.resource.data.status == 'pending'
+                   && request.resource.data.text.size() <= 500
+                   && request.resource.data.text.size() > 0;
+      
+      // Users can delete their own testimonial
+      allow delete: if request.auth != null 
+                   && request.auth.uid == resource.data.userId;
+      
+      // Backend can update status (moderation)
+      allow write: if false; // Only backend can update status/approve
+    }
+  }
+}
+
+
+

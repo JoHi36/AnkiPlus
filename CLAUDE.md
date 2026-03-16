@@ -1,0 +1,270 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Overview
+
+This is an Anki addon that provides AI-powered learning assistance through a chat interface. The addon integrates a modern React frontend (built with Vite) into Anki using PyQt6's QWebEngineView, creating a seamless side panel experience within the Anki desktop application.
+
+## Development Commands
+
+### Frontend Development
+
+```bash
+cd frontend
+npm install                    # Install dependencies
+npm run dev                    # Start development server (localhost:3000)
+npm run build                  # Build for production (outputs to web/)
+npm run build:dev              # Build in development mode
+```
+
+**Important**: The frontend is developed in a browser first, then built and loaded into Anki. The dev server includes mock bridges for testing without Anki running.
+
+### Testing in Anki
+
+After building the frontend, restart Anki to load the new UI. The addon loads the built files from the `web/` directory.
+
+## Architecture
+
+### High-Level Structure
+
+This addon bridges three major technologies:
+
+1. **Python/Qt Backend**: Anki addon integration, AI API handling, session management
+2. **React Frontend**: Modern UI with Tailwind CSS + DaisyUI, markdown rendering, streaming responses
+3. **Qt WebChannel Communication**: Message queue system for bidirectional Python ↔ JavaScript communication
+
+### Key Design Patterns
+
+**Lazy Widget Creation**: UI components are created on first use and cached globally to improve startup performance.
+
+**Message Queue System**: Instead of QWebChannel (which has timing issues), a polling-based message queue runs every 100ms to relay messages between Python and JavaScript.
+
+**Thread-Based AI Requests**: AI API calls run in QThread to keep the UI responsive, with support for streaming responses via signals.
+
+**Custom Reviewer HTML Replacement**: Uses `webview_will_set_content` hook to replace Anki's native reviewer with a custom minimalist UI.
+
+### Communication Flow
+
+**JavaScript → Python**:
+1. React calls `bridge.sendMessage(data)`
+2. JavaScript adds message to queue: `window.ankiBridge.addMessage(type, data)`
+3. Python polls queue every 100ms via QTimer
+4. Python routes message to appropriate handler
+
+**Python → JavaScript**:
+1. Python creates JSON payload
+2. Calls `web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")`
+3. React's `useAnki` hook receives and processes the message
+
+## Critical File Locations
+
+### Python Backend
+
+- `__init__.py` (460 lines): Main entry point, hook registration, addon initialization, toolbar/UI hiding logic
+- `bridge.py`: WebBridge class with 35+ `@pyqtSlot` methods for JS communication
+- `widget.py`: ChatbotWidget class, QWebEngineView setup, message queue polling, AI request handling
+- `ui_setup.py`: QDockWidget creation, keyboard shortcuts (Cmd/Ctrl+I), toolbar button, menu items
+- `anki_global_theme.py` (747 lines): Application-wide dark theme styling, continuous re-application logic
+- `ai_handler.py`: API integration for OpenAI, Anthropic (Claude), and Google (Gemini)
+- `config.py`: Configuration management (API keys, model preferences, stored in config.json)
+- `custom_reviewer/__init__.py` (430 lines): Custom reviewer HTML/CSS/JS replacement
+
+### React Frontend
+
+- `frontend/src/App.jsx`: Main React component, state management, message handling
+- `frontend/src/hooks/useAnki.js`: Bridge wrapper hook for Python communication
+- `frontend/src/components/`: React UI components (Header, ChatMessage, ChatInput, etc.)
+- `frontend/vite.config.js`: Vite build configuration (relative paths for local file loading)
+- `frontend/tailwind.config.js`: Tailwind + DaisyUI styling configuration
+
+### Build Output
+
+- `web/`: Production build output (static files loaded by QWebEngineView)
+- `web/index.html`: Entry point HTML loaded by Anki
+
+## Python ↔ JavaScript Bridge Methods
+
+The WebBridge exposes these methods to JavaScript (all defined in `bridge.py`):
+
+**AI & Messaging**: `sendMessage()`, `cancelRequest()`, `setModel()`, `generateSectionTitle()`
+
+**Settings**: `openSettings()`, `closePanel()`, `saveSettings()`, `getCurrentConfig()`, `fetchModels()`, `getAITools()`, `saveAITools()`
+
+**Deck Management**: `getCurrentDeck()`, `getAvailableDecks()`, `openDeck()`, `getDeckStats()`, `openDeckBrowser()`
+
+**Card Operations**: `getCardDetails()`, `goToCard()`, `previewCard()`, `showAnswer()`, `hideAnswer()`, `saveMultipleChoice()`, `loadMultipleChoice()`, `hasMultipleChoice()`
+
+**Sessions**: `loadSessions()`, `saveSessions()`
+
+**Authentication**: `authenticate()`, `getAuthStatus()`, `getAuthToken()`, `refreshAuth()`, `handleAuthDeepLink()`
+
+**Media**: `searchImage()`, `fetchImage()`, `openUrl()`
+
+## Anki Integration Hooks
+
+The addon uses these Anki hooks (registered in `__init__.py`):
+
+- `profile_did_open`: Initialize addon UI, theme, custom reviewer
+- `profile_will_close`: Cleanup (restore native UI elements)
+- `reviewer_did_show_question`: Track current card, emit deck selection events
+- `state_will_change`: Smart toolbar management (hide in review mode, show elsewhere)
+- `webview_will_set_content`: Replace reviewer HTML with custom UI (when custom reviewer is enabled)
+
+## Configuration
+
+Configuration is stored in `config.json` (not in repository):
+
+- API keys for OpenAI, Anthropic, Google
+- Selected AI provider and model
+- Firebase/backend authentication tokens
+- AI tool settings (images, diagrams, molecules)
+- Custom reviewer toggle (`use_custom_reviewer`)
+
+## Important Implementation Details
+
+### Qt Widget Hierarchy
+
+```
+mw (Anki Main Window)
+├── toolbar.web (QWebEngineView - the actual toolbar widget)
+├── centralWidget
+│   └── QDockWidget (chatbot panel - right side)
+│       └── ChatbotWidget (QWidget)
+│           └── QWebEngineView (loads React app)
+└── reviewer (when in review state)
+```
+
+**Critical**: `mw.toolbar` is NOT a QWidget - only `mw.toolbar.web` has Qt methods like `hide()`, `show()`, `setFixedHeight()`.
+
+### Global Theme System
+
+The addon applies a comprehensive dark theme to ALL Anki UI elements (not just the chatbot panel). This is done via `anki_global_theme.py` which:
+
+- Sets global stylesheet on QApplication
+- Re-applies on every state change (Anki frequently resets styles)
+- Uses a 2-second QTimer for continuous re-styling to ensure consistency
+
+### Custom Reviewer
+
+When enabled, the custom reviewer:
+
+1. Hooks into `webview_will_set_content` before Anki renders HTML
+2. Replaces `web_content.body` with custom HTML from `custom_reviewer/template.html`
+3. Injects custom CSS from `custom_reviewer/styles.css` (Jony Ive-inspired minimalism)
+4. Injects custom JS from `custom_reviewer/interactions.js` (keyboard shortcuts, animations)
+5. Hides native Anki toolbar and bottom bar at Qt level using `hide()` and `setFixedHeight(0)`
+
+### HTML Caching
+
+Custom reviewer caches CSS/JS/HTML files in memory (`_css_cache`, `_js_cache`, `_html_cache`) to avoid disk I/O on every card render.
+
+## AI Provider Support
+
+The addon supports three AI providers with live model fetching:
+
+1. **OpenAI**: Models fetched from API (GPT-4o, GPT-4 Turbo, GPT-3.5)
+2. **Anthropic**: Static model list (Claude 3.5 Sonnet, Claude 3 Opus/Sonnet/Haiku) - API doesn't provide model list endpoint
+3. **Google Gemini**: Models fetched from API (Gemini 1.5 Pro/Flash, Gemini Pro)
+
+API calls are handled in `ai_handler.py` with streaming support and proper error handling.
+
+## Frontend Technology Stack
+
+- **React 18**: Component-based UI framework
+- **Vite**: Ultra-fast build tool and dev server
+- **Tailwind CSS**: Utility-first styling
+- **DaisyUI**: Pre-built Tailwind components
+- **Lucide React**: Icon library
+- **react-markdown**: Markdown rendering with math support (KaTeX)
+- **react-syntax-highlighter**: Code syntax highlighting
+- **mermaid**: Diagram rendering
+- **framer-motion**: Animations
+
+## Common Development Patterns
+
+### Adding a New Bridge Method
+
+1. Add `@pyqtSlot` method in `bridge.py`:
+   ```python
+   @pyqtSlot(str, result=str)
+   def myNewMethod(self, param):
+       # Implementation
+       return json.dumps({"success": True})
+   ```
+
+2. Add to JavaScript bridge wrapper in `frontend/src/hooks/useAnki.js`:
+   ```javascript
+   myNewMethod: (param) => {
+       window.ankiBridge.addMessage('myNewMethod', { param });
+   }
+   ```
+
+3. Handle response in `widget.py`'s `_handle_js_message()` if needed
+
+### Styling Anki Components
+
+Global theme styles are in `anki_global_theme.py`. Add new component styles in the `apply_global_dark_theme()` function's stylesheet string. The theme auto-reapplies, so changes take effect within 2 seconds.
+
+### Building for Production
+
+Always run `npm run build` from the `frontend/` directory before testing in Anki. The build process:
+- Clears old files in `web/`
+- Bundles React app with optimizations
+- Uses relative paths (configured in `vite.config.js`) for local file loading
+- Generates cache-busted filenames
+
+## Known Issues & Quirks
+
+### Dark Bar Above Reviewer
+
+When custom reviewer is enabled and native toolbar is hidden, a ~40px dark bar may remain at the top of the reviewer. This is a Qt layout issue where the hidden `mw.toolbar.web` widget still reserves space despite `setFixedHeight(0)`. Investigation ongoing - see `TECHNICAL.md` section 9 for details.
+
+### Message Queue Polling
+
+The 100ms polling interval is a deliberate trade-off:
+- Fast enough to feel instant to users
+- Slow enough to avoid CPU overhead
+- More reliable than QWebChannel's timing issues
+
+### State Change Timing
+
+Some operations require `QTimer.singleShot()` delays (typically 100-500ms) to ensure Anki components are fully initialized before accessing them. This is especially important for reviewer state transitions.
+
+## Testing Strategy
+
+1. **Browser Development**: Use `npm run dev` to develop UI in browser with mock bridges
+2. **Anki Integration Testing**: Build with `npm run build`, restart Anki, test in real environment
+3. **State Testing**: Test transitions between deck browser, overview, and review states
+4. **API Testing**: Test with actual API keys for OpenAI, Anthropic, Google
+5. **Error Scenarios**: Test network failures, API errors, missing dependencies
+
+## Performance Considerations
+
+- **Lazy Loading**: Widgets created only when first accessed
+- **HTML Caching**: Reviewer templates cached in memory
+- **Message Batching**: Polling allows multiple messages to be processed together
+- **Thread-Based AI**: Long-running API calls don't block UI
+- **Minimal Re-renders**: React components use proper memoization where needed
+
+## Security Notes
+
+- API keys stored in `config.json` (never committed to repository)
+- No automatic credential transmission
+- Firebase authentication tokens managed locally
+- User must manually add authentication tokens in profile dialog
+
+## References
+
+See `TECHNICAL.md` for exhaustive implementation details including:
+- Line-by-line Qt component documentation
+- All 35 WebBridge methods with signatures
+- Complete hook integration documentation
+- Error handling patterns
+- Toolbar hiding investigation (section 9)
+
+See `QT_INTEGRATION_GUIDE.md` for:
+- General Qt/Anki addon development patterns
+- Available integration points (menus, toolbars, docks)
+- Best practices and common pitfalls
+- Code examples for common tasks

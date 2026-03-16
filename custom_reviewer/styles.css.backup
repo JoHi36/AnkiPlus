@@ -1,0 +1,883 @@
+/*
+ * Jony Ive-Inspired Reviewer
+ * "Simplicity is not the absence of clutter; it's the absence of unnecessary elements."
+ *
+ * Design Principles:
+ * - Unified surface (no visual separation)
+ * - Content is the interface
+ * - Invisible chrome
+ * - Refined typography
+ * - Purposeful whitespace
+ */
+
+/* ===== Unified Color System ===== */
+:root {
+    /* The Surface - One Continuous Material */
+    --surface: #161618;
+    --surface-elevated: #1c1c1e;
+    --surface-pressed: #0d0d0e;
+
+    /* Text Hierarchy */
+    --text-primary: rgba(255, 255, 255, 0.92);
+    --text-secondary: rgba(255, 255, 255, 0.55);
+    --text-tertiary: rgba(255, 255, 255, 0.35);
+    --text-quaternary: rgba(255, 255, 255, 0.18);
+
+    /* Semantic - Muted, Not Aggressive */
+    --accent: #0a84ff;
+    --positive: #30d158;
+    --caution: #ffd60a;
+    --negative: #ff453a;
+
+    /* Stats - Whisper, Don't Shout */
+    --new: rgba(10, 132, 255, 0.8);
+    --learning: rgba(255, 159, 10, 0.8);
+    --review: rgba(48, 209, 88, 0.8);
+
+    /* Depth - Subtle Layers */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
+
+    /* Borders - Nearly Invisible */
+    --border: rgba(255, 255, 255, 0.06);
+    --border-focus: rgba(255, 255, 255, 0.12);
+
+    /* Motion - Feels Natural */
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+    --duration-fast: 150ms;
+    --duration-normal: 300ms;
+    --duration-slow: 500ms;
+
+    /* Typography Scale */
+    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "SF Mono", ui-monospace, monospace;
+
+    /* Spacing - Generous */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+    --space-7: 48px;
+    --space-8: 64px;
+}
+
+/* ===== Foundation ===== */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+/* ===== CLEANUP & BACKGROUNDS (App Feel) ===== */
+html, body {
+    background-color: #1A1A1A !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden; /* Prevent scrollbars */
+}
+
+/* Fix for the "colored line" at top */
+#outer-top, .top-area {
+    display: none !important;
+}
+
+/* ===== Grid Background & Dark Theme (Immersive Mode with Vignette) ===== */
+body {
+    background-color: #000000 !important;  /* Deepest black backing */
+    margin: 0;
+    color: #E5E5E5;
+    font-family: var(--font-sans);
+    line-height: 1.5;
+    overflow-x: hidden;
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: radial-gradient(#3a3a3a 1px, transparent 1px);  /* Hellere Punkte */
+    background-size: 24px 24px;
+    /* Vignette Mask: Visible in center, fades to black at edges */
+    mask-image: radial-gradient(ellipse 80% 60% at center, black 40%, transparent 100%);
+    -webkit-mask-image: radial-gradient(ellipse 80% 60% at center, black 40%, transparent 100%);
+    opacity: 0.5;  /* Sichtbarer */
+    z-index: -1;
+    pointer-events: none;
+}
+
+/* ===== The Reviewer - Single Unified Surface ===== */
+#reviewer {
+    height: 100vh;  /* Fixed height for scrolling to work */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;  /* Prevent page-level scrolling */
+}
+
+.surface {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);  /* Restored: Dark surface for card area */
+}
+
+/* ===== Stats Bar - Transparent (Zen Mode) ===== */
+.stats-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-3) var(--space-5);
+    background: transparent;  /* Kein Hintergrund */
+    border-bottom: none;  /* Keine Border */
+}
+
+/* === VARIANTE B - SPLIT NAVIGATION (Slim & Glass) === */
+
+/* Globaler Container */
+.top-bar-container {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    right: 20px;
+    height: 36px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    pointer-events: none;
+    z-index: 1000;
+}
+
+/* === GRUPPE LINKS (Navigation & Info) === */
+.left-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    pointer-events: auto;
+}
+
+/* 1. Der runde Zurück-Button */
+.nav-circle {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(20, 20, 20, 0.6);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #999;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.nav-circle:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    transform: scale(1.05);
+}
+
+.nav-circle svg {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* 2. Die Info-Kapsel (Titel + Stats) */
+.info-pill {
+    height: 36px;
+    background: rgba(20, 20, 20, 0.6);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 18px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 12px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+/* Der Deck-Titel */
+.deck-title {
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: #e0e0e0;
+    white-space: nowrap;
+    max-width: 250px;  /* Mehr Platz für längere Namen */
+    overflow: hidden;
+    text-overflow: ellipsis;  /* Schneidet lange Namen mit "..." ab */
+}
+
+/* Trennlinie */
+.sep {
+    width: 1px;
+    height: 12px;
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* Die Stats (Inline) */
+.mini-stats {
+    display: flex;
+    gap: 8px;
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.stat-pair {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    color: #aaa;
+}
+
+.dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+}
+
+/* === GRUPPE RECHTS (Actions) - Flush Design === */
+.action-pill {
+    height: 40px;  /* Etwas griffiger */
+    background: rgba(20, 20, 20, 0.8);  /* Etwas dunkler für Kontrast */
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;  /* Runder */
+    padding: 0;  /* Kein Padding - Flush Design */
+    padding-left: 12px;  /* Nur links Platz für Icons */
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    pointer-events: auto;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    overflow: hidden;  /* Damit Button die Rundung erbt */
+}
+
+.pill-icon {
+    width: 32px;  /* Größer */
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: #aaa;  /* Etwas heller */
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: all 0.2s ease;
+}
+
+.pill-icon:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.pill-icon svg {
+    width: 20px !important;  /* Deutlich größer */
+    height: 20px !important;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2px;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* Der AN+KI Button - Flush Finish */
+.pill-cta {
+    height: 100%;  /* Volle Höhe */
+    margin: 0;  /* Keine Ränder */
+    border-radius: 0;  /* Radien werden vom Container beschnitten */
+    padding: 0 20px;  /* Breiterer Klickbereich */
+    border: none;
+    background: #FFFFFF;  /* Default: Weiß */
+    color: #000000;  /* Default: Schwarz */
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pill-cta:hover {
+    background: #f0f0f0;
+}
+
+/* Inverted State (Wenn Chat offen ist) */
+.pill-cta.chat-open {
+    background: #000000;  /* Schwarz */
+    color: #FFFFFF;  /* Weiß */
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);  /* Subtiler Border innen */
+}
+
+/* Legacy/Hidden Styles */
+.stats-bar,
+.actions,
+.action-group {
+    display: none;
+}
+
+/* ===== Canvas - Content is King ===== */
+.canvas {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-5);
+    padding-top: 80px;  /* Space for floating header */
+    padding-bottom: 140px;  /* Space for fixed footer */
+    overflow-y: auto;
+    scrollbar-width: none;
+}
+
+.canvas::-webkit-scrollbar {
+    display: none;
+}
+
+/* ===== Card - Komplett Transparent (Zen Mode) ===== */
+.card {
+    max-width: 720px;
+    width: 100%;
+    margin: 0 auto;
+    padding: var(--space-6) 0;
+    padding-top: 80px !important;  /* Genug Platz für schwebenden Header */
+    background-color: transparent !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    display: block !important;
+}
+
+/* Card Container & QA Container Spacing */
+.card-container,
+#qa {
+    padding-top: 80px !important;
+    display: block !important;
+}
+
+/* Night Mode Override */
+.night_mode .card,
+body.night_mode .card {
+    background-color: transparent !important;
+    background: transparent !important;
+}
+
+/* Question & Answer Sections */
+.question,
+.answer {
+    font-size: 18px;
+    line-height: 1.7;
+    color: #E5E5E5;  /* Konsistente helle Farbe */
+    letter-spacing: -0.01em;
+}
+
+.answer {
+    display: none;
+    animation: emerge var(--duration-normal) var(--ease-out);
+}
+
+[data-state="answer"] .answer {
+    display: block;
+}
+
+@keyframes emerge {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ===== Card Content Typography - Hellere Farben ===== */
+/* Cyan/Blau-Töne zu Pastell-Blau */
+.question a,
+.answer a {
+    color: #60A5FA;  /* Helles Pastell-Blau statt dunklem Cyan */
+    text-decoration: none;
+}
+
+.question a:hover,
+.answer a:hover {
+    text-decoration: underline;
+    color: #93C5FD;  /* Noch heller beim Hover */
+}
+
+/* Cloze-Texte heller */
+.question .cloze,
+.answer .cloze {
+    color: #60A5FA;  /* Pastell-Blau */
+    font-weight: 600;
+}
+
+/* Strong/Bold zu hellem Cyan */
+.question strong,
+.question b,
+.answer strong,
+.answer b {
+    color: #67E8F9;  /* Helles Cyan - gut lesbar auf dunkel */
+    font-weight: 600;
+}
+
+/* Divider - A Breath Between */
+.divider {
+    height: 1px;
+    margin: var(--space-6) 0;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        var(--border-focus) 20%,
+        var(--border-focus) 80%,
+        transparent
+    );
+    opacity: 0;
+    transition: opacity var(--duration-normal) var(--ease-out);
+}
+
+[data-state="answer"] .divider {
+    opacity: 1;
+}
+
+/* ===== Card Content Styling ===== */
+/* Bilder - Optimiert für Dark Mode */
+.question img,
+.answer img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;  /* Abgerundete Ecken */
+    margin: var(--space-3) 0;
+    filter: brightness(0.9);  /* Leichte Abdunklung für weiße Hintergründe */
+    transition: filter var(--duration-fast) var(--ease-out);
+}
+
+.question img:hover,
+.answer img:hover {
+    filter: brightness(1);  /* Volle Helligkeit beim Hover */
+}
+
+.question table,
+.answer table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: var(--space-3) 0;
+}
+
+.question td,
+.question th,
+.answer td,
+.answer th {
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    text-align: left;
+}
+
+.question a,
+.answer a {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+.question a:hover,
+.answer a:hover {
+    text-decoration: underline;
+}
+
+.question .cloze,
+.answer .cloze {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.question pre,
+.question code,
+.answer pre,
+.answer code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    background: var(--surface-elevated);
+    border-radius: 6px;
+}
+
+.question pre,
+.answer pre {
+    padding: var(--space-4);
+    overflow-x: auto;
+    margin: var(--space-3) 0;
+}
+
+.question code,
+.answer code {
+    padding: 2px 6px;
+}
+
+/* ===== UNIFIED BOTTOM DOCK (Seamless Button Flow) ===== */
+.response {
+    position: fixed !important;
+    bottom: 30px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: auto !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    pointer-events: none;
+    z-index: 100;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+}
+
+/* The "Pill" Container (Shared style for both states) */
+.dock-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1px; /* Minimal gap for separator look */
+    background: rgba(20, 20, 20, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px; /* Reduced radius */
+    padding: 4px; /* Reduced padding */
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    pointer-events: auto;
+    transition: all 0.2s ease;
+}
+
+/* Buttons (Show Answer AND Ratings) */
+.dock-btn {
+    background: transparent;
+    border: none;
+    color: #e0e0e0;
+    padding: 8px 24px; /* Compact padding */
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 8px; /* Slightly rounded inside */
+    cursor: pointer;
+    transition: background 0.1s;
+    min-width: 80px;
+    text-align: center;
+}
+
+.dock-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Specific Button Colors */
+.btn-again { color: #ff5252; }
+.btn-hard { color: #ffb74d; }
+.btn-good { color: #69f0ae; }
+.btn-easy { color: #40c4ff; }
+.btn-show { 
+    color: #ffffff; 
+    font-weight: 600; 
+    padding: 10px 40px; /* Wider "Show Answer" */
+}
+
+/* === STATE TOGGLING (The Magic) === */
+/* Default: Hide Rating buttons, Show "Show Answer" */
+.ratings-area { 
+    display: none !important; 
+}
+
+.show-answer-area { 
+    display: flex !important; 
+}
+
+/* When State is 'answer': Hide "Show Answer", Show Ratings */
+[data-state="answer"] .show-answer-area { 
+    display: none !important; 
+}
+
+[data-state="answer"] .ratings-area { 
+    display: flex !important; 
+}
+
+/* Keyboard Shortcut Badge - Wie echtes Keybinding */
+.reveal kbd,
+.dock-btn kbd {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 2px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    min-width: 20px;
+    text-align: center;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+[data-state="answer"] .reveal {
+    display: none;
+}
+
+/* ===== Rating Buttons - Kompakt wie Native Anki ===== */
+.ratings {
+    display: none;
+    gap: 8px;  /* Reduziert */
+    justify-content: center;
+    align-items: center;
+    animation: emerge var(--duration-normal) var(--ease-out);
+}
+
+[data-state="answer"] .ratings {
+    display: flex;
+}
+
+/* ===== Rating Buttons - Clean Dock Buttons ===== */
+.ratings {
+    display: none;
+    gap: 8px;
+    justify-content: center;
+    align-items: center;
+    animation: emerge var(--duration-normal) var(--ease-out);
+}
+
+[data-state="answer"] .ratings {
+    display: flex;
+}
+
+.rating-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-width: 60px;
+    max-width: 80px;
+    padding: 6px 12px;
+    background: transparent !important;  /* Transparent in dock */
+    border: none !important;
+    border-radius: 8px !important;
+    font-size: 12px;
+    font-weight: 600 !important;
+    cursor: pointer;
+    transition: all 0.2s ease !important;
+    height: 36px;
+    box-shadow: none !important;  /* No shadow, dock has shadow */
+}
+
+.rating-btn:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+    transform: translateY(-2px);
+}
+
+.rating-btn:active {
+    transform: translateY(0) scale(0.96);
+}
+
+.rating-label {
+    font-weight: 500;
+    font-size: 12px;
+    line-height: 1;
+}
+
+/* Keep text colors for meaning (Semantic Colors) */
+.rating-btn-1 {
+    color: #ff6b6b !important;  /* Again - Red */
+}
+
+.rating-btn-2 {
+    color: #ffd93d !important;  /* Hard - Yellow */
+}
+
+.rating-btn-3 {
+    color: #6bcb77 !important;  /* Good - Green */
+}
+
+.rating-btn-4 {
+    color: #4d96ff !important;  /* Easy - Blue */
+}
+
+.rating-btn:active {
+    transform: translateY(0) scale(0.96);
+}
+
+.rating-label {
+    font-weight: 500;  /* Weniger bold */
+    font-size: 12px;
+    line-height: 1;
+}
+
+/* Keyboard Shortcut in Box - Wie echtes Keybinding */
+.rating-shortcut {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    border-radius: 3px;
+    min-width: 16px;
+    text-align: center;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    line-height: 1;
+}
+
+/* Button Count Variations */
+[data-button-count="2"] .rating-btn { min-width: 70px; }
+[data-button-count="3"] .rating-btn { min-width: 65px; }
+
+/* ===== Utilities ===== */
+.hidden {
+    display: none !important;
+}
+
+/* ===== Responsive - Maintain Proportions ===== */
+@media (max-width: 600px) {
+    .stats-bar {
+        padding: var(--space-2) var(--space-3);
+    }
+
+    .stats {
+        gap: var(--space-3);
+    }
+
+    .stat {
+        font-size: 12px;
+    }
+
+    .deck {
+        display: none;
+    }
+
+    .canvas {
+        padding: var(--space-4);
+    }
+
+    .question,
+    .answer {
+        font-size: 16px;
+    }
+
+    .response {
+        padding: 6px 12px;  /* Kompakt auf Mobile */
+    }
+
+    .ratings {
+        gap: 6px;  /* Weniger Gap */
+    }
+
+    .rating-btn {
+        min-width: 50px;  /* Noch kompakter */
+        padding: 5px 10px;
+        font-size: 11px;
+    }
+}
+
+/* ===== Focus States - Accessible ===== */
+.action:focus-visible,
+.reveal:focus-visible,
+.rating-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* ===== Print ===== */
+@media print {
+    .stats-bar,
+    .response {
+        display: none;
+    }
+
+    .canvas {
+        padding: 0;
+    }
+
+    .question,
+    .answer {
+        color: #000;
+    }
+}
+
+/* ===== Question/Answer State Management ===== */
+[data-state="question"] .answer {
+    display: none;
+}
+
+[data-state="answer"] .question {
+    display: none;
+}
+
+/* ===== Preserve External Styles (AMBOSS, etc.) ===== */
+[data-amboss],
+[class*="amboss"] {
+    /* Don't override */
+}
+
+/* === HIDE NATIVE ANKI UI === */
+/*
+ * The webview_will_set_content hook replaces web_content.body,
+ * but Anki injects #top and #bottom OUTSIDE of that replacement.
+ * We hide them via CSS since they load after our styles.
+ */
+
+/* Hide native top bar (deck name, card counts, etc.) */
+#top,
+#topbutt,
+.top-bar,
+.top-area,
+#outer-top,
+div[id^="top"]:not(#reviewer *) {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+    position: absolute !important;
+    left: -9999px !important;
+}
+
+/* Hide native bottom bar (answer/rating buttons) */
+#bottom,
+#bottombutt,
+#qa-controls,
+.bottom-bar,
+.bottom-area,
+#outer-bottom,
+div[id^="bottom"]:not(.response):not(.dock-container) {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+    position: absolute !important;
+    left: -9999px !important;
+}
+
+/* Ensure our custom footer stays on top */
+.response {
+    z-index: 99999 !important;
+}
