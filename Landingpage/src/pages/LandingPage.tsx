@@ -80,38 +80,36 @@ export function LandingPage() {
           </div>
         </section>
 
-        {/* ═══ DEMO SECTION — Old Anki transforms into modern demo WITH the explosion ═══ */}
+        {/* ═══ DEMO SECTION — Old Anki crossfades into modern demo ═══ */}
         <section id="demo" className="max-w-6xl mx-auto px-4 sm:px-6 pb-24 sm:pb-32 demo-glow">
-          <div className="relative rounded-2xl" style={{ perspective: '1200px' }}>
+          {/* Fixed-height container so both layers overlap during crossfade */}
+          <div className="relative h-[600px] md:h-[750px] rounded-2xl">
 
-            {/* Old Anki — visible from page load, fades out when plus explodes */}
+            {/* Old Anki — fades in on load, fades out when plus explodes */}
             <AnimatePresence>
               {!introDone && (
                 <motion.div
                   key="old-anki"
-                  exit={{
-                    opacity: 0,
-                    scale: 0.96,
-                    filter: 'blur(12px) brightness(1.8)',
-                  }}
-                  transition={{ duration: 0.6, ease: [0.25, 0.1, 0.25, 1] }}
-                  className="w-full h-[600px] md:h-[750px] rounded-2xl overflow-hidden border border-white/[0.08]"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0, filter: 'blur(16px) brightness(1.6)' }}
+                  transition={{ duration: 1.2, ease: 'easeOut' }}
+                  className="absolute inset-0 rounded-2xl overflow-hidden border border-white/[0.08]"
                 >
                   <OldAnkiMock />
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* Modern Demo — fades in simultaneously as old Anki fades out */}
+            {/* Modern Demo — crossfades in as old Anki fades out */}
             <AnimatePresence>
               {introDone && (
                 <motion.div
                   key="new-demo"
-                  initial={{ opacity: 0, scale: 0.96, filter: 'blur(12px)' }}
-                  animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-                  transition={{ duration: 0.7, ease: [0.25, 0.1, 0.25, 1], delay: 0.15 }}
-                  className="snake-border-wrap demo-dot-grid rounded-2xl relative"
-                  style={{ transformOrigin: 'center center' }}
+                  initial={{ opacity: 0, filter: 'blur(16px)' }}
+                  animate={{ opacity: 1, filter: 'blur(0px)' }}
+                  transition={{ duration: 1.0, ease: 'easeOut', delay: 0.2 }}
+                  className="absolute inset-0 demo-blue-border demo-dot-grid rounded-2xl"
                 >
                   <InteractivePlayground />
                 </motion.div>

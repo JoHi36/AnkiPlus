@@ -83,6 +83,7 @@
   from { --border-angle: 0deg; }
   to   { --border-angle: 360deg; }
 }
+/* ═══ Legacy snake border (kept for reference) ═══ */
 .snake-border-wrap {
   position: relative;
 }
@@ -110,6 +111,57 @@
   pointer-events: none;
   animation: borderRotate 4s linear infinite;
   z-index: 1;
+}
+
+/* ═══ Mysterious blue shimmer border — flush, glowing edge ═══ */
+.demo-blue-border {
+  position: relative;
+  overflow: hidden;
+}
+.demo-blue-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 17px;
+  padding: 1.5px;
+  background: linear-gradient(
+    135deg,
+    rgba(10,132,255,0.0) 0%,
+    rgba(10,132,255,0.25) 20%,
+    rgba(10,132,255,0.05) 40%,
+    rgba(10,132,255,0.3) 55%,
+    rgba(10,132,255,0.05) 70%,
+    rgba(10,132,255,0.2) 85%,
+    rgba(10,132,255,0.0) 100%
+  );
+  background-size: 300% 300%;
+  animation: blueBorderShimmer 6s ease-in-out infinite;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 2;
+}
+/* Soft outer glow hugging the border */
+.demo-blue-border::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 20px;
+  background: transparent;
+  box-shadow:
+    0 0 15px 2px rgba(10,132,255,0.10),
+    0 0 40px 4px rgba(10,132,255,0.06),
+    inset 0 0 15px 2px rgba(10,132,255,0.04);
+  pointer-events: none;
+  z-index: 1;
+  animation: blueBorderShimmer 6s ease-in-out infinite;
+}
+@keyframes blueBorderShimmer {
+  0%, 100% { background-position: 0% 50%; opacity: 0.7; }
+  50% { background-position: 100% 50%; opacity: 1; }
 }
 
 /* ═══ Blue shimmer glow — surrounds demo container on all sides ═══ */
