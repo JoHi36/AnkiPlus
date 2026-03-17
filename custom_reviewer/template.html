@@ -91,13 +91,38 @@ div[id^="bottom"]:not(#reviewer *) {
     margin-left: 4px;
 }
 
-/* ═══ Focus Glow Border ═══ */
+/* ═══ Animated Snake Border ═══ */
+@keyframes borderRotate {
+    from { --border-angle: 0deg; }
+    to   { --border-angle: 360deg; }
+}
+@property --border-angle {
+    syntax: '<angle>';
+    initial-value: 0deg;
+    inherits: false;
+}
 .snake-border {
     position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    padding: 1px;
+    background: conic-gradient(
+        from var(--border-angle) at 50% 100%,
+        rgba(10,132,255,0.0) 0deg,
+        rgba(10,132,255,0.5) 60deg,
+        rgba(10,132,255,0.1) 120deg,
+        rgba(10,132,255,0.0) 180deg,
+        rgba(10,132,255,0.1) 240deg,
+        rgba(10,132,255,0.5) 300deg,
+        rgba(10,132,255,0.0) 360deg
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
     pointer-events: none;
     opacity: 0;
     transition: opacity 0.3s ease;
-    box-shadow: 0 0 0 1px rgba(10,132,255,0.65), 0 0 20px rgba(10,132,255,0.2);
+    animation: borderRotate 4s linear infinite;
 }
 .snake-border.active {
     opacity: 1;
@@ -175,6 +200,7 @@ div[id^="bottom"]:not(#reviewer *) {
                     <div class="relative px-4 py-3">
                         <textarea id="user-answer"
                                   class="w-full min-h-[24px] max-h-[120px] p-0 pr-10 bg-transparent border-none text-base-content text-[15px] leading-relaxed resize-none outline-none placeholder:text-base-content/[0.25]"
+                                  style="border:none;background:transparent;outline:none;resize:none;box-shadow:none;color:rgba(255,255,255,0.75);font-family:inherit;font-size:15px;line-height:1.625;width:100%;padding:0;padding-right:40px;"
                                   placeholder="Antwort eingeben..."
                                   rows="1"
                                   onfocus="document.getElementById('dock-snake-border').classList.add('active')"
