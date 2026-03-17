@@ -25,7 +25,11 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
   const centerRef = useRef({ cx: 0, cy: 0 });
   const dimsRef = useRef({ w: 0, h: 0 });
   // Cached font metrics (set once after first sizeCanvas)
-  const fontCacheRef = useRef({ font: '', subFont: '', anWidth: 0, fontSize: 0 });
+  const fontCacheRef = useRef({
+    font: '', subFont: '', fontSize: 0,
+    anWidth: 0, kiWidth: 0,
+    flashWidth: 0, intelWidth: 0,
+  });
 
   const PARTICLE_COUNT = 400; // reduced from 500 — less GPU work
   const PLUS_ARM_LEN = 120;
@@ -107,11 +111,15 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
       // Cache font metrics
       const fontSize = Math.min(w * 0.14, 180);
       const font = `800 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif`;
-      const subFontSize = Math.max(14, fontSize * 0.12);
+      const subFontSize = Math.max(14, fontSize * 0.13);
       const subFont = `300 ${subFontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif`;
       ctx.font = font;
-      const anWidth = ctx.measureText('AN').width;
-      fontCacheRef.current = { font, subFont, anWidth, fontSize };
+      const anWidth = ctx.measureText('An').width;
+      const kiWidth = ctx.measureText('ki').width;
+      ctx.font = subFont;
+      const flashWidth = ctx.measureText('Flashcard').width;
+      const intelWidth = ctx.measureText('Intelligence').width;
+      fontCacheRef.current = { font, subFont, fontSize, anWidth, kiWidth, flashWidth, intelWidth };
 
       return { w, h };
     };
@@ -154,7 +162,7 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
       ctx.clearRect(0, 0, dW, dH);
 
       const { cx, cy } = centerRef.current;
-      const { font, subFont, anWidth, fontSize } = fontCacheRef.current;
+      const { font, subFont, anWidth, kiWidth, flashWidth, intelWidth, fontSize } = fontCacheRef.current;
 
       // ── TEXT (use cached font) ──
       ctx.font = font;
@@ -174,25 +182,47 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
       if (textAlpha > 0.005) {
         const TEXT_GAP_FINAL = PLUS_ARM_LEN * 2 + 40;
         const halfGap = (splitProgress * TEXT_GAP_FINAL) / 2;
+
+        // "An" right-edge at cx - halfGap, "ki" left-edge at cx + halfGap
         const anX = cx - halfGap - anWidth;
         const kiX = cx + halfGap;
+
         ctx.globalAlpha = textAlpha;
         ctx.fillStyle = '#fff';
-        ctx.fillText('AN', anX, cy);
-        ctx.fillText('KI', kiX, cy);
+        ctx.fillText('An', anX, cy);
+        ctx.fillText('ki', kiX, cy);
 
-        // ── Subtitle "Flashcards" below — fades in early, out with text ──
-        const subAlpha = fadeIn * Math.min(0.3, brightening * 0.4) * explosionFade;
+        // ── Subtitles: "Flashcard" under An, "Intelligence" under ki ──
+        // When together (splitProgress=0): centered as "Flashcard Intelligence"
+        // When split (splitProgress=1): each centered under its letter pair
+        const subAlpha = fadeIn * Math.min(0.35, brightening * 0.45) * explosionFade;
         if (subAlpha > 0.005) {
           ctx.font = subFont;
-          ctx.textAlign = 'center';
           ctx.globalAlpha = subAlpha;
           ctx.fillStyle = '#fff';
-          ctx.fillText('Flashcards', cx, cy + fontSize * 0.55);
-          ctx.textAlign = 'start'; // reset
+          const subY = cy + fontSize * 0.55;
+
+          // Centers of "An" and "ki"
+          const anCenter = anX + anWidth / 2;
+          const kiCenter = kiX + kiWidth / 2;
+
+          // Together: "Flashcard" + space + "Intelligence" centered at cx
+          const spaceWidth = 6;
+          const totalSubWidth = flashWidth + spaceWidth + intelWidth;
+          const togetherFlashX = cx - totalSubWidth / 2 + flashWidth / 2;
+          const togetherIntelX = cx + totalSubWidth / 2 - intelWidth / 2;
+
+          // Interpolate positions from together → under their respective letters
+          const flashCenterX = togetherFlashX + (anCenter - togetherFlashX) * splitProgress;
+          const intelCenterX = togetherIntelX + (kiCenter - togetherIntelX) * splitProgress;
+
+          ctx.textAlign = 'center';
+          ctx.fillText('Flashcard', flashCenterX, subY);
+          ctx.fillText('Intelligence', intelCenterX, subY);
+          ctx.textAlign = 'start';
         }
 
-        ctx.font = font; // restore main font
+        ctx.font = font;
         ctx.globalAlpha = 1;
       }
 
