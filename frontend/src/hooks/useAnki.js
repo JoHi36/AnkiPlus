@@ -328,6 +328,37 @@ export function useAnki() {
               window.ankiBridge.addMessage('saveSessions', JSON.stringify(sessions));
             }
           },
+          // Per-Card Session Methods (SQLite)
+          loadCardSession: (cardId) => {
+            console.log('Bridge: loadCardSession aufgerufen', cardId);
+            if (window.ankiBridge) {
+              window.ankiBridge.addMessage('loadCardSession', String(cardId));
+            }
+          },
+          saveCardSession: (dataJson) => {
+            console.log('Bridge: saveCardSession aufgerufen');
+            if (window.ankiBridge) {
+              window.ankiBridge.addMessage('saveCardSession', dataJson);
+            }
+          },
+          saveCardMessage: (dataJson) => {
+            console.log('Bridge: saveCardMessage aufgerufen');
+            if (window.ankiBridge) {
+              window.ankiBridge.addMessage('saveCardMessage', dataJson);
+            }
+          },
+          saveCardSection: (dataJson) => {
+            console.log('Bridge: saveCardSection aufgerufen');
+            if (window.ankiBridge) {
+              window.ankiBridge.addMessage('saveCardSection', dataJson);
+            }
+          },
+          navigateToCard: (cardId) => {
+            console.log('Bridge: navigateToCard aufgerufen', cardId);
+            if (window.ankiBridge) {
+              window.ankiBridge.addMessage('navigateToCard', String(cardId));
+            }
+          },
           fetchImage: (url, callback) => {
             console.log('Bridge: fetchImage aufgerufen', url?.substring(0, 50));
             if (window.ankiBridge) {
@@ -368,6 +399,11 @@ export function useAnki() {
               window._cachedAITools = tools;
             } catch (e) {
               console.warn('Bridge: Fehler beim Parsen der Tools:', e);
+            }
+          },
+          companionChat: (systemPrompt, history, message) => {
+            if (window.ankiBridge) {
+              window.ankiBridge.addMessage('companionChat', { systemPrompt, history, message });
             }
           }
         };
@@ -500,13 +536,25 @@ export function useAnki() {
           },
           saveSessions: (sessions) => {
             console.log('Mock: saveSessions', sessions?.length || 0, 'Sessions');
-            // Mock: Speichere in localStorage als Fallback
             try {
               localStorage.setItem('ankiChatSessions', JSON.stringify(sessions));
             } catch (e) {
               console.warn('Mock: localStorage nicht verfügbar');
             }
           },
+          loadCardSession: (cardId) => {
+            console.log('Mock: loadCardSession', cardId);
+            if (window.ankiReceive) {
+              window.ankiReceive({
+                type: 'cardSessionLoaded',
+                data: { cardId: Number(cardId), session: null, sections: [], messages: [] }
+              });
+            }
+          },
+          saveCardSession: (dataJson) => console.log('Mock: saveCardSession'),
+          saveCardMessage: (dataJson) => console.log('Mock: saveCardMessage'),
+          saveCardSection: (dataJson) => console.log('Mock: saveCardSection'),
+          navigateToCard: (cardId) => console.log('Mock: navigateToCard', cardId),
           fetchImage: (url, callback) => {
             console.log('Mock: fetchImage', url?.substring(0, 50));
             // Mock: Gib Fehler zurück (keine echte Bildladung im Browser-Modus)
@@ -532,6 +580,15 @@ export function useAnki() {
             } catch (e) {
               console.warn('Mock: localStorage nicht verfügbar');
             }
+          },
+          companionChat: (systemPrompt, history, message) => {
+            console.log('Mock: companionChat', message?.substring(0, 50));
+            // Mock: simulate a companion response
+            setTimeout(() => {
+              if (window.ankiReceive) {
+                window.ankiReceive({ type: 'companionChunk', chunk: '{"mood":"happy"}\nHey! Das ist eine Mock-Antwort.', done: true });
+              }
+            }, 800);
           }
         });
         setIsReady(true);
