@@ -260,6 +260,7 @@ function AppInner() {
   // ── Free Chat State ──────────────────────────────────────────────
   const [freeChatOpen, setFreeChatOpen] = useState(false);
   const [freeChatInitialText, setFreeChatInitialText] = useState('');
+  const [animPhase, setAnimPhase] = useState('idle'); // 'idle'|'entering'|'entered'|'exiting'
   const [activeChat, setActiveChat] = useState('session'); // "session" | "free"
 
   // activeChatRef must be declared AFTER activeChat (can't reference before initialization)
@@ -269,18 +270,27 @@ function AppInner() {
   const freeChatHook = useFreeChat({
     bridge,
     onLoadingChange: (loading) => {
-      // When free chat finishes loading (response complete), restore session routing
-      if (!loading) {
+      // Only restore session routing if free chat is no longer open.
+      // If free chat is open, the exit handlers (handleFreeChatClose/onCancelComplete)
+      // are responsible for calling setActiveChat('session').
+      if (!loading && !freeChatOpenRef.current) {
         setActiveChat('session');
       }
     },
     onCancelComplete: () => {
-      setActiveChat('session');
-      setFreeChatOpen(false);
+      // Must animate out — do NOT call setFreeChatOpen(false) directly
+      setAnimPhase('exiting');
+      setTimeout(() => {
+        setFreeChatOpen(false);
+        setAnimPhase('idle');
+        setActiveChat('session');
+      }, 300);
     },
   });
   const freeChatHookRef = useRef(freeChatHook);
   useEffect(() => { freeChatHookRef.current = freeChatHook; }, [freeChatHook]);
+  const freeChatOpenRef = useRef(false);
+  useEffect(() => { freeChatOpenRef.current = freeChatOpen; }, [freeChatOpen]);
 
   // Mascot state
   const { mood, setEventMood, setAiMood, resetMood } = useMascot();
@@ -549,12 +559,6 @@ function AppInner() {
         // Dispatch auth events as CustomEvents for ProfileDialog/SettingsModal
         if (['authTokenLoaded', 'authStatusLoaded', 'auth_success', 'auth_error', 'auth_logout'].includes(payload.type)) {
           window.dispatchEvent(new CustomEvent('ankiAuthEvent', { detail: payload }));
-        }
-
-        // Free Chat triggered from Stapel search bar (custom_screens)
-        if (payload.type === 'startFreeChat' && payload.text) {
-          handleFreeChatOpen(payload.text);
-          return;
         }
 
         // Models Events
@@ -1409,6 +1413,18 @@ function AppInner() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [headerHeight, handleTrailNavigateLeft, handleTrailNavigateRight]);
 
+  // ⌘X — reset free chat history (stay in chat mode)
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'x' && freeChatOpen && animPhase === 'entered') {
+        e.preventDefault();
+        freeChatHookRef.current.resetMessages();
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [freeChatOpen, animPhase]);
+
   // Settings öffnen
   const handleOpenSettings = () => {
     setShowProfile(true);
@@ -1486,20 +1502,25 @@ function AppInner() {
   // ── Free Chat Handlers ─────────────────────────────────────────
   const handleFreeChatOpen = useCallback((text) => {
     setFreeChatInitialText(text);
-    // Clear after React processes the mount (one-shot trigger)
     setTimeout(() => setFreeChatInitialText(''), 0);
     setFreeChatOpen(true);
+    setAnimPhase('entering');
+    setTimeout(() => setAnimPhase('entered'), 350);
     setActiveChat('free');
   }, []);
 
   const handleFreeChatClose = useCallback(() => {
     if (freeChatHookRef.current.isLoading) {
-      // Cancel in-flight request; onCancelComplete will close
       freeChatHookRef.current.startCancel();
       if (bridge?.cancelRequest) bridge.cancelRequest();
+      // onCancelComplete (above) will trigger the exit animation
     } else {
-      setActiveChat('session');
-      setFreeChatOpen(false);
+      setAnimPhase('exiting');
+      setTimeout(() => {
+        setFreeChatOpen(false);
+        setAnimPhase('idle');
+        setActiveChat('session');
+      }, 300);
     }
   }, [bridge]);
 
