@@ -29,6 +29,8 @@ import ReviewTrailIndicator from './components/ReviewTrailIndicator';
 import { BookOpen } from 'lucide-react';
 import { useFreeChat } from './hooks/useFreeChat';
 import FreeChatOverlay from './components/FreeChatOverlay';
+import MascotShell from './components/MascotShell';
+import { useMascot } from './hooks/useMascot';
 
 /**
  * Inner App Component - wrapped by SessionContextProvider
@@ -279,7 +281,47 @@ function AppInner() {
   });
   const freeChatHookRef = useRef(freeChatHook);
   useEffect(() => { freeChatHookRef.current = freeChatHook; }, [freeChatHook]);
-  
+
+  // Mascot state
+  const { mood, setEventMood, setAiMood, resetMood } = useMascot();
+  const [mascotEnabled, setMascotEnabled] = useState(false);
+  const [companionMode, setCompanionMode] = useState(false);
+  const [bubbleText, setBubbleText] = useState(null);
+  const [consecutiveWrong, setConsecutiveWrong] = useState(0);
+
+  // Idle timer — set mascot to sleepy after 10 minutes of inactivity
+  const idleTimerRef = useRef(null);
+  const resetIdleTimer = useCallback(() => {
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    idleTimerRef.current = setTimeout(() => setEventMood('sleepy'), 10 * 60 * 1000);
+  }, [setEventMood]);
+
+  useEffect(() => {
+    window.addEventListener('mousedown', resetIdleTimer);
+    window.addEventListener('keydown', resetIdleTimer);
+    resetIdleTimer();
+    return () => {
+      window.removeEventListener('mousedown', resetIdleTimer);
+      window.removeEventListener('keydown', resetIdleTimer);
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    };
+  }, [resetIdleTimer]);
+
+  // Load mascot_enabled from config on bridge ready
+  useEffect(() => {
+    if (!isReady || !bridge || !bridge.getCurrentConfig) return;
+    try {
+      const configStr = bridge.getCurrentConfig();
+      if (configStr) {
+        const config = JSON.parse(configStr);
+        const mascotVal = config?.mascot_enabled ?? false;
+        setMascotEnabled(mascotVal);
+      }
+    } catch (e) {
+      // ignore parse errors
+    }
+  }, [isReady, bridge]);
+
   useEffect(() => {
     bridgeRef.current = bridge;
   }, [bridge]);
@@ -627,6 +669,18 @@ function AppInner() {
               window._pendingPerformanceData[cardId] = perfData;
             }
           }
+          // Mascot mood: ease 1=Again, 2=Hard, 3=Good, 4=Easy
+          const easeVal = payload.data?.ease ?? payload.ease;
+          if (easeVal >= 3) {
+            setEventMood('happy');
+            setConsecutiveWrong(0);
+          } else if (easeVal === 1) {
+            setConsecutiveWrong(prev => {
+              const next = prev + 1;
+              if (next >= 3) setEventMood('empathy');
+              return next;
+            });
+          }
         }
 
         // Evaluation Result Events
@@ -770,6 +824,18 @@ function AppInner() {
             }
         }
       }
+
+        // Mascot Events
+        if (payload.type === 'mascotEnabledSaved') {
+          setMascotEnabled(payload.data.enabled);
+        }
+
+        // configLoaded — sync mascot_enabled from full config
+        if (payload.type === 'configLoaded' && payload.data) {
+          window._cachedConfig = payload.data;
+          const mascotVal = payload.data?.mascot_enabled ?? false;
+          setMascotEnabled(mascotVal);
+        }
       };
       ankiReceiveRef.current = true;
     }
@@ -1897,6 +1963,29 @@ function AppInner() {
 
       {!showSessionOverview && (
         <>
+          {/* Mascot — bottom-left, above input */}
+          {mascotEnabled && (
+            <div style={{ position: 'fixed', bottom: 72, left: 12, zIndex: 40 }}>
+              <MascotShell
+                mood={mood}
+                bubbleText={bubbleText}
+                onBubbleDismiss={() => setBubbleText(null)}
+                active={companionMode}
+                onClick={() => {
+                  setCompanionMode(prev => {
+                    if (!prev) {
+                      setAiMood('happy');
+                      setBubbleText("Hey! 👋 Was gibt's?");
+                    } else {
+                      resetMood();
+                    }
+                    return !prev;
+                  });
+                }}
+                enabled={mascotEnabled}
+              />
+            </div>
+          )}
           {/* Chat Input — full-width dock at bottom */}
           <div className="fixed bottom-0 left-0 right-0 z-50 px-4 pb-4">
         <ChatInput
