@@ -28,9 +28,9 @@ import SectionDivider from './components/SectionDivider';
 import ReviewTrailIndicator from './components/ReviewTrailIndicator';
 import { BookOpen } from 'lucide-react';
 import { useFreeChat } from './hooks/useFreeChat';
-import FreeChatOverlay from './components/FreeChatOverlay';
 import MascotShell from './components/MascotShell';
 import { useMascot } from './hooks/useMascot';
+import { useCompanion } from './hooks/useCompanion';
 
 /**
  * Inner App Component - wrapped by SessionContextProvider
@@ -185,6 +185,7 @@ function AppInner() {
   const reviewTrailHookRef = useRef(reviewTrailHook);
   const sessionContextRef = useRef(sessionContext);
   const handlePerformanceCaptureRef = useRef(null);
+  const handleCompanionChunkRef = useRef(handleCompanionChunk);
   useEffect(() => {
     cardSessionHookRef.current = cardSessionHook;
     cardContextHookRef.current = cardContextHook;
@@ -194,6 +195,7 @@ function AppInner() {
     reviewTrailHookRef.current = reviewTrailHook;
     sessionContextRef.current = sessionContext;
     handlePerformanceCaptureRef.current = handlePerformanceCapture;
+    handleCompanionChunkRef.current = handleCompanionChunk;
   });
   // Ref für messages container (für Auto-Scroll)
   const messagesContainerRef = useRef(null);
@@ -297,6 +299,11 @@ function AppInner() {
   const [mascotEnabled, setMascotEnabled] = useState(false);
   const [companionMode, setCompanionMode] = useState(false);
   const [bubbleText, setBubbleText] = useState(null);
+
+  const { send: sendToCompanion, handleChunk: handleCompanionChunk } = useCompanion({
+    onMood: setAiMood,
+    onBubble: setBubbleText,
+  });
   const [consecutiveWrong, setConsecutiveWrong] = useState(0);
 
   // Idle timer — set mascot to sleepy after 10 minutes of inactivity
@@ -829,6 +836,11 @@ function AppInner() {
         }
       }
 
+        // Companion Chat Events
+        if (payload.type === 'companionChunk') {
+          handleCompanionChunkRef.current?.(payload.chunk ?? '', payload.done ?? false);
+        }
+
         // Mascot Events
         if (payload.type === 'mascotEnabledSaved') {
           setMascotEnabled(payload.data.enabled);
@@ -1247,6 +1259,12 @@ function AppInner() {
    * App.jsx muss nur noch den Kontext übergeben.
    */
   const handleSend = (text, options = {}) => {
+    // Companion mode intercept — route to Plusi instead of main AI
+    if (companionMode) {
+      sendToCompanion(text, '');
+      return;
+    }
+
     // Immer im Chat bleiben
     sessionsHook.setForceShowOverview(false);
     
@@ -1698,7 +1716,7 @@ function AppInner() {
 
       <main className="flex-1 overflow-hidden relative flex flex-col min-h-0" style={{ height: '100%' }}>
         {showSessionOverview ? (
-          /* Deck Browser — relative container so FreeChatOverlay (absolute) covers it */
+          /* Deck Browser — flex column container for in-place chat transformation */
           <div style={{ position: 'relative', flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <DeckBrowser
               bridge={bridge}
@@ -1707,18 +1725,12 @@ function AppInner() {
               onOpenDeck={handleOpenDeck}
               headerHeight={headerHeight}
               onFreeChatOpen={handleFreeChatOpen}
+              freeChatOpen={freeChatOpen}
+              animPhase={animPhase}
+              freeChatInitialText={freeChatInitialText}
+              freeChatHook={freeChatHook}
+              onFreeChatClose={handleFreeChatClose}
             />
-            {freeChatOpen && (
-              <FreeChatOverlay
-                messages={freeChatHook.messages}
-                streamingMessage={freeChatHook.streamingMessage}
-                isLoading={freeChatHook.isLoading}
-                initialText={freeChatInitialText}
-                onSend={(text, mode) => freeChatHook.handleSend(text, mode)}
-                onClose={handleFreeChatClose}
-                bridge={bridge}
-              />
-            )}
           </div>
         ) : (
           <>
