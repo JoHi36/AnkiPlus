@@ -607,7 +607,7 @@ class ChatbotWidget(QWidget):
                 except json.JSONDecodeError as e:
                     print(f"_handle_js_message: JSON-Fehler beim Parsen von AI Tools: {e}")
         elif msg_type == 'saveMascotEnabled':
-            enabled = bool(data) if isinstance(data, bool) else False
+            enabled = bool(data)
             update_config(mascot_enabled=enabled)
             self.config = get_config(force_reload=True)
             payload = {"type": "mascotEnabledSaved", "data": {"enabled": enabled}}
