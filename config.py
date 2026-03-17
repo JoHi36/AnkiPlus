@@ -28,7 +28,8 @@ DEFAULT_CONFIG = {
         "enabled": False,  # Firebase MCP Integration aktiviert
         "service_account_path": "",  # Pfad zur Service Account JSON (optional, kann auch über Umgebungsvariable gesetzt werden)
         "storage_bucket": ""  # Firebase Storage Bucket (optional, kann auch über Umgebungsvariable gesetzt werden)
-    }
+    },
+    "mascot_enabled": False
 }
 
 # Standard Backend URL
@@ -158,7 +159,7 @@ def get_config(force_reload=False):
         print(f"Config geladen. API-Key vorhanden: {'Ja' if mw._chatbot_config.get('api_key') else 'Nein'} (Länge: {len(mw._chatbot_config.get('api_key', ''))})")
     return mw._chatbot_config
 
-def update_config(**kwargs):
+def update_config(mascot_enabled=None, **kwargs):
     """Aktualisiert die Konfiguration"""
     config = get_config()
     print(f"update_config aufgerufen mit: {list(kwargs.keys())}")
@@ -186,6 +187,8 @@ def update_config(**kwargs):
     elif not config.get('backend_url'):
         kwargs['backend_url'] = DEFAULT_BACKEND_URL
     
+    if mascot_enabled is not None:
+        config['mascot_enabled'] = mascot_enabled
     config.update(kwargs)
     mw._chatbot_config = config
     success = save_config(config)

@@ -23,10 +23,24 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <script type="module" crossorigin src="./assets/main.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/main.css">
+  <script type="module" crossorigin src="./assets/main-BFOMaxHG.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/main-Bf6oRAKW.css">
 </head>
 <body>
+  <!-- DEBUG: visible fallback if React doesn't mount -->
+  <div id="debug-fallback" style="position:fixed;top:0;left:0;right:0;background:#c00;color:#fff;padding:8px;font-size:12px;font-family:monospace;z-index:99999;display:none;word-break:break-all;"></div>
+  <script>
+    window.onerror = function(msg, src, line, col, err) {
+      var d = document.getElementById('debug-fallback');
+      d.style.display = 'block';
+      d.textContent = 'JS ERROR: ' + msg + ' @ ' + src + ':' + line;
+    };
+    window.addEventListener('unhandledrejection', function(e) {
+      var d = document.getElementById('debug-fallback');
+      d.style.display = 'block';
+      d.textContent = 'UNHANDLED PROMISE: ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason));
+    });
+  </script>
   <div id="root"></div>
 </body>
 </html>

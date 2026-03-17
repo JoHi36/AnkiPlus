@@ -31,6 +31,7 @@ export default function SettingsModal({ isOpen, onClose, bridge, isReady, showCo
 
   // ── General settings state ──
   const [theme, setTheme] = useState('auto');
+  const [mascotEnabled, setMascotEnabled] = useState(false);
 
   // ── AI settings state ──
   const [responseStyle, setResponseStyle] = useState('balanced');
@@ -92,6 +93,14 @@ export default function SettingsModal({ isOpen, onClose, bridge, isReady, showCo
         if (t) setTheme(t);
       } catch (e) { /* ignore */ }
     }
+    // Load mascot setting from config
+    if (bridge && bridge.getCurrentConfig) {
+      try {
+        const config = JSON.parse(bridge.getCurrentConfig());
+        const mascotVal = config.mascot_enabled ?? false;
+        setMascotEnabled(mascotVal);
+      } catch (e) { /* ignore */ }
+    }
   };
 
   // ── Auth event handlers ──
@@ -106,9 +115,11 @@ export default function SettingsModal({ isOpen, onClose, bridge, isReady, showCo
       }
     };
 
-    const originalAnkiReceive = window.ankiReceive;
-    window.ankiReceive = (payload) => {
-      if (originalAnkiReceive) originalAnkiReceive(payload);
+    // Listen for auth events via CustomEvents (dispatched by main ankiReceive handler in App.jsx)
+    // Do NOT wrap window.ankiReceive — it destroys the handler chain.
+    const onAuthEvent = (event) => {
+      const payload = event.detail;
+      if (!payload) return;
       if (payload.type === 'authTokenLoaded' && payload.data) {
         handleAuthTokenLoaded(payload.data);
       } else if (payload.type === 'auth_success') {
@@ -126,8 +137,9 @@ export default function SettingsModal({ isOpen, onClose, bridge, isReady, showCo
         setQuotaStatus(null);
       }
     };
+    window.addEventListener('ankiAuthEvent', onAuthEvent);
 
-    return () => { window.ankiReceive = originalAnkiReceive; };
+    return () => { window.removeEventListener('ankiAuthEvent', onAuthEvent); };
   }, [isOpen]);
 
   // ── Fetch quota ──
@@ -239,6 +251,13 @@ export default function SettingsModal({ isOpen, onClose, bridge, isReady, showCo
     const updated = { ...aiTools, [tool]: !aiTools[tool] };
     setAiTools(updated);
     if (bridge && bridge.saveAITools) bridge.saveAITools(JSON.stringify(updated));
+  };
+
+  const handleMascotToggle = (val) => {
+    setMascotEnabled(val);
+    if (window.ankiBridge) {
+      window.ankiBridge.addMessage('saveMascotEnabled', val);
+    }
   };
 
   // ── Derived state ──
@@ -522,6 +541,25 @@ export default function SettingsModal({ isOpen, onClose, bridge, isReady, showCo
                     <ChevronRight size={14} />
                   </button>
                 </SettingsSection>
+
+                {/* Beta Features */}
+                <div className="mt-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-orange-400">Beta</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10">
+                    <div>
+                      <p className="text-sm font-medium text-white">Mascot Companion</p>
+                      <p className="text-xs text-white/50 mt-0.5">Animiertes Maskottchen mit eigenem Charakter</p>
+                    </div>
+                    <button
+                      onClick={() => handleMascotToggle(!mascotEnabled)}
+                      className={`w-11 h-6 rounded-full transition-colors relative ${mascotEnabled ? 'bg-blue-500' : 'bg-white/20'}`}
+                    >
+                      <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${mascotEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 

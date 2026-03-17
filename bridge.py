@@ -117,6 +117,7 @@ class WebBridge(QObject):
             "api_key": api_key,
             "provider": "google",  # Immer Google
             "model": config.get("model_name", ""),
+            "mascot_enabled": config.get("mascot_enabled", False),
         })
     
     @pyqtSlot(str, str, result=str)
@@ -721,6 +722,76 @@ class WebBridge(QObject):
                 "error": error_msg
             })
     
+    # ──────────────────────────────────────────────
+    #  Per-Card Session Methods (SQLite)
+    # ──────────────────────────────────────────────
+
+    @pyqtSlot(str, result=str)
+    def loadCardSession(self, card_id_str):
+        """Load a card's session (session + sections + messages) from SQLite."""
+        try:
+            from .card_sessions_storage import load_card_session
+            card_id = int(card_id_str)
+            data = load_card_session(card_id)
+            print(f"loadCardSession: card {card_id} — session={'yes' if data['session'] else 'no'}, "
+                  f"{len(data['sections'])} sections, {len(data['messages'])} messages")
+            return json.dumps(data, ensure_ascii=False)
+        except Exception as e:
+            import traceback
+            print(f"Fehler in loadCardSession: {e}")
+            traceback.print_exc()
+            return json.dumps({'session': None, 'sections': [], 'messages': []})
+
+    @pyqtSlot(str, result=str)
+    def saveCardSession(self, data_json):
+        """Save/update a card's full session to SQLite."""
+        try:
+            from .card_sessions_storage import save_card_session
+            data = json.loads(data_json)
+            card_id = data.get('cardId') or data.get('card_id')
+            if not card_id:
+                return json.dumps({'success': False, 'error': 'Missing cardId'})
+            success = save_card_session(card_id, data)
+            print(f"saveCardSession: card {card_id}, success={success}")
+            return json.dumps({'success': success, 'error': None})
+        except Exception as e:
+            import traceback
+            print(f"Fehler in saveCardSession: {e}")
+            traceback.print_exc()
+            return json.dumps({'success': False, 'error': str(e)})
+
+    @pyqtSlot(str, result=str)
+    def saveCardMessage(self, data_json):
+        """Append a single message to a card's session."""
+        try:
+            from .card_sessions_storage import save_message
+            data = json.loads(data_json)
+            card_id = data.get('cardId') or data.get('card_id')
+            message = data.get('message', data)
+            if not card_id:
+                return json.dumps({'success': False, 'error': 'Missing cardId'})
+            success = save_message(card_id, message)
+            return json.dumps({'success': success, 'error': None})
+        except Exception as e:
+            print(f"Fehler in saveCardMessage: {e}")
+            return json.dumps({'success': False, 'error': str(e)})
+
+    @pyqtSlot(str, result=str)
+    def saveCardSection(self, data_json):
+        """Create or update a review section for a card."""
+        try:
+            from .card_sessions_storage import save_section
+            data = json.loads(data_json)
+            card_id = data.get('cardId') or data.get('card_id')
+            section = data.get('section', data)
+            if not card_id:
+                return json.dumps({'success': False, 'error': 'Missing cardId'})
+            success = save_section(card_id, section)
+            return json.dumps({'success': success, 'error': None})
+        except Exception as e:
+            print(f"Fehler in saveCardSection: {e}")
+            return json.dumps({'success': False, 'error': str(e)})
+
     @pyqtSlot(str, str, result=str)
     def searchImage(self, query, image_type="general"):
         """

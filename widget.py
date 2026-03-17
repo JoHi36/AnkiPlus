@@ -97,14 +97,12 @@ class ChatbotWidget(QWidget):
         self.web_view.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
 
         html_path = os.path.join(os.path.dirname(__file__), "web", "index.html")
-        # Cache-Busting: Füge Timestamp hinzu um sicherzustellen, dass neue Dateien geladen werden
         import time
-        cache_buster = f"?v={int(time.time())}"
         url = QUrl.fromLocalFile(html_path)
-        url.setQuery(cache_buster)
-        self.web_view.load(url)
+        url.setQuery(f"v={int(time.time())}")
         self.web_view.loadFinished.connect(self._init_js_bridge)
         self.web_view.loadFinished.connect(self.push_initial_state)
+        self.web_view.load(url)
 
         layout.addWidget(self.web_view)
         self.setLayout(layout)
@@ -391,6 +389,77 @@ class ChatbotWidget(QWidget):
                 print(f"_handle_js_message: Fehler beim Speichern von Sessions: {e}")
                 import traceback
                 traceback.print_exc()
+        elif msg_type == 'loadCardSession':
+            # Load per-card session from SQLite
+            try:
+                from .card_sessions_storage import load_card_session
+                card_id = int(data) if isinstance(data, (int, str)) else data.get('cardId', 0)
+                result = load_card_session(card_id)
+                payload = {"type": "cardSessionLoaded", "cardId": card_id, "data": result}
+                payload_json = json.dumps(payload, ensure_ascii=False)
+                # Use BOTH ankiReceive AND CustomEvent for reliability
+                js = f"""(function() {{
+                    var p = {payload_json};
+                    if (typeof window.ankiReceive === 'function') window.ankiReceive(p);
+                    window.dispatchEvent(new CustomEvent('ankiCardSessionLoaded', {{detail: p}}));
+                }})();"""
+                self.web_view.page().runJavaScript(js)
+                print(f"_handle_js_message: cardSessionLoaded sent for card {card_id}, messages={len(result.get('messages', []))}")
+            except Exception as e:
+                print(f"_handle_js_message: loadCardSession error: {e}")
+
+        elif msg_type == 'saveCardSession':
+            # Save per-card session to SQLite
+            try:
+                from .card_sessions_storage import save_card_session
+                if isinstance(data, str):
+                    data = json.loads(data)
+                card_id = data.get('cardId') or data.get('card_id')
+                if card_id:
+                    save_card_session(int(card_id), data)
+            except Exception as e:
+                print(f"_handle_js_message: saveCardSession error: {e}")
+
+        elif msg_type == 'saveCardMessage':
+            # Append a single message to a card's session
+            try:
+                from .card_sessions_storage import save_message
+                if isinstance(data, str):
+                    data = json.loads(data)
+                card_id = data.get('cardId') or data.get('card_id')
+                message = data.get('message', data)
+                if card_id:
+                    save_message(int(card_id), message)
+            except Exception as e:
+                print(f"_handle_js_message: saveCardMessage error: {e}")
+
+        elif msg_type == 'saveCardSection':
+            # Create or update a review section for a card
+            try:
+                from .card_sessions_storage import save_section
+                if isinstance(data, str):
+                    data = json.loads(data)
+                card_id = data.get('cardId') or data.get('card_id')
+                section = data.get('section', data)
+                if card_id:
+                    save_section(int(card_id), section)
+            except Exception as e:
+                print(f"_handle_js_message: saveCardSection error: {e}")
+
+        elif msg_type == 'navigateToCard':
+            # Navigate reviewer to a specific card or direction (prev/next)
+            try:
+                # Support both directions ('prev'/'next') and specific card IDs
+                if isinstance(data, str) and data in ('prev', 'next'):
+                    if mw and mw.reviewer and hasattr(mw.reviewer, 'web'):
+                        mw.reviewer.web.eval(f"pycmd('navigate:{data}');")
+                else:
+                    card_id = int(data) if isinstance(data, (int, str)) else data.get('cardId', 0)
+                    if card_id and mw and mw.reviewer:
+                        mw.reviewer.web.eval(f"pycmd('navigate:{card_id}');")
+            except Exception as e:
+                print(f"_handle_js_message: navigateToCard error: {e}")
+
         elif msg_type == 'fetchImage':
             # Lade Bild über Python-Proxy und sende als Base64 zurück
             if isinstance(data, str):
@@ -537,6 +606,12 @@ class ChatbotWidget(QWidget):
                     self.web_view.page().runJavaScript(window_code)
                 except json.JSONDecodeError as e:
                     print(f"_handle_js_message: JSON-Fehler beim Parsen von AI Tools: {e}")
+        elif msg_type == 'saveMascotEnabled':
+            enabled = bool(data) if isinstance(data, bool) else False
+            update_config(mascot_enabled=enabled)
+            self.config = get_config(force_reload=True)
+            payload = {"type": "mascotEnabledSaved", "data": {"enabled": enabled}}
+            self.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
         elif msg_type == 'debugLog':
             # Debug-Logs vom Frontend in Log-Datei schreiben
             import os
