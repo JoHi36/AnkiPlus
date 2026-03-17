@@ -32,6 +32,7 @@
     let questionStartTime = Date.now();
     let chatOpen = false;
     let aiSteps = [];         // ThoughtStream steps
+    let lastUserAnswer = '';
 
     const $ = (s) => document.querySelector(s);
     const $$ = (s) => document.querySelectorAll(s);
@@ -135,7 +136,7 @@
                 break;
 
             case S.MC_ACTIVE:
-                showSection('dc-mc');
+                showSection(null);
                 setActions(null, null); // no action row — user picks from MC options
                 break;
 
@@ -291,6 +292,7 @@
             return;
         }
 
+        lastUserAnswer = text;
         ta.disabled = true;
         ta.classList.add('opacity-40');
         aiSteps = [];
@@ -386,10 +388,7 @@
         const colors = { 1: 'text-error', 2: 'text-warning', 3: 'text-success', 4: 'text-primary' };
         const barColors = { 1: '#ff453a', 2: '#ffd60a', 3: '#30d158', 4: '#0a84ff' };
 
-        let missingHtml = '';
-        if (missing && score < 70) {
-            missingHtml = `<p class="text-xs text-base-content/40 leading-relaxed mt-1" style="border-left:2px solid rgba(255,255,255,0.08);padding-left:8px;">${missing}</p>`;
-        }
+        const combinedFeedback = feedback + (missing && score < 70 ? ' ' + missing : '');
 
         const el = $('#eval-result');
         if (el) {
@@ -401,8 +400,15 @@
                     <span class="font-mono text-xl font-bold ${colors[autoRateEase]}">${score}%</span>
                     <span class="text-xs font-semibold uppercase tracking-wide ${colors[autoRateEase]}">${labels[autoRateEase]}</span>
                 </div>
-                <p class="text-xs text-base-content/55 leading-relaxed">${feedback}</p>
-                ${missingHtml}
+                <div style="border-left: 2px solid ${barColors[autoRateEase]}; background: ${barColors[autoRateEase]}10; padding: 6px 10px; border-radius: 0 6px 6px 0; margin-top: 6px; color: ${barColors[autoRateEase]}; font-size: 12px; line-height: 1.5;">
+                    ${combinedFeedback}
+                </div>
+                <div class="mt-2">
+                    <button onclick="this.nextElementSibling.classList.toggle('hidden')" class="text-[10px] text-base-content/30 hover:text-base-content/50 border border-base-content/10 rounded px-2 py-0.5">
+                        Meine Antwort anzeigen
+                    </button>
+                    <div class="hidden mt-1 text-[11px] text-base-content/40 italic leading-relaxed">${lastUserAnswer}</div>
+                </div>
             `;
         }
     };
@@ -420,8 +426,9 @@
         mcCorrectIndex = options.findIndex(o => o.correct);
         aiSteps = [];
 
-        const area = $('#mc-area');
+        const area = $('#mc-card-area');
         if (area) {
+            area.classList.remove('hidden');
             area.innerHTML = options.map((opt, i) => `
                 <div class="mc-option-wrapper" data-index="${i}">
                     <button class="btn btn-ghost justify-start gap-3 h-auto py-3 px-4 rounded-xl text-left font-normal text-sm text-base-content no-animation w-full"
@@ -449,8 +456,8 @@
         if (current !== S.MC_ACTIVE) return;
         mcAttempts++;
 
-        const all = $$('#mc-area .btn');
-        const sel = $(`#mc-area .btn[data-index="${index}"]`);
+        const all = $$('#mc-card-area .btn');
+        const sel = $(`#mc-card-area .btn[data-index="${index}"]`);
 
         if (index === mcCorrectIndex) {
             sel.classList.remove('btn-ghost');
@@ -463,7 +470,8 @@
         } else {
             mcWrongPicks.push(index);
             sel.classList.remove('btn-ghost');
-            sel.classList.add('btn-error', 'opacity-40');
+            sel.classList.add('btn-error');
+            sel.insertAdjacentHTML('beforeend', '<span class="ml-auto text-error-content font-bold">✗</span>');
             sel.querySelector('.badge')?.classList.add('badge-error');
             sel.disabled = true;
             // Show explanation for the wrong pick
@@ -471,7 +479,7 @@
 
             if (mcAttempts >= 2) {
                 autoRateEase = 1;
-                const correct = $(`#mc-area .btn[data-index="${mcCorrectIndex}"]`);
+                const correct = $(`#mc-card-area .btn[data-index="${mcCorrectIndex}"]`);
                 if (correct) {
                     correct.classList.remove('btn-ghost');
                     correct.classList.add('btn-success', 'text-success-content');
@@ -501,11 +509,9 @@
                 const wrongExps = mcWrongPicks
                     .map(i => mcOptions[i])
                     .filter(o => o && o.explanation)
-                    .map(o => `<span class="text-base-content/35">${o.text}:</span> ${o.explanation}`)
-                    .join('<br>');
-                if (wrongExps) {
-                    wrongSummary = `<div class="text-xs text-base-content/40 mt-2 leading-relaxed">${wrongExps}</div>`;
-                }
+                    .map(o => `<div class="text-xs leading-relaxed" style="border-left:2px solid rgba(255,69,58,0.4);padding-left:8px;color:rgba(255,69,58,0.7);">${o.explanation}</div>`)
+                    .join('');
+                if (wrongExps) wrongSummary = `<div class="flex flex-col gap-1 mt-2">${wrongExps}</div>`;
             }
 
             el.innerHTML = `
@@ -541,29 +547,13 @@
         }
         if (fallback) fallback.style.display = 'none';
 
-        container.innerHTML = aiSteps.map((step, idx) => {
-            const isLast = idx === aiSteps.length - 1;
-            const isLoading = step.status === 'loading';
-            const isError = step.phase === 'error';
-            const dot = isLoading
-                ? '<span class="loading loading-spinner loading-xs text-base-content/30" style="width:10px;height:10px;"></span>'
-                : isError
-                ? '<div style="width:6px;height:6px;border-radius:50%;background:rgba(255,69,58,0.6);"></div>'
-                : '<div style="width:5px;height:5px;border-radius:50%;background:rgba(48,209,88,0.4);"></div>';
-            const line = !isLast
-                ? '<div style="flex:1;width:1px;background:rgba(255,255,255,0.06);min-height:8px;"></div>'
-                : '';
-            const color = isError ? 'rgba(255,69,58,0.6)' : `rgba(255,255,255,${isLoading ? '0.5' : '0.3'})`;
-
-            return `<div style="display:flex;gap:8px;">
-                <div style="display:flex;flex-direction:column;align-items:center;width:14px;padding-top:5px;">
-                    ${dot}${line}
-                </div>
-                <div style="flex:1;padding-bottom:${isLast ? '0' : '4px'};">
-                    <span style="font-size:12px;color:${color};">${step.label}</span>
-                </div>
+        const activeStep = aiSteps[aiSteps.length - 1];
+        if (!activeStep) return;
+        container.innerHTML = `
+            <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+                <span class="loading loading-spinner loading-xs" style="width:10px;height:10px;opacity:0.5;"></span>
+                <span style="font-size:12px;color:rgba(255,255,255,0.45);">${activeStep.label}</span>
             </div>`;
-        }).join('');
     }
 
 
@@ -576,11 +566,24 @@
             setChatOpen(false);
             return;
         }
+        const mcContext = current === S.MC_RESULT ? {
+            wrongPicks: mcWrongPicks.map(i => ({
+                text: mcOptions[i]?.text || '',
+                explanation: mcOptions[i]?.explanation || ''
+            })),
+            correctOption: mcOptions[mcCorrectIndex] ? {
+                text: mcOptions[mcCorrectIndex].text,
+                explanation: mcOptions[mcCorrectIndex].explanation
+            } : null,
+            attempts: mcAttempts
+        } : null;
+
         pycmd('chat:context:' + JSON.stringify({
             question: getTextContent('.question'),
             userAnswer: $('#user-answer')?.value || '',
             correctAnswer: getTextContent('.answer'),
-            mode: current === S.MC_RESULT ? 'mc' : (current === S.EVALUATED ? 'text' : 'show')
+            mode: current === S.MC_RESULT ? 'mc' : (current === S.EVALUATED ? 'text' : 'show'),
+            mcContext
         }));
         pycmd('chat:open');
         setChatOpen(true);
@@ -633,6 +636,10 @@
 
         if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undoCard(); return; }
         if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+        // ArrowLeft/Right: Navigate review trail (previous/next card)
+        if (e.key === 'ArrowLeft') { e.preventDefault(); pycmd('navigate:prev'); return; }
+        if (e.key === 'ArrowRight') { e.preventDefault(); pycmd('navigate:next'); return; }
 
         const handlers = {
             'Space': () => {

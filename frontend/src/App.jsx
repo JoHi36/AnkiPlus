@@ -5,6 +5,8 @@ import { useSessions } from './hooks/useSessions';
 import { updateSessionSections } from './utils/sessions';
 import { useDeckTracking } from './hooks/useDeckTracking';
 import { useCardContext } from './hooks/useCardContext';
+import { useCardSession } from './hooks/useCardSession';
+import { useReviewTrail } from './hooks/useReviewTrail';
 import { useModels } from './hooks/useModels';
 import { SessionContextProvider, useSessionContext } from './contexts/SessionContext';
 import Header from './components/Header';
@@ -23,6 +25,7 @@ import DeckBrowser from './components/DeckBrowser';
 import ErrorBoundary from './components/ErrorBoundary';
 import PaywallModal from './components/PaywallModal';
 import SectionDivider from './components/SectionDivider';
+import ReviewTrailIndicator from './components/ReviewTrailIndicator';
 import { BookOpen } from 'lucide-react';
 
 /**
@@ -100,35 +103,13 @@ function AppInner() {
       }
     };
     
-    const originalAnkiReceive = window.ankiReceive;
-    window.ankiReceive = (payload) => {
-      if (originalAnkiReceive) {
-        originalAnkiReceive(payload);
-      }
-      if (payload.type === 'authTokenLoaded' && payload.data) {
-        setCurrentAuthToken(payload.data.token || '');
-      } else if (payload.type === 'auth_success') {
-        if (bridge && bridge.getAuthStatus) {
-          try {
-            const statusStr = bridge.getAuthStatus();
-            if (statusStr) {
-              const status = JSON.parse(statusStr);
-              setAuthStatus(status);
-            }
-          } catch (e) {
-            console.error('Fehler beim Laden des Auth-Status:', e);
-          }
-        }
-        if (bridge && bridge.getAuthToken) {
-          bridge.getAuthToken();
-        }
-      }
-    };
-    
+    // NOTE: Auth events (authTokenLoaded, auth_success) are now handled in the main
+    // ankiReceive handler below. Do NOT override window.ankiReceive here — that would
+    // destroy the main handler when this useEffect re-runs (bridge change).
+
     window.addEventListener('ankiMessage', handleMessage);
     return () => {
       window.removeEventListener('ankiMessage', handleMessage);
-      window.ankiReceive = originalAnkiReceive;
     };
   }, [bridge]);
   
@@ -147,6 +128,8 @@ function AppInner() {
   const modelsHook = useModels(bridge);
   const sessionsHook = useSessions(bridge, isReady);
   const cardContextHook = useCardContext();
+  const cardSessionHook = useCardSession(bridge);
+  const reviewTrailHook = useReviewTrail();
   // Create a setSessions wrapper that works with SessionContext
   const setSessionsWrapper = useCallback((updater) => {
     if (typeof updater === 'function') {
@@ -167,7 +150,7 @@ function AppInner() {
   
   // Übergebe cardContextHook an useChat für Section-Erstellung bei erster Nachricht
   // Use SessionContext's currentSessionId and wrapper
-  const chatHook = useChat(bridge, sessionContext.currentSessionId, setSessionsWrapper, cardContextHook.currentSectionId, cardContextHook);
+  const chatHook = useChat(bridge, sessionContext.currentSessionId, setSessionsWrapper, cardContextHook.currentSectionId, cardContextHook, cardSessionHook);
   // DEPRECATED: useDeckTracking is being phased out in favor of SessionContext
   // Keep for backward compatibility during migration
   const deckTrackingHook = useDeckTracking(
@@ -185,9 +168,28 @@ function AppInner() {
     sessionsHook.setForceShowOverview
   );
   
-  // Ref für window.ankiReceive
+  // Refs für window.ankiReceive — prevent stale closures
   const bridgeRef = useRef(bridge);
   const ankiReceiveRef = useRef(false);
+  // Hook refs — ankiReceive handler captures these once, so we need refs to get latest values
+  const cardSessionHookRef = useRef(cardSessionHook);
+  const cardContextHookRef = useRef(cardContextHook);
+  const chatHookRef = useRef(chatHook);
+  const modelsHookRef = useRef(modelsHook);
+  const deckTrackingHookRef = useRef(deckTrackingHook);
+  const reviewTrailHookRef = useRef(reviewTrailHook);
+  const sessionContextRef = useRef(sessionContext);
+  const handlePerformanceCaptureRef = useRef(handlePerformanceCapture);
+  useEffect(() => {
+    cardSessionHookRef.current = cardSessionHook;
+    cardContextHookRef.current = cardContextHook;
+    chatHookRef.current = chatHook;
+    modelsHookRef.current = modelsHook;
+    deckTrackingHookRef.current = deckTrackingHook;
+    reviewTrailHookRef.current = reviewTrailHook;
+    sessionContextRef.current = sessionContext;
+    handlePerformanceCaptureRef.current = handlePerformanceCapture;
+  });
   // Ref für messages container (für Auto-Scroll)
   const messagesContainerRef = useRef(null);
   // Ref für Header-Höhe (für sticky section headers)
@@ -220,7 +222,7 @@ function AppInner() {
     if (!sectionId) return;
     // 1. Update local sections state
     cardContextHook.updateSectionPerformance(sectionId, perfData);
-    // 2. Persist to session
+    // 2. Persist to deck-based session (legacy)
     const sessionId = sessionContext.currentSessionId;
     if (sessionId) {
       setSessionsWrapper((prevSessions) => {
@@ -232,7 +234,19 @@ function AppInner() {
         return updateSessionSections(prevSessions, sessionId, updatedSections);
       });
     }
-  }, [cardContextHook, sessionContext.currentSessionId, setSessionsWrapper]);
+    // 3. Persist to per-card SQLite session
+    const cardId = cardSessionHook.currentCardId || cardContextHook.cardContext?.cardId;
+    if (cardId) {
+      const section = cardContextHook.sections.find(s => s.id === sectionId);
+      if (section) {
+        cardSessionHook.saveSection(cardId, {
+          ...section,
+          performanceData: perfData,
+          performanceType: perfData?.type,
+        });
+      }
+    }
+  }, [cardContextHook, sessionContext.currentSessionId, setSessionsWrapper, cardSessionHook]);
   
   // Zeige Session-Übersicht NUR wenn explizit vom User angefordert (via Stapel-Button o.ä.)
   // NICHT automatisch wenn keine Session aktiv — Chat startet immer im Chat-Modus
@@ -433,48 +447,130 @@ function AppInner() {
         }
       }
 
+        // Use refs to avoid stale closures — this handler is only created once
+        const _models = modelsHookRef.current;
+        const _chat = chatHookRef.current;
+        const _deck = deckTrackingHookRef.current;
+        const _cardCtx = cardContextHookRef.current;
+        const _cardSession = cardSessionHookRef.current;
+        const _trail = reviewTrailHookRef.current;
+        const _session = sessionContextRef.current;
+        const _perfCapture = handlePerformanceCaptureRef.current;
+
+        // Auth Events (handled here to avoid destructive window.ankiReceive overrides)
+        if (payload.type === 'authTokenLoaded' && payload.data) {
+          setCurrentAuthToken(payload.data.token || '');
+        }
+        if (payload.type === 'auth_success') {
+          const b = bridgeRef.current;
+          if (b && b.getAuthStatus) {
+            try {
+              const statusStr = b.getAuthStatus();
+              if (statusStr) {
+                const status = JSON.parse(statusStr);
+                setAuthStatus(status);
+              }
+            } catch (e) { /* ignore */ }
+          }
+          if (b && b.getAuthToken) {
+            b.getAuthToken();
+          }
+        }
+        // Dispatch auth events as CustomEvents for ProfileDialog/SettingsModal
+        if (['authTokenLoaded', 'authStatusLoaded', 'auth_success', 'auth_error', 'auth_logout'].includes(payload.type)) {
+          window.dispatchEvent(new CustomEvent('ankiAuthEvent', { detail: payload }));
+        }
+
         // Models Events
-        modelsHook.handleAnkiReceive(payload);
-        
+        _models.handleAnkiReceive(payload);
+
         // Chat Events
-        chatHook.handleAnkiReceive(payload);
-        
+        _chat.handleAnkiReceive(payload);
+
         // Deck Events
         if (payload.type === 'currentDeck') {
           console.log('📚 App.jsx: Aktuelles Deck erhalten:', payload.data);
-          deckTrackingHook.setCurrentDeck(payload.data);
-          deckTrackingHook.handleDeckChange(payload.data);
+          _deck.setCurrentDeck(payload.data);
+          _deck.handleDeckChange(payload.data);
         } else if (payload.type === 'availableDecks') {
           console.log('📚 App.jsx: Verfügbare Decks erhalten:', payload.data?.decks?.length || 0);
         } else if (payload.type === 'openDeck') {
-          // WICHTIG: Wenn ein Deck geöffnet wird, sofort getCurrentDeck aufrufen
-          // um die Session zu laden (nicht auf Polling warten)
           console.log('📚 App.jsx: Deck geöffnet, hole aktuelle Deck-Info...');
           const currentBridge = bridgeRef.current;
           if (currentBridge && currentBridge.getCurrentDeck) {
-            // Kleine Verzögerung, damit Anki das Deck vollständig geöffnet hat
             setTimeout(() => {
               currentBridge.getCurrentDeck();
             }, 300);
           }
         }
-        
-        // Card Context Events - forward to SessionContext for seenCardIds tracking
+
+        // Card Context Events — PER-CARD SESSION SWITCH
         if (payload.type === 'cardContext') {
-          cardContextHook.handleCardContext(payload.data);
-          // Forward cardId to SessionContext for tracking
+          console.error('🔴 CARD_SWITCH: cardContext for cardId:', payload.data?.cardId);
+          _cardCtx.handleCardContext(payload.data);
           if (payload.data && payload.data.cardId) {
-            sessionContext.handleCardShown(payload.data.cardId);
+            _session.handleCardShown(payload.data.cardId);
+            // IMMEDIATELY clear chat for new card (before async load completes)
+            // This makes the card switch visible instantly.
+            // cardSessionLoaded will restore messages if the card has history.
+            _chat.setMessages([]);
+            _cardCtx.setSections([]);
+            _cardCtx.setCurrentSectionId(null);
+            // Per-Card Session: Load card's session from SQLite
+            _cardSession.loadCardSession(payload.data.cardId);
+            // Review Trail: Track card in navigation trail
+            _trail.addCard(payload.data.cardId);
           }
         }
 
-        // Review Result Events - card was rated (ease1-4) on the reviewer side
+        // Per-Card Session Events
+        if (payload.type === 'cardSessionLoaded') {
+          const enrichedPayload = {
+            ...payload,
+            data: { ...(payload.data || {}), cardId: payload.cardId || payload.data?.cardId }
+          };
+          _cardSession.handleAnkiReceive(enrichedPayload);
+          // Sync loaded card session data to chat and sections
+          const data = payload.data || payload;
+          if (data && data.messages && data.messages.length > 0) {
+            const normalizedMessages = data.messages.map(m => ({
+              ...m,
+              from: m.sender || m.from || 'user',
+              sectionId: m.section_id || m.sectionId,
+              createdAt: m.created_at || m.createdAt,
+              steps: typeof m.steps === 'string' ? JSON.parse(m.steps || '[]') : (m.steps || []),
+              citations: typeof m.citations === 'string' ? JSON.parse(m.citations || '{}') : (m.citations || {}),
+            }));
+            _chat.setMessages(normalizedMessages);
+          } else if (data && (!data.messages || data.messages.length === 0)) {
+            _chat.setMessages([]);
+          }
+          if (data && data.sections) {
+            const normalizedSections = data.sections.map(s => ({
+              ...s,
+              cardId: s.card_id || s.cardId,
+              createdAt: s.created_at || s.createdAt,
+              performanceType: s.performance_type || s.performanceType,
+              performanceData: typeof s.performance_data === 'string'
+                ? JSON.parse(s.performance_data || 'null')
+                : (s.performance_data || s.performanceData || null),
+            }));
+            _cardCtx.setSections(normalizedSections);
+            if (normalizedSections.length > 0) {
+              const lastSection = normalizedSections[normalizedSections.length - 1];
+              _cardCtx.setCurrentSectionId(lastSection.id);
+            } else {
+              _cardCtx.setCurrentSectionId(null);
+            }
+          }
+        }
+
+        // Review Result Events
         if (payload.type === 'reviewResult' && payload.data) {
           console.log('📊 App.jsx: Review result received:', payload.data);
           const { cardId, ease, rating, timeSeconds, score } = payload.data;
-          // Find or store performance data for this card's section
           if (cardId) {
-            const section = cardContextHook.getSectionForCard(cardId);
+            const section = _cardCtx.getSectionForCard(cardId);
             const perfData = {
               type: 'flip',
               score: score || 70,
@@ -483,23 +579,20 @@ function AppInner() {
               ease: ease || 3,
             };
             if (section) {
-              // Section exists - update it
-              handlePerformanceCapture(section.id, perfData);
+              _perfCapture(section.id, perfData);
             } else {
-              // Store pending performance data for when section is created
               window._pendingPerformanceData = window._pendingPerformanceData || {};
               window._pendingPerformanceData[cardId] = perfData;
-              console.log('📊 App.jsx: Stored pending performance data for card:', cardId);
             }
           }
         }
 
-        // Evaluation Result Events - text answer was evaluated on the reviewer side
+        // Evaluation Result Events
         if (payload.type === 'evaluationResult' && payload.data) {
           console.log('📊 App.jsx: Evaluation result received:', payload.data);
           const { cardId, score, feedback, userAnswer } = payload.data;
           if (cardId) {
-            const section = cardContextHook.getSectionForCard(cardId);
+            const section = _cardCtx.getSectionForCard(cardId);
             const perfData = {
               type: 'text',
               score: score || 0,
@@ -508,38 +601,54 @@ function AppInner() {
               feedback: feedback || '',
             };
             if (section) {
-              handlePerformanceCapture(section.id, perfData);
+              _perfCapture(section.id, perfData);
             } else {
               window._pendingPerformanceData = window._pendingPerformanceData || {};
               window._pendingPerformanceData[cardId] = perfData;
             }
           }
         }
-        
+
+        // Initial Message (from reviewer MC mode — auto-send to AI)
+        if (payload.type === 'initialMessage' && payload.data?.text) {
+          const _chatHook = chatHookRef.current;
+          if (_chatHook && _chatHook.handleSend) {
+            setTimeout(() => {
+              _chatHook.handleSend(payload.data.text);
+            }, 300);
+          }
+        }
+
         // Section Title Events
         if (payload.type === 'sectionTitleGenerated') {
           console.log('🏷️ App.jsx: Section-Titel erhalten:', payload.data);
-          // Delegate an useChat
-          chatHook.handleAnkiReceive(payload);
+          _chat.handleAnkiReceive(payload);
         }
-        
-        // Sessions Events - Sessions wurden von Python geladen
+
+        // Sessions Events
         if (payload.type === 'sessionsLoaded') {
           console.log('📚 App.jsx: Sessions geladen:', payload.data?.length || 0);
-          // Sessions werden direkt in useSessions verarbeitet via Event
-          window.dispatchEvent(new CustomEvent('sessionsLoaded', { 
-            detail: { sessions: payload.data || [] } 
+          window.dispatchEvent(new CustomEvent('sessionsLoaded', {
+            detail: { sessions: payload.data || [] }
           }));
         }
-        
-        // Deck Events - deckSelected
+
+        // Deck Events - deckSelected / deckExited
         if (payload.type === 'deckSelected') {
+          _trail.resetTrail();
+          // Dispatch as CustomEvent for SessionContext (which listens via addEventListener)
+          window.dispatchEvent(new CustomEvent('deckSelected', { detail: payload.data }));
         }
-        
-        // Card Details Events - Karten-Details wurden geladen
+        if (payload.type === 'deckExited') {
+          _trail.resetTrail();
+          _cardSession.clearCurrentSession();
+          // Dispatch as CustomEvent for SessionContext
+          window.dispatchEvent(new CustomEvent('deckExited'));
+        }
+
+        // Card Details Events
         if (payload.type === 'cardDetails') {
           console.log('🔍 App.jsx: Card Details erhalten:', payload.data);
-          // Rufe Callback auf, falls vorhanden
           if (window._getCardDetailsCallbacks && payload.callbackId) {
             const callback = window._getCardDetailsCallbacks[payload.callbackId];
             if (callback) {
@@ -548,10 +657,9 @@ function AppInner() {
             }
           }
         }
-        
+
         // Save Multiple Choice Result
         if (payload.type === 'saveMultipleChoiceResult') {
-          console.log('💾 App.jsx: Save Multiple Choice Result erhalten:', payload.data);
           if (window._saveMultipleChoiceCallbacks && payload.callbackId) {
             const callback = window._saveMultipleChoiceCallbacks[payload.callbackId];
             if (callback) {
@@ -560,10 +668,9 @@ function AppInner() {
             }
           }
         }
-        
+
         // Load Multiple Choice Result
         if (payload.type === 'loadMultipleChoiceResult') {
-          console.log('📥 App.jsx: Load Multiple Choice Result erhalten:', payload.data);
           if (window._loadMultipleChoiceCallbacks && payload.callbackId) {
             const callback = window._loadMultipleChoiceCallbacks[payload.callbackId];
             if (callback) {
@@ -572,10 +679,9 @@ function AppInner() {
             }
           }
         }
-        
+
         // Has Multiple Choice Result
         if (payload.type === 'hasMultipleChoiceResult') {
-          console.log('❓ App.jsx: Has Multiple Choice Result erhalten:', payload.data);
           if (window._hasMultipleChoiceCallbacks && payload.callbackId) {
             const callback = window._hasMultipleChoiceCallbacks[payload.callbackId];
             if (callback) {
@@ -584,52 +690,39 @@ function AppInner() {
             }
           }
         }
-        
-        // Deck Stats Events - Deck-Statistiken wurden geladen
+
+        // Deck Stats Events
         if (payload.type === 'deckStats') {
-          console.log('📊 App.jsx: Deck-Statistiken erhalten:', payload.deckId);
-          window.dispatchEvent(new CustomEvent('deckStats', { 
-            detail: { deckId: payload.deckId, data: payload.data } 
+          window.dispatchEvent(new CustomEvent('deckStats', {
+            detail: { deckId: payload.deckId, data: payload.data }
           }));
         }
-        
-        // Image Loaded Events - Bilder wurden über Python-Proxy geladen
+
+        // Image Loaded Events
         if (payload.type === 'imageLoaded') {
-          console.error('🖼️ App.jsx: Bild-Event empfangen, dispatching event:', payload.url?.substring(0, 50), 'success:', payload.data?.success, 'error:', payload.data?.error);
-          window.dispatchEvent(new CustomEvent('imageLoaded', { 
-            detail: { url: payload.url, data: payload.data } 
+          window.dispatchEvent(new CustomEvent('imageLoaded', {
+            detail: { url: payload.url, data: payload.data }
           }));
-          console.error('🖼️ App.jsx: Event dispatched');
         }
-        
-        // AI State Events - RAG Pipeline Status Updates
-        // CRITICAL: Handle ai_state BEFORE the general chatHook.handleAnkiReceive call
-        // to ensure it's processed even if the callback is stale
+
+        // AI State Events
         if (payload.type === 'ai_state') {
           console.log('🤖 App.jsx: AI State Update:', payload.message);
-          // CRITICAL: Explicitly forward to chatHook to ensure steps are tracked
-          // Call it directly here to ensure it's processed
-          if (chatHook && chatHook.handleAnkiReceive) {
-            chatHook.handleAnkiReceive(payload);
-          }
-          // Dispatch event für optionales UI-Feedback (z.B. Loading-Indikator mit Status)
-          window.dispatchEvent(new CustomEvent('aiStateUpdate', { 
-            detail: { message: payload.message } 
+          _chat.handleAnkiReceive(payload);
+          window.dispatchEvent(new CustomEvent('aiStateUpdate', {
+            detail: { message: payload.message }
           }));
         }
-        
-        // Init Event - spezielle Behandlung
+
+        // Init Event
         if (payload.type === 'init') {
-          // Setze aktuelles Deck
           if (payload.currentDeck) {
-            deckTrackingHook.setCurrentDeck(payload.currentDeck);
-            deckTrackingHook.handleDeckChange(payload.currentDeck);
+            _deck.setCurrentDeck(payload.currentDeck);
+            _deck.handleDeckChange(payload.currentDeck);
           }
-          
-          // Initiale Nachricht
           if (payload.message && payload.currentDeck?.isInDeck) {
-            if (chatHook.appendMessageRef.current) {
-              chatHook.appendMessageRef.current(payload.message, 'bot');
+            if (_chat.appendMessageRef?.current) {
+              _chat.appendMessageRef.current(payload.message, 'bot');
             }
         }
       }
@@ -658,41 +751,112 @@ function AppInner() {
             detail: payload.data 
           }));
         } else if (payload.type === 'init') {
-            modelsHook.handleAnkiReceive(payload);
+            modelsHookRef.current.handleAnkiReceive(payload);
             if (payload.currentDeck) {
-              deckTrackingHook.setCurrentDeck(payload.currentDeck);
-              deckTrackingHook.handleDeckChange(payload.currentDeck);
+              deckTrackingHookRef.current.setCurrentDeck(payload.currentDeck);
+              deckTrackingHookRef.current.handleDeckChange(payload.currentDeck);
             }
           }
         });
       }
     };
-    
+
     // Process queue immediately
-    console.error('🔵 DEBUG App.jsx: Initial queue processing, queue length:', window._ankiReceiveQueue?.length || 0);
     processQueue();
-    
-    // Also poll the queue periodically to catch events that arrive after initial render
+
+    // Poll the queue periodically to catch events that arrive after initial render
     const queuePollInterval = setInterval(() => {
-      if (window._ankiReceiveQueue && window._ankiReceiveQueue.length > 0) {
-        console.error('🔵 DEBUG App.jsx: Polling found queued messages', window._ankiReceiveQueue.length);
-      }
       processQueue();
-    }, 100); // Check every 100ms
-    
-    // Store interval ID for cleanup
+    }, 100);
+
     window._ankiReceiveQueuePollInterval = queuePollInterval;
-    console.error('🔵 DEBUG App.jsx: Queue polling started');
 
     return () => {
-      // Cleanup: Clear polling interval
       if (window._ankiReceiveQueuePollInterval) {
         clearInterval(window._ankiReceiveQueuePollInterval);
         window._ankiReceiveQueuePollInterval = null;
       }
     };
-  }, [modelsHook, chatHook, deckTrackingHook, cardContextHook]);
-  
+  }, []); // No deps needed — all hook access is via refs
+
+  // FALLBACK: Listen for cardContext via CustomEvent (more reliable than window.ankiReceive chain)
+  // card_tracker.py dispatches this alongside the ankiReceive call
+  useEffect(() => {
+    const handleCardContextEvent = (event) => {
+      const payload = event.detail;
+      if (!payload || payload.type !== 'cardContext') return;
+      console.error('🟢 CARD_SWITCH via CustomEvent: cardId:', payload.data?.cardId);
+
+      const _chat = chatHookRef.current;
+      const _cardCtx = cardContextHookRef.current;
+      const _cardSession = cardSessionHookRef.current;
+      const _trail = reviewTrailHookRef.current;
+      const _session = sessionContextRef.current;
+
+      _cardCtx.handleCardContext(payload.data);
+      if (payload.data && payload.data.cardId) {
+        _session.handleCardShown(payload.data.cardId);
+        _chat.setMessages([]);
+        _cardCtx.setSections([]);
+        _cardCtx.setCurrentSectionId(null);
+        _cardSession.loadCardSession(payload.data.cardId);
+        _trail.addCard(payload.data.cardId);
+      }
+    };
+
+    // Also listen for cardSessionLoaded via CustomEvent
+    const handleCardSessionLoadedEvent = (event) => {
+      const payload = event.detail;
+      if (!payload || payload.type !== 'cardSessionLoaded') return;
+      console.error('🟢 CARD_SESSION_LOADED via CustomEvent: cardId:', payload.cardId);
+
+      const _chat = chatHookRef.current;
+      const _cardCtx = cardContextHookRef.current;
+      const _cardSession = cardSessionHookRef.current;
+
+      _cardSession.handleAnkiReceive(payload);
+
+      const data = payload.data || payload;
+      if (data && data.messages && data.messages.length > 0) {
+        const normalizedMessages = data.messages.map(m => ({
+          ...m,
+          from: m.sender || m.from || 'user',
+          sectionId: m.section_id || m.sectionId,
+          createdAt: m.created_at || m.createdAt,
+          steps: typeof m.steps === 'string' ? JSON.parse(m.steps || '[]') : (m.steps || []),
+          citations: typeof m.citations === 'string' ? JSON.parse(m.citations || '{}') : (m.citations || {}),
+        }));
+        _chat.setMessages(normalizedMessages);
+      } else if (data && (!data.messages || data.messages.length === 0)) {
+        _chat.setMessages([]);
+      }
+      if (data && data.sections) {
+        const normalizedSections = data.sections.map(s => ({
+          ...s,
+          cardId: s.card_id || s.cardId,
+          createdAt: s.created_at || s.createdAt,
+          performanceType: s.performance_type || s.performanceType,
+          performanceData: typeof s.performance_data === 'string'
+            ? JSON.parse(s.performance_data || 'null')
+            : (s.performance_data || s.performanceData || null),
+        }));
+        _cardCtx.setSections(normalizedSections);
+        if (normalizedSections.length > 0) {
+          _cardCtx.setCurrentSectionId(normalizedSections[normalizedSections.length - 1].id);
+        } else {
+          _cardCtx.setCurrentSectionId(null);
+        }
+      }
+    };
+
+    window.addEventListener('ankiCardContext', handleCardContextEvent);
+    window.addEventListener('ankiCardSessionLoaded', handleCardSessionLoadedEvent);
+    return () => {
+      window.removeEventListener('ankiCardContext', handleCardContextEvent);
+      window.removeEventListener('ankiCardSessionLoaded', handleCardSessionLoadedEvent);
+    };
+  }, []); // Refs are used, no deps needed
+
   // Hole aktuelles Deck-Info beim Start
   useEffect(() => {
     if (isReady && bridge && bridge.getCurrentDeck) {
@@ -1025,15 +1189,34 @@ function AppInner() {
     lastUserMessageIdRef.current = 'pending';
   };
 
-  // Keyboard Navigation: Cmd + ArrowUp/Down to jump between user messages
+  // Keyboard Navigation: ArrowLeft/Right for review trail, Cmd+ArrowUp/Down for messages
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Skip if in input/textarea
+      const tag = e.target.tagName.toLowerCase();
+      if (tag === 'textarea' || tag === 'input' || e.target.isContentEditable) return;
+
       // ESC closes the chat panel
       if (e.key === 'Escape') {
         e.preventDefault();
         handleClose();
         return;
       }
+
+      // ArrowLeft/Right (no modifiers): Review Trail Navigation
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          handleTrailNavigateLeft();
+          return;
+        }
+        if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          handleTrailNavigateRight();
+          return;
+        }
+      }
+
       // Check for Cmd (Meta) or Ctrl + ArrowUp/Down
       if ((e.metaKey || e.ctrlKey) && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         e.preventDefault();
@@ -1096,7 +1279,7 @@ function AppInner() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [headerHeight]);
+  }, [headerHeight, handleTrailNavigateLeft, handleTrailNavigateRight]);
 
   // Settings öffnen
   const handleOpenSettings = () => {
@@ -1171,6 +1354,44 @@ function AppInner() {
     }
     sessionsHook.setForceShowOverview(false);
   }, [bridge, sessionsHook]);
+
+  // Review Trail Navigation handlers
+  // These use Python's trail (via pycmd navigate:prev/next) rather than
+  // the frontend trail, to avoid sync issues between the two trails.
+  const handleTrailNavigateLeft = useCallback(() => {
+    if (bridge) {
+      bridge.navigateToCard('prev');
+    }
+  }, [bridge]);
+
+  const handleTrailNavigateRight = useCallback(() => {
+    if (bridge) {
+      bridge.navigateToCard('next');
+    }
+  }, [bridge]);
+
+  // Global arrow key handler — works from chat panel too
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Don't navigate if user is typing in an input/textarea
+      const tag = e.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) {
+        return;
+      }
+      // Don't interfere with modifier keys
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handleTrailNavigateLeft();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        handleTrailNavigateRight();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleTrailNavigateLeft, handleTrailNavigateRight]);
 
   const handleNavigateToOverview = sessionsHook.createHandleNavigateToOverview(bridge);
   
@@ -1371,6 +1592,17 @@ function AppInner() {
                 id="messages-container"
                 className="h-full overflow-y-auto px-4 pt-20 pb-40 max-w-3xl mx-auto w-full scrollbar-thin relative z-10"
               >
+                {/* Review Trail Indicator */}
+                <ReviewTrailIndicator
+                  currentPosition={reviewTrailHook.currentPosition}
+                  totalCards={reviewTrailHook.totalCards}
+                  canGoLeft={reviewTrailHook.canGoLeft}
+                  canGoRight={reviewTrailHook.canGoRight}
+                  isViewingHistory={reviewTrailHook.isViewingHistory}
+                  onNavigateLeft={handleTrailNavigateLeft}
+                  onNavigateRight={handleTrailNavigateRight}
+                />
+
                 {chatHook.messages.length === 0 && !chatHook.isLoading && !chatHook.streamingMessage ? (
             <div className="flex items-center justify-center h-full">
               <p className="text-[13px] text-base-content/20 tracking-tight">

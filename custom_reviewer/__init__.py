@@ -115,14 +115,27 @@ def _get_deck_context_answers_sync(card_id=None, max_answers=8):
         import re
         import random as _rand
         card = mw.reviewer.card
+        note = card.note()
+        current_tags = set(note.tags)
         deck_id = card.did
         deck_name = mw.col.decks.name(deck_id)
-        # Get card IDs from the same deck (excluding current card)
-        card_ids = mw.col.find_cards(f'"deck:{deck_name}"')
-        # Shuffle and take a sample
-        sampled = [cid for cid in card_ids if cid != card.id]
-        _rand.shuffle(sampled)
-        sampled = sampled[:max_answers]
+
+        # Prefer cards with overlapping tags
+        tag_card_ids = []
+        if current_tags:
+            tag_query = ' OR '.join(f'tag:{t}' for t in list(current_tags)[:3])
+            try:
+                tag_card_ids = [c for c in mw.col.find_cards(f'({tag_query}) deck:"{deck_name}"') if c != card.id]
+                _rand.shuffle(tag_card_ids)
+            except Exception:
+                tag_card_ids = []
+
+        # Fill remaining slots from full deck
+        used_ids = set(tag_card_ids)
+        all_card_ids = [c for c in mw.col.find_cards(f'"deck:{deck_name}"') if c != card.id and c not in used_ids]
+        _rand.shuffle(all_card_ids)
+
+        sampled = (tag_card_ids[:5] + all_card_ids)[:max_answers]
 
         answers = []
         for cid in sampled:
@@ -139,6 +152,21 @@ def _get_deck_context_answers_sync(card_id=None, max_answers=8):
                             answers.append(clean)
             except Exception:
                 continue
+
+        # Prefer answers with similar length to the correct answer
+        try:
+            correct_fields = list(card.note().keys())
+            if len(correct_fields) >= 2:
+                import re as _re
+                correct_ans = card.note()[correct_fields[1]]
+                correct_len = len(_re.sub(r'<[^>]+>', '', correct_ans))
+                if correct_len > 0:
+                    filtered = [a for a in answers if 0.5 * correct_len <= len(a) <= 2.0 * correct_len]
+                    if len(filtered) >= 3:
+                        answers = filtered
+        except Exception:
+            pass
+
         return answers[:max_answers]
     except Exception as e:
         print(f"CustomReviewer: Error getting deck context: {e}")
@@ -267,28 +295,21 @@ def _ai_get_response_sync(prompt):
 def _call_ai_evaluation(question, user_answer, correct_answer):
     """Call AI to evaluate the user's answer. Returns {score, feedback, missing}."""
     try:
-        prompt = f"""Du bist ein Lernassistent. Bewerte die Antwort des Studenten auf die Karteikarten-Frage.
+        prompt = f"""Vergleiche die Antwort des Lernenden mit der korrekten Antwort.
+Erkläre in 1-2 Sätzen SPEZIFISCH was in der Antwort des Lernenden fehlte oder falsch war.
+Erkläre NICHT die gesamte Lösung neu — die korrekte Antwort ist dem Lernenden bereits sichtbar.
+Fokussiere auf: Was hat der Lernende geschrieben? Was fehlte konkret?
 
 FRAGE:
 {question}
 
-KORREKTE ANTWORT (aus der Karteikarte):
+KORREKTE ANTWORT:
 {correct_answer}
 
-ANTWORT DES STUDENTEN:
+ANTWORT DES LERNENDEN:
 {user_answer}
 
-Bewerte die Antwort des Studenten im Vergleich zur korrekten Antwort.
-Antworte NUR mit einem JSON-Objekt (kein Markdown, kein Code-Block):
-{{"score": <0-100>, "feedback": "<1-2 Sätze Feedback auf Deutsch>", "missing": "<was fehlt oder falsch ist, nur bei score < 70, sonst leerer String>"}}
-
-Bewertungskriterien:
-- 90-100: Exzellent, alle wesentlichen Punkte korrekt
-- 70-89: Gut, die wichtigsten Punkte stimmen
-- 40-69: Teilweise richtig, wichtige Aspekte fehlen — erkläre konkret was fehlt
-- 0-39: Größtenteils falsch oder unvollständig — erkläre was die richtige Antwort wäre
-
-Sei spezifisch im Feedback: nenne konkret was richtig/falsch ist, nicht nur allgemeine Phrasen."""
+Antworte NUR mit JSON: {{"score": 0-100, "feedback": "..."}}"""
 
         response = _ai_get_response_sync(prompt)
 
@@ -358,30 +379,18 @@ def _call_ai_mc_generation(question, correct_answer, deck_answers=None):
     try:
         deck_context = ""
         if deck_answers:
-            deck_context = "\n\nANTWORTEN AUS DEM GLEICHEN DECK (als Inspiration für plausible Distraktoren):\n"
+            deck_context = "\n\nDECK-KONTEXT (Inspiration für Distraktoren):\n"
             for i, ans in enumerate(deck_answers, 1):
                 deck_context += f"- {ans}\n"
 
-        prompt = f"""Du bist ein Lernassistent. Erstelle 4 Multiple-Choice-Optionen für diese Karteikarten-Frage.
+        prompt = f"""Erstelle 4 MC-Optionen für diese Karteikarten-Frage. 1 korrekt, 3 plausibel falsch.
+Jede Option: kurze Erklärung (max 1 Satz, warum richtig/falsch).
 
-FRAGE:
-{question}
+FRAGE: {question}
+KORREKTE ANTWORT: {correct_answer}{deck_context}
 
-KORREKTE ANTWORT:
-{correct_answer}{deck_context}
-
-Erstelle genau 4 Antwortoptionen (1 korrekt, 3 plausible aber falsche).
-Jede Option braucht eine kurze Erklärung (1 Satz), warum sie richtig oder falsch ist.
-Die falschen Optionen sollen plausibel und lehrreich sein.
-Antworte NUR mit einem JSON-Array (kein Markdown, kein Code-Block):
-[
-  {{"text": "Antworttext", "correct": true, "explanation": "Richtig, weil..."}},
-  {{"text": "Antworttext", "correct": false, "explanation": "Falsch, weil..."}},
-  {{"text": "Antworttext", "correct": false, "explanation": "Falsch, weil..."}},
-  {{"text": "Antworttext", "correct": false, "explanation": "Falsch, weil..."}}
-]
-
-Mische die Position der korrekten Antwort zufällig."""
+Antworte NUR mit JSON-Array:
+[{{"text":"...","correct":true,"explanation":"..."}},{{"text":"...","correct":false,"explanation":"..."}},{{"text":"...","correct":false,"explanation":"..."}},{{"text":"...","correct":false,"explanation":"..."}}]"""
 
         response = _ai_get_response_sync(prompt)
 
@@ -541,7 +550,10 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                     if chat_widget and hasattr(chat_widget, 'web_view'):
                         ease_labels = {1: 'Again', 2: 'Hard', 3: 'Good', 4: 'Easy'}
                         # Calculate time spent on card (approximate from card stats)
-                        time_taken = card.time_taken() // 1000 if hasattr(card, 'time_taken') else 0
+                        try:
+                            time_taken = card.time_taken() // 1000 if hasattr(card, 'time_taken') else 0
+                        except (TypeError, AttributeError):
+                            time_taken = 0
                         review_payload = {
                             "type": "reviewResult",
                             "data": {
@@ -560,15 +572,41 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
 
                 # After _answerCard, rev.card is now the NEXT card
                 # (set internally by nextCard() → sched.getCard()).
+                # Track the new card in the review trail
+                if rev.card:
+                    if not hasattr(handle_custom_pycmd, '_review_trail'):
+                        handle_custom_pycmd._review_trail = []
+                        handle_custom_pycmd._trail_index = -1
+                    trail = handle_custom_pycmd._review_trail
+                    new_cid = rev.card.id
+                    if len(trail) == 0 or trail[-1] != new_cid:
+                        trail.append(new_cid)
+                        handle_custom_pycmd._trail_index = len(trail) - 1
+
                 # Force a full page reload so our webview_will_set_content
                 # hook renders the new card with our custom template.
                 if rev.card:
+                    # Ensure timer_started is set (safety)
+                    import time as _time
+                    if not getattr(rev.card, 'timer_started', None):
+                        rev.card.timer_started = _time.time()
                     print(f"CustomReviewer: 🔄 Loading next card {rev.card.id}...")
                     if hasattr(rev, '_initWeb'):
                         rev._initWeb()
                     else:
                         # Fallback: trigger stdHtml directly — our hook replaces body anyway
                         rev.web.stdHtml("", context=rev)
+
+                    # CRITICAL: Send cardContext directly to chat panel
+                    # (don't rely solely on reviewer_did_show_question hook)
+                    try:
+                        from .. import ui_setup
+                        chat_widget = getattr(ui_setup, '_chatbot_widget', None)
+                        if chat_widget and hasattr(chat_widget, 'card_tracker'):
+                            chat_widget.card_tracker.send_card_context(rev.card, is_question=True)
+                            print(f"CustomReviewer: ✅ cardContext sent to chat for next card {rev.card.id}")
+                    except Exception as ctx_e:
+                        print(f"CustomReviewer: ⚠️ Could not send cardContext after ease: {ctx_e}")
                 else:
                     print("CustomReviewer: 📋 No more cards — going to overview")
                     mw.moveToState("overview")
@@ -640,6 +678,34 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
             QTimer.singleShot(1000, _focus_chat_textarea)
         except Exception as e:
             print(f"CustomReviewer: Error opening chat: {e}")
+
+        # If MC mode with wrong picks, auto-send initial message explaining the error
+        try:
+            import builtins as _builtins
+            ctx = getattr(_builtins, '_anki_card_context', {})
+            if ctx.get('mode') == 'mc' and ctx.get('mcContext') and ctx['mcContext'].get('wrongPicks'):
+                mc = ctx['mcContext']
+                wrong_texts = [p['text'] for p in mc['wrongPicks'] if p.get('text')]
+                correct = (mc.get('correctOption') or {}).get('text', '') or ctx.get('correctAnswer', '')
+                if wrong_texts and correct:
+                    initial_msg = (
+                        f"Ich habe gerade eine Multiple-Choice-Frage falsch beantwortet. "
+                        f"Ich hatte '{', '.join(wrong_texts)}' gewählt, aber die richtige Antwort war '{correct}'. "
+                        f"Kannst du mir kurz erklären, warum meine Wahl falsch war?"
+                    )
+                    def _send_initial(msg=initial_msg):
+                        try:
+                            widget = ui_setup._chatbot_widget
+                            if widget and hasattr(widget, 'web_view'):
+                                widget.web_view.page().runJavaScript(
+                                    f"if(window.ankiReceive) window.ankiReceive({json.dumps({'type': 'initialMessage', 'data': {'text': msg}})});"
+                                )
+                        except Exception as e:
+                            print(f"CustomReviewer: Error sending initial MC message: {e}")
+                    QTimer.singleShot(800, _send_initial)
+        except Exception as e:
+            print(f"CustomReviewer: Error preparing initial MC message: {e}")
+
         return (True, None)
 
     elif message == "chat:close":
@@ -708,6 +774,83 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
             print(f"CustomReviewer: Error starting MC generation: {e}")
             if mw and mw.reviewer and mw.reviewer.web:
                 mw.reviewer.web.eval('window.onMCOptions([]);')
+        return (True, None)
+
+    elif message.startswith("navigate:"):
+        # Review Trail Navigation
+        # Supports: navigate:prev, navigate:next, navigate:<cardId>
+        try:
+            arg = message[9:]
+
+            # Maintain review trail as a list on this function
+            if not hasattr(handle_custom_pycmd, '_review_trail'):
+                handle_custom_pycmd._review_trail = []
+                handle_custom_pycmd._trail_index = -1
+
+            trail = handle_custom_pycmd._review_trail
+            idx = handle_custom_pycmd._trail_index
+
+            # Track current card if not already at end of trail
+            if mw and mw.reviewer and mw.reviewer.card:
+                current_cid = mw.reviewer.card.id
+                if len(trail) == 0 or (idx == len(trail) - 1 and trail[-1] != current_cid):
+                    trail.append(current_cid)
+                    handle_custom_pycmd._trail_index = len(trail) - 1
+                    idx = handle_custom_pycmd._trail_index
+
+            target_card_id = None
+
+            if arg == 'prev':
+                if idx > 0:
+                    handle_custom_pycmd._trail_index -= 1
+                    target_card_id = trail[handle_custom_pycmd._trail_index]
+                else:
+                    print("CustomReviewer: Already at beginning of trail")
+                    return (True, None)
+            elif arg == 'next':
+                if idx < len(trail) - 1:
+                    handle_custom_pycmd._trail_index += 1
+                    target_card_id = trail[handle_custom_pycmd._trail_index]
+                else:
+                    print("CustomReviewer: Already at end of trail")
+                    return (True, None)
+            else:
+                target_card_id = int(arg)
+
+            if target_card_id and mw and mw.reviewer and mw.col:
+                card = mw.col.get_card(target_card_id)
+                if card:
+                    rev = mw.reviewer
+                    rev.card = card
+                    # Set timer_started so _answerCard doesn't crash
+                    # (navigated cards don't have timer_started set by default)
+                    import time as _time
+                    card.timer_started = _time.time()
+                    # Flag to prevent _on_webview_content from corrupting the trail
+                    handle_custom_pycmd._is_navigating = True
+                    try:
+                        rev._initWeb()
+                    finally:
+                        handle_custom_pycmd._is_navigating = False
+                    print(f"CustomReviewer: Navigated to card {target_card_id} (trail {handle_custom_pycmd._trail_index + 1}/{len(trail)})")
+
+                    # CRITICAL: Send cardContext directly to chat panel
+                    # (don't rely on reviewer_did_show_question hook — it may
+                    #  fire before the webview is ready or get lost)
+                    try:
+                        from .. import ui_setup
+                        chat_widget = getattr(ui_setup, '_chatbot_widget', None)
+                        if chat_widget and hasattr(chat_widget, 'card_tracker'):
+                            chat_widget.card_tracker.send_card_context(card, is_question=True)
+                            print(f"CustomReviewer: ✅ cardContext sent to chat for card {target_card_id}")
+                    except Exception as nav_e:
+                        print(f"CustomReviewer: ⚠️ Could not send cardContext after navigate: {nav_e}")
+                else:
+                    print(f"CustomReviewer: Card {target_card_id} not found")
+        except Exception as e:
+            print(f"CustomReviewer: Error navigating: {e}")
+            import traceback
+            traceback.print_exc()
         return (True, None)
 
     return handled
@@ -802,10 +945,22 @@ class CustomReviewer:
             # Hide native bottom bar IMMEDIATELY (before rendering)
             self._hide_reviewer_bottom()
 
+            # Track card in review trail (so arrow navigation works from the first card)
+            # SKIP during backward/forward navigation — the navigate handler manages the index
+            if not hasattr(handle_custom_pycmd, '_review_trail'):
+                handle_custom_pycmd._review_trail = []
+                handle_custom_pycmd._trail_index = -1
+            if not getattr(handle_custom_pycmd, '_is_navigating', False):
+                trail = handle_custom_pycmd._review_trail
+                cid = card.id
+                if len(trail) == 0 or trail[-1] != cid:
+                    trail.append(cid)
+                    handle_custom_pycmd._trail_index = len(trail) - 1
+
             # Build custom HTML and replace the body
             custom_html = self._build_reviewer_html(card, context)
             web_content.body = custom_html
-            print(f"CustomReviewer: ✅ Injected custom HTML for card {card.id}")
+            print(f"CustomReviewer: ✅ Injected custom HTML for card {card.id} (trail {handle_custom_pycmd._trail_index + 1}/{len(trail)})")
         except Exception as e:
             import traceback
             print(f"CustomReviewer: ❌ Error in hook: {e}")
