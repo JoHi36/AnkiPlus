@@ -509,6 +509,12 @@ function AppInner() {
           window.dispatchEvent(new CustomEvent('ankiAuthEvent', { detail: payload }));
         }
 
+        // Free Chat triggered from Stapel search bar (custom_screens)
+        if (payload.type === 'startFreeChat' && payload.text) {
+          handleFreeChatOpen(payload.text);
+          return;
+        }
+
         // Models Events
         _models.handleAnkiReceive(payload);
 
@@ -1248,18 +1254,7 @@ function AppInner() {
   // Keyboard Navigation: ArrowLeft/Right for review trail, Cmd+ArrowUp/Down for messages
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Skip if in input/textarea
-      const tag = e.target.tagName.toLowerCase();
-      if (tag === 'textarea' || tag === 'input' || e.target.isContentEditable) return;
-
-      // ESC closes the chat panel
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        handleClose();
-        return;
-      }
-
-      // ArrowLeft/Right (no modifiers): Review Trail Navigation
+      // ArrowLeft/Right ALWAYS navigate cards, even from textarea
       if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
         if (e.key === 'ArrowLeft') {
           e.preventDefault();
@@ -1271,6 +1266,17 @@ function AppInner() {
           handleTrailNavigateRight();
           return;
         }
+      }
+
+      // Skip remaining shortcuts if in input/textarea
+      const tag = e.target.tagName.toLowerCase();
+      if (tag === 'textarea' || tag === 'input' || e.target.isContentEditable) return;
+
+      // ESC closes the chat panel
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleClose();
+        return;
       }
 
       // Check for Cmd (Meta) or Ctrl + ArrowUp/Down
@@ -1895,12 +1901,6 @@ function AppInner() {
           <div className="fixed bottom-0 left-0 right-0 z-50 px-4 pb-4">
         <ChatInput
           onSend={handleSend}
-          onOverview={() => {
-            // Trigger a full topic summary in the chat
-            // Use [[OVERVIEW]] marker so ChatMessage can display it nicely
-            const overviewPrompt = "[[OVERVIEW]] Gib mir eine vollständige Übersicht zu dieser Lernkarte. Erkläre das Thema ausführlich: Was ist der Kerninhalt, warum ist es wichtig, und wie hängt es mit verwandten Konzepten zusammen? Gib eine umfassende Zusammenfassung.";
-            handleSend(overviewPrompt, { mode: 'detailed' });
-          }}
           onOpenSettings={handleOpenSettings}
           isLoading={chatHook.isLoading}
           onStop={chatHook.handleStopRequest}
@@ -1911,13 +1911,33 @@ function AppInner() {
           authStatus={authStatus}
           currentAuthToken={currentAuthToken}
           onClose={handleClose}
-          lowScorePulse={(() => {
-            // Check if current section has low score for adaptive highlighting
-            const currentSection = cardContextHook.currentSectionId
-              ? cardContextHook.sections.find(s => s.id === cardContextHook.currentSectionId)
-              : null;
-            return currentSection?.performanceData?.score < 40;
-          })()}
+          actionPrimary={{
+            label: 'Weiter',
+            shortcut: 'SPACE',
+            onClick: () => {
+              // Replicate original handleAdvance: try bridge.advanceCard, fall back to close
+              if (bridge?.advanceCard) {
+                bridge.advanceCard();
+              } else {
+                handleClose();
+              }
+            },
+          }}
+          actionSecondary={{
+            label: 'Übersicht',
+            shortcut: '↵',
+            onClick: () => {
+              const overviewPrompt = "[[OVERVIEW]] Gib mir eine vollständige Übersicht zu dieser Lernkarte. Erkläre das Thema ausführlich: Was ist der Kerninhalt, warum ist es wichtig, und wie hängt es mit verwandten Konzepten zusammen? Gib eine umfassende Zusammenfassung.";
+              handleSend(overviewPrompt, { mode: 'detailed' });
+            },
+            disabled: chatHook.isLoading,
+            pulse: (() => {
+              const currentSection = cardContextHook.currentSectionId
+                ? cardContextHook.sections.find(s => s.id === cardContextHook.currentSectionId)
+                : null;
+              return currentSection?.performanceData?.score < 40;
+            })(),
+          }}
         />
           </div>
         </>

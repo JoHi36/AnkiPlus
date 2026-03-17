@@ -1,21 +1,26 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowUp, Square, CornerDownLeft } from 'lucide-react';
+import { ArrowUp, Square } from 'lucide-react';
 
 /**
  * ChatInput — Unified dock-style input component
  * Matches the reviewer's floating dock design:
  *   - Textarea on top (with animated snake border on focus)
  *   - Send button (absolute, appears when text present)
- *   - Action row at bottom: [Weiter SPACE | Übersicht]
+ *   - Action row at bottom: configurable via actionPrimary/actionSecondary props
  *
- * "Weiter" closes the side panel and advances to next card.
- * "Übersicht" triggers a full topic summary in the chat.
  * Typing a question + Enter sends a concrete question (compact mode).
  */
 
+interface ActionConfig {
+  label: string;
+  shortcut?: string;    // display only, e.g. 'SPACE', 'ESC', '⌘X'
+  onClick: () => void;
+  disabled?: boolean;
+  pulse?: boolean;      // animated highlight (lowScorePulse equivalent)
+}
+
 export interface ChatInputProps {
   onSend: (text: string, options?: { mode?: string }) => void;
-  onOverview?: () => void;
   onOpenSettings?: () => void;
   isLoading: boolean;
   onStop?: () => void;
@@ -26,12 +31,12 @@ export interface ChatInputProps {
   authStatus?: any;
   currentAuthToken?: string;
   onClose?: () => void;
-  lowScorePulse?: boolean;
+  actionPrimary: ActionConfig;
+  actionSecondary: ActionConfig;
 }
 
 export default function ChatInput({
   onSend,
-  onOverview,
   onOpenSettings,
   isLoading,
   onStop,
@@ -42,7 +47,8 @@ export default function ChatInput({
   authStatus = {},
   currentAuthToken = '',
   onClose,
-  lowScorePulse = false,
+  actionPrimary,
+  actionSecondary,
 }: ChatInputProps) {
   const [input, setInput] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -79,18 +85,11 @@ export default function ChatInput({
   };
 
   const handleAdvance = () => {
-    // Close panel and advance to next card
-    if (bridge && bridge.advanceCard) {
-      bridge.advanceCard();
-    } else if (onClose) {
-      onClose();
-    }
+    actionPrimary.onClick();
   };
 
   const handleOverview = () => {
-    if (onOverview) {
-      onOverview();
-    }
+    actionSecondary.onClick();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -127,7 +126,7 @@ export default function ChatInput({
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [bridge, onClose]);
+  }, [actionPrimary]);
 
   return (
     <div className="w-full relative">
@@ -194,16 +193,17 @@ export default function ChatInput({
           )}
         </div>
 
-        {/* Action row — matches dock design */}
+        {/* Action row — configurable via actionPrimary/actionSecondary props */}
         <div
           className="flex items-center"
           style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
         >
-          {/* Weiter */}
+          {/* Primary action (left) */}
           <button
             type="button"
-            onClick={handleAdvance}
-            className="flex-1 flex items-center justify-center gap-1 h-[44px] bg-transparent border-none cursor-pointer transition-colors duration-100 hover:bg-white/[0.04]"
+            onClick={actionPrimary.onClick}
+            disabled={actionPrimary.disabled}
+            className="flex-1 flex items-center justify-center gap-1 h-[44px] bg-transparent border-none cursor-pointer transition-colors duration-100 hover:bg-white/[0.04] disabled:opacity-30 disabled:cursor-not-allowed"
             style={{
               fontFamily: 'inherit',
               fontSize: '13px',
@@ -213,42 +213,46 @@ export default function ChatInput({
               borderBottomLeftRadius: '16px',
             }}
           >
-            Weiter
-            <span style={{
-              fontFamily: 'ui-monospace, monospace',
-              fontSize: '10px',
-              color: 'rgba(255,255,255,0.18)',
-              marginLeft: '4px',
-            }}>SPACE</span>
+            {actionPrimary.label}
+            {actionPrimary.shortcut && (
+              <span style={{
+                fontFamily: 'ui-monospace, monospace',
+                fontSize: '10px',
+                color: 'rgba(255,255,255,0.18)',
+                marginLeft: '4px',
+              }}>{actionPrimary.shortcut}</span>
+            )}
           </button>
 
           {/* Divider */}
-          <div style={{
-            width: '1px',
-            height: '16px',
-            background: 'rgba(255,255,255,0.06)',
-            flexShrink: 0,
-          }} />
+          <div style={{ width: '1px', height: '16px', background: 'rgba(255,255,255,0.06)', flexShrink: 0 }} />
 
-          {/* Übersicht — triggers full topic summary */}
+          {/* Secondary action (right) */}
           <button
             type="button"
-            onClick={handleOverview}
-            disabled={isLoading}
-            className={`flex-1 flex items-center justify-center gap-1.5 h-[44px] bg-transparent border-none cursor-pointer transition-all duration-200 hover:bg-white/[0.04] ${
-              lowScorePulse ? 'animate-pulse' : ''
-            } ${isLoading ? 'opacity-30 cursor-not-allowed' : ''}`}
+            onClick={actionSecondary.onClick}
+            disabled={actionSecondary.disabled}
+            className={`flex-1 flex items-center justify-center gap-1.5 h-[44px] bg-transparent border-none cursor-pointer transition-all duration-200 hover:bg-white/[0.04] disabled:opacity-30 disabled:cursor-not-allowed ${
+              actionSecondary.pulse ? 'animate-pulse' : ''
+            }`}
             style={{
               fontFamily: 'inherit',
               fontSize: '13px',
               fontWeight: '500',
-              color: lowScorePulse ? 'rgba(10,132,255,0.8)' : 'rgba(255,255,255,0.35)',
+              color: actionSecondary.pulse ? 'rgba(10,132,255,0.8)' : 'rgba(255,255,255,0.35)',
               borderRadius: '0',
               borderBottomRightRadius: '16px',
             }}
           >
-            Übersicht
-            <CornerDownLeft size={11} className="opacity-40" />
+            {actionSecondary.label}
+            {actionSecondary.shortcut && (
+              <span style={{
+                fontFamily: 'ui-monospace, monospace',
+                fontSize: '10px',
+                color: 'rgba(255,255,255,0.18)',
+                marginLeft: '4px',
+              }}>{actionSecondary.shortcut}</span>
+            )}
           </button>
         </div>
       </div>
