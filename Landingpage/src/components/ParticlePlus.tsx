@@ -24,22 +24,17 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
   const calledCompleteRef = useRef(false);
   const centerRef = useRef({ cx: 0, cy: 0 });
   const dimsRef = useRef({ w: 0, h: 0 });
-  // Cached font metrics (set once after first sizeCanvas)
-  const fontCacheRef = useRef({
-    font: '', subFont: '', fontSize: 0,
-    anWidth: 0, kiWidth: 0,
-    flashWidth: 0, intelWidth: 0,
-  });
+  const fontCacheRef = useRef({ font: '', fontSize: 0, anWidth: 0 });
 
-  const PARTICLE_COUNT = 400; // reduced from 500 — less GPU work
+  const PARTICLE_COUNT = 400;
   const PLUS_ARM_LEN = 120;
   const PLUS_ARM_WIDTH = 70;
   const FOCAL_LENGTH = 600;
 
-  // ── Snappy timeline — gather flows into quick explosion ──
-  const EXPLODE_TIME = 1.8;    // explosion begins
-  const COMPLETE_TIME = 1.8;   // crossfade starts immediately with explosion
-  const TOTAL_DURATION = 2.5;  // explosion lasts only 0.7s, particles vanish fast
+  const EXPLODE_TIME = 1.8;
+  // Fire BEFORE explosion so React re-renders during calm float phase
+  const COMPLETE_TIME = 1.5;
+  const TOTAL_DURATION = 2.5;
 
   const initParticles = useCallback((w: number, h: number) => {
     const particles: Particle[] = [];
@@ -65,7 +60,6 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
       const explodeSpeed = 200 + Math.random() * 400;
 
       const baseAlpha = 0.45 + Math.random() * 0.45;
-      // All particles arrive well before explosion (0.3→1.5s)
       const arriveStart = 0.3 + Math.random() * 0.4;
       const arriveDur = 0.7 + Math.random() * 0.4;
 
@@ -108,18 +102,11 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
       canvas.style.height = `${h}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      // Cache font metrics
       const fontSize = Math.min(w * 0.14, 180);
       const font = `800 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif`;
-      const subFontSize = Math.max(14, fontSize * 0.13);
-      const subFont = `300 ${subFontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif`;
       ctx.font = font;
       const anWidth = ctx.measureText('An').width;
-      const kiWidth = ctx.measureText('ki').width;
-      ctx.font = subFont;
-      const flashWidth = ctx.measureText('Flashcard').width;
-      const intelWidth = ctx.measureText('Intelligence').width;
-      fontCacheRef.current = { font, subFont, fontSize, anWidth, kiWidth, flashWidth, intelWidth };
+      fontCacheRef.current = { font, fontSize, anWidth };
 
       return { w, h };
     };
@@ -149,6 +136,7 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
       const { w: dW, h: dH } = dimsRef.current;
       if (!dW || !dH) { animRef.current = requestAnimationFrame(animate); return; }
 
+      // Fire BEFORE explosion — React re-renders during calm float, not during explosion
       if (t >= COMPLETE_TIME && !calledCompleteRef.current) {
         calledCompleteRef.current = true;
         onIntroComplete?.();
@@ -162,9 +150,9 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
       ctx.clearRect(0, 0, dW, dH);
 
       const { cx, cy } = centerRef.current;
-      const { font, subFont, anWidth, kiWidth, flashWidth, intelWidth, fontSize } = fontCacheRef.current;
+      const { font, anWidth } = fontCacheRef.current;
 
-      // ── TEXT (use cached font) ──
+      // ── TEXT: "An" + "ki" ──
       ctx.font = font;
       ctx.textBaseline = 'middle';
 
@@ -172,7 +160,6 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
       const splitRaw = Math.max(0, Math.min(1, (t - 0.4) / 1.2));
       const splitProgress = splitRaw * splitRaw * (3 - 2 * splitRaw);
 
-      // Dark → light: starts dim (0.15), brightens as split happens (up to 0.7)
       const brightening = 0.15 + splitProgress * 0.55;
       const explosionFade = t > EXPLODE_TIME
         ? Math.max(0, 1 - (t - EXPLODE_TIME) / 0.3)
@@ -182,8 +169,6 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
       if (textAlpha > 0.005) {
         const TEXT_GAP_FINAL = PLUS_ARM_LEN * 2 + 40;
         const halfGap = (splitProgress * TEXT_GAP_FINAL) / 2;
-
-        // "An" right-edge at cx - halfGap, "ki" left-edge at cx + halfGap
         const anX = cx - halfGap - anWidth;
         const kiX = cx + halfGap;
 
@@ -191,66 +176,29 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
         ctx.fillStyle = '#fff';
         ctx.fillText('An', anX, cy);
         ctx.fillText('ki', kiX, cy);
-
-        // ── Subtitles: "Flashcard" under An, "Intelligence" under ki ──
-        // When together (splitProgress=0): centered as "Flashcard Intelligence"
-        // When split (splitProgress=1): each centered under its letter pair
-        const subAlpha = fadeIn * Math.min(0.35, brightening * 0.45) * explosionFade;
-        if (subAlpha > 0.005) {
-          ctx.font = subFont;
-          ctx.globalAlpha = subAlpha;
-          ctx.fillStyle = '#fff';
-          const subY = cy + fontSize * 0.55;
-
-          // Centers of "An" and "ki"
-          const anCenter = anX + anWidth / 2;
-          const kiCenter = kiX + kiWidth / 2;
-
-          // Together: "Flashcard" + space + "Intelligence" centered at cx
-          const spaceWidth = 6;
-          const totalSubWidth = flashWidth + spaceWidth + intelWidth;
-          const togetherFlashX = cx - totalSubWidth / 2 + flashWidth / 2;
-          const togetherIntelX = cx + totalSubWidth / 2 - intelWidth / 2;
-
-          // Interpolate positions from together → under their respective letters
-          const flashCenterX = togetherFlashX + (anCenter - togetherFlashX) * splitProgress;
-          const intelCenterX = togetherIntelX + (kiCenter - togetherIntelX) * splitProgress;
-
-          ctx.textAlign = 'center';
-          ctx.fillText('Flashcard', flashCenterX, subY);
-          ctx.fillText('Intelligence', intelCenterX, subY);
-          ctx.textAlign = 'start';
-        }
-
-        ctx.font = font;
         ctx.globalAlpha = 1;
       }
 
-      // ── PARTICLES — optimized rendering ──
+      // ── PARTICLES ──
       const particles = particlesRef.current;
       const halfW = dW / 2;
       const halfH = dH / 2;
       const explodeDur = TOTAL_DURATION - EXPLODE_TIME;
-
-      // Pre-approach energy: float amplitude grows as we near explosion
       const approachEnergy = Math.max(0, Math.min(1, (t - 1.0) / (EXPLODE_TIME - 1.0)));
 
-      // Use globalAlpha instead of per-particle rgba string parsing
       ctx.fillStyle = 'rgb(10,132,255)';
 
       for (let i = 0; i < particles.length; i++) {
         const p = particles[i];
 
         const gatherRaw = Math.max(0, Math.min(1, (t - p.arriveStart) / p.arriveDur));
-        if (gatherRaw <= 0) continue; // not started yet — skip entirely
+        if (gatherRaw <= 0) continue;
 
         const gather = gatherRaw * gatherRaw * (3 - 2 * gatherRaw);
 
         const explodeRaw = Math.max(0, (t - EXPLODE_TIME) / explodeDur);
-        // Linear movement — no ease-out plateau where particles "hang"
         const explode = Math.min(explodeRaw, 1);
 
-        // Float amplitude grows from 3→8px as explosion approaches (energy buildup)
         const floatAmp = 3 + approachEnergy * 5;
         const floatX = Math.sin(t * 1.3 + i * 0.37) * floatAmp * gather;
         const floatY = Math.cos(t * 1.1 + i * 0.53) * floatAmp * gather;
@@ -266,7 +214,6 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
           px = p.hx + floatX * (1 - explode) + p.evx * explode;
           py = p.hy + floatY * (1 - explode) + p.evy * explode;
           pz = p.hz + p.evz * explode;
-          // Alpha tracks movement — invisible by the time particles slow
           alpha = p.baseAlpha * Math.max(0, 1 - explodeRaw * 2);
         }
 
@@ -277,7 +224,6 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
         const sy = halfH + (py - halfH) * scale;
         const ss = p.size * scale;
 
-        // Skip off-screen particles
         if (sx < -20 || sx > dW + 20 || sy < -20 || sy > dH + 20) continue;
 
         ctx.globalAlpha = alpha;

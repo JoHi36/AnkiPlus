@@ -93,9 +93,28 @@ export function LandingPage() {
         </section>
 
         {/* ═══ DEMO SECTION — Old Anki crossfades into modern demo ═══ */}
-        <section id="demo" className="max-w-6xl mx-auto px-4 sm:px-6 pb-24 sm:pb-32 demo-glow">
+        <section id="demo" className="max-w-6xl mx-auto px-4 sm:px-6 pb-24 sm:pb-32 demo-glow relative">
+
+          {/* Blue glow sunrise — ambient light rising from behind the demo */}
+          <div
+            className="absolute pointer-events-none"
+            style={{
+              left: '50%',
+              bottom: '-10%',
+              transform: 'translateX(-50%)',
+              width: '120%',
+              height: '80%',
+              background: 'radial-gradient(ellipse 70% 50% at 50% 100%, rgba(10,132,255,0.18) 0%, rgba(10,132,255,0.06) 40%, transparent 70%)',
+              filter: 'blur(40px)',
+              opacity: introDone ? 1 : 0,
+              transition: 'opacity 2s cubic-bezier(0.25, 0.1, 0.25, 1) 0.3s',
+              willChange: 'opacity',
+              zIndex: 0,
+            }}
+          />
+
           {/* Fixed-height container so both layers overlap during crossfade */}
-          <div className="relative h-[600px] md:h-[750px] rounded-2xl">
+          <div className="relative h-[600px] md:h-[750px] rounded-2xl" style={{ zIndex: 1 }}>
 
             {/* Old Anki — visible on load, crossfades out */}
             <div
