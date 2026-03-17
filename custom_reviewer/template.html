@@ -7,6 +7,16 @@
     <style>
 {{CSS}}
 
+/* ═══ Force dark page background ═══
+   reviewer.css (Tailwind+DaisyUI) doesn't set html/body background.
+   Anki's page body defaults to light/white, which bleeds through the
+   dock's semi-transparent background and makes the border visible.
+   Match React panel context: fully dark page. */
+html, body {
+    background: #1A1A1A !important;
+    color-scheme: dark;
+}
+
 /* ═══ Anki Native UI: Nuclear Hide ═══ */
 #top, #topbutt, #outer-top, .top-area,
 #bottom, #bottombutt, #outer-bottom, .bottom-area,
