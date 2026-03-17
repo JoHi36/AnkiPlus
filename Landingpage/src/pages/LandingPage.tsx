@@ -18,9 +18,10 @@ export function LandingPage() {
   const [introDone, setIntroDone] = useState(false);
 
   const handleIntroComplete = useCallback(() => {
-    // Defer off the rAF stack so the current animation frame finishes painting
-    // before React re-renders. Prevents the frame drop at explosion moment.
-    setTimeout(() => setIntroDone(true), 0);
+    // Wait for the next idle period so the explosion animation frames
+    // aren't interrupted by React's re-render work
+    const schedule = window.requestIdleCallback || ((cb: () => void) => setTimeout(cb, 16));
+    schedule(() => setIntroDone(true));
   }, []);
 
   const handleScrollTo = (id: string) => {

@@ -25,7 +25,7 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
   const centerRef = useRef({ cx: 0, cy: 0 });
   const dimsRef = useRef({ w: 0, h: 0 });
   // Cached font metrics (set once after first sizeCanvas)
-  const fontCacheRef = useRef({ font: '', anWidth: 0, fontSize: 0 });
+  const fontCacheRef = useRef({ font: '', subFont: '', anWidth: 0, fontSize: 0 });
 
   const PARTICLE_COUNT = 400; // reduced from 500 — less GPU work
   const PLUS_ARM_LEN = 120;
@@ -107,9 +107,11 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
       // Cache font metrics
       const fontSize = Math.min(w * 0.14, 180);
       const font = `800 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif`;
+      const subFontSize = Math.max(14, fontSize * 0.12);
+      const subFont = `300 ${subFontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif`;
       ctx.font = font;
       const anWidth = ctx.measureText('AN').width;
-      fontCacheRef.current = { font, anWidth, fontSize };
+      fontCacheRef.current = { font, subFont, anWidth, fontSize };
 
       return { w, h };
     };
@@ -152,20 +154,22 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
       ctx.clearRect(0, 0, dW, dH);
 
       const { cx, cy } = centerRef.current;
-      const { font, anWidth } = fontCacheRef.current;
+      const { font, subFont, anWidth, fontSize } = fontCacheRef.current;
 
       // ── TEXT (use cached font) ──
       ctx.font = font;
       ctx.textBaseline = 'middle';
 
-      const fadeIn = Math.min(1, t / 0.25);
+      const fadeIn = Math.min(1, t / 0.3);
       const splitRaw = Math.max(0, Math.min(1, (t - 0.4) / 1.2));
       const splitProgress = splitRaw * splitRaw * (3 - 2 * splitRaw);
-      const dimming = 0.85 - splitProgress * 0.65;
+
+      // Dark → light: starts dim (0.15), brightens as split happens (up to 0.7)
+      const brightening = 0.15 + splitProgress * 0.55;
       const explosionFade = t > EXPLODE_TIME
-        ? Math.max(0, 1 - (t - EXPLODE_TIME) / 0.3) // text vanishes fast
+        ? Math.max(0, 1 - (t - EXPLODE_TIME) / 0.3)
         : 1;
-      const textAlpha = fadeIn * dimming * explosionFade;
+      const textAlpha = fadeIn * brightening * explosionFade;
 
       if (textAlpha > 0.005) {
         const TEXT_GAP_FINAL = PLUS_ARM_LEN * 2 + 40;
@@ -176,6 +180,19 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
         ctx.fillStyle = '#fff';
         ctx.fillText('AN', anX, cy);
         ctx.fillText('KI', kiX, cy);
+
+        // ── Subtitle "Flashcards" below — fades in early, out with text ──
+        const subAlpha = fadeIn * Math.min(0.3, brightening * 0.4) * explosionFade;
+        if (subAlpha > 0.005) {
+          ctx.font = subFont;
+          ctx.textAlign = 'center';
+          ctx.globalAlpha = subAlpha;
+          ctx.fillStyle = '#fff';
+          ctx.fillText('Flashcards', cx, cy + fontSize * 0.55);
+          ctx.textAlign = 'start'; // reset
+        }
+
+        ctx.font = font; // restore main font
         ctx.globalAlpha = 1;
       }
 
