@@ -18,7 +18,9 @@ export function LandingPage() {
   const [introDone, setIntroDone] = useState(false);
 
   const handleIntroComplete = useCallback(() => {
-    setIntroDone(true);
+    // Defer off the rAF stack so the current animation frame finishes painting
+    // before React re-renders. Prevents the frame drop at explosion moment.
+    setTimeout(() => setIntroDone(true), 0);
   }, []);
 
   const handleScrollTo = (id: string) => {
@@ -30,7 +32,10 @@ export function LandingPage() {
   };
 
   return (
-    <div className={`min-h-screen bg-[#0F0F0F] text-white/[0.92] ${introDone ? '' : 'overflow-hidden h-screen'}`}>
+    <div className="min-h-screen bg-[#0F0F0F] text-white/[0.92]" style={{
+      overflow: introDone ? undefined : 'hidden',
+      height: introDone ? undefined : '100vh',
+    }}>
 
       {/* ═══ INTRO PARTICLE ANIMATION ═══ */}
       <div
@@ -44,10 +49,11 @@ export function LandingPage() {
 
       {/* Semi-transparent overlay — dims but doesn't fully hide old Anki below */}
       <div
-        className={`fixed inset-0 z-30 bg-[#0F0F0F] pointer-events-none`}
+        className="fixed inset-0 z-30 bg-[#0F0F0F] pointer-events-none"
         style={{
           opacity: introDone ? 0 : 0.7,
           transition: 'opacity 1.2s cubic-bezier(0.25, 0.1, 0.25, 1)',
+          willChange: 'opacity',
         }}
       />
 
@@ -59,6 +65,7 @@ export function LandingPage() {
             opacity: introDone ? 1 : 0,
             transform: introDone ? 'translateY(0)' : 'translateY(16px)',
             transition: 'opacity 1s cubic-bezier(0.25,0.1,0.25,1) 0.3s, transform 1s cubic-bezier(0.25,0.1,0.25,1) 0.3s',
+            willChange: 'opacity, transform',
           }}>
             <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-[5.5rem] font-bold tracking-[-0.04em] leading-none mb-8 text-white whitespace-nowrap">
               Anki auf <span className="text-[#0a84ff]">Steroiden</span>.
@@ -96,6 +103,7 @@ export function LandingPage() {
                 opacity: introDone ? 0 : 1,
                 transition: 'opacity 1.2s cubic-bezier(0.25, 0.1, 0.25, 1)',
                 pointerEvents: introDone ? 'none' : 'auto',
+                willChange: 'opacity',
               }}
             >
               <OldAnkiMock />
@@ -108,6 +116,7 @@ export function LandingPage() {
                 opacity: introDone ? 1 : 0,
                 transition: 'opacity 1.2s cubic-bezier(0.25, 0.1, 0.25, 1) 0.1s',
                 pointerEvents: introDone ? 'auto' : 'none',
+                willChange: 'opacity',
               }}
             >
               <InteractivePlayground />
