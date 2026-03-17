@@ -57,12 +57,34 @@ _chatbot_dock = None
 _chatbot_widget = None  # Widget-Instanz für Event-Hooks
 _shortcut = None
 
+def _notify_reviewer_chat_state(is_open):
+    """Tell the reviewer webview to show/hide its dock based on chat panel visibility."""
+    try:
+        if mw and mw.reviewer and mw.reviewer.web:
+            js = f'if(window.setChatOpen) setChatOpen({"true" if is_open else "false"});'
+            mw.reviewer.web.eval(js)
+            # Retry after short delay for reliability
+            QTimer.singleShot(200, lambda: mw.reviewer.web.eval(js) if mw and mw.reviewer and mw.reviewer.web else None)
+    except Exception:
+        pass
+
 def toggle_chatbot():
     """Öffnet oder schließt das Chatbot-Panel (Cmd+I / Ctrl+I)"""
     global _chatbot_dock
     if QWebEngineView is None:
         show_qwebengine_warning()
         return
+
+    # Don't close when user is focused in the chat panel (e.g. typing)
+    if _chatbot_dock is not None and _chatbot_dock.isVisible():
+        try:
+            focused = QApplication.focusWidget()
+            if focused and _chatbot_dock.isAncestorOf(focused):
+                print("toggle_chatbot: Skipping close — focus is in chat panel")
+                return
+        except Exception:
+            pass
+
     if _chatbot_dock is None:
         # Dock-Widget erstellen
         _chatbot_dock = QDockWidget("", mw)  # Leerer Titel, da wir eigenen Header haben
@@ -135,8 +157,12 @@ def toggle_chatbot():
     # Panel ein-/ausblenden
     if _chatbot_dock.isVisible():
         _chatbot_dock.hide()
+        # Tell reviewer dock to un-hide
+        _notify_reviewer_chat_state(False)
     else:
         _chatbot_dock.show()
+        # Tell reviewer dock to hide (chat panel is now visible)
+        _notify_reviewer_chat_state(True)
         # Prüfe aktuelles Deck beim Öffnen und sende deckSelected Event
         # Kleine Verzögerung, damit WebView bereit ist
         def check_and_send_deck():
@@ -199,6 +225,13 @@ def get_chatbot_widget():
     """Gibt die Chatbot-Widget-Instanz zurück (für Hooks)"""
     global _chatbot_widget
     return _chatbot_widget
+
+def ensure_chatbot_open():
+    """Öffnet das Chatbot-Panel falls es noch nicht sichtbar ist. Gibt das Widget zurück."""
+    global _chatbot_dock
+    if _chatbot_dock is None or not _chatbot_dock.isVisible():
+        toggle_chatbot()
+    return get_chatbot_widget()
 
 def setup_keyboard_shortcut():
     """Erstellt den Cmd+I / Ctrl+I Shortcut zum Öffnen/Schließen des Chatbots"""

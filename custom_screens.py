@@ -821,13 +821,18 @@ class CustomScreens:
                 if text:
                     try:
                         from . import ui_setup
-                        widget = ui_setup.get_chatbot_widget()
-                        if widget and widget.web_view:
-                            import json as _json
-                            payload = {'type': 'startFreeChat', 'text': text}
-                            widget.web_view.page().runJavaScript(
-                                f"window.ankiReceive({_json.dumps(payload)});"
-                            )
+                        import json as _json
+                        # Open panel if not already visible, then send message
+                        ui_setup.ensure_chatbot_open()
+                        payload = _json.dumps({'type': 'startFreeChat', 'text': text})
+                        def _send(t=text, p=payload):
+                            widget = ui_setup.get_chatbot_widget()
+                            if widget and widget.web_view:
+                                widget.web_view.page().runJavaScript(
+                                    f"window.ankiReceive({p});"
+                                )
+                        # Delay to allow the webview to initialize if panel just opened
+                        QTimer.singleShot(300, _send)
                     except Exception:
                         traceback.print_exc()
             elif action_type == 'cmd':
