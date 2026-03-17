@@ -585,7 +585,7 @@
             const s = document.createElement('span');
             s.className = 'mc-star';
             s.textContent = '★';
-            s.style.cssText = 'font-size:22px;line-height:1;color:rgba(255,255,255,0.85);transition:color 0.2s;';
+            s.style.cssText = 'font-size:22px;line-height:1;color:rgba(255,255,255,0.85);';
             row.appendChild(s);
         }
     }
