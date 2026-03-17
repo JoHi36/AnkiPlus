@@ -32,10 +32,10 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
   const PLUS_ARM_WIDTH = 70;
   const FOCAL_LENGTH = 600;
 
-  // ── Tighter timeline — no dead time ──
-  const TOTAL_DURATION = 3.2;
-  const EXPLODE_TIME = 2.0;   // was 2.6 — explosion starts sooner
-  const COMPLETE_TIME = 2.2;   // was 2.8
+  // ── Snappy timeline — gather flows into quick explosion ──
+  const EXPLODE_TIME = 1.8;    // explosion begins
+  const COMPLETE_TIME = 1.8;   // crossfade starts immediately with explosion
+  const TOTAL_DURATION = 2.5;  // explosion lasts only 0.7s, particles vanish fast
 
   const initParticles = useCallback((w: number, h: number) => {
     const particles: Particle[] = [];
@@ -61,9 +61,9 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
       const explodeSpeed = 200 + Math.random() * 400;
 
       const baseAlpha = 0.45 + Math.random() * 0.45;
-      // Tighter arrival window: all arrive between 0.3→1.6s
-      const arriveStart = 0.3 + Math.random() * 0.5;
-      const arriveDur = 0.8 + Math.random() * 0.5;
+      // All particles arrive well before explosion (0.3→1.5s)
+      const arriveStart = 0.3 + Math.random() * 0.4;
+      const arriveDur = 0.7 + Math.random() * 0.4;
 
       particles.push({
         spawnX: cx + Math.cos(spawnAngle) * spawnDist,
@@ -159,11 +159,11 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
       ctx.textBaseline = 'middle';
 
       const fadeIn = Math.min(1, t / 0.25);
-      const splitRaw = Math.max(0, Math.min(1, (t - 0.4) / 1.4)); // faster split (was 1.8)
+      const splitRaw = Math.max(0, Math.min(1, (t - 0.4) / 1.2));
       const splitProgress = splitRaw * splitRaw * (3 - 2 * splitRaw);
       const dimming = 0.85 - splitProgress * 0.65;
       const explosionFade = t > EXPLODE_TIME
-        ? Math.max(0, 1 - (t - EXPLODE_TIME) / 0.4)
+        ? Math.max(0, 1 - (t - EXPLODE_TIME) / 0.3) // text vanishes fast
         : 1;
       const textAlpha = fadeIn * dimming * explosionFade;
 
@@ -186,7 +186,7 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
       const explodeDur = TOTAL_DURATION - EXPLODE_TIME;
 
       // Pre-approach energy: float amplitude grows as we near explosion
-      const approachEnergy = Math.max(0, Math.min(1, (t - 1.2) / (EXPLODE_TIME - 1.2)));
+      const approachEnergy = Math.max(0, Math.min(1, (t - 1.0) / (EXPLODE_TIME - 1.0)));
 
       // Use globalAlpha instead of per-particle rgba string parsing
       ctx.fillStyle = 'rgb(10,132,255)';
@@ -200,7 +200,8 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
         const gather = gatherRaw * gatherRaw * (3 - 2 * gatherRaw);
 
         const explodeRaw = Math.max(0, (t - EXPLODE_TIME) / explodeDur);
-        const explode = 1 - Math.pow(1 - Math.min(explodeRaw, 1), 2.5);
+        // Linear movement — no ease-out plateau where particles "hang"
+        const explode = Math.min(explodeRaw, 1);
 
         // Float amplitude grows from 3→8px as explosion approaches (energy buildup)
         const floatAmp = 3 + approachEnergy * 5;
@@ -218,7 +219,8 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
           px = p.hx + floatX * (1 - explode) + p.evx * explode;
           py = p.hy + floatY * (1 - explode) + p.evy * explode;
           pz = p.hz + p.evz * explode;
-          alpha = p.baseAlpha * Math.max(0, 1 - Math.pow(explodeRaw, 0.6) * 1.4);
+          // Alpha tracks movement — invisible by the time particles slow
+          alpha = p.baseAlpha * Math.max(0, 1 - explodeRaw * 2);
         }
 
         if (alpha < 0.008) continue;
