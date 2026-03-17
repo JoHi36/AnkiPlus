@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight, MessageSquare, Layers } from 'lucide-react';
 import FreeChatSearchBar from './FreeChatSearchBar';
+import FreeChatView from './FreeChatView';
 
 /* ── tokens ── */
 const T = {
@@ -358,7 +359,19 @@ function DeckActions({ bridge }) {
   );
 }
 
-export default function DeckBrowser({ bridge, sessions, onSelectSession, onOpenDeck, headerHeight, onFreeChatOpen }) {
+export default function DeckBrowser({
+  bridge,
+  sessions,
+  onSelectSession,
+  onOpenDeck,
+  headerHeight,
+  onFreeChatOpen,
+  freeChatOpen = false,
+  animPhase = 'idle',
+  freeChatInitialText = '',
+  freeChatHook = null,
+  onFreeChatClose = null,
+}) {
   const [decks, setDecks] = useState([]);
   const [deckStatsMap, setDeckStatsMap] = useState({});
 
@@ -419,71 +432,95 @@ export default function DeckBrowser({ bridge, sessions, onSelectSession, onOpenD
       .slice(0, 12)
   ), [sessions]);
 
+  const deckContentVisible = animPhase === 'idle' || animPhase === 'exiting';
+  const deckContentStyle = {
+    transition: 'opacity 250ms ease, transform 250ms ease',
+    opacity: deckContentVisible ? 1 : 0,
+    transform: deckContentVisible ? 'translateY(0)' : 'translateY(60px)',
+    pointerEvents: deckContentVisible ? 'auto' : 'none',
+    flexShrink: 0,
+  };
+
   return (
-    <div
-      style={{
-        flex: 1,
-        overflowY: 'auto',
-        scrollbarWidth: 'none',
-        paddingTop: (headerHeight || 60) + 12,
-        paddingBottom: 24,
-      }}
-    >
-      {/* ── Free Chat Search Bar ── */}
-      {onFreeChatOpen && (
-        <FreeChatSearchBar onOpen={onFreeChatOpen} />
-      )}
-
-      {/* ── Decks ── */}
-      <div style={{ marginBottom: 4 }}>
-        <SectionLabel count={decks.length}>Decks</SectionLabel>
-
-        {decks.length === 0 && (
-          <div style={{ padding: '12px 16px', fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>
-            Keine Decks gefunden
-          </div>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+      {/* Scrollable deck content — animates out when freeChatOpen */}
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          scrollbarWidth: 'none',
+          paddingTop: (headerHeight || 60) + 12,
+          paddingBottom: 24,
+          ...deckContentStyle,
+        }}
+      >
+        {/* ── Free Chat Search Bar ── */}
+        {onFreeChatOpen && (
+          <FreeChatSearchBar onOpen={onFreeChatOpen} />
         )}
 
-        {deckTree.map((deck, i) => (
-          <motion.div
-            key={deck.id}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.035, type: 'spring', stiffness: 360, damping: 32 }}
-          >
-            <DeckRow
-              deck={deck}
-              deckStatsMap={deckStatsMap}
-              deckSessionCountMap={deckSessionCountMap}
-              onOpenDeck={onOpenDeck}
-              depth={0}
-            />
-          </motion.div>
-        ))}
-      </div>
+        {/* ── Decks ── */}
+        <div style={{ marginBottom: 4 }}>
+          <SectionLabel count={decks.length}>Decks</SectionLabel>
 
-      {/* ── Deck Actions ── */}
-      <DeckActions bridge={bridge} />
+          {decks.length === 0 && (
+            <div style={{ padding: '12px 16px', fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>
+              Keine Decks gefunden
+            </div>
+          )}
 
-      {/* ── Divider ── */}
-      {recentSessions.length > 0 && (
-        <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', margin: '8px 16px' }} />
-      )}
-
-      {/* ── Sessions ── */}
-      {recentSessions.length > 0 && (
-        <div>
-          <SectionLabel count={sessions?.length}>Sessions</SectionLabel>
-
-          {recentSessions.map((session, i) => (
-            <SessionRow
-              key={session.id}
-              session={session}
-              index={i}
-              onClick={() => onSelectSession(session.id)}
-            />
+          {deckTree.map((deck, i) => (
+            <motion.div
+              key={deck.id}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.035, type: 'spring', stiffness: 360, damping: 32 }}
+            >
+              <DeckRow
+                deck={deck}
+                deckStatsMap={deckStatsMap}
+                deckSessionCountMap={deckSessionCountMap}
+                onOpenDeck={onOpenDeck}
+                depth={0}
+              />
+            </motion.div>
           ))}
         </div>
+
+        {/* ── Deck Actions ── */}
+        <DeckActions bridge={bridge} />
+
+        {/* ── Divider ── */}
+        {recentSessions.length > 0 && (
+          <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', margin: '8px 16px' }} />
+        )}
+
+        {/* ── Sessions ── */}
+        {recentSessions.length > 0 && (
+          <div>
+            <SectionLabel count={sessions?.length}>Sessions</SectionLabel>
+
+            {recentSessions.map((session, i) => (
+              <SessionRow
+                key={session.id}
+                session={session}
+                index={i}
+                onClick={() => onSelectSession(session.id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* FreeChatView — renders inline when freeChatOpen, fills remaining space */}
+      {freeChatOpen && freeChatHook && (
+        <FreeChatView
+          freeChatHook={freeChatHook}
+          initialText={freeChatInitialText}
+          onClose={onFreeChatClose}
+          bridge={bridge}
+          animPhase={animPhase}
+        />
       )}
     </div>
   );
