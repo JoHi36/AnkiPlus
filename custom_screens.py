@@ -348,9 +348,9 @@ def _top_bar(active_tab='stapel', deck_name='', due_new=0, due_learn=0, due_revi
     """
     def tab_cls(tab_name):
         if tab_name == active_tab:
-            return 'px-4 py-[5px] text-xs font-semibold text-base-content bg-base-content/[0.08] border-none rounded-md cursor-default'
-        return ('px-4 py-[5px] text-xs font-medium text-base-content/[0.35] bg-transparent border-none rounded-md'
-                ' cursor-pointer hover:text-base-content/[0.55] transition-colors')
+            return 'tab-btn tab-active px-4 py-[5px] text-xs font-semibold text-base-content bg-base-content/[0.08] rounded-md cursor-default'
+        return ('tab-btn px-4 py-[5px] text-xs font-medium text-base-content/[0.35] bg-transparent rounded-md'
+                ' cursor-pointer hover:text-base-content/[0.55] hover:bg-base-content/[0.04] transition-colors')
 
     stapel_onclick = '' if active_tab == 'stapel' else " onclick=\"window._apAction={type:'cmd',cmd:'decks'}\""
     session_onclick = '' if active_tab == 'session' else " onclick=\"window._apAction={type:'cmd',cmd:'study'}\""
@@ -488,6 +488,21 @@ html, body {
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { scrollbar-width: none; -ms-overflow-style: none; }
 
+/* Tab Bar */
+.tab-btn {
+    box-shadow: none !important;
+    outline: none !important;
+    border: none !important;
+}
+.tab-btn:hover {
+    box-shadow: none !important;
+    outline: none !important;
+    border: none !important;
+}
+.tab-btn.tab-active {
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
+}
+
 /* Canvas background: dot grid fading out radially — same as reviewer */
 .canvas-bg {
     position: relative;
@@ -610,6 +625,48 @@ def _wrap_page(top_bar_html, content_html, extra_js=''):
 
 # ─── Deck Browser ─────────────────────────────────────────────────────────────
 
+_SEARCHBAR_HTML = """
+<div id="ap-searchbar" style="padding:10px 16px 8px;">
+  <div style="position:relative;border-radius:24px;padding:2px;">
+    <!-- Animated snake-border ring -->
+    <div id="ap-sb-ring" style="
+      position:absolute;inset:-1px;border-radius:25px;
+      background:conic-gradient(from 0deg,transparent 0deg,transparent 55%,#6b8cff 60%,#a78bfa 72%,#38bdf8 81%,#6b8cff 86%,transparent 92%);
+      -webkit-mask:radial-gradient(circle,transparent calc(100% - 2px),white calc(100% - 2px));
+      mask:radial-gradient(circle,transparent calc(100% - 2px),white calc(100% - 2px));
+      animation:ap-snake-spin 2.5s linear infinite;opacity:0;transition:opacity 0.3s;
+    "></div>
+    <div style="position:relative;background:#1c1c1e;border-radius:22px;display:flex;align-items:center;padding:9px 14px 9px 38px;gap:8px;border:1px solid rgba(255,255,255,0.07);">
+      <span style="position:absolute;left:13px;color:#6b8cff;font-size:14px;line-height:1;">✦</span>
+      <input id="ap-search-input"
+        placeholder="Stelle eine Frage…"
+        autocomplete="off"
+        style="flex:1;background:transparent;border:none;outline:none;color:#ccc;font-size:13px;font-family:inherit;"
+        onfocus="document.getElementById('ap-sb-ring').style.opacity='1'"
+        onblur="document.getElementById('ap-sb-ring').style.opacity='0'"
+      />
+    </div>
+  </div>
+  <div style="text-align:right;font-size:10px;color:#2a2a40;margin-top:3px;padding-right:4px;">Enter zum Senden</div>
+</div>
+<style>
+@keyframes ap-snake-spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+</style>
+<script>
+(function(){
+  var inp = document.getElementById('ap-search-input');
+  if (!inp) return;
+  inp.addEventListener('keydown', function(e){
+    if (e.key === 'Enter' && inp.value.trim()) {
+      window._apAction = {type:'freeChat', text: inp.value.trim()};
+      inp.value = '';
+    }
+  });
+})();
+</script>
+"""
+
+
 def _deck_browser_html(tree, total_decks, total_new=0, total_learn=0, total_review=0):
     cards_html = ''.join(_deck_card(node, i) for i, node in enumerate(tree))
     if not cards_html:
@@ -620,6 +677,7 @@ def _deck_browser_html(tree, total_decks, total_new=0, total_learn=0, total_revi
 
     content = (
         f'<div style="max-width:720px;margin:0 auto;padding:20px 24px 80px;">'
+        f'{_SEARCHBAR_HTML}'
         f'{cards_html}'
         f'</div>'
     )
