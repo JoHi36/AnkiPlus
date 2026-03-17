@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight, MessageSquare, Layers } from 'lucide-react';
+import FreeChatSearchBar from './FreeChatSearchBar';
 
 /* ── tokens ── */
 const T = {
@@ -357,7 +358,7 @@ function DeckActions({ bridge }) {
   );
 }
 
-export default function DeckBrowser({ bridge, sessions, onSelectSession, onOpenDeck, headerHeight }) {
+export default function DeckBrowser({ bridge, sessions, onSelectSession, onOpenDeck, headerHeight, onFreeChatOpen }) {
   const [decks, setDecks] = useState([]);
   const [deckStatsMap, setDeckStatsMap] = useState({});
 
@@ -428,6 +429,11 @@ export default function DeckBrowser({ bridge, sessions, onSelectSession, onOpenD
         paddingBottom: 24,
       }}
     >
+      {/* ── Free Chat Search Bar ── */}
+      {onFreeChatOpen && (
+        <FreeChatSearchBar onOpen={onFreeChatOpen} />
+      )}
+
       {/* ── Decks ── */}
       <div style={{ marginBottom: 4 }}>
         <SectionLabel count={decks.length}>Decks</SectionLabel>
