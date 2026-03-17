@@ -115,13 +115,17 @@
 
         // Update dock content + actions per state
         switch (newState) {
-            case S.QUESTION:
+            case S.QUESTION: {
+                // Reset dock border tint from previous MC result
+                const dockInner = document.querySelector('#unified-dock > div');
+                if (dockInner) dockInner.style.borderColor = '';
                 showSection('dc-input');
                 setActions(
                     { label: 'Show Answer', shortcut: 'SPACE', onclick: 'showAnswer()', color: 'rgba(255,255,255,0.88)', weight: '600' },
                     { label: 'Multiple Choice', shortcut: '↵', onclick: 'startMCMode()' }
                 );
                 break;
+            }
 
             case S.EVALUATING:
                 showSection('dc-loading');
