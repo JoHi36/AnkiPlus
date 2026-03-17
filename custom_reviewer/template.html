@@ -184,8 +184,9 @@ div[id^="bottom"]:not(#reviewer *) {
         </main>
 
         <!-- ═══ UNIFIED FLOATING DOCK ═══ -->
-        <div id="unified-dock" class="fixed bottom-6 left-1/2 w-full max-w-[570px] px-5 z-[9999]"
-             style="transform: translateX(-50%);">
+        <div id="unified-dock" class="fixed bottom-6 left-1/2 px-5 z-[9999]"
+             style="transform: translateX(-50%); width: min(750px, calc(100vw - 40px));">
+
             <div class="relative flex flex-col rounded-2xl"
                  style="background: rgba(21,21,21,0.75); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 4px 24px rgba(0,0,0,0.4);">
 
@@ -228,9 +229,9 @@ div[id^="bottom"]:not(#reviewer *) {
                     <div id="eval-result" class="px-4 pt-3 pb-1"></div>
                 </div>
 
-                <!-- MC options: MC_ACTIVE state -->
+                <!-- MC shortcuts hint: MC_ACTIVE state -->
                 <div id="dc-mc" class="dock-section">
-                    <div id="mc-area" class="flex flex-col p-1 gap-0.5"></div>
+                    <div id="mc-shortcuts" class="flex items-center justify-center gap-2 px-4 py-2.5 font-mono"></div>
                 </div>
 
                 <!-- Loading: EVALUATING / MC_LOADING state -->

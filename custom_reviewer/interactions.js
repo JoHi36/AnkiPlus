@@ -135,10 +135,21 @@
                 setActions(null, null);
                 break;
 
-            case S.MC_ACTIVE:
-                showSection(null);
-                setActions(null, null); // no action row — user picks from MC options
+            case S.MC_ACTIVE: {
+                showSection('dc-mc');
+                const scEl = $('#mc-shortcuts');
+                if (scEl) {
+                    const count = mcOptions.length > 0 ? mcOptions.length : 4;
+                    scEl.innerHTML = Array.from({length: count}, (_, i) =>
+                        `<span style="display:inline-flex;align-items:center;gap:4px;"><span style="font-size:10px;color:rgba(255,255,255,0.2);">${i+1}</span><span style="font-size:11px;color:rgba(255,255,255,0.4);">${String.fromCharCode(65+i)}</span></span>`
+                    ).join(`<span style="color:rgba(255,255,255,0.1);font-size:10px;">·</span>`);
+                }
+                setActions(
+                    { label: 'Überspringen', shortcut: 'SPACE', onclick: 'skipMC()' },
+                    { label: 'Text-Modus', shortcut: '↵', onclick: 'cancelMC()' }
+                );
                 break;
+            }
 
             case S.EVALUATED:
             case S.MC_RESULT:
@@ -363,6 +374,31 @@
         }
     };
 
+    window.skipMC = function() {
+        if (current !== S.MC_ACTIVE) return;
+        const cardArea = $('#mc-card-area');
+        if (cardArea) { cardArea.classList.add('hidden'); cardArea.innerHTML = ''; }
+        mcOptions = []; mcWrongPicks = []; mcCorrectIndex = -1;
+        const elapsed = (Date.now() - questionStartTime) / 1000;
+        const rating = getRatingForTime(elapsed);
+        autoRateEase = rating.ease;
+        setState(S.ANSWER);
+        pycmd('ans');
+        updateTimerDisplay(elapsed);
+        const ans = $('#answer-section');
+        if (ans) setTimeout(() => ans.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+    };
+
+    window.cancelMC = function() {
+        if (current !== S.MC_ACTIVE) return;
+        const cardArea = $('#mc-card-area');
+        if (cardArea) { cardArea.classList.add('hidden'); cardArea.innerHTML = ''; }
+        mcOptions = []; mcWrongPicks = []; mcCorrectIndex = -1; mcAttempts = 0;
+        setState(S.QUESTION);
+        const ta = $('#user-answer');
+        if (ta) { ta.disabled = false; ta.classList.remove('opacity-40'); setTimeout(() => ta.focus(), 50); }
+    };
+
 
     // ═══════════════════════════════════════════════
     //   CALLBACKS FROM BACKEND
@@ -420,7 +456,6 @@
             return;
         }
 
-        setState(S.MC_ACTIVE);
         mcAttempts = 0;
         mcOptions = options;
         mcWrongPicks = [];
@@ -431,29 +466,33 @@
         if (area) {
             area.classList.remove('hidden');
             area.innerHTML = options.map((opt, i) => `
-                <div class="mc-option-wrapper" data-index="${i}">
-                    <button class="mc-opt w-full flex items-center gap-3 px-4 py-3.5 text-left transition-all duration-150"
-                            style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; cursor: pointer;"
-                            data-index="${i}" onclick="selectMCOption(${i})">
-                        <div class="mc-badge flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold transition-all"
+                <button class="mc-opt w-full flex flex-col text-left transition-all duration-150"
+                        style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; cursor: pointer;"
+                        data-index="${i}" onclick="selectMCOption(${i})">
+                    <div class="flex items-center gap-3 px-4 py-4">
+                        <div class="mc-badge flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-semibold transition-all"
                              style="border: 1px solid rgba(255,255,255,0.15); color: rgba(255,255,255,0.45); background: rgba(255,255,255,0.04);">
                             ${String.fromCharCode(65 + i)}
                         </div>
-                        <span class="mc-text flex-1 text-sm" style="color: rgba(255,255,255,0.78);">${opt.text}</span>
-                    </button>
-                    <div class="mc-explanation hidden" data-exp-index="${i}"></div>
-                </div>
+                        <span class="mc-text flex-1" style="color: rgba(255,255,255,0.78); font-size: 15px; line-height: 1.4;">${opt.text}</span>
+                    </div>
+                    <div class="mc-exp hidden" style="padding: 0 16px 12px 56px; font-size: 13px; color: rgba(255,255,255,0.45); line-height: 1.5; text-align: left;"></div>
+                </button>
             `).join('');
         }
+        setState(S.MC_ACTIVE); // call AFTER mcOptions is set so shortcut count is correct
     };
 
     function showExplanation(index) {
         const opt = mcOptions[index];
         if (!opt || !opt.explanation) return;
-        const expEl = $(`[data-exp-index="${index}"]`);
-        if (expEl) {
-            expEl.innerHTML = `<p style="font-size:11px;color:rgba(255,255,255,0.35);padding:4px 16px 6px 44px;line-height:1.5;">${opt.explanation}</p>`;
-            expEl.classList.remove('hidden');
+        const btn = $(`#mc-card-area .mc-opt[data-index="${index}"]`);
+        if (btn) {
+            const expEl = btn.querySelector('.mc-exp');
+            if (expEl) {
+                expEl.textContent = opt.explanation;
+                expEl.classList.remove('hidden');
+            }
         }
     }
 
@@ -655,17 +694,20 @@
         const handlers = {
             'Space': () => {
                 if (current === S.QUESTION) showAnswer();
+                else if (current === S.MC_ACTIVE) skipMC();
                 else if (current === S.ANSWER) rateCard(autoRateEase || 3);
                 else if (current === S.EVALUATED || current === S.MC_RESULT) proceedAfterEval();
             },
             'Enter': () => {
                 if (current === S.QUESTION) startMCMode();
+                else if (current === S.MC_ACTIVE) cancelMC();
                 else if (current === S.ANSWER || current === S.EVALUATED || current === S.MC_RESULT) openFollowUp();
             },
-            '1': () => current === S.ANSWER && rateCard(1),
-            '2': () => current === S.ANSWER && rateCard(2),
-            '3': () => current === S.ANSWER && rateCard(3),
-            '4': () => current === S.ANSWER && rateCard(4),
+            '1': () => { if (current === S.ANSWER) rateCard(1); else if (current === S.MC_ACTIVE) selectMCOption(0); },
+            '2': () => { if (current === S.ANSWER) rateCard(2); else if (current === S.MC_ACTIVE) selectMCOption(1); },
+            '3': () => { if (current === S.ANSWER) rateCard(3); else if (current === S.MC_ACTIVE) selectMCOption(2); },
+            '4': () => { if (current === S.ANSWER) rateCard(4); else if (current === S.MC_ACTIVE) selectMCOption(3); },
+            '5': () => current === S.MC_ACTIVE && selectMCOption(4),
             'e': editCard, 'E': editCard,
             'm': toggleMark, 'M': toggleMark, '*': toggleMark,
             'z': undoCard, 'Z': undoCard,
