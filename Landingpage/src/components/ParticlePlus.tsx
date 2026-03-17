@@ -39,7 +39,7 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
   const initParticles = useCallback((w: number, h: number) => {
     const particles: Particle[] = [];
     const cx = w / 2;
-    const cy = h * 0.38;
+    const cy = h * 0.32;
     centerRef.current = { cx, cy };
 
     for (let i = 0; i < PARTICLE_COUNT; i++) {

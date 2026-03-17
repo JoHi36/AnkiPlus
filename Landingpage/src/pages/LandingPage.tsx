@@ -61,7 +61,7 @@ export function LandingPage() {
       <main className="relative z-20">
 
         {/* ═══ HERO ═══ */}
-        <section className="relative pt-[18vh] sm:pt-[22vh] pb-20 sm:pb-28 mx-auto px-6 text-center">
+        <section className="relative pt-[14vh] sm:pt-[16vh] pb-20 sm:pb-28 mx-auto px-6 text-center">
           <div className="relative z-10" style={{
             opacity: introDone ? 1 : 0,
             transform: introDone ? 'translateY(0)' : 'translateY(16px)',
@@ -93,21 +93,24 @@ export function LandingPage() {
         </section>
 
         {/* ═══ DEMO SECTION — Old Anki crossfades into modern demo ═══ */}
-        <section id="demo" className="max-w-6xl mx-auto px-4 sm:px-6 pb-24 sm:pb-32 demo-glow relative">
+        <section id="demo" className="max-w-6xl mx-auto px-4 sm:px-6 pb-24 sm:pb-32 demo-glow relative" style={{ overflow: 'visible' }}>
 
-          {/* Blue glow sunrise — ambient light rising from behind the demo */}
+          {/* Blue glow sunrise — ambient light rising from behind/below the demo */}
           <div
             className="absolute pointer-events-none"
             style={{
               left: '50%',
-              bottom: '-10%',
+              bottom: '-20%',
               transform: 'translateX(-50%)',
-              width: '120%',
-              height: '80%',
-              background: 'radial-gradient(ellipse 70% 50% at 50% 100%, rgba(10,132,255,0.18) 0%, rgba(10,132,255,0.06) 40%, transparent 70%)',
-              filter: 'blur(40px)',
+              width: '140%',
+              height: '100%',
+              background: `
+                radial-gradient(ellipse 80% 55% at 50% 90%, rgba(10,132,255,0.30) 0%, rgba(10,132,255,0.12) 35%, rgba(10,132,255,0.04) 55%, transparent 75%),
+                radial-gradient(ellipse 50% 40% at 50% 95%, rgba(10,132,255,0.20) 0%, transparent 60%)
+              `,
+              filter: 'blur(50px)',
               opacity: introDone ? 1 : 0,
-              transition: 'opacity 2s cubic-bezier(0.25, 0.1, 0.25, 1) 0.3s',
+              transition: 'opacity 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 0.2s',
               willChange: 'opacity',
               zIndex: 0,
             }}
