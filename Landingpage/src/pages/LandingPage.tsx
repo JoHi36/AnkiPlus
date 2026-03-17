@@ -52,7 +52,7 @@ export function LandingPage() {
       <div
         className="fixed inset-0 z-30 bg-[#0F0F0F] pointer-events-none"
         style={{
-          opacity: introDone ? 0 : 0.7,
+          opacity: introDone ? 0 : 0.4,
           transition: 'opacity 1.2s cubic-bezier(0.25, 0.1, 0.25, 1)',
           willChange: 'opacity',
         }}
@@ -61,7 +61,7 @@ export function LandingPage() {
       <main className="relative z-20">
 
         {/* ═══ HERO ═══ */}
-        <section className="relative pt-[10vh] sm:pt-[12vh] pb-20 sm:pb-28 mx-auto px-6 text-center">
+        <section className="relative pt-[10vh] sm:pt-[12vh] pb-4 sm:pb-6 mx-auto px-6 text-center">
           <div className="relative z-10" style={{
             opacity: introDone ? 1 : 0,
             transform: introDone ? 'translateY(0)' : 'translateY(16px)',
@@ -92,30 +92,32 @@ export function LandingPage() {
           </div>
         </section>
 
-        {/* ═══ DEMO SECTION — Old Anki crossfades into modern demo ═══ */}
-        <section id="demo" className="max-w-6xl mx-auto px-4 sm:px-6 pb-24 sm:pb-32 demo-glow relative" style={{ overflow: 'visible' }}>
-
-          {/* Blue glow sunrise — sits behind demo box, radiates UPWARD like a sun behind it */}
+        {/* Blue glow sunrise — behind demo box, radiates UPWARD into hero area */}
+        <div
+          className="absolute left-0 right-0 pointer-events-none"
+          style={{
+            top: '35vh',
+            height: '65vh',
+            zIndex: 0,
+            opacity: introDone ? 1 : 0,
+            transition: 'opacity 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 0.2s',
+            willChange: 'opacity',
+          }}
+        >
           <div
-            className="absolute pointer-events-none"
+            className="absolute inset-0"
             style={{
-              left: '50%',
-              top: '-40%',
-              transform: 'translateX(-50%)',
-              width: '160%',
-              height: '120%',
               background: `
-                radial-gradient(ellipse 70% 50% at 50% 70%, rgba(10,132,255,0.22) 0%, rgba(10,132,255,0.10) 30%, rgba(10,132,255,0.04) 50%, transparent 70%),
-                radial-gradient(ellipse 90% 35% at 50% 85%, rgba(10,132,255,0.18) 0%, rgba(10,132,255,0.06) 40%, transparent 65%),
-                radial-gradient(ellipse 40% 60% at 50% 55%, rgba(10,132,255,0.12) 0%, transparent 60%)
+                radial-gradient(ellipse 80% 45% at 50% 75%, rgba(10,132,255,0.25) 0%, rgba(10,132,255,0.10) 30%, rgba(10,132,255,0.03) 55%, transparent 75%),
+                radial-gradient(ellipse 50% 60% at 50% 60%, rgba(10,132,255,0.15) 0%, rgba(10,132,255,0.05) 40%, transparent 65%)
               `,
               filter: 'blur(60px)',
-              opacity: introDone ? 1 : 0,
-              transition: 'opacity 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 0.2s',
-              willChange: 'opacity',
-              zIndex: 0,
             }}
           />
+        </div>
+
+        {/* ═══ DEMO SECTION — Old Anki crossfades into modern demo ═══ */}
+        <section id="demo" className="max-w-6xl mx-auto px-4 sm:px-6 pb-24 sm:pb-32 demo-glow relative" style={{ overflow: 'visible' }}>
 
           {/* Fixed-height container so both layers overlap during crossfade */}
           <div className="relative h-[600px] md:h-[750px] rounded-2xl" style={{ zIndex: 1 }}>
