@@ -20,6 +20,7 @@
         MC_ACTIVE:  'mc-active',
         MC_RESULT:  'mc-result',
         ANSWER:     'answer',
+        HISTORY:    'history',
     };
 
     let current = S.QUESTION;
@@ -103,7 +104,7 @@
         const questionEl = $('.question');
         const divider = $('#card-divider');
 
-        if (newState === S.ANSWER || newState === S.EVALUATED || newState === S.MC_RESULT) {
+        if (newState === S.ANSWER || newState === S.EVALUATED || newState === S.MC_RESULT || newState === S.HISTORY) {
             if (answerEl) { answerEl.classList.remove('hidden'); answerEl.style.opacity = '1'; }
             if (questionEl) questionEl.classList.add('hidden');
             if (divider) divider.classList.remove('opacity-100');
@@ -167,6 +168,23 @@
                     { label: chatOpen ? 'Schließen' : 'Nachfragen', shortcut: chatOpen ? 'ESC' : '↵', onclick: 'openFollowUp()' }
                 );
                 break;
+
+            case S.HISTORY: {
+                showSection('dc-history');
+                // Update position display
+                const posEl = $('#history-position');
+                if (posEl && window._historyInfo) {
+                    const pos = window._historyInfo.position || 0;
+                    const total = window._historyInfo.total || 0;
+                    const distance = total - pos;
+                    posEl.textContent = pos + ' / ' + total + (distance > 0 ? '  (' + distance + ' zurück)' : '');
+                }
+                setActions(
+                    { label: chatOpen ? 'Chat schließen' : 'Chat öffnen', shortcut: chatOpen ? 'ESC' : '↵', onclick: 'openFollowUp()' },
+                    null
+                );
+                break;
+            }
         }
     }
 
@@ -450,7 +468,7 @@
                         <span class="mc-text" style="font-size:15px;color:rgba(255,255,255,0.75);flex:1;">${opt.text}</span>
                         <span class="mc-icon" style="font-size:14px;font-weight:700;margin-left:auto;display:none;"></span>
                     </div>
-                    <div class="mc-exp" style="display:none;background:rgba(0,0,0,0.25);padding:8px 12px 10px 46px;font-size:11.5px;color:rgba(255,255,255,0.45);line-height:1.5;"></div>
+                    <div class="mc-exp" style="display:none;width:100%;box-sizing:border-box;background:rgba(0,0,0,0.25);padding:8px 12px 10px 46px;font-size:11.5px;color:rgba(255,255,255,0.45);line-height:1.5;"></div>
                 </button>
             `).join('');
         }
@@ -544,6 +562,14 @@
                 btn.style.opacity = '0.75'; // keep W3 style visible but slightly faded
             } else {
                 btn.style.opacity = '0.35'; // never-selected options
+            }
+        });
+
+        // Dim all remaining stars — manual reveal earns 0 stars
+        document.querySelectorAll('#mc-stars-row .mc-star').forEach(s => {
+            if (s.dataset.dimmed !== 'true') {
+                s.style.color = 'rgba(255,255,255,0.12)';
+                s.dataset.dimmed = 'true';
             }
         });
 
@@ -686,6 +712,15 @@
         setChatOpen(true);
     };
 
+    /**
+     * Enter HISTORY mode — called by Python when navigating to a previously-reviewed card.
+     * @param {object} info - { position, total }
+     */
+    window.setHistoryMode = function(info) {
+        window._historyInfo = info || {};
+        setState(S.HISTORY);
+    };
+
     window.setChatOpen = function(isOpen) {
         chatOpen = isOpen;
         const dock = $('#unified-dock');
@@ -696,7 +731,8 @@
                 dock.classList.remove('dock-hidden');
             }
         }
-        // Re-render action row to update Nachfragen/Schließen label
+        // Re-render action row to update labels
+        // In HISTORY mode, update the action button text
         setState(current);
     };
 
@@ -740,12 +776,14 @@
 
         const handlers = {
             'Space': () => {
+                if (current === S.HISTORY) return; // no action in history mode
                 if (current === S.QUESTION) showAnswer();
                 else if (current === S.MC_ACTIVE) revealAnswer();
                 else if (current === S.ANSWER) rateCard(autoRateEase || 3);
                 else if (current === S.EVALUATED || current === S.MC_RESULT) proceedAfterEval();
             },
             'Enter': () => {
+                if (current === S.HISTORY) { openFollowUp(); return; }
                 if (current === S.QUESTION) startMCMode();
                 else if (current === S.MC_ACTIVE) revealAndChat();
                 else if (current === S.ANSWER || current === S.EVALUATED || current === S.MC_RESULT) openFollowUp();
@@ -839,6 +877,8 @@
     }
 
     window.addEventListener('load', () => {
+        // Don't reset if history mode is pending (auto-answer script will set it)
+        if (window._historyPending) return;
         current = S.QUESTION;
         mcAttempts = 0;
         mcCorrectIndex = -1;
