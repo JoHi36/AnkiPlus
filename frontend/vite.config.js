@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => ({
     'process.env.NODE_ENV': JSON.stringify(mode === 'development' ? 'development' : 'production'),
   },
   build: {
-    outDir: './dist',  // Baue in temporäres dist-Verzeichnis
+    outDir: '../web',  // Direkt nach web/ bauen (wo Anki lädt)
     emptyOutDir: true, // Lösche dist-Ordner vor Build
     minify: false, // DEVELOPMENT BUILD - Keine Minification für bessere Fehler!
     sourcemap: true, // Enable source maps for better debugging
