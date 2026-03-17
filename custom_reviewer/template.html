@@ -91,38 +91,13 @@ div[id^="bottom"]:not(#reviewer *) {
     margin-left: 4px;
 }
 
-/* ═══ Animated Snake Border ═══ */
-@keyframes borderRotate {
-    from { --border-angle: 0deg; }
-    to   { --border-angle: 360deg; }
-}
-@property --border-angle {
-    syntax: '<angle>';
-    initial-value: 0deg;
-    inherits: false;
-}
+/* ═══ Focus Glow Border ═══ */
 .snake-border {
     position: absolute;
-    inset: 0;
-    border-radius: 16px;
-    padding: 1px;
-    background: conic-gradient(
-        from var(--border-angle) at 50% 100%,
-        rgba(10,132,255,0.0) 0deg,
-        rgba(10,132,255,0.5) 60deg,
-        rgba(10,132,255,0.1) 120deg,
-        rgba(10,132,255,0.0) 180deg,
-        rgba(10,132,255,0.1) 240deg,
-        rgba(10,132,255,0.5) 300deg,
-        rgba(10,132,255,0.0) 360deg
-    );
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
     pointer-events: none;
     opacity: 0;
     transition: opacity 0.3s ease;
-    animation: borderRotate 4s linear infinite;
+    box-shadow: 0 0 0 1px rgba(10,132,255,0.65), 0 0 20px rgba(10,132,255,0.2);
 }
 .snake-border.active {
     opacity: 1;
@@ -191,7 +166,7 @@ div[id^="bottom"]:not(#reviewer *) {
                  style="background: rgba(21,21,21,0.75); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 4px 24px rgba(0,0,0,0.4);">
 
                 <!-- Animated snake border for the entire dock (positioned outside via inset:-1px) -->
-                <div id="dock-snake-border" class="snake-border" style="inset:-1px;border-radius:17px;display:none;"></div>
+                <div id="dock-snake-border" class="snake-border" style="inset:-1px;border-radius:17px;"></div>
 
                 <!-- ── Content Area (top) — swapped per state ── -->
 
@@ -202,7 +177,8 @@ div[id^="bottom"]:not(#reviewer *) {
                                   class="w-full min-h-[24px] max-h-[120px] p-0 pr-10 bg-transparent border-none text-base-content text-[15px] leading-relaxed resize-none outline-none placeholder:text-base-content/[0.25]"
                                   placeholder="Antwort eingeben..."
                                   rows="1"
-                                  ></textarea>
+                                  onfocus="document.getElementById('dock-snake-border').classList.add('active')"
+                                  onblur="document.getElementById('dock-snake-border').classList.remove('active')"></textarea>
                         <button id="send-btn"
                                 class="absolute right-3 bottom-2.5 w-[30px] h-[30px] rounded-full bg-primary flex items-center justify-center border-none cursor-pointer opacity-0 scale-75 pointer-events-none transition-all duration-150"
                                 onclick="submitTextAnswer()">
@@ -231,15 +207,6 @@ div[id^="bottom"]:not(#reviewer *) {
                 <!-- MC shortcuts hint: MC_ACTIVE state -->
                 <div id="dc-mc" class="dock-section">
                     <div id="mc-stars-row" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 16px;"></div>
-                </div>
-
-                <!-- History: HISTORY state (viewing previously-reviewed card) -->
-                <div id="dc-history" class="dock-section">
-                    <div class="flex items-center justify-center gap-3 px-4 py-3">
-                        <span style="font-size:14px;color:rgba(255,255,255,0.2);">←</span>
-                        <span id="history-position" style="font-size:13px;color:rgba(255,255,255,0.4);font-variant-numeric:tabular-nums;"></span>
-                        <span style="font-size:14px;color:rgba(255,255,255,0.2);">→</span>
-                    </div>
                 </div>
 
                 <!-- Loading: EVALUATING / MC_LOADING state -->
