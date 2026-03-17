@@ -4,7 +4,6 @@ import {
   ChevronRight,
   CheckCircle2,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@shared/components/Button';
 import { PricingComparisonTable } from '../components/PricingComparisonTable';
 import { PricingFAQ } from '../components/PricingFAQ';
@@ -45,18 +44,22 @@ export function LandingPage() {
 
       {/* Semi-transparent overlay — dims but doesn't fully hide old Anki below */}
       <div
-        className={`fixed inset-0 z-30 bg-[#0F0F0F] transition-opacity duration-500 ease-out ${
-          introDone ? 'opacity-0 pointer-events-none' : 'opacity-70'
-        }`}
+        className={`fixed inset-0 z-30 bg-[#0F0F0F] pointer-events-none`}
+        style={{
+          opacity: introDone ? 0 : 0.7,
+          transition: 'opacity 1.2s cubic-bezier(0.25, 0.1, 0.25, 1)',
+        }}
       />
 
       <main className="relative z-20">
 
         {/* ═══ HERO ═══ */}
         <section className="relative pt-[18vh] sm:pt-[22vh] pb-20 sm:pb-28 mx-auto px-6 text-center">
-          <div className={`relative z-10 transition-all duration-500 ease-out ${
-            introDone ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-          }`}>
+          <div className="relative z-10" style={{
+            opacity: introDone ? 1 : 0,
+            transform: introDone ? 'translateY(0)' : 'translateY(16px)',
+            transition: 'opacity 1s cubic-bezier(0.25,0.1,0.25,1) 0.3s, transform 1s cubic-bezier(0.25,0.1,0.25,1) 0.3s',
+          }}>
             <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-[5.5rem] font-bold tracking-[-0.04em] leading-none mb-8 text-white whitespace-nowrap">
               Anki auf <span className="text-[#0a84ff]">Steroiden</span>.
             </h1>
@@ -86,36 +89,29 @@ export function LandingPage() {
           {/* Fixed-height container so both layers overlap during crossfade */}
           <div className="relative h-[600px] md:h-[750px] rounded-2xl">
 
-            {/* Old Anki — fades in on load, fades out when plus explodes */}
-            <AnimatePresence>
-              {!introDone && (
-                <motion.div
-                  key="old-anki"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0, filter: 'blur(16px) brightness(1.6)' }}
-                  transition={{ duration: 1.2, ease: 'easeOut' }}
-                  className="absolute inset-0 rounded-2xl overflow-hidden border border-white/[0.08]"
-                >
-                  <OldAnkiMock />
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* Old Anki — visible on load, crossfades out */}
+            <div
+              className="absolute inset-0 rounded-2xl overflow-hidden border border-white/[0.08]"
+              style={{
+                opacity: introDone ? 0 : 1,
+                transition: 'opacity 1.2s cubic-bezier(0.25, 0.1, 0.25, 1)',
+                pointerEvents: introDone ? 'none' : 'auto',
+              }}
+            >
+              <OldAnkiMock />
+            </div>
 
             {/* Modern Demo — crossfades in as old Anki fades out */}
-            <AnimatePresence>
-              {introDone && (
-                <motion.div
-                  key="new-demo"
-                  initial={{ opacity: 0, filter: 'blur(16px)' }}
-                  animate={{ opacity: 1, filter: 'blur(0px)' }}
-                  transition={{ duration: 1.0, ease: 'easeOut', delay: 0.2 }}
-                  className="absolute inset-0 demo-blue-border demo-dot-grid rounded-2xl"
-                >
-                  <InteractivePlayground />
-                </motion.div>
-              )}
-            </AnimatePresence>
+            <div
+              className="absolute inset-0 demo-blue-border demo-dot-grid rounded-2xl"
+              style={{
+                opacity: introDone ? 1 : 0,
+                transition: 'opacity 1.2s cubic-bezier(0.25, 0.1, 0.25, 1) 0.1s',
+                pointerEvents: introDone ? 'auto' : 'none',
+              }}
+            >
+              <InteractivePlayground />
+            </div>
 
           </div>
         </section>
