@@ -475,79 +475,63 @@
         setState(S.MC_ACTIVE); // called AFTER mcOptions is populated
     };
 
+    function lockAllOptions() {
+        const all = document.querySelectorAll('#mc-card-area .mc-opt');
+        all.forEach(btn => { btn.disabled = true; btn.style.cursor = 'default'; });
+    }
+
     window.selectMCOption = function(index) {
         if (current !== S.MC_ACTIVE) return;
+        if (index < 0 || index >= mcOptions.length) return;
+
+        const btn = document.querySelector(`#mc-card-area .mc-opt[data-index="${index}"]`);
+        if (!btn) return;
+
+        // Re-click guard — do not re-process an already-wrong option
+        if (btn.dataset.wrong === 'true') return;
+
         mcAttempts++;
 
-        const all = $$('#mc-card-area .mc-opt');
-        const sel = $(`#mc-card-area .mc-opt[data-index="${index}"]`);
+        const badge = btn.querySelector('.mc-badge');
+        const text = btn.querySelector('.mc-text');
+        const icon = btn.querySelector('.mc-icon');
+        const exp = btn.querySelector('.mc-exp');
 
         if (index === mcCorrectIndex) {
-            sel.style.background = 'rgba(48,209,88,0.1)';
-            sel.style.borderColor = 'rgba(48,209,88,0.3)';
-            const badge = sel.querySelector('.mc-badge');
-            if (badge) { badge.style.background = 'rgba(48,209,88,0.18)'; badge.style.borderColor = 'rgba(48,209,88,0.5)'; badge.style.color = 'rgb(48,209,88)'; }
-            all.forEach(o => o.disabled = true);
-            autoRateEase = mcAttempts === 1 ? 3 : 2;
+            // ── Correct (C3) ──
+            btn.style.border = '1px solid rgba(48,209,88,0.45)';
+            btn.style.background = 'rgba(48,209,88,0.12)';
+            if (badge) { badge.style.background = 'rgba(48,209,88,0.25)'; badge.style.border = '1px solid rgba(48,209,88,0.65)'; badge.style.color = 'rgb(48,209,88)'; }
+            if (icon) { icon.textContent = '✓'; icon.style.color = 'rgb(48,209,88)'; icon.style.display = 'block'; }
+            if (exp && mcOptions[index].explanation) { exp.textContent = mcOptions[index].explanation; exp.style.display = 'block'; }
+            lockAllOptions();
             finishMC(true);
         } else {
+            // ── Wrong (W3) ──
+            btn.style.border = '1px solid rgba(255,69,58,0.4)';
+            btn.style.background = 'rgba(255,69,58,0.12)';
+            if (badge) { badge.style.background = 'rgba(255,69,58,0.25)'; badge.style.border = '1px solid rgba(255,69,58,0.6)'; badge.style.color = 'rgb(255,80,65)'; }
+            if (text) { text.style.textDecoration = 'line-through'; text.style.textDecorationColor = 'rgba(255,69,58,0.4)'; }
+            if (icon) { icon.textContent = '✗'; icon.style.color = 'rgb(255,69,58)'; icon.style.display = 'block'; }
+            if (exp && mcOptions[index].explanation) { exp.textContent = mcOptions[index].explanation; exp.style.display = 'block'; }
+            btn.dataset.wrong = 'true';
             mcWrongPicks.push(index);
-            sel.style.background = 'rgba(255,69,58,0.1)';
-            sel.style.borderColor = 'rgba(255,69,58,0.3)';
-            const badge = sel.querySelector('.mc-badge');
-            if (badge) { badge.style.background = 'rgba(255,69,58,0.18)'; badge.style.borderColor = 'rgba(255,69,58,0.5)'; badge.style.color = 'rgb(255,69,58)'; }
-            const xMark = document.createElement('span');
-            xMark.style.cssText = 'color:rgba(255,69,58,0.7);font-size:13px;flex-shrink:0;';
-            xMark.textContent = '✗';
-            sel.appendChild(xMark);
-            sel.disabled = true;
+            degradeStar();
 
-            if (mcAttempts >= 2) {
-                autoRateEase = 1;
-                const correct = $(`#mc-card-area .mc-opt[data-index="${mcCorrectIndex}"]`);
-                if (correct) {
-                    correct.style.background = 'rgba(48,209,88,0.1)';
-                    correct.style.borderColor = 'rgba(48,209,88,0.3)';
-                    const cb = correct.querySelector('.mc-badge');
-                    if (cb) { cb.style.background = 'rgba(48,209,88,0.18)'; cb.style.borderColor = 'rgba(48,209,88,0.5)'; cb.style.color = 'rgb(48,209,88)'; }
-                }
-                all.forEach(o => o.disabled = true);
-                finishMC(false);
+            if (mcWrongPicks.length >= 3) {
+                revealAnswer(); // auto-reveal after 3 wrong attempts
             }
         }
     };
 
     function finishMC(wasCorrect) {
+        // Set autoRateEase centrally — callers must NOT set it before calling here
+        autoRateEase = wasCorrect
+            ? (mcAttempts === 1 ? 3 : mcAttempts === 2 ? 2 : 1)
+            : 1;
+
+        updateStarsRevealed(autoRateEase);
         setState(S.MC_RESULT);
-        const labels = { 1: 'Again', 2: 'Hard', 3: 'Good', 4: 'Easy' };
-        const colors = { 1: 'text-error', 2: 'text-warning', 3: 'text-success', 4: 'text-primary' };
-
-        const el = $('#eval-result');
-        if (el) {
-            const icon = wasCorrect ? '✓' : '✗';
-            const msg = wasCorrect
-                ? (mcAttempts === 1 ? 'Beim ersten Versuch richtig!' : 'Beim zweiten Versuch richtig.')
-                : 'Nicht richtig.';
-
-            let wrongSummary = '';
-            if (!wasCorrect && mcWrongPicks.length > 0) {
-                const wrongExps = mcWrongPicks
-                    .map(i => mcOptions[i])
-                    .filter(o => o && o.explanation)
-                    .map(o => `<div class="text-xs leading-relaxed" style="border-left:2px solid rgba(255,69,58,0.4);padding-left:8px;color:rgba(255,69,58,0.7);">${o.explanation}</div>`)
-                    .join('');
-                if (wrongExps) wrongSummary = `<div class="flex flex-col gap-1 mt-2">${wrongExps}</div>`;
-            }
-
-            el.innerHTML = `
-                <div class="flex items-center justify-center gap-2 py-1">
-                    <span class="text-lg ${colors[autoRateEase]}">${icon}</span>
-                    <span class="text-xs font-semibold uppercase tracking-wide ${colors[autoRateEase]}">${labels[autoRateEase]}</span>
-                    <span class="text-xs text-base-content/55">${msg}</span>
-                </div>
-                ${wrongSummary}
-            `;
-        }
     }
 
     // ═══ MC Stars ═══
