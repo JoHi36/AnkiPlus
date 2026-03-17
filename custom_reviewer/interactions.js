@@ -514,9 +514,9 @@
             if (text) { text.style.textDecoration = 'line-through'; text.style.textDecorationColor = 'rgba(255,69,58,0.4)'; }
             if (icon) { icon.textContent = '✗'; icon.style.color = 'rgb(255,69,58)'; icon.style.display = 'block'; }
             if (exp && mcOptions[index].explanation) { exp.textContent = mcOptions[index].explanation; exp.style.display = 'block'; }
-            btn.dataset.wrong = 'true';
             mcWrongPicks.push(index);
             degradeStar();
+            btn.dataset.wrong = 'true';
 
             if (mcWrongPicks.length >= 3) {
                 revealAnswer(); // auto-reveal after 3 wrong attempts
