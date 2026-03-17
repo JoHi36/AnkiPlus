@@ -27,6 +27,8 @@ import PaywallModal from './components/PaywallModal';
 import SectionDivider from './components/SectionDivider';
 import ReviewTrailIndicator from './components/ReviewTrailIndicator';
 import { BookOpen } from 'lucide-react';
+import { useFreeChat } from './hooks/useFreeChat';
+import FreeChatOverlay from './components/FreeChatOverlay';
 
 /**
  * Inner App Component - wrapped by SessionContextProvider
@@ -151,6 +153,28 @@ function AppInner() {
   // Übergebe cardContextHook an useChat für Section-Erstellung bei erster Nachricht
   // Use SessionContext's currentSessionId and wrapper
   const chatHook = useChat(bridge, sessionContext.currentSessionId, setSessionsWrapper, cardContextHook.currentSectionId, cardContextHook, cardSessionHook);
+
+  // ── Free Chat Hook ─────────────────────────────────────────────
+  // activeChatRef must be at top-level scope — NOT inside a useEffect (Rules of Hooks)
+  const activeChatRef = useRef('session');
+  useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
+
+  const freeChatHook = useFreeChat({
+    bridge,
+    onLoadingChange: (loading) => {
+      // When free chat finishes loading (response complete), restore session routing
+      if (!loading) {
+        setActiveChat('session');
+      }
+    },
+    onCancelComplete: () => {
+      setActiveChat('session');
+      setFreeChatOpen(false);
+    },
+  });
+  const freeChatHookRef = useRef(freeChatHook);
+  useEffect(() => { freeChatHookRef.current = freeChatHook; }, [freeChatHook]);
+
   // DEPRECATED: useDeckTracking is being phased out in favor of SessionContext
   // Keep for backward compatibility during migration
   const deckTrackingHook = useDeckTracking(
@@ -179,7 +203,7 @@ function AppInner() {
   const deckTrackingHookRef = useRef(deckTrackingHook);
   const reviewTrailHookRef = useRef(reviewTrailHook);
   const sessionContextRef = useRef(sessionContext);
-  const handlePerformanceCaptureRef = useRef(handlePerformanceCapture);
+  const handlePerformanceCaptureRef = useRef(null);
   useEffect(() => {
     cardSessionHookRef.current = cardSessionHook;
     cardContextHookRef.current = cardContextHook;
@@ -251,6 +275,11 @@ function AppInner() {
   // Zeige Session-Übersicht NUR wenn explizit vom User angefordert (via Stapel-Button o.ä.)
   // NICHT automatisch wenn keine Session aktiv — Chat startet immer im Chat-Modus
   const showSessionOverview = sessionsHook.forceShowOverview;
+
+  // ── Free Chat State ──────────────────────────────────────────────
+  const [freeChatOpen, setFreeChatOpen] = useState(false);
+  const [freeChatInitialText, setFreeChatInitialText] = useState('');
+  const [activeChat, setActiveChat] = useState('session'); // "session" | "free"
   
   useEffect(() => {
     bridgeRef.current = bridge;
@@ -484,8 +513,13 @@ function AppInner() {
         // Models Events
         _models.handleAnkiReceive(payload);
 
-        // Chat Events
-        _chat.handleAnkiReceive(payload);
+        // Chat Events — mutual exclusion: only one hook receives each payload
+        const _freeChat = freeChatHookRef.current;
+        if (activeChatRef.current === 'free') {
+          _freeChat.handleAnkiReceive(payload);
+        } else {
+          _chat.handleAnkiReceive(payload);
+        }
 
         // Deck Events
         if (payload.type === 'currentDeck') {
@@ -509,16 +543,19 @@ function AppInner() {
           console.error('🔴 CARD_SWITCH: cardContext for cardId:', payload.data?.cardId);
           _cardCtx.handleCardContext(payload.data);
           if (payload.data && payload.data.cardId) {
+            // SAVE current card's messages to cache before switching
+            const prevCardId = _cardSession.currentCardId;
+            if (prevCardId && _chat.messages && _chat.messages.length > 0) {
+              _cardSession.updateLocalMessages(prevCardId, _chat.messages);
+            }
             _session.handleCardShown(payload.data.cardId);
-            // IMMEDIATELY clear chat for new card (before async load completes)
-            // This makes the card switch visible instantly.
-            // cardSessionLoaded will restore messages if the card has history.
+            // IMMEDIATELY clear chat for new card
             _chat.setMessages([]);
             _cardCtx.setSections([]);
             _cardCtx.setCurrentSectionId(null);
             // Per-Card Session: Load card's session from SQLite
             _cardSession.loadCardSession(payload.data.cardId);
-            // Review Trail: Track card in navigation trail
+            // Review Trail
             _trail.addCard(payload.data.cardId);
           }
         }
@@ -619,10 +656,12 @@ function AppInner() {
           }
         }
 
-        // Section Title Events
+        // Section Title Events — only route to session chat (free chat drops this type)
         if (payload.type === 'sectionTitleGenerated') {
           console.log('🏷️ App.jsx: Section-Titel erhalten:', payload.data);
-          _chat.handleAnkiReceive(payload);
+          if (activeChatRef.current !== 'free') {
+            _chat.handleAnkiReceive(payload);
+          }
         }
 
         // Sessions Events
@@ -705,10 +744,14 @@ function AppInner() {
           }));
         }
 
-        // AI State Events
+        // AI State Events — route to active chat hook
         if (payload.type === 'ai_state') {
           console.log('🤖 App.jsx: AI State Update:', payload.message);
-          _chat.handleAnkiReceive(payload);
+          if (activeChatRef.current === 'free') {
+            _freeChat.handleAnkiReceive(payload);
+          } else {
+            _chat.handleAnkiReceive(payload);
+          }
           window.dispatchEvent(new CustomEvent('aiStateUpdate', {
             detail: { message: payload.message }
           }));
@@ -795,6 +838,11 @@ function AppInner() {
 
       _cardCtx.handleCardContext(payload.data);
       if (payload.data && payload.data.cardId) {
+        // Save current card's messages before switching
+        const prevCardId = _cardSession.currentCardId;
+        if (prevCardId && _chat.messages && _chat.messages.length > 0) {
+          _cardSession.updateLocalMessages(prevCardId, _chat.messages);
+        }
         _session.handleCardShown(payload.data.cardId);
         _chat.setMessages([]);
         _cardCtx.setSections([]);
@@ -1189,6 +1237,19 @@ function AppInner() {
     lastUserMessageIdRef.current = 'pending';
   };
 
+  // Review Trail Navigation handlers — defined before the keyboard useEffect that references them
+  const handleTrailNavigateLeft = useCallback(() => {
+    if (bridge) {
+      bridge.navigateToCard('prev');
+    }
+  }, [bridge]);
+
+  const handleTrailNavigateRight = useCallback(() => {
+    if (bridge) {
+      bridge.navigateToCard('next');
+    }
+  }, [bridge]);
+
   // Keyboard Navigation: ArrowLeft/Right for review trail, Cmd+ArrowUp/Down for messages
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -1355,43 +1416,27 @@ function AppInner() {
     sessionsHook.setForceShowOverview(false);
   }, [bridge, sessionsHook]);
 
-  // Review Trail Navigation handlers
-  // These use Python's trail (via pycmd navigate:prev/next) rather than
-  // the frontend trail, to avoid sync issues between the two trails.
-  const handleTrailNavigateLeft = useCallback(() => {
-    if (bridge) {
-      bridge.navigateToCard('prev');
+  // ── Free Chat Handlers ─────────────────────────────────────────
+  const handleFreeChatOpen = useCallback((text) => {
+    setFreeChatInitialText(text);
+    // Clear after React processes the mount (one-shot trigger)
+    setTimeout(() => setFreeChatInitialText(''), 0);
+    setFreeChatOpen(true);
+    setActiveChat('free');
+  }, []);
+
+  const handleFreeChatClose = useCallback(() => {
+    if (freeChatHookRef.current.isLoading) {
+      // Cancel in-flight request; onCancelComplete will close
+      freeChatHookRef.current.startCancel();
+      if (bridge?.cancelRequest) bridge.cancelRequest();
+    } else {
+      setActiveChat('session');
+      setFreeChatOpen(false);
     }
   }, [bridge]);
 
-  const handleTrailNavigateRight = useCallback(() => {
-    if (bridge) {
-      bridge.navigateToCard('next');
-    }
-  }, [bridge]);
-
-  // Global arrow key handler — works from chat panel too
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      // Don't navigate if user is typing in an input/textarea
-      const tag = e.target.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) {
-        return;
-      }
-      // Don't interfere with modifier keys
-      if (e.ctrlKey || e.altKey || e.metaKey) return;
-
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        handleTrailNavigateLeft();
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        handleTrailNavigateRight();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleTrailNavigateLeft, handleTrailNavigateRight]);
+  // (handleTrailNavigateLeft/Right defined earlier, before the keyboard useEffect)
 
   const handleNavigateToOverview = sessionsHook.createHandleNavigateToOverview(bridge);
   
@@ -1540,14 +1585,6 @@ function AppInner() {
           isResetDisabled={isResetDisabled}
           onOpenSettings={() => setShowProfile(true)}
           cardContext={cardContextHook.cardContext}
-          sectionTitle={activeSectionTitle}
-          sections={cardContextHook.sections}
-          onScrollToSection={cardContextHook.handleScrollToSection}
-          onSectionTitleClick={() => {
-            if (activeSection?.cardId && bridge?.goToCard) {
-              bridge.goToCard(activeSection.cardId);
-            }
-          }}
           sessions={sessionContext.sessions}
           onSelectSession={handleSelectSession}
           bridge={bridge}
@@ -1565,43 +1602,56 @@ function AppInner() {
 
       <main className="flex-1 overflow-hidden relative flex flex-col min-h-0" style={{ height: '100%' }}>
         {showSessionOverview ? (
-          /* Deck Browser — fills the space below the ContextSurface pill */
-          <DeckBrowser
-            bridge={bridge}
-            sessions={sessionContext.sessions}
-            onSelectSession={handleSelectSession}
-            onOpenDeck={handleOpenDeck}
-            headerHeight={headerHeight}
-          />
+          /* Deck Browser — relative container so FreeChatOverlay (absolute) covers it */
+          <div style={{ position: 'relative', flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <DeckBrowser
+              bridge={bridge}
+              sessions={sessionContext.sessions}
+              onSelectSession={handleSelectSession}
+              onOpenDeck={handleOpenDeck}
+              headerHeight={headerHeight}
+              onFreeChatOpen={handleFreeChatOpen}
+            />
+            {freeChatOpen && (
+              <FreeChatOverlay
+                messages={freeChatHook.messages}
+                streamingMessage={freeChatHook.streamingMessage}
+                isLoading={freeChatHook.isLoading}
+                initialText={freeChatInitialText}
+                onSend={(text, mode) => freeChatHook.handleSend(text, mode)}
+                onClose={handleFreeChatClose}
+                bridge={bridge}
+              />
+            )}
+          </div>
         ) : (
           <>
+            {/* Review Trail Indicator — fixed below header, outside scroll area */}
+            <ReviewTrailIndicator
+              currentPosition={reviewTrailHook.currentPosition}
+              totalCards={reviewTrailHook.totalCards}
+              canGoLeft={reviewTrailHook.canGoLeft}
+              canGoRight={reviewTrailHook.canGoRight}
+              isViewingHistory={reviewTrailHook.isViewingHistory}
+              onNavigateLeft={handleTrailNavigateLeft}
+              onNavigateRight={handleTrailNavigateRight}
+            />
             {/* Chat Container - scrollbar */}
             <div className="flex-1 overflow-hidden relative">
-              {/* Top Fade Gradient - smooth fade-out at top, positioned below header */}
-              {/* Adjusted to be always under header, now that floating pill is gone */}
-              <div 
+              {/* Top Fade Gradient */}
+              <div
                 className="fixed left-0 right-0 pointer-events-none z-25 max-w-3xl mx-auto"
                 style={{
-                  top: `${headerHeight}px`, 
+                  top: `${headerHeight}px`,
                   height: '40px',
                   background: 'linear-gradient(to bottom, hsl(var(--b1)) 0%, hsl(var(--b1) / 0.9) 30%, hsl(var(--b1) / 0.0) 100%)'
                 }}
               />
-              <div 
+              <div
                 ref={messagesContainerRef}
                 id="messages-container"
                 className="h-full overflow-y-auto px-4 pt-20 pb-40 max-w-3xl mx-auto w-full scrollbar-thin relative z-10"
               >
-                {/* Review Trail Indicator */}
-                <ReviewTrailIndicator
-                  currentPosition={reviewTrailHook.currentPosition}
-                  totalCards={reviewTrailHook.totalCards}
-                  canGoLeft={reviewTrailHook.canGoLeft}
-                  canGoRight={reviewTrailHook.canGoRight}
-                  isViewingHistory={reviewTrailHook.isViewingHistory}
-                  onNavigateLeft={handleTrailNavigateLeft}
-                  onNavigateRight={handleTrailNavigateRight}
-                />
 
                 {chatHook.messages.length === 0 && !chatHook.isLoading && !chatHook.streamingMessage ? (
             <div className="flex items-center justify-center h-full">
