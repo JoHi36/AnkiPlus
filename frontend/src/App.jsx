@@ -292,6 +292,7 @@ function AppInner() {
   const freeChatHookRef = useRef(freeChatHook);
   useEffect(() => { freeChatHookRef.current = freeChatHook; }, [freeChatHook]);
   const freeChatOpenRef = useRef(false);
+  const handleFreeChatOpenRef = useRef(null);
   useEffect(() => { freeChatOpenRef.current = freeChatOpen; }, [freeChatOpen]);
 
   // Mascot state
@@ -729,6 +730,12 @@ function AppInner() {
         // Section Title Events — handled by the general mutual-exclusion block above.
         // useFreeChat.handleAnkiReceive drops sectionTitleGenerated internally.
         // No secondary dispatch needed here.
+
+        // Free Chat triggered from native DeckBrowser search bar
+        if (payload.type === 'startFreeChat' && payload.text) {
+          handleFreeChatOpenRef.current(payload.text);
+          return;
+        }
 
         // Sessions Events
         if (payload.type === 'sessionsLoaded') {
@@ -1535,13 +1542,15 @@ function AppInner() {
 
   // ── Free Chat Handlers ─────────────────────────────────────────
   const handleFreeChatOpen = useCallback((text) => {
+    sessionsHook.setForceShowOverview(true); // ensure DeckBrowser is visible
     setFreeChatInitialText(text);
     setTimeout(() => setFreeChatInitialText(''), 0);
     setFreeChatOpen(true);
     setAnimPhase('entering');
     setTimeout(() => setAnimPhase('entered'), 350);
     setActiveChat('free');
-  }, []);
+  }, [sessionsHook]);
+  useEffect(() => { handleFreeChatOpenRef.current = handleFreeChatOpen; }, [handleFreeChatOpen]);
 
   const handleFreeChatClose = useCallback(() => {
     if (freeChatHookRef.current.isLoading) {

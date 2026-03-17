@@ -816,6 +816,20 @@ class CustomScreens:
                     mw.onOverview()
                     # Auto-start study after brief delay for overview to initialize
                     QTimer.singleShot(100, lambda: mw.overview._linkHandler('study'))
+            elif action_type == 'freeChat':
+                text = action.get('text', '').strip()
+                if text:
+                    try:
+                        from . import ui_setup
+                        widget = ui_setup.get_chatbot_widget()
+                        if widget and widget.web_view:
+                            import json as _json
+                            payload = {'type': 'startFreeChat', 'text': text}
+                            widget.web_view.page().runJavaScript(
+                                f"window.ankiReceive({_json.dumps(payload)});"
+                            )
+                    except Exception:
+                        traceback.print_exc()
             elif action_type == 'cmd':
                 cmd = action.get('cmd', '')
                 if cmd == 'study':
