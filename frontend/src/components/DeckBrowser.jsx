@@ -439,6 +439,8 @@ export default function DeckBrowser({
     transform: deckContentVisible ? 'translateY(0)' : 'translateY(60px)',
     pointerEvents: deckContentVisible ? 'auto' : 'none',
     flexShrink: 0,
+    // When not visible: collapse to 0 so FreeChatView fills all available space
+    ...(deckContentVisible ? {} : { flex: '0 0 0', overflow: 'hidden' }),
   };
 
   return (
