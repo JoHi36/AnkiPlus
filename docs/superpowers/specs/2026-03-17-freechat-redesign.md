@@ -127,6 +127,7 @@ interface ChatInputProps {
 - `onOverview` prop is removed; callers pass `actionSecondary.onClick`
 - The global `Space` keydown listener stays in `ChatInput` but calls `actionPrimary.onClick` instead of the hardcoded `handleAdvance`
 - ESC in `handleKeyDown` calls `onClose` (unchanged — maps to `handleFreeChatClose` in free chat context, to close-panel in session context)
+- **`disabled` ownership**: `ChatInput` no longer auto-disables action buttons based on `isLoading`. Callers are fully responsible for passing `disabled: true` when appropriate. In session usage: `actionSecondary={{ ..., disabled: isLoading }}` (Übersicht disabled while loading). In FreeChatView usage: `actionPrimary` (Schließen) is never disabled — clicking it while loading triggers the cancel-ack flow.
 
 **Session usage (updated call site in `App.jsx` or wherever `ChatInput` is rendered in session):**
 ```jsx
@@ -169,7 +170,7 @@ const handleFreeChatClose = useCallback(() => {
   if (freeChatHookRef.current.isLoading) {
     freeChatHookRef.current.startCancel();
     bridge.cancelRequest();
-    // onCancelComplete will call setAnimPhase('exiting') → then idle
+    // onCancelComplete (see below) will trigger the exit animation
   } else {
     setAnimPhase('exiting');
     setTimeout(() => {
@@ -181,9 +182,24 @@ const handleFreeChatClose = useCallback(() => {
 }, [bridge]);
 ```
 
+`onCancelComplete` callback (passed to `useFreeChat`, updated from current implementation):
+```javascript
+onCancelComplete: () => {
+  // Must animate out — do NOT set freeChatOpen=false directly
+  setAnimPhase('exiting');
+  setTimeout(() => {
+    setFreeChatOpen(false);
+    setAnimPhase('idle');
+    setActiveChat('session');
+  }, 300);
+}
+```
+
+> **Note for implementer**: The current `onCancelComplete` in `App.jsx` (lines ~275–278) calls `setFreeChatOpen(false)` immediately without an exit animation. It must be updated to the pattern above.
+
 `⌘X` keyboard shortcut (reset, stay in chat):
 - Wired via global keydown listener when `freeChatOpen && animPhase === 'entered'`
-- Calls `freeChatHook.resetMessages()` (new method on `useFreeChat`, or sets messages to `[]` via a reset callback)
+- Calls `freeChatHook.resetMessages()` — a one-liner additive change to `useFreeChat.js`: add `resetMessages: () => setMessages([])` to the return object. This is the only permitted change to `useFreeChat.js`; all core logic (streaming, cancellation, `handleSend`, `handleAnkiReceive`) remains untouched.
 
 ### `custom_screens.py`
 
@@ -222,7 +238,7 @@ onFreeChatClose: () => void             // NEW — passed to FreeChatView
 
 ## What Does NOT Change
 
-- `useFreeChat.js` logic (messages, streaming, cancellation, `startCancel`, `isLoading`)
+- `useFreeChat.js` core logic (streaming, cancellation, `handleSend`, `handleAnkiReceive`, `startCancel`, `isLoading`) — only `resetMessages` is added to the return object
 - Python AI handling (`widget.py`, `bridge.py`, `ai_handler.py`)
 - `ChatMessage` and `StreamingChatMessage` components
 - The snake-border animation on `FreeChatSearchBar`
