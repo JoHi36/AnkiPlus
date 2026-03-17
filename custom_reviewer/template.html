@@ -128,6 +128,21 @@ div[id^="bottom"]:not(#reviewer *) {
     opacity: 1;
 }
 
+/* ═══ Override DaisyUI textarea defaults ═══ */
+/* DaisyUI sets border-width:1px, background-color, and on :focus adds outline:solid 2px
+   with color var(--bc) which is white in dark mode. Override all of it with !important. */
+#user-answer,
+#user-answer:focus,
+#user-answer:hover,
+#user-answer:active {
+    outline: none !important;
+    border: none !important;
+    background: transparent !important;
+    resize: none !important;
+    box-shadow: none !important;
+    min-height: unset !important;
+}
+
 /* ═══ MC Options (card area) ═══ */
 .mc-opt:not(:disabled):not([data-wrong="true"]):hover {
     background: rgba(255,255,255,0.05) !important;
