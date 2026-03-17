@@ -534,6 +534,47 @@
         setState(S.MC_RESULT);
     }
 
+    function revealAnswer() {
+        if (current !== S.MC_ACTIVE) return;
+
+        // Apply C3 to correct option
+        const correct = document.querySelector(`#mc-card-area .mc-opt[data-index="${mcCorrectIndex}"]`);
+        if (correct) {
+            correct.style.border = '1px solid rgba(48,209,88,0.45)';
+            correct.style.background = 'rgba(48,209,88,0.12)';
+            const badge = correct.querySelector('.mc-badge');
+            if (badge) { badge.style.background = 'rgba(48,209,88,0.25)'; badge.style.border = '1px solid rgba(48,209,88,0.65)'; badge.style.color = 'rgb(48,209,88)'; }
+            const icon = correct.querySelector('.mc-icon');
+            if (icon) { icon.textContent = '✓'; icon.style.color = 'rgb(48,209,88)'; icon.style.display = 'block'; }
+            const exp = correct.querySelector('.mc-exp');
+            if (exp && mcOptions[mcCorrectIndex] && mcOptions[mcCorrectIndex].explanation) {
+                exp.textContent = mcOptions[mcCorrectIndex].explanation;
+                exp.style.display = 'block';
+            }
+        }
+
+        // Dim unchosen options
+        document.querySelectorAll('#mc-card-area .mc-opt').forEach(btn => {
+            const idx = parseInt(btn.dataset.index, 10);
+            if (idx === mcCorrectIndex) return; // already styled green
+            if (btn.dataset.wrong === 'true') {
+                btn.style.opacity = '0.75'; // keep W3 style visible but slightly faded
+            } else {
+                btn.style.opacity = '0.35'; // never-selected options
+            }
+        });
+
+        lockAllOptions();
+        finishMC(false); // wasCorrect=false → autoRateEase=1 (Wiederholen)
+    }
+    window.revealAnswer = revealAnswer;
+
+    function revealAndChat() {
+        revealAnswer();    // sets state to MC_RESULT
+        openFollowUp();    // opens chat with MC context (state is now MC_RESULT)
+    }
+    window.revealAndChat = revealAndChat;
+
     // ═══ MC Stars ═══
 
     function buildStars() {
