@@ -367,30 +367,6 @@
         }
     };
 
-    window.skipMC = function() {
-        if (current !== S.MC_ACTIVE) return;
-        const cardArea = $('#mc-card-area');
-        if (cardArea) { cardArea.classList.add('hidden'); cardArea.innerHTML = ''; }
-        mcOptions = []; mcWrongPicks = []; mcCorrectIndex = -1;
-        const elapsed = (Date.now() - questionStartTime) / 1000;
-        const rating = getRatingForTime(elapsed);
-        autoRateEase = rating.ease;
-        setState(S.ANSWER);
-        pycmd('ans');
-        updateTimerDisplay(elapsed);
-        const ans = $('#answer-section');
-        if (ans) setTimeout(() => ans.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
-    };
-
-    window.cancelMC = function() {
-        if (current !== S.MC_ACTIVE) return;
-        const cardArea = $('#mc-card-area');
-        if (cardArea) { cardArea.classList.add('hidden'); cardArea.innerHTML = ''; }
-        mcOptions = []; mcWrongPicks = []; mcCorrectIndex = -1; mcAttempts = 0;
-        setState(S.QUESTION);
-        const ta = $('#user-answer');
-        if (ta) { ta.disabled = false; ta.classList.remove('opacity-40'); setTimeout(() => ta.focus(), 50); }
-    };
 
 
     // ═══════════════════════════════════════════════
@@ -753,13 +729,13 @@
         const handlers = {
             'Space': () => {
                 if (current === S.QUESTION) showAnswer();
-                else if (current === S.MC_ACTIVE) skipMC();
+                else if (current === S.MC_ACTIVE) revealAnswer();
                 else if (current === S.ANSWER) rateCard(autoRateEase || 3);
                 else if (current === S.EVALUATED || current === S.MC_RESULT) proceedAfterEval();
             },
             'Enter': () => {
                 if (current === S.QUESTION) startMCMode();
-                else if (current === S.MC_ACTIVE) cancelMC();
+                else if (current === S.MC_ACTIVE) revealAndChat();
                 else if (current === S.ANSWER || current === S.EVALUATED || current === S.MC_RESULT) openFollowUp();
             },
             '1': () => { if (current === S.ANSWER) rateCard(1); else if (current === S.MC_ACTIVE) selectMCOption(0); },
@@ -767,6 +743,14 @@
             '3': () => { if (current === S.ANSWER) rateCard(3); else if (current === S.MC_ACTIVE) selectMCOption(2); },
             '4': () => { if (current === S.ANSWER) rateCard(4); else if (current === S.MC_ACTIVE) selectMCOption(3); },
             '5': () => current === S.MC_ACTIVE && selectMCOption(4),
+            'a': () => current === S.MC_ACTIVE && selectMCOption(0),
+            'b': () => current === S.MC_ACTIVE && selectMCOption(1),
+            'c': () => current === S.MC_ACTIVE && selectMCOption(2),
+            'd': () => current === S.MC_ACTIVE && selectMCOption(3),
+            'A': () => current === S.MC_ACTIVE && selectMCOption(0),
+            'B': () => current === S.MC_ACTIVE && selectMCOption(1),
+            'C': () => current === S.MC_ACTIVE && selectMCOption(2),
+            'D': () => current === S.MC_ACTIVE && selectMCOption(3),
             'e': editCard, 'E': editCard,
             'm': toggleMark, 'M': toggleMark, '*': toggleMark,
             'z': undoCard, 'Z': undoCard,
