@@ -25,12 +25,11 @@ export interface ChatInputProps {
   isLoading: boolean;
   onStop?: () => void;
   cardContext?: any;
-  bridge?: any;
   isPremium?: boolean;
   onShowPaywall?: () => void;
   authStatus?: any;
   currentAuthToken?: string;
-  onClose?: () => void;
+  onClose?: () => void; // Used by ESC handler in handleKeyDown to close the parent panel
   actionPrimary: ActionConfig;
   actionSecondary: ActionConfig;
 }
@@ -41,7 +40,6 @@ export default function ChatInput({
   isLoading,
   onStop,
   cardContext,
-  bridge,
   isPremium = false,
   onShowPaywall,
   authStatus = {},
@@ -84,14 +82,6 @@ export default function ChatInput({
     }
   };
 
-  const handleAdvance = () => {
-    actionPrimary.onClick();
-  };
-
-  const handleOverview = () => {
-    actionSecondary.onClick();
-  };
-
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -101,7 +91,7 @@ export default function ChatInput({
     // Space (when not typing) → advance card
     if (e.code === 'Space' && !input.trim() && document.activeElement !== textareaRef.current) {
       e.preventDefault();
-      handleAdvance();
+      actionPrimary.onClick();
       return;
     }
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -110,7 +100,7 @@ export default function ChatInput({
         handleSubmit(e);
       } else {
         // Enter with empty input → trigger Übersicht
-        handleOverview();
+        actionSecondary.onClick();
       }
     }
   };
@@ -121,12 +111,12 @@ export default function ChatInput({
       if ((e.target as HTMLElement).tagName === 'TEXTAREA' || (e.target as HTMLElement).tagName === 'INPUT') return;
       if (e.code === 'Space') {
         e.preventDefault();
-        handleAdvance();
+        actionPrimary.onClick();
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [actionPrimary]);
+  }, [actionPrimary.onClick]);
 
   return (
     <div className="w-full relative">

@@ -1905,7 +1905,6 @@ function AppInner() {
           isLoading={chatHook.isLoading}
           onStop={chatHook.handleStopRequest}
           cardContext={cardContextHook.cardContext}
-          bridge={bridge}
           isPremium={isPremium}
           onShowPaywall={() => setShowPaywall(true)}
           authStatus={authStatus}
