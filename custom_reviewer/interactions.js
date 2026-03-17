@@ -119,6 +119,9 @@
                 // Reset dock border tint from previous MC result
                 const dockInner = document.querySelector('#unified-dock > div');
                 if (dockInner) dockInner.style.borderColor = '';
+                // Clear MC card area from previous card
+                const mcArea = document.getElementById('mc-card-area');
+                if (mcArea) { mcArea.classList.add('hidden'); mcArea.innerHTML = ''; }
                 showSection('dc-input');
                 setActions(
                     { label: 'Show Answer', shortcut: 'SPACE', onclick: 'showAnswer()', color: 'rgba(255,255,255,0.88)', weight: '600' },
@@ -560,6 +563,11 @@
     function buildStars() {
         const row = document.getElementById('mc-stars-row');
         if (!row) return;
+        // Re-home the row back into #dc-mc if it was moved to #eval-result
+        const dcMc = document.getElementById('dc-mc');
+        if (dcMc && row.parentElement !== dcMc) {
+            dcMc.appendChild(row);
+        }
         row.innerHTML = '';
         for (let i = 0; i < 3; i++) {
             const s = document.createElement('span');
