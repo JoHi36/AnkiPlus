@@ -70,7 +70,7 @@ No changes to the component itself. The parent (`DeckBrowser`) controls its visi
 ### `DeckBrowser.jsx`
 
 - Receives two new props: `freeChatOpen: boolean`, `animPhase: string`, `freeChatInitialText: string`, `freeChatHook: object`
-- The `onFreeChatOpen` prop is **removed** — transition is handled internally: `FreeChatSearchBar.onOpen` → calls `props.onFreeChatOpen` which triggers the animation in `App.jsx`. Wait — `onFreeChatOpen` stays as a prop from `App.jsx` but is still called when the search bar submits. `DeckBrowser` does not manage animation state itself.
+- `onFreeChatOpen` stays as a prop passed from `App.jsx` and is called when the search bar submits — it triggers `handleFreeChatOpen` in `App.jsx` which manages all animation state. `DeckBrowser` does not manage animation state itself.
 - When `animPhase === 'entering'` or `'entered'`: deck list and search bar header get exit animation CSS classes; `FreeChatView` renders
 - When `animPhase === 'exiting'` or `'idle'`: reverse classes; `FreeChatView` unmounts after `exiting` → `idle` transition completes
 
