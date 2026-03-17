@@ -37,12 +37,12 @@ export default function FreeChatSearchBar({ onOpen }) {
 
       {/* Snake-border wrapper */}
       <div style={{ position: 'relative', borderRadius: 24, padding: 2 }}>
-        {/* Animated conic-gradient ring */}
+        {/* Animated conic-gradient ring — transform:rotate for smooth continuous spin */}
         <div style={{
           position: 'absolute',
-          inset: 0,
-          borderRadius: 24,
-          background: 'conic-gradient(from 0deg, transparent 0deg, transparent 200deg, #6b8cff 220deg, #a78bfa 260deg, #38bdf8 290deg, #6b8cff 310deg, transparent 330deg)',
+          inset: -1,
+          borderRadius: 25,
+          background: 'conic-gradient(from 0deg, transparent 0deg, transparent 55%, #6b8cff 60%, #a78bfa 72%, #38bdf8 81%, #6b8cff 86%, transparent 92%)',
           WebkitMask: 'radial-gradient(circle, transparent calc(100% - 2px), white calc(100% - 2px))',
           mask: 'radial-gradient(circle, transparent calc(100% - 2px), white calc(100% - 2px))',
           animation: 'freechat-snake-rotate 2.5s linear infinite',
@@ -90,14 +90,11 @@ export default function FreeChatSearchBar({ onOpen }) {
         Enter zum Senden
       </div>
 
-      {/* CSS animation — injected once via style tag */}
+      {/* CSS animation — transform:rotate produces smooth continuous spin */}
       <style>{`
         @keyframes freechat-snake-rotate {
-          0%   { background: conic-gradient(from 0deg,   transparent 0deg, transparent 200deg, #6b8cff 220deg, #a78bfa 260deg, #38bdf8 290deg, #6b8cff 310deg, transparent 330deg); }
-          25%  { background: conic-gradient(from 90deg,  transparent 0deg, transparent 200deg, #6b8cff 220deg, #a78bfa 260deg, #38bdf8 290deg, #6b8cff 310deg, transparent 330deg); }
-          50%  { background: conic-gradient(from 180deg, transparent 0deg, transparent 200deg, #6b8cff 220deg, #a78bfa 260deg, #38bdf8 290deg, #6b8cff 310deg, transparent 330deg); }
-          75%  { background: conic-gradient(from 270deg, transparent 0deg, transparent 200deg, #6b8cff 220deg, #a78bfa 260deg, #38bdf8 290deg, #6b8cff 310deg, transparent 330deg); }
-          100% { background: conic-gradient(from 360deg, transparent 0deg, transparent 200deg, #6b8cff 220deg, #a78bfa 260deg, #38bdf8 290deg, #6b8cff 310deg, transparent 330deg); }
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
         }
       `}</style>
     </div>

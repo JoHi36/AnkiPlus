@@ -154,27 +154,6 @@ function AppInner() {
   // Use SessionContext's currentSessionId and wrapper
   const chatHook = useChat(bridge, sessionContext.currentSessionId, setSessionsWrapper, cardContextHook.currentSectionId, cardContextHook, cardSessionHook);
 
-  // ── Free Chat Hook ─────────────────────────────────────────────
-  // activeChatRef must be at top-level scope — NOT inside a useEffect (Rules of Hooks)
-  const activeChatRef = useRef('session');
-  useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
-
-  const freeChatHook = useFreeChat({
-    bridge,
-    onLoadingChange: (loading) => {
-      // When free chat finishes loading (response complete), restore session routing
-      if (!loading) {
-        setActiveChat('session');
-      }
-    },
-    onCancelComplete: () => {
-      setActiveChat('session');
-      setFreeChatOpen(false);
-    },
-  });
-  const freeChatHookRef = useRef(freeChatHook);
-  useEffect(() => { freeChatHookRef.current = freeChatHook; }, [freeChatHook]);
-
   // DEPRECATED: useDeckTracking is being phased out in favor of SessionContext
   // Keep for backward compatibility during migration
   const deckTrackingHook = useDeckTracking(
@@ -280,6 +259,26 @@ function AppInner() {
   const [freeChatOpen, setFreeChatOpen] = useState(false);
   const [freeChatInitialText, setFreeChatInitialText] = useState('');
   const [activeChat, setActiveChat] = useState('session'); // "session" | "free"
+
+  // activeChatRef must be declared AFTER activeChat (can't reference before initialization)
+  const activeChatRef = useRef('session');
+  useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
+
+  const freeChatHook = useFreeChat({
+    bridge,
+    onLoadingChange: (loading) => {
+      // When free chat finishes loading (response complete), restore session routing
+      if (!loading) {
+        setActiveChat('session');
+      }
+    },
+    onCancelComplete: () => {
+      setActiveChat('session');
+      setFreeChatOpen(false);
+    },
+  });
+  const freeChatHookRef = useRef(freeChatHook);
+  useEffect(() => { freeChatHookRef.current = freeChatHook; }, [freeChatHook]);
   
   useEffect(() => {
     bridgeRef.current = bridge;
@@ -656,13 +655,9 @@ function AppInner() {
           }
         }
 
-        // Section Title Events — only route to session chat (free chat drops this type)
-        if (payload.type === 'sectionTitleGenerated') {
-          console.log('🏷️ App.jsx: Section-Titel erhalten:', payload.data);
-          if (activeChatRef.current !== 'free') {
-            _chat.handleAnkiReceive(payload);
-          }
-        }
+        // Section Title Events — handled by the general mutual-exclusion block above.
+        // useFreeChat.handleAnkiReceive drops sectionTitleGenerated internally.
+        // No secondary dispatch needed here.
 
         // Sessions Events
         if (payload.type === 'sessionsLoaded') {
