@@ -61,7 +61,7 @@ export function LandingPage() {
       <main className="relative z-20">
 
         {/* ═══ HERO ═══ */}
-        <section className="relative pt-[14vh] sm:pt-[16vh] pb-20 sm:pb-28 mx-auto px-6 text-center">
+        <section className="relative pt-[10vh] sm:pt-[12vh] pb-20 sm:pb-28 mx-auto px-6 text-center">
           <div className="relative z-10" style={{
             opacity: introDone ? 1 : 0,
             transform: introDone ? 'translateY(0)' : 'translateY(16px)',
@@ -95,20 +95,21 @@ export function LandingPage() {
         {/* ═══ DEMO SECTION — Old Anki crossfades into modern demo ═══ */}
         <section id="demo" className="max-w-6xl mx-auto px-4 sm:px-6 pb-24 sm:pb-32 demo-glow relative" style={{ overflow: 'visible' }}>
 
-          {/* Blue glow sunrise — ambient light rising from behind/below the demo */}
+          {/* Blue glow sunrise — sits behind demo box, radiates UPWARD like a sun behind it */}
           <div
             className="absolute pointer-events-none"
             style={{
               left: '50%',
-              bottom: '-20%',
+              top: '-40%',
               transform: 'translateX(-50%)',
-              width: '140%',
-              height: '100%',
+              width: '160%',
+              height: '120%',
               background: `
-                radial-gradient(ellipse 80% 55% at 50% 90%, rgba(10,132,255,0.30) 0%, rgba(10,132,255,0.12) 35%, rgba(10,132,255,0.04) 55%, transparent 75%),
-                radial-gradient(ellipse 50% 40% at 50% 95%, rgba(10,132,255,0.20) 0%, transparent 60%)
+                radial-gradient(ellipse 70% 50% at 50% 70%, rgba(10,132,255,0.22) 0%, rgba(10,132,255,0.10) 30%, rgba(10,132,255,0.04) 50%, transparent 70%),
+                radial-gradient(ellipse 90% 35% at 50% 85%, rgba(10,132,255,0.18) 0%, rgba(10,132,255,0.06) 40%, transparent 65%),
+                radial-gradient(ellipse 40% 60% at 50% 55%, rgba(10,132,255,0.12) 0%, transparent 60%)
               `,
-              filter: 'blur(50px)',
+              filter: 'blur(60px)',
               opacity: introDone ? 1 : 0,
               transition: 'opacity 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 0.2s',
               willChange: 'opacity',
