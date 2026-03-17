@@ -462,39 +462,25 @@
         mcCorrectIndex = options.findIndex(o => o.correct);
         aiSteps = [];
 
-        const area = $('#mc-card-area');
+        const area = document.getElementById('mc-card-area');
         if (area) {
             area.classList.remove('hidden');
             area.innerHTML = options.map((opt, i) => `
-                <button class="mc-opt w-full flex flex-col text-left transition-all duration-150"
-                        style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; cursor: pointer;"
-                        data-index="${i}" onclick="selectMCOption(${i})">
-                    <div class="flex items-center gap-3 px-4 py-4">
-                        <div class="mc-badge flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-semibold transition-all"
-                             style="border: 1px solid rgba(255,255,255,0.15); color: rgba(255,255,255,0.45); background: rgba(255,255,255,0.04);">
-                            ${String.fromCharCode(65 + i)}
-                        </div>
-                        <span class="mc-text flex-1" style="color: rgba(255,255,255,0.78); font-size: 15px; line-height: 1.4;">${opt.text}</span>
+                <button class="mc-opt" data-index="${i}" data-wrong="false"
+                        onclick="selectMCOption(${i})"
+                        style="display:flex;flex-direction:column;width:100%;border-radius:9px;border:1px solid rgba(255,255,255,0.07);background:none;padding:0;cursor:pointer;text-align:left;">
+                    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;">
+                        <div class="mc-badge" style="width:24px;height:24px;border-radius:50%;border:1px solid rgba(255,255,255,0.13);display:flex;align-items:center;justify-content:center;font-size:10px;color:rgba(255,255,255,0.38);flex-shrink:0;">${String.fromCharCode(65 + i)}</div>
+                        <span class="mc-text" style="font-size:15px;color:rgba(255,255,255,0.75);flex:1;">${opt.text}</span>
+                        <span class="mc-icon" style="font-size:14px;font-weight:700;margin-left:auto;display:none;"></span>
                     </div>
-                    <div class="mc-exp hidden" style="padding: 0 16px 12px 56px; font-size: 13px; color: rgba(255,255,255,0.45); line-height: 1.5; text-align: left;"></div>
+                    <div class="mc-exp" style="display:none;background:rgba(0,0,0,0.25);padding:8px 12px 10px 46px;font-size:11.5px;color:rgba(255,255,255,0.45);line-height:1.5;"></div>
                 </button>
             `).join('');
         }
-        setState(S.MC_ACTIVE); // call AFTER mcOptions is set so shortcut count is correct
-    };
 
-    function showExplanation(index) {
-        const opt = mcOptions[index];
-        if (!opt || !opt.explanation) return;
-        const btn = $(`#mc-card-area .mc-opt[data-index="${index}"]`);
-        if (btn) {
-            const expEl = btn.querySelector('.mc-exp');
-            if (expEl) {
-                expEl.textContent = opt.explanation;
-                expEl.classList.remove('hidden');
-            }
-        }
-    }
+        setState(S.MC_ACTIVE); // called AFTER mcOptions is populated
+    };
 
     window.selectMCOption = function(index) {
         if (current !== S.MC_ACTIVE) return;
