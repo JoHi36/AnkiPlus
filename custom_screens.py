@@ -832,7 +832,7 @@ class CustomScreens:
                                     f"window.ankiReceive({p});"
                                 )
                         # Delay to allow the webview to initialize if panel just opened
-                        QTimer.singleShot(300, _send)
+                        QTimer.singleShot(150, _send)
                     except Exception:
                         traceback.print_exc()
             elif action_type == 'cmd':

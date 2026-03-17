@@ -1542,13 +1542,20 @@ function AppInner() {
 
   // ── Free Chat Handlers ─────────────────────────────────────────
   const handleFreeChatOpen = useCallback((text) => {
-    sessionsHook.setForceShowOverview(true); // ensure DeckBrowser is visible
-    setFreeChatInitialText(text);
-    setTimeout(() => setFreeChatInitialText(''), 0);
-    setFreeChatOpen(true);
-    setAnimPhase('entering');
-    setTimeout(() => setAnimPhase('entered'), 350);
+    // Step 1: show DeckBrowser (deck list visible)
+    sessionsHook.setForceShowOverview(true);
     setActiveChat('free');
+    // Step 2: after DeckBrowser has mounted and rendered, start animation
+    // The delay lets the user see the deck list briefly before the chat slides in.
+    // Also ensures freeChatInitialText is set in the same render as freeChatOpen,
+    // so FreeChatView receives the text on first mount (before the cleanup setTimeout).
+    setTimeout(() => {
+      setFreeChatInitialText(text);
+      setFreeChatOpen(true);
+      setAnimPhase('entering');
+      setTimeout(() => setFreeChatInitialText(''), 0);
+      setTimeout(() => setAnimPhase('entered'), 350);
+    }, 80);
   }, [sessionsHook]);
   useEffect(() => { handleFreeChatOpenRef.current = handleFreeChatOpen; }, [handleFreeChatOpen]);
 
