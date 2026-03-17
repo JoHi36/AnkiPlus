@@ -24,15 +24,18 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
   const calledCompleteRef = useRef(false);
   const centerRef = useRef({ cx: 0, cy: 0 });
   const dimsRef = useRef({ w: 0, h: 0 });
+  // Cached font metrics (set once after first sizeCanvas)
+  const fontCacheRef = useRef({ font: '', anWidth: 0, fontSize: 0 });
 
-  const PARTICLE_COUNT = 500;
+  const PARTICLE_COUNT = 400; // reduced from 500 — less GPU work
   const PLUS_ARM_LEN = 120;
   const PLUS_ARM_WIDTH = 70;
   const FOCAL_LENGTH = 600;
 
-  const TOTAL_DURATION = 3.8;
-  const EXPLODE_TIME = 2.6;
-  const COMPLETE_TIME = 2.8;
+  // ── Tighter timeline — no dead time ──
+  const TOTAL_DURATION = 3.2;
+  const EXPLODE_TIME = 2.0;   // was 2.6 — explosion starts sooner
+  const COMPLETE_TIME = 2.2;   // was 2.8
 
   const initParticles = useCallback((w: number, h: number) => {
     const particles: Particle[] = [];
@@ -58,8 +61,9 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
       const explodeSpeed = 200 + Math.random() * 400;
 
       const baseAlpha = 0.45 + Math.random() * 0.45;
-      const arriveStart = 0.3 + Math.random() * 0.8;
-      const arriveDur = 1.0 + Math.random() * 0.6;
+      // Tighter arrival window: all arrive between 0.3→1.6s
+      const arriveStart = 0.3 + Math.random() * 0.5;
+      const arriveDur = 0.8 + Math.random() * 0.5;
 
       particles.push({
         spawnX: cx + Math.cos(spawnAngle) * spawnDist,
@@ -90,7 +94,6 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
     if (!ctx) return;
 
     const sizeCanvas = () => {
-      // Use window dimensions directly — canvas is fixed fullscreen
       const w = window.innerWidth;
       const h = window.innerHeight;
       const dpr = window.devicePixelRatio || 1;
@@ -100,10 +103,17 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
       canvas.style.width = `${w}px`;
       canvas.style.height = `${h}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      // Cache font metrics
+      const fontSize = Math.min(w * 0.14, 180);
+      const font = `800 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif`;
+      ctx.font = font;
+      const anWidth = ctx.measureText('AN').width;
+      fontCacheRef.current = { font, anWidth, fontSize };
+
       return { w, h };
     };
 
-    // Defer init to next frame so layout is fully settled
     let initDone = false;
     requestAnimationFrame(() => {
       const { w, h } = sizeCanvas();
@@ -142,19 +152,18 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
       ctx.clearRect(0, 0, dW, dH);
 
       const { cx, cy } = centerRef.current;
+      const { font, anWidth } = fontCacheRef.current;
 
-      // ── TEXT ──
-      const fontSize = Math.min(dW * 0.14, 180);
-      ctx.font = `800 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif`;
+      // ── TEXT (use cached font) ──
+      ctx.font = font;
       ctx.textBaseline = 'middle';
-      const anWidth = ctx.measureText('AN').width;
 
       const fadeIn = Math.min(1, t / 0.25);
-      const splitRaw = Math.max(0, Math.min(1, (t - 0.4) / 1.8));
+      const splitRaw = Math.max(0, Math.min(1, (t - 0.4) / 1.4)); // faster split (was 1.8)
       const splitProgress = splitRaw * splitRaw * (3 - 2 * splitRaw);
       const dimming = 0.85 - splitProgress * 0.65;
       const explosionFade = t > EXPLODE_TIME
-        ? Math.max(0, 1 - (t - EXPLODE_TIME) / 0.5)
+        ? Math.max(0, 1 - (t - EXPLODE_TIME) / 0.4)
         : 1;
       const textAlpha = fadeIn * dimming * explosionFade;
 
@@ -163,58 +172,72 @@ export function ParticlePlus({ className = '', onIntroComplete }: ParticlePlusPr
         const halfGap = (splitProgress * TEXT_GAP_FINAL) / 2;
         const anX = cx - halfGap - anWidth;
         const kiX = cx + halfGap;
-        ctx.fillStyle = `rgba(255,255,255,${textAlpha})`;
+        ctx.globalAlpha = textAlpha;
+        ctx.fillStyle = '#fff';
         ctx.fillText('AN', anX, cy);
         ctx.fillText('KI', kiX, cy);
+        ctx.globalAlpha = 1;
       }
 
-      // ── PARTICLES ──
+      // ── PARTICLES — optimized rendering ──
       const particles = particlesRef.current;
+      const halfW = dW / 2;
+      const halfH = dH / 2;
+      const explodeDur = TOTAL_DURATION - EXPLODE_TIME;
+
+      // Pre-approach energy: float amplitude grows as we near explosion
+      const approachEnergy = Math.max(0, Math.min(1, (t - 1.2) / (EXPLODE_TIME - 1.2)));
+
+      // Use globalAlpha instead of per-particle rgba string parsing
+      ctx.fillStyle = 'rgb(10,132,255)';
 
       for (let i = 0; i < particles.length; i++) {
         const p = particles[i];
 
         const gatherRaw = Math.max(0, Math.min(1, (t - p.arriveStart) / p.arriveDur));
+        if (gatherRaw <= 0) continue; // not started yet — skip entirely
+
         const gather = gatherRaw * gatherRaw * (3 - 2 * gatherRaw);
 
-        const explodeRaw = Math.max(0, (t - EXPLODE_TIME) / (TOTAL_DURATION - EXPLODE_TIME));
+        const explodeRaw = Math.max(0, (t - EXPLODE_TIME) / explodeDur);
         const explode = 1 - Math.pow(1 - Math.min(explodeRaw, 1), 2.5);
 
-        const floatX = Math.sin(t * 1.3 + i * 0.37) * 3 * gather;
-        const floatY = Math.cos(t * 1.1 + i * 0.53) * 3 * gather;
+        // Float amplitude grows from 3→8px as explosion approaches (energy buildup)
+        const floatAmp = 3 + approachEnergy * 5;
+        const floatX = Math.sin(t * 1.3 + i * 0.37) * floatAmp * gather;
+        const floatY = Math.cos(t * 1.1 + i * 0.53) * floatAmp * gather;
+
+        let px: number, py: number, pz: number, alpha: number;
 
         if (explodeRaw <= 0) {
-          p.x = p.spawnX + (p.hx - p.spawnX) * gather + floatX;
-          p.y = p.spawnY + (p.hy - p.spawnY) * gather + floatY;
-          p.z = p.spawnZ + (p.hz - p.spawnZ) * gather;
-          p.alpha = p.baseAlpha * gather;
+          px = p.spawnX + (p.hx - p.spawnX) * gather + floatX;
+          py = p.spawnY + (p.hy - p.spawnY) * gather + floatY;
+          pz = p.spawnZ + (p.hz - p.spawnZ) * gather;
+          alpha = p.baseAlpha * gather;
         } else {
-          p.x = p.hx + floatX * (1 - explode) + p.evx * explode;
-          p.y = p.hy + floatY * (1 - explode) + p.evy * explode;
-          p.z = p.hz + p.evz * explode;
-          p.alpha = p.baseAlpha * Math.max(0, 1 - Math.pow(explodeRaw, 0.6) * 1.4);
+          px = p.hx + floatX * (1 - explode) + p.evx * explode;
+          py = p.hy + floatY * (1 - explode) + p.evy * explode;
+          pz = p.hz + p.evz * explode;
+          alpha = p.baseAlpha * Math.max(0, 1 - Math.pow(explodeRaw, 0.6) * 1.4);
         }
 
-        const scale = FOCAL_LENGTH / (FOCAL_LENGTH + p.z);
-        const sx = dW / 2 + (p.x - dW / 2) * scale;
-        const sy = dH / 2 + (p.y - dH / 2) * scale;
+        if (alpha < 0.008) continue;
+
+        const scale = FOCAL_LENGTH / (FOCAL_LENGTH + pz);
+        const sx = halfW + (px - halfW) * scale;
+        const sy = halfH + (py - halfH) * scale;
         const ss = p.size * scale;
 
-        if (p.alpha < 0.008) continue;
+        // Skip off-screen particles
+        if (sx < -20 || sx > dW + 20 || sy < -20 || sy > dH + 20) continue;
 
+        ctx.globalAlpha = alpha;
         ctx.beginPath();
         ctx.arc(sx, sy, ss, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(10,132,255,${Math.min(p.alpha, 1)})`;
         ctx.fill();
-
-        if (ss > 1.2 && p.alpha > 0.03) {
-          ctx.beginPath();
-          ctx.arc(sx, sy, ss * 3, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(10,132,255,${Math.min(p.alpha * 0.1, 0.15)})`;
-          ctx.fill();
-        }
       }
 
+      ctx.globalAlpha = 1;
       animRef.current = requestAnimationFrame(animate);
     };
 
