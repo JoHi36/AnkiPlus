@@ -496,7 +496,6 @@
             if (badge) { badge.style.background = 'rgba(48,209,88,0.18)'; badge.style.borderColor = 'rgba(48,209,88,0.5)'; badge.style.color = 'rgb(48,209,88)'; }
             all.forEach(o => o.disabled = true);
             autoRateEase = mcAttempts === 1 ? 3 : 2;
-            showExplanation(index);
             finishMC(true);
         } else {
             mcWrongPicks.push(index);
@@ -509,8 +508,6 @@
             xMark.textContent = '✗';
             sel.appendChild(xMark);
             sel.disabled = true;
-            // Show explanation for the wrong pick
-            showExplanation(index);
 
             if (mcAttempts >= 2) {
                 autoRateEase = 1;
@@ -521,7 +518,6 @@
                     const cb = correct.querySelector('.mc-badge');
                     if (cb) { cb.style.background = 'rgba(48,209,88,0.18)'; cb.style.borderColor = 'rgba(48,209,88,0.5)'; cb.style.color = 'rgb(48,209,88)'; }
                 }
-                showExplanation(mcCorrectIndex);
                 all.forEach(o => o.disabled = true);
                 finishMC(false);
             }
