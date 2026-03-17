@@ -1338,6 +1338,14 @@ function AppInner() {
         }
       }
 
+      // ESC in companion mode exits companion mode instead of closing the panel
+      if (e.key === 'Escape' && companionMode) {
+        e.stopPropagation();
+        setCompanionMode(false);
+        resetMood();
+        return;
+      }
+
       // Skip remaining shortcuts if in input/textarea
       const tag = e.target.tagName.toLowerCase();
       if (tag === 'textarea' || tag === 'input' || e.target.isContentEditable) return;
@@ -1411,7 +1419,7 @@ function AppInner() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [headerHeight, handleTrailNavigateLeft, handleTrailNavigateRight]);
+  }, [headerHeight, handleTrailNavigateLeft, handleTrailNavigateRight, companionMode, setCompanionMode, resetMood]);
 
   // ⌘X — reset free chat history (stay in chat mode)
   useEffect(() => {

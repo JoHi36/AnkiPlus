@@ -32,6 +32,7 @@ export interface ChatInputProps {
   onClose?: () => void; // Used by ESC handler in handleKeyDown to close the parent panel
   actionPrimary: ActionConfig;
   actionSecondary: ActionConfig;
+  companionMode?: boolean;
 }
 
 export default function ChatInput({
@@ -47,6 +48,7 @@ export default function ChatInput({
   onClose,
   actionPrimary,
   actionSecondary,
+  companionMode = false,
 }: ChatInputProps) {
   const [input, setInput] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -144,6 +146,13 @@ export default function ChatInput({
           }}
         />
 
+        {/* Companion mode label */}
+        {companionMode && (
+          <div className="text-[10px] text-indigo-400 px-3 pt-1 font-medium tracking-wide">
+            Companion-Modus
+          </div>
+        )}
+
         {/* Textarea area */}
         <div className="relative px-4 py-3">
           <textarea
@@ -155,7 +164,7 @@ export default function ChatInput({
             onBlur={() => setIsFocused(false)}
             placeholder="Stelle eine Frage..."
             rows={1}
-            className="w-full min-h-[24px] max-h-[120px] p-0 pr-10 bg-transparent text-base-content text-[15px] leading-relaxed resize-none outline-none placeholder:text-base-content/25"
+            className={`w-full min-h-[24px] max-h-[120px] p-0 pr-10 bg-transparent text-base-content text-[15px] leading-relaxed resize-none outline-none placeholder:text-base-content/25 ${companionMode ? 'ring-2 ring-indigo-500 bg-indigo-950/30 rounded-lg px-2' : ''}`}
             style={{ border: 'none' }}
           />
           {/* Send button — appears when text present */}
