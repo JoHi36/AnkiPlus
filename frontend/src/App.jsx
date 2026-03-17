@@ -1421,8 +1421,8 @@ function AppInner() {
         freeChatHookRef.current.resetMessages();
       }
     };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
   }, [freeChatOpen, animPhase]);
 
   // Settings öffnen
@@ -2020,6 +2020,7 @@ function AppInner() {
           authStatus={authStatus}
           currentAuthToken={currentAuthToken}
           onClose={handleClose}
+          companionMode={companionMode}
           actionPrimary={{
             label: 'Weiter',
             shortcut: 'SPACE',
