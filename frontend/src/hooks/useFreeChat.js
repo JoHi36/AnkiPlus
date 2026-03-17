@@ -99,5 +99,6 @@ export function useFreeChat({ bridge, onLoadingChange, onCancelComplete }) {
     handleSend,
     handleAnkiReceive,
     startCancel,
+    resetMessages: () => setMessages([]),
   };
 }
