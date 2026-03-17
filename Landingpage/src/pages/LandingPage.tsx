@@ -61,7 +61,7 @@ export function LandingPage() {
       <main className="relative z-20">
 
         {/* ═══ HERO ═══ */}
-        <section className="relative pt-[10vh] sm:pt-[12vh] pb-4 sm:pb-6 mx-auto px-6 text-center">
+        <section className="relative pt-[10vh] sm:pt-[12vh] pb-12 sm:pb-16 mx-auto px-6 text-center">
           <div className="relative z-10" style={{
             opacity: introDone ? 1 : 0,
             transform: introDone ? 'translateY(0)' : 'translateY(16px)',
