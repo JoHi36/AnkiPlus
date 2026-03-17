@@ -575,6 +575,65 @@
         }
     }
 
+    // ═══ MC Stars ═══
+
+    function buildStars() {
+        const row = document.getElementById('mc-stars-row');
+        if (!row) return;
+        row.innerHTML = '';
+        for (let i = 0; i < 3; i++) {
+            const s = document.createElement('span');
+            s.className = 'mc-star';
+            s.textContent = '★';
+            s.style.cssText = 'font-size:22px;line-height:1;color:rgba(255,255,255,0.85);transition:color 0.2s;';
+            row.appendChild(s);
+        }
+    }
+
+    function degradeStar() {
+        // Called AFTER mcWrongPicks.push() so length already reflects new pick
+        const stars = document.querySelectorAll('#mc-stars-row .mc-star');
+        const idx = mcWrongPicks.length - 1;
+        if (stars[idx]) {
+            stars[idx].style.color = 'rgba(255,255,255,0.12)';
+            stars[idx].dataset.dimmed = 'true';
+        }
+    }
+
+    function updateStarsRevealed(ease) {
+        const colorMap = { 3: 'rgb(48,209,88)', 2: 'rgb(255,159,10)', 1: 'rgb(255,69,58)' };
+        const labelMap = { 3: 'Gut', 2: 'Schwierig', 1: 'Wiederholen' };
+        const color = colorMap[ease];
+
+        const row = document.getElementById('mc-stars-row');
+        if (!row) return;
+
+        // Color non-dimmed stars
+        row.querySelectorAll('.mc-star').forEach(s => {
+            if (s.dataset.dimmed !== 'true') s.style.color = color;
+        });
+
+        // Append arrow + label
+        row.insertAdjacentHTML('beforeend',
+            `<span style="font-size:13px;color:rgba(255,255,255,0.3);margin:0 4px;">→</span>`
+            + `<span style="font-size:14px;font-weight:600;color:${color};">${labelMap[ease]}</span>`
+        );
+
+        // Move row to eval-result
+        const evalResult = document.getElementById('eval-result');
+        if (evalResult) {
+            evalResult.innerHTML = '';
+            evalResult.appendChild(row);
+        }
+
+        // Dock border tint
+        const dockInner = document.querySelector('#unified-dock > div');
+        if (dockInner) {
+            const borderMap = { 3: 'rgba(48,209,88,0.2)', 2: 'rgba(255,159,10,0.2)', 1: 'rgba(255,69,58,0.2)' };
+            dockInner.style.borderColor = borderMap[ease];
+        }
+    }
+
 
     // ═══ Mini-ThoughtStream ═══
 
