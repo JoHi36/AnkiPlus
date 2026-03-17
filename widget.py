@@ -660,11 +660,8 @@ class ChatbotWidget(QWidget):
 
             def run(self):
                 try:
-                    # Build history with system prompt injected as first entry
-                    full_history = []
-                    if self.system_prompt:
-                        full_history.append({"role": "system", "content": self.system_prompt})
-                    full_history.extend(self.prior_history)
+                    # Use prior history directly — system prompt is passed as override
+                    full_history = list(self.prior_history)
 
                     def on_chunk(chunk, done, is_function_call=False):
                         if not self._cancelled:
@@ -676,10 +673,14 @@ class ChatbotWidget(QWidget):
                         history=full_history,
                         mode='compact',
                         callback=on_chunk,
+                        system_prompt_override=self.system_prompt if self.system_prompt else None,
                     )
                 except Exception as e:
                     if not self._cancelled:
                         self.chunk_signal.emit(f"Fehler: {e}", True)
+
+        if hasattr(self, '_companion_thread') and self._companion_thread is not None:
+            self._companion_thread.cancel()
 
         thread = CompanionThread(ai, system_prompt, history, message)
 

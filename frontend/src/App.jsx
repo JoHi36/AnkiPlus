@@ -185,7 +185,7 @@ function AppInner() {
   const reviewTrailHookRef = useRef(reviewTrailHook);
   const sessionContextRef = useRef(sessionContext);
   const handlePerformanceCaptureRef = useRef(null);
-  const handleCompanionChunkRef = useRef(handleCompanionChunk);
+  const handleCompanionChunkRef = useRef(null);
   useEffect(() => {
     cardSessionHookRef.current = cardSessionHook;
     cardContextHookRef.current = cardContextHook;
@@ -1450,6 +1450,14 @@ function AppInner() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [freeChatOpen, animPhase]);
+
+  // Reset companion mode when mascot is disabled
+  useEffect(() => {
+    if (!mascotEnabled && companionMode) {
+      setCompanionMode(false);
+      resetMood();
+    }
+  }, [mascotEnabled]);
 
   // Settings öffnen
   const handleOpenSettings = () => {

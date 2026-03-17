@@ -268,10 +268,10 @@ class AIHandler:
             print(traceback.format_exc())
             return f"Fehler beim Erstellen des Diagramms: {str(e)}"
         
-    def get_response(self, user_message, context=None, history=None, mode='compact', callback=None):
+    def get_response(self, user_message, context=None, history=None, mode='compact', callback=None, system_prompt_override=None):
         """
         Generiert eine Antwort auf eine Benutzer-Nachricht mit optionalem Streaming
-        
+
         Args:
             user_message: Die Nachricht des Benutzers
             context: Optionaler Kontext (z.B. aktuelle Karte)
@@ -281,13 +281,15 @@ class AIHandler:
                       - chunk: Text-Chunk oder None
                       - done: True wenn fertig
                       - is_function_call: True wenn Function Call erkannt
-        
+            system_prompt_override: Optional - Wenn gesetzt, wird dieser System-Prompt anstatt
+                                    get_system_prompt() verwendet (z.B. für Companion/Plusi)
+
         Returns:
             Die generierte Antwort
         """
         # Lade Config neu um sicherzustellen, dass API-Key aktuell ist
         self._refresh_config()
-        
+
         if not self.is_configured():
             # Unterschiedliche Fehlermeldungen je nach Modus
             if is_backend_mode():
@@ -297,27 +299,29 @@ class AIHandler:
             if callback:
                 callback(error_msg, True, False)
             return error_msg
-        
+
         model = self.config.get("model_name", "")
         api_key = self.config.get("api_key", "")
-        
+
         try:
             # Wenn callback vorhanden, verwende Streaming
             if callback:
                 return self._get_google_response_streaming(
-                    user_message, model, api_key, 
-                    context=context, history=history, mode=mode, callback=callback
+                    user_message, model, api_key,
+                    context=context, history=history, mode=mode, callback=callback,
+                    system_prompt_override=system_prompt_override,
                 )
             else:
                 # Fallback auf non-streaming für Backward-Kompatibilität
-                return self._get_google_response(user_message, model, api_key, context=context, history=history, mode=mode)
+                return self._get_google_response(user_message, model, api_key, context=context, history=history, mode=mode,
+                                                  system_prompt_override=system_prompt_override)
         except Exception as e:
             error_msg = f"Fehler bei der API-Anfrage: {str(e)}"
             if callback:
                 callback(error_msg, True, False)
             return error_msg
     
-    def _get_google_response(self, user_message, model, api_key, context=None, history=None, mode='compact', rag_context=None):
+    def _get_google_response(self, user_message, model, api_key, context=None, history=None, mode='compact', rag_context=None, system_prompt_override=None):
         """Google Gemini API-Integration mit optionalem Kontext und Chat-Historie"""
         # CRITICAL: Hardcode to gemini-3-flash-preview for maximum reasoning capability
         # Fallback handled in get_response_with_rag
@@ -360,14 +364,17 @@ class AIHandler:
             "molecules": False
         })
         
-        # System Prompt hinzufügen (mit Modus und Tools)
-        system_instruction = get_system_prompt(mode=mode, tools=ai_tools)
-        
+        # System Prompt hinzufügen (mit Modus und Tools, oder Override falls angegeben)
+        if system_prompt_override is not None:
+            system_instruction = system_prompt_override
+        else:
+            system_instruction = get_system_prompt(mode=mode, tools=ai_tools)
+
         # Erweitere System Prompt mit RAG-Anweisungen falls RAG-Kontext vorhanden
         if rag_context and rag_context.get("cards"):
             rag_instruction = "\n\nWICHTIG: Du hast Zugriff auf relevante Anki-Karten als Kontext. Verwende diese Informationen, um präzise und fundierte Antworten zu geben. Zitiere IMMER deine Quellen mit dem Format [[CardID]] direkt im Text, wenn du Informationen aus den Karten verwendest."
             system_instruction = system_instruction + rag_instruction
-        
+
         # Erstelle Tools Array für Function Calling (nur wenn aktiviert)
         # Hardcoded: Nur wenn diagrams=True UND mode != 'compact' wird Tool übergeben
         tools_array = []
@@ -910,7 +917,7 @@ class AIHandler:
         
         raise Exception("Konnte keine Antwort von Google API erhalten")
     
-    def _get_google_response_streaming(self, user_message, model, api_key, context=None, history=None, mode='compact', callback=None, rag_context=None, suppress_error_callback=False):
+    def _get_google_response_streaming(self, user_message, model, api_key, context=None, history=None, mode='compact', callback=None, rag_context=None, suppress_error_callback=False, system_prompt_override=None):
         """
         Google Gemini API mit Streaming-Support und Tool Call Handling
         
@@ -958,9 +965,12 @@ class AIHandler:
             "molecules": False
         })
         
-        # System Prompt
-        system_instruction = get_system_prompt(mode=mode, tools=ai_tools)
-        
+        # System Prompt (Override falls angegeben, z.B. für Companion/Plusi)
+        if system_prompt_override is not None:
+            system_instruction = system_prompt_override
+        else:
+            system_instruction = get_system_prompt(mode=mode, tools=ai_tools)
+
         # Erweitere System Prompt mit RAG-Anweisungen falls RAG-Kontext vorhanden
         if rag_context and rag_context.get("cards"):
             rag_instruction = "\n\nWICHTIG: Du hast Zugriff auf relevante Anki-Karten als Kontext. Verwende diese Informationen, um präzise und fundierte Antworten zu geben. Zitiere IMMER deine Quellen mit dem Format [[CardID]] direkt im Text, wenn du Informationen aus den Karten verwendest."

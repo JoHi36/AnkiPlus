@@ -40,6 +40,7 @@ export function useCompanion({ onMood, onBubble }) {
   const [isLoading, setIsLoading] = useState(false);
   const historyRef = useRef([]); // [{role:'user'|'assistant', content:string}]
   const bufferRef = useRef(''); // accumulates stream chunks for mood-prefix parsing
+  const moodDispatchedRef = useRef(false); // tracks whether mood/bubble fired for current response
 
   const send = useCallback((text, surfaceContext = '') => {
     if (!text.trim()) return;
@@ -69,12 +70,15 @@ export function useCompanion({ onMood, onBubble }) {
   const handleChunk = useCallback((chunk, done) => {
     bufferRef.current += chunk;
 
-    const match = bufferRef.current.match(MOOD_REGEX);
-    if (match) {
-      const moodKey = match[1];
-      onMood?.(moodKey);
-      const textAfterMood = bufferRef.current.replace(MOOD_REGEX, '');
-      if (textAfterMood) onBubble?.(textAfterMood);
+    if (!moodDispatchedRef.current) {
+      const match = bufferRef.current.match(MOOD_REGEX);
+      if (match) {
+        moodDispatchedRef.current = true;
+        const moodKey = match[1];
+        onMood?.(moodKey);
+        const textAfterMood = bufferRef.current.replace(MOOD_REGEX, '');
+        if (textAfterMood) onBubble?.(textAfterMood);
+      }
     }
 
     if (done) {
@@ -88,6 +92,7 @@ export function useCompanion({ onMood, onBubble }) {
         }
       }
       bufferRef.current = '';
+      moodDispatchedRef.current = false; // reset for next response
       setIsLoading(false);
     }
   }, [onMood, onBubble]);
