@@ -135,21 +135,14 @@
                 setActions(null, null);
                 break;
 
-            case S.MC_ACTIVE: {
+            case S.MC_ACTIVE:
                 showSection('dc-mc');
-                const scEl = $('#mc-shortcuts');
-                if (scEl) {
-                    const count = mcOptions.length > 0 ? mcOptions.length : 4;
-                    scEl.innerHTML = Array.from({length: count}, (_, i) =>
-                        `<span style="display:inline-flex;align-items:center;gap:4px;"><span style="font-size:10px;color:rgba(255,255,255,0.2);">${i+1}</span><span style="font-size:11px;color:rgba(255,255,255,0.4);">${String.fromCharCode(65+i)}</span></span>`
-                    ).join(`<span style="color:rgba(255,255,255,0.1);font-size:10px;">·</span>`);
-                }
+                buildStars();
                 setActions(
-                    { label: 'Überspringen', shortcut: 'SPACE', onclick: 'skipMC()' },
-                    { label: 'Text-Modus', shortcut: '↵', onclick: 'cancelMC()' }
+                    { label: 'Auflösen', shortcut: 'SPACE', onclick: 'revealAnswer()' },
+                    { label: 'Auflösen & Nachfragen', shortcut: '↵', onclick: 'revealAndChat()' }
                 );
                 break;
-            }
 
             case S.EVALUATED:
             case S.MC_RESULT:
