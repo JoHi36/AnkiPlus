@@ -127,6 +127,15 @@ div[id^="bottom"]:not(#reviewer *) {
 .snake-border.active {
     opacity: 1;
 }
+
+/* ═══ MC Options (card area) ═══ */
+.mc-opt:not(:disabled):hover {
+    background: rgba(255,255,255,0.05) !important;
+    border-color: rgba(255,255,255,0.1) !important;
+}
+.mc-opt:disabled {
+    cursor: default;
+}
     </style>
 </head>
 <body class="bg-base-100 text-base-content overflow-hidden m-0 p-0 {{IS_DARK_MODE}}">
@@ -175,7 +184,7 @@ div[id^="bottom"]:not(#reviewer *) {
         </main>
 
         <!-- ═══ UNIFIED FLOATING DOCK ═══ -->
-        <div id="unified-dock" class="fixed bottom-6 left-1/2 w-full max-w-[750px] px-5 z-[9999]"
+        <div id="unified-dock" class="fixed bottom-6 left-1/2 w-full max-w-[570px] px-5 z-[9999]"
              style="transform: translateX(-50%);">
             <div class="relative flex flex-col rounded-2xl"
                  style="background: rgba(21,21,21,0.75); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 4px 24px rgba(0,0,0,0.4);">

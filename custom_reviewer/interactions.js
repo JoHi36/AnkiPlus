@@ -396,18 +396,19 @@
                 <div class="w-full h-[3px] bg-base-content/6 rounded-full overflow-hidden mb-2">
                     <div class="h-full rounded-full transition-all duration-500" style="width: ${score}%; background: ${barColors[autoRateEase]}"></div>
                 </div>
-                <div class="flex items-baseline gap-2 mb-1">
-                    <span class="font-mono text-xl font-bold ${colors[autoRateEase]}">${score}%</span>
-                    <span class="text-xs font-semibold uppercase tracking-wide ${colors[autoRateEase]}">${labels[autoRateEase]}</span>
-                </div>
-                <div style="border-left: 2px solid ${barColors[autoRateEase]}; background: ${barColors[autoRateEase]}10; padding: 6px 10px; border-radius: 0 6px 6px 0; margin-top: 6px; color: ${barColors[autoRateEase]}; font-size: 12px; line-height: 1.5;">
-                    ${combinedFeedback}
-                </div>
-                <div class="mt-2">
-                    <button onclick="this.nextElementSibling.classList.toggle('hidden')" class="text-[10px] text-base-content/30 hover:text-base-content/50 border border-base-content/10 rounded px-2 py-0.5">
-                        Meine Antwort anzeigen
+                <div class="flex items-center justify-between gap-2 mb-1">
+                    <div class="flex items-baseline gap-2">
+                        <span class="font-mono text-xl font-bold ${colors[autoRateEase]}">${score}%</span>
+                        <span class="text-xs font-semibold uppercase tracking-wide ${colors[autoRateEase]}">${labels[autoRateEase]}</span>
+                    </div>
+                    <button onclick="document.getElementById('eval-user-ans').classList.toggle('hidden')"
+                            class="btn btn-xs btn-ghost text-base-content/30 font-normal">
+                        Meine Antwort
                     </button>
-                    <div class="hidden mt-1 text-[11px] text-base-content/40 italic leading-relaxed">${lastUserAnswer}</div>
+                </div>
+                <div id="eval-user-ans" class="hidden mb-2 text-[11px] text-base-content/40 italic leading-relaxed px-1 pb-1" style="border-bottom: 1px solid rgba(255,255,255,0.05);">${lastUserAnswer}</div>
+                <div style="border-left: 2px solid ${barColors[autoRateEase]}40; padding: 5px 10px; border-radius: 0 4px 4px 0; color: rgba(255,255,255,0.55); font-size: 12px; line-height: 1.5;">
+                    ${combinedFeedback}
                 </div>
             `;
         }
@@ -431,10 +432,14 @@
             area.classList.remove('hidden');
             area.innerHTML = options.map((opt, i) => `
                 <div class="mc-option-wrapper" data-index="${i}">
-                    <button class="btn btn-ghost justify-start gap-3 h-auto py-3 px-4 rounded-xl text-left font-normal text-sm text-base-content no-animation w-full"
+                    <button class="mc-opt w-full flex items-center gap-3 px-4 py-3.5 text-left transition-all duration-150"
+                            style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; cursor: pointer;"
                             data-index="${i}" onclick="selectMCOption(${i})">
-                        <span class="badge badge-sm badge-ghost font-mono font-semibold">${String.fromCharCode(65 + i)}</span>
-                        <span class="flex-1">${opt.text}</span>
+                        <div class="mc-badge flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold transition-all"
+                             style="border: 1px solid rgba(255,255,255,0.15); color: rgba(255,255,255,0.45); background: rgba(255,255,255,0.04);">
+                            ${String.fromCharCode(65 + i)}
+                        </div>
+                        <span class="mc-text flex-1 text-sm" style="color: rgba(255,255,255,0.78);">${opt.text}</span>
                     </button>
                     <div class="mc-explanation hidden" data-exp-index="${i}"></div>
                 </div>
@@ -447,7 +452,7 @@
         if (!opt || !opt.explanation) return;
         const expEl = $(`[data-exp-index="${index}"]`);
         if (expEl) {
-            expEl.innerHTML = `<p class="text-xs text-base-content/45 px-4 pb-2 pl-12 leading-relaxed">${opt.explanation}</p>`;
+            expEl.innerHTML = `<p style="font-size:11px;color:rgba(255,255,255,0.35);padding:4px 16px 6px 44px;line-height:1.5;">${opt.explanation}</p>`;
             expEl.classList.remove('hidden');
         }
     }
@@ -456,34 +461,40 @@
         if (current !== S.MC_ACTIVE) return;
         mcAttempts++;
 
-        const all = $$('#mc-card-area .btn');
-        const sel = $(`#mc-card-area .btn[data-index="${index}"]`);
+        const all = $$('#mc-card-area .mc-opt');
+        const sel = $(`#mc-card-area .mc-opt[data-index="${index}"]`);
 
         if (index === mcCorrectIndex) {
-            sel.classList.remove('btn-ghost');
-            sel.classList.add('btn-success', 'text-success-content');
-            sel.querySelector('.badge')?.classList.add('badge-success');
+            sel.style.background = 'rgba(48,209,88,0.1)';
+            sel.style.borderColor = 'rgba(48,209,88,0.3)';
+            const badge = sel.querySelector('.mc-badge');
+            if (badge) { badge.style.background = 'rgba(48,209,88,0.18)'; badge.style.borderColor = 'rgba(48,209,88,0.5)'; badge.style.color = 'rgb(48,209,88)'; }
             all.forEach(o => o.disabled = true);
             autoRateEase = mcAttempts === 1 ? 3 : 2;
             showExplanation(index);
             finishMC(true);
         } else {
             mcWrongPicks.push(index);
-            sel.classList.remove('btn-ghost');
-            sel.classList.add('btn-error');
-            sel.insertAdjacentHTML('beforeend', '<span class="ml-auto text-error-content font-bold">✗</span>');
-            sel.querySelector('.badge')?.classList.add('badge-error');
+            sel.style.background = 'rgba(255,69,58,0.1)';
+            sel.style.borderColor = 'rgba(255,69,58,0.3)';
+            const badge = sel.querySelector('.mc-badge');
+            if (badge) { badge.style.background = 'rgba(255,69,58,0.18)'; badge.style.borderColor = 'rgba(255,69,58,0.5)'; badge.style.color = 'rgb(255,69,58)'; }
+            const xMark = document.createElement('span');
+            xMark.style.cssText = 'color:rgba(255,69,58,0.7);font-size:13px;flex-shrink:0;';
+            xMark.textContent = '✗';
+            sel.appendChild(xMark);
             sel.disabled = true;
             // Show explanation for the wrong pick
             showExplanation(index);
 
             if (mcAttempts >= 2) {
                 autoRateEase = 1;
-                const correct = $(`#mc-card-area .btn[data-index="${mcCorrectIndex}"]`);
+                const correct = $(`#mc-card-area .mc-opt[data-index="${mcCorrectIndex}"]`);
                 if (correct) {
-                    correct.classList.remove('btn-ghost');
-                    correct.classList.add('btn-success', 'text-success-content');
-                    correct.querySelector('.badge')?.classList.add('badge-success');
+                    correct.style.background = 'rgba(48,209,88,0.1)';
+                    correct.style.borderColor = 'rgba(48,209,88,0.3)';
+                    const cb = correct.querySelector('.mc-badge');
+                    if (cb) { cb.style.background = 'rgba(48,209,88,0.18)'; cb.style.borderColor = 'rgba(48,209,88,0.5)'; cb.style.color = 'rgb(48,209,88)'; }
                 }
                 showExplanation(mcCorrectIndex);
                 all.forEach(o => o.disabled = true);
