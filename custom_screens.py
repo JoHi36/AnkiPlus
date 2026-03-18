@@ -22,13 +22,14 @@ except ImportError:
     from PyQt6.QtCore import QTimer
 
 try:
-    from PyQt6.QtCore import QThread, pyqtSignal as _Signal
+    from PyQt6.QtCore import QThread, pyqtSignal as _Signal, Qt as _Qt
 except ImportError:
     try:
-        from PyQt5.QtCore import QThread, pyqtSignal as _Signal
+        from PyQt5.QtCore import QThread, pyqtSignal as _Signal, Qt as _Qt
     except ImportError:
         QThread = None
         _Signal = None
+        _Qt = None
 
 try:
     from aqt.deckbrowser import DeckBrowser
@@ -40,13 +41,7 @@ try:
 except ImportError:
     Overview = None
 
-try:
-    from .sessions_storage import load_sessions
-except ImportError:
-    try:
-        from sessions_storage import load_sessions
-    except ImportError:
-        def load_sessions(): return []
+# NOTE: Legacy sessions_storage (JSON) removed — per-card SQLite is now used instead.
 
 
 # ─── Shared CSS loader ────────────────────────────────────────────────────────
@@ -64,25 +59,8 @@ def _load_reviewer_css():
 # ─── Data layer ───────────────────────────────────────────────────────────────
 
 def _get_sessions_by_deck():
-    try:
-        sessions = load_sessions()
-        result = {}
-        for s in sessions:
-            name = s.get('deckName', '')
-            if not name:
-                continue
-            if name not in result:
-                result[name] = []
-            result[name].append(s)
-        for name in result:
-            result[name].sort(
-                key=lambda x: x.get('updatedAt') or x.get('createdAt') or '',
-                reverse=True
-            )
-        return result
-    except Exception as e:
-        print(f"CustomScreens: sessions error: {e}")
-        return {}
+    # Legacy JSON sessions removed — per-card SQLite is now used instead.
+    return {}
 
 
 def _get_due_counts():
@@ -402,7 +380,7 @@ def _top_bar(active_tab='stapel', deck_name='', due_new=0, due_learn=0, due_revi
         )
 
     return (
-        f'<div class="flex items-center justify-between px-5 h-12 z-50 flex-shrink-0" style="background:#111111;">'
+        f'<div class="flex items-center justify-between px-5 h-12 z-50 flex-shrink-0" style="background:transparent;">'
         f'<div class="flex-1 flex items-center">{left_html}</div>'
         f'<div class="flex items-center gap-0.5 p-[3px] bg-base-content/[0.04] rounded-lg">'
         f'<button class="{tab_cls("stapel")}"{stapel_onclick}>Stapel</button>'
@@ -418,12 +396,12 @@ def _account_widget():
     """Build the fixed bottom-right settings widget.
     Shows 'AnkiPlus' + tier badge. Flat, rectangular, minimal.
     """
-    # Check premium status
+    # Check premium status — authenticated + validated = Pro
     is_premium = False
     try:
-        from .auth import get_auth_status
-        auth_status = get_auth_status()
-        is_premium = auth_status.get('isPremium', False) or auth_status.get('is_premium', False)
+        from .config import get_config
+        _cfg = get_config()
+        is_premium = bool(_cfg.get('auth_token', '').strip()) and _cfg.get('auth_validated', False)
     except Exception:
         pass
 
@@ -484,7 +462,7 @@ div[id^="bottom"]:not(#ap-page *) {
 }
 
 html, body {
-    background: #0f0f0f !important;
+    background: #1A1A1A;
     color: #e8e8e8 !important;
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif !important;
     -webkit-font-smoothing: antialiased !important;
@@ -526,7 +504,10 @@ html, body {
     mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 0%, transparent 100%);
     pointer-events: none;
     z-index: 0;
+    transition: opacity 350ms ease;
 }
+.canvas-bg.chat-active::before { opacity: 0; }
+.canvas-bg.no-transition::before { transition: none !important; }
 .canvas-content {
     position: relative;
     z-index: 1;
@@ -641,12 +622,12 @@ html, body {
     max-width: 720px;
     width: 100%;
     margin: 0 auto;
-    padding-top: 48px;
+    padding-top: 64px;
 }
 #ap-search-bar {
     border-radius: 50px;
     height: 46px;
-    padding: 0 10px 0 20px;
+    padding: 0 16px 0 20px;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -678,6 +659,10 @@ html, body {
 }
 #ap-search-input::placeholder { color: transparent; }
 #ap-send-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%) scale(0.75);
     width: 30px;
     height: 30px;
     border-radius: 50%;
@@ -689,31 +674,29 @@ html, body {
     justify-content: center;
     flex-shrink: 0;
     opacity: 0;
-    transform: scale(0.75);
     transition: opacity 0.15s, transform 0.15s;
     pointer-events: none;
 }
 #ap-send-btn.ap-send-visible {
     opacity: 1;
-    transform: scale(1);
+    transform: translateY(-50%) scale(1);
     pointer-events: auto;
 }
-#ap-search-hint {
-    text-align: center;
-    margin-top: 8px;
-    height: 16px;
+#ap-cmdk-badge {
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     font-size: 10px;
-    color: rgba(255,255,255,0.15);
+    font-weight: 500;
+    color: rgba(255,255,255,0.22);
+    background: rgba(255,255,255,0.06);
+    border: none;
+    border-radius: 5px;
+    padding: 2px 6px;
+    flex-shrink: 0;
+    line-height: 1.3;
+    pointer-events: none;
+    transition: opacity 0.15s;
 }
-#ap-search-hint kbd {
-    font-family: ui-monospace, monospace;
-    font-size: 9.5px;
-    background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 4px;
-    padding: 1px 4px;
-    color: rgba(255,255,255,0.3);
-}
+#ap-cmdk-badge.ap-hidden { opacity: 0; }
 /* ─── Pill Snake Border ─── */
 @property --ap-sb-angle {
     syntax: '<angle>';
@@ -807,7 +790,7 @@ html, body {
     0%, 100% { opacity: 1; }
     50%       { opacity: 0; }
 }
-.ap-search-spacer { margin-top: 32px; }
+.ap-search-spacer { margin-top: 24px; }
 
 /* ─── Exchange separator ─── */
 .ap-exchange-sep {
@@ -934,26 +917,22 @@ _SEARCHBAR_HTML = """
       <span id="ap-placeholder-b" class="ap-ph ap-ph--hidden"></span>
     </div>
     <input id="ap-search-input" type="text" autocomplete="off" spellcheck="false">
+    <kbd id="ap-cmdk-badge">⌘K</kbd>
     <button id="ap-send-btn" aria-label="Senden">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
            stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="5" y1="12" x2="19" y2="12"/>
-        <polyline points="12 5 19 12 12 19"/>
+        <path d="M12 19V5M5 12l7-7 7 7"/>
       </svg>
     </button>
   </div>
-
-  <div id="ap-search-hint">
-    <span id="ap-hint-text"></span>
-  </div>
 </div>
-<div class="ap-search-spacer"></div>
+<div class="ap-search-spacer" style="height:8px;"></div>
 """
 
 _CHAT_HTML = """
 <div id="ap-chat-overlay" style="
   position:fixed;top:48px;left:0;right:0;bottom:0;z-index:50;
-  background:#0f0f0f;
+  background:transparent;
   opacity:0;
   transition:opacity 220ms ease;
   pointer-events:none;overflow-y:auto;scrollbar-width:none;
@@ -1036,7 +1015,7 @@ _CHAT_JS = """
   var sbInput       = document.getElementById('ap-search-input');
   var sbSnake       = document.getElementById('ap-sb-snake');
   var sbSend        = document.getElementById('ap-send-btn');
-  var hintEl        = document.getElementById('ap-hint-text');
+  var cmdkBadge     = document.getElementById('ap-cmdk-badge');
   var phWrap        = document.getElementById('ap-placeholder-wrap');
   var phA           = document.getElementById('ap-placeholder-a');
   var phB           = document.getElementById('ap-placeholder-b');
@@ -1064,13 +1043,32 @@ _CHAT_JS = """
     if (ci) ci.disabled = on;
   }
 
+  /* ── Chat message persistence for tab switches ── */
+  function _saveChatMsgs() {
+    try { if (msgs) sessionStorage.setItem('ap_chat_msgs', msgs.innerHTML); } catch(e){}
+  }
+  function _restoreChatMsgs() {
+    try {
+      var saved = sessionStorage.getItem('ap_chat_msgs');
+      if (saved && msgs) { msgs.innerHTML = saved; msgs.scrollTop = msgs.scrollHeight; }
+    } catch(e){}
+  }
+
   /* ── Chat open/close/reset ── */
+  var canvasBg = document.querySelector('.canvas-bg');
+
   function openChat(q) {
     if (isOpen) return; isOpen = true;
-    deck.style.transition = 'opacity 200ms ease';
+    /* Background morph + dots fade */
+    document.body.style.transition = 'background-color 350ms ease';
+    document.body.style.backgroundColor = '#161616';
+    if (canvasBg) canvasBg.classList.add('chat-active');
+    /* Deck content slides down and fades out */
+    deck.style.transition = 'opacity 300ms ease, transform 300ms ease';
     deck.style.opacity = '0';
+    deck.style.transform = 'translateY(30px)';
     deck.style.pointerEvents = 'none';
-    requestAnimationFrame(function(){
+    setTimeout(function(){
       overlay.style.opacity = '1';
       overlay.style.pointerEvents = 'auto';
       setTimeout(function(){
@@ -1078,10 +1076,16 @@ _CHAT_JS = """
         dock.style.transform = DOCK_SHOWN;
         dock.style.pointerEvents = 'auto';
         ci.focus();
-      }, 120);
-    });
-    _curN = addExchange(q);
-    setLoading(true);
+      }, 100);
+    }, 120);
+    if (q) {
+      _curN = addExchange(q);
+      setLoading(true);
+    }
+    /* Persist chat-open state for tab switches */
+    try { sessionStorage.setItem('ap_chat_open', '1'); } catch(e){}
+    /* Save messages before any tab switch */
+    _saveChatMsgs();
   }
 
   function closeChat() {
@@ -1092,10 +1096,18 @@ _CHAT_JS = """
     dock.style.opacity = '0';
     dock.style.transform = DOCK_HIDDEN;
     dock.style.pointerEvents = 'none';
+    /* Restore original background */
+    document.body.style.transition = 'background-color 350ms ease';
+    document.body.style.backgroundColor = '#1A1A1A';
+    if (canvasBg) canvasBg.classList.remove('chat-active');
+    /* Deck slides back up */
     setTimeout(function(){
+      deck.style.transition = 'opacity 300ms ease, transform 300ms ease';
       deck.style.opacity = '1';
+      deck.style.transform = 'translateY(0)';
       deck.style.pointerEvents = 'auto';
-    }, 180);
+    }, 200);
+    try { sessionStorage.removeItem('ap_chat_open'); sessionStorage.removeItem('ap_chat_msgs'); } catch(e){}
     window._apAction = {type:'freeChatClose'};
   }
 
@@ -1104,6 +1116,7 @@ _CHAT_JS = """
     _curN = null;
     setLoading(false);
     _aiCounter = 0;
+    try { sessionStorage.removeItem('ap_chat_msgs'); } catch(e){}
   }
 
   /* ── Message rendering (Style B) ── */
@@ -1118,6 +1131,7 @@ _CHAT_JS = """
       '<div class="ap-ai-prose" id="ap-ai-' + n + '"></div>';
     msgs.appendChild(el);
     msgs.scrollTop = msgs.scrollHeight;
+    _saveChatMsgs();
     /* Append blinking cursor */
     var prose = document.getElementById('ap-ai-' + n);
     var cursor = document.createElement('span');
@@ -1156,6 +1170,7 @@ _CHAT_JS = """
       /* Remove cursor */
       if (el) { var c = el.querySelector('.ap-cursor'); if (c) c.remove(); }
       setLoading(false); _curN = null;
+      _saveChatMsgs();
     }
     msgs.scrollTop = msgs.scrollHeight;
   };
@@ -1212,26 +1227,27 @@ _CHAT_JS = """
   /* ── Search bar wiring ── */
   if (!sbInput) return; /* guard: HTML must be present */
 
-  /* Platform-aware hint text */
+  /* Platform-aware ⌘K badge */
   var isMac = ((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '').toUpperCase().indexOf('MAC') >= 0;
-  var focusHint = isMac ? 'Fokussieren\u00a0<kbd>\u2318K</kbd>' : 'Fokussieren\u00a0<kbd>Ctrl+K</kbd>';
-  var sendHint  = 'Senden\u00a0<kbd>Enter</kbd>';
-  if (hintEl) hintEl.innerHTML = focusHint;
+  if (cmdkBadge && !isMac) cmdkBadge.textContent = 'Ctrl+K';
 
   /* Focus / blur */
   sbInput.addEventListener('focus', function(){
     if (sbSnake) sbSnake.classList.add('active');
-    if (hintEl) hintEl.innerHTML = sendHint;
+    if (cmdkBadge) cmdkBadge.classList.add('ap-hidden');
   });
   sbInput.addEventListener('blur', function(){
     if (sbSnake) sbSnake.classList.remove('active');
-    if (hintEl) hintEl.innerHTML = focusHint;
+    var hasText = sbInput.value.trim().length > 0;
+    if (cmdkBadge && !hasText) cmdkBadge.classList.remove('ap-hidden');
   });
 
-  /* Send button visibility — single source of truth */
+  /* Send button + badge visibility — single source of truth */
   sbInput.addEventListener('input', function(){
     var hasText = sbInput.value.trim().length > 0;
+    var isFocused = document.activeElement === sbInput;
     if (sbSend) sbSend.classList.toggle('ap-send-visible', hasText);
+    if (cmdkBadge) cmdkBadge.classList.toggle('ap-hidden', hasText || isFocused);
     if (phWrap) phWrap.style.opacity = hasText ? '0' : '1';
   });
 
@@ -1246,6 +1262,13 @@ _CHAT_JS = """
   }
   sbInput.addEventListener('keydown', function(e){
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitSearch(); }
+  });
+  /* Double-tap on input opens chat without needing text */
+  sbInput.addEventListener('dblclick', function(){
+    if (!sbInput.value.trim()) {
+      openChat('');
+      window._apAction = {type:'freeChat', text:''};
+    }
   });
   if (sbSend) sbSend.addEventListener('click', submitSearch);
 
@@ -1280,9 +1303,45 @@ _CHAT_JS = """
     if (isPro) {
       badge.textContent = 'Pro';
       badge.className = 'ap-wm-badge ap-wm-badge--pro';
+      var tld = document.querySelector('.ap-wm-tld');
+      if (tld) tld.style.color = 'rgba(10,132,255,0.72)';
     }
     badge.onclick = function(){ window._apAction = {type:'upgradeBadge'}; };
   }
+
+  /* ── Restore chat if it was open before tab switch ── */
+  try {
+    if (sessionStorage.getItem('ap_chat_open') === '1') {
+      /* Skip ALL animations — restore instantly */
+      isOpen = true;
+      document.body.style.backgroundColor = '#161616';
+      if (canvasBg) { canvasBg.classList.add('no-transition'); canvasBg.classList.add('chat-active'); }
+      _restoreChatMsgs();
+      deck.style.transition = 'none';
+      deck.style.opacity = '0';
+      deck.style.transform = 'translateY(30px)';
+      deck.style.pointerEvents = 'none';
+      overlay.style.transition = 'none';
+      overlay.style.opacity = '1';
+      overlay.style.pointerEvents = 'auto';
+      dock.style.transition = 'none';
+      dock.style.opacity = '1';
+      dock.style.transform = DOCK_SHOWN;
+      dock.style.pointerEvents = 'auto';
+      /* Also suppress canvas-bg dot transition */
+      var bgBefore = canvasBg ? canvasBg.style.cssText : '';
+      /* Restore transitions after paint so future open/close animates */
+      requestAnimationFrame(function(){
+        requestAnimationFrame(function(){
+          overlay.style.transition = 'opacity 220ms ease';
+          dock.style.transition = 'opacity 220ms ease,transform 220ms ease';
+          deck.style.transition = '';
+          if (canvasBg) canvasBg.classList.remove('no-transition');
+          ci.focus();
+        });
+      });
+    }
+  } catch(e){}
 
 })();
 """
@@ -1446,12 +1505,16 @@ class CustomScreens:
             elif action_type == 'freeChat':
                 text = action.get('text', '').strip()
                 if text:
-                    self._fc_history = [{'role': 'user', 'content': text}]
+                    # Load persistent history from DB on first open
+                    self._fc_history = self._load_fc_history()
+                    self._fc_history.append({'role': 'user', 'content': text})
+                    self._save_fc_message(text, 'user')
                     self._start_fc_request(text)
             elif action_type == 'freeChatSend':
                 text = action.get('text', '').strip()
                 if text:
                     self._fc_history.append({'role': 'user', 'content': text})
+                    self._save_fc_message(text, 'user')
                     self._start_fc_request(text)
             elif action_type in ('freeChatClose', 'freeChatCancel'):
                 if self._fc_thread is not None:
@@ -1631,9 +1694,16 @@ class CustomScreens:
             if done:
                 full = ''.join(_buf)
                 self._fc_history.append({'role': 'assistant', 'content': full})
+                if full.strip():
+                    self._save_fc_message(full, 'assistant')
                 self._fc_thread = None
 
-        thread.chunk_signal.connect(on_chunk_with_hist)
+        # QueuedConnection ensures on_chunk_with_hist runs on the main thread,
+        # preventing crashes from runJavaScript called on a background thread
+        if _Qt is not None:
+            thread.chunk_signal.connect(on_chunk_with_hist, _Qt.ConnectionType.QueuedConnection)
+        else:
+            thread.chunk_signal.connect(on_chunk_with_hist)
         thread.start()
 
     def _fc_push(self, data):
@@ -1647,6 +1717,47 @@ class CustomScreens:
                 print(f"CustomScreens: _fc_push skipped — state={state!r}")
         except Exception as e:
             print(f"CustomScreens: _fc_push error: {e}")
+
+    def _load_fc_history(self):
+        """Load Free Chat history from SQLite (deck_id=0 = global). Returns list of {role, content}."""
+        try:
+            from .card_sessions_storage import load_deck_messages
+        except ImportError:
+            try:
+                from card_sessions_storage import load_deck_messages
+            except ImportError:
+                return []
+        try:
+            messages = load_deck_messages(0, limit=20)
+            history = []
+            for m in messages:
+                role = 'assistant' if m.get('sender') == 'assistant' else 'user'
+                history.append({'role': role, 'content': m.get('text', '')})
+            print(f"CustomScreens: Loaded {len(history)} messages from FC history")
+            return history
+        except Exception as e:
+            print(f"CustomScreens: _load_fc_history error: {e}")
+            return []
+
+    def _save_fc_message(self, text, sender):
+        """Save a Free Chat message to SQLite for persistence."""
+        try:
+            from .card_sessions_storage import save_deck_message
+        except ImportError:
+            try:
+                from card_sessions_storage import save_deck_message
+            except ImportError:
+                return
+        try:
+            import uuid
+            save_deck_message(0, {
+                'id': str(uuid.uuid4()),
+                'text': text,
+                'sender': sender,
+                'source': 'tutor',
+            })
+        except Exception as e:
+            print(f"CustomScreens: _save_fc_message error: {e}")
 
     # ── Hook ──────────────────────────────────────────────────────────────────
 
@@ -1673,12 +1784,12 @@ class CustomScreens:
             total_learn = sum(d.get('learning', 0) for d in due_counts.values())
             total_review = sum(d.get('review', 0) for d in due_counts.values())
 
-            # Determine tier for badge
+            # Determine tier for badge — authenticated + validated = Pro
             is_premium = False
             try:
-                from .auth import get_auth_status
-                auth_status = get_auth_status()
-                is_premium = auth_status.get('isPremium', False) or auth_status.get('is_premium', False)
+                from .config import get_config
+                _cfg = get_config()
+                is_premium = bool(_cfg.get('auth_token', '').strip()) and _cfg.get('auth_validated', False)
             except Exception:
                 pass
             tier = 'pro' if is_premium else 'free'
