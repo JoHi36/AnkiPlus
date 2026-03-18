@@ -4,7 +4,7 @@
 
 **Goal:** Transform Plusi from a decorative mascot into a unified AI identity — a sub-agent with its own personality, memory, tools, and persistent history — integrated cleanly into a professional UI without compromising quality.
 
-**Core Principle:** Plusi is not a chat partner you address directly. Plusi is a **living UI element** that the main AI can spawn via tool call. Plusi has its own AI model, its own conversation history, and its own tools. The user writes in one chat — the AI decides when Plusi appears.
+**Core Principle:** Plusi is not a chat partner you address directly. Plusi is a **living UI element** that the main AI can spawn via tool call (and, in future, by app events like onboarding). Plusi has its own AI model, its own conversation history, and its own tools. The user writes in one chat — the AI decides when Plusi appears.
 
 ---
 
@@ -49,7 +49,7 @@
 | **Focus** | Knowledge, learning, explaining | App control, emotion, orientation |
 | **Tools** | Diagrams, images, RAG, spawn_plusi | App config, theme, navigation, help |
 | **Prompt** | Long tutor system prompt | Short personality prompt |
-| **Model** | Gemini Flash (full) | Gemini Flash (light, fast) |
+| **Model** | `gemini-3-flash-preview` (current default) | `gemini-2.0-flash` (lightweight, higher rate limits) |
 | **Output** | Text + content widgets | Mood + short text (≤85 chars) + optional action |
 | **History** | Per-card or per-deck (see §2) | Own persistent history, cross-deck |
 | **Context** | Card content + card chat OR deck chat | Situation from tutor + own history |
@@ -79,19 +79,28 @@
 
 ### Data Model
 
-Every message has:
+**Migration required.** The existing `card_sessions_storage.py` schema has `card_id INTEGER NOT NULL` with a foreign key constraint. The following migration is needed:
+
+1. Make `card_id` nullable (drop NOT NULL constraint, relax foreign key)
+2. Add `deck_id INTEGER` column to `messages` table (currently lives only on `card_sessions`)
+3. Add `source TEXT DEFAULT 'tutor'` column to `messages` table
+4. Add index on `messages(deck_id, created_at)` for deck-level queries
+5. Use existing `created_at` column as the timestamp (no rename needed)
+
+After migration, every message has:
 ```
 deck_id     — which deck (required)
 card_id     — which card (nullable; NULL = deck-level message)
-timestamp   — when written (for chronological ordering)
+created_at  — when written (existing column, used for chronological ordering)
 role        — 'user' | 'assistant'
 content     — message text
 source      — 'tutor' | 'plusi' | 'user' (for filtering Plusi messages)
 ```
 
-- **Card view query:** `WHERE card_id = X ORDER BY timestamp`
-- **Deck view query:** `WHERE deck_id = X ORDER BY timestamp`
-- **Plusi history extraction:** `WHERE source = 'plusi' ORDER BY timestamp` (cross-deck)
+- **Card view query:** `WHERE card_id = X ORDER BY created_at`
+- **Deck view query:** `WHERE deck_id = X ORDER BY created_at`
+
+**Note:** Plusi's AI context history is stored separately in `plusi_history` (see §4), NOT extracted from the messages table. The `source` field on messages is for display purposes only (styling Plusi messages differently in the chat UI).
 
 ---
 
@@ -121,23 +130,18 @@ source      — 'tutor' | 'plusi' | 'user' (for filtering Plusi messages)
 
 ### Tools V1
 
-**Content Tools (appear in chat):**
+**Main AI Tools (Tutor):**
 
-| Tool | Description | Status |
-|---|---|---|
-| `spawn_plusi` | Trigger Plusi sub-agent with situation context | New |
-| `create_diagram` | Mermaid diagram rendering | Migrate from existing |
-| `search_image` | Image search | Migrate from existing |
-| `show_card_preview` | Inline Anki card preview in chat | New |
+| Tool | Category | Description | Status |
+|---|---|---|---|
+| `spawn_plusi` | Content | Trigger Plusi sub-agent with situation context | New |
+| `create_diagram` | Content | Mermaid diagram rendering | Migrate from existing |
+| `search_image` | Content | Image search | Migrate from existing |
+| `show_card_preview` | Content | Inline Anki card preview in chat | New |
+| `search_cards` | Action | RAG search through user's cards (query string, optional deck filter, returns list of `{card_id, front, back, score}`, max 5 results, uses existing `card_embeddings` table) | New |
+| `get_statistics` | Action | Fetch learning progress for a deck | New |
 
-**Action Tools (do something in the app):**
-
-| Tool | Description | Status |
-|---|---|---|
-| `search_cards` | RAG search through user's cards | New |
-| `open_deck` | Navigate to a specific deck | New |
-| `get_statistics` | Fetch learning progress | New |
-| `toggle_theme` | Switch dark/light mode | New |
+**Note:** App-control tools (`open_deck`, `toggle_theme`) live exclusively on Plusi (see §4). If the Main AI needs to navigate or change settings, it calls `spawn_plusi` which then uses its own tools. This keeps the role separation clean: Tutor = knowledge, Plusi = app control.
 
 **Each tool is individually toggleable in Settings** — extending the existing ai_tools config pattern.
 
@@ -162,6 +166,20 @@ source      — 'tutor' | 'plusi' | 'user' (for filtering Plusi messages)
 5. Plusi responds: `{"mood":"empathy","text":"ey, Pharma ist hart..."}`
 6. Frontend replaces skeleton with **live Plusi widget** (animated mood + text)
 7. Plusi's response stored in `plusi_history`
+8. `spawn_plusi` returns `{"status": "displayed", "mood": "empathy"}` to the main AI's agent loop (short confirmation, NOT Plusi's text — prevents the tutor from echoing it)
+
+### Streaming Wire Format
+
+When the agent loop encounters a `spawn_plusi` tool call during streaming:
+
+1. Backend sends: `{"type": "plusiSkeleton", "requestId": "..."}` — frontend renders skeleton widget
+2. Backend makes Plusi AI call (async)
+3. Backend sends: `{"type": "plusiResult", "requestId": "...", "mood": "empathy", "text": "ey, Pharma ist hart...", "action": null}` — frontend replaces skeleton with live widget
+4. If Plusi AI call fails: `{"type": "plusiResult", "requestId": "...", "error": true}` — frontend removes skeleton silently (no error shown to user, tutor text continues)
+
+### Rate Limiting
+
+Max 2 Plusi spawns per user message. The agent loop ignores additional `spawn_plusi` calls beyond this limit. This prevents excessive API costs and keeps Plusi appearances special.
 
 ### Plusi's Own Tools
 
@@ -212,7 +230,7 @@ Passive, read-only widget. Bottom-left of screen during review. 48px animated Pl
 
 | Current | New |
 |---|---|
-| Click to toggle companion mode | No toggle — always visible during review |
+| Click to toggle companion mode | No toggle — visible during review when `mascot_enabled` is true in config (existing setting retained) |
 | Own AI call on user click | No own AI call — mood comes from spawn_plusi tool results |
 | User writes to Plusi via chat input intercept | No chat intercept — user writes to tutor, Plusi spawns when needed |
 | Greeting on activate | No activation — Plusi just reacts |
@@ -327,7 +345,7 @@ No architectural changes needed for new tools.
 | 2 | **Two-Level Chat** | None | Data model update, deck-chat view (chronological), card-chat filter, context switching |
 | 3 | **Plusi Sub-Agent** | Agent Framework | `spawn_plusi` tool, separate AI call, Plusi history table, Plusi system prompt, chat widget rendering |
 | 4 | **Plusi Tools** | Plusi Sub-Agent | `read_app_config`, `toggle_theme`, `open_deck`, `show_help` |
-| 5 | **Action Tools** | Agent Framework | `search_cards`, `open_deck`, `get_statistics`, `show_card_preview` |
+| 5 | **Additional Tools** | Agent Framework | `search_cards`, `get_statistics`, `show_card_preview` (content tools for Main AI) |
 | 6 | **Companion Dock Refactor** | Plusi Sub-Agent | Remove companion mode, rule-based reactions, mood sync from tool calls |
 | 7 | **Future Foundations** | Plusi Sub-Agent | `plusi_memory` table, event system stubs, onboarding placeholders |
 
@@ -351,8 +369,8 @@ Each sub-project gets its own plan → implementation cycle.
 | `system_prompt.py` | **Modify** — Update tool descriptions, add Plusi tool docs |
 | `frontend/src/components/PlusiWidget.jsx` | **New** — Chat widget (skeleton/live/frozen states) |
 | `frontend/src/components/ChatMessage.jsx` | **Modify** — Render PlusiWidget for spawn_plusi results |
-| `frontend/src/components/MascotShell.jsx` | **Modify** — Remove companion mode toggle, add mood sync |
+| `frontend/src/components/MascotShell.jsx` | **Modify** — Make dock always-visible (when mascot_enabled), receive mood from Plusi tool results |
 | `frontend/src/components/SettingsModal.jsx` | **Modify** — Add Plusi tool toggle |
 | `frontend/src/hooks/useCompanion.js` | **Delete** — Replaced by plusi_agent.py backend |
-| `frontend/src/App.jsx` | **Modify** — Remove companion mode state, update chat context logic |
+| `frontend/src/App.jsx` | **Modify** — Remove companion mode state/toggle, update chat context logic, handle plusiSkeleton/plusiResult events |
 | `card_sessions_storage.py` | **Modify** — Add source field, deck-level queries |
