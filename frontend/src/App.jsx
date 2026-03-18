@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAnki } from './hooks/useAnki';
 import { useChat } from './hooks/useChat';
-import { useSessions } from './hooks/useSessions';
 import { updateSessionSections } from './utils/sessions';
 import { useDeckTracking } from './hooks/useDeckTracking';
 import { useCardContext } from './hooks/useCardContext';
@@ -130,7 +129,7 @@ function AppInner() {
   
   // Custom Hooks
   const modelsHook = useModels(bridge);
-  const sessionsHook = useSessions(bridge, isReady);
+  const [forceShowOverview, setForceShowOverview] = useState(false);
   const cardContextHook = useCardContext();
   const cardSessionHook = useCardSession(bridge);
   const reviewTrailHook = useReviewTrail();
@@ -162,7 +161,7 @@ function AppInner() {
     bridge,
     isReady,
     sessionContext.sessions,
-    sessionsHook.forceShowOverview,
+    forceShowOverview,
     sessionContext.currentSessionId,
     chatHook.messages,
     (id) => sessionContext.setCurrentSession(sessionContext.sessions.find(s => s.id === id) || null),
@@ -170,7 +169,7 @@ function AppInner() {
     sessionContext.setSessions,
     cardContextHook.setSections,
     cardContextHook.setCurrentSectionId,
-    sessionsHook.setForceShowOverview
+    setForceShowOverview
   );
   
   // Refs für window.ankiReceive — prevent stale closures
@@ -257,7 +256,7 @@ function AppInner() {
   
   // Zeige Session-Übersicht NUR wenn explizit vom User angefordert (via Stapel-Button o.ä.)
   // NICHT automatisch wenn keine Session aktiv — Chat startet immer im Chat-Modus
-  const showSessionOverview = sessionsHook.forceShowOverview;
+  const showSessionOverview = forceShowOverview;
 
   // ── Free Chat State ──────────────────────────────────────────────
   const [freeChatOpen, setFreeChatOpen] = useState(false);
@@ -301,7 +300,7 @@ function AppInner() {
   const [companionMode, setCompanionMode] = useState(false);
   const [bubbleText, setBubbleText] = useState(null);
 
-  const { send: sendToCompanion, handleChunk: handleCompanionChunk } = useCompanion({
+  const { send: sendToCompanion, handleChunk: handleCompanionChunk, isLoading: companionIsLoading } = useCompanion({
     onMood: setAiMood,
     onBubble: setBubbleText,
   });
@@ -509,15 +508,8 @@ function AppInner() {
         return;
       }
       
-      // CRITICAL: Process sessionsLoaded and deckSelected immediately, don't queue them
-      // These events are time-sensitive and need to be processed as soon as possible
-      if (payload.type === 'sessionsLoaded') {
-        console.error('🔵 DEBUG App.jsx: Processing sessionsLoaded IMMEDIATELY', payload.data?.length);
-        window.dispatchEvent(new CustomEvent('sessionsLoaded', { 
-          detail: { sessions: payload.data || [] } 
-        }));
-      }
-      
+      // CRITICAL: Process deckSelected immediately, don't queue it
+      // This event is time-sensitive and needs to be processed as soon as possible
       if (payload.type === 'deckSelected') {
         console.error('🔵 DEBUG App.jsx: Processing deckSelected IMMEDIATELY', payload.data);
         window.dispatchEvent(new CustomEvent('deckSelected', { 
@@ -737,14 +729,6 @@ function AppInner() {
           return;
         }
 
-        // Sessions Events
-        if (payload.type === 'sessionsLoaded') {
-          console.log('📚 App.jsx: Sessions geladen:', payload.data?.length || 0);
-          window.dispatchEvent(new CustomEvent('sessionsLoaded', {
-            detail: { sessions: payload.data || [] }
-          }));
-        }
-
         // Deck Events - deckSelected / deckExited
         if (payload.type === 'deckSelected') {
           _trail.resetTrail();
@@ -871,13 +855,7 @@ function AppInner() {
         queued.forEach(payload => {
           console.error('🔵 DEBUG App.jsx: Processing queued payload', payload?.type);
           // Process ALL queued messages, not just 'init'
-          if (payload.type === 'sessionsLoaded') {
-            console.error('🔵 DEBUG App.jsx: Processing queued sessionsLoaded', payload.data?.length);
-            // Handle sessionsLoaded from queue
-            window.dispatchEvent(new CustomEvent('sessionsLoaded', { 
-              detail: { sessions: payload.data || [] } 
-            }));
-        } else if (payload.type === 'deckSelected') {
+          if (payload.type === 'deckSelected') {
           console.error('🔵 DEBUG App.jsx: Processing queued deckSelected', payload.data);
           // Handle deckSelected from queue - dispatch event for SessionContext
           window.dispatchEvent(new CustomEvent('deckSelected', { 
@@ -1273,7 +1251,7 @@ function AppInner() {
     }
 
     // Immer im Chat bleiben
-    sessionsHook.setForceShowOverview(false);
+    setForceShowOverview(false);
     
     // Check if this is the first message in a temporary session
     const isFirstMessage = sessionContext.isTemporary && 
@@ -1505,7 +1483,7 @@ function AppInner() {
       sessionContext.setIsTemporary(false);
       
       // Hide overview
-      sessionsHook.setForceShowOverview(false);
+      setForceShowOverview(false);
       
       // Load session messages and sections
       chatHook.setMessages(session.messages || []);
@@ -1522,7 +1500,7 @@ function AppInner() {
         scrollToLastUserMessage();
       }, 500); // Give React time to render the messages
     }
-  }, [sessionContext, bridge, sessionsHook, chatHook, cardContextHook, scrollToLastUserMessage]);
+  }, [sessionContext, bridge, chatHook, cardContextHook, scrollToLastUserMessage]);
   
   const handleDeleteSession = useCallback((sessionId) => {
     sessionContext.deleteSessionById(sessionId);
@@ -1537,13 +1515,13 @@ function AppInner() {
     if (bridge && bridge.openDeck) {
       bridge.openDeck(deckId);
     }
-    sessionsHook.setForceShowOverview(false);
-  }, [bridge, sessionsHook]);
+    setForceShowOverview(false);
+  }, [bridge]);
 
   // ── Free Chat Handlers ─────────────────────────────────────────
   const handleFreeChatOpen = useCallback((text) => {
     // Step 1: show DeckBrowser (deck list visible)
-    sessionsHook.setForceShowOverview(true);
+    setForceShowOverview(true);
     setActiveChat('free');
     // Step 2: after DeckBrowser has mounted and rendered, start animation
     // The delay lets the user see the deck list briefly before the chat slides in.
@@ -1556,7 +1534,7 @@ function AppInner() {
       setTimeout(() => setFreeChatInitialText(''), 0);
       setTimeout(() => setAnimPhase('entered'), 350);
     }, 80);
-  }, [sessionsHook]);
+  }, []);
   useEffect(() => { handleFreeChatOpenRef.current = handleFreeChatOpen; }, [handleFreeChatOpen]);
 
   const handleFreeChatClose = useCallback(() => {
@@ -1576,13 +1554,20 @@ function AppInner() {
 
   // (handleTrailNavigateLeft/Right defined earlier, before the keyboard useEffect)
 
-  const handleNavigateToOverview = sessionsHook.createHandleNavigateToOverview(bridge);
-  
-  const handleResetChat = sessionsHook.createHandleResetChat(
-    chatHook.setMessages,
-    cardContextHook.setSections,
-    cardContextHook.setCurrentSectionId
-  );
+  const handleNavigateToOverview = useCallback(() => {
+    setForceShowOverview(true);
+    if (bridge && bridge.openDeckBrowser) {
+      bridge.openDeckBrowser();
+    }
+  }, [bridge]);
+
+  const handleResetChat = useCallback(() => {
+    if (confirm('Möchtest du den Chat wirklich zurücksetzen? Alle Nachrichten und Abschnitte werden gelöscht.')) {
+      chatHook.setMessages([]);
+      cardContextHook.setSections([]);
+      cardContextHook.setCurrentSectionId(null);
+    }
+  }, [chatHook, cardContextHook]);
   
   // Prüfe ob Reset-Button inaktiv sein soll (keine Messages und keine Sections)
   const isResetDisabled = chatHook.messages.length === 0 && cardContextHook.sections.length === 0;
@@ -2029,28 +2014,25 @@ function AppInner() {
       {!showSessionOverview && (
         <>
           {/* Mascot — bottom-left, above input */}
-          {mascotEnabled && (
-            <div style={{ position: 'fixed', bottom: 72, left: 12, zIndex: 40 }}>
-              <MascotShell
-                mood={mood}
-                bubbleText={bubbleText}
-                onBubbleDismiss={() => setBubbleText(null)}
-                active={companionMode}
-                onClick={() => {
-                  setCompanionMode(prev => {
-                    if (!prev) {
-                      setAiMood('happy');
-                      setBubbleText("Hey! 👋 Was gibt's?");
-                    } else {
-                      resetMood();
-                    }
-                    return !prev;
-                  });
-                }}
-                enabled={mascotEnabled}
-              />
-            </div>
-          )}
+          <MascotShell
+            mood={mood}
+            active={companionMode}
+            isThinking={companionIsLoading}
+            replyText={bubbleText}
+            onClick={() => {
+              setCompanionMode(prev => {
+                if (!prev) {
+                  setAiMood('happy');
+                  setBubbleText("Hey! 👋 Was gibt's?");
+                } else {
+                  resetMood();
+                  setBubbleText(null);
+                }
+                return !prev;
+              });
+            }}
+            enabled={mascotEnabled}
+          />
           {/* Chat Input — full-width dock at bottom */}
           <div className="fixed bottom-0 left-0 right-0 z-50 px-4 pb-4">
         <ChatInput
