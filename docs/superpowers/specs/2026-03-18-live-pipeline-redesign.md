@@ -46,7 +46,7 @@ The router receives enriched context and returns a simplified decision:
 **Key changes:**
 - No `intent` field. Only `search_needed: true/false`.
 - New `embedding_query` field: Router synthesizes a semantically rich search text from card context + user question + conversation context. The user's raw question (e.g., "Was ist das?") is never used directly as embedding input.
-- `lastAssistantMessage` included so the router understands conversational references.
+- `lastAssistantMessage` included so the router understands conversational references. The backend retrieves this from the current session's message history (last bot message in `card_sessions_storage`), not sent by the frontend.
 - Card `tags` and `deckName` included for scope decisions and query generation.
 
 ### Scope Decision Logic
@@ -68,6 +68,10 @@ Backend emits `ai_state` events with phase + metadata. Events are coarse — one
 
 Each pipeline step emits granular events that the UI renders in real-time. All events include a `requestId` for correlation.
 
+### requestId Plumbing
+
+The frontend generates a UUID v4 `requestId` for each message and includes it in the `sendMessage` bridge call payload. The backend receives it in `widget._handle_js_message()` and passes it to `ai_handler.get_response_with_rag()`. The handler stores it as `self._current_request_id` for the duration of the request. Every `_emit_pipeline_step()` call reads from this instance variable. Stale requests are filtered on the frontend: `if (payload.requestId !== activeRequestIdRef.current) return`.
+
 #### Event: `pipeline_step`
 Replaces `ai_state`. One event per meaningful state change.
 
@@ -75,7 +79,7 @@ Replaces `ai_state`. One event per meaningful state change.
 {
   "type": "pipeline_step",
   "requestId": "uuid",
-  "step": "intent",
+  "step": "router",
   "status": "done",
   "data": {
     "search_needed": true,
@@ -90,21 +94,54 @@ Replaces `ai_state`. One event per meaningful state change.
 
 | step | status | data |
 |------|--------|------|
-| `intent` | `active` → `done` | `{ search_needed, retrieval_mode, scope, scope_label }` |
+| `router` | `active` → `done` | `{ search_needed, retrieval_mode, scope, scope_label }` |
 | `sql_search` | `active` → `done` | `{ queries: [{ text, hits }], total_hits }` |
 | `semantic_search` | `active` → `done` | `{ chunks: [{ score, snippet }], total_hits }` |
 | `merge` | `active` → `done` | `{ keyword_count, semantic_count, total, weight_position }` |
 | `generating` | `active` → `done` | `{}` (shimmer bar phase) |
 
-**`semantic_search` chunk previews:** When semantic search completes, the top 3 results are sent with truncated text snippets (first 60 chars of the card's primary field) and similarity scores. These are real data from the embedding search, loaded from the card's fields.
+Note: Step is named `router` (not `intent`) since the intent system has been removed.
+
+**`semantic_search` chunk previews:** When semantic search completes, the top 3 results are sent with truncated text snippets (first 60 chars of the card's primary field) and similarity scores. These are real data from the embedding search. Snippet loading uses `_load_card_data()` for the top 3 card_ids returned by the embedding search, done as part of the `semantic_search` step before emitting the `done` event.
 
 **`merge` weight_position:** A float 0.0–1.0 representing the balance. Calculated as `semantic_count / (keyword_count + semantic_count)`. The UI renders the glow dot at this position on the merge bar.
 
-#### Event: `rag_sources` (unchanged)
-Still sent with full citation data for the SourcesCarousel. Sent after merge completes.
+#### Event: `rag_sources`
+Sent immediately after the `merge` done event (same callback sequence). Contains full citation data for the SourcesCarousel.
 
 #### Event: `streaming` (unchanged)
 Text chunks for the AI response. Existing protocol stays the same.
+
+### Partial Pipelines
+
+The `retrieval_mode` from the router determines which steps are emitted:
+- `"both"`: router → sql_search → semantic_search → merge → generating
+- `"sql"`: router → sql_search → generating (no semantic, no merge)
+- `"semantic"`: router → semantic_search → generating (no sql, no merge)
+
+The frontend uses `retrieval_mode` from the router `done` data to know which phases to expect. Unexpected step events are ignored.
+
+### No-Search Path
+
+When `search_needed: false`:
+```
+router done (search_needed: false) → generating active → streaming begins
+```
+The frontend sees `search_needed: false` in the router done data and skips directly to the generating phase. No sql_search, semantic_search, or merge events are emitted.
+
+### Error Handling
+
+If any step fails, the backend emits:
+```json
+{
+  "type": "pipeline_step",
+  "requestId": "uuid",
+  "step": "semantic_search",
+  "status": "error",
+  "data": { "message": "Embedding model unavailable" }
+}
+```
+The UI shows the step as failed (gray text, no checkmark) and the pipeline continues with available results. If both search steps fail, the response is generated without RAG context.
 
 ### Removed from persistence
 - SQL query texts
@@ -112,8 +149,11 @@ Text chunks for the AI response. Existing protocol stays the same.
 - Router decision details
 
 Only persisted per message:
-- Step labels (for collapsed expand view): `["Anfrage analysiert", "Keyword-Suche — 4 Treffer", "Semantische Suche — 3 Treffer", "Quellen kombiniert — 5"]`
+- Step labels as string array (for collapsed expand view): `["Anfrage analysiert", "Keyword-Suche — 4 Treffer", "Semantische Suche — 3 Treffer", "Quellen kombiniert — 5"]`
 - Citations (card references)
+- Step count (integer, for "X Schritte" display): count of steps that reached `done` status
+
+**Backward compatibility:** Old messages with the previous `steps` format (array of `{phase, state, timestamp, metadata}` objects) are detected by checking if `steps[0]` has a `phase` field. If so, the ThoughtStream falls back to rendering them as a flat done-list with labels extracted from `state`.
 
 ## 3. ThoughtStream UI Redesign
 
@@ -140,7 +180,7 @@ Replace existing `ThoughtStream.tsx` with a new component that follows the "Acti
 
 ### Phase Animations
 
-#### Phase 1: Intent Analysis
+#### Phase 1: Router Analysis
 - Title: "Analysiere Anfrage..."
 - Content: Shows decision as inline key-value pairs: `Suche notwendig → Hybrid | Scope → [Deck-Name]`
 - Duration: min 800ms
@@ -212,7 +252,7 @@ When the streaming response begins:
 3. When streaming completes (after 500ms delay): entire ThoughtStream collapses
 
 **Collapsed view:**
-- Single clickable line: chevron (rotated -90°) + "X Schritte · Y Quellen"
+- Single clickable line: chevron (rotated -90°) + "X Schritte · Y Quellen" (X = count of steps that reached `done` status, Y = citation count)
 - Font: 12px, `rgba(232,232,232,0.35)`
 - Opacity: 0.4, hover: 0.6
 - SourcesCarousel always visible below (never hidden)
@@ -248,27 +288,29 @@ User sends message
   │
   ▼
 Backend: _rag_router()
-  ├─ Emits: pipeline_step { step: "intent", status: "active" }
+  ├─ Emits: pipeline_step { step: "router", status: "active" }
   ├─ Calls router API with enriched context (card + deck + tags + last message)
-  ├─ Emits: pipeline_step { step: "intent", status: "done", data: { search_needed, ... } }
+  ├─ Emits: pipeline_step { step: "router", status: "done", data: { search_needed, ... } }
   │
   ├─ If search_needed == false:
-  │   └─ Skip to generating phase
+  │   ├─ Emits: pipeline_step { step: "generating", status: "active" }
+  │   └─ Skip directly to streaming (no search/merge steps emitted)
   │
   ▼
-Backend: hybrid_retrieval.retrieve()
+Backend: hybrid_retrieval.retrieve(embedding_query=router_result['embedding_query'])
   ├─ Emits: pipeline_step { step: "sql_search", status: "active" }
   ├─ Runs precise queries, then broad if needed
   ├─ Emits: pipeline_step { step: "sql_search", status: "done", data: { queries, total_hits } }
   │
   ├─ Emits: pipeline_step { step: "semantic_search", status: "active" }
-  ├─ Generates embedding for router's embedding_query
-  ├─ Searches vector index
+  ├─ Generates embedding for router's embedding_query (NOT user_message)
+  ├─ Searches vector index, loads card data for top 3 snippets
   ├─ Emits: pipeline_step { step: "semantic_search", status: "done", data: { chunks, total_hits } }
   │
-  ├─ Merges results
+  ├─ Emits: pipeline_step { step: "merge", status: "active" }
+  ├─ Merges results, calculates weight_position
   ├─ Emits: pipeline_step { step: "merge", status: "done", data: { keyword_count, semantic_count, total, weight_position } }
-  ├─ Emits: rag_sources { citations }
+  ├─ Emits: rag_sources { citations } (immediately after merge done)
   │
   ▼
 Backend: _get_response_streaming()
@@ -282,7 +324,7 @@ Backend: _get_response_streaming()
 
 ### Backend (Python)
 - `ai_handler.py` — Router prompt rewrite, new `pipeline_step` emission, `embedding_query` field, remove intent system
-- `hybrid_retrieval.py` — Emit granular events per search type, include chunk previews in semantic results
+- `hybrid_retrieval.py` — Change `retrieve()` to use `router_result['embedding_query']` for semantic search instead of `user_message`. Emit granular events per search type, include chunk previews (top 3 card snippets) in semantic results
 - `bridge.py` — No changes expected (events flow through existing streaming callback)
 
 ### Backend (Cloud Functions)
