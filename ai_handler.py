@@ -1888,7 +1888,7 @@ Karteninhalt: {question_clean[:500]}"""
             phase: Optional - Phase-Konstante (PHASE_INTENT, PHASE_SEARCH, etc.)
             metadata: Optional - Dict mit Metadaten (mode, sourceCount, intent, scope)
         """
-        # Track step for persistence
+        # Track step for persistence (always — needed for query data parsing)
         import time
         step = {
             "state": message,
@@ -1897,12 +1897,16 @@ Karteninhalt: {question_clean[:500]}"""
             "metadata": metadata or {}
         }
         self._current_request_steps.append(step)
-        
+
+        # When new pipeline is active, don't send ai_state to frontend
+        # (pipeline_step events handle the UI now; ai_state only logs internally)
+        if getattr(self, '_current_request_id', None):
+            return
+
         if not self.widget or not self.widget.web_view:
             return
-        
+
         # Thread-safe: Führe JavaScript-Aufruf auf dem Hauptthread aus
-        # CRITICAL: Process events immediately to avoid "Wall of Text" - Steps sollen nacheinander aufploppen
         if mw and mw.taskman:
             def emit_on_main():
                 try:
