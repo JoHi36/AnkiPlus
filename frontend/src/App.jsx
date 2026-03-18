@@ -625,6 +625,9 @@ function AppInner() {
           const isQuestion = payload.data?.isQuestion;
           console.error('🔴 CARD_SWITCH: cardContext for cardId:', newCardId, 'isQuestion:', isQuestion);
 
+          // Disable deck-chat mode when entering card review
+          _chat.setDeckChatMode(false);
+
           // Cancel any in-flight AI request before switching cards
           if (_chat.isLoading) {
             _chat.handleStopRequest();
@@ -689,6 +692,23 @@ function AppInner() {
               _cardCtx.setCurrentSectionId(null);
             }
           }
+        }
+
+        // Deck Messages Loaded (deck-chat mode)
+        if (payload.type === 'deckMessagesLoaded') {
+          const msgs = (payload.messages || []).map(m => ({
+            id: m.id,
+            text: m.text,
+            from: m.sender,
+            cardId: m.card_id,
+            deckId: m.deck_id,
+            createdAt: m.created_at,
+            source: m.source || 'tutor',
+            steps: m.steps ? (typeof m.steps === 'string' ? JSON.parse(m.steps) : m.steps) : null,
+            citations: m.citations ? (typeof m.citations === 'string' ? JSON.parse(m.citations) : m.citations) : null,
+            requestId: m.request_id,
+          }));
+          _chat.setMessages(msgs);
         }
 
         // Review Result Events
@@ -1297,9 +1317,35 @@ function AppInner() {
       return;
     }
 
+    // Deck-chat mode — no card context, chronological deck messages
+    if (chatHook.deckChatMode) {
+      const deckId = sessionContext.currentSession?.deckId;
+      if (!deckId) return;
+
+      const userMessage = {
+        id: crypto.randomUUID(),
+        text,
+        from: 'user',
+        createdAt: new Date().toISOString(),
+        source: 'user',
+      };
+      chatHook.setMessages(prev => [...prev, userMessage]);
+      chatHook.saveDeckMessage(deckId, userMessage);
+
+      // Build history from recent deck messages (no card content)
+      const history = chatHook.messages.slice(-10).map(m => ({
+        role: m.from === 'user' ? 'user' : 'assistant',
+        content: m.text,
+      }));
+
+      // Send to AI without card context
+      bridge.sendMessage(text, history, options.mode || 'compact', crypto.randomUUID());
+      return;
+    }
+
     // Immer im Chat bleiben
     setForceShowOverview(false);
-    
+
     // Check if this is the first message in a temporary session
     const isFirstMessage = sessionContext.isTemporary && 
                           (!sessionContext.currentSession?.messages || sessionContext.currentSession.messages.length === 0);
@@ -1603,10 +1649,14 @@ function AppInner() {
 
   const handleNavigateToOverview = useCallback(() => {
     setForceShowOverview(true);
+    chatHook.setDeckChatMode(true);
+    if (sessionContext.currentSession?.deckId) {
+      chatHook.loadDeckMessages(sessionContext.currentSession.deckId);
+    }
     if (bridge && bridge.openDeckBrowser) {
       bridge.openDeckBrowser();
     }
-  }, [bridge]);
+  }, [bridge, chatHook, sessionContext]);
 
   const handleResetChat = useCallback(() => {
     if (confirm('Möchtest du den Chat wirklich zurücksetzen? Alle Nachrichten und Abschnitte werden gelöscht.')) {

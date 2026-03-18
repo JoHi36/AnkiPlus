@@ -15,6 +15,7 @@ import { updateSession, updateSessionSections, createSession, findSessionByDeck 
  */
 export function useChat(bridge, currentSessionId, setSessions, currentSectionId, cardContextHook = null, cardSessionHook = null) {
   const [messages, setMessages] = useState([]);
+  const [deckChatMode, setDeckChatMode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState('');
   const [currentSteps, setCurrentSteps] = useState([]);  // NEW: Track RAG steps during generation
@@ -159,6 +160,29 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
   // DISABLED: Auto-Scroll beim Streaming
   // Die View bleibt am Top des Interaction Containers während der Generation
   
+  // ── Deck-Chat Mode helpers ──────────────────────────────────────────
+  const loadDeckMessages = useCallback((deckId) => {
+    if (!deckId) return;
+    window.ankiBridge?.addMessage('loadDeckMessages', String(deckId));
+  }, []);
+
+  const saveDeckMessage = useCallback((deckId, message) => {
+    if (!deckId) return;
+    window.ankiBridge?.addMessage('saveDeckMessage', JSON.stringify({
+      deckId,
+      message: {
+        id: message.id || crypto.randomUUID(),
+        text: message.text,
+        sender: message.from || message.sender || 'user',
+        created_at: message.createdAt || message.timestamp || new Date().toISOString(),
+        steps: message.steps ? JSON.stringify(message.steps) : null,
+        citations: message.citations ? JSON.stringify(message.citations) : null,
+        request_id: message.requestId,
+        source: message.source || 'tutor',
+      },
+    }));
+  }, []);
+
   /**
    * Nachricht senden - ATOMARE OPERATION
    * 
@@ -766,6 +790,10 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     setMessages,
     isLoading,
     streamingMessage,
+    deckChatMode,
+    setDeckChatMode,
+    loadDeckMessages,
+    saveDeckMessage,
     currentSteps,  // NEW: Expose current steps for streaming
     currentCitations,  // NEW: Expose current citations for streaming
     pipelineSteps,  // NEW: Expose pipeline steps for ThoughtStream
