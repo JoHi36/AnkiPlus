@@ -15,7 +15,7 @@ import { updateSession, updateSessionSections, createSession, findSessionByDeck 
  */
 export function useChat(bridge, currentSessionId, setSessions, currentSectionId, cardContextHook = null, cardSessionHook = null) {
   const [messages, setMessages] = useState([]);
-  const [deckChatMode, setDeckChatMode] = useState(false);
+  const freeChatPushRef = useRef(null); // set by App.jsx to push messages to Free Chat
   const [isLoading, setIsLoading] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState('');
   const [currentSteps, setCurrentSteps] = useState([]);  // NEW: Track RAG steps during generation
@@ -110,8 +110,6 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
 
   // Ref for active request ID (used to match streaming/error/metadata responses)
   const activeRequestIdRef = useRef(null);
-  // Ref for deck-chat save context — when set, bot responses are saved to this deckId
-  const deckSaveContextRef = useRef(null);
   
   // Nachricht hinzufügen (für Bot-Antworten)
   // Verwendet Refs um immer die aktuelle Session-ID und Section-ID zu haben
@@ -153,24 +151,9 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       }
     }
 
-    // Deck-level persistence — save bot responses when in deck-chat mode
-    if (deckSaveContextRef.current && from !== 'user') {
-      const deckId = deckSaveContextRef.current;
-      window.ankiBridge?.addMessage('saveDeckMessage', JSON.stringify({
-        deckId,
-        message: {
-          id: newMessage.id,
-          text: newMessage.text,
-          sender: 'assistant',
-          created_at: new Date().toISOString(),
-          steps: newMessage.steps ? JSON.stringify(newMessage.steps) : null,
-          citations: newMessage.citations ? JSON.stringify(newMessage.citations) : null,
-          request_id: newMessage.request_id,
-          source: 'tutor',
-        },
-      }));
-      // Clear the deck save context after saving
-      deckSaveContextRef.current = null;
+    // Push card messages to Free Chat hook (for deck-level chronological view)
+    if (freeChatPushRef.current) {
+      freeChatPushRef.current(newMessage);
     }
   }, [currentSectionId, setSessions]);
   
@@ -182,29 +165,6 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
   // DISABLED: Auto-Scroll beim Streaming
   // Die View bleibt am Top des Interaction Containers während der Generation
   
-  // ── Deck-Chat Mode helpers ──────────────────────────────────────────
-  const loadDeckMessages = useCallback((deckId) => {
-    if (!deckId) return;
-    window.ankiBridge?.addMessage('loadDeckMessages', String(deckId));
-  }, []);
-
-  const saveDeckMessage = useCallback((deckId, message) => {
-    if (!deckId) return;
-    window.ankiBridge?.addMessage('saveDeckMessage', JSON.stringify({
-      deckId,
-      message: {
-        id: message.id || crypto.randomUUID(),
-        text: message.text,
-        sender: message.from || message.sender || 'user',
-        created_at: message.createdAt || message.timestamp || new Date().toISOString(),
-        steps: message.steps ? JSON.stringify(message.steps) : null,
-        citations: message.citations ? JSON.stringify(message.citations) : null,
-        request_id: message.requestId,
-        source: message.source || 'tutor',
-      },
-    }));
-  }, []);
-
   /**
    * Nachricht senden - ATOMARE OPERATION
    * 
@@ -804,13 +764,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     setMessages,
     isLoading,
     streamingMessage,
-    deckChatMode,
-    setDeckChatMode,
-    setIsLoading,
-    loadDeckMessages,
-    saveDeckMessage,
-    activeRequestIdRef,
-    deckSaveContextRef,
+    freeChatPushRef,
     currentSteps,  // NEW: Expose current steps for streaming
     currentCitations,  // NEW: Expose current citations for streaming
     pipelineSteps,  // NEW: Expose pipeline steps for ThoughtStream

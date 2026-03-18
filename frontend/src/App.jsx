@@ -258,17 +258,19 @@ function AppInner() {
   // NICHT automatisch wenn keine Session aktiv — Chat startet immer im Chat-Modus
   const showSessionOverview = forceShowOverview;
 
-  // ── Deck-Chat Mode Sync ──────────────────────────────────────────
-  // Reload deck messages whenever deckChatMode or view state changes.
-  // deckChatMode stays true until a cardContext event (card review) sets it false.
+  // ── Free Chat Push: card messages → Free Chat ──────────────────
+  // When session chat saves a message, also push it to Free Chat for the chronological view
   useEffect(() => {
-    const deckId = sessionContext.currentSession?.deckId;
-    console.log('🔄 DECK-SYNC:', { showSessionOverview, deckChatMode: chatHook.deckChatMode, deckId, msgCount: chatHook.messages.length });
-    if (chatHook.deckChatMode && deckId) {
-      console.log('🔄 DECK-SYNC: Loading deck messages for deck', deckId);
-      chatHook.loadDeckMessages(deckId);
-    }
-  }, [showSessionOverview, chatHook.deckChatMode]);
+    chatHook.freeChatPushRef.current = (msg) => {
+      freeChatHook.setMessages(prev => [...prev, {
+        id: msg.id,
+        text: msg.text,
+        from: msg.from,
+        createdAt: new Date().toISOString(),
+      }]);
+    };
+    return () => { chatHook.freeChatPushRef.current = null; };
+  }, []);
 
   // ── Free Chat State ──────────────────────────────────────────────
   const [freeChatOpen, setFreeChatOpen] = useState(false);
@@ -636,9 +638,6 @@ function AppInner() {
           const newCardId = payload.data?.cardId;
           const isQuestion = payload.data?.isQuestion;
           console.error('🔴 CARD_SWITCH: cardContext for cardId:', newCardId, 'isQuestion:', isQuestion);
-
-          // Disable deck-chat mode when entering card review
-          _chat.setDeckChatMode(false);
 
           // Cancel any in-flight AI request before switching cards
           if (_chat.isLoading) {
@@ -1356,44 +1355,6 @@ function AppInner() {
       return;
     }
 
-    // Deck-chat mode — no card context, chronological deck messages
-    if (chatHook.deckChatMode) {
-      // Switch from overview to chat view if still on overview
-      if (forceShowOverview) {
-        setForceShowOverview(false);
-      }
-      const deckId = sessionContext.currentSession?.deckId;
-      if (!deckId) return;
-
-      const requestId = crypto.randomUUID();
-      const userMessage = {
-        id: crypto.randomUUID(),
-        text,
-        from: 'user',
-        createdAt: new Date().toISOString(),
-        source: 'user',
-        requestId,
-      };
-      chatHook.setMessages(prev => [...prev, userMessage]);
-      chatHook.saveDeckMessage(deckId, userMessage);
-      chatHook.setIsLoading(true);
-
-      // Build history from recent deck messages (no card content)
-      const history = chatHook.messages.slice(-10).map(m => ({
-        role: m.from === 'user' ? 'user' : 'assistant',
-        content: m.text,
-      }));
-
-      // Track requestId so streaming handler can match the response
-      chatHook.activeRequestIdRef.current = requestId;
-      // Store deckId so we can save bot response to deck when streaming completes
-      chatHook.deckSaveContextRef.current = deckId;
-
-      // Send to AI without card context
-      bridge.sendMessage(text, history, options.mode || 'compact', requestId);
-      return;
-    }
-
     // Immer im Chat bleiben
     setForceShowOverview(false);
 
@@ -1701,10 +1662,6 @@ function AppInner() {
 
   const handleNavigateToOverview = useCallback(() => {
     setForceShowOverview(true);
-    chatHook.setDeckChatMode(true);
-    if (sessionContext.currentSession?.deckId) {
-      chatHook.loadDeckMessages(sessionContext.currentSession.deckId);
-    }
     if (bridge && bridge.openDeckBrowser) {
       bridge.openDeckBrowser();
     }
