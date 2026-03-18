@@ -564,7 +564,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       // Zeige Function Call Indikator wenn nötig
       if (payload.isFunctionCall && !streamingMessage) {
         console.log('🔧 useChat: Function Call erkannt - zeige Indikator');
-        setStreamingMessage('Erstelle Diagramm...');
+        setStreamingMessage('⏳');
         setIsLoading(true);
       }
       
@@ -584,7 +584,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
         // ... (logging omitted for brevity)
         setStreamingMessage((prev) => {
           // ... (logging omitted)
-          const baseMessage = prev === 'Erstelle Diagramm...' ? '' : prev;
+          const baseMessage = prev === '⏳' ? '' : prev;
           const newMessage = baseMessage + payload.chunk;
           return newMessage;
         });
@@ -597,7 +597,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
         setStreamingMessage((prev) => {
           if (prev && appendMessageRef.current) {
             // Ignoriere Function Call Indikator beim Speichern
-            if (prev !== 'Erstelle Diagramm...') {
+            if (prev !== '⏳') {
               // CRITICAL: Keep isLoading true during this callback to maintain StreamingChatMessage
               // It will be set to false after message is saved (see below)
               // Attach accumulated steps and citations to final message

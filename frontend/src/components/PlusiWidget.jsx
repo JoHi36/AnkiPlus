@@ -16,7 +16,10 @@ const MOOD_DOT_COLORS = {
 
 export default function PlusiWidget({ mood = 'neutral', text = '', metaText = '', isLoading = false, isFrozen = false }) {
   const dotColor = MOOD_DOT_COLORS[mood] || MOOD_DOT_COLORS.neutral;
-  const displayMeta = isLoading ? 'denkt nach...' : metaText;
+  // If Plusi chose "thinking" mood but has actual text, show different meta
+  const resolvedMeta = isLoading ? 'denkt nach...'
+    : mood === 'thinking' && text ? 'grübelt...'
+    : metaText;
   const displayText = isLoading ? 'hmm, moment mal...' : text;
 
   return (
@@ -39,13 +42,13 @@ export default function PlusiWidget({ mood = 'neutral', text = '', metaText = ''
 
           <div className="plusi-w-info">
             <div className="plusi-w-name">Plusi</div>
-            {displayMeta && (
+            {resolvedMeta && (
               <div className="plusi-w-meta">
                 <span
                   className="plusi-w-dot"
                   style={{ background: dotColor, boxShadow: `0 0 4px ${dotColor}66` }}
                 />
-                <span className="plusi-w-meta-text">{displayMeta}</span>
+                <span className="plusi-w-meta-text">{resolvedMeta}</span>
               </div>
             )}
           </div>
@@ -96,10 +99,13 @@ const PLUSI_CSS = `
 
   .plusi-w-avatar {
     flex-shrink: 0;
-    width: 48px;
-    height: 48px;
-    overflow: hidden;
+    width: 56px;
+    height: 60px;
+    overflow: visible;
     position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .plusi-w-avatar .mascot-shadow {
