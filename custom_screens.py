@@ -807,6 +807,7 @@ html, body {
     0%, 100% { opacity: 1; }
     50%       { opacity: 0; }
 }
+.ap-search-spacer { margin-top: 32px; }
 """
 
 _TOGGLE_JS = """
@@ -929,7 +930,7 @@ _SEARCHBAR_HTML = """
     <span id="ap-hint-text"></span>
   </div>
 </div>
-<div style="margin-top:32px;"></div>
+<div class="ap-search-spacer"></div>
 """
 
 _CHAT_HTML = """
