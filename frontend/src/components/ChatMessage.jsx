@@ -1650,16 +1650,17 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
   }, [steps, citations]);
   
   // Determine if ThoughtStream should be rendered
+  // NOTE: Live pipelineSteps are rendered directly in App.jsx during loading.
+  // ChatMessage only renders ThoughtStream for SAVED messages (steps/citations).
   const shouldRenderThoughtStream = React.useMemo(() => {
     if (isUser) return false;
+    if (isStreaming) return false; // Live pipeline is handled by App.jsx
 
-    const hasPipeline = pipelineSteps && pipelineSteps.length > 0;
     const hasSteps = steps.length > 0 || generateFallbackSteps.length > 0;
     const hasCitations = Object.keys(citations).length > 0;
-    const hasIntent = !!routerIntent;
 
-    return hasPipeline || hasSteps || hasCitations || hasIntent;
-  }, [isUser, pipelineSteps, steps.length, generateFallbackSteps.length, citations, routerIntent]);
+    return hasSteps || hasCitations;
+  }, [isUser, isStreaming, steps.length, generateFallbackSteps.length, citations]);
 
   // === RENDER RETURN ===
   return (
@@ -1669,13 +1670,10 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
             {/* 0. ThoughtStream - Shows during loading and after completion */}
             {shouldRenderThoughtStream && (
                 <ThoughtStream
-                    pipelineSteps={pipelineSteps}
                     steps={generateFallbackSteps}
                     citations={citations}
                     citationIndices={citationIndices}
-                    isStreaming={isStreaming}
                     bridge={bridge}
-                    intent={routerIntent}
                     onPreviewCard={onPreviewCard}
                     message={message}
                 />
