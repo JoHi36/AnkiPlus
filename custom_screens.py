@@ -1226,7 +1226,7 @@ _CHAT_JS = """
 """
 
 
-def _deck_browser_html(tree, total_decks, total_new=0, total_learn=0, total_review=0):
+def _deck_browser_html(tree, total_decks, total_new=0, total_learn=0, total_review=0, tier='free'):
     cards_html = ''.join(_deck_card(node, i) for i, node in enumerate(tree))
     if not cards_html:
         cards_html = (
@@ -1245,7 +1245,8 @@ def _deck_browser_html(tree, total_decks, total_new=0, total_learn=0, total_revi
     )
 
     top_bar = _top_bar(active_tab='stapel', due_new=total_new, due_learn=total_learn, due_review=total_review)
-    return _wrap_page(top_bar, content, extra_js=_CHAT_JS, show_account_widget=False)
+    tier_js = f'document.body.dataset.tier = "{tier}";'
+    return _wrap_page(top_bar, content, extra_js=tier_js + _CHAT_JS, show_account_widget=False)
 
 
 # ─── Overview ─────────────────────────────────────────────────────────────────
@@ -1547,7 +1548,17 @@ class CustomScreens:
             total_learn = sum(d.get('learning', 0) for d in due_counts.values())
             total_review = sum(d.get('review', 0) for d in due_counts.values())
 
-            html             = _deck_browser_html(tree, len(all_decks), total_new, total_learn, total_review)
+            # Determine tier for badge
+            is_premium = False
+            try:
+                from .auth import get_auth_status
+                auth_status = get_auth_status()
+                is_premium = auth_status.get('isPremium', False) or auth_status.get('is_premium', False)
+            except Exception:
+                pass
+            tier = 'pro' if is_premium else 'free'
+
+            html             = _deck_browser_html(tree, len(all_decks), total_new, total_learn, total_review, tier=tier)
             web_content.body  = html
             web_content.head  = ''
             print(f"CustomScreens: ✅ DeckBrowser ({len(all_decks)} decks)")
