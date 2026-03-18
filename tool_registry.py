@@ -251,7 +251,10 @@ PLUSI_SCHEMA = {
         "Verwende dieses Tool wenn die Situation emotional ist (Frustration, Erfolg, Motivation), "
         "wenn der Nutzer Hilfe zur App braucht, oder wenn eine persönliche Reaktion passender ist als eine sachliche Antwort. "
         "Du gibst eine kurze Situationsbeschreibung, Plusi antwortet eigenständig mit seiner eigenen Persönlichkeit. "
-        "WICHTIG: Maximal 2x pro Nachricht. Nicht für rein sachliche Fragen verwenden."
+        "KRITISCH: Wenn du dieses Tool verwendest, hat Plusi die Situation bereits behandelt. "
+        "Schreibe danach KEINEN eigenen langen Text mehr zum gleichen Thema — das wäre redundant. "
+        "Maximal ein kurzer Satz als Überleitung, oder gar nichts. Plusi übernimmt. "
+        "Maximal 1x pro Nachricht. Nicht für rein sachliche Fragen verwenden."
     ),
     "parameters": {
         "type": "object",
