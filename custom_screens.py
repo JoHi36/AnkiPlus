@@ -1035,6 +1035,7 @@ _CHAT_JS = """
       }, 150);
     });
     _curN = addExchange(q);
+    isLoading = true;
   }
 
   function closeChat() {
@@ -1058,6 +1059,7 @@ _CHAT_JS = """
     _curN = null;
     isLoading = false;
     _aiCounter = 0;
+    if (_phInterval) { clearInterval(_phInterval); _phInterval = null; }
   }
 
   /* ── Message rendering (Style B) ── */
@@ -1126,6 +1128,7 @@ _CHAT_JS = """
       e.preventDefault();
       var t = ci.value.trim(); ci.value = ''; ci.style.height = 'auto';
       _curN = addExchange(t);
+      isLoading = true;
       window._apAction = {type:'freeChatSend', text:t};
     }
   });
@@ -1148,7 +1151,7 @@ _CHAT_JS = """
   if (!sbInput) return; /* guard: HTML must be present */
 
   /* Platform-aware hint text */
-  var isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  var isMac = ((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '').toUpperCase().indexOf('MAC') >= 0;
   var focusHint = isMac ? 'Fokussieren\u00a0<kbd>\u2318K</kbd>' : 'Fokussieren\u00a0<kbd>Ctrl+K</kbd>';
   var sendHint  = 'Senden\u00a0<kbd>Enter</kbd>';
   if (hintEl) hintEl.innerHTML = focusHint;
@@ -1174,6 +1177,7 @@ _CHAT_JS = """
   function submitSearch() {
     var t = sbInput.value.trim();
     if (!t) return;
+    openChat(t);
     window._apAction = {type:'freeChat', text:t};
     sbInput.value = '';
     sbInput.dispatchEvent(new Event('input')); /* triggers visibility reset */
@@ -1193,7 +1197,7 @@ _CHAT_JS = """
   ];
   var phIdx = 0;
   if (phA) phA.textContent = phrases[0];
-  setInterval(function(){
+  var _phInterval = setInterval(function(){
     if (!phA || !phB) return;
     if (sbInput.value || document.activeElement === sbInput) return;
     phIdx = (phIdx + 1) % phrases.length;
