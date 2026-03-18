@@ -814,7 +814,22 @@ class ChatbotWidget(QWidget):
         text = message.strip()
         if not text:
             return
-        
+
+        # Set frontend callback for tools that need to push events (e.g. spawn_plusi)
+        try:
+            from .tool_executor import set_frontend_callback
+        except ImportError:
+            from tool_executor import set_frontend_callback
+
+        import json as _json
+
+        def _push_to_frontend(payload):
+            self.web_view.page().runJavaScript(
+                f"window.ankiReceive({_json.dumps(payload)});"
+            )
+
+        set_frontend_callback(_push_to_frontend)
+
         try:
             from .ai_handler import get_ai_handler
         except ImportError:
