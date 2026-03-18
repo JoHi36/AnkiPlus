@@ -362,16 +362,29 @@ def load_deck_messages(deck_id, limit=50):
     db = _get_db()
     deck_id = int(deck_id)
 
-    rows = db.execute("""
-        SELECT m.id, m.card_id, m.deck_id, m.section_id, m.text, m.sender,
-               m.source, m.created_at, m.steps, m.citations, m.request_id,
-               cs.deck_name
-        FROM messages m
-        LEFT JOIN card_sessions cs ON m.card_id = cs.card_id
-        WHERE m.deck_id = ?
-        ORDER BY m.created_at DESC
-        LIMIT ?
-    """, (deck_id, limit)).fetchall()
+    if deck_id == 0:
+        # Global Free Chat: load ALL messages across all decks chronologically
+        rows = db.execute("""
+            SELECT m.id, m.card_id, m.deck_id, m.section_id, m.text, m.sender,
+                   m.source, m.created_at, m.steps, m.citations, m.request_id,
+                   cs.deck_name
+            FROM messages m
+            LEFT JOIN card_sessions cs ON m.card_id = cs.card_id
+            ORDER BY m.created_at DESC
+            LIMIT ?
+        """, (limit,)).fetchall()
+    else:
+        # Deck-specific: load only messages for this deck
+        rows = db.execute("""
+            SELECT m.id, m.card_id, m.deck_id, m.section_id, m.text, m.sender,
+                   m.source, m.created_at, m.steps, m.citations, m.request_id,
+                   cs.deck_name
+            FROM messages m
+            LEFT JOIN card_sessions cs ON m.card_id = cs.card_id
+            WHERE m.deck_id = ?
+            ORDER BY m.created_at DESC
+            LIMIT ?
+        """, (deck_id, limit)).fetchall()
 
     messages = []
     for r in rows:
