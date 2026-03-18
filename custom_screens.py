@@ -1059,7 +1059,6 @@ _CHAT_JS = """
     _curN = null;
     isLoading = false;
     _aiCounter = 0;
-    if (_phInterval) { clearInterval(_phInterval); _phInterval = null; }
   }
 
   /* ── Message rendering (Style B) ── */
