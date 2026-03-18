@@ -259,18 +259,18 @@ function AppInner() {
   const showSessionOverview = forceShowOverview;
 
   // ── Deck-Chat Mode Sync ──────────────────────────────────────────
-  // Auto-load deck messages whenever we switch to overview mode
+  // Load deck messages when transitioning from overview to chat while in deck mode.
+  // deckChatMode is set true by handleNavigateToOverview, and stays true until
+  // a cardContext event (card review) sets it false.
   useEffect(() => {
-    if (showSessionOverview) {
-      chatHook.setDeckChatMode(true);
+    if (!showSessionOverview && chatHook.deckChatMode) {
+      // We just switched from overview to chat — load deck messages into the chat view
       const deckId = sessionContext.currentSession?.deckId;
       if (deckId) {
         chatHook.loadDeckMessages(deckId);
       }
-    } else {
-      chatHook.setDeckChatMode(false);
     }
-  }, [showSessionOverview, sessionContext.currentSession?.deckId]);
+  }, [showSessionOverview]);
 
   // ── Free Chat State ──────────────────────────────────────────────
   const [freeChatOpen, setFreeChatOpen] = useState(false);
@@ -1333,6 +1333,10 @@ function AppInner() {
 
     // Deck-chat mode — no card context, chronological deck messages
     if (chatHook.deckChatMode) {
+      // Switch from overview to chat view if still on overview
+      if (forceShowOverview) {
+        setForceShowOverview(false);
+      }
       const deckId = sessionContext.currentSession?.deckId;
       if (!deckId) return;
 
