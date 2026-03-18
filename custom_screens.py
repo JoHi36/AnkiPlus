@@ -873,7 +873,7 @@ window._apAction = null;
 """
 
 
-def _wrap_page(top_bar_html, content_html, extra_js=''):
+def _wrap_page(top_bar_html, content_html, extra_js='', show_account_widget=True):
     """Wrap content in the shared page layout with DaisyUI theme — same as reviewer."""
     reviewer_css = _load_reviewer_css()
     return (
@@ -891,7 +891,7 @@ def _wrap_page(top_bar_html, content_html, extra_js=''):
         f'{content_html}'
         f'</div>'
         f'</main>'
-        f'{_account_widget()}'
+        f'{_account_widget() if show_account_widget else ""}'
         f'</div>'
         f'<script>{_TOGGLE_JS}{extra_js}</script>'
         f'</body></html>'
@@ -1245,7 +1245,7 @@ def _deck_browser_html(tree, total_decks, total_new=0, total_learn=0, total_revi
     )
 
     top_bar = _top_bar(active_tab='stapel', due_new=total_new, due_learn=total_learn, due_review=total_review)
-    return _wrap_page(top_bar, content, extra_js=_CHAT_JS)
+    return _wrap_page(top_bar, content, extra_js=_CHAT_JS, show_account_widget=False)
 
 
 # ─── Overview ─────────────────────────────────────────────────────────────────
