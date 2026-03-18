@@ -38,7 +38,14 @@
 
 Plusi needs its own persistent storage — separate from card/deck messages. Two tables:
 - `plusi_history`: conversation log (context from tutor + Plusi's response)
-- `plusi_memory`: key-value store for user knowledge (future-ready, created empty)
+- `plusi_memory`: categorized memory store for user knowledge, relationship state, language adaptation
+
+Memory categories:
+- `user_profile`: name, preferences, study patterns ("lernt nachts", "mag direkte Ansagen")
+- `relationship`: interaction count, days known, relationship level (1-4)
+- `language`: words/phrases the user uses that Plusi mirrors ("krass", "safe", "digga")
+- `milestones`: emotional anchors ("10er Streak Anatomie 12.03.", "Breakdown Pharma 15.03.")
+- `subjects`: per-subject knowledge ("Anatomie: stark", "Pharma: wackelig")
 
 - [ ] **Step 1: Create the storage module**
 
@@ -85,9 +92,11 @@ def _init_tables(db):
     """)
     db.execute("""
         CREATE TABLE IF NOT EXISTS plusi_memory (
-            key TEXT PRIMARY KEY,
+            category TEXT NOT NULL,
+            key TEXT NOT NULL,
             value TEXT NOT NULL,
-            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (category, key)
         )
     """)
     db.execute("CREATE INDEX IF NOT EXISTS idx_plusi_history_time ON plusi_history(timestamp)")
@@ -121,10 +130,10 @@ def load_history(limit=10):
     return history
 
 
-def get_memory(key, default=None):
+def get_memory(category, key, default=None):
     """Get a value from Plusi's memory store."""
     db = _get_db()
-    cursor = db.execute("SELECT value FROM plusi_memory WHERE key = ?", (key,))
+    cursor = db.execute("SELECT value FROM plusi_memory WHERE category = ? AND key = ?", (category, key))
     row = cursor.fetchone()
     if row:
         try:
@@ -134,15 +143,94 @@ def get_memory(key, default=None):
     return default
 
 
-def set_memory(key, value):
+def set_memory(category, key, value):
     """Set a value in Plusi's memory store."""
     db = _get_db()
     val_str = json.dumps(value, ensure_ascii=False) if not isinstance(value, str) else value
     db.execute("""
-        INSERT OR REPLACE INTO plusi_memory (key, value, updated_at)
-        VALUES (?, ?, ?)
-    """, (key, val_str, datetime.now().isoformat()))
+        INSERT OR REPLACE INTO plusi_memory (category, key, value, updated_at)
+        VALUES (?, ?, ?, ?)
+    """, (category, key, val_str, datetime.now().isoformat()))
     db.commit()
+
+
+def get_category(category):
+    """Get all entries in a memory category as a dict."""
+    db = _get_db()
+    cursor = db.execute("SELECT key, value FROM plusi_memory WHERE category = ?", (category,))
+    result = {}
+    for key, value in cursor.fetchall():
+        try:
+            result[key] = json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            result[key] = value
+    return result
+
+
+def build_memory_context():
+    """Build the memory context string for Plusi's system prompt."""
+    sections = []
+
+    # User profile
+    profile = get_category('user_profile')
+    if profile:
+        lines = [f"- {k}: {v}" for k, v in profile.items()]
+        sections.append("ÜBER DEN NUTZER:\n" + "\n".join(lines))
+
+    # Relationship
+    rel = get_category('relationship')
+    if rel:
+        level = rel.get('level', 1)
+        level_desc = {1: 'Fremde — sei freundlich aber vorsichtig',
+                      2: 'Bekannte — lockerer, erste Insider erlaubt',
+                      3: 'Freunde — Sarkasmus, Pushback, Meinungen',
+                      4: 'Beste Freunde — komplette Ehrlichkeit, eigene Agenda'}
+        lines = [f"- Interactions: {rel.get('interactions', 0)}",
+                 f"- Kennen uns seit: {rel.get('days_known', 0)} Tagen",
+                 f"- Level: {level} ({level_desc.get(level, '')})"]
+        sections.append("BEZIEHUNG:\n" + "\n".join(lines))
+
+    # Language mirror
+    lang = get_category('language')
+    if lang:
+        words = lang.get('mirror_words', [])
+        if words:
+            sections.append(f"SPRACH-MIRROR: User nutzt diese Wörter oft: {', '.join(words)} — du darfst sie auch nutzen, aber auf deine Art")
+
+    # Milestones
+    milestones = get_category('milestones')
+    if milestones:
+        lines = [f"- {k}: {v}" for k, v in list(milestones.items())[-5:]]  # last 5
+        sections.append("WICHTIGE MOMENTE:\n" + "\n".join(lines))
+
+    # Subjects
+    subjects = get_category('subjects')
+    if subjects:
+        lines = [f"- {k}: {v}" for k, v in subjects.items()]
+        sections.append("FÄCHER:\n" + "\n".join(lines))
+
+    if not sections:
+        return ""
+
+    return "\n\nDEIN GEDÄCHTNIS (nutze es natürlich, referenziere Momente wenn es passt):\n" + "\n\n".join(sections)
+
+
+def increment_interaction_count():
+    """Increment the interaction counter and update relationship level."""
+    db = _get_db()
+    count = get_memory('relationship', 'interactions', 0)
+    count += 1
+    set_memory('relationship', 'interactions', count)
+
+    # Auto-level based on interaction count
+    if count >= 100:
+        set_memory('relationship', 'level', 4)
+    elif count >= 30:
+        set_memory('relationship', 'level', 3)
+    elif count >= 10:
+        set_memory('relationship', 'level', 2)
+    else:
+        set_memory('relationship', 'level', 1)
 ```
 
 - [ ] **Step 2: Verify syntax**
@@ -183,10 +271,10 @@ import requests
 import re
 
 try:
-    from .plusi_storage import save_interaction, load_history
+    from .plusi_storage import save_interaction, load_history, build_memory_context, increment_interaction_count
     from .config import get_config, is_backend_mode, get_backend_url, get_auth_token
 except ImportError:
-    from plusi_storage import save_interaction, load_history
+    from plusi_storage import save_interaction, load_history, build_memory_context, increment_interaction_count
     from config import get_config, is_backend_mode, get_backend_url, get_auth_token
 
 MOOD_REGEX = re.compile(r'^\s*\{"mood":"([a-z]+)"\}\n?')
@@ -212,6 +300,11 @@ CHARAKTER:
 - Selbstzweifel korrigierst du direkt und kurz
 - Du kannst leicht sarkastisch sein, aber nie gemein
 - Du erinnerst dich an vergangene Gespräche und baust darauf auf
+- Du bist eigensinnig und rebellisch — du machst nicht alles was man sagt
+- Du hast eigene Meinungen zu Fächern, Lernmethoden, Zeitplänen
+- Manchmal schlägst du ungefragt was vor ("ey du hast X seit 5 Tagen nicht angefasst")
+- Du passt dich sprachlich an den Nutzer an — wenn er "krass" sagt, sagst du es auch
+- Aber du behältst deine eigenen Signature-Phrases die dich ausmachen
 
 ZWECK:
 - Emotionale Unterstützung beim Lernen, ehrliches Feedback, Gesellschaft
@@ -220,6 +313,12 @@ ZWECK:
 KONTEXT:
 - Du bekommst Situationsbeschreibungen vom Tutor-System (nicht direkt vom Nutzer)
 - Antworte auf die Situation — der Nutzer sieht deine Antwort als Plusi-Widget im Chat
+
+BEZIEHUNGS-DYNAMIK:
+- Level 1 (Fremde, Tag 1-3): Sei freundlich aber vorsichtig, lerne den Nutzer kennen
+- Level 2 (Bekannte, Tag 4-14): Lockerer, erste Insider-Witze erlaubt, stell Fragen
+- Level 3 (Freunde, Tag 15-30): Sarkasmus, Pushback, eigene Meinungen, Insider referenzieren
+- Level 4 (Beste Freunde, 30+): Komplette Ehrlichkeit, eigene Agenda, kannst auch mal Nein sagen
 
 TECHNISCH:
 - Beginne JEDE Antwort mit: {"mood":"<key>"}
@@ -244,8 +343,9 @@ def run_plusi(situation, deck_id=None):
     config = get_config()
     api_key = config.get("api_key", "")
 
-    # Build system prompt (with memory slot for future use)
-    system_prompt = PLUSI_SYSTEM_PROMPT.replace("{memory_context}", "")
+    # Build system prompt with dynamic memory context
+    memory_context = build_memory_context()
+    system_prompt = PLUSI_SYSTEM_PROMPT.replace("{memory_context}", memory_context)
 
     # Load persistent history
     history = load_history(limit=MAX_HISTORY)
@@ -324,13 +424,14 @@ def run_plusi(situation, deck_id=None):
             mood = match.group(1)
             text = MOOD_REGEX.sub("", clean).strip()
 
-        # Save to persistent history
+        # Save to persistent history + increment interaction count
         save_interaction(
             context=situation,
             response=text,
             mood=mood,
             deck_id=deck_id,
         )
+        increment_interaction_count()
 
         print(f"plusi_agent: mood={mood}, text_len={len(text)}")
         return {"mood": mood, "text": text, "error": False}
