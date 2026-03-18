@@ -113,44 +113,25 @@ def run_plusi(situation, deck_id=None):
     }
 
     try:
-        # Determine URL
-        if is_backend_mode():
-            url = f"{get_backend_url()}/chat"
-            headers = {"Content-Type": "application/json"}
-            auth_token = get_auth_token()
-            if auth_token:
-                headers["Authorization"] = f"Bearer {auth_token}"
+        # Plusi ALWAYS uses direct Gemini API (not backend) — own lightweight model
+        if not api_key:
+            print("plusi_agent: No API key configured")
+            return {"mood": "neutral", "text": "", "error": True}
 
-            # Backend format
-            request_data = {
-                "message": situation,
-                "history": history,
-                "model": PLUSI_MODEL,
-                "mode": "compact",
-                "stream": False,
-            }
-            response = requests.post(url, json=request_data, headers=headers, timeout=30)
-        else:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{PLUSI_MODEL}:generateContent?key={api_key}"
-            headers = {"Content-Type": "application/json"}
-            request_data = data
-            response = requests.post(url, json=request_data, headers=headers, timeout=30)
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{PLUSI_MODEL}:generateContent?key={api_key}"
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(url, json=data, headers=headers, timeout=30)
 
         response.raise_for_status()
         result = response.json()
 
-        # Extract text from response
-        if is_backend_mode():
-            # Backend returns {text: "..."}
-            raw_text = result.get("text", "")
+        # Extract text from Gemini API response
+        candidates = result.get("candidates", [])
+        if candidates:
+            parts = candidates[0].get("content", {}).get("parts", [])
+            raw_text = "".join(p.get("text", "") for p in parts)
         else:
-            # Gemini API format
-            candidates = result.get("candidates", [])
-            if candidates:
-                parts = candidates[0].get("content", {}).get("parts", [])
-                raw_text = "".join(p.get("text", "") for p in parts)
-            else:
-                raw_text = ""
+            raw_text = ""
 
         # Parse mood prefix
         mood = "neutral"
