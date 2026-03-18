@@ -13,7 +13,7 @@ import { updateSession, updateSessionSections, createSession, findSessionByDeck 
  * Sections werden bei der ersten Nachricht zu einer neuen Karte erstellt,
  * nicht automatisch beim Öffnen der Karte.
  */
-export function useChat(bridge, currentSessionId, setSessions, currentSectionId, cardContextHook = null) {
+export function useChat(bridge, currentSessionId, setSessions, currentSectionId, cardContextHook = null, cardSessionHook = null) {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState('');
@@ -54,6 +54,24 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     }
   }, []);
   
+  const [pipelineSteps, setPipelineSteps] = useState([]);
+  // Each: { step: 'router'|'sql_search'|..., status: 'active'|'done'|'error', data: {}, timestamp: number }
+  const pipelineStepsRef = useRef([]);
+
+  const updatePipelineSteps = useCallback((updater) => {
+    setPipelineSteps(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      pipelineStepsRef.current = next;
+      return next;
+    });
+  }, []);
+
+  // Ref für cardSessionHook (per-card persistence)
+  const cardSessionHookRef = useRef(cardSessionHook);
+  useEffect(() => {
+    cardSessionHookRef.current = cardSessionHook;
+  }, [cardSessionHook]);
+
   // Ref für appendMessage, damit es in window.ankiReceive verwendet werden kann
   const appendMessageRef = useRef(null);
   
@@ -71,23 +89,44 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
   
   // Ref für pendende Section-Titel-Anfrage
   const pendingSectionTitleRef = useRef(null);
+
+  // Listen for cardSessionReady events from useCardSession
+  // This ensures chat messages are populated when a card session loads
+  useEffect(() => {
+    const handler = (e) => {
+      const { session } = e.detail;
+      if (session && session.messages && session.messages.length > 0) {
+        setMessages(session.messages);
+      } else {
+        setMessages([]);
+      }
+      setIsLoading(false);
+      setStreamingMessage('');
+    };
+    window.addEventListener('cardSessionReady', handler);
+    return () => window.removeEventListener('cardSessionReady', handler);
+  }, []);
+
+  // Ref for active request ID (used to match streaming/error/metadata responses)
+  const activeRequestIdRef = useRef(null);
   
   // Nachricht hinzufügen (für Bot-Antworten)
   // Verwendet Refs um immer die aktuelle Session-ID und Section-ID zu haben
-  const appendMessage = useCallback((text, from, steps = [], citations = {}) => {
+  const appendMessage = useCallback((text, from, steps = [], citations = {}, requestId = null, stepLabels = []) => {
     console.log(`💬 useChat: Füge Nachricht hinzu (${from}):`, text.substring(0, 50) + (text.length > 50 ? '...' : ''));
-    const newMessage = { 
-      text, 
-      from, 
+    const newMessage = {
+      text,
+      from,
       id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, // Unique stable ID
       sectionId: currentSectionIdRef.current,  // Verwende Ref statt Props
-      steps: steps || [],  // NEW: Reasoning steps
-      citations: citations || {}  // NEW: Citations map
+      steps: stepLabels && stepLabels.length > 0 ? stepLabels : (steps || []),  // NEW: Reasoning steps (prefer stepLabels)
+      citations: citations || {},  // NEW: Citations map
+      request_id: requestId || activeRequestIdRef.current  // Link to request
     };
     
     setMessages((prev) => {
       const updated = [...prev, newMessage];
-      
+
       // Speichere in Session - verwende Ref für aktuelle Session-ID
       const sessionId = currentSessionIdRef.current;
       if (sessionId) {
@@ -102,9 +141,14 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       }
       return updated;
     });
-    
-    // DISABLED: Auto-Scroll während Generation
-    // Die View bleibt am Top des Interaction Containers
+
+    // Per-Card SQLite Persistence
+    if (cardSessionHookRef.current) {
+      const cardId = cardSessionHookRef.current.currentCardId;
+      if (cardId) {
+        cardSessionHookRef.current.saveMessage(cardId, newMessage);
+      }
+    }
   }, [currentSectionId, setSessions]);
   
   // Aktualisiere Ref bei jeder Änderung
@@ -129,8 +173,13 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
    */
   const handleSend = useCallback((text, context) => {
     console.log('📤 useChat: Nachricht gesendet:', text.substring(0, 50) + (text.length > 50 ? '...' : ''));
-    
-    const { 
+
+    // Generate a unique request ID to correlate streaming/error/metadata responses
+    const requestId = crypto.randomUUID?.() ||
+                      `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    activeRequestIdRef.current = requestId;
+
+    const {
       pendingDeckSession, 
       setCurrentSessionId, 
       setPendingDeckSession,
@@ -172,15 +221,10 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
           const sectionIdForTitle = effectiveSectionId;
           pendingSectionTitleRef.current = sectionIdForTitle;
           
-          console.log('📤 useChat: Fordere KI-Titel an für Section (verzögert):', sectionIdForTitle, 'Text:', questionText.substring(0, 50));
-          
-          // Verzögere Title-Request um 1.5 Sekunden, damit Chat-Request zuerst abgeschlossen wird
-          // Der Titel wird über handleAnkiReceive (sectionTitleGenerated) empfangen und dort gespeichert
-          setTimeout(() => {
-            if (pendingSectionTitleRef.current === sectionIdForTitle) {
-              bridge.generateSectionTitle(questionText, answerText, null);
-            }
-          }, 1500);
+          console.log('📤 useChat: Fordere KI-Titel an für Section:', sectionIdForTitle, 'Text:', questionText.substring(0, 50));
+
+          // Request title immediately - requestId-based correlation eliminates the race condition
+          bridge.generateSectionTitle(questionText, answerText, null);
         }
       } else {
         effectiveSectionId = existingSection.id;
@@ -188,15 +232,24 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
         currentSectionIdRef.current = effectiveSectionId;
       }
     }
-    
+
+    // Per-Card SQLite: Save newly created section
+    if (newlyCreatedSection && cardSessionHookRef.current) {
+      const cardId = cardSessionHookRef.current.currentCardId || cardContextHook?.cardContext?.cardId;
+      if (cardId) {
+        cardSessionHookRef.current.saveSection(cardId, newlyCreatedSection);
+      }
+    }
+
     // Erstelle die neue Nachricht mit der effektiven Section-ID
-    const newMessage = { 
-      text, 
-      from: 'user', 
+    const newMessage = {
+      text,
+      from: 'user',
       id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, // Unique stable ID
       sectionId: effectiveSectionId,
-      steps: [],  // NEW: User messages don't have steps
-      citations: {}  // NEW: User messages don't have citations
+      steps: [],  // User messages don't have steps
+      citations: {},  // User messages don't have citations
+      request_id: requestId  // Link to request for correlation
     };
     
     // ATOMARE OPERATION: Session-Erstellung + Nachricht-Speicherung
@@ -274,6 +327,14 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     
     // Aktualisiere lokale Messages State
     setMessages((prev) => [...prev, newMessage]);
+
+    // Per-Card SQLite: Save user message
+    if (cardSessionHookRef.current) {
+      const cardId = cardSessionHookRef.current.currentCardId;
+      if (cardId) {
+        cardSessionHookRef.current.saveMessage(cardId, newMessage);
+      }
+    }
     
     // Sammle die letzten 10 Nachrichten für KI-Kontext
     const allMessages = [...(currentMessages || []), newMessage];
@@ -295,14 +356,15 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     setConnectionStatus('connecting');
     updateCurrentSteps([]);  // Reset steps for new request
     updateCurrentCitations({});  // Reset citations for new request
+    updatePipelineSteps([]);  // Reset pipeline steps for new request
     
     // Store message for potential retry
     setLastFailedMessage({ text, context });
     
     if (bridge && bridge.sendMessage) {
-      console.log('📤 useChat: Sende an API mit Historie:', conversationHistory.length, 'Nachrichten, Modus:', mode);
+      console.log('📤 useChat: Sende an API mit Historie:', conversationHistory.length, 'Nachrichten, Modus:', mode, 'requestId:', requestId);
       try {
-        bridge.sendMessage(text, conversationHistory, mode);
+        bridge.sendMessage(text, conversationHistory, mode, requestId);
         setConnectionStatus('connected');
       } catch (err) {
         console.error('❌ useChat: Error sending message:', err);
@@ -324,6 +386,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     setIsLoading(false);
     setStreamingMessage('');
     setError(null);
+    activeRequestIdRef.current = null; // Clear active request on cancel
     if (bridge && bridge.cancelRequest) {
       console.log('🛑 useChat: Rufe bridge.cancelRequest auf');
       bridge.cancelRequest();
@@ -359,6 +422,26 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       setStreamingMessage('');
       updateCurrentSteps([]);  // Reset steps
       updateCurrentCitations({});  // Reset citations
+      updatePipelineSteps([]);
+    } else if (payload.type === 'pipeline_step') {
+      if (payload.requestId && payload.requestId !== activeRequestIdRef.current) return;
+
+      updatePipelineSteps(prev => {
+        const existing = prev.findIndex(s => s.step === payload.step);
+        const newStep = {
+          step: payload.step,
+          status: payload.status,
+          data: payload.data || {},
+          timestamp: Date.now()
+        };
+        if (existing >= 0) {
+          const updated = [...prev];
+          updated[existing] = newStep;
+          return updated;
+        }
+        return [...prev, newStep];
+      });
+      return;
     } else if (payload.type === 'ai_state') {
       // Track AI state events as steps
       const step = {
@@ -432,20 +515,34 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
           return prev;
         });
       }
+    } else if (payload.type === 'metadata') {
+      // Handle metadata payloads (steps/citations from backend)
+      if (payload.requestId === activeRequestIdRef.current) {
+        console.log('📊 useChat: Metadata received for request:', payload.requestId);
+        if (payload.steps && payload.steps.length > 0) {
+          updateCurrentSteps(payload.steps);
+        }
+        if (payload.citations) {
+          updateCurrentCitations(payload.citations);
+        }
+      }
     } else if (payload.type === 'error') {
-      // NEW: Handle error payloads
-      console.error('❌ useChat: Error received:', payload.message);
-      setIsLoading(false);
-      setStreamingMessage('');
-      setError(payload.message || 'Ein Fehler ist aufgetreten');
-      setConnectionStatus('error');
-      
-      // Show error message to user
-      if (appendMessageRef.current) {
-        appendMessageRef.current(
-          `Fehler: ${payload.message || 'Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut.'}`,
-          'bot'
-        );
+      // Handle error payloads - match by requestId if provided
+      if (!payload.requestId || payload.requestId === activeRequestIdRef.current) {
+        console.error('❌ useChat: Error received:', payload.message);
+        setIsLoading(false);
+        setStreamingMessage('');
+        setError(payload.message || 'Ein Fehler ist aufgetreten');
+        setConnectionStatus('error');
+        activeRequestIdRef.current = null; // Clear active request
+
+        // Show error message to user
+        if (appendMessageRef.current) {
+          appendMessageRef.current(
+            `Fehler: ${payload.message || 'Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut.'}`,
+            'bot'
+          );
+        }
       }
     } else if (payload.type === 'bot' || payload.type === 'info') {
       console.log('🤖 useChat: Bot-Nachricht erhalten:', payload.message?.substring(0, 50) + '...');
@@ -459,9 +556,13 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
         }
       }
     } else if (payload.type === 'streaming') {
+      // Ignore chunks from stale requests
+      if (payload.requestId && payload.requestId !== activeRequestIdRef.current) {
+        console.log('📡 useChat: Ignoring stale streaming chunk for request:', payload.requestId);
+        return;
+      }
       console.log('📡 useChat: Streaming-Chunk erhalten:', payload.chunk?.substring(0, 30) + '...', 'done:', payload.done, 'isFunctionCall:', payload.isFunctionCall);
-      
-      
+
       // Zeige Function Call Indikator wenn nötig
       if (payload.isFunctionCall && !streamingMessage) {
         console.log('🔧 useChat: Function Call erkannt - zeige Indikator');
@@ -556,10 +657,12 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
                 refCitationsKeys: Object.keys(localCitations).slice(0, 5)
               });
               
+              const finalStepLabels = payload.stepLabels || [];
+
               // CRITICAL: Always save steps and citations, even if empty, to maintain consistency
               // This ensures the ThoughtStream has the same data during streaming and after saving
-              appendMessageRef.current(prev, 'bot', finalSteps, finalCitations);
-              
+              appendMessageRef.current(prev, 'bot', finalSteps, finalCitations, activeRequestIdRef.current, finalStepLabels);
+
               // CRITICAL: Set isLoading to false AFTER message is saved
               // This ensures StreamingChatMessage continues to render until saved message is available
               setTimeout(() => {
@@ -567,6 +670,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
                 // Reset tracking state after a delay to ensure message is saved
                 updateCurrentSteps([]);
                 updateCurrentCitations({});
+                activeRequestIdRef.current = null; // Clear active request
                 // CRITICAL: Clear streaming message AFTER isLoading is set to false
                 // This prevents the "white screen gap" where text disappears before saved message appears
                 setStreamingMessage('');
@@ -615,8 +719,19 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
           // 1. Aktualisiere lokalen State
           cardContextHook.updateSectionTitle(sectionId, title);
           pendingSectionTitleRef.current = null;
-          
-          // 2. Speichere auch in der Session (für Persistenz)
+
+          // 2a. Per-Card SQLite: Update section title
+          if (cardSessionHookRef.current) {
+            const cardId = cardSessionHookRef.current.currentCardId;
+            if (cardId) {
+              const section = cardContextHook.sections?.find(s => s.id === sectionId);
+              if (section) {
+                cardSessionHookRef.current.saveSection(cardId, { ...section, title });
+              }
+            }
+          }
+
+          // 2b. Speichere auch in der Session (für Persistenz - legacy)
           const sessionId = currentSessionIdRef.current;
           if (sessionId) {
             console.log('💾 useChat: Speichere Section-Titel in Session:', sectionId, '->', title);
@@ -651,6 +766,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     streamingMessage,
     currentSteps,  // NEW: Expose current steps for streaming
     currentCitations,  // NEW: Expose current citations for streaming
+    pipelineSteps,  // NEW: Expose pipeline steps for ThoughtStream
     error,  // NEW: Error state
     connectionStatus,  // NEW: Connection status
     appendMessage,

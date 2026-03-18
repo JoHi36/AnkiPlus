@@ -679,9 +679,12 @@ class AIHandler:
                             function_name = function_call.get("name", "")
                             print(f"🔧 _get_google_response: Function Call erkannt: {function_name}")
                             
-                            if function_name == "create_mermaid_diagram":
-                                # Führe Tool aus
-                                from .tool_executor import execute_tool
+                            if function_name:
+                                # Führe Tool aus (generisch über Registry)
+                                try:
+                                    from .tool_executor import execute_tool
+                                except ImportError:
+                                    from tool_executor import execute_tool
                                 tool_result = execute_tool(function_name, function_call.get("args", {}))
                                 
                                 # Erstelle neuen Request mit Function Response
