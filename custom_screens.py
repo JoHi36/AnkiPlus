@@ -22,6 +22,15 @@ except ImportError:
     from PyQt6.QtCore import QTimer
 
 try:
+    from PyQt6.QtCore import QThread, pyqtSignal as _Signal
+except ImportError:
+    try:
+        from PyQt5.QtCore import QThread, pyqtSignal as _Signal
+    except ImportError:
+        QThread = None
+        _Signal = None
+
+try:
     from aqt.deckbrowser import DeckBrowser
 except ImportError:
     DeckBrowser = None
@@ -533,6 +542,271 @@ html, body {
 
 .ap-hidden { display: none !important; }
 .ap-row.open > .ap-chev { transform: rotate(90deg) !important; }
+
+/* ─── Free Chat Dock ─── */
+@property --ap-dock-angle {
+    syntax: '<angle>';
+    initial-value: 0deg;
+    inherits: false;
+}
+@keyframes apDockBorderRotate {
+    from { --ap-dock-angle: 0deg; }
+    to   { --ap-dock-angle: 360deg; }
+}
+.ap-dock-snake {
+    position: absolute;
+    inset: -1px;
+    border-radius: 17px;
+    padding: 1px;
+    background: conic-gradient(
+        from var(--ap-dock-angle) at 50% 100%,
+        rgba(10,132,255,0.0) 0deg,
+        rgba(10,132,255,0.5) 60deg,
+        rgba(10,132,255,0.1) 120deg,
+        rgba(10,132,255,0.0) 180deg,
+        rgba(10,132,255,0.1) 240deg,
+        rgba(10,132,255,0.5) 300deg,
+        rgba(10,132,255,0.0) 360deg
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    animation: apDockBorderRotate 4s linear infinite;
+}
+.ap-dock-snake.active { opacity: 1; }
+.ap-dock-action {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    gap: 4px; height: 44px; background: none; border: none; cursor: pointer;
+    font-family: inherit; font-size: 13px; transition: background 0.1s; padding: 0 12px;
+}
+.ap-dock-action:hover { background: rgba(255,255,255,0.04); }
+#ap-chat-input, #ap-chat-input:focus, #ap-chat-input:hover, #ap-chat-input:active {
+    outline: none !important; border: none !important;
+    background: transparent !important; resize: none !important;
+    box-shadow: none !important; min-height: unset !important;
+}
+
+/* ─── Wordmark ─── */
+#ap-wordmark {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 24px;
+}
+.ap-wm-text { display: flex; align-items: baseline; }
+.ap-wm-anki {
+    font-family: -apple-system, "SF Pro Display", system-ui, sans-serif;
+    font-size: 46px;
+    font-weight: 700;
+    letter-spacing: -1.8px;
+    color: rgba(255,255,255,0.92);
+    line-height: 1;
+}
+.ap-wm-tld {
+    font-family: -apple-system, "SF Pro Display", system-ui, sans-serif;
+    font-size: 46px;
+    font-weight: 300;
+    letter-spacing: -1px;
+    color: rgba(255,255,255,0.22);
+    line-height: 1;
+}
+.ap-wm-badge {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    padding: 4px 9px;
+    border-radius: 7px;
+    align-self: center;
+    margin-top: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.ap-wm-badge--free {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.09);
+    color: rgba(255,255,255,0.28);
+}
+.ap-wm-badge--pro {
+    background: rgba(10,132,255,0.1);
+    border: 1px solid rgba(10,132,255,0.22);
+    color: rgba(10,132,255,0.72);
+}
+
+/* ─── Pill Search Bar ─── */
+#ap-search-wrap {
+    max-width: 720px;
+    width: 100%;
+    margin: 0 auto;
+    padding-top: 48px;
+}
+#ap-search-bar {
+    border-radius: 50px;
+    height: 46px;
+    padding: 0 10px 0 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #1c1c1e;
+    border: 1px solid rgba(255,255,255,0.08);
+    position: relative;
+    transition: border-color 0.2s;
+}
+#ap-search-bar:focus-within {
+    border-color: rgba(10,132,255,0.25);
+}
+.ap-sb-icon {
+    font-size: 14px;
+    color: rgba(100,130,255,0.65);
+    flex-shrink: 0;
+    line-height: 1;
+    pointer-events: none;
+}
+#ap-search-input {
+    flex: 1;
+    background: transparent;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    color: rgba(255,255,255,0.85);
+    font-size: 14px;
+    font-family: inherit;
+    min-width: 0;
+}
+#ap-search-input::placeholder { color: transparent; }
+#ap-send-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: #0a84ff;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    opacity: 0;
+    transform: scale(0.75);
+    transition: opacity 0.15s, transform 0.15s;
+    pointer-events: none;
+}
+#ap-send-btn.ap-send-visible {
+    opacity: 1;
+    transform: scale(1);
+    pointer-events: auto;
+}
+#ap-search-hint {
+    text-align: center;
+    margin-top: 8px;
+    height: 16px;
+    font-size: 10px;
+    color: rgba(255,255,255,0.15);
+}
+#ap-search-hint kbd {
+    font-family: ui-monospace, monospace;
+    font-size: 9.5px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 4px;
+    padding: 1px 4px;
+    color: rgba(255,255,255,0.3);
+}
+/* ─── Pill Snake Border ─── */
+@property --ap-sb-angle {
+    syntax: '<angle>';
+    inherits: false;
+    initial-value: 0deg;
+}
+@keyframes apSbRotate {
+    from { --ap-sb-angle: 0deg; }
+    to   { --ap-sb-angle: 360deg; }
+}
+#ap-sb-snake {
+    position: absolute;
+    inset: -1px;
+    border-radius: 50px;
+    padding: 1px;
+    background: conic-gradient(
+        from var(--ap-sb-angle) at 50% 50%,
+        rgba(10,132,255,0.0)   0deg,
+        rgba(10,132,255,0.55) 60deg,
+        rgba(10,132,255,0.12) 120deg,
+        rgba(10,132,255,0.0) 180deg,
+        rgba(10,132,255,0.12) 240deg,
+        rgba(10,132,255,0.55) 300deg,
+        rgba(10,132,255,0.0) 360deg
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+}
+#ap-sb-snake.active {
+    opacity: 1;
+    animation: apSbRotate 4s linear infinite;
+}
+/* ─── Placeholder overlays ─── */
+#ap-placeholder-wrap {
+    position: absolute;
+    left: 46px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+.ap-ph {
+    font-size: 14px;
+    color: rgba(255,255,255,0.22);
+    position: absolute;
+    white-space: nowrap;
+    transition: opacity 0.4s ease;
+    top: 0;
+    left: 0;
+    transform: translateY(-50%);
+}
+.ap-ph--hidden { opacity: 0; }
+
+/* ─── Chat exchange (Style B) ─── */
+.ap-exchange { margin-bottom: 40px; max-width: 720px; }
+.ap-user-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.3);
+    margin-bottom: 6px;
+}
+.ap-user-q {
+    font-size: 19px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.88);
+    line-height: 1.35;
+    margin-bottom: 20px;
+}
+.ap-ai-prose {
+    font-size: 15px;
+    font-weight: 400;
+    color: rgba(255,255,255,0.75);
+    line-height: 1.7;
+}
+/* Streaming cursor */
+.ap-cursor {
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    background: rgba(255,255,255,0.5);
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: apCursorBlink 0.9s step-start infinite;
+}
+@keyframes apCursorBlink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0; }
+}
 """
 
 _TOGGLE_JS = """
@@ -628,7 +902,6 @@ def _wrap_page(top_bar_html, content_html, extra_js=''):
 _SEARCHBAR_HTML = """
 <div id="ap-searchbar" style="padding:10px 16px 8px;">
   <div style="position:relative;border-radius:24px;padding:2px;">
-    <!-- Animated snake-border ring -->
     <div id="ap-sb-ring" style="
       position:absolute;inset:-1px;border-radius:25px;
       background:conic-gradient(from 0deg,transparent 0deg,transparent 55%,#6b8cff 60%,#a78bfa 72%,#38bdf8 81%,#6b8cff 86%,transparent 92%);
@@ -638,9 +911,7 @@ _SEARCHBAR_HTML = """
     "></div>
     <div style="position:relative;background:#1c1c1e;border-radius:22px;display:flex;align-items:center;padding:9px 14px 9px 38px;gap:8px;border:1px solid rgba(255,255,255,0.07);">
       <span style="position:absolute;left:13px;color:#6b8cff;font-size:14px;line-height:1;">✦</span>
-      <input id="ap-search-input"
-        placeholder="Stelle eine Frage…"
-        autocomplete="off"
+      <input id="ap-search-input" placeholder="Stelle eine Frage…" autocomplete="off"
         style="flex:1;background:transparent;border:none;outline:none;color:#ccc;font-size:13px;font-family:inherit;"
         onfocus="document.getElementById('ap-sb-ring').style.opacity='1'"
         onblur="document.getElementById('ap-sb-ring').style.opacity='0'"
@@ -649,21 +920,172 @@ _SEARCHBAR_HTML = """
   </div>
   <div style="text-align:right;font-size:10px;color:#2a2a40;margin-top:3px;padding-right:4px;">Enter zum Senden</div>
 </div>
-<style>
-@keyframes ap-snake-spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-</style>
+<style>@keyframes ap-snake-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}</style>
 <script>
 (function(){
   var inp = document.getElementById('ap-search-input');
   if (!inp) return;
   inp.addEventListener('keydown', function(e){
     if (e.key === 'Enter' && inp.value.trim()) {
-      window._apAction = {type:'freeChat', text: inp.value.trim()};
-      inp.value = '';
+      var t = inp.value.trim(); inp.value = '';
+      if (window.apOpenChat) window.apOpenChat(t);
+      window._apAction = {type:'freeChat', text:t};
     }
   });
 })();
 </script>
+"""
+
+_CHAT_HTML = """
+<div id="ap-chat-overlay" style="
+  position:fixed;top:48px;left:0;right:0;bottom:0;z-index:50;
+  background:#111111;
+  opacity:0;transform:translateY(8px);
+  transition:opacity 280ms ease,transform 280ms ease;
+  pointer-events:none;overflow-y:auto;scrollbar-width:none;
+">
+  <div id="ap-chat-msgs" style="
+    max-width:720px;margin:0 auto;padding:20px 20px 130px;
+    display:flex;flex-direction:column;gap:10px;
+  "></div>
+</div>
+
+<div id="ap-chat-dock" style="
+  position:fixed;bottom:24px;left:50%;
+  transform:translateX(-50%) translateY(14px);
+  width:min(720px,calc(100vw - 40px));
+  padding:0 20px;z-index:9999;
+  opacity:0;pointer-events:none;
+  transition:opacity 220ms ease,transform 220ms ease;
+">
+  <div style="
+    position:relative;display:flex;flex-direction:column;border-radius:16px;
+    background:#151515;border:1px solid rgba(255,255,255,0.07);
+    box-shadow:0 4px 24px rgba(0,0,0,0.4);
+  ">
+    <div class="ap-dock-snake" id="ap-ci-snake"></div>
+    <div style="padding:12px 16px 10px;">
+      <textarea id="ap-chat-input" rows="1"
+        placeholder="Stelle eine Folgefrage…"
+        style="width:100%;min-height:24px;max-height:120px;overflow-y:hidden;
+          color:rgba(255,255,255,0.75);font-family:inherit;font-size:15px;line-height:1.625;
+          display:block;"
+        onfocus="document.getElementById('ap-ci-snake').classList.add('active')"
+        onblur="document.getElementById('ap-ci-snake').classList.remove('active')"
+      ></textarea>
+    </div>
+    <div style="display:flex;border-top:1px solid rgba(255,255,255,0.06);">
+      <button id="ap-btn-close" class="ap-dock-action"
+        style="border-bottom-left-radius:16px;color:rgba(255,255,255,0.88);font-weight:600;">
+        Schließen <span style="font-family:ui-monospace,monospace;font-size:10px;color:rgba(255,255,255,0.18);margin-left:4px;">ESC</span>
+      </button>
+      <div style="width:1px;height:16px;background:rgba(255,255,255,0.06);align-self:center;flex-shrink:0;"></div>
+      <button id="ap-btn-reset" class="ap-dock-action"
+        style="border-bottom-right-radius:16px;color:rgba(255,255,255,0.35);">
+        Zurücksetzen <span style="font-family:ui-monospace,monospace;font-size:10px;color:rgba(255,255,255,0.18);margin-left:4px;">⌘X</span>
+      </button>
+    </div>
+  </div>
+</div>
+"""
+
+_CHAT_JS = """
+(function(){
+  var overlay = document.getElementById('ap-chat-overlay');
+  var msgs    = document.getElementById('ap-chat-msgs');
+  var dock    = document.getElementById('ap-chat-dock');
+  var ci      = document.getElementById('ap-chat-input');
+  var deck    = document.getElementById('ap-deck-content');
+  var isOpen = false, isLoading = false, curEl = null;
+
+  var DOCK_HIDDEN = 'translateX(-50%) translateY(14px)';
+  var DOCK_SHOWN  = 'translateX(-50%) translateY(0)';
+
+  function openChat(q) {
+    if (isOpen) return; isOpen = true;
+    deck.style.transition = 'opacity 250ms ease,transform 250ms ease';
+    deck.style.opacity = '0';
+    deck.style.transform = 'translateY(60px)';
+    deck.style.pointerEvents = 'none';
+    overlay.style.pointerEvents = 'auto';
+    requestAnimationFrame(function(){
+      overlay.style.opacity = '1';
+      overlay.style.transform = 'translateY(0)';
+      setTimeout(function(){
+        dock.style.opacity = '1';
+        dock.style.transform = DOCK_SHOWN;
+        dock.style.pointerEvents = 'auto';
+        ci.focus();
+      }, 150);
+    });
+    addUser(q);
+    curEl = startAI();
+  }
+
+  function closeChat() {
+    if (!isOpen) return; isOpen = false;
+    overlay.style.opacity = '0';
+    overlay.style.transform = 'translateY(8px)';
+    overlay.style.pointerEvents = 'none';
+    dock.style.opacity = '0';
+    dock.style.transform = DOCK_HIDDEN;
+    dock.style.pointerEvents = 'none';
+    setTimeout(function(){
+      deck.style.opacity = '1';
+      deck.style.transform = 'translateY(0)';
+      deck.style.pointerEvents = 'auto';
+    }, 200);
+    window._apAction = {type:'freeChatClose'};
+  }
+
+  function resetChat() { msgs.innerHTML = ''; curEl = null; isLoading = false; }
+
+  function addUser(t) {
+    var d = document.createElement('div');
+    d.style.cssText = 'align-self:flex-end;max-width:80%;background:rgba(10,132,255,0.15);border:1px solid rgba(10,132,255,0.2);color:rgba(255,255,255,0.88);padding:10px 14px;border-radius:18px 18px 4px 18px;font-size:15px;line-height:1.5;word-break:break-word;';
+    d.textContent = t; msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  function startAI() {
+    var d = document.createElement('div');
+    d.style.cssText = 'align-self:flex-start;max-width:88%;color:rgba(255,255,255,0.75);font-size:15px;line-height:1.625;white-space:pre-wrap;word-break:break-word;';
+    msgs.appendChild(d); isLoading = true; return d;
+  }
+
+  window.apOpenChat = openChat;
+  window.apCloseChat = closeChat;
+  window.apResetChat = resetChat;
+
+  window.apChatReceive = function(data) {
+    if (!curEl) curEl = startAI();
+    if (data.error) { curEl.style.color='rgba(255,80,80,0.8)'; curEl.textContent=data.error; isLoading=false; curEl=null; return; }
+    if (data.chunk) curEl.textContent += data.chunk;
+    if (data.done) { isLoading=false; curEl=null; }
+    msgs.scrollTop = msgs.scrollHeight;
+  };
+
+  /* Textarea auto-resize */
+  ci.addEventListener('input', function(){
+    ci.style.height = 'auto';
+    ci.style.height = Math.min(ci.scrollHeight, 120) + 'px';
+  });
+
+  ci.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') { closeChat(); return; }
+    if (e.key === 'Enter' && !e.shiftKey && ci.value.trim() && !isLoading) {
+      e.preventDefault();
+      var t = ci.value.trim(); ci.value = ''; ci.style.height = 'auto';
+      addUser(t); curEl = startAI();
+      window._apAction = {type:'freeChatSend', text:t};
+    }
+  });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && isOpen) closeChat();
+    if ((e.metaKey||e.ctrlKey) && e.key==='x' && isOpen) resetChat();
+  });
+  document.getElementById('ap-btn-close').onclick = closeChat;
+  document.getElementById('ap-btn-reset').onclick = resetChat;
+})();
 """
 
 
@@ -676,14 +1098,17 @@ def _deck_browser_html(tree, total_decks, total_new=0, total_learn=0, total_revi
         )
 
     content = (
+        f'<div id="ap-deck-content" style="transition:opacity 250ms ease,transform 250ms ease;">'
         f'<div style="max-width:720px;margin:0 auto;padding:20px 24px 80px;">'
         f'{_SEARCHBAR_HTML}'
         f'{cards_html}'
         f'</div>'
+        f'</div>'
+        f'{_CHAT_HTML}'
     )
 
     top_bar = _top_bar(active_tab='stapel', due_new=total_new, due_learn=total_learn, due_review=total_review)
-    return _wrap_page(top_bar, content)
+    return _wrap_page(top_bar, content, extra_js=_CHAT_JS)
 
 
 # ─── Overview ─────────────────────────────────────────────────────────────────
@@ -754,6 +1179,8 @@ class CustomScreens:
         self.active = True
         self._hook_registered = False
         self._poll_timer = None
+        self._fc_thread = None
+        self._fc_history = []
 
     def enable(self):
         if not self._hook_registered:
@@ -819,22 +1246,21 @@ class CustomScreens:
             elif action_type == 'freeChat':
                 text = action.get('text', '').strip()
                 if text:
+                    self._fc_history = [{'role': 'user', 'content': text}]
+                    self._start_fc_request(text)
+            elif action_type == 'freeChatSend':
+                text = action.get('text', '').strip()
+                if text:
+                    self._fc_history.append({'role': 'user', 'content': text})
+                    self._start_fc_request(text)
+            elif action_type == 'freeChatClose':
+                if self._fc_thread is not None:
                     try:
-                        from . import ui_setup
-                        import json as _json
-                        # Open panel if not already visible, then send message
-                        ui_setup.ensure_chatbot_open()
-                        payload = _json.dumps({'type': 'startFreeChat', 'text': text})
-                        def _send(t=text, p=payload):
-                            widget = ui_setup.get_chatbot_widget()
-                            if widget and widget.web_view:
-                                widget.web_view.page().runJavaScript(
-                                    f"window.ankiReceive({p});"
-                                )
-                        # Delay to allow the webview to initialize if panel just opened
-                        QTimer.singleShot(150, _send)
+                        self._fc_thread.cancel()
                     except Exception:
-                        traceback.print_exc()
+                        pass
+                    self._fc_thread = None
+                self._fc_history = []
             elif action_type == 'cmd':
                 cmd = action.get('cmd', '')
                 if cmd == 'study':
@@ -866,6 +1292,87 @@ class CustomScreens:
         except Exception as e:
             print(f"CustomScreens: action error: {e}")
             traceback.print_exc()
+
+    # ── Free chat AI request ──────────────────────────────────────────────
+
+    def _start_fc_request(self, text):
+        if QThread is None:
+            self._fc_push({'error': 'QThread nicht verfügbar.', 'done': True})
+            return
+
+        try:
+            from .ai_handler import get_ai_handler
+        except ImportError:
+            try:
+                from ai_handler import get_ai_handler
+            except ImportError:
+                self._fc_push({'error': 'AI Handler nicht gefunden.', 'done': True})
+                return
+
+        ai = get_ai_handler()
+
+        history_snapshot = list(self._fc_history[:-1])  # all but last (current user msg)
+
+        class _FCThread(QThread):
+            chunk_signal = _Signal(str, bool)  # chunk, done
+
+            def __init__(self, handler, msg, hist):
+                super().__init__()
+                self._handler = handler
+                self._msg = msg
+                self._hist = hist
+                self._cancelled = False
+
+            def cancel(self):
+                self._cancelled = True
+
+            def run(self):
+                def cb(chunk, done, is_function_call=False):
+                    if not self._cancelled:
+                        self.chunk_signal.emit(chunk or '', done)
+                try:
+                    self._handler.get_response(
+                        self._msg,
+                        history=self._hist,
+                        mode='compact',
+                        callback=cb,
+                    )
+                except Exception as e:
+                    if not self._cancelled:
+                        self.chunk_signal.emit(f'Fehler: {e}', True)
+
+        if self._fc_thread is not None:
+            try:
+                self._fc_thread.cancel()
+            except Exception:
+                pass
+
+        thread = _FCThread(ai, text, history_snapshot)
+        self._fc_thread = thread
+
+        _buf = []
+
+        def on_chunk_with_hist(chunk, done):
+            if self._fc_thread is not thread:
+                return
+            _buf.append(chunk)
+            self._fc_push({'chunk': chunk, 'done': done})
+            if done:
+                full = ''.join(_buf)
+                self._fc_history.append({'role': 'assistant', 'content': full})
+                self._fc_thread = None
+
+        thread.chunk_signal.connect(on_chunk_with_hist)
+        thread.start()
+
+    def _fc_push(self, data):
+        """Push data to the deck browser's apChatReceive JS function."""
+        try:
+            if mw and getattr(mw, 'state', None) == 'deckBrowser' and hasattr(mw, 'deckBrowser'):
+                js = f"window.apChatReceive({json.dumps(data)});"
+                mw.deckBrowser.web.page().runJavaScript(js)
+        except Exception as e:
+            print(f"CustomScreens: _fc_push error: {e}")
 
     # ── Hook ──────────────────────────────────────────────────────────────────
 
