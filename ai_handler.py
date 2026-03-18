@@ -101,70 +101,6 @@ try:
 except ImportError:
     mw = None
 
-# Mermaid Tool Definition für Function Calling
-MERMAID_TOOL = {
-    "name": "create_mermaid_diagram",
-    "description": """Erstellt ein Mermaid-Diagramm zur Visualisierung von Konzepten, Prozessen oder Strukturen.
-    
-Unterstützte Diagrammtypen:
-- flowchart: Flowcharts für Prozesse und Abläufe (graph TD, graph LR, etc.)
-- sequenceDiagram: Sequenzdiagramme für Interaktionen zwischen Entitäten
-- gantt: Gantt-Charts für Zeitpläne und Projektphasen
-- classDiagram: Klassendiagramme für Strukturen und Hierarchien
-- stateDiagram-v2: Zustandsdiagramme für Zustandsübergänge
-- erDiagram: Entity-Relationship-Diagramme für Beziehungen
-- pie: Kreisdiagramme für Verteilungen
-- gitGraph: Git-Graphen für Versionskontrolle
-- timeline: Timeline-Diagramme für zeitliche Abläufe
-- journey: Journey-Diagramme für Prozesse mit Phasen
-- mindmap: Mindmaps für hierarchische Strukturen
-- quadrantChart: Quadrant-Charts für 2D-Klassifikationen
-- requirement: Requirement-Diagramme für Anforderungen
-- userJourney: User Journey für Nutzerpfade
-- sankey-beta: Sankey-Diagramme für Flüsse und Mengen
-
-WICHTIG: Mermaid akzeptiert NUR reinen Text - keine HTML-Tags oder Markdown-Formatierung im Code!
-Verwende \\n für Zeilenumbrüche und Anführungszeichen für Labels mit Leerzeichen.
-
-KRITISCH - FARBEN:
-- Verwende KEINE expliziten Farben im Code (keine 'style' Statements, keine 'classDef' mit fill/stroke Farben)
-- Verwende KEINE Farbnamen (z.B. orange, red, pink) oder Hex-Codes (z.B. #ff0000) im Diagramm-Code
-- Verwende KEINE Subgraphs mit expliziten Farben
-- Mermaid verwendet automatisch konsistente Farben basierend auf dem Theme (Grautöne mit Teal-Akzenten)
-- Alle Knoten sollten die Standard-Farben verwenden - keine manuellen Farbzuweisungen nötig!""",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "diagram_type": {
-                "type": "string",
-                "enum": [
-                    "flowchart",
-                    "sequenceDiagram",
-                    "gantt",
-                    "classDiagram",
-                    "stateDiagram-v2",
-                    "erDiagram",
-                    "pie",
-                    "gitGraph",
-                    "timeline",
-                    "journey",
-                    "mindmap",
-                    "quadrantChart",
-                    "requirement",
-                    "userJourney",
-                    "sankey-beta"
-                ],
-                "description": "Der Typ des Mermaid-Diagramms"
-            },
-            "code": {
-                "type": "string",
-                "description": "Der Mermaid-Code für das Diagramm (ohne ```mermaid Markdown-Wrapper). WICHTIG: Nur reiner Text, keine HTML-Tags oder Markdown-Formatierung! Verwende \\n für Zeilenumbrüche."
-            }
-        },
-        "required": ["diagram_type", "code"]
-    }
-}
-
 class AIHandler:
     """Handler für AI-Anfragen (nur Google Gemini)"""
     
@@ -280,36 +216,6 @@ class AIHandler:
             # Bei Decode-Fehler: Token als gültig annehmen, Backend validiert
             return bool(auth_token)
     
-    def _execute_mermaid_tool(self, function_call):
-        """
-        Führt das create_mermaid_diagram Tool aus
-        
-        Args:
-            function_call: Dict mit 'name' und 'args' (von Gemini API)
-        
-        Returns:
-            String: Markdown-Codeblock mit Mermaid-Diagramm
-        """
-        try:
-            args = function_call.get("args", {})
-            diagram_type = args.get("diagram_type", "")
-            code = args.get("code", "")
-            
-            if not diagram_type or not code:
-                return "Fehler: diagram_type und code sind erforderlich."
-            
-            # Formatiere als Markdown-Codeblock (kompatibel mit Frontend)
-            mermaid_block = f"```mermaid\n{code}\n```"
-            
-            print(f"_execute_mermaid_tool: Diagramm erstellt - Typ: {diagram_type}, Code-Länge: {len(code)}")
-            return mermaid_block
-            
-        except Exception as e:
-            import traceback
-            print(f"⚠️ _execute_mermaid_tool Fehler: {e}")
-            print(traceback.format_exc())
-            return f"Fehler beim Erstellen des Diagramms: {str(e)}"
-        
     def get_response(self, user_message, context=None, history=None, mode='compact', callback=None, system_prompt_override=None, model_override=None):
         """
         Generiert eine Antwort auf eine Benutzer-Nachricht mit optionalem Streaming
@@ -418,19 +324,8 @@ class AIHandler:
             system_instruction = system_instruction + rag_instruction
 
         # Erstelle Tools Array für Function Calling (nur wenn aktiviert)
-        # Hardcoded: Nur wenn diagrams=True UND mode != 'compact' wird Tool übergeben
-        tools_array = []
-        diagrams_enabled = ai_tools.get("diagrams", True)
-        if diagrams_enabled and mode != 'compact':
-            tools_array.append({
-                "functionDeclarations": [MERMAID_TOOL]
-            })
-            print(f"_get_google_response: Mermaid Tool aktiviert (mode: {mode})")
-        else:
-            if not diagrams_enabled:
-                print(f"_get_google_response: Mermaid Tool deaktiviert (diagrams=False)")
-            elif mode == 'compact':
-                print(f"_get_google_response: Mermaid Tool deaktiviert (Kompakt-Modus)")
+        declarations = tool_registry.get_function_declarations(agent='tutor', ai_tools_config=ai_tools, mode=mode)
+        tools_array = [{"functionDeclarations": declarations}] if declarations else []
         
         # Erweitere Nachricht mit Kontext, falls vorhanden
         enhanced_message = user_message
@@ -786,7 +681,8 @@ class AIHandler:
                             
                             if function_name == "create_mermaid_diagram":
                                 # Führe Tool aus
-                                tool_result = self._execute_mermaid_tool(function_call)
+                                from .tool_executor import execute_tool
+                                tool_result = execute_tool(function_name, function_call.get("args", {}))
                                 
                                 # Erstelle neuen Request mit Function Response
                                 # Füge Function Response zu contents hinzu
@@ -1018,14 +914,16 @@ class AIHandler:
             rag_instruction = "\n\nWICHTIG: Du hast Zugriff auf relevante Anki-Karten als Kontext. Verwende diese Informationen, um präzise und fundierte Antworten zu geben. Zitiere IMMER deine Quellen mit dem Format [[CardID]] direkt im Text, wenn du Informationen aus den Karten verwendest."
             system_instruction = system_instruction + rag_instruction
         
-        # Tools Array
+        # Tools Array — built from central registry
+        declarations = tool_registry.get_function_declarations(
+            agent='tutor',
+            ai_tools_config=ai_tools,
+            mode=mode,
+        )
         tools_array = []
-        diagrams_enabled = ai_tools.get("diagrams", True)
-        if diagrams_enabled and mode != 'compact':
-            tools_array.append({
-                "functionDeclarations": [MERMAID_TOOL]
-            })
-            print(f"_get_google_response_streaming: Mermaid Tool aktiviert (mode: {mode})")
+        if declarations:
+            tools_array.append({"functionDeclarations": declarations})
+            print(f"_get_google_response_streaming: {len(declarations)} Tool(s) aktiviert (mode: {mode})")
         
         # Erweitere Nachricht mit Kontext (gleiche Logik wie _get_google_response)
         enhanced_message = user_message
@@ -1171,80 +1069,23 @@ class AIHandler:
             }
         
         try:
-            # UNIFIED STREAMING APPROACH: Always stream first!
-            # This ensures instant feedback even if tools are enabled but not used.
-            print(f"📡 _get_google_response_streaming: Starte Streaming (Tools: {has_tools}, Backend: {use_backend})")
-            
-            # Start streaming request immediately
-            text_result, function_call = self._stream_response(stream_urls, data, callback, use_backend=use_backend, backend_data=backend_data)
-            
-            # Check if function call was detected during stream
-            if function_call:
-                # FUNCTION CALL DETECTED
-                function_name = function_call.get("name", "")
-                print(f"🔧 Function Call erkannt: {function_name}")
-                
-                # Execute tool
-                if function_name == "create_mermaid_diagram":
-                    tool_result = self._execute_mermaid_tool({"name": function_name, "args": function_call.get("args", {})})
-                    
-                    # Construct request for final response
-                    # Need to reconstruct parts for the model's turn
-                    # The model outputted a function call, so we add that to history
-                    model_response_part = {
-                        "functionCall": function_call
-                    }
-                    
-                    contents_with_function_response = contents.copy()
-                    contents_with_function_response.append({
-                        "role": "model",
-                            "parts": [model_response_part]
-                                })
-                    contents_with_function_response.append({
-                        "role": "function",
-                            "parts": [{
-                                "functionResponse": {
-                                            "name": function_name,
-                                            "response": {"result": tool_result}
-                                        }
-                                    }]
-                                })
-                    
-                    # Prepare final request
-                    max_tokens_final = 8192 if "gemini-3-flash-preview" in model.lower() else 2000
-                    data_final = {
-                        "contents": contents_with_function_response,
-                        "generationConfig": {
-                            "temperature": 0.7,
-                            "maxOutputTokens": max_tokens_final
-                                    }
-                                }
-                                
-                    if system_instruction:
-                        data_final["systemInstruction"] = {
-                            "parts": [{"text": system_instruction}]
-                                    }
-                    
-                    if tools_array:
-                        data_final["tools"] = tools_array
-                    
-                    # PHASE 2: Stream final response
-                    print(f"🔧 Sende Function Response zurück, stream finale Antwort...")
-                    # Function Calls werden im Backend-Modus noch nicht unterstützt
-                    # Für jetzt: Fallback auf API-Key-Modus für Function Calls
-                    if use_backend:
-                        print("⚠️ Function Calls im Backend-Modus noch nicht unterstützt - verwende API-Key-Modus")
-                        # TODO: Backend-Support für Function Calls implementieren
-                    text_final, _ = self._stream_response(stream_urls, data_final, callback, use_backend=False)
-                    return text_final
-                else:
-                    error_msg = f"Unbekanntes Tool: {function_name}"
-                    if callback and not suppress_error_callback:
-                        callback(error_msg, True, False)
-                    return error_msg
-            else:
-                # Normal text response (already streamed)
-                return text_result
+            # Run agent loop (handles multi-turn tool calling)
+            system_instruction_dict = None
+            if system_instruction and system_instruction.strip():
+                system_instruction_dict = {"parts": [{"text": system_instruction}]}
+
+            text_result = run_agent_loop(
+                stream_fn=self._stream_response,
+                stream_urls=stream_urls,
+                data=data,
+                callback=callback,
+                use_backend=use_backend,
+                backend_data=backend_data,
+                tools_array=tools_array if tools_array else None,
+                system_instruction=system_instruction_dict,
+                model=model,
+            )
+            return text_result
             
         except Exception as e:
             import traceback
@@ -3338,20 +3179,23 @@ REGELN:
             
             # Stage 3: Generator (mit RAG-Kontext falls vorhanden)
             self._refresh_config()
-            
+
             if not self.is_configured():
                 error_msg = "Bitte konfigurieren Sie zuerst den API-Schlüssel in den Einstellungen."
                 if callback:
                     callback(error_msg, True, False)
                 return error_msg
-            
+
             # CRITICAL: Split-Brain Architecture
             # Generator: Use gemini-3-flash-preview for maximum reasoning capability
             # Fallback to gemini-2.5-flash (gemini-2.5-flash has quota 0)
             model = "gemini-3-flash-preview"
             fallback_model = "gemini-2.5-flash"
             api_key = self.config.get("api_key", "")
-            
+
+            # Emit generating pipeline step (covers both search and no-search paths)
+            self._emit_pipeline_step("generating", "active")
+
             # Track Generator step
             self._emit_ai_state("Generiere Antwort...", phase=self.PHASE_GENERATING, metadata={"mode": mode, "sourceCount": len(citations)})
             
