@@ -258,6 +258,20 @@ function AppInner() {
   // NICHT automatisch wenn keine Session aktiv — Chat startet immer im Chat-Modus
   const showSessionOverview = forceShowOverview;
 
+  // ── Deck-Chat Mode Sync ──────────────────────────────────────────
+  // Auto-load deck messages whenever we switch to overview mode
+  useEffect(() => {
+    if (showSessionOverview) {
+      chatHook.setDeckChatMode(true);
+      const deckId = sessionContext.currentSession?.deckId;
+      if (deckId) {
+        chatHook.loadDeckMessages(deckId);
+      }
+    } else {
+      chatHook.setDeckChatMode(false);
+    }
+  }, [showSessionOverview, sessionContext.currentSession?.deckId]);
+
   // ── Free Chat State ──────────────────────────────────────────────
   const [freeChatOpen, setFreeChatOpen] = useState(false);
   const [freeChatInitialText, setFreeChatInitialText] = useState('');
