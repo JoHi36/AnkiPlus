@@ -85,17 +85,25 @@ function useQueuedPipeline(pipelineSteps: PipelineStep[]) {
     }
 
     const doneSteps = pipelineSteps.filter(
-      s => (s.status === 'done' || s.status === 'error') && !processedStepsRef.current.has(s.step)
+      s => s.status === 'done' || s.status === 'error'
     );
 
     for (const s of doneSteps) {
-      processedStepsRef.current.add(s.step);
-      queueRef.current.push({
+      const entry = {
         step: s.step,
         label: getDoneLabel(s),
         data: s.data || {},
         isError: s.status === 'error',
-      });
+      };
+
+      if (processedStepsRef.current.has(s.step)) {
+        // Step already processed — update label in completedStack if data changed
+        setCompletedStack(prev => prev.map(e => e.step === s.step ? entry : e));
+        continue;
+      }
+
+      processedStepsRef.current.add(s.step);
+      queueRef.current.push(entry);
     }
 
     // Check if there's an active step (for loading indicator)

@@ -2049,7 +2049,8 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                             
                             // Link Rendering - handle citation links
                             a: ({node, href, children, ...props}) => {
-                              
+                              const childrenText = typeof children === 'string' ? children : Array.isArray(children) ? children.join('') : String(children || '');
+
                               // FALLBACK: If link contains only a number (1, 2, 3) and citations exist, try to render as CitationBadge
                               // This handles cases where AI outputs [1] instead of [[CardID: 123]]
                               if (citations && Object.keys(citations).length > 0 && childrenText.match(/^\d+$/)) {

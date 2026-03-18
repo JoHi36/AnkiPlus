@@ -108,6 +108,8 @@ class HybridRetrieval:
         context_string = self._build_context_string(merged)
 
         # Scope fallback: if <2 results on current_deck, try collection
+        # NOTE: This re-runs the entire retrieve() which re-emits pipeline steps.
+        # The frontend queue handles duplicate step names by updating (not appending).
         total_results = len(merged)
         if total_results < 2 and router_result.get('search_scope') == 'current_deck' and not router_result.get('_fallback_used'):
             fallback_router = {**router_result, 'search_scope': 'collection', '_fallback_used': True}
