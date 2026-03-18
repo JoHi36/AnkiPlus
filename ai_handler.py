@@ -116,6 +116,7 @@ class AIHandler:
         self.widget = widget  # Widget reference for UI state emission
         self._current_request_steps = []  # Track steps for the current request
         self._current_request_id = None
+        self._pipeline_signal_callback = None
         self._current_step_labels = []
     
     def _refresh_config(self):
@@ -1900,8 +1901,12 @@ Karteninhalt: {question_clean[:500]}"""
 
         # When new pipeline is active, don't send ai_state to frontend
         # (pipeline_step events handle the UI now; ai_state only logs internally)
-        if getattr(self, '_current_request_id', None):
+        req_id = getattr(self, '_current_request_id', None)
+        if req_id:
+            print(f"🔇 _emit_ai_state SUPPRESSED (pipeline active, reqId={req_id[:8]}): {message[:50]}")
             return
+        else:
+            print(f"📡 _emit_ai_state SENDING (no pipeline): {message[:50]}")
 
         if not self.widget or not self.widget.web_view:
             return
@@ -1945,34 +1950,23 @@ Karteninhalt: {question_clean[:500]}"""
                 print(f"⚠️ Fehler beim Senden von AI-State: {e}")
 
     def _emit_pipeline_step(self, step, status, data=None):
-        """Emit a pipeline_step event to the frontend.
+        """Emit a pipeline_step event to the frontend via Qt signal.
 
-        Args:
-            step: Step name ('router', 'sql_search', 'semantic_search', 'merge', 'generating')
-            status: 'active', 'done', or 'error'
-            data: Optional dict with step-specific data
+        Uses _pipeline_signal_callback (set by AIRequestThread) for real-time
+        event delivery instead of mw.taskman.run_on_main which batches events.
         """
-        request_id = getattr(self, '_current_request_id', None)
-        payload = {
-            "type": "pipeline_step",
-            "requestId": request_id,
-            "step": step,
-            "status": status,
-            "data": data or {}
-        }
-
         # Record step label for persistence (only on 'done')
         if status == 'done':
             label = self._step_done_label(step, data)
             self._current_step_labels.append(label)
 
-        try:
-            from aqt import mw
-            if mw and hasattr(mw, 'taskman'):
-                js = f"window.ankiReceive({json.dumps(payload)});"
-                mw.taskman.run_on_main(lambda: self.widget.web_view.page().runJavaScript(js) if self.widget and self.widget.web_view else None)
-        except Exception as e:
-            print(f"⚠️ _emit_pipeline_step error: {e}")
+        # Emit via Qt signal callback (set by AIRequestThread)
+        callback = getattr(self, '_pipeline_signal_callback', None)
+        if callback:
+            try:
+                callback(step, status, data)
+            except Exception as e:
+                print(f"⚠️ _emit_pipeline_step error: {e}")
 
     def _step_done_label(self, step, data):
         """Generate a human-readable label for a completed step."""

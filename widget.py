@@ -69,6 +69,7 @@ class AIRequestThread(QThread):
     error_signal = pyqtSignal(str, str)  # requestId, error_message
     finished_signal = pyqtSignal(str)  # requestId
     metadata_signal = pyqtSignal(str, object, object, object)  # requestId, steps, citations, step_labels
+    pipeline_signal = pyqtSignal(str, str, str, object)  # requestId, step, status, data
 
     def __init__(self, ai_handler, text, widget_ref, history=None, mode='compact', request_id=None):
         super().__init__()
@@ -87,6 +88,14 @@ class AIRequestThread(QThread):
     def run(self):
         try:
             context = self.widget_ref.current_card_context if self.widget_ref else None
+
+            # Give the AI handler a callback to emit pipeline events via Qt signal
+            def pipeline_callback(step, status, data):
+                if self._cancelled:
+                    return
+                self.pipeline_signal.emit(self.request_id, step, status, data or {})
+
+            self.ai_handler._pipeline_signal_callback = pipeline_callback
 
             def stream_callback(chunk, done, is_function_call=False, steps=None, citations=None, step_labels=None):
                 if self._cancelled:
@@ -108,6 +117,8 @@ class AIRequestThread(QThread):
                 print(f"AIRequestThread: Exception: {str(e)}")
                 print(traceback.format_exc())
                 self.error_signal.emit(self.request_id, str(e))
+        finally:
+            self.ai_handler._pipeline_signal_callback = None
 
 
 class ChatbotWidget(QWidget):
@@ -834,12 +845,24 @@ class ChatbotWidget(QWidget):
             self._ai_thread.finished_signal.connect(self.on_streaming_finished)
             self._ai_thread.error_signal.connect(self.on_streaming_error)
             self._ai_thread.metadata_signal.connect(self.on_streaming_metadata)
+            self._ai_thread.pipeline_signal.connect(self.on_pipeline_step)
             self._ai_thread.start()
 
     def _send_to_js(self, payload):
         """Send a JSON payload to the frontend via ankiReceive."""
         js_code = f"window.ankiReceive({json.dumps(payload)});"
         self.web_view.page().runJavaScript(js_code)
+
+    def on_pipeline_step(self, request_id, step, status, data):
+        """Handle pipeline step events from the AI thread — delivered via Qt signal for real-time UI."""
+        payload = {
+            "type": "pipeline_step",
+            "requestId": request_id,
+            "step": step,
+            "status": status,
+            "data": data if isinstance(data, dict) else {}
+        }
+        self._send_to_js(payload)
 
     def on_streaming_chunk(self, request_id, chunk, done, is_function_call):
         payload = {
