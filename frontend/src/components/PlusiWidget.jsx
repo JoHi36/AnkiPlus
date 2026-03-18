@@ -1,4 +1,6 @@
 import React from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import MascotCharacter from './MascotCharacter';
 
 const MOOD_DOT_COLORS = {
@@ -26,7 +28,6 @@ export default function PlusiWidget({ mood = 'neutral', text = '', metaText = ''
       >
         {/* Header row */}
         <div className="plusi-w-header">
-          {/* Plusi character — clipped container to prevent shadow/animation overflow */}
           <div className="plusi-w-avatar">
             <MascotCharacter
               mood={isLoading ? 'thinking' : mood}
@@ -36,7 +37,6 @@ export default function PlusiWidget({ mood = 'neutral', text = '', metaText = ''
             />
           </div>
 
-          {/* Name + mood info */}
           <div className="plusi-w-info">
             <div className="plusi-w-name">Plusi</div>
             {displayMeta && (
@@ -51,7 +51,7 @@ export default function PlusiWidget({ mood = 'neutral', text = '', metaText = ''
           </div>
         </div>
 
-        {/* Content area */}
+        {/* Content area — same markdown rendering as chat messages */}
         <div className="plusi-w-content">
           {isLoading ? (
             <div className="plusi-w-skeleton">
@@ -59,9 +59,11 @@ export default function PlusiWidget({ mood = 'neutral', text = '', metaText = ''
               <p className="plusi-w-placeholder">{displayText}</p>
             </div>
           ) : (
-            displayText.split('\n').filter(l => l.trim()).map((line, i) => (
-              <p key={i} className="plusi-w-text">{line}</p>
-            ))
+            <div className="plusi-w-markdown">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {displayText}
+              </ReactMarkdown>
+            </div>
           )}
         </div>
       </div>
@@ -70,6 +72,9 @@ export default function PlusiWidget({ mood = 'neutral', text = '', metaText = ''
 }
 
 const PLUSI_CSS = `
+  /* ── Google Font: Space Grotesk — Plusi's unique font ── */
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
   /* ── Plusi Widget — markdown blockquote style ── */
   .plusi-widget {
     border-left: 3px solid #007AFF;
@@ -77,6 +82,7 @@ const PLUSI_CSS = `
     margin: 10px 0 14px;
     overflow: hidden;
     transition: opacity 0.3s ease;
+    font-family: 'Space Grotesk', -apple-system, sans-serif;
   }
 
   /* Header row */
@@ -88,7 +94,6 @@ const PLUSI_CSS = `
     border-bottom: 1px solid rgba(0,122,255,.08);
   }
 
-  /* Avatar container — clips the MascotCharacter shadow and float animation */
   .plusi-w-avatar {
     flex-shrink: 0;
     width: 48px;
@@ -97,12 +102,10 @@ const PLUSI_CSS = `
     position: relative;
   }
 
-  /* Hide the mascot shadow inside PlusiWidget */
   .plusi-w-avatar .mascot-shadow {
     display: none !important;
   }
 
-  /* Name + meta */
   .plusi-w-info {
     display: flex;
     flex-direction: column;
@@ -110,10 +113,11 @@ const PLUSI_CSS = `
   }
 
   .plusi-w-name {
-    font-size: 13px;
-    font-weight: 700;
+    font-size: 14px;
+    font-weight: 600;
     color: rgba(0,140,255,.8);
-    letter-spacing: 0.02em;
+    letter-spacing: 0.01em;
+    font-family: 'Space Grotesk', -apple-system, sans-serif;
   }
 
   .plusi-w-meta {
@@ -130,24 +134,68 @@ const PLUSI_CSS = `
   }
 
   .plusi-w-meta-text {
-    font-size: 10.5px;
+    font-size: 11px;
     color: rgba(120,175,255,.4);
   }
 
-  /* Content area */
+  /* Content area — matches chat message text styling */
   .plusi-w-content {
     padding: 12px 16px 14px;
-    font-size: 13px;
-    line-height: 1.65;
-    color: rgba(210,225,250,.85);
   }
 
-  .plusi-w-text {
-    margin: 0 0 8px;
+  /* Markdown rendering — same sizes as chat */
+  .plusi-w-markdown {
+    font-family: 'Space Grotesk', -apple-system, sans-serif;
+    color: rgba(210,225,250,.88);
   }
 
-  .plusi-w-text:last-child {
+  .plusi-w-markdown p {
+    font-size: inherit;
+    line-height: 1.75;
+    margin: 0 0 0.75em;
+  }
+
+  .plusi-w-markdown p:last-child {
     margin-bottom: 0;
+  }
+
+  .plusi-w-markdown strong {
+    color: rgba(225,238,255,.95);
+    font-weight: 600;
+  }
+
+  .plusi-w-markdown em {
+    color: rgba(180,210,255,.7);
+  }
+
+  .plusi-w-markdown ul, .plusi-w-markdown ol {
+    margin: 0.5em 0;
+    padding-left: 1.5em;
+  }
+
+  .plusi-w-markdown li {
+    margin-bottom: 0.3em;
+    line-height: 1.65;
+  }
+
+  .plusi-w-markdown code {
+    background: rgba(0,0,0,.25);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-size: 0.9em;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+
+  .plusi-w-markdown a {
+    color: rgba(0,150,255,.8);
+    text-decoration: none;
+  }
+
+  .plusi-w-markdown blockquote {
+    border-left: 2px solid rgba(0,122,255,.2);
+    padding-left: 12px;
+    margin: 0.5em 0;
+    color: rgba(180,210,255,.6);
   }
 
   /* Skeleton loading */
@@ -175,7 +223,7 @@ const PLUSI_CSS = `
   }
 
   .plusi-w-placeholder {
-    font-size: 12px;
+    font-size: 13px;
     color: rgba(100,160,255,.35);
     font-style: italic;
     margin: 0;
