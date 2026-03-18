@@ -900,40 +900,36 @@ def _wrap_page(top_bar_html, content_html, extra_js=''):
 # ─── Deck Browser ─────────────────────────────────────────────────────────────
 
 _SEARCHBAR_HTML = """
-<div id="ap-searchbar" style="padding:10px 16px 8px;">
-  <div style="position:relative;border-radius:24px;padding:2px;">
-    <div id="ap-sb-ring" style="
-      position:absolute;inset:-1px;border-radius:25px;
-      background:conic-gradient(from 0deg,transparent 0deg,transparent 55%,#6b8cff 60%,#a78bfa 72%,#38bdf8 81%,#6b8cff 86%,transparent 92%);
-      -webkit-mask:radial-gradient(circle,transparent calc(100% - 2px),white calc(100% - 2px));
-      mask:radial-gradient(circle,transparent calc(100% - 2px),white calc(100% - 2px));
-      animation:ap-snake-spin 2.5s linear infinite;opacity:0;transition:opacity 0.3s;
-    "></div>
-    <div style="position:relative;background:#1c1c1e;border-radius:22px;display:flex;align-items:center;padding:9px 14px 9px 38px;gap:8px;border:1px solid rgba(255,255,255,0.07);">
-      <span style="position:absolute;left:13px;color:#6b8cff;font-size:14px;line-height:1;">✦</span>
-      <input id="ap-search-input" placeholder="Stelle eine Frage…" autocomplete="off"
-        style="flex:1;background:transparent;border:none;outline:none;color:#ccc;font-size:13px;font-family:inherit;"
-        onfocus="document.getElementById('ap-sb-ring').style.opacity='1'"
-        onblur="document.getElementById('ap-sb-ring').style.opacity='0'"
-      />
+<div id="ap-search-wrap">
+  <div id="ap-wordmark">
+    <div class="ap-wm-text">
+      <span class="ap-wm-anki">Anki</span><span class="ap-wm-tld">.plus</span>
     </div>
+    <span id="ap-wm-badge" class="ap-wm-badge ap-wm-badge--free">Free</span>
   </div>
-  <div style="text-align:right;font-size:10px;color:#2a2a40;margin-top:3px;padding-right:4px;">Enter zum Senden</div>
+
+  <div id="ap-search-bar">
+    <div id="ap-sb-snake"></div>
+    <span class="ap-sb-icon">&#10022;</span>
+    <div id="ap-placeholder-wrap">
+      <span id="ap-placeholder-a" class="ap-ph"></span>
+      <span id="ap-placeholder-b" class="ap-ph ap-ph--hidden"></span>
+    </div>
+    <input id="ap-search-input" type="text" autocomplete="off" spellcheck="false">
+    <button id="ap-send-btn" aria-label="Senden">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+           stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="5" y1="12" x2="19" y2="12"/>
+        <polyline points="12 5 19 12 12 19"/>
+      </svg>
+    </button>
+  </div>
+
+  <div id="ap-search-hint">
+    <span id="ap-hint-text"></span>
+  </div>
 </div>
-<style>@keyframes ap-snake-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}</style>
-<script>
-(function(){
-  var inp = document.getElementById('ap-search-input');
-  if (!inp) return;
-  inp.addEventListener('keydown', function(e){
-    if (e.key === 'Enter' && inp.value.trim()) {
-      var t = inp.value.trim(); inp.value = '';
-      if (window.apOpenChat) window.apOpenChat(t);
-      window._apAction = {type:'freeChat', text:t};
-    }
-  });
-})();
-</script>
+<div style="margin-top:32px;"></div>
 """
 
 _CHAT_HTML = """
