@@ -15,15 +15,24 @@ export default function FreeChatView({
   bridge,
   animPhase,    // 'entering' | 'entered' | 'exiting' — drives own opacity/transform
 }) {
-  const { messages, streamingMessage, isLoading, handleSend, resetMessages } = freeChatHook;
+  const { messages, streamingMessage, isLoading, handleSend, resetMessages, loadForDeck } = freeChatHook;
   const messagesEndRef = useRef(null);
   const hasSentInitialRef = useRef(false);
+
+  // Load persisted messages from DB every time FreeChatView becomes visible
+  useEffect(() => {
+    console.error('📦 FreeChatView mounted — loading deck messages');
+    if (loadForDeck) {
+      loadForDeck(0); // 0 = global, loads ALL messages across decks
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // One-shot: send initial text on mount
   useEffect(() => {
     if (initialText && !hasSentInitialRef.current) {
       hasSentInitialRef.current = true;
-      handleSend(initialText, 'compact');
+      // Small delay to let loaded messages render first
+      setTimeout(() => handleSend(initialText, 'compact'), 200);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
