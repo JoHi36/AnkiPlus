@@ -1157,6 +1157,8 @@ _CHAT_JS = """
   window.apOpenChat  = openChat;
   window.apCloseChat = closeChat;
   window.apResetChat = resetChat;
+  window.apAddExchange = addExchange;
+  window.apAppendChunk = appendChunk;
 
   window.apChatReceive = function(data) {
     if (!_curN) { _curN = addExchange(''); }
@@ -1505,8 +1507,15 @@ class CustomScreens:
             elif action_type == 'freeChat':
                 text = action.get('text', '').strip()
                 if text:
-                    # Load persistent history from DB on first open
-                    self._fc_history = self._load_fc_history()
+                    # Load persistent history from DB and show in UI
+                    db_messages = self._load_fc_db_messages()
+                    self._fc_history = [
+                        {'role': 'assistant' if m.get('sender') == 'assistant' else 'user', 'content': m.get('text', '')}
+                        for m in db_messages
+                    ]
+                    # Push historical messages to the native chat UI (after short delay for chat to open)
+                    if db_messages:
+                        QTimer.singleShot(150, lambda msgs=db_messages: self._fc_push_history_to_ui(msgs))
                     self._fc_history.append({'role': 'user', 'content': text})
                     self._save_fc_message(text, 'user')
                     self._start_fc_request(text)
@@ -1718,8 +1727,42 @@ class CustomScreens:
         except Exception as e:
             print(f"CustomScreens: _fc_push error: {e}")
 
-    def _load_fc_history(self):
-        """Load Free Chat history from SQLite (deck_id=0 = global). Returns list of {role, content}."""
+    def _fc_push_history_to_ui(self, messages):
+        """Push historical messages to the native Free Chat UI."""
+        if not messages:
+            return
+        state = getattr(mw, 'state', None)
+        if not (mw and state == 'deckBrowser' and hasattr(mw, 'deckBrowser')):
+            return
+
+        js_lines = []
+        for msg in messages:
+            sender = msg.get('sender', 'user')
+            text = msg.get('text', '')
+            text_escaped = json.dumps(text)
+
+            if sender in ('user',):
+                # Render user message + create AI response slot
+                js_lines.append(f"window._histN = window.apAddExchange({text_escaped});")
+            else:
+                # Fill AI response slot with historical text (remove cursor)
+                js_lines.append(
+                    f"(function(){{"
+                    f"var el=document.getElementById('ap-ai-'+window._histN);"
+                    f"if(el){{el.textContent='';el.appendChild(document.createTextNode({text_escaped}));"
+                    f"var c=el.querySelector('.ap-cursor');if(c)c.remove();}}"
+                    f"}})();"
+                )
+
+        js = "\n".join(js_lines)
+        try:
+            mw.deckBrowser.web.page().runJavaScript(js)
+            print(f"CustomScreens: Pushed {len(messages)} historical messages to UI")
+        except Exception as e:
+            print(f"CustomScreens: _fc_push_history_to_ui error: {e}")
+
+    def _load_fc_db_messages(self):
+        """Load Free Chat messages from SQLite (deck_id=0 = all decks). Returns raw message dicts."""
         try:
             from .card_sessions_storage import load_deck_messages
         except ImportError:
@@ -1729,14 +1772,10 @@ class CustomScreens:
                 return []
         try:
             messages = load_deck_messages(0, limit=20)
-            history = []
-            for m in messages:
-                role = 'assistant' if m.get('sender') == 'assistant' else 'user'
-                history.append({'role': role, 'content': m.get('text', '')})
-            print(f"CustomScreens: Loaded {len(history)} messages from FC history")
-            return history
+            print(f"CustomScreens: Loaded {len(messages)} messages from DB")
+            return messages
         except Exception as e:
-            print(f"CustomScreens: _load_fc_history error: {e}")
+            print(f"CustomScreens: _load_fc_db_messages error: {e}")
             return []
 
     def _save_fc_message(self, text, sender):
