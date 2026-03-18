@@ -402,7 +402,7 @@ def _top_bar(active_tab='stapel', deck_name='', due_new=0, due_learn=0, due_revi
         )
 
     return (
-        f'<div class="flex items-center justify-between px-5 h-12 bg-base-100 z-50 flex-shrink-0">'
+        f'<div class="flex items-center justify-between px-5 h-12 z-50 flex-shrink-0" style="background:#111111;">'
         f'<div class="flex-1 flex items-center">{left_html}</div>'
         f'<div class="flex items-center gap-0.5 p-[3px] bg-base-content/[0.04] rounded-lg">'
         f'<button class="{tab_cls("stapel")}"{stapel_onclick}>Stapel</button>'
@@ -484,7 +484,7 @@ div[id^="bottom"]:not(#ap-page *) {
 }
 
 html, body {
-    background: #1A1A1A !important;
+    background: #0f0f0f !important;
     color: #e8e8e8 !important;
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif !important;
     -webkit-font-smoothing: antialiased !important;
@@ -808,6 +808,23 @@ html, body {
     50%       { opacity: 0; }
 }
 .ap-search-spacer { margin-top: 32px; }
+
+/* ─── Exchange separator ─── */
+.ap-exchange-sep {
+    height: 1px;
+    background: rgba(255,255,255,0.06);
+    margin: 16px 0 20px;
+    border: none;
+}
+
+/* ─── Loading dots pulse ─── */
+@keyframes apDotPulse {
+    0%, 80%, 100% { opacity: 0.2; }
+    40%           { opacity: 1; }
+}
+#ap-loading-dots span:nth-child(1) { animation: apDotPulse 1.2s ease-in-out infinite; }
+#ap-loading-dots span:nth-child(2) { animation: apDotPulse 1.2s ease-in-out 0.2s infinite; }
+#ap-loading-dots span:nth-child(3) { animation: apDotPulse 1.2s ease-in-out 0.4s infinite; }
 """
 
 _TOGGLE_JS = """
@@ -936,9 +953,9 @@ _SEARCHBAR_HTML = """
 _CHAT_HTML = """
 <div id="ap-chat-overlay" style="
   position:fixed;top:48px;left:0;right:0;bottom:0;z-index:50;
-  background:#111111;
-  opacity:0;transform:translateY(8px);
-  transition:opacity 280ms ease,transform 280ms ease;
+  background:#0f0f0f;
+  opacity:0;
+  transition:opacity 220ms ease;
   pointer-events:none;overflow-y:auto;scrollbar-width:none;
 ">
   <div id="ap-chat-msgs" style="
@@ -971,7 +988,7 @@ _CHAT_HTML = """
         onblur="document.getElementById('ap-ci-snake').classList.remove('active')"
       ></textarea>
     </div>
-    <div style="display:flex;border-top:1px solid rgba(255,255,255,0.06);">
+    <div style="display:flex;border-top:1px solid rgba(255,255,255,0.06);position:relative;">
       <button id="ap-btn-close" class="ap-dock-action"
         style="border-bottom-left-radius:16px;color:rgba(255,255,255,0.88);font-weight:600;">
         Schließen <span style="font-family:ui-monospace,monospace;font-size:10px;color:rgba(255,255,255,0.18);margin-left:4px;">ESC</span>
@@ -981,6 +998,28 @@ _CHAT_HTML = """
         style="border-bottom-right-radius:16px;color:rgba(255,255,255,0.35);">
         Zurücksetzen <span style="font-family:ui-monospace,monospace;font-size:10px;color:rgba(255,255,255,0.18);margin-left:4px;">⌘X</span>
       </button>
+      <!-- Loading + Stop overlay — appears over the action bar when AI is thinking -->
+      <div id="ap-dock-loading" style="
+        display:none;position:absolute;inset:0;border-bottom-left-radius:16px;border-bottom-right-radius:16px;
+        background:#151515;align-items:center;justify-content:space-between;padding:0 16px;gap:10px;
+      ">
+        <div style="display:flex;align-items:center;gap:8px;flex:1;">
+          <span id="ap-loading-dots" style="display:inline-flex;gap:3px;align-items:center;">
+            <span style="font-size:8px;color:rgba(255,255,255,0.4);">&#x25cf;</span>
+            <span style="font-size:8px;color:rgba(255,255,255,0.4);">&#x25cf;</span>
+            <span style="font-size:8px;color:rgba(255,255,255,0.4);">&#x25cf;</span>
+          </span>
+          <span style="font-size:12px;color:rgba(255,255,255,0.25);">KI denkt…</span>
+        </div>
+        <button id="ap-btn-stop" style="
+          display:flex;align-items:center;gap:5px;padding:5px 12px;
+          border-radius:8px;border:1px solid rgba(255,80,80,0.25);
+          background:rgba(255,80,80,0.08);color:rgba(255,100,100,0.7);
+          font-family:inherit;font-size:12px;cursor:pointer;transition:background 0.12s;
+        ">
+          &#x25a0; Stopp
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -989,18 +1028,20 @@ _CHAT_HTML = """
 _CHAT_JS = """
 (function(){
   /* ── DOM refs ── */
-  var overlay  = document.getElementById('ap-chat-overlay');
-  var msgs     = document.getElementById('ap-chat-msgs');
-  var dock     = document.getElementById('ap-chat-dock');
-  var ci       = document.getElementById('ap-chat-input');
-  var deck     = document.getElementById('ap-deck-content');
-  var sbInput  = document.getElementById('ap-search-input');
-  var sbSnake  = document.getElementById('ap-sb-snake');
-  var sbSend   = document.getElementById('ap-send-btn');
-  var hintEl   = document.getElementById('ap-hint-text');
-  var phWrap   = document.getElementById('ap-placeholder-wrap');
-  var phA      = document.getElementById('ap-placeholder-a');
-  var phB      = document.getElementById('ap-placeholder-b');
+  var overlay       = document.getElementById('ap-chat-overlay');
+  var msgs          = document.getElementById('ap-chat-msgs');
+  var dock          = document.getElementById('ap-chat-dock');
+  var ci            = document.getElementById('ap-chat-input');
+  var deck          = document.getElementById('ap-deck-content');
+  var sbInput       = document.getElementById('ap-search-input');
+  var sbSnake       = document.getElementById('ap-sb-snake');
+  var sbSend        = document.getElementById('ap-send-btn');
+  var hintEl        = document.getElementById('ap-hint-text');
+  var phWrap        = document.getElementById('ap-placeholder-wrap');
+  var phA           = document.getElementById('ap-placeholder-a');
+  var phB           = document.getElementById('ap-placeholder-b');
+  var dockLoading   = document.getElementById('ap-dock-loading');
+  var btnStop       = document.getElementById('ap-btn-stop');
 
   /* ── State ── */
   var isOpen    = false;
@@ -1016,48 +1057,52 @@ _CHAT_JS = """
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
+  /* ── Loading state ── */
+  function setLoading(on) {
+    isLoading = on;
+    if (dockLoading) dockLoading.style.display = on ? 'flex' : 'none';
+    if (ci) ci.disabled = on;
+  }
+
   /* ── Chat open/close/reset ── */
   function openChat(q) {
     if (isOpen) return; isOpen = true;
-    deck.style.transition = 'opacity 250ms ease,transform 250ms ease';
+    deck.style.transition = 'opacity 200ms ease';
     deck.style.opacity = '0';
-    deck.style.transform = 'translateY(60px)';
     deck.style.pointerEvents = 'none';
-    overlay.style.pointerEvents = 'auto';
     requestAnimationFrame(function(){
       overlay.style.opacity = '1';
-      overlay.style.transform = 'translateY(0)';
+      overlay.style.pointerEvents = 'auto';
       setTimeout(function(){
         dock.style.opacity = '1';
         dock.style.transform = DOCK_SHOWN;
         dock.style.pointerEvents = 'auto';
         ci.focus();
-      }, 150);
+      }, 120);
     });
     _curN = addExchange(q);
-    isLoading = true;
+    setLoading(true);
   }
 
   function closeChat() {
     if (!isOpen) return; isOpen = false;
+    setLoading(false);
     overlay.style.opacity = '0';
-    overlay.style.transform = 'translateY(8px)';
     overlay.style.pointerEvents = 'none';
     dock.style.opacity = '0';
     dock.style.transform = DOCK_HIDDEN;
     dock.style.pointerEvents = 'none';
     setTimeout(function(){
       deck.style.opacity = '1';
-      deck.style.transform = 'translateY(0)';
       deck.style.pointerEvents = 'auto';
-    }, 200);
+    }, 180);
     window._apAction = {type:'freeChatClose'};
   }
 
   function resetChat() {
     msgs.innerHTML = '';
     _curN = null;
-    isLoading = false;
+    setLoading(false);
     _aiCounter = 0;
   }
 
@@ -1069,6 +1114,7 @@ _CHAT_JS = """
     el.innerHTML =
       '<div class="ap-user-label">Du</div>' +
       '<div class="ap-user-q">' + escHtml(question) + '</div>' +
+      '<hr class="ap-exchange-sep">' +
       '<div class="ap-ai-prose" id="ap-ai-' + n + '"></div>';
     msgs.appendChild(el);
     msgs.scrollTop = msgs.scrollHeight;
@@ -1103,13 +1149,13 @@ _CHAT_JS = """
     var el = document.getElementById('ap-ai-' + _curN);
     if (data.error) {
       if (el) { el.textContent = data.error; el.style.color = 'rgba(255,80,80,0.8)'; }
-      isLoading = false; _curN = null; return;
+      setLoading(false); _curN = null; return;
     }
     if (data.chunk) appendChunk(_curN, data.chunk);
     if (data.done) {
       /* Remove cursor */
       if (el) { var c = el.querySelector('.ap-cursor'); if (c) c.remove(); }
-      isLoading = false; _curN = null;
+      setLoading(false); _curN = null;
     }
     msgs.scrollTop = msgs.scrollHeight;
   };
@@ -1120,6 +1166,23 @@ _CHAT_JS = """
     ci.style.height = Math.min(ci.scrollHeight, 120) + 'px';
   });
 
+  /* ── Stop button ── */
+  if (btnStop) {
+    btnStop.addEventListener('click', function(){
+      setLoading(false);
+      window._apAction = {type:'freeChatCancel'};
+      /* Show error marker in current exchange */
+      if (_curN) {
+        var el = document.getElementById('ap-ai-' + _curN);
+        if (el) {
+          var c = el.querySelector('.ap-cursor'); if (c) c.remove();
+          if (!el.textContent.trim()) el.innerHTML = '<span style="color:rgba(255,255,255,0.2);font-size:13px;">—</span>';
+        }
+        _curN = null;
+      }
+    });
+  }
+
   /* ── Dock Enter to send follow-up ── */
   ci.addEventListener('keydown', function(e){
     if (e.key === 'Escape') { closeChat(); return; }
@@ -1127,7 +1190,7 @@ _CHAT_JS = """
       e.preventDefault();
       var t = ci.value.trim(); ci.value = ''; ci.style.height = 'auto';
       _curN = addExchange(t);
-      isLoading = true;
+      setLoading(true);
       window._apAction = {type:'freeChatSend', text:t};
     }
   });
@@ -1390,14 +1453,15 @@ class CustomScreens:
                 if text:
                     self._fc_history.append({'role': 'user', 'content': text})
                     self._start_fc_request(text)
-            elif action_type == 'freeChatClose':
+            elif action_type in ('freeChatClose', 'freeChatCancel'):
                 if self._fc_thread is not None:
                     try:
                         self._fc_thread.cancel()
                     except Exception:
                         pass
                     self._fc_thread = None
-                self._fc_history = []
+                if action_type == 'freeChatClose':
+                    self._fc_history = []
             elif action_type == 'cmd':
                 cmd = action.get('cmd', '')
                 if cmd == 'study':
@@ -1443,6 +1507,59 @@ class CustomScreens:
 
     # ── Free chat AI request ──────────────────────────────────────────────
 
+    def _build_fc_system_prompt(self):
+        """Build a rich system prompt with the user's current deck context."""
+        import datetime
+        today = datetime.date.today().strftime('%A, %d. %B %Y')
+
+        lines = [
+            "Du bist ein hilfreicher Lernassistent für Anki-Karteikarten.",
+            f"Heute ist {today}.",
+            "",
+            "# Kontext: Aktuelle Anki-Sammlung",
+        ]
+
+        try:
+            due_counts   = _get_due_counts()
+            card_dist    = _get_card_distribution()
+            all_decks    = list(mw.col.decks.all_names_and_ids())
+            tree         = _build_deck_tree(all_decks, due_counts, card_dist, {})
+
+            total_new    = sum(d.get('new', 0) for d in due_counts.values())
+            total_learn  = sum(d.get('learning', 0) for d in due_counts.values())
+            total_review = sum(d.get('review', 0) for d in due_counts.values())
+            total_due    = total_new + total_learn + total_review
+            total_cards  = sum(n['agg_total'] for n in tree)
+
+            lines += [
+                f"- Karten gesamt: {total_cards}",
+                f"- Heute fällig: {total_due} ({total_new} neu, {total_learn} lernen, {total_review} wiederholen)",
+                f"- Stapel (Decks): {len(tree)}",
+                "",
+                "## Stapel-Übersicht:",
+            ]
+
+            for node in tree:
+                name  = node['name']
+                total = node['agg_total']
+                new   = node['due_new']
+                lrn   = node['due_learn']
+                rev   = node['due_review']
+                lines.append(f"- **{name}**: {total} Karten gesamt, heute fällig: {new} neu / {lrn} lernen / {rev} wiederholen")
+                for child in node.get('children', []):
+                    c_total = child['agg_total']
+                    lines.append(f"  - {child['display']}: {c_total} Karten")
+        except Exception as e:
+            lines.append(f"(Deck-Kontext konnte nicht geladen werden: {e})")
+
+        lines += [
+            "",
+            "Antworte auf Deutsch, klar und präzise. Wenn der Nutzer nach einem Lernplan oder Strategie fragt, "
+            "nutze die obigen Zahlen konkret. Halte Antworten kompakt (2–5 Sätze) außer wenn mehr Tiefe explizit erwünscht ist.",
+        ]
+
+        return "\n".join(lines)
+
     def _start_fc_request(self, text):
         if QThread is None:
             self._fc_push({'error': 'QThread nicht verfügbar.', 'done': True})
@@ -1458,17 +1575,19 @@ class CustomScreens:
                 return
 
         ai = get_ai_handler()
-
+        system_prompt = self._build_fc_system_prompt()
         history_snapshot = list(self._fc_history[:-1])  # all but last (current user msg)
+        print(f"CustomScreens: _start_fc_request — handler={ai}, msg={text[:60]!r}")
 
         class _FCThread(QThread):
             chunk_signal = _Signal(str, bool)  # chunk, done
 
-            def __init__(self, handler, msg, hist):
+            def __init__(self, handler, msg, hist, sys_prompt):
                 super().__init__()
                 self._handler = handler
                 self._msg = msg
                 self._hist = hist
+                self._sys_prompt = sys_prompt
                 self._cancelled = False
 
             def cancel(self):
@@ -1479,13 +1598,17 @@ class CustomScreens:
                     if not self._cancelled:
                         self.chunk_signal.emit(chunk or '', done)
                 try:
+                    print(f"CustomScreens: _FCThread.run — calling get_response")
                     self._handler.get_response(
                         self._msg,
                         history=self._hist,
                         mode='compact',
                         callback=cb,
+                        system_prompt_override=self._sys_prompt,
                     )
+                    print(f"CustomScreens: _FCThread.run — get_response returned")
                 except Exception as e:
+                    print(f"CustomScreens: _FCThread.run — exception: {e}")
                     if not self._cancelled:
                         self.chunk_signal.emit(f'Fehler: {e}', True)
 
@@ -1495,7 +1618,7 @@ class CustomScreens:
             except Exception:
                 pass
 
-        thread = _FCThread(ai, text, history_snapshot)
+        thread = _FCThread(ai, text, history_snapshot, system_prompt)
         self._fc_thread = thread
 
         _buf = []
@@ -1516,9 +1639,12 @@ class CustomScreens:
     def _fc_push(self, data):
         """Push data to the deck browser's apChatReceive JS function."""
         try:
-            if mw and getattr(mw, 'state', None) == 'deckBrowser' and hasattr(mw, 'deckBrowser'):
+            state = getattr(mw, 'state', None)
+            if mw and state == 'deckBrowser' and hasattr(mw, 'deckBrowser'):
                 js = f"window.apChatReceive({json.dumps(data)});"
                 mw.deckBrowser.web.page().runJavaScript(js)
+            else:
+                print(f"CustomScreens: _fc_push skipped — state={state!r}")
         except Exception as e:
             print(f"CustomScreens: _fc_push error: {e}")
 
