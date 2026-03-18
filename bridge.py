@@ -29,11 +29,7 @@ try:
 except ImportError:
     from config import get_config, update_config, is_backend_mode, get_backend_url, get_auth_token, get_refresh_token, DEFAULT_BACKEND_URL
 
-# Sessions-Import
-try:
-    from .sessions_storage import load_sessions, save_sessions
-except ImportError:
-    from sessions_storage import load_sessions, save_sessions
+# NOTE: Legacy sessions_storage (JSON) removed — per-card SQLite is now used instead.
 
 
 class WebBridge(QObject):
@@ -675,53 +671,6 @@ class WebBridge(QObject):
                 "error": f"{error_type}: {error_msg}"
             })
     
-    @pyqtSlot(result=str)
-    def loadSessions(self):
-        """
-        Lädt alle Chat-Sessions aus der persistenten Speicherung
-        
-        Returns:
-            JSON-Array mit allen Sessions
-        """
-        try:
-            sessions = load_sessions()
-            print(f"loadSessions: {len(sessions)} Sessions geladen")
-            return json.dumps(sessions)
-        except Exception as e:
-            import traceback
-            print(f"Fehler in loadSessions: {e}")
-            print(traceback.format_exc())
-            return json.dumps([])
-    
-    @pyqtSlot(str, result=str)
-    def saveSessions(self, sessions_json):
-        """
-        Speichert Chat-Sessions persistent
-        
-        Args:
-            sessions_json: JSON-String mit Sessions-Array
-            
-        Returns:
-            JSON mit Erfolgs-Status
-        """
-        try:
-            sessions = json.loads(sessions_json)
-            success = save_sessions(sessions)
-            print(f"saveSessions: {len(sessions)} Sessions, Erfolg: {success}")
-            return json.dumps({
-                "success": success,
-                "error": None
-            })
-        except Exception as e:
-            import traceback
-            error_msg = str(e)
-            print(f"Fehler in saveSessions: {error_msg}")
-            print(traceback.format_exc())
-            return json.dumps({
-                "success": False,
-                "error": error_msg
-            })
-    
     # ──────────────────────────────────────────────
     #  Per-Card Session Methods (SQLite)
     # ──────────────────────────────────────────────
@@ -791,6 +740,38 @@ class WebBridge(QObject):
         except Exception as e:
             print(f"Fehler in saveCardSection: {e}")
             return json.dumps({'success': False, 'error': str(e)})
+
+    @pyqtSlot(str, result=str)
+    def loadDeckMessages(self, deck_id_str):
+        """Load chronological messages for a deck (all cards + deck-level)."""
+        try:
+            from .card_sessions_storage import load_deck_messages
+        except ImportError:
+            from card_sessions_storage import load_deck_messages
+        try:
+            deck_id = int(deck_id_str)
+            messages = load_deck_messages(deck_id, limit=50)
+            return json.dumps({"success": True, "messages": messages})
+        except Exception as e:
+            print(f"loadDeckMessages error: {e}")
+            return json.dumps({"success": False, "messages": [], "error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    def saveDeckMessage(self, data_json):
+        """Save a deck-level message (no card association)."""
+        try:
+            from .card_sessions_storage import save_deck_message
+        except ImportError:
+            from card_sessions_storage import save_deck_message
+        try:
+            data = json.loads(data_json)
+            deck_id = data.get('deckId')
+            message = data.get('message', {})
+            success = save_deck_message(deck_id, message)
+            return json.dumps({"success": success})
+        except Exception as e:
+            print(f"saveDeckMessage error: {e}")
+            return json.dumps({"success": False, "error": str(e)})
 
     @pyqtSlot(str, str, result=str)
     def searchImage(self, query, image_type="general"):

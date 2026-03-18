@@ -428,6 +428,32 @@ class ChatbotWidget(QWidget):
             except Exception as e:
                 print(f"_handle_js_message: saveCardSection error: {e}")
 
+        elif msg_type == 'loadDeckMessages':
+            deck_id = data if isinstance(data, (int, str)) else data.get('deckId')
+            try:
+                from .card_sessions_storage import load_deck_messages
+            except ImportError:
+                from card_sessions_storage import load_deck_messages
+            try:
+                messages = load_deck_messages(int(deck_id), limit=50)
+                payload = {"type": "deckMessagesLoaded", "deckId": int(deck_id), "messages": messages}
+                self.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
+            except Exception as e:
+                print(f"loadDeckMessages error: {e}")
+
+        elif msg_type == 'saveDeckMessage':
+            try:
+                msg_data = json.loads(data) if isinstance(data, str) else data
+                deck_id = msg_data.get('deckId')
+                message = msg_data.get('message', {})
+                try:
+                    from .card_sessions_storage import save_deck_message
+                except ImportError:
+                    from card_sessions_storage import save_deck_message
+                save_deck_message(int(deck_id), message)
+            except Exception as e:
+                print(f"saveDeckMessage error: {e}")
+
         elif msg_type == 'navigateToCard':
             # Navigate reviewer to a specific card or direction (prev/next)
             try:
