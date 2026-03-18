@@ -311,10 +311,10 @@ def save_message(card_id, message):
         """, (card_id, now, now))
 
         steps = message.get('steps')
-        if steps and not isinstance(steps, str):
+        if steps is not None and not isinstance(steps, str):
             steps = json.dumps(steps, ensure_ascii=False)
         citations = message.get('citations')
-        if citations and not isinstance(citations, str):
+        if citations is not None and not isinstance(citations, str):
             citations = json.dumps(citations, ensure_ascii=False)
         request_id = message.get('request_id') or message.get('requestId')
 
@@ -397,10 +397,10 @@ def save_deck_message(deck_id, message):
 
     try:
         steps = message.get('steps')
-        if steps and not isinstance(steps, str):
+        if steps is not None and not isinstance(steps, str):
             steps = json.dumps(steps, ensure_ascii=False)
         citations = message.get('citations')
-        if citations and not isinstance(citations, str):
+        if citations is not None and not isinstance(citations, str):
             citations = json.dumps(citations, ensure_ascii=False)
         request_id = message.get('request_id') or message.get('requestId')
         source = message.get('source', 'tutor')
