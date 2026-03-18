@@ -258,20 +258,6 @@ function AppInner() {
   // NICHT automatisch wenn keine Session aktiv — Chat startet immer im Chat-Modus
   const showSessionOverview = forceShowOverview;
 
-  // ── Free Chat Push: card messages → Free Chat ──────────────────
-  // When session chat saves a message, also push it to Free Chat for the chronological view
-  useEffect(() => {
-    chatHook.freeChatPushRef.current = (msg) => {
-      freeChatHook.setMessages(prev => [...prev, {
-        id: msg.id,
-        text: msg.text,
-        from: msg.from,
-        createdAt: new Date().toISOString(),
-      }]);
-    };
-    return () => { chatHook.freeChatPushRef.current = null; };
-  }, []);
-
   // ── Free Chat State ──────────────────────────────────────────────
   const [freeChatOpen, setFreeChatOpen] = useState(false);
   const [freeChatInitialText, setFreeChatInitialText] = useState('');
@@ -304,6 +290,20 @@ function AppInner() {
   });
   const freeChatHookRef = useRef(freeChatHook);
   useEffect(() => { freeChatHookRef.current = freeChatHook; }, [freeChatHook]);
+
+  // ── Free Chat Push: card messages → Free Chat ──────────────────
+  // When session chat saves a message, also push it to Free Chat for the chronological view
+  useEffect(() => {
+    chatHook.freeChatPushRef.current = (msg) => {
+      freeChatHook.setMessages(prev => [...prev, {
+        id: msg.id,
+        text: msg.text,
+        from: msg.from,
+        createdAt: new Date().toISOString(),
+      }]);
+    };
+    return () => { chatHook.freeChatPushRef.current = null; };
+  }, []);
   const freeChatOpenRef = useRef(false);
   const handleFreeChatOpenRef = useRef(null);
   useEffect(() => { freeChatOpenRef.current = freeChatOpen; }, [freeChatOpen]);
@@ -601,7 +601,7 @@ function AppInner() {
           }
         }
         // Dispatch auth events as CustomEvents for ProfileDialog/SettingsModal
-        if (['authTokenLoaded', 'authStatusLoaded', 'auth_success', 'auth_error', 'auth_logout'].includes(payload.type)) {
+        if (['authTokenLoaded', 'authStatusLoaded', 'auth_success', 'auth_error', 'auth_logout', 'auth_linking', 'auth_link_expired', 'auth_link_timeout'].includes(payload.type)) {
           window.dispatchEvent(new CustomEvent('ankiAuthEvent', { detail: payload }));
         }
 
@@ -1627,6 +1627,7 @@ function AppInner() {
   const handleFreeChatOpen = useCallback((text) => {
     // Load persisted deck messages before opening (0 = global Free Chat fallback)
     const deckId = sessionContext.currentSession?.deckId || 0;
+    console.error('📦 handleFreeChatOpen called, deckId:', deckId, 'text:', text?.substring(0, 30));
     freeChatHook.loadForDeck(deckId);
 
     // Step 1: show DeckBrowser (deck list visible)

@@ -5,6 +5,7 @@ import cors from 'cors';
 import { validateToken, validateTokenOptional } from './middleware/auth';
 import { chatHandler } from './handlers/chat';
 import { authHandler } from './handlers/auth';
+import { authLinkStoreHandler, authLinkRetrieveHandler } from './handlers/authLink';
 import { modelsHandler } from './handlers/models';
 import { quotaHandler } from './handlers/quota';
 import { usageHistoryHandler } from './handlers/usageHistory';
@@ -12,6 +13,8 @@ import { createCheckoutSessionHandler, createPortalSessionHandler } from './hand
 import { stripeWebhookHandler } from './handlers/stripeWebhook';
 import { verifyCheckoutSessionHandler } from './handlers/verifyCheckoutSession';
 import { migrationHandler } from './handlers/migration';
+import { routerHandler } from './handlers/router';
+import { embedHandler } from './handlers/embed';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -78,6 +81,8 @@ app.get('/health', (req, res) => {
 // API routes (ohne /api/ Präfix, da Cloud Function bereits "api" heißt)
 app.post('/chat', validateTokenOptional, chatHandler);
 app.post('/auth/refresh', authHandler);
+app.post('/auth/link', authLinkStoreHandler);
+app.get('/auth/link/:code', authLinkRetrieveHandler);
 app.get('/models', modelsHandler);
 app.get('/user/quota', validateToken, quotaHandler);
 app.get('/user/usage-history', validateToken, usageHistoryHandler);
@@ -89,6 +94,10 @@ app.post('/stripe/verify-checkout-session', validateToken, verifyCheckoutSession
 
 // Migration route
 app.post('/migrate-anonymous', validateToken, migrationHandler);
+
+// RAG routes (router + embeddings)
+app.post('/router', validateToken, routerHandler);
+app.post('/embed', validateToken, embedHandler);
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {

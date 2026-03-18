@@ -8,6 +8,13 @@ from aqt.qt import QTimer
 from aqt import gui_hooks
 import json
 
+# Global EmbeddingManager instance
+_embedding_manager = None
+
+
+def get_embedding_manager():
+    return _embedding_manager
+
 # UI-Setup Import
 try:
     from .ui_setup import setup_ui, setup_menu, get_chatbot_widget
@@ -245,10 +252,134 @@ def hide_splitter_visuals():
     except Exception as e:
         print(f"⚠️ Fehler beim Verstecken des Splitters: {e}")
 
+def _init_embedding_manager():
+    """Initialize EmbeddingManager for semantic search (called after profile load)"""
+    global _embedding_manager
+    try:
+        try:
+            from .embedding_manager import EmbeddingManager
+        except ImportError:
+            from embedding_manager import EmbeddingManager
+
+        try:
+            from .config import is_backend_mode, get_backend_url, get_auth_token
+        except ImportError:
+            from config import is_backend_mode, get_backend_url, get_auth_token
+
+        config = mw.addonManager.getConfig(__name__) or {}
+        api_key = config.get('api_key', '')
+
+        backend_url = None
+        auth_headers_fn = None
+        if is_backend_mode() and get_auth_token():
+            backend_url = get_backend_url()
+            auth_headers_fn = lambda: {"Authorization": f"Bearer {get_auth_token()}"}
+
+        _embedding_manager = EmbeddingManager(
+            api_key=api_key,
+            backend_url=backend_url,
+            auth_headers_fn=auth_headers_fn
+        )
+        _embedding_manager.load_index()
+
+        # Start background embedding after a delay to not slow down startup
+        def get_all_cards():
+            if not mw or not mw.col:
+                return []
+            card_ids = mw.col.find_cards("")
+            cards = []
+            for cid in card_ids[:10000]:  # Limit to prevent memory issues
+                try:
+                    card = mw.col.get_card(cid)
+                    note = card.note()
+                    cards.append({
+                        'card_id': cid,
+                        'question': note.fields[0] if note.fields else '',
+                        'answer': note.fields[1] if len(note.fields) > 1 else '',
+                        'tags': note.tags,
+                    })
+                except Exception:
+                    continue
+            return cards
+
+        QTimer.singleShot(10000, lambda: _embedding_manager.start_background_embedding(get_all_cards))
+
+        print(f"EmbeddingManager initialized")
+    except Exception as e:
+        print(f"EmbeddingManager initialization failed: {e}")
+        _embedding_manager = None
+
+
 def init_addon():
     """Initialisiert das Addon nach dem Laden des Profils"""
     if mw is None:
         return
+
+    # Migrate sessions.json → SQLite (one-time, on first load)
+    try:
+        from .card_sessions_storage import migrate_from_json
+        migrate_from_json()
+    except Exception as e:
+        print(f"Card sessions migration skipped: {e}")
+
+    # Proaktiver Token-Refresh beim Startup + periodischer Refresh
+    def _startup_token_refresh():
+        try:
+            from .config import get_auth_token, get_refresh_token, is_backend_mode
+            from .ai_handler import get_ai_handler
+        except ImportError:
+            from config import get_auth_token, get_refresh_token, is_backend_mode
+            from ai_handler import get_ai_handler
+
+        if not (is_backend_mode() and get_refresh_token()):
+            return
+
+        handler = get_ai_handler()
+        if handler._ensure_valid_token():
+            print("✅ Startup: Token ist gültig")
+        else:
+            print("⚠️ Startup: Token abgelaufen, Refresh versucht")
+
+        # Benachrichtige Frontend über aktuellen Auth-Status
+        _notify_frontend_auth_status()
+
+    def _notify_frontend_auth_status():
+        """Sendet Auth-Status an Frontend (falls WebView bereit)"""
+        try:
+            from .config import get_auth_token, get_config
+        except ImportError:
+            from config import get_auth_token, get_config
+        config = get_config()
+        auth_token = get_auth_token()
+        auth_validated = config.get('auth_validated', False)
+        if auth_token and auth_validated:
+            widget = get_chatbot_widget()
+            if widget and getattr(widget, 'web_view', None):
+                payload = {"type": "auth_success", "message": "Auto-Login erfolgreich"}
+                js_code = f"if (window.ankiReceive) {{ window.ankiReceive({json.dumps(payload)}); }}"
+                widget.web_view.page().runJavaScript(js_code)
+                print("✅ Startup: Frontend über Auth-Status benachrichtigt")
+
+    def _periodic_token_refresh():
+        """Periodischer Token-Refresh alle 30 Minuten"""
+        try:
+            from .config import get_refresh_token, is_backend_mode
+            from .ai_handler import get_ai_handler
+        except ImportError:
+            from config import get_refresh_token, is_backend_mode
+            from ai_handler import get_ai_handler
+
+        if is_backend_mode() and get_refresh_token():
+            handler = get_ai_handler()
+            handler._ensure_valid_token()
+
+    QTimer.singleShot(3000, _startup_token_refresh)
+
+    # Periodischer Token-Refresh: alle 30 Minuten prüfen
+    if not hasattr(mw, '_token_refresh_timer'):
+        mw._token_refresh_timer = QTimer(mw)
+        mw._token_refresh_timer.timeout.connect(_periodic_token_refresh)
+        mw._token_refresh_timer.start(30 * 60 * 1000)  # 30 Minuten
 
     try:
         mw.addonManager.setWebExports(__name__, r"(web|icons)/.*")
@@ -332,6 +463,9 @@ def init_addon():
             show_native_toolbar()
 
         # Keine automatischen Server/Monitoring mehr - User fügt Token manuell ein
+
+        # Initialize EmbeddingManager for semantic search (after other init is done)
+        _init_embedding_manager()
     except Exception as e:
         from aqt.utils import showInfo
         showInfo(f"Fehler beim Laden des Chatbot-Addons: {str(e)}")
@@ -555,13 +689,18 @@ def on_state_will_change(new_state, old_state):
 
 def cleanup_addon():
     """Cleanup when addon is disabled or Anki closes"""
+    global _embedding_manager
     try:
+        if _embedding_manager:
+            _embedding_manager.stop_background_embedding()
+            _embedding_manager = None
+
         show_native_bottom_bar()
         show_native_top_separator()
         show_native_toolbar()
-        print("✅ Addon cleanup: Native UI restored")
+        print("Addon cleanup: Native UI restored")
     except Exception as e:
-        print(f"⚠️ Cleanup error: {e}")
+        print(f"Cleanup error: {e}")
 
 # Hook registrieren (mit Fallback falls Hooks nicht verfügbar sind)
 if mw is not None:

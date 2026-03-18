@@ -150,29 +150,41 @@ class AIHandler:
             if not refresh_token:
                 print("_refresh_auth_token: Kein Refresh-Token vorhanden")
                 return False
-            
+
             backend_url = get_backend_url()
-            # Backend-URL ist die Cloud Function Base-URL, Express-Routen haben kein /api/ Präfix
             refresh_url = f"{backend_url}/auth/refresh"
-            
+
             response = requests.post(
                 refresh_url,
                 json={"refreshToken": refresh_token},
                 headers={"Content-Type": "application/json"},
                 timeout=10
             )
-            
+
             if response.status_code == 200:
                 data = response.json()
                 new_token = data.get("idToken")
                 if new_token:
-                    update_config(auth_token=new_token)
+                    # Speichere neues ID-Token UND ggf. neues Refresh-Token
+                    new_refresh = data.get("refreshToken", "")
+                    update_kwargs = {
+                        "auth_token": new_token,
+                        "auth_validated": True,
+                    }
+                    if new_refresh:
+                        update_kwargs["refresh_token"] = new_refresh
+                    update_config(**update_kwargs)
                     print("_refresh_auth_token: Token erfolgreich erneuert")
                     self._refresh_config()
                     return True
                 else:
                     print("_refresh_auth_token: Kein neues Token in Response")
                     return False
+            elif response.status_code == 401:
+                # Refresh-Token ungültig/abgelaufen → User muss sich neu einloggen
+                print("_refresh_auth_token: Refresh-Token ungültig (401)")
+                update_config(auth_validated=False)
+                return False
             else:
                 print(f"_refresh_auth_token: Refresh fehlgeschlagen (Status: {response.status_code})")
                 return False

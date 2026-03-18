@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { GoogleSignInButton } from '../components/GoogleSignInButton';
 import { Loader2, Mail, Lock, AlertCircle, Check } from 'lucide-react';
@@ -7,6 +7,8 @@ import { Loader2, Mail, Lock, AlertCircle, Check } from 'lucide-react';
 export function RegisterPage() {
   const { register } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const linkCode = searchParams.get('link');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -40,8 +42,8 @@ export function RegisterPage() {
 
     try {
       await register(email, password);
-      // Redirect to auth callback to generate deep link
-      navigate('/auth/callback');
+      const callbackUrl = linkCode ? `/auth/callback?link=${linkCode}` : '/auth/callback';
+      navigate(callbackUrl);
     } catch (err: any) {
       setError(err.message || 'Registrierung fehlgeschlagen');
     } finally {
@@ -50,7 +52,8 @@ export function RegisterPage() {
   };
 
   const handleGoogleSuccess = () => {
-    navigate('/auth/callback');
+    const callbackUrl = linkCode ? `/auth/callback?link=${linkCode}` : '/auth/callback';
+    navigate(callbackUrl);
   };
 
   return (

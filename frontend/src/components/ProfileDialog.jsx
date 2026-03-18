@@ -93,43 +93,41 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady, showCo
       }
     };
 
-    const originalAnkiReceive = window.ankiReceive;
-    window.ankiReceive = (payload) => {
-      if (originalAnkiReceive) {
-        originalAnkiReceive(payload);
-      }
+    // Listen for auth events via CustomEvents (dispatched by main ankiReceive handler in App.jsx)
+    // Do NOT wrap window.ankiReceive — it destroys the handler chain.
+    const onAuthEvent = (event) => {
+      const payload = event.detail;
+      if (!payload) return;
       if (payload.type === 'authStatusLoaded' && payload.data) {
         handleAuthStatusLoaded({ detail: payload.data });
       } else if (payload.type === 'authTokenLoaded' && payload.data) {
         handleAuthTokenLoaded({ detail: payload.data });
-      } else if (payload.type === 'authTokenLoaded') {
-        // Handle direct payload format
-        if (payload.data) {
-          const token = payload.data.token || '';
-          setCurrentAuthToken(token);
-          // Wenn Token leer ist, setze auch authStatus auf nicht authentifiziert
-          if (!token || !token.trim()) {
-            setAuthStatus(prev => ({ ...prev, authenticated: false, hasToken: false }));
-          }
-        }
       } else if (payload.type === 'auth_success') {
         checkAuthStatus();
         loadAuthToken();
         setError('');
         setLoading(false);
-        setAuthToken(''); // Clear input after success
+        setLinkingInProgress(false);
+        setAuthToken('');
       } else if (payload.type === 'auth_error') {
         setError(payload.message || 'Authentifizierung fehlgeschlagen');
         setLoading(false);
+        setLinkingInProgress(false);
+      } else if (payload.type === 'auth_linking') {
+        setLinkingInProgress(true);
+      } else if (payload.type === 'auth_link_expired' || payload.type === 'auth_link_timeout') {
+        setLinkingInProgress(false);
+        setError(payload.message || 'Verbindung fehlgeschlagen. Bitte erneut versuchen.');
       } else if (payload.type === 'auth_logout') {
         setCurrentAuthToken('');
         setAuthStatus(prev => ({ ...prev, authenticated: false, hasToken: false }));
         setQuotaStatus(null);
       }
     };
+    window.addEventListener('ankiAuthEvent', onAuthEvent);
 
     return () => {
-      window.ankiReceive = originalAnkiReceive;
+      window.removeEventListener('ankiAuthEvent', onAuthEvent);
     };
   }, [isOpen]);
 
@@ -218,12 +216,20 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady, showCo
     setError('');
   };
 
+  const [linkingInProgress, setLinkingInProgress] = useState(false);
+
   const handleRelogin = () => {
-    // Abmelden und Landing Page öffnen
-    handleLogout();
-    const url = 'https://anki-plus.vercel.app/login';
-    if (bridge && bridge.openUrl) bridge.openUrl(url);
-    else window.open(url, '_blank');
+    // Link-Code Auth Flow starten (automatische Verbindung)
+    if (bridge && bridge.startLinkAuth) {
+      setLinkingInProgress(true);
+      setError('');
+      bridge.startLinkAuth();
+    } else {
+      // Fallback: Landing Page direkt öffnen
+      const url = 'https://anki-plus.vercel.app/login';
+      if (bridge && bridge.openUrl) bridge.openUrl(url);
+      else window.open(url, '_blank');
+    }
   };
 
   const handleManageSubscription = () => {
@@ -440,7 +446,7 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady, showCo
               </div>
             </div>
           ) : !isAuthenticated ? (
-            /* MODUS 1: Nicht authentifiziert - Nur Token-Eingabe */
+            /* MODUS 1: Nicht authentifiziert */
             <div className="flex flex-col items-center justify-center py-8 space-y-6">
               <div className="text-center space-y-2">
                 <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -448,72 +454,89 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady, showCo
                 </div>
                 <h3 className="text-xl font-bold text-base-content">Verbinde dein Konto</h3>
                 <p className="text-sm text-base-content/60 max-w-sm">
-                  Füge deinen Auth-Token ein, um dein Anki Plugin mit deinem Account zu verbinden
+                  Melde dich an, um dein Anki Plugin mit deinem Account zu verbinden
                 </p>
               </div>
 
-              <div className="w-full space-y-4">
-                <div className="relative">
-                  <input
-                    type={showToken ? "text" : "password"}
-                    value={authToken}
-                    onChange={(e) => setAuthToken(e.target.value)}
-                    placeholder="Auth-Token einfügen..."
-                    className="w-full pl-4 pr-10 py-4 bg-base-200/50 border-2 border-base-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all placeholder:text-base-content/30"
-                    autoFocus
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowToken(!showToken)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-base-content/40 hover:text-base-content/70 transition-colors rounded-lg hover:bg-base-200/50"
-                  >
-                    {showToken ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
+              {error && (
+                <div className="w-full flex items-center gap-2 text-sm text-error bg-error/5 p-3 rounded-lg border border-error/10">
+                  <AlertCircle size={16} className="flex-shrink-0" />
+                  <span>{error}</span>
                 </div>
+              )}
 
-                {error && (
-                  <div className="flex items-center gap-2 text-sm text-error bg-error/5 p-3 rounded-lg border border-error/10">
-                    <AlertCircle size={16} />
-                    <span>{error}</span>
-                  </div>
-                )}
-
+              {/* Primäre Aktion: Anmelden via Link-Code Flow */}
+              <div className="w-full space-y-3">
                 <button
-                  onClick={handleSave}
-                  disabled={loading || !authToken.trim()}
+                  onClick={handleRelogin}
+                  disabled={linkingInProgress}
                   className="w-full btn btn-primary btn-lg gap-2 font-semibold rounded-xl shadow-lg shadow-primary/20 disabled:opacity-50"
                 >
-                  {loading ? (
+                  {linkingInProgress ? (
                     <>
                       <Loader2 size={18} className="animate-spin" />
-                      Verifiziere...
+                      Warte auf Anmeldung im Browser...
                     </>
                   ) : (
                     <>
-                      <Save size={18} />
-                      Token verifizieren
+                      <ExternalLink size={18} />
+                      Anmelden
                     </>
                   )}
                 </button>
+
+                {linkingInProgress && (
+                  <p className="text-xs text-base-content/50 text-center">
+                    Ein Browser-Fenster wurde geöffnet. Melde dich dort an — die Verbindung erfolgt automatisch.
+                  </p>
+                )}
               </div>
 
-              <div className="text-center text-xs text-base-content/50 pt-4 border-t border-base-content/5 space-y-3">
-                <p>Du findest deinen Token auf der Landingpage nach dem Login</p>
-                <button
-                  onClick={() => {
-                    const url = 'https://anki-plus.vercel.app';
-                    if (bridge && bridge.openUrl) {
-                      bridge.openUrl(url);
-                    } else {
-                      window.open(url, '_blank');
-                    }
-                  }}
-                  className="w-full btn btn-outline btn-sm gap-2 text-xs"
-                >
-                  <Sparkles size={14} />
-                  Zur Landingpage gehen
-                </button>
-              </div>
+              {/* Sekundäre Aktion: Manueller Token-Input (eingeklappt) */}
+              {!linkingInProgress && (
+                <div className="w-full pt-4 border-t border-base-content/5">
+                  <details className="group">
+                    <summary className="text-xs text-base-content/40 cursor-pointer hover:text-base-content/60 transition-colors text-center list-none">
+                      Manuell mit Token verbinden
+                    </summary>
+                    <div className="mt-4 space-y-3">
+                      <div className="relative">
+                        <input
+                          type={showToken ? "text" : "password"}
+                          value={authToken}
+                          onChange={(e) => setAuthToken(e.target.value)}
+                          placeholder="Token einfügen..."
+                          className="w-full pl-4 pr-10 py-3 bg-base-200/50 border border-base-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all placeholder:text-base-content/30"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowToken(!showToken)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-base-content/40 hover:text-base-content/70 transition-colors rounded-lg hover:bg-base-200/50"
+                        >
+                          {showToken ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                      <button
+                        onClick={handleSave}
+                        disabled={loading || !authToken.trim()}
+                        className="w-full btn btn-outline btn-sm gap-2 rounded-xl disabled:opacity-50"
+                      >
+                        {loading ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin" />
+                            Verifiziere...
+                          </>
+                        ) : (
+                          <>
+                            <Save size={14} />
+                            Token verifizieren
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </details>
+                </div>
+              )}
             </div>
           ) : (
             /* MODUS 2: Authentifiziert - Abo-Status + Abo verwalten */

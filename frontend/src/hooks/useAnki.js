@@ -17,14 +17,15 @@ export function useAnki() {
         console.log('useAnki: ankiBridge gefunden');
         
         const bridgeWrapper = {
-          sendMessage: (msg, history = null, mode = 'compact') => {
-            console.log('Bridge: sendMessage aufgerufen:', msg?.substring(0, 50), 'Historie:', history?.length || 0, 'Modus:', mode);
+          sendMessage: (msg, history = null, mode = 'compact', requestId = null) => {
+            console.log('Bridge: sendMessage aufgerufen:', msg?.substring(0, 50), 'Historie:', history?.length || 0, 'Modus:', mode, 'requestId:', requestId);
             if (window.ankiBridge) {
-              // Sende Nachricht mit optionaler Historie und Modus
-              window.ankiBridge.addMessage('sendMessage', { 
-                message: msg, 
+              // Sende Nachricht mit optionaler Historie, Modus und requestId
+              window.ankiBridge.addMessage('sendMessage', {
+                message: msg,
                 history: history,
-                mode: mode
+                mode: mode,
+                requestId: requestId
               });
             }
           },
@@ -135,6 +136,18 @@ export function useAnki() {
             console.log('Bridge: refreshAuth aufgerufen');
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('refreshAuth', null);
+            }
+          },
+          startLinkAuth: () => {
+            console.log('Bridge: startLinkAuth aufgerufen');
+            if (window.ankiBridge) {
+              window.ankiBridge.addMessage('startLinkAuth', null);
+            }
+          },
+          logout: () => {
+            console.log('Bridge: logout aufgerufen');
+            if (window.ankiBridge) {
+              window.ankiBridge.addMessage('logout', null);
             }
           },
           openUrl: (url) => {
@@ -316,18 +329,6 @@ export function useAnki() {
               window.ankiBridge.addMessage('hideAnswer', null);
             }
           },
-          loadSessions: () => {
-            console.log('Bridge: loadSessions aufgerufen');
-            if (window.ankiBridge) {
-              window.ankiBridge.addMessage('loadSessions', null);
-            }
-          },
-          saveSessions: (sessions) => {
-            console.log('Bridge: saveSessions aufgerufen', sessions?.length || 0, 'Sessions');
-            if (window.ankiBridge) {
-              window.ankiBridge.addMessage('saveSessions', JSON.stringify(sessions));
-            }
-          },
           // Per-Card Session Methods (SQLite)
           loadCardSession: (cardId) => {
             console.log('Bridge: loadCardSession aufgerufen', cardId);
@@ -438,8 +439,8 @@ export function useAnki() {
           currentRequestTimeout: null
         };
         setBridge({
-          sendMessage: (msg, history = null, mode = 'compact') => {
-            console.log('Mock: sendMessage', msg, 'Historie:', history?.length || 0, 'Modus:', mode);
+          sendMessage: (msg, history = null, mode = 'compact', requestId = null) => {
+            console.log('Mock: sendMessage', msg, 'Historie:', history?.length || 0, 'Modus:', mode, 'requestId:', requestId);
             if (mockState.currentRequestTimeout) {
               clearTimeout(mockState.currentRequestTimeout);
               mockState.currentRequestTimeout = null;
@@ -524,24 +525,6 @@ export function useAnki() {
             }, 500);
           },
           goToCard: (cardId) => console.log('Mock: goToCard', cardId),
-          loadSessions: () => {
-            console.log('Mock: loadSessions');
-            // Mock: Sende leere Sessions
-            if (window.ankiReceive) {
-              window.ankiReceive({
-                type: 'sessionsLoaded',
-                data: { sessions: [] }
-              });
-            }
-          },
-          saveSessions: (sessions) => {
-            console.log('Mock: saveSessions', sessions?.length || 0, 'Sessions');
-            try {
-              localStorage.setItem('ankiChatSessions', JSON.stringify(sessions));
-            } catch (e) {
-              console.warn('Mock: localStorage nicht verfügbar');
-            }
-          },
           loadCardSession: (cardId) => {
             console.log('Mock: loadCardSession', cardId);
             if (window.ankiReceive) {

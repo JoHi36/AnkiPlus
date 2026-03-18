@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { GoogleSignInButton } from '../components/GoogleSignInButton';
 import { Loader2, Mail, Lock, AlertCircle } from 'lucide-react';
@@ -7,6 +7,8 @@ import { Loader2, Mail, Lock, AlertCircle } from 'lucide-react';
 export function LoginPage() {
   const { login, resetPassword, firebaseConfigured } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const linkCode = searchParams.get('link');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -23,8 +25,9 @@ export function LoginPage() {
 
     try {
       await login(email, password);
-      // Redirect to auth callback to generate deep link
-      navigate('/auth/callback');
+      // Redirect to auth callback — preserve link code for Anki auto-connect
+      const callbackUrl = linkCode ? `/auth/callback?link=${linkCode}` : '/auth/callback';
+      navigate(callbackUrl);
     } catch (err: any) {
       setError(err.message || 'Login fehlgeschlagen');
     } finally {
@@ -48,7 +51,8 @@ export function LoginPage() {
   };
 
   const handleGoogleSuccess = () => {
-    navigate('/auth/callback');
+    const callbackUrl = linkCode ? `/auth/callback?link=${linkCode}` : '/auth/callback';
+    navigate(callbackUrl);
   };
 
   return (

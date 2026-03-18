@@ -1257,12 +1257,27 @@ class WebBridge(QObject):
         """
         Authentifiziert User mit Firebase ID Token
         Speichert Token in Config und validiert durch Backend-Call
+        Akzeptiert auch JSON-Format: {"token": "...", "refreshToken": "..."}
         """
         try:
             if not token or not token.strip():
                 return json.dumps({"success": False, "error": "Kein Token angegeben"})
-            
-            print(f"authenticate: Token erhalten (Länge: {len(token)})")
+
+            # Erkennung von JSON-Format (Landing Page kopiert beide Tokens als JSON)
+            token_str = token.strip()
+            if token_str.startswith('{'):
+                try:
+                    token_data = json.loads(token_str)
+                    token = token_data.get('token', '') or token_data.get('idToken', '')
+                    refresh_token = token_data.get('refreshToken', '') or refresh_token
+                    print(f"authenticate: JSON-Format erkannt, Token + RefreshToken extrahiert")
+                except json.JSONDecodeError:
+                    pass  # Kein gültiges JSON, behandle als normalen Token
+
+            if not token or not token.strip():
+                return json.dumps({"success": False, "error": "Kein Token angegeben"})
+
+            print(f"authenticate: Token erhalten (Länge: {len(token)}, RefreshToken: {'Ja' if refresh_token else 'Nein'})")
             
             # Speichere Token in Config (noch nicht validiert)
             update_config(
@@ -1436,6 +1451,136 @@ class WebBridge(QObject):
             print(f"Fehler in logout: {e}")
             print(traceback.format_exc())
             return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(result=str)
+    def startLinkAuth(self):
+        """
+        Startet den Link-Code Auth Flow:
+        1. Generiert kryptographisch sicheren Code
+        2. Öffnet Landing Page mit ?link=CODE
+        3. Startet Polling auf Backend (alle 2s, max 5 Min)
+        4. Authentifiziert automatisch wenn Tokens ankommen
+        """
+        import secrets
+        import threading
+
+        try:
+            # Generiere 32-Zeichen Code (kryptographisch sicher)
+            link_code = secrets.token_urlsafe(24)  # 32 chars base64url
+            print(f"startLinkAuth: Code generiert ({link_code[:8]}...)")
+
+            # Öffne Landing Page mit Link-Code
+            login_url = f"https://anki-plus.vercel.app/login?link={link_code}"
+            webbrowser.open(login_url)
+
+            # Benachrichtige Frontend: Polling gestartet
+            if self.widget and self.widget.web_view:
+                payload = {"type": "auth_linking", "message": "Warte auf Anmeldung im Browser..."}
+                js_code = f"if (window.ankiReceive) {{ window.ankiReceive({json.dumps(payload)}); }}"
+                self.widget.web_view.page().runJavaScript(js_code)
+
+            # Starte Polling in separatem Thread
+            def poll_for_tokens():
+                import time
+                backend_url = get_backend_url()
+                max_attempts = 150  # 5 Minuten bei 2s Intervall
+
+                for attempt in range(max_attempts):
+                    time.sleep(2)
+                    try:
+                        response = requests.get(
+                            f"{backend_url}/auth/link/{link_code}",
+                            headers={"Content-Type": "application/json"},
+                            timeout=5
+                        )
+
+                        if response.status_code == 200:
+                            data = response.json()
+                            id_token = data.get("idToken", "")
+                            refresh_token = data.get("refreshToken", "")
+
+                            if id_token:
+                                print(f"startLinkAuth: Tokens empfangen! (Attempt {attempt+1})")
+                                # Authentifiziere mit beiden Tokens
+                                # Muss auf dem Main-Thread laufen (Qt)
+                                from aqt import mw
+                                mw.taskman.run_on_main(
+                                    lambda t=id_token, r=refresh_token: self._complete_link_auth(t, r)
+                                )
+                                return
+                        elif response.status_code == 410:
+                            # Code abgelaufen
+                            print("startLinkAuth: Link-Code abgelaufen")
+                            from aqt import mw
+                            mw.taskman.run_on_main(
+                                lambda: self._notify_auth_event("auth_link_expired", "Link abgelaufen. Bitte erneut versuchen.")
+                            )
+                            return
+                        # 404 = noch nicht bereit, weiter pollen
+                    except Exception as e:
+                        # Netzwerkfehler — weiter versuchen
+                        if attempt % 10 == 0:
+                            print(f"startLinkAuth: Polling-Fehler (Attempt {attempt+1}): {e}")
+
+                # Timeout nach 5 Minuten
+                print("startLinkAuth: Timeout nach 5 Minuten")
+                from aqt import mw
+                mw.taskman.run_on_main(
+                    lambda: self._notify_auth_event("auth_link_timeout", "Zeitüberschreitung. Bitte erneut versuchen.")
+                )
+
+            thread = threading.Thread(target=poll_for_tokens, daemon=True, name="LinkAuthPoll")
+            thread.start()
+
+            return json.dumps({"success": True, "linkCode": link_code})
+        except Exception as e:
+            import traceback
+            print(f"Fehler in startLinkAuth: {e}")
+            print(traceback.format_exc())
+            return json.dumps({"success": False, "error": str(e)})
+
+    def _complete_link_auth(self, id_token, refresh_token):
+        """Wird auf dem Main-Thread aufgerufen wenn Link-Auth Tokens empfangen wurden"""
+        try:
+            # Speichere Tokens
+            update_config(
+                auth_token=id_token.strip(),
+                refresh_token=refresh_token.strip() if refresh_token else "",
+                backend_url=DEFAULT_BACKEND_URL,
+                backend_mode=True,
+                auth_validated=False
+            )
+
+            # Validiere durch Backend-Call
+            backend_url = get_backend_url()
+            response = requests.get(
+                f"{backend_url}/user/quota",
+                headers={
+                    "Authorization": f"Bearer {id_token.strip()}",
+                    "Content-Type": "application/json"
+                },
+                timeout=15
+            )
+
+            if response.status_code == 200:
+                update_config(auth_validated=True)
+                print("_complete_link_auth: Token validiert!")
+                self._notify_auth_event("auth_success", "Erfolgreich verbunden!")
+            else:
+                # Token gespeichert, aber Validierung fehlgeschlagen
+                print(f"_complete_link_auth: Validierung fehlgeschlagen (Status: {response.status_code})")
+                self._notify_auth_event("auth_success", "Verbunden (Validierung ausstehend)")
+        except Exception as e:
+            print(f"_complete_link_auth: Fehler: {e}")
+            # Token wurde trotzdem gespeichert
+            self._notify_auth_event("auth_success", "Verbunden")
+
+    def _notify_auth_event(self, event_type, message):
+        """Sendet Auth-Event an Frontend"""
+        if self.widget and self.widget.web_view:
+            payload = {"type": event_type, "message": message}
+            js_code = f"if (window.ankiReceive) {{ window.ankiReceive({json.dumps(payload)}); }}"
+            self.widget.web_view.page().runJavaScript(js_code)
 
     @pyqtSlot(str, result=str)
     def openUrl(self, url):

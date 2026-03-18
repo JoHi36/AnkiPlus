@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { sendTokenToPlugin, checkPluginServer, copyToClipboard } from '../utils/deepLink';
 import { CheckCircle2, Copy, Loader2, AlertCircle, ExternalLink } from 'lucide-react';
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://europe-west1-ankiplus-b0ffb.cloudfunctions.net/api';
 
 type TransferStatus = 'checking' | 'sending' | 'success' | 'manual';
 
 export function AuthCallbackPage() {
   const { user, getAuthToken, getRefreshToken } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [idToken, setIdToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -16,15 +19,19 @@ export function AuthCallbackPage() {
   const [transferStatus, setTransferStatus] = useState<TransferStatus>('checking');
   const [transferError, setTransferError] = useState<string | null>(null);
 
+  // Get link code from URL params (set by Anki addon)
+  const linkCode = searchParams.get('link');
+
   useEffect(() => {
     const connectPlugin = async () => {
       if (!user) {
-        navigate('/login');
+        // Preserve link param through login redirect
+        const loginUrl = linkCode ? `/login?link=${linkCode}` : '/login';
+        navigate(loginUrl);
         return;
       }
 
       try {
-        // Get ID token and refresh token
         const token = await getAuthToken();
         if (!token) {
           setError('Token-Generierung fehlgeschlagen');
@@ -35,7 +42,33 @@ export function AuthCallbackPage() {
         setIdToken(token);
         const refreshToken = getRefreshToken() || '';
 
-        // Try automatic transfer to plugin
+        // Primary method: Link-Code flow (HTTPS→HTTPS, no Mixed Content)
+        if (linkCode) {
+          setTransferStatus('sending');
+          try {
+            const response = await fetch(`${BACKEND_URL}/auth/link`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                code: linkCode,
+                idToken: token,
+                refreshToken,
+              }),
+            });
+
+            if (response.ok) {
+              setTransferStatus('success');
+              setLoading(false);
+              return;
+            }
+            // Backend error — fall through to legacy methods
+            setTransferError('Backend-Verbindung fehlgeschlagen');
+          } catch {
+            setTransferError('Netzwerkfehler');
+          }
+        }
+
+        // Legacy fallback: Direct HTTP POST to local auth server
         setTransferStatus('checking');
         const serverAvailable = await checkPluginServer();
 
@@ -47,16 +80,12 @@ export function AuthCallbackPage() {
             setTransferStatus('success');
             setLoading(false);
             return;
-          } else {
-            // Plugin server reachable but transfer failed
-            setTransferError(result.error || 'Transfer fehlgeschlagen');
-            setTransferStatus('manual');
           }
-        } else {
-          // Plugin server not reachable — show manual instructions
-          setTransferStatus('manual');
+          setTransferError(result.error || 'Transfer fehlgeschlagen');
         }
 
+        // All automatic methods failed — show manual fallback
+        setTransferStatus('manual');
         setLoading(false);
       } catch (err: any) {
         setError('Fehler: ' + err.message);
@@ -65,11 +94,16 @@ export function AuthCallbackPage() {
     };
 
     connectPlugin();
-  }, [user, getAuthToken, getRefreshToken, navigate]);
+  }, [user, getAuthToken, getRefreshToken, navigate, linkCode]);
 
   const handleCopyToken = async () => {
     if (idToken) {
-      const success = await copyToClipboard(idToken);
+      const refreshToken = getRefreshToken() || '';
+      const tokenPayload = JSON.stringify({
+        token: idToken,
+        refreshToken: refreshToken,
+      });
+      const success = await copyToClipboard(tokenPayload);
       if (success) {
         setCopied(true);
         setTimeout(() => setCopied(false), 3000);
@@ -82,6 +116,27 @@ export function AuthCallbackPage() {
     setTransferStatus('sending');
     setTransferError(null);
     const refreshToken = getRefreshToken() || '';
+
+    // Try link-code first if available
+    if (linkCode) {
+      try {
+        const response = await fetch(`${BACKEND_URL}/auth/link`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code: linkCode,
+            idToken: idToken,
+            refreshToken,
+          }),
+        });
+        if (response.ok) {
+          setTransferStatus('success');
+          return;
+        }
+      } catch { /* fall through */ }
+    }
+
+    // Legacy fallback
     const result = await sendTokenToPlugin(idToken, refreshToken);
     if (result.success) {
       setTransferStatus('success');
@@ -140,6 +195,7 @@ export function AuthCallbackPage() {
             <h2 className="text-2xl font-bold mb-2">Verbunden!</h2>
             <p className="text-neutral-400 text-sm mb-6">
               Dein Anki Plugin wurde automatisch mit deinem Account verbunden.
+              {linkCode && ' Du kannst dieses Fenster schließen und zu Anki zurückkehren.'}
             </p>
             <div className="flex gap-3">
               <button
@@ -161,7 +217,7 @@ export function AuthCallbackPage() {
     );
   }
 
-  // Manual fallback — plugin not reachable or transfer failed
+  // Manual fallback — all automatic methods failed
   return (
     <div className="min-h-screen bg-[#030303] text-white flex items-center justify-center p-6 relative">
       <div className="fixed top-0 left-0 w-full h-[500px] bg-teal-900/10 blur-[120px] pointer-events-none z-0" />
@@ -176,7 +232,7 @@ export function AuthCallbackPage() {
             <h2 className="text-2xl font-bold mb-2">Manuell verbinden</h2>
             <p className="text-neutral-400 text-sm">
               {transferError
-                ? 'Automatische Verbindung fehlgeschlagen. Kopiere den Token manuell.'
+                ? 'Automatische Verbindung fehlgeschlagen. Kopiere den Schlüssel manuell.'
                 : 'Anki Plugin nicht erreichbar. Stelle sicher, dass Anki läuft.'}
             </p>
           </div>
@@ -193,15 +249,12 @@ export function AuthCallbackPage() {
           <div className="space-y-4 mb-6">
             <div>
               <label className="block text-sm font-medium mb-2 text-neutral-300">
-                Auth-Token
+                Verbindungsschlüssel
               </label>
               <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={idToken || ''}
-                  readOnly
-                  className="flex-1 px-4 py-3 bg-[#111] border border-white/10 rounded-lg text-white text-xs font-mono"
-                />
+                <div className="flex-1 px-4 py-3 bg-[#111] border border-white/10 rounded-lg text-neutral-500 text-xs font-mono truncate">
+                  {idToken ? `${idToken.slice(0, 20)}...` : ''}
+                </div>
                 <button
                   onClick={handleCopyToken}
                   className={`px-4 py-3 border rounded-lg transition-colors ${
@@ -209,7 +262,7 @@ export function AuthCallbackPage() {
                       ? 'bg-green-500/10 border-green-500/20 text-green-400'
                       : 'bg-white/5 border-white/10 hover:bg-white/10'
                   }`}
-                  title="Token kopieren"
+                  title="Schlüssel kopieren"
                 >
                   {copied ? <CheckCircle2 className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
                 </button>
@@ -217,7 +270,7 @@ export function AuthCallbackPage() {
               {copied && (
                 <p className="mt-2 text-sm text-green-400 flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4" />
-                  Token kopiert! Füge ihn in Anki ein.
+                  Kopiert! Füge den Schlüssel in Anki ein.
                 </p>
               )}
             </div>
@@ -227,10 +280,10 @@ export function AuthCallbackPage() {
           <div className="mb-6 p-4 bg-teal-500/10 border border-teal-500/20 rounded-lg">
             <p className="text-sm text-teal-300 mb-3 font-medium">So verbindest du manuell:</p>
             <ol className="text-xs text-neutral-400 space-y-2 list-decimal list-inside">
-              <li><strong>Kopiere den Token</strong> oben</li>
+              <li><strong>Kopiere den Schlüssel</strong> oben</li>
               <li><strong>Öffne Anki</strong> und das Chat-Panel (Cmd+I / Ctrl+I)</li>
-              <li><strong>Öffne Einstellungen</strong> → Profil Tab</li>
-              <li><strong>Füge den Token ein</strong> und klicke "Token verifizieren"</li>
+              <li><strong>Klicke auf dein Profil</strong> (oben rechts)</li>
+              <li><strong>Füge den Schlüssel ein</strong> und klicke &quot;Verifizieren&quot;</li>
             </ol>
           </div>
 
