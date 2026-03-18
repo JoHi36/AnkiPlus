@@ -443,7 +443,11 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       });
       return;
     } else if (payload.type === 'ai_state') {
-      // Track AI state events as steps
+      // Skip old ai_state events when new pipeline_step events are active
+      if (pipelineStepsRef.current && pipelineStepsRef.current.length > 0) {
+        return;
+      }
+      // Track AI state events as steps (legacy fallback only)
       const step = {
         state: payload.message,
         timestamp: Date.now(),
@@ -451,12 +455,10 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
         metadata: payload.metadata || {}
       };
       updateCurrentSteps((prev) => {
-        // CRITICAL: Add step and sort by timestamp to ensure correct order
-        // Steps may arrive out of order due to async events
         const newSteps = [...prev, step].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
         return newSteps;
       });
-      console.log('📊 useChat: AI State tracked:', payload.message);
+      console.log('📊 useChat: AI State tracked (legacy):', payload.message);
     } else if (payload.type === 'rag_sources') {
       // NEW: Live citations from backend
       console.log('📚 useChat: Received live citations:', payload.data ? Object.keys(payload.data).length : 0);

@@ -3199,15 +3199,13 @@ REGELN:
             # Emit generating pipeline step (covers both search and no-search paths)
             self._emit_pipeline_step("generating", "active")
 
-            # Track Generator step
-            self._emit_ai_state("Generiere Antwort...", phase=self.PHASE_GENERATING, metadata={"mode": mode, "sourceCount": len(citations)})
+            # (Old ai_state emission removed — replaced by _emit_pipeline_step above)
             
             # Wrapper für Callback um Steps und Citations zu übergeben
             def enhanced_callback(chunk, done, is_function_call=False):
                 """Enhanced callback that includes steps and citations via kwargs"""
                 if done:
-                    # Emit finished phase event
-                    self._emit_ai_state("Fertiggestellt", phase=self.PHASE_FINISHED, metadata={"mode": mode, "sourceCount": len(citations)})
+                    self._emit_pipeline_step("generating", "done")
                     if callback:
                         callback(chunk, done, is_function_call,
                                  steps=self._current_request_steps,
@@ -3245,7 +3243,7 @@ REGELN:
                 print(f"⚠️ Primary model error ({status_code or 'unknown'}): {str(e)[:100]}...")
                 
                 # Wenn wir hier sind, hat der erste Versuch fehlgeschlagen
-                self._emit_ai_state("Wechsle zu Fallback-Modell...", phase=self.PHASE_GENERATING)
+                # (Old ai_state "Wechsle zu Fallback-Modell..." removed)
                 
                 # Strategie für Fallback:
                 # 1. Wenn 400 (Bad Request/Size) -> Sofort massiv kürzen
