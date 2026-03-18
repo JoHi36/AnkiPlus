@@ -12,6 +12,13 @@ from .config import (
 )
 from .system_prompt import get_system_prompt
 
+try:
+    from .tool_registry import registry as tool_registry
+    from .agent_loop import run_agent_loop
+except ImportError:
+    from tool_registry import registry as tool_registry
+    from agent_loop import run_agent_loop
+
 # User-friendly error messages
 ERROR_MESSAGES = {
     'QUOTA_EXCEEDED': 'Tageslimit erreicht. Upgrade für mehr Requests?',
@@ -2141,19 +2148,19 @@ Karteninhalt: {question_clean[:500]}"""
 
     def _rag_router(self, user_message, context=None):
         """
-        Stage 1: Router - Analysiert die Anfrage und entscheidet ob Suche nötig ist
-        
+        Stage 1: Router - Analysiert die Anfrage und entscheidet ob und wie gesucht werden soll.
+
         Args:
             user_message: Die Benutzer-Nachricht
             context: Optionaler Kontext (z.B. aktuelle Karte)
-        
+
         Returns:
-            Dict mit search_needed, search_query, search_scope, reasoning
+            Dict mit search_needed, retrieval_mode, embedding_query, precise_queries, broad_queries, search_scope
             Oder None bei Fehler (dann wird search_needed=False angenommen)
         """
         try:
             self._refresh_config()
-            
+
             # Prüfe ob Backend-Modus aktiv ist
             use_backend = is_backend_mode() and get_auth_token()
             if not use_backend:
@@ -2162,131 +2169,111 @@ Karteninhalt: {question_clean[:500]}"""
                     return None
             else:
                 api_key = ""  # Nicht benötigt im Backend-Modus
-            
+
             # Router-Modell: gemini-2.5-flash (schnell, direkte API ~1s)
             # Fallback: gemini-3-flash-preview
             router_model = "gemini-2.5-flash"
             fallback_model = "gemini-3-flash-preview"
-            
-            # Emit UI State
-            self._emit_ai_state("Analysiere Anfrage...", phase=self.PHASE_INTENT)
-            
-            # Erstelle Router-Prompt
-            deck_info = ""
-            if context and context.get('deckName'):
-                deck_info = f"\nAktuelles Deck: {context.get('deckName')}"
-            
-            # Karteninhalt für Router hinzufügen (wichtig für Fragen wie "fassen wir zusammen")
+
+            # Emit pipeline step
+            self._emit_pipeline_step("router", "active")
+
+            # Fetch lastAssistantMessage from session storage
+            last_assistant_message = ""
+            try:
+                try:
+                    from . import card_sessions_storage
+                except ImportError:
+                    import card_sessions_storage
+                if context and context.get('cardId'):
+                    session_data = card_sessions_storage.load_card_session(context['cardId'])
+                    messages = session_data.get('messages', [])
+                    for msg in reversed(messages):
+                        if msg.get('sender') == 'bot':
+                            last_assistant_message = (msg.get('text', '') or '')[:300]
+                            break
+            except Exception:
+                pass
+
+            # Extrahiere Karteninhalt
             import re
-            card_content = ""
+            card_question = ""
+            card_answer = ""
+            deck_name = ""
+            extra_fields = ""
+
             if context:
-                # Extrahiere Karteninhalt
-                question = context.get('question') or context.get('frontField') or ""
-                answer = context.get('answer') or ""
+                question_raw = context.get('question') or context.get('frontField') or ""
+                answer_raw = context.get('answer') or ""
+                deck_name = context.get('deckName') or ""
                 fields = context.get('fields', {})
-                
-                if question or answer or fields:
-                    card_content = "\n\nAktuelle Karte:\n"
-                    if question:
-                        # HTML-Tags entfernen für bessere Lesbarkeit
-                        question_clean = re.sub(r'<[^>]+>', ' ', question)
-                        question_clean = re.sub(r'\s+', ' ', question_clean).strip()
-                        if question_clean:
-                            card_content += f"Frage: {question_clean[:500]}\n"
-                    if answer:
-                        answer_clean = re.sub(r'<[^>]+>', ' ', answer)
-                        answer_clean = re.sub(r'\s+', ' ', answer_clean).strip()
-                        if answer_clean:
-                            card_content += f"Antwort: {answer_clean[:500]}\n"
-                    # Wichtige Felder hinzufügen (falls vorhanden)
-                    if fields:
-                        for field_name, field_value in list(fields.items())[:3]:  # Max 3 Felder
-                            if field_value and field_name not in ['question', 'answer', 'Front', 'Back']:
-                                field_clean = re.sub(r'<[^>]+>', ' ', str(field_value))
-                                field_clean = re.sub(r'\s+', ' ', field_clean).strip()
-                                if field_clean and len(field_clean) > 10:
-                                    card_content += f"{field_name}: {field_clean[:200]}\n"
-            
+
+                if question_raw:
+                    card_question = re.sub(r'<[^>]+>', ' ', question_raw)
+                    card_question = re.sub(r'\s+', ' ', card_question).strip()[:500]
+                if answer_raw:
+                    card_answer = re.sub(r'<[^>]+>', ' ', answer_raw)
+                    card_answer = re.sub(r'\s+', ' ', card_answer).strip()[:500]
+
+                # Wichtige Felder hinzufügen (falls vorhanden)
+                if fields:
+                    extra_lines = []
+                    for field_name, field_value in list(fields.items())[:3]:
+                        if field_value and field_name not in ['question', 'answer', 'Front', 'Back']:
+                            field_clean = re.sub(r'<[^>]+>', ' ', str(field_value))
+                            field_clean = re.sub(r'\s+', ' ', field_clean).strip()
+                            if field_clean and len(field_clean) > 10:
+                                extra_lines.append(f"- {field_name}: {field_clean[:200]}")
+                    if extra_lines:
+                        extra_fields = "\n".join(extra_lines)
+
+            # Extract card tags
+            card_tags = []
+            if context and context.get('tags'):
+                card_tags = context['tags']
+            elif context and context.get('cardId'):
+                try:
+                    from aqt import mw
+                    card = mw.col.get_card(context['cardId'])
+                    note = card.note()
+                    card_tags = list(note.tags)
+                except Exception:
+                    pass
+
             # Debug-Logging
-            print(f"🔍 Router: user_message='{user_message[:100]}', has_context={bool(context)}, card_content_length={len(card_content)}")
-            if card_content:
-                print(f"🔍 Router: card_content preview: {card_content[:200]}...")
-            
-            router_prompt = f"""Analysiere diese Benutzeranfrage und klassifiziere sie in eine Intent-Kategorie.
+            print(f"🔍 Router: user_message='{user_message[:100]}', has_context={bool(context)}, deck={deck_name}, tags={card_tags[:5]}")
 
-Benutzeranfrage: {user_message}{deck_info}{card_content}
+            router_prompt = f"""Du bist ein Such-Router für eine Lernkarten-App. Entscheide ob und wie gesucht werden soll.
 
-KRITISCHE REGEL FÜR SUCHANFRAGEN:
-- Die Nutzeranfrage (z.B. "erkläre mir das", "fassen wir zusammen") darf NIEMALS direkt als Suchanfrage verwendet werden!
-- Du musst stattdessen relevante Keywords und Konzepte aus dem Karteninhalt extrahieren
-- Wenn eine "Aktuelle Karte" vorhanden ist, MUSS du deren Inhalte (Frage, Antwort, Felder) für die Suchstrategien verwenden
-- Die Suchanfragen müssen konkrete Begriffe aus der Karte enthalten, nicht die Formulierung der Nutzeranfrage
+Benutzer-Nachricht: "{user_message}"
+{f'Letzte Antwort: "{last_assistant_message[:200]}"' if last_assistant_message else ''}
 
-Beispiele:
-❌ FALSCH: Nutzer fragt "erkläre mir das" → Query: "erkläre mir das"
-✅ RICHTIG: Nutzer fragt "erkläre mir das", Karte enthält "Photosynthese" → Query: "Photosynthese AND Prozess"
+Karten-Kontext:
+- Frage: {card_question}
+- Antwort: {card_answer}
+- Deck: {deck_name}
+- Tags: {', '.join(card_tags) if card_tags else 'keine'}
+{extra_fields}
 
-❌ FALSCH: Nutzer fragt "fassen wir zusammen" → Query: "fassen wir zusammen"  
-✅ RICHTIG: Nutzer fragt "fassen wir zusammen", Karte enthält "Mitochondrien" → Query: "Mitochondrien OR Zellatmung"
-
-Antworte NUR mit einem JSON-Objekt im folgenden Format (KEINE Markdown-Formatierung, KEINE Code-Blöcke, KEINE Erklärungen):
+Antworte NUR mit JSON:
 {{
-  "intent": "EXPLANATION",
-  "search_needed": true,
-  "retrieval_mode": "both",
-  "precise_queries": [
-    "query1 mit AND Operatoren",
-    "query2 mit AND Operatoren",
-    "query3 mit AND Operatoren"
-  ],
-  "broad_queries": [
-    "query1 mit OR Operatoren",
-    "query2 mit OR Operatoren",
-    "query3 mit OR Operatoren"
-  ],
-  "search_scope": "current_deck",
-  "reasoning": "kurze Erklärung"
+  "search_needed": true/false,
+  "retrieval_mode": "sql" | "semantic" | "both",
+  "embedding_query": "semantisch reicher Suchtext aus Kartenkontext + Frage synthetisiert",
+  "precise_queries": ["keyword1 AND keyword2", ...],
+  "broad_queries": ["keyword1 OR keyword2", ...],
+  "search_scope": "current_deck" | "collection"
 }}
 
-INTENT-KATEGORIEN (genau eine auswählen):
-- "EXPLANATION": Nutzer möchte ein Konzept erklärt haben oder vertiefen
-- "FACT_CHECK": Nutzer fragt nach spezifischen Fakten oder Definitionen
-- "MNEMONIC": Nutzer möchte eine Eselsbrücke oder Merkhilfe
-- "QUIZ": Nutzer möchte ein Quiz oder eine Übung
-- "CHAT": Allgemeine Unterhaltung, Begrüßung, oder Off-Topic (setze search_needed=false)
+REGELN:
+- search_needed=false bei Smalltalk, Danke, Meta-Fragen
+- embedding_query: Synthese aus Karteninhalt + Benutzerfrage. NIEMALS die Benutzerfrage wörtlich verwenden.
+  Beispiel: Frage="Was ist das?", Karte="Mitochondrium" → embedding_query="Mitochondrium Zellatmung Organell Funktion"
+- precise_queries: 2-3 AND-Queries aus Karten-Keywords (nicht aus Benutzerfrage)
+- broad_queries: 2-3 OR-Queries für breitere Suche
+- search_scope: "current_deck" als Default, "collection" nur bei fächerübergreifenden Fragen
+- retrieval_mode: "both" als Default, "sql" für exakte Fakten, "semantic" für konzeptuelle Fragen"""
 
-KRITISCHE JSON-REGELN:
-- Antworte NUR mit dem rohen JSON-Objekt
-- KEINE Markdown-Codeblöcke
-- Verwende doppelte Anführungszeichen für Strings
-- Vermeide Anführungszeichen innerhalb von Strings, oder escape sie korrekt (\\")
-- Keine Kommentare
-- Deck-Namen IMMER in doppelten Anführungszeichen: deck:"Deck Name" (nicht deck:Deck Name)
-
-Regeln für Suchstrategien:
-- intent: Wähle genau eine Kategorie aus der Liste oben
-- search_needed: true wenn die Frage spezifische Informationen aus Karten benötigt, false bei CHAT
-- search_needed: IMMER false wenn intent="CHAT"
-- retrieval_mode: One of "sql", "semantic", or "both".
-  * Use "sql" for structural queries about specific tags, decks, or exact field content
-  * Use "semantic" for meaning-based queries like "explain", "relate", "why", "compare", or conceptual questions
-  * Use "both" for queries that could benefit from both keyword matching and conceptual similarity
-  * Default to "both" when unsure
-- search_scope: "current_deck" für Fragen zum aktuellen Thema, "collection" für breite Fragen
-- precise_queries: Array mit GENAU 3 verschiedenen Suchanfragen (AND-Verknüpfung)
-  * KRITISCH: You MUST generate 3 distinct, different search queries. Do not repeat the same query.
-  * Jede Query: Extrahiere die wichtigsten Keywords aus dem Karteninhalt, kombiniere mit AND
-  * Variation: Jede der 3 Queries sollte unterschiedliche Keyword-Kombinationen enthalten
-  * Beispiel: ["Photosynthese AND Licht", "Chlorophyll AND Energie", "Pflanzen AND CO2"]
-- broad_queries: Array mit GENAU 3 verschiedenen Suchanfragen (OR-Verknüpfung)
-  * KRITISCH: You MUST generate 3 distinct, different search queries. Do not repeat the same query.
-  * Jede Query: Extrahiere verwandte Begriffe/Synonyme aus dem Karteninhalt, kombiniere mit OR
-  * Variation: Jede der 3 Queries sollte unterschiedliche Synonym-Kombinationen enthalten
-  * Beispiel: ["Photosynthese OR Assimilation", "Licht OR Sonnenlicht OR Strahlung", "Pflanze OR Gewächs"]
-- Wenn KEINE "Aktuelle Karte" vorhanden ist, nutze Keywords aus der Nutzeranfrage
-- Jede query sollte für Anki-Syntax optimiert sein (max 15 Wörter pro Query)
-- NIEMALS die Nutzeranfrage wörtlich als Query verwenden, wenn eine Karte vorhanden ist!"""
-            
             # Backend-Modus: Router über Cloud Function (API-Key serverseitig)
             if use_backend:
                 try:
@@ -2303,9 +2290,12 @@ Regeln für Suchstrategien:
                             "question": context.get('question') or context.get('frontField') or "",
                             "answer": context.get('answer') or "",
                             "deckName": context.get('deckName') or "",
-                            "tags": context.get('tags') or []
+                            "tags": card_tags
                         }
-                    router_payload = {"message": user_message}
+                    router_payload = {
+                        "message": user_message,
+                        "lastAssistantMessage": last_assistant_message
+                    }
                     if card_context:
                         router_payload["cardContext"] = card_context
 
@@ -2314,8 +2304,8 @@ Regeln für Suchstrategien:
                     response.raise_for_status()
                     router_result = response.json()
 
-                    if router_result.get("intent") and router_result.get("search_needed") is not None:
-                        print(f"✅ Router (Backend): Intent={router_result.get('intent')}, search_needed={router_result.get('search_needed')}")
+                    if router_result.get("search_needed") is not None:
+                        print(f"✅ Router (Backend): search_needed={router_result.get('search_needed')}")
                         # Weiter zur Validierung unten (gleicher Code wie bei direkter API)
                 except Exception as be:
                     print(f"⚠️ Router: Backend-Fehler: {be}, Fallback auf direkte API")
@@ -2324,14 +2314,6 @@ Regeln für Suchstrategien:
             # Wenn Backend erfolgreich war, überspringe direkte API
             if use_backend and 'router_result' in locals() and router_result and router_result.get("search_needed") is not None:
                 # Validierung des Backend-Ergebnisses
-                intent = router_result.get("intent", "EXPLANATION")
-                if intent == "CHAT":
-                    router_result["search_needed"] = False
-                self._emit_ai_state(f"Intent: {intent}", phase=self.PHASE_INTENT, metadata={"intent": intent})
-                scope = router_result.get("search_scope", "current_deck")
-                scope_label = "Stapel" if scope == "current_deck" else "Global"
-                self._emit_ai_state(f"Suchraum: {scope_label}", phase=self.PHASE_SEARCH, metadata={"scope": scope})
-
                 retrieval_mode = router_result.get('retrieval_mode', 'both')
                 if retrieval_mode not in ('sql', 'semantic', 'both'):
                     retrieval_mode = 'both'
@@ -2350,7 +2332,18 @@ Regeln für Suchstrategien:
                 router_result["precise_queries"] = precise_queries[:3]
                 router_result["broad_queries"] = broad_queries[:3]
 
-                print(f"✅ Router (Backend): intent={intent}, search_needed={router_result.get('search_needed')}, retrieval_mode={retrieval_mode}")
+                # Emit pipeline done
+                scope_label = ""
+                if deck_name:
+                    scope_label = deck_name.split("::")[-1]
+                self._emit_pipeline_step("router", "done", {
+                    "search_needed": router_result.get("search_needed", True),
+                    "retrieval_mode": retrieval_mode,
+                    "scope": router_result.get("search_scope", "current_deck"),
+                    "scope_label": scope_label
+                })
+
+                print(f"✅ Router (Backend): search_needed={router_result.get('search_needed')}, retrieval_mode={retrieval_mode}")
                 return router_result
 
             # Direkter Gemini API Modus (Fallback oder wenn kein Backend)
@@ -2382,17 +2375,17 @@ Regeln für Suchstrategien:
                     response = requests.post(url, json=data, headers=headers, timeout=10)
                     response.raise_for_status()
                     result = response.json()
-                    
+
                     if "error" in result:
                         continue
-                    
+
                     if "candidates" in result and len(result["candidates"]) > 0:
                         candidate = result["candidates"][0]
                         if "content" in candidate and "parts" in candidate["content"]:
                             parts = candidate["content"]["parts"]
                             if len(parts) > 0:
                                 text = parts[0].get("text", "")
-                                
+
                                 # Parse JSON (kann in Code-Block sein)
                                 import re
                                 # Entferne Markdown-Code-Blöcke falls vorhanden
@@ -2402,11 +2395,11 @@ Regeln für Suchstrategien:
                                 json_match = re.search(r'\{.*?"search_needed".*?\}', text, re.DOTALL)
                                 if json_match:
                                     text = json_match.group(0)
-                                
+
                                 # Bereinige JSON: Entferne trailing commas
                                 # Pattern: Komma gefolgt von } oder ]
                                 text = re.sub(r',(\s*[}\]])', r'\1', text)
-                                
+
                                 try:
                                     router_result = json.loads(text)
                                 except json.JSONDecodeError as json_err:
@@ -2417,7 +2410,7 @@ Regeln für Suchstrategien:
                                     text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
                                     # Entferne trailing commas nochmal
                                     text = re.sub(r',(\s*[}\]])', r'\1', text)
-                                    
+
                                     # Versuche unvollständiges JSON zu reparieren
                                     try:
                                         router_result = json.loads(text)
@@ -2427,13 +2420,13 @@ Regeln für Suchstrategien:
                                         close_braces = text.count('}')
                                         open_brackets = text.count('[')
                                         close_brackets = text.count(']')
-                                        
+
                                         # Füge fehlende schließende Klammern hinzu
                                         if open_braces > close_braces:
                                             text += '\n' + '}' * (open_braces - close_braces)
                                         if open_brackets > close_brackets:
                                             text += '\n' + ']' * (open_brackets - close_brackets)
-                                        
+
                                         try:
                                             router_result = json.loads(text)
                                             print(f"✅ Router: Unvollständiges JSON repariert")
@@ -2445,87 +2438,69 @@ Regeln für Suchstrategien:
                                                 # Extrahiere Queries aus Arrays
                                                 precise_queries = []
                                                 broad_queries = []
-                                                
+
                                                 if precise_match:
                                                     precise_text = precise_match.group(1)
-                                                    # Finde alle Strings im Array
                                                     precise_items = re.findall(r'"([^"]+)"', precise_text)
-                                                    precise_queries = precise_items[:3]  # Max 3
-                                                
+                                                    precise_queries = precise_items[:3]
+
                                                 if broad_match:
                                                     broad_text = broad_match.group(1)
                                                     broad_items = re.findall(r'"([^"]+)"', broad_text)
-                                                    broad_queries = broad_items[:3]  # Max 3
-                                                
+                                                    broad_queries = broad_items[:3]
+
                                                 if precise_queries or broad_queries:
                                                     router_result = {
-                                                        "intent": "EXPLANATION",
                                                         "search_needed": True,
                                                         "retrieval_mode": "both",
+                                                        "embedding_query": "",
                                                         "precise_queries": precise_queries if precise_queries else [],
                                                         "broad_queries": broad_queries if broad_queries else [],
-                                                        "search_scope": "current_deck",
-                                                        "reasoning": "JSON repariert - nur queries extrahiert"
+                                                        "search_scope": "current_deck"
                                                     }
                                                     print(f"✅ Router: Queries aus unvollständigem JSON extrahiert: {len(precise_queries)} precise, {len(broad_queries)} broad")
                                                 else:
                                                     raise json_err
                                             else:
                                                 raise json_err
-                                
+
                                 # Validiere Struktur
                                 if "search_needed" in router_result:
-                                    # Extract intent (default to EXPLANATION if not present)
-                                    intent = router_result.get("intent", "EXPLANATION")
-                                    
-                                    # CRITICAL: If intent is CHAT, set search_needed=False
-                                    if intent == "CHAT":
-                                        router_result["search_needed"] = False
-                                    
-                                    # Emit intent and scope to frontend immediately
-                                    self._emit_ai_state(f"Intent: {intent}", phase=self.PHASE_INTENT, metadata={"intent": intent})
-                                    scope = router_result.get("search_scope", "current_deck")
-                                    scope_label = "Stapel" if scope == "current_deck" else "Global"
-                                    self._emit_ai_state(f"Suchraum: {scope_label}", phase=self.PHASE_SEARCH, metadata={"scope": scope})
-
                                     # Extract and validate retrieval_mode
                                     retrieval_mode = router_result.get('retrieval_mode', 'both')
                                     if retrieval_mode not in ('sql', 'semantic', 'both'):
                                         retrieval_mode = 'both'
                                     router_result['retrieval_mode'] = retrieval_mode
 
-                                    # Validiere neue Format: precise_queries und broad_queries
+                                    # Extract embedding_query
+                                    embedding_query = router_result.get("embedding_query", "")
+
+                                    # Validiere precise_queries und broad_queries
                                     precise_queries = router_result.get("precise_queries", [])
                                     broad_queries = router_result.get("broad_queries", [])
-                                    
-                                    # Validierung: Stelle sicher dass Arrays vorhanden und nicht leer sind
-                                    if not isinstance(precise_queries, list) or len(precise_queries) == 0:
-                                            # Fallback: Erstelle aus search_query falls vorhanden
-                                            if "search_query" in router_result:
-                                                precise_queries = [router_result["search_query"]]
-                                            else:
-                                                precise_queries = []
-                                    
-                                    if not isinstance(broad_queries, list) or len(broad_queries) == 0:
-                                        # Fallback: Erstelle aus search_query falls vorhanden
-                                        if "search_query" in router_result:
-                                            broad_queries = [router_result["search_query"]]
-                                        else:
-                                            broad_queries = []
-                                    
-                                    # Stelle sicher dass wir mindestens 3 Queries haben (füge leere hinzu falls nötig)
+
+                                    if not isinstance(precise_queries, list):
+                                        precise_queries = []
+                                    if not isinstance(broad_queries, list):
+                                        broad_queries = []
+
+                                    # Stelle sicher dass wir mindestens 3 Queries haben
                                     while len(precise_queries) < 3:
                                         precise_queries.append("")
                                     while len(broad_queries) < 3:
                                         broad_queries.append("")
-                                    
-                                    # Limitiere auf max 3
+
                                     precise_queries = precise_queries[:3]
                                     broad_queries = broad_queries[:3]
-                                    
+
                                     router_result["precise_queries"] = precise_queries
                                     router_result["broad_queries"] = broad_queries
-                                    
+                                    router_result["embedding_query"] = embedding_query
+
+                                    # Remove legacy intent field if present
+                                    router_result.pop("intent", None)
+                                    router_result.pop("reasoning", None)
+
                                     # KRITISCHE VALIDIERUNG: Prüfe ob Queries die Nutzeranfrage wörtlich enthalten
                                     if precise_queries or broad_queries:
                                         print(f"🔍 Router: Validiere {len(precise_queries)} precise_queries und {len(broad_queries)} broad_queries")
@@ -2533,40 +2508,38 @@ Regeln für Suchstrategien:
                                         user_words = set(user_message_clean.split())
                                         corrected_precise = []
                                         corrected_broad = []
-                                        
+
                                         # Validiere precise_queries
                                         for i, query in enumerate(precise_queries):
                                             if not query or not query.strip():
                                                 continue
                                             print(f"🔍 Router: Precise Query {i+1}: '{query[:80]}'")
                                             query_lower = query.lower().strip()
-                                            query_clean = query_lower.rstrip('.').rstrip('…').rstrip('...')
-                                            
-                                            # Prüfe ob Query die Nutzeranfrage wörtlich enthält
+                                            query_clean = query_lower.rstrip('.').rstrip('\u2026').rstrip('...')
+
                                             contains_user_message = user_message_clean in query_clean or query_clean in user_message_clean
                                             query_words = set(query_clean.split())
                                             overlap = user_words.intersection(query_words)
-                                            
+
                                             if contains_user_message or (len(overlap) >= 3 and len(user_words) <= 15):
                                                 print(f"⚠️ Router: Precise Query enthält Nutzeranfrage wörtlich: '{query[:100]}'")
-                                                # Versuche Keywords aus Karteninhalt zu extrahieren
                                                 if context:
                                                     question = context.get('question') or context.get('frontField') or ""
                                                     answer = context.get('answer') or ""
-                                                    
+
                                                     import re
                                                     card_text = f"{question} {answer}".lower()
                                                     card_text = re.sub(r'<[^>]+>', ' ', card_text)
                                                     card_text = re.sub(r'[^\w\s]', ' ', card_text)
                                                     card_words = card_text.split()
-                                                    
+
                                                     stopwords = {'der', 'die', 'das', 'und', 'oder', 'ist', 'sind', 'wird', 'werden', 'auf', 'in', 'zu', 'für', 'mit', 'von', 'ein', 'eine', 'einer', 'einem', 'einen', 'mir', 'dir', 'uns', 'ihr', 'ihm', 'sie', 'er', 'es', 'diese', 'dieser', 'dieses', 'diesen', 'dem', 'den', 'des'}
                                                     important_words = [w for w in card_words if len(w) > 3 and w not in stopwords]
-                                                    
+
                                                     from collections import Counter
                                                     word_freq = Counter(important_words)
                                                     top_words = [word for word, count in word_freq.most_common(3)]
-                                                    
+
                                                     if top_words:
                                                         new_query = " AND ".join(top_words)
                                                         print(f"✅ Router: Korrigiere Precise Query zu: '{new_query}'")
@@ -2577,39 +2550,39 @@ Regeln für Suchstrategien:
                                                     corrected_precise.append(query)
                                             else:
                                                 corrected_precise.append(query)
-                                        
+
                                         # Validiere broad_queries
                                         for i, query in enumerate(broad_queries):
                                             if not query or not query.strip():
                                                 continue
                                             print(f"🔍 Router: Broad Query {i+1}: '{query[:80]}'")
                                             query_lower = query.lower().strip()
-                                            query_clean = query_lower.rstrip('.').rstrip('…').rstrip('...')
-                                            
+                                            query_clean = query_lower.rstrip('.').rstrip('\u2026').rstrip('...')
+
                                             contains_user_message = user_message_clean in query_clean or query_clean in user_message_clean
                                             query_words = set(query_clean.split())
                                             overlap = user_words.intersection(query_words)
                                             is_or_expansion = all(word in user_words or word == 'or' for word in query_words) and 'or' in query_clean
-                                            
+
                                             if contains_user_message or (len(overlap) >= 3 and len(user_words) <= 15) or is_or_expansion:
                                                 print(f"⚠️ Router: Broad Query enthält Nutzeranfrage wörtlich: '{query[:100]}'")
                                                 if context:
                                                     question = context.get('question') or context.get('frontField') or ""
                                                     answer = context.get('answer') or ""
-                                                    
+
                                                     import re
                                                     card_text = f"{question} {answer}".lower()
                                                     card_text = re.sub(r'<[^>]+>', ' ', card_text)
                                                     card_text = re.sub(r'[^\w\s]', ' ', card_text)
                                                     card_words = card_text.split()
-                                                    
+
                                                     stopwords = {'der', 'die', 'das', 'und', 'oder', 'ist', 'sind', 'wird', 'werden', 'auf', 'in', 'zu', 'für', 'mit', 'von', 'ein', 'eine', 'einer', 'einem', 'einen', 'mir', 'dir', 'uns', 'ihr', 'ihm', 'sie', 'er', 'es', 'diese', 'dieser', 'dieses', 'diesen', 'dem', 'den', 'des'}
                                                     important_words = [w for w in card_words if len(w) > 3 and w not in stopwords]
-                                                    
+
                                                     from collections import Counter
                                                     word_freq = Counter(important_words)
                                                     top_words = [word for word, count in word_freq.most_common(5)]
-                                                    
+
                                                     if top_words:
                                                         new_query = " OR ".join(top_words)
                                                         print(f"✅ Router: Korrigiere Broad Query zu: '{new_query}'")
@@ -2620,20 +2593,31 @@ Regeln für Suchstrategien:
                                                     corrected_broad.append(query)
                                             else:
                                                 corrected_broad.append(query)
-                                        
+
                                         # Stelle sicher dass wir 3 Queries haben
                                         while len(corrected_precise) < 3:
                                             corrected_precise.append("")
                                         while len(corrected_broad) < 3:
                                             corrected_broad.append("")
-                                        
+
                                         router_result["precise_queries"] = corrected_precise[:3]
                                         router_result["broad_queries"] = corrected_broad[:3]
-                                        
+
                                         print(f"✅ Router: Validierung abgeschlossen: {len([q for q in corrected_precise if q])} precise, {len([q for q in corrected_broad if q])} broad")
-                                    
+
+                                    # Emit pipeline done
+                                    scope_label = ""
+                                    if deck_name:
+                                        scope_label = deck_name.split("::")[-1]
+                                    self._emit_pipeline_step("router", "done", {
+                                        "search_needed": router_result.get("search_needed", True),
+                                        "retrieval_mode": retrieval_mode,
+                                        "scope": router_result.get("search_scope", "current_deck"),
+                                        "scope_label": scope_label
+                                    })
+
                                     # Finale Log-Ausgabe
-                                    print(f"✅ Router: intent={intent}, search_needed={router_result.get('search_needed')}, retrieval_mode={retrieval_mode}, precise_queries={len([q for q in precise_queries if q])}, broad_queries={len([q for q in broad_queries if q])}, scope={router_result.get('search_scope')}")
+                                    print(f"✅ Router: search_needed={router_result.get('search_needed')}, retrieval_mode={retrieval_mode}, embedding_query='{embedding_query[:80]}', precise_queries={len([q for q in precise_queries if q])}, broad_queries={len([q for q in broad_queries if q])}, scope={router_result.get('search_scope')}")
                                     for i, q in enumerate(precise_queries):
                                         if q:
                                             print(f"   Precise Query {i+1}: '{q[:100]}'")
@@ -2641,7 +2625,7 @@ Regeln für Suchstrategien:
                                         if q:
                                             print(f"   Broad Query {i+1}: '{q[:100]}'")
                                     return router_result
-                
+
                 except requests.exceptions.HTTPError as e:
                     last_error = e
                     print(f"⚠️ Router: HTTP-Fehler {e.response.status_code}: {e.response.text[:300]}")
@@ -2653,38 +2637,37 @@ Regeln für Suchstrategien:
                     last_error = e
                     print(f"⚠️ Router: Unerwarteter Fehler: {type(e).__name__}: {e}")
                     continue
-            
+
             print(f"⚠️ Router: Alle URLs fehlgeschlagen, verwende Fallback")
-            # Fallback: Default to EXPLANATION intent
-            self._emit_ai_state("Intent: EXPLANATION")
-            self._emit_ai_state("Suche in Karten...")  # Ensure UI shows searching state
-            
+
             # Fallback: Versuche Keywords aus Karteninhalt zu extrahieren
             fallback_precise = []
             fallback_broad = []
+            fallback_embedding = ""
             if context:
                 question = context.get('question') or context.get('frontField') or ""
                 answer = context.get('answer') or ""
-                
+
                 if question or answer:
                     import re
                     from collections import Counter
-                    
+
                     # Extrahiere wichtige Wörter aus Karteninhalt
                     card_text = f"{question} {answer}".lower()
                     card_text = re.sub(r'<[^>]+>', ' ', card_text)
                     card_text = re.sub(r'[^\w\s]', ' ', card_text)
                     card_words = card_text.split()
-                    
+
                     # Filtere Stoppwörter und kurze Wörter
                     stopwords = {'der', 'die', 'das', 'und', 'oder', 'ist', 'sind', 'wird', 'werden', 'auf', 'in', 'zu', 'für', 'mit', 'von', 'ein', 'eine', 'einer', 'einem', 'einen', 'mir', 'dir', 'uns', 'ihr', 'ihm', 'sie', 'er', 'es', 'diese', 'dieser', 'dieses', 'diesen', 'dem', 'den', 'des', 'wo', 'was', 'wie', 'wenn', 'dass', 'sich', 'nicht', 'kein', 'keine', 'keinen', 'gib', 'gibt', 'geben', 'hint', 'hinweis', 'antwort', 'verraten', 'verrate'}
                     important_words = [w for w in card_words if len(w) > 3 and w not in stopwords]
-                    
+
                     if important_words:
                         word_freq = Counter(important_words)
                         top_words = [word for word, count in word_freq.most_common(9)]  # Genug für 3 Queries
-                        
+
                         if top_words:
+                            fallback_embedding = " ".join(top_words[:7])
                             # Erstelle 3 verschiedene precise queries
                             fallback_precise = [
                                 " AND ".join(top_words[0:3]) if len(top_words) >= 3 else " AND ".join(top_words),
@@ -2698,13 +2681,13 @@ Regeln für Suchstrategien:
                                 " OR ".join(top_words[4:9]) if len(top_words) >= 9 else " OR ".join(top_words[:5])
                             ]
                             print(f"✅ Router Fallback: Keywords aus Karte extrahiert: {top_words[:9]}")
-            
+
             # Wenn keine Keywords extrahiert werden konnten, verwende minimale Queries
             if not fallback_precise or not fallback_broad:
-                # Versuche wenigstens ein paar Wörter aus der Nutzeranfrage zu extrahieren (ohne Stoppwörter)
                 import re
                 user_words = [w for w in user_message.lower().split() if len(w) > 3 and w not in {'hint', 'hinweis', 'antwort', 'verraten', 'verrate', 'gib', 'gibt', 'geben', 'mir', 'dir', 'uns', 'einen', 'eine', 'ohne', 'die', 'der', 'das'}]
                 if user_words:
+                    fallback_embedding = " ".join(user_words[:7])
                     fallback_precise = [
                         " AND ".join(user_words[:3]) if len(user_words) >= 3 else " AND ".join(user_words),
                         " AND ".join(user_words[1:4]) if len(user_words) >= 4 else " AND ".join(user_words[:3]),
@@ -2719,6 +2702,7 @@ Regeln für Suchstrategien:
                 else:
                     # Letzter Fallback: Verwende erste Wörter der Nutzeranfrage
                     words = user_message.split()[:9]
+                    fallback_embedding = " ".join(words[:7])
                     if len(words) >= 3:
                         fallback_precise = [
                             " AND ".join(words[0:3]),
@@ -2735,78 +2719,103 @@ Regeln für Suchstrategien:
                         fallback_precise = [" AND ".join(words)] * 3
                         fallback_broad = [" OR ".join(words)] * 3
                     print(f"⚠️ Router Fallback: Letzter Fallback mit ersten Wörtern: {words}")
-            
-            return {
-                "intent": "EXPLANATION",
+
+            # Emit pipeline done for fallback
+            scope_label = ""
+            if deck_name:
+                scope_label = deck_name.split("::")[-1]
+            self._emit_pipeline_step("router", "done", {
                 "search_needed": True,
                 "retrieval_mode": "both",
+                "scope": "current_deck",
+                "scope_label": scope_label
+            })
+
+            return {
+                "search_needed": True,
+                "retrieval_mode": "both",
+                "embedding_query": fallback_embedding,
                 "precise_queries": fallback_precise[:3] if fallback_precise else ["", "", ""],
                 "broad_queries": fallback_broad[:3] if fallback_broad else ["", "", ""],
-                "search_scope": "current_deck",
-                "reasoning": "Router-Fallback: Queries aus Karteninhalt generiert"
+                "search_scope": "current_deck"
             }
-            
+
         except Exception as e:
             import traceback
             print(f"⚠️ Router Fehler: {e}")
             print(traceback.format_exc())
-            # Fallback: Default to EXPLANATION intent
-            self._emit_ai_state("Intent: EXPLANATION", phase=self.PHASE_INTENT, metadata={"intent": "EXPLANATION"})
-            self._emit_ai_state("Suche in Karten...", phase=self.PHASE_SEARCH)  # Ensure UI shows searching state even on error
-            
-            # Fallback: Versuche Keywords aus Karteninhalt zu extrahieren (gleiche Logik wie normaler Fallback)
-            fallback_strategies = []
+
+            # Emit pipeline error
+            self._emit_pipeline_step("router", "error")
+
+            # Fallback: Versuche Keywords aus Karteninhalt zu extrahieren
+            fallback_precise = []
+            fallback_broad = []
+            fallback_embedding = ""
             if context:
                 question = context.get('question') or context.get('frontField') or ""
                 answer = context.get('answer') or ""
-                
+
                 if question or answer:
                     import re
                     from collections import Counter
-                    
+
                     card_text = f"{question} {answer}".lower()
                     card_text = re.sub(r'<[^>]+>', ' ', card_text)
                     card_text = re.sub(r'[^\w\s]', ' ', card_text)
                     card_words = card_text.split()
-                    
+
                     stopwords = {'der', 'die', 'das', 'und', 'oder', 'ist', 'sind', 'wird', 'werden', 'auf', 'in', 'zu', 'für', 'mit', 'von', 'ein', 'eine', 'einer', 'einem', 'einen', 'mir', 'dir', 'uns', 'ihr', 'ihm', 'sie', 'er', 'es', 'diese', 'dieser', 'dieses', 'diesen', 'dem', 'den', 'des', 'wo', 'was', 'wie', 'wenn', 'dass', 'sich', 'nicht', 'kein', 'keine', 'keinen', 'gib', 'gibt', 'geben', 'hint', 'hinweis', 'antwort', 'verraten', 'verrate'}
                     important_words = [w for w in card_words if len(w) > 3 and w not in stopwords]
-                    
+
                     if important_words:
                         word_freq = Counter(important_words)
                         top_words = [word for word, count in word_freq.most_common(5)]
-                        
+
                         if top_words:
-                            fallback_strategies = [
-                                {"type": "precise", "query": " AND ".join(top_words[:3])},
-                                {"type": "broad", "query": " OR ".join(top_words[:5])}
+                            fallback_embedding = " ".join(top_words[:5])
+                            fallback_precise = [
+                                " AND ".join(top_words[:3]),
+                                " AND ".join(top_words[1:4]) if len(top_words) >= 4 else " AND ".join(top_words[:3]),
+                                " AND ".join(top_words[2:5]) if len(top_words) >= 5 else " AND ".join(top_words[:3])
+                            ]
+                            fallback_broad = [
+                                " OR ".join(top_words[:5]),
+                                " OR ".join(top_words[1:]) if len(top_words) >= 2 else " OR ".join(top_words),
+                                " OR ".join(top_words)
                             ]
                             print(f"✅ Router Exception-Fallback: Keywords aus Karte extrahiert: {top_words[:5]}")
-            
-            if not fallback_strategies:
+
+            if not fallback_precise:
                 import re
                 user_words = [w for w in user_message.lower().split() if len(w) > 3 and w not in {'hint', 'hinweis', 'antwort', 'verraten', 'verrate', 'gib', 'gibt', 'geben', 'mir', 'dir', 'uns', 'einen', 'eine', 'ohne', 'die', 'der', 'das'}]
                 if user_words:
-                    fallback_strategies = [
-                        {"type": "precise", "query": " AND ".join(user_words[:3])},
-                        {"type": "broad", "query": " OR ".join(user_words[:5])}
+                    fallback_embedding = " ".join(user_words[:5])
+                    fallback_precise = [
+                        " AND ".join(user_words[:3]),
+                        " AND ".join(user_words[1:4]) if len(user_words) >= 4 else " AND ".join(user_words[:3]),
+                        " AND ".join(user_words[2:5]) if len(user_words) >= 5 else " AND ".join(user_words[:3])
+                    ]
+                    fallback_broad = [
+                        " OR ".join(user_words[:5]),
+                        " OR ".join(user_words[1:]) if len(user_words) >= 2 else " OR ".join(user_words),
+                        " OR ".join(user_words)
                     ]
                     print(f"⚠️ Router Exception-Fallback: Verwende minimale Keywords aus Nutzeranfrage: {user_words[:5]}")
                 else:
                     words = user_message.split()[:3]
-                    fallback_strategies = [
-                        {"type": "precise", "query": " AND ".join(words)},
-                        {"type": "broad", "query": " OR ".join(words)}
-                    ]
+                    fallback_embedding = " ".join(words)
+                    fallback_precise = [" AND ".join(words)] * 3
+                    fallback_broad = [" OR ".join(words)] * 3
                     print(f"⚠️ Router Exception-Fallback: Letzter Fallback mit ersten Wörtern: {words}")
-            
+
             return {
-                "intent": "EXPLANATION",
                 "search_needed": True,
                 "retrieval_mode": "both",
-                "strategies": fallback_strategies,
-                "search_scope": "current_deck",
-                "reasoning": "Router-Fehler: Strategien aus Karteninhalt generiert"
+                "embedding_query": fallback_embedding,
+                "precise_queries": fallback_precise[:3] if fallback_precise else ["", "", ""],
+                "broad_queries": fallback_broad[:3] if fallback_broad else ["", "", ""],
+                "search_scope": "current_deck"
             }
     
     def _emit_ai_event(self, event_type, data):
@@ -3252,8 +3261,7 @@ Regeln für Suchstrategien:
         citations = {}
         
         try:
-            # Stage 1: Router
-            self._emit_ai_state("Analysiere Anfrage...", phase=self.PHASE_INTENT)
+            # Stage 1: Router (pipeline_step emitted inside _rag_router)
             router_result = self._rag_router(user_message, context=context)
             
             rag_context = None
