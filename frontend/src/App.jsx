@@ -527,6 +527,17 @@ function AppInner() {
         return;
       }
       
+      // Trigger slide-in animation when panel is opened
+      if (payload.type === 'panelOpened') {
+        const root = document.getElementById('chat-root');
+        if (root) {
+          root.style.animation = 'none';
+          root.offsetHeight; // force reflow
+          root.style.animation = 'slideInFromRight 0.3s ease-out';
+        }
+        return;
+      }
+
       // CRITICAL: Process deckSelected immediately, don't queue it
       // This event is time-sensitive and needs to be processed as soon as possible
       if (payload.type === 'deckSelected') {
@@ -1734,7 +1745,13 @@ function AppInner() {
 
   return (
     <ErrorBoundary>
-    <div className="flex flex-col h-screen text-base-content overflow-hidden" style={{ backgroundColor: '#161616' }}>
+    <style>{`
+      @keyframes slideInFromRight {
+        from { transform: translateX(30px); opacity: 0; }
+        to   { transform: translateX(0);    opacity: 1; }
+      }
+    `}</style>
+    <div id="chat-root" className="flex flex-col h-screen text-base-content overflow-hidden" style={{ backgroundColor: '#161616' }}>
       {/* Header — ContextSurface (fixiert oben) */}
       <div ref={headerRef} className="fixed top-0 left-0 right-0 z-40" style={{ overflow: 'visible' }}>
         <ContextSurface
@@ -2016,12 +2033,13 @@ function AppInner() {
                           (chatHook.streamingMessage.trim() === nextMsg.text.trim())
                         ) && (
                           <div className="w-full flex-none">
-                            <StreamingChatMessage 
-                              message={chatHook.streamingMessage || ''} 
+                            <StreamingChatMessage
+                              message={chatHook.streamingMessage || ''}
                               isStreaming={chatHook.isLoading}
                               cardContext={cardContextHook.cardContext}
                               steps={chatHook.currentSteps || []}
                               citations={chatHook.currentCitations || {}}
+                              pipelineSteps={chatHook.pipelineSteps || []}
                               bridge={bridge}
                               onPreviewCard={handlePreviewCard}
                             />

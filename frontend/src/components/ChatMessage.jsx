@@ -1219,7 +1219,7 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
  * ChatMessage Komponente - INTENT BASED RENDERING
  * Analysiert JSON-Daten oder Intents und rendert die entsprechende High-End Card.
  */
-function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, isStreaming = false, steps = [], citations = {}, bridge = null, onPreviewCard, onPerformanceCapture }) {
+function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, isStreaming = false, steps = [], citations = {}, pipelineSteps = [], bridge = null, onPreviewCard, onPerformanceCapture }) {
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [answerFeedback, setAnswerFeedback] = useState(null);
   const [score, setScore] = useState(null);
@@ -1652,15 +1652,14 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
   // Determine if ThoughtStream should be rendered
   const shouldRenderThoughtStream = React.useMemo(() => {
     if (isUser) return false;
-    
-    // Always render if we have steps, citations, or intent
+
+    const hasPipeline = pipelineSteps && pipelineSteps.length > 0;
     const hasSteps = steps.length > 0 || generateFallbackSteps.length > 0;
     const hasCitations = Object.keys(citations).length > 0;
     const hasIntent = !!routerIntent;
-    
-    
-    return hasSteps || hasCitations || hasIntent;
-  }, [isUser, steps.length, generateFallbackSteps.length, citations, routerIntent]);
+
+    return hasPipeline || hasSteps || hasCitations || hasIntent;
+  }, [isUser, pipelineSteps, steps.length, generateFallbackSteps.length, citations, routerIntent]);
 
   // === RENDER RETURN ===
   return (
@@ -1669,15 +1668,16 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
         <div className="w-full min-w-0">
             {/* 0. ThoughtStream - Shows during loading and after completion */}
             {shouldRenderThoughtStream && (
-                <ThoughtStream 
-                    steps={generateFallbackSteps} 
+                <ThoughtStream
+                    pipelineSteps={pipelineSteps}
+                    steps={generateFallbackSteps}
                     citations={citations}
-                    citationIndices={citationIndices} // PASS INDICES
+                    citationIndices={citationIndices}
                     isStreaming={isStreaming}
                     bridge={bridge}
                     intent={routerIntent}
                     onPreviewCard={onPreviewCard}
-                    message={message} // PASS MESSAGE to detect first text chunk
+                    message={message}
                 />
             )}
             

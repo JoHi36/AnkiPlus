@@ -13,7 +13,7 @@ import ChatMessage from './ChatMessage';
  * @param {boolean} isStreaming - Ob der Text noch streamt (zeigt Cursor)
  * @param {object} cardContext - Kontext für die Karte
  */
-const StreamingChatMessage = React.memo(({ message, isStreaming = true, cardContext, steps = [], citations = {}, bridge = null, onPreviewCard }) => {
+const StreamingChatMessage = React.memo(({ message, isStreaming = true, cardContext, steps = [], citations = {}, pipelineSteps = [], bridge = null, onPreviewCard }) => {
   const [displayedMessage, setDisplayedMessage] = useState('');
 
   // Zeige Text SOFORT an - keine Verzögerung für echtes Streaming
@@ -29,9 +29,10 @@ const StreamingChatMessage = React.memo(({ message, isStreaming = true, cardCont
     isStreaming,
     steps,
     citations,
+    pipelineSteps,
     bridge,
     onPreviewCard
-  }), [displayedMessage, cardContext, isStreaming, steps, citations, bridge, onPreviewCard]);
+  }), [displayedMessage, cardContext, isStreaming, steps, citations, pipelineSteps, bridge, onPreviewCard]);
 
   return (
     <div className="streaming-message-wrapper">
