@@ -467,22 +467,9 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       });
       return;
     } else if (payload.type === 'ai_state') {
-      // Skip old ai_state events when new pipeline_step events are active
-      if (pipelineStepsRef.current && pipelineStepsRef.current.length > 0) {
-        return;
-      }
-      // Track AI state events as steps (legacy fallback only)
-      const step = {
-        state: payload.message,
-        timestamp: Date.now(),
-        phase: payload.phase || null,
-        metadata: payload.metadata || {}
-      };
-      updateCurrentSteps((prev) => {
-        const newSteps = [...prev, step].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-        return newSteps;
-      });
-      console.log('📊 useChat: AI State tracked (legacy):', payload.message);
+      // ai_state events are suppressed by the backend when pipeline is active.
+      // Any that still arrive are ignored — pipeline_step events handle the UI now.
+      return;
     } else if (payload.type === 'rag_sources') {
       // NEW: Live citations from backend
       console.log('📚 useChat: Received live citations:', payload.data ? Object.keys(payload.data).length : 0);
@@ -545,7 +532,10 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       // Handle metadata payloads (steps/citations from backend)
       if (payload.requestId === activeRequestIdRef.current) {
         console.log('📊 useChat: Metadata received for request:', payload.requestId);
-        if (payload.steps && payload.steps.length > 0) {
+        // Prefer stepLabels (clean pipeline labels) over old-format steps
+        if (payload.stepLabels && payload.stepLabels.length > 0) {
+          updateCurrentSteps(payload.stepLabels);
+        } else if (payload.steps && payload.steps.length > 0) {
           updateCurrentSteps(payload.steps);
         }
         if (payload.citations) {
@@ -597,8 +587,10 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       }
       
       // Handle steps and citations from payload (when done=True or during streaming)
-      if (payload.steps && payload.steps.length > 0) {
-        console.log('📊 useChat: Updating steps from payload:', payload.steps.length);
+      // Prefer stepLabels (clean pipeline labels) over old-format steps
+      if (payload.stepLabels && payload.stepLabels.length > 0) {
+        updateCurrentSteps(payload.stepLabels);
+      } else if (payload.steps && payload.steps.length > 0) {
         updateCurrentSteps(payload.steps);
       }
       if (payload.citations && Object.keys(payload.citations).length > 0) {
