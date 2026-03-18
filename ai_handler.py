@@ -875,14 +875,14 @@ class AIHandler:
         model_normalized = model
         
         # Prüfe ob Backend-Modus aktiv ist
-        use_backend = is_backend_mode() and get_auth_token()
-        
+        # Prefer direct API key over Cloud Function when both are available
+        use_backend = is_backend_mode() and get_auth_token() and not api_key
+
         if use_backend:
             # Backend-Modus: Verwende Backend-URL
             backend_url = get_backend_url()
-            # Backend-URL ist die Cloud Function Base-URL, Express-Routen haben kein /api/ Präfix
             stream_urls = [f"{backend_url}/chat"]
-            normal_urls = [f"{backend_url}/chat"]  # Backend unterstützt nur Streaming
+            normal_urls = [f"{backend_url}/chat"]
             print(f"_get_google_response_streaming: Verwende Backend-Modus: {stream_urls[0]}")
         else:
             # Fallback: Direkte Gemini API (API-Key-Modus)
@@ -2004,13 +2004,11 @@ Karteninhalt: {question_clean[:500]}"""
             self._refresh_config()
 
             # Prüfe ob Backend-Modus aktiv ist
-            use_backend = is_backend_mode() and get_auth_token()
-            if not use_backend:
-                api_key = self.config.get("api_key", "")
-                if not api_key:
-                    return None
-            else:
-                api_key = ""  # Nicht benötigt im Backend-Modus
+            # Prefer direct API key when available
+            api_key = self.config.get("api_key", "")
+            use_backend = is_backend_mode() and get_auth_token() and not api_key
+            if not use_backend and not api_key:
+                return None
 
             # Router-Modell: gemini-2.5-flash (schnell, direkte API ~1s)
             # Fallback: gemini-3-flash-preview
