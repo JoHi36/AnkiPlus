@@ -18,7 +18,7 @@ except ImportError:
 
 MOOD_REGEX = re.compile(r'^\s*\{"mood":"([a-z]+)"\}\n?')
 
-PLUSI_MODEL = 'gemini-2.0-flash'
+PLUSI_MODEL = 'gemini-2.5-flash'
 
 MAX_HISTORY = 10  # last 10 interactions as context
 
