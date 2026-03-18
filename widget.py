@@ -823,10 +823,12 @@ class ChatbotWidget(QWidget):
 
         import json as _json
 
+        from PyQt6.QtCore import QTimer
+
         def _push_to_frontend(payload):
-            self.web_view.page().runJavaScript(
-                f"window.ankiReceive({_json.dumps(payload)});"
-            )
+            # Must run on main Qt thread — tool executor runs in AI thread
+            js_code = f"window.ankiReceive({_json.dumps(payload)});"
+            QTimer.singleShot(0, lambda: self.web_view.page().runJavaScript(js_code))
 
         set_frontend_callback(_push_to_frontend)
 
