@@ -706,21 +706,9 @@ function AppInner() {
           }
         }
 
-        // Deck Messages Loaded (deck-chat mode)
+        // Deck Messages Loaded — route to Free Chat hook for persistence
         if (payload.type === 'deckMessagesLoaded') {
-          const msgs = (payload.messages || []).map(m => ({
-            id: m.id,
-            text: m.text,
-            from: m.sender,
-            cardId: m.card_id,
-            deckId: m.deck_id,
-            createdAt: m.created_at,
-            source: m.source || 'tutor',
-            steps: m.steps ? (typeof m.steps === 'string' ? JSON.parse(m.steps) : m.steps) : null,
-            citations: m.citations ? (typeof m.citations === 'string' ? JSON.parse(m.citations) : m.citations) : null,
-            requestId: m.request_id,
-          }));
-          _chat.setMessages(msgs);
+          _freeChat.handleDeckMessagesLoaded(payload);
         }
 
         // Review Result Events
@@ -1637,13 +1625,16 @@ function AppInner() {
 
   // ── Free Chat Handlers ─────────────────────────────────────────
   const handleFreeChatOpen = useCallback((text) => {
+    // Load persisted deck messages before opening
+    const deckId = sessionContext.currentSession?.deckId;
+    if (deckId) {
+      freeChatHook.loadForDeck(deckId);
+    }
+
     // Step 1: show DeckBrowser (deck list visible)
     setForceShowOverview(true);
     setActiveChat('free');
     // Step 2: after DeckBrowser has mounted and rendered, start animation
-    // The delay lets the user see the deck list briefly before the chat slides in.
-    // Also ensures freeChatInitialText is set in the same render as freeChatOpen,
-    // so FreeChatView receives the text on first mount (before the cleanup setTimeout).
     setTimeout(() => {
       setFreeChatInitialText(text);
       setFreeChatOpen(true);
@@ -1651,7 +1642,7 @@ function AppInner() {
       setTimeout(() => setFreeChatInitialText(''), 0);
       setTimeout(() => setAnimPhase('entered'), 350);
     }, 80);
-  }, []);
+  }, [sessionContext.currentSession?.deckId, freeChatHook]);
   useEffect(() => { handleFreeChatOpenRef.current = handleFreeChatOpen; }, [handleFreeChatOpen]);
 
   const handleFreeChatClose = useCallback(() => {

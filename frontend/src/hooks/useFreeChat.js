@@ -1,11 +1,11 @@
 // frontend/src/hooks/useFreeChat.js
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 /**
  * useFreeChat — card-independent chat hook for the Stapel overlay.
  *
  * Does NOT touch setSessions, currentSessionId, or any card context.
- * All state is RAM-only (cleared on app restart).
+ * Messages are persisted to SQLite via saveDeckMessage / loadDeckMessages bridge calls.
  *
  * @param {object} bridge  — the Python bridge object
  * @param {function} onLoadingChange — called with (bool) when isLoading changes
@@ -16,11 +16,56 @@ export function useFreeChat({ bridge, onLoadingChange, onCancelComplete }) {
   const [streamingMessage, setStreamingMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const isCancellingRef = useRef(false);
+  const deckIdRef = useRef(null);          // current deck for persistence
+  const messagesLoadedRef = useRef(false); // prevent double-loading
 
   const setIsLoadingWithCallback = useCallback((value) => {
     setIsLoading(value);
     if (onLoadingChange) onLoadingChange(value);
   }, [onLoadingChange]);
+
+  // ── Persistence helpers ──────────────────────────────────────────
+  const _saveDeckMsg = useCallback((message) => {
+    const deckId = deckIdRef.current;
+    if (!deckId) return;
+    window.ankiBridge?.addMessage('saveDeckMessage', JSON.stringify({
+      deckId,
+      message: {
+        id: String(message.id),
+        text: message.text,
+        sender: message.from === 'bot' ? 'assistant' : (message.from || 'user'),
+        created_at: message.createdAt || new Date().toISOString(),
+        source: 'tutor',
+        steps: message.steps ? JSON.stringify(message.steps) : null,
+        citations: message.citations ? JSON.stringify(message.citations) : null,
+      },
+    }));
+  }, []);
+
+  const loadForDeck = useCallback((deckId) => {
+    if (!deckId) return;
+    deckIdRef.current = deckId;
+    // Only load from DB if we don't already have messages for this deck
+    if (!messagesLoadedRef.current) {
+      window.ankiBridge?.addMessage('loadDeckMessages', String(deckId));
+    }
+  }, []);
+
+  // Handle deckMessagesLoaded event (called from App.jsx ankiReceive)
+  const handleDeckMessagesLoaded = useCallback((payload) => {
+    if (messagesLoadedRef.current) return; // already loaded
+    const msgs = (payload.messages || []).map(m => ({
+      id: m.id || `db-${Date.now()}-${Math.random()}`,
+      text: m.text,
+      from: m.sender === 'assistant' ? 'bot' : (m.sender || 'user'),
+      createdAt: m.created_at,
+      citations: m.citations ? (typeof m.citations === 'string' ? JSON.parse(m.citations) : m.citations) : {},
+    }));
+    if (msgs.length > 0) {
+      setMessages(msgs);
+    }
+    messagesLoadedRef.current = true;
+  }, []);
 
   // Exposed: set isCancelling before calling bridge.cancelRequest()
   const startCancel = useCallback(() => {
@@ -31,7 +76,9 @@ export function useFreeChat({ bridge, onLoadingChange, onCancelComplete }) {
     if (!text?.trim() || isLoading) return;
 
     // Add user message immediately
-    setMessages(prev => [...prev, { from: 'user', text, id: Date.now() }]);
+    const userMsg = { from: 'user', text, id: Date.now() };
+    setMessages(prev => [...prev, userMsg]);
+    _saveDeckMsg(userMsg);
     setIsLoadingWithCallback(true);
     setStreamingMessage('');
 
@@ -39,7 +86,7 @@ export function useFreeChat({ bridge, onLoadingChange, onCancelComplete }) {
     if (bridge?.sendMessage) {
       bridge.sendMessage(JSON.stringify({ text, mode, cardContext: null, isFreeChat: true }));
     }
-  }, [bridge, isLoading, setIsLoadingWithCallback]);
+  }, [bridge, isLoading, setIsLoadingWithCallback, _saveDeckMsg]);
 
   // NOTE: streamingMessage intentionally omitted from deps — read via setStreamingMessage(prev=>) instead
   const handleAnkiReceive = useCallback((payload) => {
@@ -69,10 +116,9 @@ export function useFreeChat({ bridge, onLoadingChange, onCancelComplete }) {
       // without a stale closure
       setStreamingMessage(prev => {
         const botText = prev || payload.message || '';
-        setMessages(msgs => [
-          ...msgs,
-          { from: 'bot', text: botText, id: Date.now(), citations: payload.citations || {} }
-        ]);
+        const botMsg = { from: 'bot', text: botText, id: Date.now(), citations: payload.citations || {} };
+        setMessages(msgs => [...msgs, botMsg]);
+        _saveDeckMsg(botMsg);
         return ''; // clear streaming
       });
       setIsLoadingWithCallback(false);
@@ -98,7 +144,10 @@ export function useFreeChat({ bridge, onLoadingChange, onCancelComplete }) {
     isLoading,
     handleSend,
     handleAnkiReceive,
+    handleDeckMessagesLoaded,
     startCancel,
-    resetMessages: () => setMessages([]),
+    loadForDeck,
+    setMessages,
+    resetMessages: useCallback(() => { setMessages([]); messagesLoadedRef.current = false; }, []),
   };
 }
