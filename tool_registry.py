@@ -267,37 +267,32 @@ PLUSI_SCHEMA = {
 
 
 def execute_plusi(args):
-    """Execute spawn_plusi — calls the Plusi sub-agent."""
+    """Execute spawn_plusi — calls the Plusi sub-agent.
+
+    Returns full result (mood + text) so agent_loop can inject [[PLUSI_DATA:]] marker
+    into the stream. The agent_loop sanitizes the result before sending to Gemini.
+    """
     try:
         from .plusi_agent import run_plusi
     except ImportError:
         from plusi_agent import run_plusi
 
-    frontend_cb = args.pop('_frontend_callback', None)
+    # Remove internal args that aren't for the tool
+    args.pop('_frontend_callback', None)
+
     situation = args.get("situation", "")
     if not situation:
         return json.dumps({"status": "error", "message": "No situation provided"})
 
-    # Send skeleton event to frontend
-    if frontend_cb:
-        frontend_cb({"type": "plusiSkeleton"})
-
     result = run_plusi(situation)
 
-    # Send result event to frontend
-    if frontend_cb:
-        if result.get("error"):
-            frontend_cb({"type": "plusiResult", "error": True})
-        else:
-            frontend_cb({
-                "type": "plusiResult",
-                "mood": result.get("mood", "neutral"),
-                "text": result.get("text", ""),
-                "error": False,
-            })
-
-    # Return minimal info to main AI (don't include Plusi's text — prevents echoing)
-    return json.dumps({"status": "displayed", "mood": result.get("mood", "neutral")})
+    # Return FULL data — agent_loop handles injection + sanitization
+    return json.dumps({
+        "status": "displayed",
+        "mood": result.get("mood", "neutral"),
+        "text": result.get("text", ""),
+        "error": result.get("error", False),
+    }, ensure_ascii=False)
 
 
 registry.register(ToolDefinition(
