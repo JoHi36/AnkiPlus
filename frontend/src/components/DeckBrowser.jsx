@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight, MessageSquare, Layers } from 'lucide-react';
 import FreeChatSearchBar from './FreeChatSearchBar';
 import FreeChatView from './FreeChatView';
+import ChatMessage from './ChatMessage';
 
 /* ── tokens ── */
 const T = {
@@ -400,6 +401,15 @@ export default function DeckBrowser({
     });
   }, [bridge, decks]);
 
+  /* Load chat history from DB on mount */
+  const historyLoadedRef = useRef(false);
+  useEffect(() => {
+    if (freeChatHook?.loadForDeck && !historyLoadedRef.current) {
+      historyLoadedRef.current = true;
+      freeChatHook.loadForDeck(0); // 0 = global, loads all messages
+    }
+  }, [freeChatHook]);
+
   /* Also handle async deckStats events (Python may push updates) */
   useEffect(() => {
     const handler = (e) => {
@@ -510,6 +520,26 @@ export default function DeckBrowser({
                 onClick={() => onSelectSession(session.id)}
               />
             ))}
+          </div>
+        )}
+
+        {/* ── Chat History (all messages across decks) ── */}
+        {!freeChatOpen && freeChatHook && freeChatHook.messages && freeChatHook.messages.length > 0 && (
+          <div>
+            <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', margin: '8px 16px' }} />
+            <SectionLabel count={freeChatHook.messages.length}>Chat-Verlauf</SectionLabel>
+            <div style={{ padding: '0 8px' }}>
+              {freeChatHook.messages.map((msg) => (
+                <ChatMessage
+                  key={msg.id}
+                  message={msg.text}
+                  from={msg.from}
+                  cardContext={null}
+                  citations={msg.citations || {}}
+                  bridge={bridge}
+                />
+              ))}
+            </div>
           </div>
         )}
       </div>
