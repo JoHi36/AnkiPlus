@@ -885,6 +885,45 @@ function AppInner() {
         }
       }
 
+        // Plusi Sub-Agent Events
+        if (payload.type === 'plusiSkeleton') {
+          console.log('🔵 Plusi skeleton received');
+        }
+
+        if (payload.type === 'plusiResult') {
+          console.log('🔵 Plusi result received:', payload.mood, payload.text?.substring(0, 50));
+          if (!payload.error && payload.text) {
+            const meta = {
+              happy: 'freut sich', empathy: 'fühlt mit dir', excited: 'ist aufgeregt',
+              surprised: 'ist überrascht', sleepy: 'ist müde', blush: 'wird rot',
+              thinking: 'denkt nach', neutral: '',
+            }[payload.mood] || '';
+
+            const plusiMarker = `[[PLUSI_DATA: ${JSON.stringify({
+              mood: payload.mood,
+              text: payload.text,
+              meta: meta,
+            })}]]`;
+
+            // Append Plusi marker to the current streaming message
+            const _chatForPlusi = chatHookRef.current;
+            if (_chatForPlusi && _chatForPlusi.appendMessageRef?.current) {
+              // If streaming is done, append as part of last bot message
+              _chatForPlusi.setMessages(prev => {
+                if (prev.length === 0) return prev;
+                const lastIdx = prev.length - 1;
+                const lastMsg = prev[lastIdx];
+                if (lastMsg.from === 'bot') {
+                  const updated = [...prev];
+                  updated[lastIdx] = { ...lastMsg, text: (lastMsg.text || '') + '\n' + plusiMarker };
+                  return updated;
+                }
+                return prev;
+              });
+            }
+          }
+        }
+
         // Companion Chat Events
         if (payload.type === 'companionChunk') {
           handleCompanionChunkRef.current?.(payload.chunk ?? '', payload.done ?? false);

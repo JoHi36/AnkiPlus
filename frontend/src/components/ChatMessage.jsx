@@ -11,6 +11,7 @@ import ReviewResult from './ReviewResult';
 import MultipleChoiceCard from './MultipleChoiceCard';
 import CitationBadge from './CitationBadge';
 import ThoughtStream from './ThoughtStream';
+import PlusiWidget from './PlusiWidget';
 import mermaid from 'mermaid';
 // SmilesDrawer wird dynamisch importiert, da es CommonJS ist und Vite-Probleme verursachen kann
 
@@ -1225,6 +1226,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
   const [score, setScore] = useState(null);
   const [reviewData, setReviewData] = useState(null);
   const [quizData, setQuizData] = useState(null);
+  const [plusiData, setPlusiData] = useState(null);
   const [intent, setIntent] = useState(null); // 'REVIEW', 'MC', 'HINT', 'EXPLANATION', 'MNEMONIC', 'CHAT'
   const [routerIntent, setRouterIntent] = useState(null); // Router intent: 'EXPLANATION', 'FACT_CHECK', 'MNEMONIC', 'QUIZ', 'CHAT'
   
@@ -1392,6 +1394,19 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                 console.error("Failed to parse Quiz Data", e);
             }
         }
+
+        // 5. Plusi Data Parsing ([[PLUSI_DATA: {...}]])
+        const plusiMatch = fixedMessage.match(/\[\[PLUSI_DATA:\s*(\{[\s\S]*?\})\s*\]\]/);
+        if (plusiMatch && plusiMatch[1]) {
+            try {
+                const data = JSON.parse(plusiMatch[1]);
+                if (data && data.text) {
+                    setPlusiData(data);
+                }
+            } catch (e) {
+                console.warn('Failed to parse PLUSI_DATA:', e);
+            }
+        }
     }
   }, [fixedMessage, isUser]);
 
@@ -1489,6 +1504,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
   processedMessage = processedMessage.replace(/\[\[EVALUATION_DATA:\s*\{[\s\S]*?\}\s*\]\]/g, '');
   processedMessage = processedMessage.replace(/\[\[SCORE:\s*\d+\]\]/g, '');
   processedMessage = processedMessage.replace(/\[\[INTENT:\s*\w+\]\]/g, '');
+  processedMessage = processedMessage.replace(/\[\[PLUSI_DATA:\s*\{[\s\S]*?\}\s*\]\]/g, '');
   // Remove "JSON undefined" artefacts if any leaked
   processedMessage = processedMessage.replace(/JSON\s*\n\s*undefined/g, '');
   
@@ -1682,6 +1698,17 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
             {/* 1. Review Card (Highest Priority) */}
             {reviewData && (
                 <ReviewResult data={reviewData} onAutoFlip={onAutoFlip} />
+            )}
+
+            {/* Plusi Companion Widget */}
+            {plusiData && (
+                <PlusiWidget
+                    mood={plusiData.mood || 'neutral'}
+                    text={plusiData.text || ''}
+                    metaText={plusiData.meta || ''}
+                    isLoading={false}
+                    isFrozen={false}
+                />
             )}
 
             {/* Fallback Progress Bar */}
