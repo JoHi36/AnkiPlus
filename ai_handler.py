@@ -171,7 +171,6 @@ class AIHandler:
     def __init__(self, widget=None):
         self.config = get_config()
         self.widget = widget  # Widget reference for UI state emission
-        self._last_rag_metadata = None  # Store last RAG metadata (steps, citations)
         self._current_request_steps = []  # Track steps for the current request
     
     def _refresh_config(self):
@@ -268,7 +267,7 @@ class AIHandler:
             print(traceback.format_exc())
             return f"Fehler beim Erstellen des Diagramms: {str(e)}"
         
-    def get_response(self, user_message, context=None, history=None, mode='compact', callback=None, system_prompt_override=None):
+    def get_response(self, user_message, context=None, history=None, mode='compact', callback=None, system_prompt_override=None, model_override=None):
         """
         Generiert eine Antwort auf eine Benutzer-Nachricht mit optionalem Streaming
 
@@ -300,7 +299,7 @@ class AIHandler:
                 callback(error_msg, True, False)
             return error_msg
 
-        model = self.config.get("model_name", "")
+        model = model_override or self.config.get("model_name", "")
         api_key = self.config.get("api_key", "")
 
         try:
@@ -2147,6 +2146,7 @@ Antworte NUR mit einem JSON-Objekt im folgenden Format (KEINE Markdown-Formatier
 {{
   "intent": "EXPLANATION",
   "search_needed": true,
+  "retrieval_mode": "both",
   "precise_queries": [
     "query1 mit AND Operatoren",
     "query2 mit AND Operatoren",
@@ -2180,6 +2180,11 @@ Regeln für Suchstrategien:
 - intent: Wähle genau eine Kategorie aus der Liste oben
 - search_needed: true wenn die Frage spezifische Informationen aus Karten benötigt, false bei CHAT
 - search_needed: IMMER false wenn intent="CHAT"
+- retrieval_mode: One of "sql", "semantic", or "both".
+  * Use "sql" for structural queries about specific tags, decks, or exact field content
+  * Use "semantic" for meaning-based queries like "explain", "relate", "why", "compare", or conceptual questions
+  * Use "both" for queries that could benefit from both keyword matching and conceptual similarity
+  * Default to "both" when unsure
 - search_scope: "current_deck" für Fragen zum aktuellen Thema, "collection" für breite Fragen
 - precise_queries: Array mit GENAU 3 verschiedenen Suchanfragen (AND-Verknüpfung)
   * KRITISCH: You MUST generate 3 distinct, different search queries. Do not repeat the same query.
@@ -2411,6 +2416,7 @@ Regeln für Suchstrategien:
                                                     router_result = {
                                                         "intent": "EXPLANATION",
                                                         "search_needed": True,
+                                                        "retrieval_mode": "both",
                                                         "precise_queries": precise_queries if precise_queries else [],
                                                         "broad_queries": broad_queries if broad_queries else [],
                                                         "search_scope": "current_deck",
@@ -2436,7 +2442,13 @@ Regeln für Suchstrategien:
                                     scope = router_result.get("search_scope", "current_deck")
                                     scope_label = "Stapel" if scope == "current_deck" else "Global"
                                     self._emit_ai_state(f"Suchraum: {scope_label}", phase=self.PHASE_SEARCH, metadata={"scope": scope})
-                                    
+
+                                    # Extract and validate retrieval_mode
+                                    retrieval_mode = router_result.get('retrieval_mode', 'both')
+                                    if retrieval_mode not in ('sql', 'semantic', 'both'):
+                                        retrieval_mode = 'both'
+                                    router_result['retrieval_mode'] = retrieval_mode
+
                                     # Validiere neue Format: precise_queries und broad_queries
                                     precise_queries = router_result.get("precise_queries", [])
                                     broad_queries = router_result.get("broad_queries", [])
@@ -2576,7 +2588,7 @@ Regeln für Suchstrategien:
                                         print(f"✅ Router: Validierung abgeschlossen: {len([q for q in corrected_precise if q])} precise, {len([q for q in corrected_broad if q])} broad")
                                     
                                     # Finale Log-Ausgabe
-                                    print(f"✅ Router: intent={intent}, search_needed={router_result.get('search_needed')}, precise_queries={len([q for q in precise_queries if q])}, broad_queries={len([q for q in broad_queries if q])}, scope={router_result.get('search_scope')}")
+                                    print(f"✅ Router: intent={intent}, search_needed={router_result.get('search_needed')}, retrieval_mode={retrieval_mode}, precise_queries={len([q for q in precise_queries if q])}, broad_queries={len([q for q in broad_queries if q])}, scope={router_result.get('search_scope')}")
                                     for i, q in enumerate(precise_queries):
                                         if q:
                                             print(f"   Precise Query {i+1}: '{q[:100]}'")
@@ -2682,6 +2694,7 @@ Regeln für Suchstrategien:
             return {
                 "intent": "EXPLANATION",
                 "search_needed": True,
+                "retrieval_mode": "both",
                 "precise_queries": fallback_precise[:3] if fallback_precise else ["", "", ""],
                 "broad_queries": fallback_broad[:3] if fallback_broad else ["", "", ""],
                 "search_scope": "current_deck",
@@ -2745,6 +2758,7 @@ Regeln für Suchstrategien:
             return {
                 "intent": "EXPLANATION",
                 "search_needed": True,
+                "retrieval_mode": "both",
                 "strategies": fallback_strategies,
                 "search_scope": "current_deck",
                 "reasoning": "Router-Fehler: Strategien aus Karteninhalt generiert"
@@ -3210,30 +3224,63 @@ Regeln für Suchstrategien:
                 broad_queries = [q for q in broad_queries if q and q.strip()]
                 
                 if precise_queries or broad_queries:
-                    retrieval_result = self._rag_retrieve_cards(
-                        precise_queries=precise_queries,
-                        broad_queries=broad_queries,
-                        search_scope=search_scope,
-                        context=context,
-                        max_notes=10
-                    )
-                    
+                    # Check if hybrid retrieval (semantic search) is available
+                    _emb_mgr = None
+                    try:
+                        try:
+                            from . import get_embedding_manager
+                        except ImportError:
+                            from __init__ import get_embedding_manager
+                        _emb_mgr = get_embedding_manager()
+                    except Exception:
+                        pass
+
+                    retrieval_mode = router_result.get('retrieval_mode', 'both')
+
+                    if _emb_mgr and retrieval_mode in ('semantic', 'both'):
+                        # Use hybrid retrieval (SQL + semantic)
+                        try:
+                            try:
+                                from .hybrid_retrieval import HybridRetrieval
+                            except ImportError:
+                                from hybrid_retrieval import HybridRetrieval
+                            hybrid = HybridRetrieval(_emb_mgr, self)
+                            retrieval_result = hybrid.retrieve(user_message, router_result, context, max_notes=10)
+                        except Exception as e:
+                            print(f"Hybrid retrieval failed, falling back to SQL: {e}")
+                            retrieval_result = self._rag_retrieve_cards(
+                                precise_queries=precise_queries,
+                                broad_queries=broad_queries,
+                                search_scope=search_scope,
+                                context=context,
+                                max_notes=10
+                            )
+                    else:
+                        # Fallback to SQL-only (existing path)
+                        retrieval_result = self._rag_retrieve_cards(
+                            precise_queries=precise_queries,
+                            broad_queries=broad_queries,
+                            search_scope=search_scope,
+                            context=context,
+                            max_notes=10
+                        )
+
                     # Handle new structured return format
                     if retrieval_result and retrieval_result.get("context_string"):
                         context_string = retrieval_result.get("context_string", "")
                         citations = retrieval_result.get("citations", {})
-                        
+
                         # Convert context_string to list format for backward compatibility
                         formatted_cards = [line for line in context_string.split("\n") if line.strip()]
-                        
+
                         rag_context = {
                             "cards": formatted_cards,
                             "reasoning": router_result.get("reasoning", ""),
                             "citations": citations  # NEW: Include citations
                         }
-                        print(f"✅ RAG: {len(formatted_cards)} Karten für Kontext verwendet, {len(citations)} Citations")
+                        print(f"RAG: {len(formatted_cards)} Karten fuer Kontext verwendet, {len(citations)} Citations")
                     else:
-                        print(f"⚠️ RAG: Keine Karten gefunden")
+                        print(f"RAG: Keine Karten gefunden")
             
             # Stage 3: Generator (mit RAG-Kontext falls vorhanden)
             self._refresh_config()
@@ -3256,22 +3303,17 @@ Regeln für Suchstrategien:
             
             # Wrapper für Callback um Steps und Citations zu übergeben
             def enhanced_callback(chunk, done, is_function_call=False):
-                """Enhanced callback that includes steps and citations"""
-                # Store metadata FIRST to avoid race conditions with async signals
+                """Enhanced callback that includes steps and citations via kwargs"""
                 if done:
                     # Emit finished phase event
                     self._emit_ai_state("Fertiggestellt", phase=self.PHASE_FINISHED, metadata={"mode": mode, "sourceCount": len(citations)})
-                    # Store metadata in handler for widget to access
-                    # Use accumulated global steps
-                    self._last_rag_metadata = {
-                        "steps": self._current_request_steps,
-                        "citations": citations
-                    }
-                    print(f"✅ RAG Metadata stored: {len(self._current_request_steps)} steps, {len(citations)} citations")
-
-                # Call original callback
-                if callback:
-                    callback(chunk, done, is_function_call)
+                    if callback:
+                        callback(chunk, done, is_function_call,
+                                 steps=self._current_request_steps,
+                                 citations=citations)
+                else:
+                    if callback:
+                        callback(chunk, done, is_function_call)
             
             # Verwende bestehende Streaming-Methode mit RAG-Kontext
             # Try gemini-3-flash-preview first, fallback to gemini-2.5-flash on error

@@ -5,6 +5,7 @@ Verwaltet das Web-basierte Chat-UI über QWebEngineView
 
 import os
 import json
+import uuid
 from aqt.qt import *
 from aqt.utils import showInfo
 
@@ -59,11 +60,54 @@ try:
 except ImportError:
     from card_tracker import CardTracker
 
-# Sessions-Storage-Import
-try:
-    from .sessions_storage import load_sessions, save_sessions
-except ImportError:
-    from sessions_storage import load_sessions, save_sessions
+# NOTE: Legacy sessions_storage (JSON) removed — per-card SQLite is now used instead.
+
+
+class AIRequestThread(QThread):
+    """Thread for asynchronous AI API requests with request-ID based streaming."""
+    chunk_signal = pyqtSignal(str, str, bool, bool)  # requestId, chunk, done, is_function_call
+    error_signal = pyqtSignal(str, str)  # requestId, error_message
+    finished_signal = pyqtSignal(str)  # requestId
+    metadata_signal = pyqtSignal(str, object, object)  # requestId, steps, citations
+
+    def __init__(self, ai_handler, text, widget_ref, history=None, mode='compact', request_id=None):
+        super().__init__()
+        self.ai_handler = ai_handler
+        self.text = text
+        self.widget_ref = widget_ref
+        self.history = history
+        self.mode = mode
+        self.request_id = request_id or str(uuid.uuid4())
+        self._cancelled = False
+
+    def cancel(self):
+        """Cancel the request."""
+        self._cancelled = True
+
+    def run(self):
+        try:
+            context = self.widget_ref.current_card_context if self.widget_ref else None
+
+            def stream_callback(chunk, done, is_function_call=False, steps=None, citations=None):
+                if self._cancelled:
+                    return
+                self.chunk_signal.emit(self.request_id, chunk or "", done, is_function_call)
+                if done and (steps or citations):
+                    self.metadata_signal.emit(self.request_id, steps or [], citations or [])
+
+            bot_msg = self.ai_handler.get_response_with_rag(
+                self.text, context=context, history=self.history,
+                mode=self.mode, callback=stream_callback
+            )
+
+            if not self._cancelled:
+                self.finished_signal.emit(self.request_id)
+        except Exception as e:
+            if not self._cancelled:
+                import traceback
+                print(f"AIRequestThread: Exception: {str(e)}")
+                print(traceback.format_exc())
+                self.error_signal.emit(self.request_id, str(e))
 
 
 class ChatbotWidget(QWidget):
@@ -167,13 +211,14 @@ class ChatbotWidget(QWidget):
                 self.current_request = data
                 self.handle_message_from_ui(data, history=None, mode='compact')
             elif isinstance(data, dict):
-                # Neues Format: Nachricht + Historie + Modus
+                # Neues Format: Nachricht + Historie + Modus + requestId
                 message = data.get('message', '')
                 history = data.get('history', None)
                 mode = data.get('mode', 'compact')
+                request_id = data.get('requestId', None)
                 self.current_request = message
-                print(f"_handle_js_message: Nachricht mit Historie erhalten ({len(history) if history else 0} Nachrichten), Modus: {mode}")
-                self.handle_message_from_ui(message, history=history, mode=mode)
+                print(f"_handle_js_message: Nachricht mit Historie erhalten ({len(history) if history else 0} Nachrichten), Modus: {mode}, requestId: {request_id}")
+                self.handle_message_from_ui(message, history=history, mode=mode, request_id=request_id)
             else:
                 print(f"_handle_js_message: Ungültiges Format für sendMessage: {type(data)}")
         elif msg_type == 'closePanel':
@@ -326,69 +371,6 @@ class ChatbotWidget(QWidget):
         elif msg_type == 'hideAnswer':
             # Verstecke die Antwort (lade Karte neu)
             self.bridge.hideAnswer()
-        elif msg_type == 'loadSessions':
-            # Lade Sessions aus Datei und sende an Frontend
-            sessions = load_sessions()
-            payload = {"type": "sessionsLoaded", "data": sessions}
-            js_code = f"window.ankiReceive({json.dumps(payload)});"
-            # Add check if window.ankiReceive exists before calling
-            js_code_with_check = f"""
-            (function() {{
-              console.error('🔵 DEBUG widget.py: Attempting to call window.ankiReceive', typeof window !== 'undefined', typeof window.ankiReceive !== 'undefined');
-              if (typeof window !== 'undefined' && typeof window.ankiReceive === 'function') {{
-                try {{
-                  window.ankiReceive({json.dumps(payload)});
-                  console.error('🔵 DEBUG widget.py: window.ankiReceive called successfully');
-                }} catch (e) {{
-                  console.error('🔵 DEBUG widget.py: Error calling window.ankiReceive', e);
-                }}
-              }} else {{
-                console.error('🔵 DEBUG widget.py: window.ankiReceive not available', typeof window, typeof window?.ankiReceive);
-              }}
-            }})();
-            """
-            self.web_view.page().runJavaScript(js_code_with_check)
-        elif msg_type == 'saveSessions':
-            # Speichere Sessions in Datei
-            sessions = None
-            try:
-                # Handle both string (JSON) and list (direct array) formats
-                if isinstance(data, str):
-                    # Parse JSON string - may need double parsing if string was double-escaped
-                    try:
-                        sessions = json.loads(data)
-                        # If result is still a string, it was double-escaped - parse again
-                        if isinstance(sessions, str):
-                            sessions = json.loads(sessions)
-                    except json.JSONDecodeError as e:
-                        print(f"_handle_js_message: JSON-Fehler beim Parsen: {e}")
-                        return
-                elif isinstance(data, list):
-                    sessions = data
-                else:
-                    print(f"_handle_js_message: saveSessions - Ungültiger Datentyp: {type(data)}")
-                    return
-                
-                # If parsed result is a dict (not array), try to extract sessions array
-                if isinstance(sessions, dict):
-                    # Try common keys that might contain the sessions array
-                    if 'sessions' in sessions:
-                        sessions = sessions['sessions']
-                    elif 'data' in sessions:
-                        sessions = sessions['data']
-                    else:
-                        print(f"_handle_js_message: saveSessions - Parsed dict but no 'sessions' or 'data' key found. Keys: {list(sessions.keys())}")
-                        return
-                
-                if sessions is not None:
-                    success = save_sessions(sessions)
-                    print(f"_handle_js_message: Sessions gespeichert, Erfolg: {success}")
-            except json.JSONDecodeError as e:
-                print(f"_handle_js_message: JSON-Fehler beim Parsen von Sessions: {e}")
-            except Exception as e:
-                print(f"_handle_js_message: Fehler beim Speichern von Sessions: {e}")
-                import traceback
-                traceback.print_exc()
         elif msg_type == 'loadCardSession':
             # Load per-card session from SQLite
             try:
@@ -480,7 +462,8 @@ class ChatbotWidget(QWidget):
                 "data": {
                     "api_key": api_key,
                     "provider": "google",
-                    "model": config.get("model_name", "")
+                    "model": config.get("model_name", ""),
+                    "mascot_enabled": config.get("mascot_enabled", False),
                 }
             }
             self.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
@@ -674,6 +657,7 @@ class ChatbotWidget(QWidget):
                         mode='compact',
                         callback=on_chunk,
                         system_prompt_override=self.system_prompt if self.system_prompt else None,
+                        model_override='gemini-2.0-flash',  # Lighter model for companion — higher rate limits
                     )
                 except Exception as e:
                     if not self._cancelled:
@@ -780,14 +764,15 @@ class ChatbotWidget(QWidget):
             items.append({"name": m["name"], "label": m["label"]})
         return items
 
-    def handle_message_from_ui(self, message: str, history=None, mode='compact'):
+    def handle_message_from_ui(self, message: str, history=None, mode='compact', request_id=None):
         """
         Verarbeitet Nachrichten von der UI
-        
+
         Args:
             message: Die Nachricht des Benutzers
             history: Optional - Liste von vorherigen Nachrichten [{role: 'user'|'assistant', content: 'text'}]
             mode: Optional - 'compact' oder 'detailed' (Standard: 'compact')
+            request_id: Optional - UUID for tracking this request
         """
         text = message.strip()
         if not text:
@@ -816,179 +801,55 @@ class ChatbotWidget(QWidget):
             loading_payload = {"type": "loading"}
             self.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(loading_payload)});")
             
-            # Track ob Streaming bereits die Nachricht gesendet hat (verhindert doppelte Antworten)
-            self._streaming_sent_message = False
-            
-            # Verwende QThread für echte asynchrone Verarbeitung
-            # Dies verhindert, dass die UI blockiert wird
-            # Erstelle Thread mit Modus
-            class AIRequestThread(QThread):
-                finished_signal = pyqtSignal(str, str)  # message, response
-                error_signal = pyqtSignal(str, str)  # message, error
-                streaming_signal = pyqtSignal(str, bool, bool)  # chunk, done, is_function_call
-                
-                def __init__(self, ai_handler, text, message_ref, widget_ref, history=None, mode='compact'):
-                    super().__init__()
-                    self.ai_handler = ai_handler
-                    self.text = text
-                    self.message_ref = message_ref
-                    self.widget_ref = widget_ref
-                    self.history = history  # Chat-Historie
-                    self.mode = mode  # Kompakt oder Ausführlich
-                    self._cancelled = False  # Flag für Abbruch
-                
-                def cancel(self):
-                    """Bricht die Anfrage ab"""
-                    self._cancelled = True
-                
-                def run(self):
-                    try:
-                        print(f"AIRequestThread: Sende Nachricht an AI: {self.text[:50]}... (Modus: {self.mode})")
-                        if self.history:
-                            print(f"AIRequestThread: Verwende Chat-Historie ({len(self.history)} Nachrichten)")
-                        # Hole aktuellen Karten-Kontext
-                        context = self.widget_ref.current_card_context if self.widget_ref else None
-                        if context:
-                            print(f"AIRequestThread: Verwende Karten-Kontext (Card ID: {context.get('cardId')})")
-                        
-                        # Streaming-Callback
-                        def stream_callback(chunk, done, is_function_call=False):
-                            if self._cancelled:
-                                return
-                            
-                            # Sende Chunk an Widget
-                            self.streaming_signal.emit(chunk or "", done, is_function_call)
-                        
-                        # Übergebe Historie, Modus und Callback an AI-Handler mit RAG-Pipeline
-                        bot_msg = self.ai_handler.get_response_with_rag(
-                            self.text, 
-                            context=context, 
-                            history=self.history, 
-                            mode=self.mode,
-                            callback=stream_callback
-                        )
-                        
-                        if not self._cancelled:
-                            print(f"AIRequestThread: Antwort erhalten (Länge: {len(bot_msg) if bot_msg else 0})")
-                            self.finished_signal.emit(self.message_ref, bot_msg or "")
-                    except Exception as e:
-                        if not self._cancelled:
-                            import traceback
-                            error_msg = f"Fehler bei der API-Anfrage: {str(e)}"
-                            print(f"AIRequestThread: Exception: {error_msg}")
-                            print(traceback.format_exc())
-                            self.error_signal.emit(self.message_ref, error_msg)
-            
-            def on_streaming_chunk(chunk, done, is_function_call):
-                # Prüfe ob Anfrage abgebrochen wurde
-                if not self.current_request or self.current_request != message:
-                    return  # Anfrage wurde abgebrochen
-                
-                payload = {
-                    "type": "streaming", 
-                    "chunk": chunk, 
-                    "done": done,
-                    "isFunctionCall": is_function_call
-                }
-                
-                # DEBUG: Zeige was gesendet wird
-                import time
-                timestamp_before = time.time() * 1000
-                print(f"📤 widget.py: Sende Streaming-Chunk an Frontend (Länge: {len(chunk) if chunk else 0}, done: {done})")
-                
-                # Markiere dass Streaming verwendet wurde
-                if done:
-                    self._streaming_sent_message = True
-                
-                # Sende an Frontend
-                js_code = f"window.ankiReceive({json.dumps(payload)});"
-                self.web_view.page().runJavaScript(js_code)
-            
-            # Track ob Streaming bereits die Nachricht gesendet hat
-            self._streaming_sent_message = False
-            
-            def on_finished(message_ref, bot_msg):
-                # Prüfe ob Anfrage abgebrochen wurde
-                if not self.current_request or self.current_request != message_ref:
-                    print(f"handle_message_from_ui: Anfrage wurde während der Verarbeitung abgebrochen")
-                    return
-                
-                # Wenn Streaming bereits die Nachricht gesendet hat (done=True), 
-                # müssen wir hier nichts mehr tun, außer aufzuräumen
-                if self._streaming_sent_message:
-                    print(f"handle_message_from_ui: Nachricht wurde bereits über Streaming gesendet, überspringe on_finished")
-                elif bot_msg:
-                    # Nur senden wenn Streaming NICHT verwendet wurde
-                    payload = {"type": "bot", "message": bot_msg}
-                    self.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
-                else:
-                    error_msg = "Keine Antwort von der API erhalten."
-                    payload = {"type": "bot", "message": error_msg}
-                    self.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
-                
-                # Lösche Referenz nach Verarbeitung
-                if self.current_request == message_ref:
-                    self.current_request = None
-                    self._streaming_sent_message = False
-                
-                # Thread aufräumen
-                if hasattr(self, '_ai_thread'):
-                    self._ai_thread.quit()
-                    self._ai_thread.wait(1000)  # Warte max. 1 Sekunde
-                    self._ai_thread = None
-            
-            def on_streaming_chunk(chunk, done, is_function_call):
-                # Prüfe ob Anfrage abgebrochen wurde
-                if not self.current_request or self.current_request != message:
-                    return  # Anfrage wurde abgebrochen
-                
-                payload = {
-                    "type": "streaming", 
-                    "chunk": chunk, 
-                    "done": done,
-                    "isFunctionCall": is_function_call
-                }
-                
-                # Include steps and citations metadata when done
-                if done:
-                    has_metadata = hasattr(ai, '_last_rag_metadata') and ai._last_rag_metadata
-                    if has_metadata:
-                        metadata = ai._last_rag_metadata
-                        steps = metadata.get("steps", [])
-                        citations = metadata.get("citations", {})
-                        payload["steps"] = steps
-                        payload["citations"] = citations
-                        print(f"📦 widget.py: Metadaten an Frontend gesendet: {len(steps)} Steps, {len(citations)} Citations")
-                        # Clear metadata after sending
-                        ai._last_rag_metadata = None
-                    else:
-                        print(f"⚠️ widget.py: Keine Metadaten in ai._last_rag_metadata gefunden")
-                
-                self.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
-                
-                # Markiere dass Streaming verwendet wurde
-                if done:
-                    self._streaming_sent_message = True
-            
-            def on_error(message_ref, error_msg):
-                # Prüfe ob Anfrage abgebrochen wurde
-                if self.current_request == message_ref:
-                    payload = {"type": "bot", "message": error_msg}
-                    self.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
-                    self.current_request = None
-                
-                # Thread aufräumen
-                if hasattr(self, '_ai_thread'):
-                    self._ai_thread.quit()
-                    self._ai_thread.wait(1000)  # Warte max. 1 Sekunde
-                    self._ai_thread = None
-            
-            # Starte Thread für asynchrone Verarbeitung mit Historie
-            self._ai_thread = AIRequestThread(ai, text, message, self, history=history, mode=mode)
-            self._ai_thread.streaming_signal.connect(on_streaming_chunk)
-            self._ai_thread.finished_signal.connect(on_finished)
-            self._ai_thread.error_signal.connect(on_error)
+            # Start AI request thread with request-ID based streaming
+            self._ai_thread = AIRequestThread(ai, text, self, history=history, mode=mode, request_id=request_id)
+            self._ai_thread.chunk_signal.connect(self.on_streaming_chunk)
+            self._ai_thread.finished_signal.connect(self.on_streaming_finished)
+            self._ai_thread.error_signal.connect(self.on_streaming_error)
+            self._ai_thread.metadata_signal.connect(self.on_streaming_metadata)
             self._ai_thread.start()
+
+    def _send_to_js(self, payload):
+        """Send a JSON payload to the frontend via ankiReceive."""
+        js_code = f"window.ankiReceive({json.dumps(payload)});"
+        self.web_view.page().runJavaScript(js_code)
+
+    def on_streaming_chunk(self, request_id, chunk, done, is_function_call):
+        payload = {
+            "type": "streaming",
+            "requestId": request_id,
+            "chunk": chunk,
+            "done": done,
+            "isFunctionCall": is_function_call
+        }
+        self._send_to_js(payload)
+
+    def on_streaming_error(self, request_id, error_message):
+        payload = {
+            "type": "error",
+            "requestId": request_id,
+            "message": error_message
+        }
+        self._send_to_js(payload)
+        self.current_request = None
+        if hasattr(self, '_ai_thread'):
+            self._ai_thread = None
+
+    def on_streaming_metadata(self, request_id, steps, citations):
+        payload = {
+            "type": "metadata",
+            "requestId": request_id,
+            "steps": steps,
+            "citations": [c if isinstance(c, dict) else c for c in (citations or [])]
+        }
+        self._send_to_js(payload)
+
+    def on_streaming_finished(self, request_id):
+        self.current_request = None
+        if hasattr(self, '_ai_thread'):
+            self._ai_thread.quit()
+            self._ai_thread.wait(1000)
+            self._ai_thread = None
 
     def set_model_from_ui(self, model_name: str):
         if not model_name:

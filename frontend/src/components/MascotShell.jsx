@@ -31,7 +31,7 @@ export default function MascotShell({ mood = 'neutral', active, isThinking, repl
     <div
       style={{
         position: 'fixed',
-        bottom: 160,       // more clearance above chat input bar
+        bottom: 104,       // just above the chat input bar
         left: 12,
         right: 16,
         zIndex: 60,
