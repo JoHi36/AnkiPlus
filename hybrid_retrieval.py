@@ -112,6 +112,8 @@ class HybridRetrieval:
         # The frontend queue handles duplicate step names by updating (not appending).
         total_results = len(merged)
         if total_results < 2 and router_result.get('search_scope') == 'current_deck' and not router_result.get('_fallback_used'):
+            # Keep only the router label, remove search/merge labels before retry
+            self.ai._current_step_labels = self.ai._current_step_labels[:1]
             fallback_router = {**router_result, 'search_scope': 'collection', '_fallback_used': True}
             return self.retrieve(user_message, fallback_router, context, max_notes)
 

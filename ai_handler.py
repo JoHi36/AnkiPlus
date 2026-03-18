@@ -1971,19 +1971,22 @@ Karteninhalt: {question_clean[:500]}"""
     def _step_done_label(self, step, data):
         """Generate a human-readable label for a completed step."""
         data = data or {}
+        mode_labels = {'both': 'Hybrid-Suche', 'sql': 'Keyword-Suche', 'semantic': 'Semantische Suche'}
         if step == 'router':
-            mode = data.get('retrieval_mode', '')
+            mode = mode_labels.get(data.get('retrieval_mode', ''), data.get('retrieval_mode', ''))
             scope = data.get('scope_label', '')
-            return f"Anfrage analysiert — {mode.capitalize()}, {scope}" if scope else f"Anfrage analysiert — {mode.capitalize()}"
+            if not data.get('search_needed', True):
+                return 'Keine Suche nötig'
+            return f"{mode} · {scope}" if scope else mode or 'Anfrage analysiert'
         elif step == 'sql_search':
-            return f"Keyword-Suche — {data.get('total_hits', 0)} Treffer"
+            hits = data.get('total_hits', 0)
+            return f"{hits} Keyword-Treffer"
         elif step == 'semantic_search':
-            return f"Semantische Suche — {data.get('total_hits', 0)} Treffer"
+            hits = data.get('total_hits', 0)
+            return f"{hits} semantische Treffer"
         elif step == 'merge':
             t = data.get('total', 0)
-            k = data.get('keyword_count', 0)
-            s = data.get('semantic_count', 0)
-            return f"Quellen kombiniert — {t} ({k}K + {s}S)"
+            return f"{t} Quelle{'n' if t != 1 else ''} kombiniert"
         elif step == 'generating':
             return "Antwort generiert"
         return step
