@@ -2109,8 +2109,6 @@ Karteninhalt: {question_clean[:500]}"""
         # Record step label for persistence (only on 'done')
         if status == 'done':
             label = self._step_done_label(step, data)
-            if not hasattr(self, '_current_step_labels'):
-                self._current_step_labels = []
             self._current_step_labels.append(label)
 
         try:
@@ -2324,7 +2322,7 @@ Regeln für Suchstrategien:
                     use_backend = False
 
             # Wenn Backend erfolgreich war, überspringe direkte API
-            if use_backend and 'router_result' in dir() and router_result and router_result.get("search_needed") is not None:
+            if use_backend and 'router_result' in locals() and router_result and router_result.get("search_needed") is not None:
                 # Validierung des Backend-Ergebnisses
                 intent = router_result.get("intent", "EXPLANATION")
                 if intent == "CHAT":

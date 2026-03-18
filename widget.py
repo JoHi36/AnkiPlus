@@ -92,7 +92,7 @@ class AIRequestThread(QThread):
                 if self._cancelled:
                     return
                 self.chunk_signal.emit(self.request_id, chunk or "", done, is_function_call)
-                if done and (steps or citations):
+                if done and (steps or citations or step_labels):
                     self.metadata_signal.emit(self.request_id, steps or [], citations or [], step_labels or [])
 
             bot_msg = self.ai_handler.get_response_with_rag(
