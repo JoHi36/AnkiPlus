@@ -22,7 +22,8 @@ DEFAULT_CONFIG = {
     "ai_tools": {
         "images": True,
         "diagrams": True,
-        "molecules": False  # Beta
+        "molecules": False,  # Beta
+        "plusi": True,  # Plusi sub-agent companion
     },
     "firebase": {
         "enabled": False,  # Firebase MCP Integration aktiviert
