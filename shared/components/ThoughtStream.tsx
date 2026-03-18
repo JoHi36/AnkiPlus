@@ -6,12 +6,11 @@ import type { Citation } from './SourceCard';
 
 /* ═══════════════════════════════════════════════════
    ThoughtStream v2 — Active Box + Done Stack
-   Phase-specific animations for each pipeline step.
+   Queue-based: done steps are shown one at a time
+   with minimum display duration per step.
    ═══════════════════════════════════════════════════ */
 
-const MIN_PHASE_DURATION = 800; // ms — minimum time each phase is visible
-
-/* ── Keyframes (injected once) ── */
+const MIN_PHASE_DURATION = 800;
 
 const KEYFRAMES = `
 @keyframes scanGlow {
@@ -40,6 +39,7 @@ interface PipelineStep {
 interface DoneEntry {
   step: string;
   label: string;
+  data: Record<string, any>;
   isError: boolean;
 }
 
@@ -51,59 +51,91 @@ export interface ThoughtStreamProps {
   bridge?: any;
   onPreviewCard?: (citation: Citation) => void;
   message?: string;
-  // Legacy support
   steps?: any[];
   intent?: string | null;
 }
 
-/* ── Timing hook ── */
+/* ── Queue-based pipeline display ──
+   Instead of reacting to active/done status directly,
+   we queue done steps and show them one at a time
+   with MIN_PHASE_DURATION between transitions. */
 
-function useTimedPipeline(pipelineSteps: PipelineStep[]) {
-  const [visibleActive, setVisibleActive] = useState<PipelineStep | null>(null);
-  const [doneStack, setDoneStack] = useState<DoneEntry[]>([]);
-  const lastTransitionRef = useRef(0);
+function useQueuedPipeline(pipelineSteps: PipelineStep[]) {
+  const [currentDisplay, setCurrentDisplay] = useState<DoneEntry | null>(null);
+  const [completedStack, setCompletedStack] = useState<DoneEntry[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const queueRef = useRef<DoneEntry[]>([]);
+  const processedStepsRef = useRef<Set<string>>(new Set());
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Detect new done steps and add to queue
   useEffect(() => {
     if (!pipelineSteps || pipelineSteps.length === 0) {
-      setVisibleActive(null);
-      setDoneStack([]);
+      // Reset everything
+      queueRef.current = [];
+      processedStepsRef.current = new Set();
+      setCurrentDisplay(null);
+      setCompletedStack([]);
+      setIsProcessing(false);
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
       return;
     }
 
-    const latestActive = [...pipelineSteps].reverse().find(s => s.status === 'active') || null;
-    const doneSteps = pipelineSteps.filter(s => s.status === 'done' || s.status === 'error');
+    const doneSteps = pipelineSteps.filter(
+      s => (s.status === 'done' || s.status === 'error') && !processedStepsRef.current.has(s.step)
+    );
 
-    // Show active immediately
-    if (latestActive) {
-      setVisibleActive(latestActive);
+    for (const s of doneSteps) {
+      processedStepsRef.current.add(s.step);
+      queueRef.current.push({
+        step: s.step,
+        label: getDoneLabel(s),
+        data: s.data || {},
+        isError: s.status === 'error',
+      });
     }
 
-    const now = Date.now();
-    const elapsed = now - lastTransitionRef.current;
-    const entries = doneSteps.map(s => ({
-      step: s.step,
-      label: getDoneLabel(s),
-      isError: s.status === 'error',
-    })).reverse(); // Newest first
-
-    if (elapsed >= MIN_PHASE_DURATION) {
-      setDoneStack(entries);
-      lastTransitionRef.current = now;
-      if (!latestActive) setVisibleActive(null);
-    } else {
-      const delay = MIN_PHASE_DURATION - elapsed;
-      const timer = setTimeout(() => {
-        setDoneStack(entries);
-        lastTransitionRef.current = Date.now();
-        if (!pipelineSteps.find(s => s.status === 'active')) {
-          setVisibleActive(null);
-        }
-      }, delay);
-      return () => clearTimeout(timer);
+    // Check if there's an active step (for loading indicator)
+    const hasActive = pipelineSteps.some(s => s.status === 'active');
+    if (hasActive && !currentDisplay && queueRef.current.length === 0) {
+      setIsProcessing(true);
     }
   }, [pipelineSteps]);
 
-  return { visibleActive, doneStack };
+  // Process queue: show one item at a time with min duration
+  useEffect(() => {
+    if (currentDisplay !== null) return; // Already showing something
+    if (queueRef.current.length === 0) {
+      // Nothing to show — check if pipeline is still active
+      const hasActive = pipelineSteps?.some(s => s.status === 'active') || false;
+      if (!hasActive && processedStepsRef.current.size > 0) {
+        setIsProcessing(false);
+      }
+      return;
+    }
+
+    setIsProcessing(true);
+    const next = queueRef.current.shift()!;
+    setCurrentDisplay(next);
+
+    timerRef.current = setTimeout(() => {
+      setCompletedStack(prev => [next, ...prev]); // Newest first
+      setCurrentDisplay(null);
+      timerRef.current = null;
+    }, MIN_PHASE_DURATION);
+  }, [currentDisplay, pipelineSteps]);
+
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  return { currentDisplay, completedStack, isProcessing };
 }
 
 /* ── Done label generator ── */
@@ -135,27 +167,20 @@ function getDoneLabel(step: PipelineStep): string {
 }
 
 function getStepName(step: string): string {
-  switch (step) {
-    case 'router': return 'Analyse';
-    case 'sql_search': return 'Keyword-Suche';
-    case 'semantic_search': return 'Semantische Suche';
-    case 'merge': return 'Merge';
-    case 'generating': return 'Generierung';
-    default: return step;
-  }
+  const names: Record<string, string> = {
+    router: 'Analyse', sql_search: 'Keyword-Suche',
+    semantic_search: 'Semantische Suche', merge: 'Merge', generating: 'Generierung',
+  };
+  return names[step] || step;
 }
 
-/* ── Active title ── */
-
 function getActiveTitle(step?: string): string {
-  switch (step) {
-    case 'router': return 'Analysiere Anfrage...';
-    case 'sql_search': return 'Keyword-Suche...';
-    case 'semantic_search': return 'Semantische Suche...';
-    case 'merge': return 'Quellen kombinieren...';
-    case 'generating': return 'Generiere Antwort...';
-    default: return 'Verarbeite...';
-  }
+  const titles: Record<string, string> = {
+    router: 'Analysiere Anfrage...', sql_search: 'Keyword-Suche...',
+    semantic_search: 'Semantische Suche...', merge: 'Quellen kombinieren...',
+    generating: 'Generiere Antwort...',
+  };
+  return titles[step || ''] || 'Verarbeite...';
 }
 
 /* ═══════════════════════════════════════════════════
@@ -192,9 +217,7 @@ function SqlActiveContent({ data }: { data: Record<string, any> }) {
             ${q.hits > 0 ? 'bg-base-content/[0.05] text-base-content/50' : 'bg-base-content/[0.03] text-base-content/25'}`}
         >
           <Search className="w-2.5 h-2.5 opacity-40" />
-          <span className={q.hits === 0 ? 'line-through decoration-base-content/15' : ''}>
-            {q.text}
-          </span>
+          <span className={q.hits === 0 ? 'line-through decoration-base-content/15' : ''}>{q.text}</span>
           {q.hits !== undefined && (
             <span className={`text-[10px] font-mono ${q.hits > 0 ? 'text-success/60' : 'text-base-content/20'}`}>
               {q.hits > 0 ? `✓${q.hits}` : '0'}
@@ -219,8 +242,7 @@ function SemanticActiveContent({ data }: { data: Record<string, any> }) {
           transition={{ delay: i * 0.3, duration: 0.8 }}
           className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg bg-white/[0.02] relative overflow-hidden"
         >
-          <div
-            className="absolute inset-0 pointer-events-none"
+          <div className="absolute inset-0 pointer-events-none"
             style={{
               background: 'linear-gradient(90deg, transparent, rgba(10,132,255,0.08), transparent)',
               backgroundSize: '30% 100%',
@@ -230,9 +252,7 @@ function SemanticActiveContent({ data }: { data: Record<string, any> }) {
           <span className="text-[11px] font-mono text-[#0a84ff]/70 flex-shrink-0 min-w-[36px] relative z-10">
             {c.score?.toFixed(3)}
           </span>
-          <span className="text-[11px] text-base-content/50 truncate relative z-10">
-            {c.snippet}
-          </span>
+          <span className="text-[11px] text-base-content/50 truncate relative z-10">{c.snippet}</span>
         </motion.div>
       ))}
     </div>
@@ -245,7 +265,6 @@ function MergeActiveContent({ data }: { data: Record<string, any> }) {
   const total = data.total || 0;
   const weight = data.weight_position || 0.5;
   const weightPercent = `${Math.round(weight * 100)}%`;
-
   if (!total) return null;
 
   return (
@@ -261,14 +280,12 @@ function MergeActiveContent({ data }: { data: Record<string, any> }) {
         </div>
       </div>
       <div className="relative h-8 my-2">
-        <div
-          className="absolute top-1/2 left-0 right-0 h-[2px] -translate-y-1/2 rounded-sm"
+        <div className="absolute top-1/2 left-0 right-0 h-[2px] -translate-y-1/2 rounded-sm"
           style={{
             background: `linear-gradient(90deg, rgba(10,132,255,0.25) 0%, rgba(10,132,255,0.4) ${weightPercent}, rgba(20,184,166,0.4) ${weightPercent}, rgba(20,184,166,0.25) 100%)`,
           }}
         />
-        <div
-          className="absolute top-1/2 w-2.5 h-2.5 rounded-full bg-[#0a84ff] z-10"
+        <div className="absolute top-1/2 w-2.5 h-2.5 rounded-full bg-[#0a84ff] z-10"
           style={{
             left: weightPercent,
             transform: 'translate(-50%, -50%)',
@@ -277,14 +294,8 @@ function MergeActiveContent({ data }: { data: Record<string, any> }) {
         />
       </div>
       <div className="text-center">
-        <motion.div
-          initial={{ y: '100%', opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.4 }}
-          className="text-[20px] font-semibold text-base-content/80"
-        >
-          {total}
-        </motion.div>
+        <motion.div initial={{ y: '100%', opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.4 }}
+          className="text-[20px] font-semibold text-base-content/80">{total}</motion.div>
         <div className="text-[11px] text-base-content/25">Quellen kombiniert</div>
       </div>
     </div>
@@ -293,11 +304,9 @@ function MergeActiveContent({ data }: { data: Record<string, any> }) {
 
 function GeneratingActiveContent() {
   return (
-    <div
-      className="h-[3px] rounded-sm overflow-hidden"
+    <div className="h-[3px] rounded-sm overflow-hidden"
       style={{
-        background:
-          'linear-gradient(90deg, transparent 0%, rgba(10,132,255,0.05) 20%, rgba(10,132,255,0.3) 50%, rgba(10,132,255,0.05) 80%, transparent 100%)',
+        background: 'linear-gradient(90deg, transparent 0%, rgba(10,132,255,0.05) 20%, rgba(10,132,255,0.3) 50%, rgba(10,132,255,0.05) 80%, transparent 100%)',
         backgroundSize: '200% 100%',
         animation: 'shimmerWave 2s ease-in-out infinite',
       }}
@@ -305,14 +314,12 @@ function GeneratingActiveContent() {
   );
 }
 
-/* ── Active content dispatcher ── */
-
-function ActiveContent({ step }: { step: PipelineStep }) {
-  switch (step.step) {
-    case 'router': return <RouterActiveContent data={step.data} />;
-    case 'sql_search': return <SqlActiveContent data={step.data} />;
-    case 'semantic_search': return <SemanticActiveContent data={step.data} />;
-    case 'merge': return <MergeActiveContent data={step.data} />;
+function ActiveContent({ step, data }: { step: string; data: Record<string, any> }) {
+  switch (step) {
+    case 'router': return <RouterActiveContent data={data} />;
+    case 'sql_search': return <SqlActiveContent data={data} />;
+    case 'semantic_search': return <SemanticActiveContent data={data} />;
+    case 'merge': return <MergeActiveContent data={data} />;
     case 'generating': return <GeneratingActiveContent />;
     default: return null;
   }
@@ -320,19 +327,14 @@ function ActiveContent({ step }: { step: PipelineStep }) {
 
 /* ── Auto-collapse hook ── */
 
-function useAutoCollapse(isStreaming: boolean, message: string, hasActive: boolean) {
+function useAutoCollapse(isStreaming: boolean, message: string, isProcessing: boolean) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [hasAutoCollapsed, setHasAutoCollapsed] = useState(false);
   const hasText = Boolean(message && message.trim().length > 0);
 
   useEffect(() => {
-    if (isStreaming && !hasAutoCollapsed) setIsExpanded(true);
-  }, [isStreaming, hasAutoCollapsed]);
-
-  // Auto-expand when pipeline starts
-  useEffect(() => {
-    if (hasActive && !hasAutoCollapsed) setIsExpanded(true);
-  }, [hasActive, hasAutoCollapsed]);
+    if ((isStreaming || isProcessing) && !hasAutoCollapsed) setIsExpanded(true);
+  }, [isStreaming, isProcessing, hasAutoCollapsed]);
 
   useEffect(() => {
     if (hasText && !hasAutoCollapsed) {
@@ -347,28 +349,13 @@ function useAutoCollapse(isStreaming: boolean, message: string, hasActive: boole
   return { isExpanded, setIsExpanded, hasAutoCollapsed };
 }
 
-/* ── Legacy fallback for old message format ── */
+/* ── Legacy fallback ── */
 
-function LegacyThoughtStream({
-  steps,
-  citations,
-  citationIndices,
-  bridge,
-  onPreviewCard,
-}: {
-  steps: any[];
-  citations: Record<string, any>;
-  citationIndices: Record<string, number>;
-  bridge: any;
-  onPreviewCard?: (citation: Citation) => void;
-}) {
+function LegacyThoughtStream({ steps, citations, citationIndices, bridge, onPreviewCard }: any) {
   const hasCitations = Object.keys(citations || {}).length > 0;
-
-  // Extract labels: new format = string[], old format = {state, phase, ...}[]
   const labels: string[] = Array.isArray(steps)
     ? steps.map((s: any) => (typeof s === 'string' ? s : s.state || s.label || '')).filter(Boolean)
     : [];
-
   if (labels.length === 0 && !hasCitations) return null;
 
   return (
@@ -386,12 +373,7 @@ function LegacyThoughtStream({
       )}
       {hasCitations && (
         <div className="mt-2 max-w-full overflow-hidden">
-          <SourcesCarousel
-            citations={citations}
-            citationIndices={citationIndices}
-            bridge={bridge}
-            onPreviewCard={onPreviewCard}
-          />
+          <SourcesCarousel citations={citations} citationIndices={citationIndices} bridge={bridge} onPreviewCard={onPreviewCard} />
         </div>
       )}
     </div>
@@ -413,7 +395,6 @@ export default function ThoughtStream({
   steps = [],
   intent = null,
 }: ThoughtStreamProps) {
-  // Inject keyframes once
   useEffect(() => {
     if (typeof document !== 'undefined' && !document.getElementById('thoughtstream-keyframes')) {
       const style = document.createElement('style');
@@ -423,45 +404,34 @@ export default function ThoughtStream({
     }
   }, []);
 
-  // Legacy detection: old-format steps (array of objects with phase field) or string array labels
   const isLegacy = pipelineSteps.length === 0 && steps.length > 0;
-
-  const { visibleActive, doneStack } = useTimedPipeline(pipelineSteps);
-  const { isExpanded, setIsExpanded } = useAutoCollapse(isStreaming, message, !!visibleActive);
+  const { currentDisplay, completedStack, isProcessing } = useQueuedPipeline(pipelineSteps);
+  const { isExpanded, setIsExpanded } = useAutoCollapse(isStreaming, message, isProcessing);
 
   const hasCitations = Object.keys(citations).length > 0;
-  const hasContent = pipelineSteps.length > 0 || doneStack.length > 0 || visibleActive !== null || isLegacy;
-  const stepCount = doneStack.length;
+  const hasContent = isProcessing || currentDisplay !== null || completedStack.length > 0 || isLegacy;
+  const stepCount = completedStack.length;
   const citationCount = Object.keys(citations).length;
 
   if (!hasContent) return null;
 
-  // Legacy rendering for old messages
   if (isLegacy) {
-    return (
-      <LegacyThoughtStream
-        steps={steps}
-        citations={citations}
-        citationIndices={citationIndices}
-        bridge={bridge}
-        onPreviewCard={onPreviewCard}
-      />
-    );
+    return <LegacyThoughtStream steps={steps} citations={citations} citationIndices={citationIndices} bridge={bridge} onPreviewCard={onPreviewCard} />;
   }
 
   const handleToggle = () => {
-    if (visibleActive) return; // Don't collapse while processing
+    if (currentDisplay || isProcessing) return;
     setIsExpanded(v => !v);
   };
 
+  const showingActive = currentDisplay !== null || isProcessing;
+
   return (
     <div className="mb-2 max-w-full select-none">
-      {/* Collapsed header (shown when collapsed and no active step) */}
-      {!isExpanded && !visibleActive && stepCount > 0 && (
-        <button
-          onClick={handleToggle}
-          className="group flex items-center gap-1.5 w-full text-left py-1 opacity-40 hover:opacity-60 transition-opacity cursor-pointer"
-        >
+      {/* Collapsed header */}
+      {!isExpanded && !showingActive && stepCount > 0 && (
+        <button onClick={handleToggle}
+          className="group flex items-center gap-1.5 w-full text-left py-1 opacity-40 hover:opacity-60 transition-opacity cursor-pointer">
           <ChevronDown className="w-3 h-3 text-base-content/30 -rotate-90 transition-transform" />
           <span className="text-[12px] text-base-content/35">
             {stepCount} Schritt{stepCount !== 1 ? 'e' : ''} · {citationCount} Quellen
@@ -469,35 +439,27 @@ export default function ThoughtStream({
         </button>
       )}
 
-      {/* Sources carousel — always visible when collapsed */}
-      {!isExpanded && !visibleActive && hasCitations && (
+      {/* Sources carousel when collapsed */}
+      {!isExpanded && !showingActive && hasCitations && (
         <div className="mt-1 mb-1 max-w-full overflow-hidden">
-          <SourcesCarousel
-            citations={citations}
-            citationIndices={citationIndices}
-            bridge={bridge}
-            onPreviewCard={onPreviewCard}
-          />
+          <SourcesCarousel citations={citations} citationIndices={citationIndices} bridge={bridge} onPreviewCard={onPreviewCard} />
         </div>
       )}
 
-      {/* Expanded content (or forced open when active) */}
+      {/* Expanded / Active content */}
       <AnimatePresence initial={false}>
-        {(isExpanded || visibleActive) && (
-          <motion.div
-            key="pipeline"
+        {(isExpanded || showingActive) && (
+          <motion.div key="pipeline"
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ height: { duration: 0.2 }, opacity: { duration: 0.15 } }}
-            className="overflow-hidden"
-          >
-            {/* Collapse toggle when expanded and no active step */}
-            {!visibleActive && stepCount > 0 && (
-              <button
-                onClick={handleToggle}
-                className="group flex items-center gap-1.5 w-full text-left py-1 opacity-60 hover:opacity-80 transition-opacity cursor-pointer"
-              >
+            className="overflow-hidden">
+
+            {/* Collapse toggle when expanded */}
+            {!showingActive && stepCount > 0 && (
+              <button onClick={handleToggle}
+                className="group flex items-center gap-1.5 w-full text-left py-1 opacity-60 hover:opacity-80 transition-opacity cursor-pointer">
                 <ChevronDown className="w-3 h-3 text-base-content/30 transition-transform" />
                 <span className="text-[12px] text-base-content/45">
                   {stepCount} Schritt{stepCount !== 1 ? 'e' : ''} · {citationCount} Quellen
@@ -505,41 +467,43 @@ export default function ThoughtStream({
               </button>
             )}
 
-            {/* Active Box */}
+            {/* Active Box — shows current step being displayed */}
             <AnimatePresence mode="wait">
-              {visibleActive && (
-                <motion.div
-                  key={visibleActive.step}
+              {currentDisplay && (
+                <motion.div key={currentDisplay.step}
                   initial={{ opacity: 0, y: -8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95, height: 0, padding: 0, margin: 0 }}
                   transition={{ duration: 0.3, ease: 'easeOut' }}
-                  className="bg-[#1e1e1e] rounded-xl p-4 mb-2 border border-white/[0.04]"
-                >
+                  className="bg-[#1e1e1e] rounded-xl p-4 mb-2 border border-white/[0.04]">
                   <div className="flex items-center gap-2 mb-3">
-                    <div
-                      className="w-1.5 h-1.5 rounded-full bg-[#0a84ff]"
-                      style={{ animation: 'dotPulse 1.5s ease-in-out infinite' }}
-                    />
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#0a84ff]"
+                      style={{ animation: 'dotPulse 1.5s ease-in-out infinite' }} />
                     <span className="text-[12px] text-base-content/60 font-medium">
-                      {getActiveTitle(visibleActive.step)}
+                      {getActiveTitle(currentDisplay.step)}
                     </span>
                   </div>
-                  <ActiveContent step={visibleActive} />
+                  <ActiveContent step={currentDisplay.step} data={currentDisplay.data} />
                 </motion.div>
               )}
             </AnimatePresence>
 
+            {/* Loading indicator when pipeline is processing but no step to show yet */}
+            {isProcessing && !currentDisplay && completedStack.length === 0 && (
+              <div className="flex items-center gap-2 py-2">
+                <Loader2 className="w-3 h-3 animate-spin text-base-content/30" />
+                <span className="text-[12px] text-base-content/40">Analysiere Anfrage...</span>
+              </div>
+            )}
+
             {/* Done Stack (newest first) */}
             <AnimatePresence>
-              {doneStack.map((entry) => (
-                <motion.div
-                  key={entry.step}
+              {completedStack.map((entry) => (
+                <motion.div key={entry.step}
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   transition={{ duration: 0.25 }}
-                  className="flex items-center gap-2 py-1.5 border-t border-white/[0.03] first:border-t-0"
-                >
+                  className="flex items-center gap-2 py-1.5 border-t border-white/[0.03] first:border-t-0">
                   <div className="w-[5px] h-[5px] rounded-full bg-base-content/15 flex-shrink-0" />
                   <span className={`text-[11px] flex-1 ${entry.isError ? 'text-error/40' : 'text-base-content/30'}`}>
                     {entry.label}
@@ -549,15 +513,10 @@ export default function ThoughtStream({
               ))}
             </AnimatePresence>
 
-            {/* Sources carousel in expanded mode */}
+            {/* Sources carousel */}
             {hasCitations && (
               <div className="mt-2 max-w-full overflow-hidden">
-                <SourcesCarousel
-                  citations={citations}
-                  citationIndices={citationIndices}
-                  bridge={bridge}
-                  onPreviewCard={onPreviewCard}
-                />
+                <SourcesCarousel citations={citations} citationIndices={citationIndices} bridge={bridge} onPreviewCard={onPreviewCard} />
               </div>
             )}
           </motion.div>
