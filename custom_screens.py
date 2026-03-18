@@ -1426,6 +1426,17 @@ class CustomScreens:
                     except Exception:
                         if hasattr(mw, 'onPrefs'):
                             mw.onPrefs()
+            elif action_type == 'upgradeBadge':
+                # Open addon settings — same as 'cmd':'settings'
+                try:
+                    from . import ui_setup
+                    if hasattr(ui_setup, 'show_settings'):
+                        ui_setup.show_settings()
+                    elif hasattr(mw, 'onPrefs'):
+                        mw.onPrefs()
+                except Exception:
+                    if hasattr(mw, 'onPrefs'):
+                        mw.onPrefs()
         except Exception as e:
             print(f"CustomScreens: action error: {e}")
             traceback.print_exc()
