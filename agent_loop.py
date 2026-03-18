@@ -47,6 +47,11 @@ def run_agent_loop(
         function_name = function_call.get("name", "")
         function_args = function_call.get("args", {})
         print(f"agent_loop: Tool-Call erkannt: {function_name}")
+
+        # spawn_plusi: inject loading widget BEFORE the tool executes
+        if function_name == 'spawn_plusi' and callback:
+            callback('\n[[PLUSI_LOADING]]\n', False, False)
+
         tool_result = execute_tool(function_name, function_args)
 
         # Special: spawn_plusi — inject PlusiWidget data directly into the stream

@@ -1395,7 +1395,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
             }
         }
 
-        // 5. Plusi Data Parsing ([[PLUSI_DATA: {...}]])
+        // 5. Plusi Data Parsing ([[PLUSI_DATA: {...}]] or [[PLUSI_LOADING]])
         const plusiMatch = fixedMessage.match(/\[\[PLUSI_DATA:\s*(\{[\s\S]*?\})\s*\]\]/);
         if (plusiMatch && plusiMatch[1]) {
             try {
@@ -1406,6 +1406,9 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
             } catch (e) {
                 console.warn('Failed to parse PLUSI_DATA:', e);
             }
+        } else if (fixedMessage.includes('[[PLUSI_LOADING]]')) {
+            // Show loading widget while Plusi's AI call is in progress
+            setPlusiData({ _loading: true });
         }
     }
   }, [fixedMessage, isUser]);
@@ -1505,6 +1508,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
   processedMessage = processedMessage.replace(/\[\[SCORE:\s*\d+\]\]/g, '');
   processedMessage = processedMessage.replace(/\[\[INTENT:\s*\w+\]\]/g, '');
   processedMessage = processedMessage.replace(/\[\[PLUSI_DATA:\s*\{[\s\S]*?\}\s*\]\]/g, '');
+  processedMessage = processedMessage.replace(/\[\[PLUSI_LOADING\]\]/g, '');
   // Remove "JSON undefined" artefacts if any leaked
   processedMessage = processedMessage.replace(/JSON\s*\n\s*undefined/g, '');
   
@@ -1703,10 +1707,10 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
             {/* Plusi Companion Widget */}
             {plusiData && (
                 <PlusiWidget
-                    mood={plusiData.mood || 'neutral'}
+                    mood={plusiData._loading ? 'thinking' : (plusiData.mood || 'neutral')}
                     text={plusiData.text || ''}
                     metaText={plusiData.meta || ''}
-                    isLoading={false}
+                    isLoading={!!plusiData._loading}
                     isFrozen={false}
                 />
             )}
