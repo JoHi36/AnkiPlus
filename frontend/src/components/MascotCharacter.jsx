@@ -67,7 +67,8 @@ export default function MascotCharacter({ mood = 'neutral', size = 52, tapKey = 
 
   const bodyAnim = tapAnim || m.bodyClass;
 
-  const pupilStyle = pupilOffset && m.pupilClass
+  // Don't override thinking animation with eye tracking — let mascot-pupil-think run freely
+  const pupilStyle = pupilOffset && m.pupilClass && !isThinking
     ? { transform: `translate(${pupilOffset.x}px, ${pupilOffset.y}px)`, animation: 'none' }
     : undefined;
 

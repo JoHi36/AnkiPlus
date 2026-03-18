@@ -99,9 +99,18 @@ export function useCompanion({ onMood, onBubble }) {
     }
 
     if (done) {
-      // If no mood prefix found (e.g. error message), still show the text
+      // If no mood prefix found (e.g. error message from backend), show something human-friendly
       if (!moodDispatchedRef.current && bufferRef.current.trim()) {
-        onBubble?.(bufferRef.current.trim());
+        const raw = bufferRef.current.trim();
+        const friendly = raw.includes('429') || raw.toLowerCase().includes('rate limit')
+          ? 'Zu viele Anfragen — kurz pausieren 😅'
+          : raw.includes('401') || raw.toLowerCase().includes('unauthorized')
+            ? 'API-Schlüssel fehlt oder ungültig 🔑'
+            : raw.startsWith('Fehler:')
+              ? 'Hmm, da ging was schief 😬'
+              : raw;
+        onBubble?.(friendly);
+        onMood?.('neutral');
       }
       const text = bufferRef.current.replace(MOOD_REGEX, '').trim();
       if (text) {

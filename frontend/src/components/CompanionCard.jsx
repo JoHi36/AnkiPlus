@@ -24,13 +24,8 @@ export default function CompanionCard({ isThinking, text, visible }) {
       <div
         className="companion-card"
         style={{
-          flex: 1,
-          maxWidth: isThinking ? '60px' : '800px',
-          transform: isThinking ? 'translateY(0)' : 'translateY(-2px)',
-          transition: [
-            'max-width 0.38s cubic-bezier(0.34,1.1,0.64,1)',
-            'transform 0.38s cubic-bezier(0.34,1.1,0.64,1)',
-          ].join(', '),
+          maxWidth: isThinking ? '60px' : '360px',
+          transition: 'max-width 0.38s cubic-bezier(0.34,1.1,0.64,1)',
           overflow: 'hidden',
         }}
       >

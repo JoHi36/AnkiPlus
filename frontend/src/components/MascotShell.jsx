@@ -31,12 +31,12 @@ export default function MascotShell({ mood = 'neutral', active, isThinking, repl
     <div
       style={{
         position: 'fixed',
-        bottom: 120,       // clears the chat input bar (~96px tall + 16px pb-4 + 8px gap)
+        bottom: 160,       // more clearance above chat input bar
         left: 12,
         right: 16,
         zIndex: 60,
         display: 'flex',
-        alignItems: 'flex-end',
+        alignItems: 'flex-start',  // card top-aligns with Plusi's top
         gap: 9,
         pointerEvents: 'none',  // clicks pass through the empty dock area
       }}

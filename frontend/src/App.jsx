@@ -306,6 +306,25 @@ function AppInner() {
   });
   const [consecutiveWrong, setConsecutiveWrong] = useState(0);
 
+  // Companion activation escalation — tracks how often Plusi is toggled on
+  const activationCountRef = useRef(0);
+  const activationResetRef = useRef(null);
+
+  const COMPANION_GREETINGS = [
+    { mood: 'happy', text: "Hey! 👋 Was gibt's?" },
+    { mood: 'happy', text: "Da bin ich 🙂 Was los?" },
+    { mood: 'happy', text: "Yo! Was machst du gerade?" },
+    { mood: 'happy', text: "Heyy! Was kann ich tun?" },
+    { mood: 'happy', text: "Hi 👋 Alles okay?" },
+  ];
+  const COMPANION_ANNOY = [
+    null, // 1st activation — random normal
+    { mood: 'surprised', text: "Schon wieder? 😮 Was ist los?" },
+    { mood: 'excited',   text: "bitte. nicht. dauernd. klicken 😬" },
+    { mood: 'empathy',   text: "ich muss kurz durchatmen... 😮‍💨" },
+    { mood: 'sleepy',    text: "ich ignoriere dich jetzt. bye 🙄" },
+  ];
+
   // Idle timer — set mascot to sleepy after 10 minutes of inactivity
   const idleTimerRef = useRef(null);
   const resetIdleTimer = useCallback(() => {
@@ -591,23 +610,31 @@ function AppInner() {
 
         // Card Context Events — PER-CARD SESSION SWITCH
         if (payload.type === 'cardContext') {
-          console.error('🔴 CARD_SWITCH: cardContext for cardId:', payload.data?.cardId);
+          const newCardId = payload.data?.cardId;
+          const isQuestion = payload.data?.isQuestion;
+          console.error('🔴 CARD_SWITCH: cardContext for cardId:', newCardId, 'isQuestion:', isQuestion);
+
+          // Cancel any in-flight AI request before switching cards
+          if (_chat.isLoading) {
+            _chat.handleStopRequest();
+          }
+
           _cardCtx.handleCardContext(payload.data);
-          if (payload.data && payload.data.cardId) {
-            // SAVE current card's messages to cache before switching
+          if (newCardId) {
+            // SAVE current card's messages to cache BEFORE clearing
             const prevCardId = _cardSession.currentCardId;
             if (prevCardId && _chat.messages && _chat.messages.length > 0) {
               _cardSession.updateLocalMessages(prevCardId, _chat.messages);
             }
-            _session.handleCardShown(payload.data.cardId);
-            // IMMEDIATELY clear chat for new card
+            _session.handleCardShown(newCardId);
+            // Clear chat and sections for new card
             _chat.setMessages([]);
             _cardCtx.setSections([]);
             _cardCtx.setCurrentSectionId(null);
             // Per-Card Session: Load card's session from SQLite
-            _cardSession.loadCardSession(payload.data.cardId);
+            _cardSession.loadCardSession(newCardId);
             // Review Trail
-            _trail.addCard(payload.data.cardId);
+            _trail.addCard(newCardId);
           }
         }
 
@@ -904,19 +931,28 @@ function AppInner() {
       const _trail = reviewTrailHookRef.current;
       const _session = sessionContextRef.current;
 
+      const newCardId = payload.data?.cardId;
+      const isQuestion = payload.data?.isQuestion;
+
+      // Cancel any in-flight AI request before switching cards
+      if (_chat.isLoading) {
+        _chat.handleStopRequest();
+      }
+
       _cardCtx.handleCardContext(payload.data);
-      if (payload.data && payload.data.cardId) {
-        // Save current card's messages before switching
+      if (newCardId) {
+        // Save current card's messages BEFORE clearing
         const prevCardId = _cardSession.currentCardId;
         if (prevCardId && _chat.messages && _chat.messages.length > 0) {
           _cardSession.updateLocalMessages(prevCardId, _chat.messages);
         }
-        _session.handleCardShown(payload.data.cardId);
+        _session.handleCardShown(newCardId);
+        // Clear chat and sections for new card
         _chat.setMessages([]);
         _cardCtx.setSections([]);
         _cardCtx.setCurrentSectionId(null);
-        _cardSession.loadCardSession(payload.data.cardId);
-        _trail.addCard(payload.data.cardId);
+        _cardSession.loadCardSession(newCardId);
+        _trail.addCard(newCardId);
       }
     };
 
@@ -2022,8 +2058,21 @@ function AppInner() {
             onClick={() => {
               setCompanionMode(prev => {
                 if (!prev) {
-                  setAiMood('happy');
-                  setBubbleText("Hey! 👋 Was gibt's?");
+                  // Increment activation count, reset after 3 minutes of no activations
+                  clearTimeout(activationResetRef.current);
+                  activationCountRef.current += 1;
+                  activationResetRef.current = setTimeout(() => { activationCountRef.current = 0; }, 3 * 60 * 1000);
+
+                  const count = activationCountRef.current;
+                  const annoy = COMPANION_ANNOY[Math.min(count - 1, COMPANION_ANNOY.length - 1)];
+                  if (annoy) {
+                    setAiMood(annoy.mood);
+                    setBubbleText(annoy.text);
+                  } else {
+                    const g = COMPANION_GREETINGS[Math.floor(Math.random() * COMPANION_GREETINGS.length)];
+                    setAiMood(g.mood);
+                    setBubbleText(g.text);
+                  }
                 } else {
                   resetMood();
                   setBubbleText(null);
