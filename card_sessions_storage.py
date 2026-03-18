@@ -297,6 +297,19 @@ def save_card_session(card_id, data):
         return False
 
 
+def _get_deck_for_card(card_id):
+    """Get deck_id and deck_name from Anki for a card. Returns (deck_id, deck_name) or (None, None)."""
+    try:
+        import aqt
+        if aqt.mw and aqt.mw.col:
+            card = aqt.mw.col.get_card(card_id)
+            if card:
+                return card.did, aqt.mw.col.decks.name(card.did)
+    except Exception:
+        pass
+    return None, None
+
+
 def save_message(card_id, message):
     """Append a single message to a card's session."""
     db = _get_db()
@@ -304,11 +317,19 @@ def save_message(card_id, message):
     now = datetime.now().isoformat()
 
     try:
-        # Ensure card session exists
+        # Ensure card session exists — include deck_id from Anki
+        deck_id, deck_name = _get_deck_for_card(card_id)
         db.execute("""
-            INSERT OR IGNORE INTO card_sessions (card_id, created_at, updated_at)
-            VALUES (?, ?, ?)
-        """, (card_id, now, now))
+            INSERT OR IGNORE INTO card_sessions (card_id, deck_id, deck_name, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (card_id, deck_id, deck_name, now, now))
+
+        # Backfill deck_id on existing entries that are missing it
+        if deck_id:
+            db.execute("""
+                UPDATE card_sessions SET deck_id = ?, deck_name = ?
+                WHERE card_id = ? AND deck_id IS NULL
+            """, (deck_id, deck_name, card_id))
 
         steps = message.get('steps')
         if steps is not None and not isinstance(steps, str):
@@ -320,8 +341,8 @@ def save_message(card_id, message):
 
         msg_id = message.get('id') or str(uuid.uuid4())
         db.execute("""
-            INSERT OR REPLACE INTO messages (id, card_id, section_id, text, sender, created_at, steps, citations, request_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO messages (id, card_id, section_id, text, sender, created_at, steps, citations, request_id, deck_id, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             msg_id,
             card_id,
@@ -332,14 +353,9 @@ def save_message(card_id, message):
             steps,
             citations,
             request_id,
+            deck_id,
+            message.get('source', 'tutor'),
         ))
-
-        # Backfill deck_id from card_sessions
-        db.execute("""
-            UPDATE messages SET deck_id = (
-                SELECT deck_id FROM card_sessions WHERE card_id = ?
-            ) WHERE id = ? AND deck_id IS NULL
-        """, (card_id, msg_id))
 
         db.execute("UPDATE card_sessions SET updated_at = ? WHERE card_id = ?", (now, card_id))
 
