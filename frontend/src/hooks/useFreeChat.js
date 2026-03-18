@@ -43,15 +43,13 @@ export function useFreeChat({ bridge, onLoadingChange, onCancelComplete }) {
 
   const loadForDeck = useCallback((deckId) => {
     deckIdRef.current = deckId || 0; // fallback to 0 = global Free Chat
-    // Only load from DB if we don't already have messages for this deck
-    if (!messagesLoadedRef.current) {
-      window.ankiBridge?.addMessage('loadDeckMessages', String(deckId));
-    }
+    // Always reload from DB — ensures card messages that were added since last open appear
+    messagesLoadedRef.current = false;
+    window.ankiBridge?.addMessage('loadDeckMessages', String(deckIdRef.current));
   }, []);
 
   // Handle deckMessagesLoaded event (called from App.jsx ankiReceive)
   const handleDeckMessagesLoaded = useCallback((payload) => {
-    if (messagesLoadedRef.current) return; // already loaded
     const msgs = (payload.messages || []).map(m => ({
       id: m.id || `db-${Date.now()}-${Math.random()}`,
       text: m.text,
@@ -59,9 +57,7 @@ export function useFreeChat({ bridge, onLoadingChange, onCancelComplete }) {
       createdAt: m.created_at,
       citations: m.citations ? (typeof m.citations === 'string' ? JSON.parse(m.citations) : m.citations) : {},
     }));
-    if (msgs.length > 0) {
-      setMessages(msgs);
-    }
+    setMessages(msgs); // replace with fresh data from DB
     messagesLoadedRef.current = true;
   }, []);
 
