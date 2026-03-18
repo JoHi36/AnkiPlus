@@ -68,7 +68,7 @@ class AIRequestThread(QThread):
     chunk_signal = pyqtSignal(str, str, bool, bool)  # requestId, chunk, done, is_function_call
     error_signal = pyqtSignal(str, str)  # requestId, error_message
     finished_signal = pyqtSignal(str)  # requestId
-    metadata_signal = pyqtSignal(str, object, object)  # requestId, steps, citations
+    metadata_signal = pyqtSignal(str, object, object, object)  # requestId, steps, citations, step_labels
 
     def __init__(self, ai_handler, text, widget_ref, history=None, mode='compact', request_id=None):
         super().__init__()
@@ -88,12 +88,12 @@ class AIRequestThread(QThread):
         try:
             context = self.widget_ref.current_card_context if self.widget_ref else None
 
-            def stream_callback(chunk, done, is_function_call=False, steps=None, citations=None):
+            def stream_callback(chunk, done, is_function_call=False, steps=None, citations=None, step_labels=None):
                 if self._cancelled:
                     return
                 self.chunk_signal.emit(self.request_id, chunk or "", done, is_function_call)
                 if done and (steps or citations):
-                    self.metadata_signal.emit(self.request_id, steps or [], citations or [])
+                    self.metadata_signal.emit(self.request_id, steps or [], citations or [], step_labels or [])
 
             bot_msg = self.ai_handler.get_response_with_rag(
                 self.text, context=context, history=self.history,
@@ -784,6 +784,7 @@ class ChatbotWidget(QWidget):
             from ai_handler import get_ai_handler
 
         ai = get_ai_handler(widget=self)  # Pass widget reference for UI state emission
+        ai._current_request_id = request_id  # Store for pipeline_step events
         if not ai.is_configured():
             # Unterschiedliche Fehlermeldungen je nach Modus
             from .config import is_backend_mode
@@ -835,12 +836,13 @@ class ChatbotWidget(QWidget):
         if hasattr(self, '_ai_thread'):
             self._ai_thread = None
 
-    def on_streaming_metadata(self, request_id, steps, citations):
+    def on_streaming_metadata(self, request_id, steps, citations, step_labels):
         payload = {
             "type": "metadata",
             "requestId": request_id,
             "steps": steps,
-            "citations": [c if isinstance(c, dict) else c for c in (citations or [])]
+            "citations": [c if isinstance(c, dict) else c for c in (citations or [])],
+            "stepLabels": step_labels or []
         }
         self._send_to_js(payload)
 

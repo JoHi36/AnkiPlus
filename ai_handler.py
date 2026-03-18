@@ -172,6 +172,8 @@ class AIHandler:
         self.config = get_config()
         self.widget = widget  # Widget reference for UI state emission
         self._current_request_steps = []  # Track steps for the current request
+        self._current_request_id = None
+        self._current_step_labels = []
     
     def _refresh_config(self):
         """Lädt die Config neu, um sicherzustellen dass API-Key aktuell ist"""
@@ -187,6 +189,9 @@ class AIHandler:
             "Content-Type": "application/json",
             "X-Device-Id": device_id
         }
+
+        # Proaktiver Token-Refresh vor Ablauf
+        self._ensure_valid_token()
 
         auth_token = get_auth_token()
         if auth_token:
@@ -232,10 +237,41 @@ class AIHandler:
             return False
     
     def _ensure_valid_token(self):
-        """Prüft Token-Gültigkeit und refresht bei Bedarf"""
-        # Für jetzt: Token wird bei 401 automatisch refreshed
-        # Später könnte hier eine Token-Validierung hinzugefügt werden
-        return True
+        """Prüft Token-Gültigkeit und refresht proaktiv vor Ablauf"""
+        auth_token = get_auth_token()
+        if not auth_token:
+            return False
+
+        # Decode JWT payload (ohne Signatur-Validierung) um exp zu prüfen
+        try:
+            import base64
+            # JWT: header.payload.signature
+            parts = auth_token.split('.')
+            if len(parts) != 3:
+                return bool(auth_token)
+
+            # Payload base64url-decodieren
+            payload_b64 = parts[1]
+            # Padding hinzufügen
+            payload_b64 += '=' * (4 - len(payload_b64) % 4)
+            payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+
+            exp = payload.get('exp', 0)
+            import time
+            now = time.time()
+
+            # Token läuft in weniger als 5 Minuten ab → proaktiv refreshen
+            if exp - now < 300:
+                print(f"🔄 Token läuft in {int(exp - now)}s ab, proaktiver Refresh")
+                if self._refresh_auth_token():
+                    return True
+                # Token abgelaufen und Refresh fehlgeschlagen
+                if exp < now:
+                    return False
+            return True
+        except Exception:
+            # Bei Decode-Fehler: Token als gültig annehmen, Backend validiert
+            return bool(auth_token)
     
     def _execute_mermaid_tool(self, function_call):
         """
@@ -1236,9 +1272,10 @@ class AIHandler:
             except Exception as fallback_error:
                 print(f"⚠️ Fallback komplett fehlgeschlagen: {fallback_error}")
             
-            # Wenn Fallback auch fehlschlägt, sende Fehlermeldung (nur wenn nicht unterdrückt)
-            if callback and not suppress_error_callback:
-                callback(error_msg, True, False)
+            # Wenn Fallback auch fehlschlägt, Fehler nur über Exception-Pfad melden.
+            # NICHT zusätzlich über callback senden – das führt zu doppelten
+            # Fehlermeldungen, weil die Exception in widget.py nochmal per
+            # error_signal an das Frontend gesendet wird.
             raise Exception(error_msg)
     
     def _stream_response(self, urls, data, callback=None, use_backend=False, backend_data=None):
@@ -2051,7 +2088,59 @@ Karteninhalt: {question_clean[:500]}"""
                 print(f"📡 RAG State: {message} (phase: {phase})")
             except Exception as e:
                 print(f"⚠️ Fehler beim Senden von AI-State: {e}")
-    
+
+    def _emit_pipeline_step(self, step, status, data=None):
+        """Emit a pipeline_step event to the frontend.
+
+        Args:
+            step: Step name ('router', 'sql_search', 'semantic_search', 'merge', 'generating')
+            status: 'active', 'done', or 'error'
+            data: Optional dict with step-specific data
+        """
+        request_id = getattr(self, '_current_request_id', None)
+        payload = {
+            "type": "pipeline_step",
+            "requestId": request_id,
+            "step": step,
+            "status": status,
+            "data": data or {}
+        }
+
+        # Record step label for persistence (only on 'done')
+        if status == 'done':
+            label = self._step_done_label(step, data)
+            if not hasattr(self, '_current_step_labels'):
+                self._current_step_labels = []
+            self._current_step_labels.append(label)
+
+        try:
+            from aqt import mw
+            if mw and hasattr(mw, 'taskman'):
+                js = f"window.ankiReceive({json.dumps(payload)});"
+                mw.taskman.run_on_main(lambda: self.widget.web_view.page().runJavaScript(js) if self.widget and self.widget.web_view else None)
+        except Exception as e:
+            print(f"⚠️ _emit_pipeline_step error: {e}")
+
+    def _step_done_label(self, step, data):
+        """Generate a human-readable label for a completed step."""
+        data = data or {}
+        if step == 'router':
+            mode = data.get('retrieval_mode', '')
+            scope = data.get('scope_label', '')
+            return f"Anfrage analysiert — {mode.capitalize()}, {scope}" if scope else f"Anfrage analysiert — {mode.capitalize()}"
+        elif step == 'sql_search':
+            return f"Keyword-Suche — {data.get('total_hits', 0)} Treffer"
+        elif step == 'semantic_search':
+            return f"Semantische Suche — {data.get('total_hits', 0)} Treffer"
+        elif step == 'merge':
+            t = data.get('total', 0)
+            k = data.get('keyword_count', 0)
+            s = data.get('semantic_count', 0)
+            return f"Quellen kombiniert — {t} ({k}K + {s}S)"
+        elif step == 'generating':
+            return "Antwort generiert"
+        return step
+
     def _rag_router(self, user_message, context=None):
         """
         Stage 1: Router - Analysiert die Anfrage und entscheidet ob Suche nötig ist
@@ -2200,12 +2289,77 @@ Regeln für Suchstrategien:
 - Jede query sollte für Anki-Syntax optimiert sein (max 15 Wörter pro Query)
 - NIEMALS die Nutzeranfrage wörtlich als Query verwenden, wenn eine Karte vorhanden ist!"""
             
-            # Router IMMER direkt über Gemini API (kein Cloud Function Overhead)
-            # Dies spart 5-7s pro Request vs. Backend-Proxy
+            # Backend-Modus: Router über Cloud Function (API-Key serverseitig)
+            if use_backend:
+                try:
+                    backend_url = get_backend_url()
+                    auth_token = get_auth_token()
+                    router_url = f"{backend_url}/router"
+                    router_headers = {
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {auth_token}"
+                    }
+                    card_context = None
+                    if context:
+                        card_context = {
+                            "question": context.get('question') or context.get('frontField') or "",
+                            "answer": context.get('answer') or "",
+                            "deckName": context.get('deckName') or "",
+                            "tags": context.get('tags') or []
+                        }
+                    router_payload = {"message": user_message}
+                    if card_context:
+                        router_payload["cardContext"] = card_context
+
+                    print(f"🔍 Router: Backend-Aufruf an {router_url}")
+                    response = requests.post(router_url, json=router_payload, headers=router_headers, timeout=15)
+                    response.raise_for_status()
+                    router_result = response.json()
+
+                    if router_result.get("intent") and router_result.get("search_needed") is not None:
+                        print(f"✅ Router (Backend): Intent={router_result.get('intent')}, search_needed={router_result.get('search_needed')}")
+                        # Weiter zur Validierung unten (gleicher Code wie bei direkter API)
+                except Exception as be:
+                    print(f"⚠️ Router: Backend-Fehler: {be}, Fallback auf direkte API")
+                    use_backend = False
+
+            # Wenn Backend erfolgreich war, überspringe direkte API
+            if use_backend and 'router_result' in dir() and router_result and router_result.get("search_needed") is not None:
+                # Validierung des Backend-Ergebnisses
+                intent = router_result.get("intent", "EXPLANATION")
+                if intent == "CHAT":
+                    router_result["search_needed"] = False
+                self._emit_ai_state(f"Intent: {intent}", phase=self.PHASE_INTENT, metadata={"intent": intent})
+                scope = router_result.get("search_scope", "current_deck")
+                scope_label = "Stapel" if scope == "current_deck" else "Global"
+                self._emit_ai_state(f"Suchraum: {scope_label}", phase=self.PHASE_SEARCH, metadata={"scope": scope})
+
+                retrieval_mode = router_result.get('retrieval_mode', 'both')
+                if retrieval_mode not in ('sql', 'semantic', 'both'):
+                    retrieval_mode = 'both'
+                router_result['retrieval_mode'] = retrieval_mode
+
+                precise_queries = router_result.get("precise_queries", [])
+                broad_queries = router_result.get("broad_queries", [])
+                if not isinstance(precise_queries, list):
+                    precise_queries = []
+                if not isinstance(broad_queries, list):
+                    broad_queries = []
+                while len(precise_queries) < 3:
+                    precise_queries.append("")
+                while len(broad_queries) < 3:
+                    broad_queries.append("")
+                router_result["precise_queries"] = precise_queries[:3]
+                router_result["broad_queries"] = broad_queries[:3]
+
+                print(f"✅ Router (Backend): intent={intent}, search_needed={router_result.get('search_needed')}, retrieval_mode={retrieval_mode}")
+                return router_result
+
+            # Direkter Gemini API Modus (Fallback oder wenn kein Backend)
             router_api_key = api_key or self.config.get("api_key", "")
             if not router_api_key:
-                # Fallback: API-Key aus Backend-Konfiguration
-                router_api_key = "AIzaSyBGdyUuaPa13pmgwjvVZlQzZ2ZLgWBlHqc"
+                print("⚠️ Router: Kein API-Key verfügbar, überspringe direkte API")
+                return None
 
             url_model_pairs = [
                 (f"https://generativelanguage.googleapis.com/v1beta/models/{router_model}:generateContent?key={router_api_key}", router_model),
@@ -2213,8 +2367,6 @@ Regeln für Suchstrategien:
             ]
             headers = {"Content-Type": "application/json"}
             print(f"🔍 Router: Direkter Gemini API Aufruf, Models: [{router_model}, {fallback_model}]")
-
-            use_backend = False  # Force direct mode for router
             data = {
                 "contents": [{"role": "user", "parts": [{"text": router_prompt}]}],
                 "generationConfig": {
@@ -2227,116 +2379,11 @@ Regeln für Suchstrategien:
             last_error = None
             for url, current_model in url_model_pairs:
                 try:
-                    if use_backend:
-                        # Backend-Request (non-streaming)
-                        backend_data = {
-                            "message": router_prompt,
-                            "model": current_model,
-                            "mode": "compact",
-                            "stream": False,
-                            "history": [],
-                            "temperature": 0.1,
-                            "maxOutputTokens": 1000
-                        }
-                        print(f"🔍 Router: Sende Request an {url} mit model={current_model}")
-                        try:
-                            response = requests.post(url, json=backend_data, headers=headers, timeout=15)
-                        except requests.exceptions.Timeout:
-                            print(f"⚠️ Router: Timeout nach 15s für {url}")
-                            continue
-                        except requests.exceptions.ConnectionError as ce:
-                            print(f"⚠️ Router: Verbindungsfehler: {ce}")
-                            continue
-
-                        print(f"🔍 Router: Response Status={response.status_code}")
-                        if response.status_code != 200:
-                            print(f"⚠️ Router: Fehler-Response: {response.text[:500]}")
-                            response.raise_for_status()
-
-                        result = response.json()
-                        print(f"🔍 Router: Response-Keys: {list(result.keys())}, text_length={len(result.get('text', ''))}")
-                        # Backend gibt direkt text zurück oder in einem anderen Format
-                        # Prüfe Format
-                        if "text" in result:
-                            text = result["text"]
-                        elif "message" in result:
-                            text = result["message"]
-                        elif "candidates" in result:
-                            # Backend könnte auch Gemini-Format zurückgeben
-                            if result["candidates"] and len(result["candidates"]) > 0:
-                                candidate = result["candidates"][0]
-                                if "content" in candidate and "parts" in candidate["content"]:
-                                    parts = candidate["content"]["parts"]
-                                    if len(parts) > 0:
-                                        text = parts[0].get("text", "")
-                                    else:
-                                        continue
-                                else:
-                                    continue
-                            else:
-                                continue
-                        else:
-                            # Versuche direkt als Text zu parsen
-                            text = str(result)
-                        
-                        # Parse JSON aus Text (wie bei direkter API)
-                        import re
-                        print(f"🔍 Router: Raw text from backend: {text[:400]}")
-                        text = re.sub(r'```json\s*', '', text)
-                        text = re.sub(r'```\s*', '', text)
-                        text = text.strip()
-                        # Extrahiere vollständiges JSON-Objekt mit Bracket-Matching
-                        json_start = text.find('{')
-                        if json_start >= 0:
-                            depth = 0
-                            in_str = False
-                            esc = False
-                            for i in range(json_start, len(text)):
-                                c = text[i]
-                                if esc:
-                                    esc = False
-                                    continue
-                                if c == '\\':
-                                    esc = True
-                                    continue
-                                if c == '"' and not esc:
-                                    in_str = not in_str
-                                    continue
-                                if in_str:
-                                    continue
-                                if c == '{':
-                                    depth += 1
-                                elif c == '}':
-                                    depth -= 1
-                                    if depth == 0:
-                                        text = text[json_start:i+1]
-                                        break
-                        text = re.sub(r',(\s*[}\]])', r'\1', text)
-                        
-                        try:
-                            router_result = json.loads(text)
-                        except json.JSONDecodeError as json_err:
-                            print(f"⚠️ Router: JSON-Parse-Fehler nach Bereinigung: {json_err}, Text: {text[:300]}")
-                            text = re.sub(r'//.*?$', '', text, flags=re.MULTILINE)
-                            text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
-                            text = re.sub(r',(\s*[}\]])', r'\1', text)
-                            try:
-                                router_result = json.loads(text)
-                            except json.JSONDecodeError:
-                                continue
-                        
-                        # Validierung
-                        if router_result.get("intent") and router_result.get("search_needed") is not None:
-                            print(f"✅ Router: Intent={router_result.get('intent')}, search_needed={router_result.get('search_needed')}")
-                            return router_result
-                        else:
-                            continue
-                    else:
-                        # Direkte Gemini API
-                        print(f"🔍 Router: Direkter API-Aufruf an {current_model}")
-                        response = requests.post(url, json=data, headers=headers, timeout=10)
-                        response.raise_for_status()
-                        result = response.json()
+                    # Direkte Gemini API
+                    print(f"🔍 Router: Direkter API-Aufruf an {current_model}")
+                    response = requests.post(url, json=data, headers=headers, timeout=10)
+                    response.raise_for_status()
+                    result = response.json()
                     
                     if "error" in result:
                         continue
@@ -3203,6 +3250,7 @@ Regeln für Suchstrategien:
         
         # Reset Request State
         self._current_request_steps = []
+        self._current_step_labels = []
         citations = {}
         
         try:
@@ -3310,7 +3358,8 @@ Regeln für Suchstrategien:
                     if callback:
                         callback(chunk, done, is_function_call,
                                  steps=self._current_request_steps,
-                                 citations=citations)
+                                 citations=citations,
+                                 step_labels=getattr(self, '_current_step_labels', []))
                 else:
                     if callback:
                         callback(chunk, done, is_function_call)
