@@ -988,16 +988,35 @@ _CHAT_HTML = """
 
 _CHAT_JS = """
 (function(){
-  var overlay = document.getElementById('ap-chat-overlay');
-  var msgs    = document.getElementById('ap-chat-msgs');
-  var dock    = document.getElementById('ap-chat-dock');
-  var ci      = document.getElementById('ap-chat-input');
-  var deck    = document.getElementById('ap-deck-content');
-  var isOpen = false, isLoading = false, curEl = null;
+  /* ── DOM refs ── */
+  var overlay  = document.getElementById('ap-chat-overlay');
+  var msgs     = document.getElementById('ap-chat-msgs');
+  var dock     = document.getElementById('ap-chat-dock');
+  var ci       = document.getElementById('ap-chat-input');
+  var deck     = document.getElementById('ap-deck-content');
+  var sbInput  = document.getElementById('ap-search-input');
+  var sbSnake  = document.getElementById('ap-sb-snake');
+  var sbSend   = document.getElementById('ap-send-btn');
+  var hintEl   = document.getElementById('ap-hint-text');
+  var phWrap   = document.getElementById('ap-placeholder-wrap');
+  var phA      = document.getElementById('ap-placeholder-a');
+  var phB      = document.getElementById('ap-placeholder-b');
+
+  /* ── State ── */
+  var isOpen    = false;
+  var isLoading = false;
+  var _aiCounter = 0;
+  var _curN     = null;
 
   var DOCK_HIDDEN = 'translateX(-50%) translateY(14px)';
   var DOCK_SHOWN  = 'translateX(-50%) translateY(0)';
 
+  /* ── Helpers ── */
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ── Chat open/close/reset ── */
   function openChat(q) {
     if (isOpen) return; isOpen = true;
     deck.style.transition = 'opacity 250ms ease,transform 250ms ease';
@@ -1015,8 +1034,7 @@ _CHAT_JS = """
         ci.focus();
       }, 150);
     });
-    addUser(q);
-    curEl = startAI();
+    _curN = addExchange(q);
   }
 
   function closeChat() {
@@ -1035,53 +1053,171 @@ _CHAT_JS = """
     window._apAction = {type:'freeChatClose'};
   }
 
-  function resetChat() { msgs.innerHTML = ''; curEl = null; isLoading = false; }
-
-  function addUser(t) {
-    var d = document.createElement('div');
-    d.style.cssText = 'align-self:flex-end;max-width:80%;background:rgba(10,132,255,0.15);border:1px solid rgba(10,132,255,0.2);color:rgba(255,255,255,0.88);padding:10px 14px;border-radius:18px 18px 4px 18px;font-size:15px;line-height:1.5;word-break:break-word;';
-    d.textContent = t; msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
+  function resetChat() {
+    msgs.innerHTML = '';
+    _curN = null;
+    isLoading = false;
+    _aiCounter = 0;
   }
 
-  function startAI() {
-    var d = document.createElement('div');
-    d.style.cssText = 'align-self:flex-start;max-width:88%;color:rgba(255,255,255,0.75);font-size:15px;line-height:1.625;white-space:pre-wrap;word-break:break-word;';
-    msgs.appendChild(d); isLoading = true; return d;
+  /* ── Message rendering (Style B) ── */
+  function addExchange(question) {
+    var n = ++_aiCounter;
+    var el = document.createElement('div');
+    el.className = 'ap-exchange';
+    el.innerHTML =
+      '<div class="ap-user-label">Du</div>' +
+      '<div class="ap-user-q">' + escHtml(question) + '</div>' +
+      '<div class="ap-ai-prose" id="ap-ai-' + n + '"></div>';
+    msgs.appendChild(el);
+    msgs.scrollTop = msgs.scrollHeight;
+    /* Append blinking cursor */
+    var prose = document.getElementById('ap-ai-' + n);
+    var cursor = document.createElement('span');
+    cursor.className = 'ap-cursor';
+    prose.appendChild(cursor);
+    return n;
   }
 
-  window.apOpenChat = openChat;
+  function appendChunk(n, chunk) {
+    var el = document.getElementById('ap-ai-' + n);
+    if (!el) return;
+    /* Insert text before cursor */
+    var cursor = el.querySelector('.ap-cursor');
+    if (cursor) {
+      el.insertBefore(document.createTextNode(chunk), cursor);
+    } else {
+      el.appendChild(document.createTextNode(chunk));
+    }
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  /* ── Receive from Python ── */
+  window.apOpenChat  = openChat;
   window.apCloseChat = closeChat;
   window.apResetChat = resetChat;
 
   window.apChatReceive = function(data) {
-    if (!curEl) curEl = startAI();
-    if (data.error) { curEl.style.color='rgba(255,80,80,0.8)'; curEl.textContent=data.error; isLoading=false; curEl=null; return; }
-    if (data.chunk) curEl.textContent += data.chunk;
-    if (data.done) { isLoading=false; curEl=null; }
+    if (!_curN) { _curN = addExchange(''); }
+    var el = document.getElementById('ap-ai-' + _curN);
+    if (data.error) {
+      if (el) { el.textContent = data.error; el.style.color = 'rgba(255,80,80,0.8)'; }
+      isLoading = false; _curN = null; return;
+    }
+    if (data.chunk) appendChunk(_curN, data.chunk);
+    if (data.done) {
+      /* Remove cursor */
+      if (el) { var c = el.querySelector('.ap-cursor'); if (c) c.remove(); }
+      isLoading = false; _curN = null;
+    }
     msgs.scrollTop = msgs.scrollHeight;
   };
 
-  /* Textarea auto-resize */
+  /* ── Dock textarea auto-resize ── */
   ci.addEventListener('input', function(){
     ci.style.height = 'auto';
     ci.style.height = Math.min(ci.scrollHeight, 120) + 'px';
   });
 
+  /* ── Dock Enter to send follow-up ── */
   ci.addEventListener('keydown', function(e){
     if (e.key === 'Escape') { closeChat(); return; }
     if (e.key === 'Enter' && !e.shiftKey && ci.value.trim() && !isLoading) {
       e.preventDefault();
       var t = ci.value.trim(); ci.value = ''; ci.style.height = 'auto';
-      addUser(t); curEl = startAI();
+      _curN = addExchange(t);
       window._apAction = {type:'freeChatSend', text:t};
     }
   });
+
+  /* ── Global keyboard shortcuts ── */
   document.addEventListener('keydown', function(e){
-    if (e.key === 'Escape' && isOpen) closeChat();
-    if ((e.metaKey||e.ctrlKey) && e.key==='x' && isOpen) resetChat();
+    if (e.key === 'Escape' && isOpen) { closeChat(); return; }
+    if ((e.metaKey||e.ctrlKey) && e.key==='x' && isOpen) { resetChat(); return; }
+    /* ⌘K / Ctrl+K — focus search bar */
+    if ((e.metaKey||e.ctrlKey) && e.key==='k') {
+      e.preventDefault();
+      if (sbInput) sbInput.focus();
+    }
   });
+
   document.getElementById('ap-btn-close').onclick = closeChat;
   document.getElementById('ap-btn-reset').onclick = resetChat;
+
+  /* ── Search bar wiring ── */
+  if (!sbInput) return; /* guard: HTML must be present */
+
+  /* Platform-aware hint text */
+  var isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  var focusHint = isMac ? 'Fokussieren\u00a0<kbd>\u2318K</kbd>' : 'Fokussieren\u00a0<kbd>Ctrl+K</kbd>';
+  var sendHint  = 'Senden\u00a0<kbd>Enter</kbd>';
+  if (hintEl) hintEl.innerHTML = focusHint;
+
+  /* Focus / blur */
+  sbInput.addEventListener('focus', function(){
+    if (sbSnake) sbSnake.classList.add('active');
+    if (hintEl) hintEl.innerHTML = sendHint;
+  });
+  sbInput.addEventListener('blur', function(){
+    if (sbSnake) sbSnake.classList.remove('active');
+    if (hintEl) hintEl.innerHTML = focusHint;
+  });
+
+  /* Send button visibility — single source of truth */
+  sbInput.addEventListener('input', function(){
+    var hasText = sbInput.value.trim().length > 0;
+    if (sbSend) sbSend.classList.toggle('ap-send-visible', hasText);
+    if (phWrap) phWrap.style.opacity = hasText ? '0' : '1';
+  });
+
+  /* Enter / send button → open chat */
+  function submitSearch() {
+    var t = sbInput.value.trim();
+    if (!t) return;
+    window._apAction = {type:'freeChat', text:t};
+    sbInput.value = '';
+    sbInput.dispatchEvent(new Event('input')); /* triggers visibility reset */
+  }
+  sbInput.addEventListener('keydown', function(e){
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitSearch(); }
+  });
+  if (sbSend) sbSend.addEventListener('click', submitSearch);
+
+  /* Rotating placeholder */
+  var phrases = [
+    'Stelle eine Frage\u2026',
+    'Was ist ein Aktionspotential?',
+    'Erkl\u00e4re die Nernst-Gleichung',
+    'Welche Muskeln rotieren den Oberarm?',
+    'Zusammenfassung Biochemie?'
+  ];
+  var phIdx = 0;
+  if (phA) phA.textContent = phrases[0];
+  setInterval(function(){
+    if (!phA || !phB) return;
+    if (sbInput.value || document.activeElement === sbInput) return;
+    phIdx = (phIdx + 1) % phrases.length;
+    phB.textContent = phrases[phIdx];
+    phB.classList.remove('ap-ph--hidden');
+    phA.classList.add('ap-ph--hidden');
+    setTimeout(function(){
+      phA.textContent = phrases[phIdx];
+      phA.classList.remove('ap-ph--hidden');
+      phB.classList.add('ap-ph--hidden');
+    }, 500);
+  }, 3000);
+
+  /* Badge tier — read from Python-injected data attribute if present */
+  var badge = document.getElementById('ap-wm-badge');
+  if (badge) {
+    var isPro = document.body.dataset.tier === 'pro';
+    if (isPro) {
+      badge.textContent = 'Pro';
+      badge.className = 'ap-wm-badge ap-wm-badge--pro';
+    }
+    badge.onclick = function(){ window._apAction = {type:'upgradeBadge'}; };
+  }
+
 })();
 """
 
