@@ -1625,11 +1625,9 @@ function AppInner() {
 
   // ── Free Chat Handlers ─────────────────────────────────────────
   const handleFreeChatOpen = useCallback((text) => {
-    // Load persisted deck messages before opening
-    const deckId = sessionContext.currentSession?.deckId;
-    if (deckId) {
-      freeChatHook.loadForDeck(deckId);
-    }
+    // Load persisted deck messages before opening (0 = global Free Chat fallback)
+    const deckId = sessionContext.currentSession?.deckId || 0;
+    freeChatHook.loadForDeck(deckId);
 
     // Step 1: show DeckBrowser (deck list visible)
     setForceShowOverview(true);

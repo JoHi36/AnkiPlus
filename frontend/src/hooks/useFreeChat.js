@@ -26,8 +26,7 @@ export function useFreeChat({ bridge, onLoadingChange, onCancelComplete }) {
 
   // ── Persistence helpers ──────────────────────────────────────────
   const _saveDeckMsg = useCallback((message) => {
-    const deckId = deckIdRef.current;
-    if (!deckId) return;
+    const deckId = deckIdRef.current || 0; // 0 = global Free Chat
     window.ankiBridge?.addMessage('saveDeckMessage', JSON.stringify({
       deckId,
       message: {
@@ -43,8 +42,7 @@ export function useFreeChat({ bridge, onLoadingChange, onCancelComplete }) {
   }, []);
 
   const loadForDeck = useCallback((deckId) => {
-    if (!deckId) return;
-    deckIdRef.current = deckId;
+    deckIdRef.current = deckId || 0; // fallback to 0 = global Free Chat
     // Only load from DB if we don't already have messages for this deck
     if (!messagesLoadedRef.current) {
       window.ankiBridge?.addMessage('loadDeckMessages', String(deckId));
