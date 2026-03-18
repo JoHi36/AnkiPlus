@@ -1322,15 +1322,18 @@ function AppInner() {
       const deckId = sessionContext.currentSession?.deckId;
       if (!deckId) return;
 
+      const requestId = crypto.randomUUID();
       const userMessage = {
         id: crypto.randomUUID(),
         text,
         from: 'user',
         createdAt: new Date().toISOString(),
         source: 'user',
+        requestId,
       };
       chatHook.setMessages(prev => [...prev, userMessage]);
       chatHook.saveDeckMessage(deckId, userMessage);
+      chatHook.setIsLoading(true);
 
       // Build history from recent deck messages (no card content)
       const history = chatHook.messages.slice(-10).map(m => ({
@@ -1338,8 +1341,13 @@ function AppInner() {
         content: m.text,
       }));
 
+      // Track requestId so streaming handler can match the response
+      chatHook.activeRequestIdRef.current = requestId;
+      // Store deckId so we can save bot response to deck when streaming completes
+      chatHook.deckSaveContextRef.current = deckId;
+
       // Send to AI without card context
-      bridge.sendMessage(text, history, options.mode || 'compact', crypto.randomUUID());
+      bridge.sendMessage(text, history, options.mode || 'compact', requestId);
       return;
     }
 

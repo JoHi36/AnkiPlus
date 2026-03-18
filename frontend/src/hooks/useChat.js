@@ -110,6 +110,8 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
 
   // Ref for active request ID (used to match streaming/error/metadata responses)
   const activeRequestIdRef = useRef(null);
+  // Ref for deck-chat save context — when set, bot responses are saved to this deckId
+  const deckSaveContextRef = useRef(null);
   
   // Nachricht hinzufügen (für Bot-Antworten)
   // Verwendet Refs um immer die aktuelle Session-ID und Section-ID zu haben
@@ -149,6 +151,26 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       if (cardId) {
         cardSessionHookRef.current.saveMessage(cardId, newMessage);
       }
+    }
+
+    // Deck-level persistence — save bot responses when in deck-chat mode
+    if (deckSaveContextRef.current && from !== 'user') {
+      const deckId = deckSaveContextRef.current;
+      window.ankiBridge?.addMessage('saveDeckMessage', JSON.stringify({
+        deckId,
+        message: {
+          id: newMessage.id,
+          text: newMessage.text,
+          sender: 'assistant',
+          created_at: new Date().toISOString(),
+          steps: newMessage.steps ? JSON.stringify(newMessage.steps) : null,
+          citations: newMessage.citations ? JSON.stringify(newMessage.citations) : null,
+          request_id: newMessage.request_id,
+          source: 'tutor',
+        },
+      }));
+      // Clear the deck save context after saving
+      deckSaveContextRef.current = null;
     }
   }, [currentSectionId, setSessions]);
   
@@ -784,8 +806,11 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     streamingMessage,
     deckChatMode,
     setDeckChatMode,
+    setIsLoading,
     loadDeckMessages,
     saveDeckMessage,
+    activeRequestIdRef,
+    deckSaveContextRef,
     currentSteps,  // NEW: Expose current steps for streaming
     currentCitations,  // NEW: Expose current citations for streaming
     pipelineSteps,  // NEW: Expose pipeline steps for ThoughtStream
