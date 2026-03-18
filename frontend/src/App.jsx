@@ -259,18 +259,16 @@ function AppInner() {
   const showSessionOverview = forceShowOverview;
 
   // ── Deck-Chat Mode Sync ──────────────────────────────────────────
-  // Load deck messages when transitioning from overview to chat while in deck mode.
-  // deckChatMode is set true by handleNavigateToOverview, and stays true until
-  // a cardContext event (card review) sets it false.
+  // Reload deck messages whenever deckChatMode or view state changes.
+  // deckChatMode stays true until a cardContext event (card review) sets it false.
   useEffect(() => {
-    if (!showSessionOverview && chatHook.deckChatMode) {
-      // We just switched from overview to chat — load deck messages into the chat view
-      const deckId = sessionContext.currentSession?.deckId;
-      if (deckId) {
-        chatHook.loadDeckMessages(deckId);
-      }
+    const deckId = sessionContext.currentSession?.deckId;
+    console.log('🔄 DECK-SYNC:', { showSessionOverview, deckChatMode: chatHook.deckChatMode, deckId, msgCount: chatHook.messages.length });
+    if (chatHook.deckChatMode && deckId) {
+      console.log('🔄 DECK-SYNC: Loading deck messages for deck', deckId);
+      chatHook.loadDeckMessages(deckId);
     }
-  }, [showSessionOverview]);
+  }, [showSessionOverview, chatHook.deckChatMode]);
 
   // ── Free Chat State ──────────────────────────────────────────────
   const [freeChatOpen, setFreeChatOpen] = useState(false);
@@ -2096,15 +2094,25 @@ function AppInner() {
                         {/* CRITICAL: Only render StreamingChatMessage if no saved bot message exists yet */}
                         {/* This prevents double-rendering when message is saved but timeout hasn't cleared streamingMessage */}
                         {/* Robust: Text-Vergleich verhindert Dopplung auch bei Race Conditions */}
+                        {/* Pipeline ThoughtStream — rendered directly during loading */}
+                        {chatHook.isLoading && (
+                          <div className="w-full flex-none mb-2">
+                            <ThoughtStream
+                              pipelineSteps={chatHook.pipelineSteps || []}
+                              citations={chatHook.currentCitations || {}}
+                              isStreaming={true}
+                              bridge={bridge}
+                              onPreviewCard={handlePreviewCard}
+                              message={chatHook.streamingMessage || ''}
+                            />
+                          </div>
+                        )}
                         {(chatHook.isLoading || chatHook.streamingMessage) && !(
-                          nextMsg && 
-                          nextMsg.from === 'bot' && 
+                          nextMsg &&
+                          nextMsg.from === 'bot' &&
                           typeof nextMsg.text === 'string' &&
-                          nextMsg.text && 
-                          // CRITICAL: Prüfe auf Identität (Text-Vergleich), um Dopplung zu verhindern
-                          // Nutze trim(), um Whitespace-Unterschiede zu ignorieren
-                          // Sicher: Prüfe ob beide Strings vorhanden sind vor trim()
-                          chatHook.streamingMessage && 
+                          nextMsg.text &&
+                          chatHook.streamingMessage &&
                           typeof chatHook.streamingMessage === 'string' &&
                           (chatHook.streamingMessage.trim() === nextMsg.text.trim())
                         ) && (

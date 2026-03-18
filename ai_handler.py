@@ -3200,10 +3200,14 @@ REGELN:
             # (Old ai_state emission removed — replaced by _emit_pipeline_step above)
             
             # Wrapper für Callback um Steps und Citations zu übergeben
+            _generating_done_emitted = False
             def enhanced_callback(chunk, done, is_function_call=False):
                 """Enhanced callback that includes steps and citations via kwargs"""
+                nonlocal _generating_done_emitted
                 if done:
-                    self._emit_pipeline_step("generating", "done")
+                    if not _generating_done_emitted:
+                        self._emit_pipeline_step("generating", "done")
+                        _generating_done_emitted = True
                     if callback:
                         callback(chunk, done, is_function_call,
                                  steps=self._current_request_steps,
