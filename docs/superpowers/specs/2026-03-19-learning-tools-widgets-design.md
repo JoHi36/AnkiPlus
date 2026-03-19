@@ -199,7 +199,7 @@ const [toolWidgets, setToolWidgets] = useState([]);
 // ]
 ```
 
-Uses an array instead of a keyed object. This supports multiple calls to the same tool in one message (e.g., two separate `search_deck` calls). The parser appends to the array. A `loading` entry is replaced by the `widget` entry for the same tool name when it arrives (first match).
+Uses an array instead of a keyed object. This supports multiple calls to the same tool in one message (e.g., two separate `search_deck` calls). The parser appends to the array. A `loading` entry is replaced by the `widget` entry for the same tool name when it arrives (first match). This is safe because the agent loop executes tools sequentially — the first `loading` marker always corresponds to the first `widget` result for that tool name.
 
 #### CardWidget — Single card display
 
@@ -334,7 +334,7 @@ The CardListWidget shows this button in its footer. For now:
 - Tooltip or small text: "Bald verfügbar"
 - Will be activated when Preview Mode feature is implemented (separate spec/chat)
 
-### 8. Main Thread Access Pattern
+### 7. Main Thread Access Pattern
 
 Both `search_deck` and `get_learning_stats` need to access `mw.col` which is only safe on the main Qt thread. The tool executor runs tools in a daemon thread (via `_run_with_timeout`). We need a helper to marshal calls to the main thread.
 
@@ -409,10 +409,14 @@ def execute_search_deck(args):
         card_ids = mw.col.find_cards(search, order=True)
         # ... build card list, strip HTML, etc.
 
+    # Inner timeout = timeout_seconds - 1 (search_deck has 15s, so 14s here)
     return run_on_main_thread(_search, timeout=14)
 ```
 
-### 9. Out of Scope
+**Convention:** The inner `run_on_main_thread` timeout should always be `timeout_seconds - 1` for the tool. This is documented here rather than enforced in code — tool authors must follow this rule.
+```
+
+### 8. Out of Scope
 
 - Preview Mode (separate feature — card opens in reviewer-like view without changing queue)
 - New stat modules beyond streak/heatmap/deck_overview (future, system is modular)
