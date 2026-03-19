@@ -422,3 +422,168 @@ registry.register(ToolDefinition(
     display_type="widget",
     timeout_seconds=15,
 ))
+
+
+# ---------------------------------------------------------------------------
+# Learning Stats Tool
+# ---------------------------------------------------------------------------
+
+LEARNING_STATS_SCHEMA = {
+    "name": "get_learning_stats",
+    "description": (
+        "Zeigt Lernstatistiken als visuelle Widgets. Die AI wählt die passenden Module "
+        "basierend auf dem Kontext. Verfügbare Module: 'streak' (aktuelle Lernserie), "
+        "'heatmap' (Aktivität der letzten 30 Tage), 'deck_overview' (Kartenverteilung im Deck)."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "modules": {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                    "enum": ["streak", "heatmap", "deck_overview"]
+                },
+                "description": "Welche Statistik-Module angezeigt werden sollen. Kann einzeln oder kombiniert sein."
+            },
+            "deck_id": {
+                "type": "integer",
+                "description": "Deck-ID für deck_overview. Wenn nicht angegeben, wird das aktuelle Deck verwendet."
+            }
+        },
+        "required": ["modules"]
+    }
+}
+
+
+def execute_learning_stats(args):
+    """Collect learning statistics for the requested modules.
+
+    Returns dict with modules array. Each module has a 'type' key
+    plus type-specific data (streak, heatmap, deck_overview).
+    """
+    try:
+        from .anki_utils import run_on_main_thread
+    except ImportError:
+        from anki_utils import run_on_main_thread
+
+    modules = args.get("modules", [])
+    deck_id = args.get("deck_id")
+
+    if not modules:
+        return {"error": "Keine Module angegeben"}
+
+    def _collect():
+        from aqt import mw
+        from datetime import date, datetime, timedelta
+
+        result_modules = []
+
+        if "streak" in modules:
+            # Get all distinct review dates
+            query = "SELECT DISTINCT date(id/1000, 'unixepoch', 'localtime') as day FROM revlog ORDER BY day DESC"
+            rows = mw.col.db.list(query)
+            review_dates = set(rows)
+
+            # Count consecutive days from today backwards
+            current_streak = 0
+            check_date = date.today()
+            while str(check_date) in review_dates:
+                current_streak += 1
+                check_date -= timedelta(days=1)
+
+            # Best streak: longest consecutive run
+            best_streak = 0
+            if review_dates:
+                sorted_dates = sorted(review_dates)
+                run = 1
+                for i in range(1, len(sorted_dates)):
+                    d1 = datetime.strptime(sorted_dates[i-1], "%Y-%m-%d").date()
+                    d2 = datetime.strptime(sorted_dates[i], "%Y-%m-%d").date()
+                    if (d2 - d1).days == 1:
+                        run += 1
+                    else:
+                        best_streak = max(best_streak, run)
+                        run = 1
+                best_streak = max(best_streak, run)
+
+            is_record = current_streak >= best_streak and current_streak > 0
+
+            result_modules.append({
+                "type": "streak",
+                "current": current_streak,
+                "best": best_streak,
+                "is_record": is_record,
+            })
+
+        if "heatmap" in modules:
+            # Last 30 days of review activity
+            days_data = []
+            for i in range(29, -1, -1):
+                d = date.today() - timedelta(days=i)
+                day_start = int(datetime.combine(d, datetime.min.time()).timestamp()) * 1000
+                day_end = day_start + 86400000
+                count = mw.col.db.scalar(
+                    "SELECT COUNT(*) FROM revlog WHERE id >= ? AND id < ?",
+                    day_start, day_end
+                ) or 0
+                if count == 0:
+                    level = 0
+                elif count < 10:
+                    level = 1
+                elif count < 30:
+                    level = 2
+                elif count < 60:
+                    level = 3
+                else:
+                    level = 4
+                days_data.append(level)
+
+            result_modules.append({
+                "type": "heatmap",
+                "days": days_data,
+                "period": 30,
+            })
+
+        if "deck_overview" in modules:
+            did = int(deck_id) if deck_id else mw.col.decks.selected()
+            deck = mw.col.decks.get(did)
+            if not deck:
+                result_modules.append({"type": "deck_overview", "error": "Deck nicht gefunden"})
+            else:
+                deck_name = deck["name"]
+                total = len(mw.col.find_cards(f'"deck:{deck_name}"'))
+                new_count = len(mw.col.find_cards(f'"deck:{deck_name}" is:new'))
+                learn_count = len(mw.col.find_cards(f'"deck:{deck_name}" is:learn'))
+                review_count = len(mw.col.find_cards(f'"deck:{deck_name}" is:review'))
+                unseen = total - new_count - learn_count - review_count
+
+                result_modules.append({
+                    "type": "deck_overview",
+                    "name": deck_name,
+                    "total": total,
+                    "new_count": new_count,
+                    "learning_count": learn_count,
+                    "review_count": review_count,
+                    "unseen_count": max(0, unseen),
+                })
+
+        if not result_modules:
+            return {"error": "Keine Module konnten geladen werden"}
+
+        return {"modules": result_modules}
+
+    # Inner timeout = timeout_seconds - 1
+    return run_on_main_thread(_collect, timeout=9)
+
+
+registry.register(ToolDefinition(
+    name="get_learning_stats",
+    schema=LEARNING_STATS_SCHEMA,
+    execute_fn=execute_learning_stats,
+    category="content",
+    config_key=None,
+    agent="tutor",
+    display_type="widget",
+    timeout_seconds=10,
+))
