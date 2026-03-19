@@ -828,8 +828,35 @@ class ChatbotWidget(QWidget):
             loading_payload = {"type": "loading"}
             self.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(loading_payload)});")
             
+            # Override history with card-specific messages from SQLite
+            # This prevents cross-card history contamination
+            card_history = history  # Default to frontend-provided history
+            if self.current_card_context and self.current_card_context.get('cardId'):
+                try:
+                    try:
+                        from .card_sessions_storage import load_card_session
+                    except ImportError:
+                        from card_sessions_storage import load_card_session
+                    card_id = self.current_card_context['cardId']
+                    session_data = load_card_session(card_id)
+                    db_messages = session_data.get('messages', [])
+                    if db_messages:
+                        # Use last 10 messages from THIS card only
+                        recent = db_messages[-10:]
+                        card_history = [
+                            {'role': 'user' if m.get('sender') == 'user' else 'assistant',
+                             'content': m.get('text', '')}
+                            for m in recent if m.get('text')
+                        ]
+                        print(f"📋 Widget: Using card-specific history ({len(card_history)} msgs from card {card_id})")
+                    else:
+                        card_history = []
+                        print(f"📋 Widget: No card history for card {card_id}, starting fresh")
+                except Exception as e:
+                    print(f"⚠️ Widget: Failed to load card history: {e}, using frontend history")
+
             # Start AI request thread with request-ID based streaming
-            self._ai_thread = AIRequestThread(ai, text, self, history=history, mode=mode, request_id=request_id)
+            self._ai_thread = AIRequestThread(ai, text, self, history=card_history, mode=mode, request_id=request_id)
             self._ai_thread.chunk_signal.connect(self.on_streaming_chunk)
             self._ai_thread.finished_signal.connect(self.on_streaming_finished)
             self._ai_thread.error_signal.connect(self.on_streaming_error)
