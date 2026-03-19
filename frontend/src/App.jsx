@@ -17,7 +17,7 @@ import ChatInput from './components/ChatInput';
 import ProfileDialog from './components/ProfileDialog';
 import ThoughtStream from './components/ThoughtStream';
 import SessionOverview from './components/SessionOverview';
-import CardPreviewModal from './components/CardPreviewModal';
+// CardPreviewModal removed — replaced by universal Preview Mode (bridge.openPreview)
 import SessionList from './components/SessionView/SessionList';
 import ContextSurface from './components/ContextSurface';
 import DeckBrowser from './components/DeckBrowser';
@@ -212,20 +212,19 @@ function AppInner() {
   const [visibleMessageCount, setVisibleMessageCount] = useState(20);
   const loadMoreTriggerRef = useRef(null);
 
-  // Card Preview State
-  const [previewCard, setPreviewCard] = useState(null);
-
   // Preview Mode State (for Card Preview Mode feature)
   // null | {stage: 'peek'|'card_chat', cardId: number, previousChatState: object}
   const [previewMode, setPreviewMode] = useState(null);
   const previewModeRef = useRef(null);
   useEffect(() => { previewModeRef.current = previewMode; }, [previewMode]);
 
-  // Handler for opening card preview
+  // Handler for opening card preview — uses new universal Preview Mode
   const handlePreviewCard = useCallback((cardData) => {
-    console.log('🔍 Opening preview for card:', cardData);
-    setPreviewCard(cardData);
-  }, []);
+    const cardId = cardData?.cardId || cardData?.noteId || cardData?.id;
+    if (cardId && bridge?.openPreview) {
+      bridge.openPreview(String(cardId));
+    }
+  }, [bridge]);
 
   // Handler for performance data capture (MC, text evaluation, flip)
   // Updates both local sections state and persists to session
@@ -2012,7 +2011,7 @@ function AppInner() {
                               section={section}
                               isFirst={localIdx === 0}
                               onGoToCard={(cardId) => {
-                                if (bridge && bridge.goToCard) bridge.goToCard(cardId);
+                                if (bridge && bridge.openPreview) bridge.openPreview(String(cardId));
                               }}
                               lowScorePulse={section.performanceData && section.performanceData.score < 40}
                             />
@@ -2080,7 +2079,7 @@ function AppInner() {
                                 section={section}
                                 isFirst={false}
                                 onGoToCard={(cardId) => {
-                                  if (bridge && bridge.goToCard) bridge.goToCard(cardId);
+                                  if (bridge && bridge.openPreview) bridge.openPreview(String(cardId));
                                 }}
                                 lowScorePulse={section.performanceData && section.performanceData.score < 40}
                               />
@@ -2289,13 +2288,7 @@ function AppInner() {
         isReady={isReady}
       />
 
-      {/* Card Preview Modal */}
-      <CardPreviewModal 
-        card={previewCard} 
-        isOpen={!!previewCard} 
-        onClose={() => setPreviewCard(null)} 
-        bridge={bridge}
-      />
+      {/* Card Preview Modal removed — replaced by universal Preview Mode */}
 
       {/* Paywall Modal */}
       <PaywallModal

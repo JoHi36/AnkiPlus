@@ -11,8 +11,8 @@ export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, i
   if (!toolWidgets || toolWidgets.length === 0) return null;
 
   const handleCardClick = (cardId) => {
-    if (bridge && bridge.goToCard) {
-      bridge.goToCard(String(cardId));
+    if (bridge && bridge.openPreview) {
+      bridge.openPreview(String(cardId));
     }
   };
 

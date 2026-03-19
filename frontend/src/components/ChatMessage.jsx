@@ -1968,8 +1968,8 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                                               onClick={(cardId, citation) => {
                                                 if (onPreviewCard) {
                                                   onPreviewCard(citation);
-                                                } else if (bridge && bridge.previewCard) {
-                                                  bridge.previewCard(cardId);
+                                                } else if (bridge && bridge.openPreview) {
+                                                  bridge.openPreview(String(cardId));
                                                 }
                                               }}
                                             />
