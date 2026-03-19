@@ -1926,26 +1926,58 @@ Karteninhalt: {question_clean[:500]}"""
             return "Antwort generiert"
         return step
 
-    def _is_context_dependent_question(self, user_message):
-        """Detect if a user question refers to the current context rather than being standalone."""
+    def _is_standalone_question(self, user_message, context):
+        """Detect if a question is about a DIFFERENT topic than the current card.
+
+        Logic is inverted: assume context-dependent by default when a card is open.
+        Only return True (standalone) if the question contains domain-specific words
+        that don't appear on the current card.
+        """
+        if not context:
+            return True  # No card context — must be standalone
+
         msg = user_message.lower().strip()
-        # Short messages with pronouns/references are almost always context-dependent
-        context_patterns = [
-            'verstehe', 'versteh', 'check ich nicht', 'kapier', 'kapiere',
-            'was ist das', 'was bedeutet', 'was heißt', 'was meint',
-            'erkläre', 'erklär', 'explain',
-            'mehr dazu', 'mehr darüber', 'erzähl mir mehr',
-            'was ist damit gemeint', 'wie ist das gemeint',
-            'kannst du das', 'hilf mir',
-            'warum ist das', 'wieso ist das', 'wozu',
-            'und was ist mit', 'was hat das mit',
-        ]
-        for pattern in context_patterns:
-            if pattern in msg:
-                return True
-        # Very short messages (<30 chars) without domain-specific words are likely context-dependent
-        if len(msg) < 30 and not any(c.isupper() for c in msg[1:]):
+
+        # Very short messages are always about the card
+        if len(msg) < 40:
+            return False
+
+        # Extract words from user message (>3 chars, alpha)
+        import re
+        user_words = set(w.lower() for w in re.findall(r'[A-Za-zÄÖÜäöüß]{4,}', msg))
+
+        # Common non-domain words that don't indicate a topic change
+        generic = {'kannst', 'könntest', 'würdest', 'bitte', 'einmal', 'nochmal',
+                   'genauer', 'ausführlich', 'kurz', 'einfach', 'erkläre', 'erklär',
+                   'beschreibe', 'vergleiche', 'zeige', 'hilf', 'sagen', 'machen',
+                   'wissen', 'verstehe', 'verstehen', 'kapiere', 'check', 'lerne',
+                   'lernen', 'merken', 'einprägen', 'behalten', 'wiederholen',
+                   'zusammenfassen', 'überblick', 'übersicht', 'übung', 'beispiel',
+                   'wichtig', 'relevant', 'warum', 'wieso', 'weshalb', 'wofür',
+                   'denkst', 'meinst', 'findest', 'glaubst', 'gibt', 'gibt',
+                   'dieses', 'diese', 'dieser', 'damit', 'davon', 'darüber',
+                   'what', 'explain', 'describe', 'compare', 'help', 'think'}
+
+        # Domain words = user words minus generic
+        domain_words = user_words - generic
+
+        if not domain_words:
+            return False  # Only generic words — must be about the card
+
+        # Check if any domain word appears in the card content
+        card_keywords = set(kw.lower() for kw in self._extract_card_keywords(context))
+
+        overlap = domain_words & card_keywords
+        if overlap:
+            return False  # Domain words overlap with card — context-dependent
+
+        # Domain words present but DON'T overlap with card — likely standalone
+        # But only if there are enough domain words to be confident
+        if len(domain_words) >= 2:
+            print(f"🔍 _is_standalone: domain_words={domain_words}, card_keywords={list(card_keywords)[:5]} → STANDALONE")
             return True
+
+        # Single domain word — ambiguous, default to context-dependent
         return False
 
     def _extract_card_keywords(self, context):
@@ -2007,10 +2039,10 @@ Karteninhalt: {question_clean[:500]}"""
         if not router_result.get('search_needed', False):
             return router_result
 
-        is_ctx = self._is_context_dependent_question(user_message)
-        print(f"🔧 _fix_router_queries: is_context_dependent={is_ctx} for '{user_message[:50]}'")
-        if not is_ctx:
-            return router_result  # Standalone question — trust the router
+        is_standalone = self._is_standalone_question(user_message, context)
+        print(f"🔧 _fix_router_queries: is_standalone={is_standalone} for '{user_message[:50]}'")
+        if is_standalone:
+            return router_result  # Standalone question about a different topic — trust the router
 
         card_keywords = self._extract_card_keywords(context)
         print(f"🔧 _fix_router_queries: card_keywords={card_keywords[:5]}")
