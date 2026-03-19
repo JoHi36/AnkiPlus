@@ -157,62 +157,61 @@ export default function ChatInput({
           }}
         />
 
-        {/* Textarea area — with inline @Plusi tag */}
-        <div className="relative px-4 py-3" style={{ display: 'flex', alignItems: 'flex-start', gap: 0 }}>
-          {/* @Plusi tag chip — appears inline, replaces the text "@Plusi " */}
-          {hasPlusiTag && (
-            <span
-              onClick={() => {
-                // Remove @Plusi prefix when clicking the tag (undo)
-                setInput(input.replace(/^@Plusi\s*/, ''));
-                textareaRef.current?.focus();
-              }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                background: 'rgba(10,132,255,.18)',
-                color: '#0a84ff',
-                padding: '3px 8px',
-                borderRadius: '6px',
-                fontWeight: 600,
-                fontSize: '14px',
-                fontFamily: "'Space Grotesk', sans-serif",
-                flexShrink: 0,
-                marginTop: 1,
-                marginRight: 6,
-                cursor: 'pointer',
-                userSelect: 'none',
-                whiteSpace: 'nowrap',
-                lineHeight: '1.5',
-              }}
-            >@Plusi</span>
-          )}
+        {/* Textarea area — normal textarea with @Plusi highlight overlay */}
+        <div className="relative px-4 py-3">
+          {/* Highlight overlay — mirrors textarea content, shows @Plusi highlighted + rest as normal text */}
+          {hasPlusiTag && (() => {
+            const idx = input.indexOf('@Plusi');
+            const before = input.slice(0, idx);
+            const after = input.slice(idx + 6);
+            return (
+              <div
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  top: 0, left: 0, right: 0, bottom: 0,
+                  padding: '12px 16px',
+                  paddingRight: '56px',
+                  pointerEvents: 'none',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  fontSize: '15px',
+                  lineHeight: '1.625',
+                  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif',
+                  overflow: 'hidden',
+                  color: 'rgba(232,232,232,0.9)',
+                }}
+              >
+                {before && <span>{before}</span>}
+                <span style={{
+                  background: 'rgba(10,132,255,.18)',
+                  color: '#0a84ff',
+                  padding: '1px 3px',
+                  borderRadius: '4px',
+                  fontWeight: 600,
+                }}>@Plusi</span>
+                {after && <span>{after}</span>}
+              </div>
+            );
+          })()}
           <textarea
             ref={textareaRef}
-            value={hasPlusiTag ? input.replace(/^@Plusi\s*/, '') : input}
-            onChange={(e) => {
-              if (hasPlusiTag) {
-                // Keep @Plusi prefix, update rest
-                setInput('@Plusi ' + e.target.value);
-              } else {
-                setInput(e.target.value);
-              }
-            }}
-            onKeyDown={(e) => {
-              // When tag is shown and user presses Backspace on empty remaining text, remove the tag
-              if (hasPlusiTag && e.key === 'Backspace' && input.replace(/^@Plusi\s*/, '') === '') {
-                e.preventDefault();
-                setInput('');
-                return;
-              }
-              handleKeyDown(e);
-            }}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
-            placeholder={hasPlusiTag ? "Nachricht an Plusi..." : "Stelle eine Frage..."}
+            placeholder="Stelle eine Frage..."
             rows={1}
-            className="w-full min-h-[24px] max-h-[120px] p-0 pr-10 bg-transparent text-base-content text-[15px] leading-relaxed resize-none outline-none placeholder:text-base-content/25"
-            style={{ border: 'none', flex: 1 }}
+            className="w-full min-h-[24px] max-h-[120px] p-0 pr-10 bg-transparent text-[15px] leading-relaxed resize-none outline-none placeholder:text-base-content/25"
+            style={{
+              border: 'none',
+              position: 'relative',
+              zIndex: 1,
+              color: hasPlusiTag ? 'transparent' : undefined,
+              caretColor: 'white',
+              WebkitTextFillColor: hasPlusiTag ? 'transparent' : undefined,
+            }}
           />
           {/* Send button — appears when text present */}
           {isLoading ? (
