@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { findSessionByDeck, createSession, updateSession, saveSessions } from '../utils/sessions';
+import { findSessionByDeck, createSession, updateSession } from '../utils/sessions';
 
 /**
  * SessionContext - Central State Machine for Session Management
@@ -32,116 +32,24 @@ export function SessionContextProvider({ children, bridge, isReady }) {
   const [isLoading, setIsLoading] = useState(true);
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
   
-  // Refs for debouncing and preventing race conditions
-  const saveTimeoutRef = useRef(null);
-  const lastSavedSessionsRef = useRef(null);
   const bridgeRef = useRef(bridge);
-  
+
   // Update bridge ref
   useEffect(() => {
     bridgeRef.current = bridge;
   }, [bridge]);
   
-  // Register global saveSessions function for utils/sessions.js
+  // Legacy JSON session loading removed — per-card SQLite is now used instead.
+  // Mark sessions as loaded immediately since there's nothing to load from JSON.
   useEffect(() => {
-    if (bridge && bridge.saveSessions) {
-      window._bridgeSaveSessions = bridge.saveSessions;
-    }
-    return () => {
-      window._bridgeSaveSessions = null;
-    };
-  }, [bridge]);
-  
-  // Load sessions from disk on mount
-  useEffect(() => {
-    if (isReady && bridge && bridge.loadSessions) {
-      console.log('📚 SessionContext: Lade Sessions von Bridge...');
-      bridge.loadSessions();
-    } else {
-    }
-  }, [isReady, bridge]);
-  
-  // Listen for sessionsLoaded event from Python
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    
-    const handleSessionsLoaded = (event) => {
-      const loadedSessions = event.detail?.sessions || event.detail || [];
-      console.log('📚 SessionContext: Sessions geladen:', loadedSessions.length);
-      
-      // Migrate messages to have stable IDs
-      const migratedSessions = loadedSessions.map(session => {
-        if (!session.messages || session.messages.length === 0) return session;
-        
-        const migratedMessages = session.messages.map((msg, idx) => {
-          if (!msg.id || typeof msg.id === 'number') {
-            return {
-              ...msg,
-              id: `msg-legacy-${msg.timestamp || Date.now()}-${idx}-${Math.random().toString(36).substr(2, 9)}`
-            };
-          }
-          return msg;
-        });
-        
-        return {
-          ...session,
-          messages: migratedMessages
-        };
-      });
-      
-      setSessions(migratedSessions);
-      setSessionsLoaded(true);
-      setIsLoading(false);
-      lastSavedSessionsRef.current = migratedSessions;
-    };
-    
-    window.addEventListener('sessionsLoaded', handleSessionsLoaded);
-    
-    // Also listen via ankiReceive
-    const originalAnkiReceive = window.ankiReceive;
-    window.ankiReceive = (payload) => {
-      if (payload.type === 'sessionsLoaded') {
-        handleSessionsLoaded({ detail: { sessions: payload.data || [] } });
-      }
-      if (originalAnkiReceive) {
-        originalAnkiReceive(payload);
-      }
-    };
-    
-    return () => {
-      window.removeEventListener('sessionsLoaded', handleSessionsLoaded);
-    };
+    setSessionsLoaded(true);
+    setIsLoading(false);
   }, []);
   
-  // Debounced save function
-  const debouncedSave = useCallback((sessionsToSave) => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-    
-    saveTimeoutRef.current = setTimeout(() => {
-      if (bridgeRef.current && bridgeRef.current.saveSessions) {
-        console.log('💾 SessionContext: Speichere Sessions (debounced):', sessionsToSave.length);
-        bridgeRef.current.saveSessions(JSON.stringify(sessionsToSave));
-        lastSavedSessionsRef.current = sessionsToSave;
-      }
-    }, 5000); // 5 second debounce
-  }, []);
-  
-  // Immediate save (for critical transitions)
-  const immediateSave = useCallback((sessionsToSave) => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = null;
-    }
-    
-    if (bridgeRef.current && bridgeRef.current.saveSessions) {
-      console.log('💾 SessionContext: Speichere Sessions (sofort):', sessionsToSave.length);
-      bridgeRef.current.saveSessions(JSON.stringify(sessionsToSave));
-      lastSavedSessionsRef.current = sessionsToSave;
-    } else {
-    }
-  }, []);
+  // Legacy JSON save functions removed — per-card SQLite handles persistence now.
+  // These no-op stubs keep the internal API stable during migration.
+  const debouncedSave = useCallback(() => {}, []);
+  const immediateSave = useCallback(() => {}, []);
   
   /**
    * Handle deckSelected event from Anki
@@ -159,17 +67,6 @@ export function SessionContextProvider({ children, bridge, isReady }) {
     }
     
     const { deckId, deckName, totalCards } = deckData;
-    
-    // CRITICAL FIX: If sessions are not loaded yet, reload them and retry
-    if (!sessionsLoaded && bridgeRef.current && bridgeRef.current.loadSessions) {
-      console.log('⏳ SessionContext: Sessions noch nicht geladen, lade sie jetzt...');
-      bridgeRef.current.loadSessions();
-      // Retry after a short delay to allow sessions to load
-      setTimeout(() => {
-        handleDeckSelected(deckData);
-      }, 500);
-      return;
-    }
     
     // Check if session exists
     const existingSession = findSessionByDeck(sessions, deckId);
@@ -327,36 +224,29 @@ export function SessionContextProvider({ children, bridge, isReady }) {
     immediateSave(updatedSessions);
   }, [sessions, currentSession, immediateSave]);
   
-  // Listen for deckSelected and deckExited events
+  // Listen for deckSelected and deckExited events via CustomEvents
+  // NOTE: These events are dispatched by the main ankiReceive handler in App.jsx.
+  // Do NOT wrap window.ankiReceive here — it destroys the handler chain
+  // and breaks per-card session switching.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    
-    const originalAnkiReceive = window.ankiReceive;
-    window.ankiReceive = (payload) => {
-      if (payload.type === 'deckSelected') {
-        handleDeckSelected(payload.data);
-      } else if (payload.type === 'deckExited') {
-        handleDeckExited();
-      }
-      
-      if (originalAnkiReceive) {
-        originalAnkiReceive(payload);
-      }
+
+    const onDeckSelected = (event) => {
+      handleDeckSelected(event.detail);
     };
-    
+    const onDeckExited = () => {
+      handleDeckExited();
+    };
+
+    window.addEventListener('deckSelected', onDeckSelected);
+    window.addEventListener('deckExited', onDeckExited);
+
     return () => {
-      window.ankiReceive = originalAnkiReceive;
+      window.removeEventListener('deckSelected', onDeckSelected);
+      window.removeEventListener('deckExited', onDeckExited);
     };
   }, [handleDeckSelected, handleDeckExited]);
   
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, []);
   
   // PERFORMANCE: Memoize context value to prevent unnecessary re-renders
   const value = useMemo(() => ({

@@ -105,59 +105,13 @@ export function useDeckTracking(bridge, isReady, sessions, forceShowOverview, cu
         // ... (existing logic for switching session)
         
         if (existingSession.id !== currentSessionIdRef.current) {
-           // ... (existing logic)
            setCurrentSessionId(existingSession.id);
-           
-           // LOAD SESSION DATA
-           const sessionMessages = existingSession.messages || [];
-           // Migrate messages...
-           const migratedMessages = sessionMessages.map((msg, idx) => {
-            if (!msg.id || typeof msg.id === 'number') {
-              return {
-                ...msg,
-                id: `msg-legacy-${msg.timestamp || Date.now()}-${idx}-${Math.random().toString(36).substr(2, 9)}`
-              };
-            }
-            return msg;
-          });
-           setMessages(migratedMessages);
-           
-           // Sections loading logic...
-           if (existingSession.sections && existingSession.sections.length > 0) {
-             setSections(existingSession.sections);
-             // Set current section
-             if (migratedMessages.length > 0) {
-               const lastMsg = migratedMessages[migratedMessages.length-1];
-               if(lastMsg.sectionId) setCurrentSectionId(lastMsg.sectionId);
-             }
-           } else {
-             // Legacy fallback logic...
-             setSections([]); // Simplify for brevity in this replace block, full logic is in original
-             // Actually I should preserve the full logic to not break it.
-             // But since I'm replacing the whole function, I need to be careful.
-             // I will use the "original" logic pattern but rewritten cleanly.
-             
-             // RE-IMPLEMENTATION OF SECTIONS LOADING (to avoid breaking changes)
-             const messageSections = new Map();
-             migratedMessages.forEach(msg => {
-                if (msg.sectionId && !messageSections.has(msg.sectionId)) {
-                    messageSections.set(msg.sectionId, {
-                        id: msg.sectionId,
-                        title: `Karte ${messageSections.size + 1}`,
-                        createdAt: msg.id
-                    });
-                }
-             });
-             setSections(Array.from(messageSections.values()));
-           }
-           
+           // NOTE: Messages and sections are NOT loaded here anymore.
+           // The per-card session system (useCardSession + cardSessionLoaded) handles
+           // loading the correct messages/sections for the current card.
            if (setForceShowOverview) setForceShowOverview(false);
         } else {
-            // Same session logic
-             if (existingSession.sections && existingSession.sections.length > 0) {
-                setSections(existingSession.sections);
-              }
-             if (setForceShowOverview) setForceShowOverview(false);
+           if (setForceShowOverview) setForceShowOverview(false);
         }
         
         setPendingDeckSession(null);
@@ -165,15 +119,13 @@ export function useDeckTracking(bridge, isReady, sessions, forceShowOverview, cu
         // Keine Session - New Session Logic
         console.log('⏳ useDeckTracking: Keine Session für Deck, wird bei erster Nachricht erstellt');
         
-        // Reset old session data if we switched decks completely
-        const shouldClearMessages = !currentSessionIdRef.current || 
+        // Only reset session ID — messages/sections are managed by per-card system
+        const shouldReset = !currentSessionIdRef.current ||
           (messagesRef.current.length === 0 && previousDeckId !== newDeckId);
-          
-        if (shouldClearMessages) {
+
+        if (shouldReset) {
           setCurrentSessionId(null);
-          setMessages([]);
-          if (setSections) setSections([]);
-          if (setCurrentSectionId) setCurrentSectionId(null);
+          // Don't clear messages/sections here — per-card system handles it
         }
         
         if (!pendingDeckSessionRef.current || pendingDeckSessionRef.current.deckId !== deckInfo.deckId) {
