@@ -2005,6 +2005,106 @@ Karteninhalt: {question_clean[:500]}"""
             return "Antwort generiert"
         return step
 
+    def _is_context_dependent_question(self, user_message):
+        """Detect if a user question refers to the current context rather than being standalone."""
+        msg = user_message.lower().strip()
+        # Short messages with pronouns/references are almost always context-dependent
+        context_patterns = [
+            'verstehe', 'versteh', 'check ich nicht', 'kapier', 'kapiere',
+            'was ist das', 'was bedeutet', 'was heißt', 'was meint',
+            'erkläre', 'erklär', 'explain',
+            'mehr dazu', 'mehr darüber', 'erzähl mir mehr',
+            'was ist damit gemeint', 'wie ist das gemeint',
+            'kannst du das', 'hilf mir',
+            'warum ist das', 'wieso ist das', 'wozu',
+            'und was ist mit', 'was hat das mit',
+        ]
+        for pattern in context_patterns:
+            if pattern in msg:
+                return True
+        # Very short messages (<30 chars) without domain-specific words are likely context-dependent
+        if len(msg) < 30 and not any(c.isupper() for c in msg[1:]):
+            return True
+        return False
+
+    def _extract_card_keywords(self, context):
+        """Extract meaningful keywords from the current card for query building."""
+        import re
+        keywords = []
+        if not context:
+            return keywords
+
+        for field in ['frontField', 'question', 'answer']:
+            text = context.get(field, '')
+            if text:
+                # Strip HTML and Anki cloze markers
+                clean = re.sub(r'<[^>]+>', ' ', text)
+                clean = re.sub(r'\{\{c\d+::(.*?)\}\}', r'\1', clean)
+                clean = re.sub(r'\s+', ' ', clean).strip()
+                # Extract words > 3 chars (skip articles, prepositions)
+                words = [w for w in clean.split() if len(w) > 3 and w[0].isalpha()]
+                keywords.extend(words[:10])
+
+        # Deduplicate while preserving order
+        seen = set()
+        unique = []
+        for w in keywords:
+            wl = w.lower()
+            if wl not in seen:
+                seen.add(wl)
+                unique.append(w)
+        return unique[:15]
+
+    def _fix_router_queries(self, router_result, user_message, context):
+        """Post-process router result: if question is context-dependent but queries don't contain card keywords, fix them."""
+        if not router_result or not context:
+            return router_result
+        if not router_result.get('search_needed', False):
+            return router_result
+
+        # Check if this is a context-dependent question
+        if not self._is_context_dependent_question(user_message):
+            return router_result  # Standalone question — trust the router
+
+        card_keywords = self._extract_card_keywords(context)
+        if not card_keywords:
+            return router_result
+
+        # Check if any card keyword appears in the queries
+        all_queries = ' '.join(router_result.get('precise_queries', []) + router_result.get('broad_queries', []))
+        card_kw_lower = {kw.lower() for kw in card_keywords}
+        query_words = set(all_queries.lower().split())
+
+        has_card_keywords = bool(card_kw_lower & query_words)
+        if has_card_keywords:
+            return router_result  # Router did its job correctly
+
+        # Router failed — override queries with card keywords
+        print(f"⚠️ Router-Fix: Kontextbezogene Frage erkannt aber Router nutzt keine Karten-Keywords. Korrigiere Queries.")
+        top_kw = card_keywords[:6]
+
+        # Build AND queries from top keywords
+        precise = []
+        for i in range(0, min(len(top_kw), 6), 2):
+            pair = top_kw[i:i+2]
+            if len(pair) == 2:
+                precise.append(f"{pair[0]} AND {pair[1]}")
+            else:
+                precise.append(pair[0])
+
+        # Build OR queries
+        broad = [' OR '.join(top_kw[:4])]
+        if len(top_kw) > 4:
+            broad.append(' OR '.join(top_kw[2:6]))
+
+        router_result['precise_queries'] = precise[:3]
+        router_result['broad_queries'] = broad[:3]
+        router_result['embedding_query'] = ' '.join(top_kw)
+        router_result['search_scope'] = 'current_deck'
+
+        print(f"✅ Router-Fix: precise={precise}, broad={broad}, embedding='{' '.join(top_kw)}'")
+        return router_result
+
     def _rag_router(self, user_message, context=None):
         """
         Stage 1: Router - Analysiert die Anfrage und entscheidet ob und wie gesucht werden soll.
@@ -2215,7 +2315,7 @@ REGELN:
                 })
 
                 print(f"✅ Router (Backend): search_needed={router_result.get('search_needed')}, retrieval_mode={retrieval_mode}")
-                return router_result
+                return self._fix_router_queries(router_result, user_message, context)
 
             # Direkter Gemini API Modus (Fallback oder wenn kein Backend)
             router_api_key = api_key or self.config.get("api_key", "")
@@ -2496,7 +2596,7 @@ REGELN:
                                     for i, q in enumerate(broad_queries):
                                         if q:
                                             print(f"   Broad Query {i+1}: '{q[:100]}'")
-                                    return router_result
+                                    return self._fix_router_queries(router_result, user_message, context)
 
                 except requests.exceptions.HTTPError as e:
                     last_error = e
