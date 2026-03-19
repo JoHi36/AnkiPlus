@@ -1691,8 +1691,10 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                   )}
                 </>
             ) : (
-                /* Simple divider for saved bot messages without steps */
-                !isUser && <div className="h-px my-2" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                /* Simple divider for saved bot messages without steps — only for pure text replies (no Plusi, no ReviewCard) */
+                !isUser && !plusiData && !reviewData && message && message.trim().length > 0 && (
+                  <div className="h-px my-2" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                )
             )}
             
             {/* 1. Review Card (Highest Priority) */}
