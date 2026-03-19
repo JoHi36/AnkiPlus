@@ -322,13 +322,15 @@ SHOW_CARD_SCHEMA = {
     "name": "show_card",
     "description": (
         "Zeigt eine einzelne Anki-Karte als interaktives Widget im Chat an. "
-        "WICHTIG: Verwende dieses Tool wenn der Nutzer eine Karte sehen möchte und du "
-        "bereits Karten im LERNMATERIAL-Kontext hast. Die note_id findest du in den "
-        "Note-Nummern im LERNMATERIAL-Abschnitt (z.B. 'Note 12345' → note_id=12345). "
-        "NICHT search_deck verwenden wenn du bereits Karten im Kontext hast — "
-        "show_card ist schneller und zuverlässiger. "
-        "Beispiel: User sagt 'Zeig mir eine Karte zum Herz' → du hast Note 12345 "
-        "im LERNMATERIAL → show_card(note_id=12345)."
+        "Verwende dieses Tool wenn du dem Nutzer eine bestimmte Karte zeigen willst. "
+        "Die note_id findest du im LERNMATERIAL-Abschnitt deines Kontexts — dort stehen "
+        "Einträge wie 'Note 12345 (found in 2 queries): ...'. Nimm die Zahl nach 'Note'. "
+        "WICHTIG: Wenn der Nutzer sagt 'zeig mir eine Karte zu X' und du hast passende "
+        "Karten im LERNMATERIAL, verwende IMMER show_card mit der note_id aus dem Kontext. "
+        "Verwende NICHT search_deck dafür — search_deck ist nur für das explizite Durchsuchen "
+        "des gesamten Kartenstapels ('Zeig mir alle meine Karten zu Pharmakologie'). "
+        "Beispiel: LERNMATERIAL enthält 'Note 98765 (found in 1 queries): Field Front: "
+        "Was ist die Pumpleistung des Herzens?' → show_card(note_id=98765)."
     ),
     "parameters": {
         "type": "object",
@@ -401,11 +403,13 @@ registry.register(ToolDefinition(
 SEARCH_DECK_SCHEMA = {
     "name": "search_deck",
     "description": (
-        "Durchsucht das Deck des Nutzers und zeigt eine Liste von Karten-Vorschauen. "
-        "Verwende dieses Tool NUR wenn der Nutzer explizit seinen Kartenstapel durchsuchen will "
-        "(z.B. 'Zeig mir alle meine Pharmakologie-Karten', 'Welche Karten hab ich zu Anatomie?'). "
-        "NICHT verwenden wenn der Nutzer nur eine einzelne Karte sehen will — dafür show_card nutzen. "
-        "NICHT verwenden wenn du bereits Karten im LERNMATERIAL-Kontext hast — dafür show_card nutzen."
+        "Durchsucht das gesamte Deck des Nutzers und zeigt eine scrollbare Liste von Karten. "
+        "Verwende dieses Tool NUR wenn der Nutzer explizit seinen Kartenstapel durchsuchen will, "
+        "z.B. 'Zeig mir alle meine Pharmakologie-Karten', 'Welche Karten hab ich zu Anatomie?', "
+        "'Wie viele Karten habe ich zu X?'. "
+        "NICHT verwenden wenn der Nutzer nur eine einzelne Karte sehen will — dafür show_card "
+        "mit der note_id aus dem LERNMATERIAL-Kontext nutzen. "
+        "NICHT verwenden wenn du bereits passende Karten im LERNMATERIAL hast."
     ),
     "parameters": {
         "type": "object",
