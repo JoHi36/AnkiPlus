@@ -157,38 +157,62 @@ export default function ChatInput({
           }}
         />
 
-        {/* @Plusi indicator — small chip above textarea when typing @Plusi */}
-        {hasPlusiTag && (
-          <div style={{ padding: '4px 16px 0', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              background: 'rgba(10,132,255,.15)',
-              color: 'rgba(10,132,255,.8)',
-              padding: '2px 8px',
-              borderRadius: '5px',
-              fontWeight: 600,
-              fontSize: '11px',
-              fontFamily: "'Space Grotesk', sans-serif",
-              letterSpacing: '0.03em',
-            }}>Plusi-Direkt</span>
-            <span style={{ fontSize: 10, color: 'rgba(255,255,255,.2)' }}>Nachricht geht direkt an Plusi</span>
-          </div>
-        )}
-
-        {/* Textarea area */}
-        <div className="relative px-4 py-3">
+        {/* Textarea area — with inline @Plusi tag */}
+        <div className="relative px-4 py-3" style={{ display: 'flex', alignItems: 'flex-start', gap: 0 }}>
+          {/* @Plusi tag chip — appears inline, replaces the text "@Plusi " */}
+          {hasPlusiTag && (
+            <span
+              onClick={() => {
+                // Remove @Plusi prefix when clicking the tag (undo)
+                setInput(input.replace(/^@Plusi\s*/, ''));
+                textareaRef.current?.focus();
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                background: 'rgba(10,132,255,.18)',
+                color: '#0a84ff',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                fontWeight: 600,
+                fontSize: '14px',
+                fontFamily: "'Space Grotesk', sans-serif",
+                flexShrink: 0,
+                marginTop: 1,
+                marginRight: 6,
+                cursor: 'pointer',
+                userSelect: 'none',
+                whiteSpace: 'nowrap',
+                lineHeight: '1.5',
+              }}
+            >@Plusi</span>
+          )}
           <textarea
             ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
+            value={hasPlusiTag ? input.replace(/^@Plusi\s*/, '') : input}
+            onChange={(e) => {
+              if (hasPlusiTag) {
+                // Keep @Plusi prefix, update rest
+                setInput('@Plusi ' + e.target.value);
+              } else {
+                setInput(e.target.value);
+              }
+            }}
+            onKeyDown={(e) => {
+              // When tag is shown and user presses Backspace on empty remaining text, remove the tag
+              if (hasPlusiTag && e.key === 'Backspace' && input.replace(/^@Plusi\s*/, '') === '') {
+                e.preventDefault();
+                setInput('');
+                return;
+              }
+              handleKeyDown(e);
+            }}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
-            placeholder="Stelle eine Frage..."
+            placeholder={hasPlusiTag ? "Nachricht an Plusi..." : "Stelle eine Frage..."}
             rows={1}
             className="w-full min-h-[24px] max-h-[120px] p-0 pr-10 bg-transparent text-base-content text-[15px] leading-relaxed resize-none outline-none placeholder:text-base-content/25"
-            style={{ border: 'none', position: 'relative', zIndex: 1 }}
+            style={{ border: 'none', flex: 1 }}
           />
           {/* Send button — appears when text present */}
           {isLoading ? (
