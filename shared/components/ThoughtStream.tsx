@@ -764,6 +764,14 @@ export default function ThoughtStream({
   if (!hasContent) return null;
   if (isLegacy) return <LegacyThoughtStream steps={steps} citations={citations} citationIndices={citationIndices} bridge={bridge} onPreviewCard={onPreviewCard} />;
 
+  // No-search shortcut: if only step is router with search_needed=false, just show a simple line
+  const isNoSearch = !isProcessing && !activeEntry && doneStack.length > 0 &&
+    doneStack.every(d => d.step === 'router') &&
+    pipelineSteps.some(s => s.step === 'router' && s.data?.search_needed === false);
+  if (isNoSearch) {
+    return <div style={{ height: 1, margin: '8px 0', background: 'rgba(255,255,255,0.06)' }} />;
+  }
+
   return (
     <div style={{ marginBottom: 8, maxWidth: '100%', userSelect: 'none', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 4 }}>
       {/* ── Collapsed view ── */}
