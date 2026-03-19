@@ -218,6 +218,12 @@
   .badge-free { background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.2); }
   .badge-pro { background: rgba(10,132,255,0.12); color: rgba(10,132,255,0.7); }
 
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  details summary::-webkit-details-marker { display: none; }
+  details summary::marker { display: none; }
+  details summary:hover { color: var(--text-secondary); }
+
   .link-btn {
     background: none; border: none; cursor: pointer; font-family: var(--font);
     font-size: 12px; color: var(--text-tertiary); transition: color 0.12s;
@@ -254,7 +260,7 @@
     <div class="tab-pill-group">
       <button class="tab-pill active" data-tab="profil" onclick="switchTab('profil')">Profil</button>
       <button class="tab-pill" data-tab="allgemein" onclick="switchTab('allgemein')">Allgemein</button>
-      <button class="tab-pill" data-tab="ki" onclick="switchTab('ki')">KI</button>
+      <button class="tab-pill" data-tab="ki" onclick="switchTab('ki')">Agent</button>
       <button class="tab-pill" data-tab="anki" onclick="switchTab('anki')">Anki</button>
     </div>
   </div>
@@ -264,46 +270,85 @@
     <div id="profile-loading" class="auth-center">
       <div style="color:var(--text-tertiary);font-size:13px;">Lade...</div>
     </div>
+
+    <!-- Nicht authentifiziert: Primär = Anmelden via Link-Code -->
     <div id="profile-unauth" class="auth-center" style="display:none;">
       <div class="auth-icon" style="background:var(--accent-soft);">
         <svg viewBox="0 0 24 24" fill="none" stroke="#0a84ff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
       </div>
       <div class="auth-title">Konto verbinden</div>
-      <div class="auth-subtitle">Füge deinen Auth-Token ein, um AnkiPlus mit deinem Account zu verbinden</div>
-      <div class="form-group">
-        <input class="input-field" id="token-input" type="password" placeholder="Auth-Token einfügen..." />
-        <div id="auth-error" class="error-msg" style="display:none;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          <span id="auth-error-text"></span>
-        </div>
-        <button class="btn btn-primary" id="verify-btn" onclick="verifyToken()">Token verifizieren</button>
+      <div class="auth-subtitle">Melde dich an, um dein Anki Plugin mit deinem Account zu verbinden</div>
+
+      <div id="auth-error" class="error-msg" style="display:none;width:100%;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span id="auth-error-text"></span>
       </div>
-      <div class="divider"></div>
-      <div class="auth-subtitle">Du findest deinen Token auf der Landingpage nach dem Login</div>
-      <button class="link-btn" onclick="bridge.openUrl('https://anki-plus.vercel.app')">Zur Landingpage →</button>
+
+      <!-- Primäre Aktion: Automatisch anmelden -->
+      <div class="form-group">
+        <button class="btn btn-primary" id="link-auth-btn" onclick="startLinkAuth()" style="gap:8px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          <span id="link-auth-btn-text">Anmelden</span>
+        </button>
+        <div id="link-auth-hint" style="display:none;font-size:11px;color:var(--text-tertiary);text-align:center;line-height:1.5;">
+          Ein Browser-Fenster wurde geöffnet. Melde dich dort an — die Verbindung erfolgt automatisch.
+        </div>
+      </div>
+
+      <!-- Sekundär: Manueller Token-Input (eingeklappt) -->
+      <div style="width:100%;margin-top:8px;">
+        <details id="manual-token-details">
+          <summary style="font-size:11px;color:var(--text-tertiary);cursor:pointer;text-align:center;list-style:none;user-select:none;">
+            Manuell mit Token verbinden
+          </summary>
+          <div style="margin-top:12px;" class="form-group">
+            <input class="input-field" id="token-input" type="password" placeholder="Token einfügen..." />
+            <button class="btn btn-primary" id="verify-btn" onclick="verifyToken()" style="background:var(--surface);border-color:var(--border);color:var(--text-secondary);">Token verifizieren</button>
+          </div>
+        </details>
+      </div>
     </div>
+
+    <!-- Erfolgs-Animation (kurz nach Login) -->
+    <div id="profile-success" class="auth-center" style="display:none;">
+      <div class="auth-icon" style="background:rgba(34,197,94,0.1);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      </div>
+      <div class="auth-title">Verbunden!</div>
+      <div class="auth-subtitle">Dein Account wurde erfolgreich verknüpft.</div>
+    </div>
+
+    <!-- Authentifiziert: Profil + Abo -->
     <div id="profile-auth" style="display:none;">
+
+      <!-- Profil-Header: Avatar + Name + Email -->
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-bottom:24px;">
+        <div id="profile-avatar" style="width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#fff;letter-spacing:0.5px;"></div>
+        <div id="profile-display-name" style="font-size:15px;font-weight:600;color:var(--text);margin-top:4px;"></div>
+        <div id="profile-email" style="font-size:12px;color:var(--text-tertiary);"></div>
+      </div>
+
+      <!-- Abo-Card mit integriertem "Verwalten" Link -->
       <div class="section">
         <div class="tier-card">
-          <div class="tier-header">
-            <div class="tier-icon" id="tier-icon-container"></div>
-            <div>
-              <div class="tier-name" id="tier-name">Starter</div>
-              <div class="tier-desc" id="tier-desc">Kostenloser Einstieg</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <div class="tier-icon" id="tier-icon-container"></div>
+              <div>
+                <div class="tier-name" id="tier-name">Starter</div>
+                <div class="tier-desc" id="tier-desc">Kostenloser Einstieg</div>
+              </div>
             </div>
+            <button class="link-btn" onclick="bridge.openUrl('https://anki-plus.vercel.app/dashboard/subscription')" style="font-size:11px;color:var(--accent);padding:4px 0;">
+              Verwalten →
+            </button>
           </div>
           <div class="quota-section" id="quota-section" style="display:none;"></div>
         </div>
       </div>
-      <button class="btn" onclick="bridge.openUrl('https://anki-plus.vercel.app/dashboard/subscription')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
-        Abo verwalten
-      </button>
-      <button class="btn btn-primary" style="margin-top:8px;" onclick="handleRelogin()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-        Neu anmelden
-      </button>
-      <button class="link-btn" style="margin-top:8px;width:100%;text-align:center;color:rgba(239,68,68,0.5);" onclick="handleLogout()">Abmelden</button>
+
+      <!-- Nur Abmelden -->
+      <button class="link-btn" style="margin-top:12px;width:100%;text-align:center;color:rgba(239,68,68,0.4);font-size:11px;" onclick="handleLogout()">Abmelden</button>
     </div>
   </div>
 
@@ -352,14 +397,29 @@
     </div>
   </div>
 
-  <!-- ═══ KI TAB ═══ -->
+  <!-- ═══ AGENT TAB ═══ -->
   <div class="tab-content" id="tab-ki">
-    <div class="section">
-      <div class="section-title">Antwortstil</div>
-      <div class="pill-group" id="style-pills"></div>
+    <!-- Mini Dashboard -->
+    <div class="section" style="display:flex; gap:8px;">
+      <div class="card" style="flex:1; text-align:center; padding:14px 0;">
+        <div id="dash-tools-active" style="font-size:22px; font-weight:700; color:var(--text); letter-spacing:-0.5px;">0</div>
+        <div style="font-size:10px; color:var(--text-tertiary); text-transform:uppercase; letter-spacing:0.3px; margin-top:2px;">Tools aktiv</div>
+      </div>
+      <div class="card" style="flex:1; text-align:center; padding:14px 0;">
+        <div id="dash-sub-agents" style="font-size:22px; font-weight:700; color:var(--text); letter-spacing:-0.5px;">0</div>
+        <div style="font-size:10px; color:var(--text-tertiary); text-transform:uppercase; letter-spacing:0.3px; margin-top:2px;">Sub-Agents</div>
+      </div>
     </div>
+
+    <!-- Sub-Agents -->
     <div class="section">
-      <div class="section-title">KI-Werkzeuge</div>
+      <div class="section-title">Sub-Agents</div>
+      <div class="card" id="subagents-card"></div>
+    </div>
+
+    <!-- Agent Tools -->
+    <div class="section">
+      <div class="section-title">Agent Tools</div>
       <div class="card" id="tools-card"></div>
     </div>
   </div>
@@ -421,24 +481,56 @@ function switchTab(tab) {
 }
 
 // ── Profile ──
+let _wasUnauthenticated = true;
+
 function renderProfile() {
   document.getElementById('profile-loading').style.display = 'none';
+  document.getElementById('profile-success').style.display = 'none';
+  _resetLinkAuthBtn();
+
   if (config.isAuthenticated) {
     document.getElementById('profile-unauth').style.display = 'none';
-    document.getElementById('profile-auth').style.display = 'block';
-    // Fetch quota
-    bridge.getQuota((json) => {
-      const quota = JSON.parse(json);
-      renderTier(quota);
-    });
+    renderProfileHeader();
+
+    if (_wasUnauthenticated) {
+      _wasUnauthenticated = false;
+      document.getElementById('profile-auth').style.display = 'none';
+      document.getElementById('profile-success').style.display = 'flex';
+      setTimeout(() => {
+        document.getElementById('profile-success').style.display = 'none';
+        document.getElementById('profile-auth').style.display = 'block';
+        bridge.getQuota((json) => { renderTier(JSON.parse(json)); });
+      }, 1500);
+    } else {
+      document.getElementById('profile-auth').style.display = 'block';
+      bridge.getQuota((json) => { renderTier(JSON.parse(json)); });
+    }
   } else {
+    _wasUnauthenticated = true;
     document.getElementById('profile-unauth').style.display = 'flex';
     document.getElementById('profile-auth').style.display = 'none';
   }
 }
 
+function renderProfileHeader() {
+  const email = config.userEmail || '';
+  const name = config.profileName || email.split('@')[0] || 'User';
+
+  // Avatar with initials and gradient
+  const initials = name.charAt(0).toUpperCase();
+  const avatarEl = document.getElementById('profile-avatar');
+  // Deterministic color from name
+  const hue = (name.charCodeAt(0) * 7 + (name.charCodeAt(1) || 0) * 13) % 360;
+  avatarEl.style.background = `linear-gradient(135deg, hsl(${hue}, 60%, 45%), hsl(${(hue + 40) % 360}, 50%, 35%))`;
+  avatarEl.textContent = initials;
+
+  document.getElementById('profile-display-name').textContent = name;
+  document.getElementById('profile-email').textContent = email;
+  document.getElementById('profile-email').style.display = email ? 'block' : 'none';
+}
+
 function renderTier(quota) {
-  let name = 'Starter', desc = 'Kostenloser Einstieg', color = 'var(--text-tertiary)', bg = 'rgba(255,255,255,0.04)';
+  let name = 'Free', desc = 'Kostenloser Einstieg', color = 'var(--text-tertiary)', bg = 'rgba(255,255,255,0.04)';
   let iconSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>';
 
   if (quota && quota.tier === 'tier1') {
@@ -456,13 +548,18 @@ function renderTier(quota) {
   document.getElementById('tier-name').textContent = name;
   document.getElementById('tier-desc').textContent = desc;
 
-  // Quota bars
+  // Quota — show combined "Anfragen heute" for simplicity
   const qs = document.getElementById('quota-section');
-  if (quota && (quota.deep || quota.flash)) {
+  if (quota && quota.deep) {
     qs.style.display = 'block';
     qs.innerHTML = '';
-    if (quota.deep) qs.innerHTML += quotaBarHTML('Deep Mode', quota.deep.used, quota.deep.limit, sparklesSvg());
-    if (quota.flash) qs.innerHTML += quotaBarHTML('Flash Mode', quota.flash.used, quota.flash.limit, zapSvg());
+    // Deep mode = primary quota that matters
+    if (quota.deep.limit !== -1) {
+      qs.innerHTML += quotaBarHTML('Anfragen heute', quota.deep.used, quota.deep.limit, sparklesSvg());
+    } else {
+      // Unlimited — show a subtle "unlimited" indicator
+      qs.innerHTML = '<div style="font-size:11px;color:var(--text-tertiary);text-align:center;padding:4px 0;">Unbegrenzte Anfragen</div>';
+    }
   }
 }
 
@@ -493,10 +590,77 @@ function handleLogout() {
 }
 
 function handleRelogin() {
-  bridge.logout();
+  // Direkt neuen Link-Code Flow starten (alten Token behalten bis neuer da ist)
   config.isAuthenticated = false;
+  _wasUnauthenticated = true;
   renderProfile();
-  bridge.openUrl('https://anki-plus.vercel.app/login');
+  setTimeout(() => startLinkAuth(), 200);
+}
+
+let _linkAuthActive = false;
+
+function startLinkAuth() {
+  if (_linkAuthActive) return;
+  _linkAuthActive = true;
+  hideAuthError();
+
+  const btn = document.getElementById('link-auth-btn');
+  const btnText = document.getElementById('link-auth-btn-text');
+  const hint = document.getElementById('link-auth-hint');
+
+  btn.disabled = true;
+  btnText.textContent = 'Warte auf Anmeldung...';
+  // Spinner SVG ersetzen
+  btn.querySelector('svg').style.display = 'none';
+  btn.insertAdjacentHTML('afterbegin', '<span id="link-spinner" style="display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0;"></span>');
+  hint.style.display = 'block';
+
+  // Rufe bridge.startLinkAuth() auf — öffnet Browser, pollt automatisch
+  bridge.startLinkAuth();
+
+  // Auf Auth-Events hören (Erfolg, Fehler, Timeout)
+  _waitForAuthResult();
+}
+
+function _waitForAuthResult() {
+  // Poll config alle 2s für max 5 Minuten (Bridge pollt parallel)
+  let attempts = 0;
+  const maxAttempts = 150;
+
+  const pollInterval = setInterval(() => {
+    attempts++;
+    bridge.getConfig((json) => {
+      const c = JSON.parse(json);
+      if (c.isAuthenticated) {
+        clearInterval(pollInterval);
+        config = c;
+        _linkAuthActive = false;
+        renderProfile();
+      }
+    });
+
+    if (attempts >= maxAttempts) {
+      clearInterval(pollInterval);
+      _linkAuthActive = false;
+      _resetLinkAuthBtn();
+      showAuthError('Zeitüberschreitung — bitte versuche es erneut.');
+    }
+  }, 2000);
+}
+
+function _resetLinkAuthBtn() {
+  const btn = document.getElementById('link-auth-btn');
+  const btnText = document.getElementById('link-auth-btn-text');
+  const hint = document.getElementById('link-auth-hint');
+  const spinner = document.getElementById('link-spinner');
+  if (spinner) spinner.remove();
+  if (btn) {
+    btn.disabled = false;
+    const svg = btn.querySelector('svg');
+    if (svg) svg.style.display = '';
+  }
+  if (btnText) btnText.textContent = 'Anmelden';
+  if (hint) hint.style.display = 'none';
 }
 
 function verifyToken() {
@@ -519,7 +683,7 @@ function verifyToken() {
         showAuthError('Token konnte nicht verifiziert werden');
       }
     });
-  }, 2000);
+  }, 3000);
 }
 
 function showAuthError(msg) {
@@ -575,23 +739,56 @@ function setStyle(key) {
   renderResponseStyle();
 }
 
-// ── AI Tools ──
-const TOOLS = [
-  { key: 'images', label: 'Bilder generieren', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>' },
-  { key: 'diagrams', label: 'Diagramme', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>' },
-  { key: 'molecules', label: 'Moleküle', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/></svg>', badge: 'Beta' },
-  { key: 'plusi', label: 'Plusi Companion', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 8v8M8 12h8"/></svg>' },
+// ── Agent Tools ──
+const SUB_AGENTS = [
+  { key: 'plusi', label: 'Plusi', desc: 'Emotionaler Lern-Begleiter mit Persönlichkeit', emoji: '🧠' },
 ];
 
+const AGENT_TOOLS = [
+  { key: 'cards', label: 'Kartensuche', desc: 'Karten aus dem Deck suchen und anzeigen', emoji: '🔍' },
+  { key: 'images', label: 'Bilder', desc: 'Bilder aus Karten und Internet anzeigen', emoji: '🖼' },
+  { key: 'diagrams', label: 'Diagramme', desc: 'Mermaid-Diagramme für Visualisierungen', emoji: '📊' },
+  { key: 'stats', label: 'Statistiken', desc: 'Streak, Heatmap, Deck-Überblick', emoji: '📈' },
+  { key: 'molecules', label: 'Moleküle', desc: 'Molekülstrukturen darstellen', emoji: '⚗️', badge: 'Beta' },
+];
+
+function renderToolRow(t) {
+  const on = config.aiTools && config.aiTools[t.key];
+  const badgeColor = t.badge ? 'background:rgba(251,191,36,0.08);color:rgba(251,191,36,0.5)' : '';
+  return `<div class="row" onclick="toggleTool('${t.key}')" style="gap:12px;">
+    <div style="width:32px;height:32px;border-radius:8px;background:rgba(10,132,255,0.08);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">${t.emoji}</div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:13px;font-weight:500;color:var(--text);">${t.label}${t.badge ? ` <span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px;${badgeColor}">${t.badge}</span>` : ''}</div>
+      <div style="font-size:11px;color:var(--text-tertiary);margin-top:1px;">${t.desc}</div>
+    </div>
+    <button class="toggle ${on ? 'on' : ''}" onclick="event.stopPropagation();toggleTool('${t.key}')"><div class="knob"></div></button>
+  </div>`;
+}
+
 function renderTools() {
-  const el = document.getElementById('tools-card');
-  el.innerHTML = TOOLS.map(t => {
-    const on = config.aiTools && config.aiTools[t.key];
-    return `<div class="row" onclick="toggleTool('${t.key}')">
-      <div class="row-label">${t.icon}<span>${t.label}</span>${t.badge ? `<span class="badge" style="background:rgba(251,191,36,0.08);color:rgba(251,191,36,0.5);font-size:9px;padding:1px 6px;border-radius:4px;">${t.badge}</span>` : ''}</div>
-      <button class="toggle ${on ? 'on' : ''}" onclick="event.stopPropagation();toggleTool('${t.key}')"><div class="knob"></div></button>
-    </div>`;
-  }).join('');
+  // Sub-Agents
+  const saEl = document.getElementById('subagents-card');
+  if (saEl) {
+    saEl.innerHTML = SUB_AGENTS.map(t => {
+      const row = renderToolRow(t);
+      return row.replace('rgba(10,132,255,0.08)', 'rgba(167,139,250,0.08)');
+    }).join('');
+  }
+
+  // Agent Tools
+  const toolsEl = document.getElementById('tools-card');
+  if (toolsEl) {
+    toolsEl.innerHTML = AGENT_TOOLS.map(t => renderToolRow(t)).join('');
+  }
+
+  // Dashboard counters
+  const allTools = [...SUB_AGENTS, ...AGENT_TOOLS];
+  const activeCount = allTools.filter(t => config.aiTools && config.aiTools[t.key]).length;
+  const subAgentCount = SUB_AGENTS.filter(t => config.aiTools && config.aiTools[t.key]).length;
+  const dashTools = document.getElementById('dash-tools-active');
+  const dashSA = document.getElementById('dash-sub-agents');
+  if (dashTools) dashTools.textContent = activeCount;
+  if (dashSA) dashSA.textContent = subAgentCount;
 }
 
 function toggleTool(key) {

@@ -20,10 +20,12 @@ DEFAULT_CONFIG = {
     "response_style": "balanced",  # balanced, concise, detailed, friendly
     "theme": "auto",  # auto, dark, light
     "ai_tools": {
-        "images": True,
-        "diagrams": True,
-        "molecules": False,  # Beta
-        "plusi": True,  # Plusi sub-agent companion
+        "plusi": True,       # Sub-Agent: Plusi companion
+        "cards": True,       # Tool: Card search + show
+        "images": True,      # Tool: Images from cards and internet
+        "diagrams": True,    # Tool: Mermaid diagrams
+        "stats": True,       # Tool: Learning statistics
+        "molecules": False,  # Tool: Molecules (Beta)
     },
     "firebase": {
         "enabled": False,  # Firebase MCP Integration aktiviert
