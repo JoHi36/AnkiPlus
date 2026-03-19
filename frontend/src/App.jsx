@@ -30,7 +30,7 @@ import { BookOpen } from 'lucide-react';
 import { useFreeChat } from './hooks/useFreeChat';
 import MascotShell from './components/MascotShell';
 import { useMascot } from './hooks/useMascot';
-import { useCompanion } from './hooks/useCompanion';
+import { usePlusiDirect } from './hooks/usePlusiDirect';
 
 /**
  * Inner App Component - wrapped by SessionContextProvider
@@ -185,7 +185,7 @@ function AppInner() {
   const reviewTrailHookRef = useRef(reviewTrailHook);
   const sessionContextRef = useRef(sessionContext);
   const handlePerformanceCaptureRef = useRef(null);
-  const handleCompanionChunkRef = useRef(null);
+  const handlePlusiDirectResultRef = useRef(null);
   useEffect(() => {
     cardSessionHookRef.current = cardSessionHook;
     cardContextHookRef.current = cardContextHook;
@@ -195,7 +195,6 @@ function AppInner() {
     reviewTrailHookRef.current = reviewTrailHook;
     sessionContextRef.current = sessionContext;
     handlePerformanceCaptureRef.current = handlePerformanceCapture;
-    handleCompanionChunkRef.current = handleCompanionChunk;
   });
   // Ref für messages container (für Auto-Scroll)
   const messagesContainerRef = useRef(null);
@@ -314,31 +313,18 @@ function AppInner() {
   const [mascotEnabled, setMascotEnabled] = useState(false);
   const [companionMode, setCompanionMode] = useState(false);
   const [bubbleText, setBubbleText] = useState(null);
-
   const { send: sendToCompanion, handleChunk: handleCompanionChunk, isLoading: companionIsLoading } = useCompanion({
     onMood: setAiMood,
     onBubble: setBubbleText,
   });
   const [consecutiveWrong, setConsecutiveWrong] = useState(0);
-
-  // Companion activation escalation — tracks how often Plusi is toggled on
   const activationCountRef = useRef(0);
   const activationResetRef = useRef(null);
 
-  const COMPANION_GREETINGS = [
-    { mood: 'happy', text: "Hey! 👋 Was gibt's?" },
-    { mood: 'happy', text: "Da bin ich 🙂 Was los?" },
-    { mood: 'happy', text: "Yo! Was machst du gerade?" },
-    { mood: 'happy', text: "Heyy! Was kann ich tun?" },
-    { mood: 'happy', text: "Hi 👋 Alles okay?" },
-  ];
-  const COMPANION_ANNOY = [
-    null, // 1st activation — random normal
-    { mood: 'surprised', text: "Schon wieder? 😮 Was ist los?" },
-    { mood: 'excited',   text: "bitte. nicht. dauernd. klicken 😬" },
-    { mood: 'empathy',   text: "ich muss kurz durchatmen... 😮‍💨" },
-    { mood: 'sleepy',    text: "ich ignoriere dich jetzt. bye 🙄" },
-  ];
+  // Plusi Direct — @Plusi inline messages
+  const { sendDirect: sendPlusiDirect, handleResult: handlePlusiResult, isLoading: plusiDirectLoading } = usePlusiDirect();
+  const eventTriggerRef = useRef(null);
+  const [streak, setStreak] = useState(0);
 
   // Idle timer — set mascot to sleepy after 10 minutes of inactivity
   const idleTimerRef = useRef(null);
@@ -924,9 +910,43 @@ function AppInner() {
           }
         }
 
-        // Companion Chat Events
-        if (payload.type === 'companionChunk') {
-          handleCompanionChunkRef.current?.(payload.chunk ?? '', payload.done ?? false);
+        // Plusi Direct Result — @Plusi inline messages
+        if (payload.type === 'plusi_direct_result') {
+          const _chatForPlusi = chatHookRef.current;
+          if (_chatForPlusi) {
+            const result = {
+              mood: payload.mood || 'neutral',
+              text: payload.text || '',
+              meta: payload.meta || '',
+              error: payload.error || false,
+            };
+            if (!result.error) {
+              const plusiMarker = `[[PLUSI_DATA: ${JSON.stringify({ mood: result.mood, text: result.text, meta: result.meta })}]]`;
+              // Add as a new bot message containing the Plusi widget
+              _chatForPlusi.setMessages(prev => [
+                ...prev,
+                { id: Date.now(), from: 'bot', text: plusiMarker }
+              ]);
+              setAiMood(result.mood);
+            }
+          }
+        }
+
+        // Card Result — streak tracking + mascot reactions
+        if (payload.type === 'cardResult') {
+          if (payload.correct) {
+            setStreak(prev => {
+              const newStreak = prev + 1;
+              setEventMood('happy');
+              if (newStreak === 5) eventTriggerRef.current?.('streak_5');
+              else if (newStreak === 10) eventTriggerRef.current?.('streak_10');
+              return newStreak;
+            });
+          } else {
+            setStreak(0);
+            setEventMood('empathy');
+            eventTriggerRef.current?.('card_wrong');
+          }
         }
 
         // Mascot Events
@@ -1350,9 +1370,18 @@ function AppInner() {
    * App.jsx muss nur noch den Kontext übergeben.
    */
   const handleSend = (text, options = {}) => {
-    // Companion mode intercept — route to Plusi instead of main AI
-    if (companionMode) {
-      sendToCompanion(text, '');
+    // @Plusi intercept — route to Plusi Direct instead of main AI
+    if (text.trim().startsWith('@Plusi')) {
+      const plusiText = text.trim().slice(6).trim();
+      if (plusiText) {
+        // Add user message to chat
+        chatHook.setMessages(prev => [
+          ...prev,
+          { id: Date.now(), from: 'user', text }
+        ]);
+        // Send to Plusi directly
+        sendPlusiDirect(plusiText);
+      }
       return;
     }
 
@@ -1447,14 +1476,6 @@ function AppInner() {
         }
       }
 
-      // ESC in companion mode exits companion mode instead of closing the panel
-      if (e.key === 'Escape' && companionMode) {
-        e.stopPropagation();
-        setCompanionMode(false);
-        resetMood();
-        return;
-      }
-
       // Skip remaining shortcuts if in input/textarea
       const tag = e.target.tagName.toLowerCase();
       if (tag === 'textarea' || tag === 'input' || e.target.isContentEditable) return;
@@ -1528,7 +1549,7 @@ function AppInner() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [headerHeight, handleTrailNavigateLeft, handleTrailNavigateRight, companionMode, setCompanionMode, resetMood]);
+  }, [headerHeight, handleTrailNavigateLeft, handleTrailNavigateRight]);
 
   // ⌘X — reset free chat history (stay in chat mode)
   useEffect(() => {
@@ -1541,14 +1562,6 @@ function AppInner() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [freeChatOpen, animPhase]);
-
-  // Reset companion mode when mascot is disabled
-  useEffect(() => {
-    if (!mascotEnabled && companionMode) {
-      setCompanionMode(false);
-      resetMood();
-    }
-  }, [mascotEnabled]);
 
   // Settings öffnen
   const handleOpenSettings = () => {
@@ -2155,34 +2168,12 @@ function AppInner() {
           {/* Mascot — bottom-left, above input */}
           <MascotShell
             mood={mood}
-            active={companionMode}
-            isThinking={companionIsLoading}
-            replyText={bubbleText}
-            onClick={() => {
-              setCompanionMode(prev => {
-                if (!prev) {
-                  // Increment activation count, reset after 3 minutes of no activations
-                  clearTimeout(activationResetRef.current);
-                  activationCountRef.current += 1;
-                  activationResetRef.current = setTimeout(() => { activationCountRef.current = 0; }, 3 * 60 * 1000);
-
-                  const count = activationCountRef.current;
-                  const annoy = COMPANION_ANNOY[Math.min(count - 1, COMPANION_ANNOY.length - 1)];
-                  if (annoy) {
-                    setAiMood(annoy.mood);
-                    setBubbleText(annoy.text);
-                  } else {
-                    const g = COMPANION_GREETINGS[Math.floor(Math.random() * COMPANION_GREETINGS.length)];
-                    setAiMood(g.mood);
-                    setBubbleText(g.text);
-                  }
-                } else {
-                  resetMood();
-                  setBubbleText(null);
-                }
-                return !prev;
-              });
+            onPlusiAsk={() => {
+              // Dispatch a custom event that ChatInput can listen to for prefilling @Plusi
+              window.dispatchEvent(new CustomEvent('plusi-ask-focus', { detail: { prefix: '@Plusi ' } }));
             }}
+            onOpenSettings={() => setShowProfile(true)}
+            onEvent={eventTriggerRef}
             enabled={mascotEnabled}
           />
           {/* Chat Input — full-width dock at bottom */}
@@ -2198,7 +2189,6 @@ function AppInner() {
           authStatus={authStatus}
           currentAuthToken={currentAuthToken}
           onClose={handleClose}
-          companionMode={companionMode}
           actionPrimary={{
             label: 'Weiter',
             shortcut: 'SPACE',
