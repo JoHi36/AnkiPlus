@@ -205,31 +205,67 @@ def _gemini_call(system_prompt, user_prompt, api_key, max_tokens=256):
 
 
 def _search_cards(query, top_k=10):
-    """Search the user's card collection via embeddings. Returns formatted context string."""
+    """Search the user's card collection using full hybrid retrieval (SQL + Semantic + Merge).
+
+    Uses the same pipeline as the main chat but without UI events.
+    Returns formatted context string with the best matching cards.
+    """
     try:
         from aqt import mw
         if not mw or not mw.col:
             return ""
 
-        # Get embedding manager
-        emb = getattr(mw, '_embedding_manager', None)
-        if not emb:
-            return ""
-
-        # Embed the query
-        embeddings = emb.embed_texts([query])
-        if not embeddings:
-            return ""
-
-        # Search index
-        results = emb.search(embeddings[0], top_k=top_k)
-        if not results:
-            return ""
-
-        # Load card data
         import re
+
+        # ── Semantic search (embeddings) ──
+        emb = getattr(mw, '_embedding_manager', None)
+        semantic_results = []
+        if emb:
+            try:
+                query_embeddings = emb.embed_texts([query])
+                if query_embeddings:
+                    semantic_results = emb.search(query_embeddings[0], top_k=top_k)
+            except Exception as e:
+                print(f"plusi search semantic error: {e}")
+
+        # ── SQL keyword search ──
+        sql_card_ids = set()
+        try:
+            # Split query into keywords and search Anki's collection
+            keywords = [w.strip() for w in query.split() if len(w.strip()) >= 3]
+            for kw in keywords[:5]:  # max 5 keywords
+                try:
+                    card_ids = mw.col.find_cards(f'"{kw}"', order="c.mod desc")
+                    for cid in card_ids[:20]:
+                        sql_card_ids.add(cid)
+                except Exception:
+                    continue
+        except Exception as e:
+            print(f"plusi search sql error: {e}")
+
+        # ── Merge results (semantic score + SQL presence bonus) ──
+        card_scores = {}
+
+        # Semantic results with scores
+        for card_id, score in semantic_results:
+            card_scores[card_id] = score
+
+        # SQL results get a bonus if also in semantic, or base score if not
+        for card_id in sql_card_ids:
+            if card_id in card_scores:
+                card_scores[card_id] += 0.15  # bonus for appearing in both
+            else:
+                card_scores[card_id] = 0.5  # base score for SQL-only
+
+        if not card_scores:
+            return ""
+
+        # Sort by score, take top_k
+        ranked = sorted(card_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
+
+        # ── Load card data ──
         cards = []
-        for card_id, score in results:
+        for card_id, score in ranked:
             try:
                 card = mw.col.get_card(card_id)
                 note = card.note()
@@ -247,6 +283,7 @@ def _search_cards(query, top_k=10):
             except Exception:
                 continue
 
+        print(f"plusi search: {len(semantic_results)} semantic + {len(sql_card_ids)} sql → {len(cards)} merged")
         return "\n".join(cards) if cards else ""
     except Exception as e:
         print(f"plusi _search_cards error: {e}")
