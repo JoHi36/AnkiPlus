@@ -275,6 +275,20 @@ PLUSI_JS = """
       // Hide the custom placeholder overlay
       var phWrap = document.getElementById('ap-placeholder-wrap');
       if (phWrap) phWrap.style.display = 'none';
+      // Style the input to show @Plusi as blue
+      searchInput.style.color = '#0a84ff';
+      searchInput.style.fontWeight = '600';
+      // Revert color when user types more (after the @Plusi prefix)
+      searchInput.addEventListener('input', function onInput() {
+        if (searchInput.value.startsWith('@Plusi')) {
+          searchInput.style.color = '#0a84ff';
+          searchInput.style.fontWeight = '600';
+        } else {
+          searchInput.style.color = '';
+          searchInput.style.fontWeight = '';
+          searchInput.removeEventListener('input', onInput);
+        }
+      });
       // Trigger input event so the search bar JS recognizes the value change
       searchInput.dispatchEvent(new Event('input', { bubbles: true }));
       searchInput.dispatchEvent(new Event('focus', { bubbles: true }));
