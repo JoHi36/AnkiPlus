@@ -333,15 +333,21 @@ class AIHandler:
 
         # Erweitere System Prompt mit RAG-Anweisungen falls RAG-Kontext vorhanden
         if rag_context and rag_context.get("cards"):
-            rag_instruction = """\n\nQUELLEN-SYSTEM (WICHTIG):
-Du hast nummerierte Quellen-Karten als Kontext. Verwende diese Informationen für präzise Antworten.
+            rag_instruction = """\n\nQUELLEN-SYSTEM (KRITISCH — MUSS BEFOLGT WERDEN):
+Du erhältst Quellen-Karten aus dem Lernmaterial des Nutzers. Diese Karten sind dein PRIMÄRES Wissen.
 
-ZITIER-REGELN:
-- Verwende IMMER das Format [[CardID]] wenn du Informationen aus einer Karte nutzt (z.B. [[1735567472099]])
-- Setze die Citation DIREKT nach dem Satz oder Fakt, der daraus stammt
-- Jede wichtige Aussage sollte eine Citation haben
-- Die Karten sind nummeriert — die Nummern erscheinen dem Nutzer als [1], [2], [3] etc.
-- Die aktuelle Karte (die der Nutzer gerade lernt) ist immer die wichtigste Quelle"""
+ANTWORTSTRATEGIE:
+1. Beantworte die Frage KONKRET und DIREKT — gib dem Nutzer genau die Information die er braucht
+2. Nutze dabei die Fakten aus den Quellen-Karten als Grundlage — der Nutzer lernt diese Karten, also verwende deren Terminologie und Fakten
+3. Ergänze mit deinem eigenen Wissen nur wo die Karten nicht ausreichen, um die Frage vollständig zu beantworten
+4. Die aktuelle Karte (die der Nutzer gerade lernt) ist die WICHTIGSTE Quelle — beziehe dich darauf
+
+ZITIER-REGELN (PFLICHT):
+- Setze [[NoteID]] DIREKT nach jedem Fakt der aus einer Karte stammt (z.B. [[1735567472099]])
+- JEDE Aussage die auf einer Karte basiert MUSS eine Citation haben — ohne Citation ist die Aussage wertlos
+- Die Note-IDs findest du im Kontext als "Note XXXXX" — verwende genau diese Zahlen
+- Auch wenn du nur EINE Karte als Quelle hast, zitiere sie trotzdem
+- Die Nummern erscheinen dem Nutzer als klickbare [1], [2], [3] Badges"""
             system_instruction = system_instruction + rag_instruction
 
         # Erstelle Tools Array für Function Calling (nur wenn aktiviert)
@@ -439,7 +445,7 @@ ZITIER-REGELN:
             # Füge RAG-Kontext hinzu falls vorhanden
             if rag_context and rag_context.get("cards"):
                 cards_text = "\n".join(rag_context["cards"])
-                enhanced_message = f"{enhanced_message}\n\nRelevante Anki-Karten als Kontext:\n{cards_text}\n\nVerwende diese Karten, um die Frage zu beantworten. Zitiere mit [[CardID]] wenn du Informationen aus den Karten verwendest."
+                enhanced_message = f"{enhanced_message}\n\n--- QUELLEN-KARTEN (aus dem Lernmaterial des Nutzers) ---\n{cards_text}\n--- ENDE QUELLEN ---\n\nDu MUSST diese Karten als Hauptquelle nutzen. Zitiere JEDEN Fakt mit [[NoteID]] (die Zahl nach 'Note'). Antworte konkret auf die Frage, baue die Fakten aus den Karten ein."
         
         # WICHTIG: Erstelle Contents-Array mit Chat-Historie für besseren Kontext
         contents = []
@@ -474,8 +480,8 @@ ZITIER-REGELN:
         
         # Erstelle Request-Daten für Gemini 3 Preview Modelle
         # Preview-Modelle verwenden systemInstruction im neuen Format
-        # CRITICAL: Set max_output_tokens to 8192 for gemini-3-flash-preview to prevent cut-off answers
-        max_tokens = 8192 if "gemini-3-flash-preview" in model.lower() else 2000
+        # CRITICAL: Set max_output_tokens to 8192 to prevent cut-off answers
+        max_tokens = 8192 if "gemini-3-flash-preview" in model.lower() else 4096
         data = {
             "contents": contents,
             "generationConfig": {
@@ -847,15 +853,21 @@ ZITIER-REGELN:
 
         # Erweitere System Prompt mit RAG-Anweisungen falls RAG-Kontext vorhanden
         if rag_context and rag_context.get("cards"):
-            rag_instruction = """\n\nQUELLEN-SYSTEM (WICHTIG):
-Du hast nummerierte Quellen-Karten als Kontext. Verwende diese Informationen für präzise Antworten.
+            rag_instruction = """\n\nQUELLEN-SYSTEM (KRITISCH — MUSS BEFOLGT WERDEN):
+Du erhältst Quellen-Karten aus dem Lernmaterial des Nutzers. Diese Karten sind dein PRIMÄRES Wissen.
 
-ZITIER-REGELN:
-- Verwende IMMER das Format [[CardID]] wenn du Informationen aus einer Karte nutzt (z.B. [[1735567472099]])
-- Setze die Citation DIREKT nach dem Satz oder Fakt, der daraus stammt
-- Jede wichtige Aussage sollte eine Citation haben
-- Die Karten sind nummeriert — die Nummern erscheinen dem Nutzer als [1], [2], [3] etc.
-- Die aktuelle Karte (die der Nutzer gerade lernt) ist immer die wichtigste Quelle"""
+ANTWORTSTRATEGIE:
+1. Beantworte die Frage KONKRET und DIREKT — gib dem Nutzer genau die Information die er braucht
+2. Nutze dabei die Fakten aus den Quellen-Karten als Grundlage — der Nutzer lernt diese Karten, also verwende deren Terminologie und Fakten
+3. Ergänze mit deinem eigenen Wissen nur wo die Karten nicht ausreichen, um die Frage vollständig zu beantworten
+4. Die aktuelle Karte (die der Nutzer gerade lernt) ist die WICHTIGSTE Quelle — beziehe dich darauf
+
+ZITIER-REGELN (PFLICHT):
+- Setze [[NoteID]] DIREKT nach jedem Fakt der aus einer Karte stammt (z.B. [[1735567472099]])
+- JEDE Aussage die auf einer Karte basiert MUSS eine Citation haben — ohne Citation ist die Aussage wertlos
+- Die Note-IDs findest du im Kontext als "Note XXXXX" — verwende genau diese Zahlen
+- Auch wenn du nur EINE Karte als Quelle hast, zitiere sie trotzdem
+- Die Nummern erscheinen dem Nutzer als klickbare [1], [2], [3] Badges"""
             system_instruction = system_instruction + rag_instruction
         
         # Tools Array — built from central registry
@@ -942,7 +954,7 @@ ZITIER-REGELN:
             # Füge RAG-Kontext hinzu falls vorhanden
             if rag_context and rag_context.get("cards"):
                 cards_text = "\n".join(rag_context["cards"])
-                enhanced_message = f"{enhanced_message}\n\nRelevante Anki-Karten als Kontext:\n{cards_text}\n\nVerwende diese Karten, um die Frage zu beantworten. Zitiere mit [[CardID]] wenn du Informationen aus den Karten verwendest."
+                enhanced_message = f"{enhanced_message}\n\n--- QUELLEN-KARTEN (aus dem Lernmaterial des Nutzers) ---\n{cards_text}\n--- ENDE QUELLEN ---\n\nDu MUSST diese Karten als Hauptquelle nutzen. Zitiere JEDEN Fakt mit [[NoteID]] (die Zahl nach 'Note'). Antworte konkret auf die Frage, baue die Fakten aus den Karten ein."
         
         # Erstelle Contents-Array mit Chat-Historie
         contents = []
@@ -970,8 +982,8 @@ ZITIER-REGELN:
         })
         
         # Request-Daten
-        # CRITICAL: Set max_output_tokens to 8192 for gemini-3-flash-preview to prevent cut-off answers
-        max_tokens = 8192 if "gemini-3-flash-preview" in model.lower() else 2000
+        # CRITICAL: Set max_output_tokens to 8192 to prevent cut-off answers
+        max_tokens = 8192 if "gemini-3-flash-preview" in model.lower() else 4096
         data = {
             "contents": contents,
             "generationConfig": {
@@ -2078,10 +2090,14 @@ Karteninhalt: {question_clean[:500]}"""
 
         router_result['precise_queries'] = precise[:3]
         router_result['broad_queries'] = broad[:3]
-        router_result['embedding_query'] = ' '.join(top_kw)
+        # Build 2 embedding queries from different keyword subsets
+        if len(top_kw) >= 4:
+            router_result['embedding_queries'] = [' '.join(top_kw[:3]), ' '.join(top_kw[2:5])]
+        else:
+            router_result['embedding_queries'] = [' '.join(top_kw)]
         router_result['search_scope'] = 'current_deck'
 
-        print(f"✅ Router-Fix: precise={precise}, broad={broad}, embedding='{' '.join(top_kw)}'")
+        print(f"✅ Router-Fix: precise={precise}, broad={broad}, embedding_queries={router_result['embedding_queries']}")
         return router_result
 
     def _rag_router(self, user_message, context=None):
@@ -2197,11 +2213,11 @@ Antworte NUR mit JSON:
 {{
   "search_needed": true/false,
   "retrieval_mode": "sql" | "semantic" | "both",
-  "embedding_query": "semantisch reicher Suchtext",
+  "embedding_queries": ["semantischer Suchtext 1", "semantischer Suchtext 2"],
   "precise_queries": ["keyword1 AND keyword2", ...],
   "broad_queries": ["keyword1 OR keyword2", ...],
   "search_scope": "current_deck" | "collection",
-  "response_length": "short" | "medium" | "long"
+  "max_sources": "low" | "medium" | "high"
 }}
 
 KONTEXT-ERKENNUNG (KRITISCH):
@@ -2209,21 +2225,23 @@ Bestimme zuerst, ob die Frage sich auf die aktuelle Karte/Gesprächskontext bezi
 
 Kontextbezogene Fragen erkennen: "was ist damit gemeint", "erkläre das genauer", "ich verstehe das nicht", "was bedeutet das", "kannst du das erklären", "erzähl mir mehr darüber", Pronomen wie "das", "es", "dieser".
 → Bei kontextbezogenen Fragen: Nutze Karten-Kontext + letzte Antwort um spezifische Queries zu erstellen.
-  embedding_query MUSS die Schlüsselbegriffe der Karte enthalten.
-  Beispiel: Karte="Nucleotid", Frage="ich verstehe das nicht" → embedding_query="Nucleotid Aufbau Base Zucker Phosphat Purin Pyrimidin"
+  embedding_queries MÜSSEN die Schlüsselbegriffe der Karte enthalten, aus verschiedenen Perspektiven.
+  Beispiel: Karte="K-Zellen GIP", Frage="ich verstehe das nicht"
+  → embedding_queries=["K-Zellen GIP Dünndarm endokrine Zellen Lokalisation", "GIP Insulinsekretion Magensäure gastrointestinale Hormone Wirkung"]
 
 Eigenständige Fragen erkennen: Enthält eigene Fachbegriffe die NICHT auf der Karte stehen.
 → Bei eigenständigen Fragen: Ignoriere Kartenkontext, erstelle Queries aus der Frage selbst.
-  Beispiel: Karte="Nucleotid", Frage="wie viel Volumen hat das Herz?" → embedding_query="Herzvolumen Herzgröße Pumpleistung"
+  Beispiel: Karte="Nucleotid", Frage="wie viel Volumen hat das Herz?"
+  → embedding_queries=["Herzvolumen Herzgröße Schlagvolumen", "Pumpleistung Herzzeitvolumen Ejektionsfraktion"]
 
 REGELN:
 - search_needed=false NUR bei Smalltalk, Danke, Meta-Fragen über die App
-- embedding_query: NIEMALS die Benutzerfrage wörtlich verwenden. Immer zu fachlichen Suchbegriffen expandieren.
+- embedding_queries: 2-3 semantische Suchtexte aus VERSCHIEDENEN Perspektiven/Aspekten des Themas. NIEMALS die Benutzerfrage wörtlich verwenden. Immer zu fachlichen Suchbegriffen expandieren.
 - precise_queries: 2-3 AND-Queries aus den relevanten Keywords (Karte ODER Frage, je nach Kontext)
 - broad_queries: 2-3 OR-Queries für breitere Suche
 - search_scope: "current_deck" als Default, "collection" nur bei fächerübergreifenden Fragen
 - retrieval_mode: "both" als Default, "sql" für exakte Fakten, "semantic" für konzeptuelle Fragen
-- response_length: "short" für einfache Fakten, "medium" für Erklärungen, "long" für detaillierte Vergleiche"""
+- max_sources: "low" (3-5 Quellen, einfache Faktenfragen), "medium" (8-10, Standard-Erklärungen), "high" (bis 15, Vergleiche/Überblicke)"""
 
             # Backend-Modus: Router über Cloud Function (API-Key serverseitig)
             if use_backend:
@@ -2292,7 +2310,7 @@ REGELN:
                     "retrieval_mode": retrieval_mode,
                     "scope": router_result.get("search_scope", "current_deck"),
                     "scope_label": scope_label,
-                    "response_length": router_result.get("response_length", "medium")
+                    "max_sources": router_result.get("max_sources", "medium")
                 })
 
                 print(f"✅ Router (Backend): search_needed={router_result.get('search_needed')}, retrieval_mode={retrieval_mode}")
@@ -2405,7 +2423,7 @@ REGELN:
                                                     router_result = {
                                                         "search_needed": True,
                                                         "retrieval_mode": "both",
-                                                        "embedding_query": "",
+                                                        "embedding_queries": [],
                                                         "precise_queries": precise_queries if precise_queries else [],
                                                         "broad_queries": broad_queries if broad_queries else [],
                                                         "search_scope": "current_deck"
@@ -2424,8 +2442,12 @@ REGELN:
                                         retrieval_mode = 'both'
                                     router_result['retrieval_mode'] = retrieval_mode
 
-                                    # Extract embedding_query
-                                    embedding_query = router_result.get("embedding_query", "")
+                                    # Extract embedding_queries (array) with backward compat for embedding_query (string)
+                                    embedding_queries = router_result.get("embedding_queries", [])
+                                    if not isinstance(embedding_queries, list) or not embedding_queries:
+                                        legacy = router_result.get("embedding_query", "")
+                                        embedding_queries = [legacy] if legacy else []
+                                    embedding_queries = [q for q in embedding_queries if q and q.strip()][:3]
 
                                     # Validiere precise_queries und broad_queries
                                     precise_queries = router_result.get("precise_queries", [])
@@ -2447,7 +2469,7 @@ REGELN:
 
                                     router_result["precise_queries"] = precise_queries
                                     router_result["broad_queries"] = broad_queries
-                                    router_result["embedding_query"] = embedding_query
+                                    router_result["embedding_queries"] = embedding_queries
 
                                     # Remove legacy intent field if present
                                     router_result.pop("intent", None)
@@ -2566,11 +2588,11 @@ REGELN:
                                         "retrieval_mode": retrieval_mode,
                                         "scope": router_result.get("search_scope", "current_deck"),
                                         "scope_label": scope_label,
-                                        "response_length": router_result.get("response_length", "medium")
+                                        "max_sources": router_result.get("max_sources", "medium")
                                     })
 
                                     # Finale Log-Ausgabe
-                                    print(f"✅ Router: search_needed={router_result.get('search_needed')}, retrieval_mode={retrieval_mode}, embedding_query='{embedding_query[:80]}', precise_queries={len([q for q in precise_queries if q])}, broad_queries={len([q for q in broad_queries if q])}, scope={router_result.get('search_scope')}")
+                                    print(f"✅ Router: search_needed={router_result.get('search_needed')}, retrieval_mode={retrieval_mode}, embedding_queries={[q[:40] for q in embedding_queries]}, precise_queries={len([q for q in precise_queries if q])}, broad_queries={len([q for q in broad_queries if q])}, scope={router_result.get('search_scope')}")
                                     for i, q in enumerate(precise_queries):
                                         if q:
                                             print(f"   Precise Query {i+1}: '{q[:100]}'")
@@ -2659,13 +2681,13 @@ REGELN:
                 "retrieval_mode": "both",
                 "scope": "current_deck",
                 "scope_label": scope_label,
-                "response_length": "medium"
+                "max_sources": "medium"
             })
 
             return {
                 "search_needed": True,
                 "retrieval_mode": "both",
-                "embedding_query": fallback_embedding,
+                "embedding_queries": [fallback_embedding] if fallback_embedding else [],
                 "precise_queries": fallback_precise[:3] if fallback_precise else ["", "", ""],
                 "broad_queries": fallback_broad[:3] if fallback_broad else ["", "", ""],
                 "search_scope": "current_deck"
@@ -2743,7 +2765,7 @@ REGELN:
             return {
                 "search_needed": True,
                 "retrieval_mode": "both",
-                "embedding_query": fallback_embedding,
+                "embedding_queries": [fallback_embedding] if fallback_embedding else [],
                 "precise_queries": fallback_precise[:3] if fallback_precise else ["", "", ""],
                 "broad_queries": fallback_broad[:3] if fallback_broad else ["", "", ""],
                 "search_scope": "current_deck"
@@ -3070,7 +3092,8 @@ REGELN:
                     note = note_data['note']
                     query_count = note_data['query_count']
                     queries_found = note_data['queries_found_in']
-                    
+                    first_card_id = note_data['card_ids'][0] if note_data.get('card_ids') else note_id
+
                     # Iteriere über ALLE Felder der Note
                     note_fields = {}
                     all_images = []
@@ -3169,10 +3192,10 @@ REGELN:
             print(traceback.format_exc())
             return {"context_string": "", "citations": {}}
     
-    def get_response_with_rag(self, user_message, context=None, history=None, mode='compact', callback=None):
+    def get_response_with_rag(self, user_message, context=None, history=None, mode='compact', callback=None, insights=None):
         """
         Hauptmethode für RAG-Pipeline: Orchestriert Router → Retrieval → Generator
-        
+
         Args:
             user_message: Die Benutzer-Nachricht
             context: Optionaler Kontext (z.B. aktuelle Karte)
@@ -3180,7 +3203,8 @@ REGELN:
             mode: Optional - 'compact' oder 'detailed'
             callback: Optional - Streaming-Callback mit erweitertem Format:
                       callback(chunk, done, is_function_call, steps=None, citations=None)
-        
+            insights: Optional — Dict mit {'insights': [...]} für karten-spezifische Erkenntnisse
+
         Returns:
             Die generierte Antwort
         """
@@ -3200,15 +3224,20 @@ REGELN:
             if router_result and router_result.get("search_needed"):
                 # Stage 2: Retrieval
                 search_scope = router_result.get("search_scope", "current_deck")
-                
+
+                # Determine max_notes from router's max_sources decision
+                max_sources_level = router_result.get("max_sources", "medium")
+                max_notes = {"low": 5, "medium": 10, "high": 15}.get(max_sources_level, 10)
+                print(f"📊 RAG: max_sources={max_sources_level} → max_notes={max_notes}")
+
                 # Extract new format: precise_queries and broad_queries
                 precise_queries = router_result.get("precise_queries", [])
                 broad_queries = router_result.get("broad_queries", [])
-                
+
                 # Filter out empty queries
                 precise_queries = [q for q in precise_queries if q and q.strip()]
                 broad_queries = [q for q in broad_queries if q and q.strip()]
-                
+
                 if precise_queries or broad_queries:
                     # Check if hybrid retrieval (semantic search) is available
                     _emb_mgr = None
@@ -3231,7 +3260,7 @@ REGELN:
                             except ImportError:
                                 from hybrid_retrieval import HybridRetrieval
                             hybrid = HybridRetrieval(_emb_mgr, self)
-                            retrieval_result = hybrid.retrieve(user_message, router_result, context, max_notes=10)
+                            retrieval_result = hybrid.retrieve(user_message, router_result, context, max_notes=max_notes)
                         except Exception as e:
                             print(f"Hybrid retrieval failed, falling back to SQL: {e}")
                             retrieval_result = self._rag_retrieve_cards(
@@ -3239,7 +3268,7 @@ REGELN:
                                 broad_queries=broad_queries,
                                 search_scope=search_scope,
                                 context=context,
-                                max_notes=10
+                                max_notes=max_notes
                             )
                     else:
                         # Fallback to SQL-only (existing path)
@@ -3248,7 +3277,7 @@ REGELN:
                             broad_queries=broad_queries,
                             search_scope=search_scope,
                             context=context,
-                            max_notes=10
+                            max_notes=max_notes
                         )
 
                     # Handle new structured return format
@@ -3257,15 +3286,16 @@ REGELN:
                         citations = retrieval_result.get("citations", {})
 
                         # Inject current card as primary source if not already in citations
+                        # Use noteId as key (consistent with SQL citations from _rag_retrieve_cards)
                         if context and context.get('cardId'):
-                            current_card_id = str(context['cardId'])
-                            if current_card_id not in citations:
+                            current_note_id = str(context.get('noteId', context['cardId']))
+                            if current_note_id not in citations:
                                 import re as _re
                                 _q = context.get('question') or context.get('frontField') or ''
                                 _a = context.get('answer') or ''
                                 _q_clean = _re.sub(r'<[^>]+>', ' ', _q).strip()[:200]
                                 _a_clean = _re.sub(r'<[^>]+>', ' ', _a).strip()[:200]
-                                citations[current_card_id] = {
+                                citations[current_note_id] = {
                                     'noteId': context.get('noteId', context['cardId']),
                                     'cardId': context['cardId'],
                                     'question': _q_clean,
@@ -3276,7 +3306,8 @@ REGELN:
                                     'sources': ['current'],
                                 }
                                 # Prepend current card context to the RAG context string
-                                context_string = f"[Aktuelle Karte - CardID {current_card_id}] Frage: {_q_clean} | Antwort: {_a_clean}\n{context_string}"
+                                # Use Note ID so the AI generates [[noteId]] which matches the citations key
+                                context_string = f"Note {current_note_id} (aktuelle Karte):\n  Frage: {_q_clean}\n  Antwort: {_a_clean}\n{context_string}"
 
                         # Convert context_string to list format for backward compatibility
                         formatted_cards = [line for line in context_string.split("\n") if line.strip()]
@@ -3293,16 +3324,16 @@ REGELN:
             # Even without search, include current card as context for the AI
             if not rag_context and context and context.get('cardId'):
                 import re as _re
-                current_card_id = str(context['cardId'])
+                current_note_id = str(context.get('noteId', context['cardId']))
                 _q = context.get('question') or context.get('frontField') or ''
                 _a = context.get('answer') or ''
                 _q_clean = _re.sub(r'<[^>]+>', ' ', _q).strip()[:200]
                 _a_clean = _re.sub(r'<[^>]+>', ' ', _a).strip()[:200]
                 if _q_clean or _a_clean:
                     rag_context = {
-                        "cards": [f"[Aktuelle Karte - CardID {current_card_id}] Frage: {_q_clean} | Antwort: {_a_clean}"],
+                        "cards": [f"Note {current_note_id} (aktuelle Karte):\n  Frage: {_q_clean}\n  Antwort: {_a_clean}"],
                         "citations": {
-                            current_card_id: {
+                            current_note_id: {
                                 'noteId': context.get('noteId', context['cardId']),
                                 'cardId': context['cardId'],
                                 'question': _q_clean,
@@ -3331,6 +3362,10 @@ REGELN:
             model = "gemini-3-flash-preview"
             fallback_model = "gemini-2.5-flash"
             api_key = self.config.get("api_key", "")
+
+            # Build system prompt with optional insights injection
+            ai_tools = self.config.get("ai_tools", {"images": True, "diagrams": True, "molecules": False})
+            insights_system_prompt = get_system_prompt(mode=mode, tools=ai_tools, insights=insights)
 
             # Emit generating pipeline step (covers both search and no-search paths)
             self._emit_pipeline_step("generating", "active")
@@ -3364,13 +3399,15 @@ REGELN:
                         user_message, model, api_key,
                         context=context, history=history, mode=mode, callback=enhanced_callback,
                         rag_context=rag_context,
-                        suppress_error_callback=True # CRITICAL: Suppress error reporting for first attempt
+                        suppress_error_callback=True, # CRITICAL: Suppress error reporting for first attempt
+                        system_prompt_override=insights_system_prompt
                     )
                 else:
                     result = self._get_google_response(
                     user_message, model, api_key,
                     context=context, history=history, mode=mode,
-                    rag_context=rag_context
+                    rag_context=rag_context,
+                    system_prompt_override=insights_system_prompt
                 )
                 return result
             except Exception as e:
@@ -3410,13 +3447,15 @@ REGELN:
                             user_message, fallback_model, api_key,
                             context=context, history=fallback_history, mode=mode, callback=enhanced_callback,
                             rag_context=fallback_rag_context,
-                            suppress_error_callback=True # Auch hier Fehler unterdrücken für letzten Rettungsversuch
+                            suppress_error_callback=True, # Auch hier Fehler unterdrücken für letzten Rettungsversuch
+                            system_prompt_override=insights_system_prompt
                         )
                     else:
                         return self._get_google_response(
                             user_message, fallback_model, api_key,
                             context=context, history=fallback_history, mode=mode,
-                            rag_context=fallback_rag_context
+                            rag_context=fallback_rag_context,
+                            system_prompt_override=insights_system_prompt
                         )
                 except Exception as fallback_e:
                     print(f"⚠️ Fallback mit RAG gescheitert: {fallback_e}")
@@ -3429,7 +3468,8 @@ REGELN:
                             user_message, fallback_model, api_key,
                             context=context, history=None, mode=mode, callback=enhanced_callback,
                             rag_context=None,
-                            suppress_error_callback=False
+                            suppress_error_callback=False,
+                            system_prompt_override=insights_system_prompt
                         )
                     else:
                         raise fallback_e

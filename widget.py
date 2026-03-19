@@ -71,7 +71,7 @@ class AIRequestThread(QThread):
     metadata_signal = pyqtSignal(str, object, object, object)  # requestId, steps, citations, step_labels
     pipeline_signal = pyqtSignal(str, str, str, object)  # requestId, step, status, data
 
-    def __init__(self, ai_handler, text, widget_ref, history=None, mode='compact', request_id=None):
+    def __init__(self, ai_handler, text, widget_ref, history=None, mode='compact', request_id=None, insights=None):
         super().__init__()
         self.ai_handler = ai_handler
         self.text = text
@@ -80,6 +80,7 @@ class AIRequestThread(QThread):
         self.mode = mode
         self.request_id = request_id or str(uuid.uuid4())
         self._cancelled = False
+        self.insights = insights
 
     def cancel(self):
         """Cancel the request."""
@@ -132,7 +133,8 @@ class AIRequestThread(QThread):
 
             bot_msg = self.ai_handler.get_response_with_rag(
                 self.text, context=context, history=card_history,
-                mode=self.mode, callback=stream_callback
+                mode=self.mode, callback=stream_callback,
+                insights=self.insights
             )
 
             if not self._cancelled:
@@ -1040,9 +1042,22 @@ class ChatbotWidget(QWidget):
             loading_payload = {"type": "loading"}
             self.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(loading_payload)});")
 
+            # Load insights for the current card (if any) to inject into system prompt
+            card_insights = None
+            if self.current_card_context and self.current_card_context.get('cardId'):
+                try:
+                    try:
+                        from .card_sessions_storage import load_insights
+                    except ImportError:
+                        from card_sessions_storage import load_insights
+                    card_id = self.current_card_context['cardId']
+                    card_insights = load_insights(int(card_id))
+                except Exception as e:
+                    print(f"⚠️ Failed to load insights for card context: {e}")
+
             # Start AI request thread immediately — card history loading happens inside the thread
             # to avoid blocking the main Qt thread
-            self._ai_thread = AIRequestThread(ai, text, self, history=history, mode=mode, request_id=request_id)
+            self._ai_thread = AIRequestThread(ai, text, self, history=history, mode=mode, request_id=request_id, insights=card_insights)
             self._ai_thread._card_context_for_history = self.current_card_context
             self._ai_thread.chunk_signal.connect(self.on_streaming_chunk)
             self._ai_thread.finished_signal.connect(self.on_streaming_finished)
