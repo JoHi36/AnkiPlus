@@ -2199,8 +2199,8 @@ function AppInner() {
             label: 'Übersicht',
             shortcut: '↵',
             onClick: () => {
-              const overviewPrompt = "[[OVERVIEW]] Gib mir eine vollständige Übersicht zu dieser Lernkarte. Erkläre das Thema ausführlich: Was ist der Kerninhalt, warum ist es wichtig, und wie hängt es mit verwandten Konzepten zusammen? Gib eine umfassende Zusammenfassung.";
-              handleSend(overviewPrompt, { mode: 'detailed' });
+              // Short display text for chat, full instruction goes internally via mode
+              handleSend("Übersicht zu dieser Karte", { mode: 'detailed' });
             },
             disabled: chatHook.isLoading,
             pulse: (() => {
