@@ -52,7 +52,7 @@ export default function ChatInput({
   const [isFocused, setIsFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const hasPlusiTag = /(?:^|\s)@Plusi(?:\s|$)/i.test(input) || input.trim() === '@Plusi';
+  const hasPlusiTag = input.startsWith('@Plusi');
 
   // Auto-focus textarea when component mounts (chat panel opened)
   useEffect(() => {
