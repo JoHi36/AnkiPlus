@@ -148,9 +148,9 @@ export function AuthCallbackPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#030303] text-white flex items-center justify-center">
+      <div className="min-h-screen bg-[#0F0F0F] text-white flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-teal-500 mx-auto mb-4" />
+          <Loader2 className="w-12 h-12 animate-spin text-[#0a84ff] mx-auto mb-4" />
           <p className="text-neutral-400">
             {transferStatus === 'checking' && 'Suche Anki Plugin...'}
             {transferStatus === 'sending' && 'Verbinde mit Anki...'}
@@ -162,8 +162,8 @@ export function AuthCallbackPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-[#030303] text-white flex items-center justify-center p-6">
-        <div className="w-full max-w-md bg-[#0A0A0A] border border-red-500/20 rounded-2xl p-8">
+      <div className="min-h-screen bg-[#0F0F0F] text-white flex items-center justify-center p-6">
+        <div className="w-full max-w-md bg-[#141414] border border-red-500/20 rounded-2xl p-8">
           <div className="flex items-start gap-3 mb-4">
             <AlertCircle className="w-6 h-6 text-red-400 flex-shrink-0" />
             <div>
@@ -173,7 +173,7 @@ export function AuthCallbackPage() {
           </div>
           <button
             onClick={() => navigate('/login')}
-            className="w-full py-3 bg-teal-500 hover:bg-teal-400 text-black font-semibold rounded-lg transition-colors"
+            className="w-full py-3 bg-[#0a84ff] hover:bg-[#0a84ff]/90 text-white font-semibold rounded-lg transition-colors"
           >
             Zurück zum Login
           </button>
@@ -185,10 +185,9 @@ export function AuthCallbackPage() {
   // Success — auto-connected
   if (transferStatus === 'success') {
     return (
-      <div className="min-h-screen bg-[#030303] text-white flex items-center justify-center p-6 relative">
-        <div className="fixed top-0 left-0 w-full h-[500px] bg-green-900/10 blur-[120px] pointer-events-none z-0" />
+      <div className="min-h-screen bg-[#0F0F0F] text-white flex items-center justify-center p-6 relative">
         <div className="w-full max-w-md relative z-10">
-          <div className="bg-[#0A0A0A] border border-green-500/20 rounded-2xl p-8 shadow-2xl text-center">
+          <div className="bg-[#141414] border border-green-500/20 rounded-2xl p-8 shadow-2xl text-center">
             <div className="w-16 h-16 bg-green-500/10 border border-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle2 className="w-8 h-8 text-green-400" />
             </div>
@@ -199,14 +198,14 @@ export function AuthCallbackPage() {
             </p>
             <div className="flex gap-3">
               <button
-                onClick={() => navigate('/dashboard')}
+                onClick={() => navigate('/account')}
                 className="flex-1 py-3 bg-white/5 border border-white/10 text-white font-medium rounded-lg hover:bg-white/10 transition-colors"
               >
                 Dashboard
               </button>
               <button
                 onClick={() => navigate('/')}
-                className="flex-1 py-3 bg-teal-500 hover:bg-teal-400 text-black font-semibold rounded-lg transition-colors"
+                className="flex-1 py-3 bg-[#0a84ff] hover:bg-[#0a84ff]/90 text-white font-semibold rounded-lg transition-colors"
               >
                 Startseite
               </button>
@@ -219,11 +218,9 @@ export function AuthCallbackPage() {
 
   // Manual fallback — all automatic methods failed
   return (
-    <div className="min-h-screen bg-[#030303] text-white flex items-center justify-center p-6 relative">
-      <div className="fixed top-0 left-0 w-full h-[500px] bg-teal-900/10 blur-[120px] pointer-events-none z-0" />
-
+    <div className="min-h-screen bg-[#0F0F0F] text-white flex items-center justify-center p-6 relative">
       <div className="w-full max-w-md relative z-10">
-        <div className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-8 shadow-2xl">
+        <div className="bg-[#141414] border border-white/10 rounded-2xl p-8 shadow-2xl">
           {/* Header */}
           <div className="text-center mb-6">
             <div className="w-16 h-16 bg-amber-500/10 border border-amber-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -240,7 +237,7 @@ export function AuthCallbackPage() {
           {/* Retry Button */}
           <button
             onClick={handleRetryTransfer}
-            className="w-full py-3 mb-4 bg-teal-500/10 border border-teal-500/20 text-teal-400 font-medium rounded-lg hover:bg-teal-500/20 transition-colors text-sm"
+            className="w-full py-3 mb-4 bg-[#0a84ff]/10 border border-[#0a84ff]/20 text-[#0a84ff] font-medium rounded-lg hover:bg-[#0a84ff]/20 transition-colors text-sm"
           >
             Erneut automatisch verbinden
           </button>
@@ -277,8 +274,8 @@ export function AuthCallbackPage() {
           </div>
 
           {/* Instructions */}
-          <div className="mb-6 p-4 bg-teal-500/10 border border-teal-500/20 rounded-lg">
-            <p className="text-sm text-teal-300 mb-3 font-medium">So verbindest du manuell:</p>
+          <div className="mb-6 p-4 bg-[#0a84ff]/10 border border-[#0a84ff]/20 rounded-lg">
+            <p className="text-sm text-[#0a84ff] mb-3 font-medium">So verbindest du manuell:</p>
             <ol className="text-xs text-neutral-400 space-y-2 list-decimal list-inside">
               <li><strong>Kopiere den Schlüssel</strong> oben</li>
               <li><strong>Öffne Anki</strong> und das Chat-Panel (Cmd+I / Ctrl+I)</li>
@@ -290,14 +287,14 @@ export function AuthCallbackPage() {
           {/* Actions */}
           <div className="flex gap-3">
             <button
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate('/account')}
               className="flex-1 py-3 bg-white/5 border border-white/10 text-white font-medium rounded-lg hover:bg-white/10 transition-colors"
             >
               Dashboard
             </button>
             <button
               onClick={() => navigate('/')}
-              className="flex-1 py-3 bg-teal-500 hover:bg-teal-400 text-black font-semibold rounded-lg transition-colors"
+              className="flex-1 py-3 bg-[#0a84ff] hover:bg-[#0a84ff]/90 text-white font-semibold rounded-lg transition-colors"
             >
               Startseite
             </button>

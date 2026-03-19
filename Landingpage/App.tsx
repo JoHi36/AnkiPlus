@@ -1,69 +1,34 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { ProtectedRoute } from './src/components/ProtectedRoute';
 import { LandingPage } from './src/pages/LandingPage';
-import { LoginPage } from './src/pages/LoginPage';
-import { RegisterPage } from './src/pages/RegisterPage';
-import { DashboardPage } from './src/pages/DashboardPage';
-import { SubscriptionPage } from './src/pages/SubscriptionPage';
-import { StatisticsPage } from './src/pages/StatisticsPage';
-import { SettingsPage } from './src/pages/SettingsPage';
-import { InstallPage } from './src/pages/InstallPage';
+import { AuthPage } from './src/pages/AuthPage';
+import { AccountPage } from './src/pages/AccountPage';
 import { AuthCallbackPage } from './src/pages/AuthCallbackPage';
+
+/** Redirect that preserves query params (needed for ?link= forwarding) */
+function RedirectWithParams({ to }: { to: string }) {
+  const location = useLocation();
+  return <Navigate to={to + location.search} replace />;
+}
 
 function App() {
   return (
     <AuthProvider>
       <Routes>
-        {/* Public Routes */}
+        {/* Active routes */}
         <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/install" element={<InstallPage />} />
-        
-        {/* Protected Routes */}
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <DashboardPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dashboard/subscription"
-          element={
-            <ProtectedRoute>
-              <SubscriptionPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dashboard/statistics"
-          element={
-            <ProtectedRoute>
-              <StatisticsPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dashboard/settings"
-          element={
-            <ProtectedRoute>
-              <SettingsPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/auth/callback"
-          element={
-            <ProtectedRoute>
-              <AuthCallbackPage />
-            </ProtectedRoute>
-          }
-        />
-        
-        {/* Catch all - redirect to home */}
+        <Route path="/login" element={<AuthPage />} />
+        <Route path="/account" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
+        <Route path="/auth/callback" element={<ProtectedRoute><AuthCallbackPage /></ProtectedRoute>} />
+
+        {/* Redirects for old routes */}
+        <Route path="/register" element={<RedirectWithParams to="/login" />} />
+        <Route path="/install" element={<Navigate to="/" replace />} />
+        <Route path="/dashboard/*" element={<Navigate to="/account" replace />} />
+        <Route path="/dashboard" element={<Navigate to="/account" replace />} />
+
+        {/* Catch all */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>

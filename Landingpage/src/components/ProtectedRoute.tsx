@@ -12,9 +12,9 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   if (loading) {
     // Show loading state while checking auth
     return (
-      <div className="min-h-screen bg-[#030303] text-white flex items-center justify-center">
+      <div className="min-h-screen bg-[#0F0F0F] text-white flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-teal-500/30 border-t-teal-500 rounded-full animate-spin mx-auto mb-4" />
+          <div className="w-12 h-12 border-4 border-[#0a84ff]/30 border-t-[#0a84ff] rounded-full animate-spin mx-auto mb-4" />
           <p className="text-neutral-400">Lade...</p>
         </div>
       </div>
