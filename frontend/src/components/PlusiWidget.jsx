@@ -48,7 +48,7 @@ export default function PlusiWidget({ mood = 'neutral', text = '', metaText = ''
           <div className="plusi-w-char">
             <MascotCharacter
               mood={isLoading ? 'thinking' : mood}
-              size={32}
+              size={48}
               isThinking={isLoading}
               active={false}
             />
@@ -116,8 +116,8 @@ const PLUSI_CSS = `
 
   .plusi-w-char {
     flex-shrink: 0;
-    width: 32px;
-    height: 32px;
+    width: 48px;
+    height: 52px;
     position: relative;
     overflow: visible;
   }

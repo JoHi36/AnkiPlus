@@ -64,6 +64,17 @@ export default function ChatInput({
     return () => clearTimeout(timer);
   }, []);
 
+  // Listen for "Plusi fragen" from MascotShell context menu
+  useEffect(() => {
+    const handler = (e: any) => {
+      const prefix = e.detail?.prefix || '@Plusi ';
+      setInput(prefix);
+      setTimeout(() => textareaRef.current?.focus(), 50);
+    };
+    window.addEventListener('plusi-ask-focus', handler);
+    return () => window.removeEventListener('plusi-ask-focus', handler);
+  }, []);
+
   // Auto-Grow textarea
   useEffect(() => {
     if (textareaRef.current) {
@@ -148,31 +159,33 @@ export default function ChatInput({
 
         {/* Textarea area */}
         <div className="relative px-4 py-3">
-          {/* @Plusi tag overlay */}
+          {/* @Plusi tag overlay — rendered OVER textarea with pointer-events:none */}
           {hasPlusiTag && (
             <div
               aria-hidden="true"
               style={{
                 position: 'absolute',
                 top: 0, left: 0, right: 0, bottom: 0,
-                padding: '12px 16px', // matches px-4 py-3 (16px / 12px)
+                padding: '12px 16px',
                 pointerEvents: 'none',
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
                 font: 'inherit',
                 lineHeight: 'inherit',
+                fontSize: '15px',
                 overflow: 'hidden',
-                zIndex: 0,
+                zIndex: 2,
               }}
             >
               <span style={{
-                background: 'rgba(10,132,255,.18)',
+                background: 'rgba(10,132,255,.22)',
                 color: '#0a84ff',
-                padding: '1px 6px',
-                borderRadius: '4px',
+                padding: '2px 7px',
+                borderRadius: '5px',
                 fontWeight: 600,
-                fontSize: '13px',
+                fontSize: '14px',
                 fontFamily: "'Space Grotesk', sans-serif",
+                letterSpacing: '0.02em',
               }}>@Plusi</span>
               <span style={{ color: 'transparent' }}>{input.slice(6)}</span>
             </div>
