@@ -315,6 +315,79 @@ registry.register(ToolDefinition(
 
 
 # ---------------------------------------------------------------------------
+# Show Card Tool
+# ---------------------------------------------------------------------------
+
+SHOW_CARD_SCHEMA = {
+    "name": "show_card",
+    "description": (
+        "Zeigt eine einzelne Anki-Karte als Widget im Chat an. Verwende dieses Tool "
+        "wenn du eine bestimmte Karte aus deinem Kontext (z.B. aus den Referenzen/Citations) "
+        "hervorheben oder dem Nutzer zeigen möchtest. Die card_id bekommst du aus dem "
+        "Lernmaterial-Kontext (LERNMATERIAL-Abschnitt). Beispiel: 'Schau dir speziell "
+        "diese Karte an:' → show_card mit der card_id."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "card_id": {
+                "type": "integer",
+                "description": "Die Anki card_id der anzuzeigenden Karte"
+            }
+        },
+        "required": ["card_id"]
+    }
+}
+
+
+def execute_show_card(args):
+    """Show a single card by ID as an inline widget.
+
+    Takes card_id from RAG context/citations, loads card data,
+    returns dict for CardWidget rendering.
+    """
+    try:
+        from .anki_utils import run_on_main_thread, strip_html_and_cloze
+    except ImportError:
+        from anki_utils import run_on_main_thread, strip_html_and_cloze
+
+    card_id = args.get("card_id")
+    if not card_id:
+        return {"error": "Keine card_id angegeben"}
+
+    def _load():
+        from aqt import mw
+        try:
+            card = mw.col.get_card(int(card_id))
+            note = card.note()
+            front = note.fields[0] if note.fields else ""
+            back = note.fields[1] if len(note.fields) > 1 else ""
+            deck_name = mw.col.decks.name(card.did)
+            return {
+                "card_id": int(card_id),
+                "front": strip_html_and_cloze(front)[:300],
+                "back": strip_html_and_cloze(back)[:300],
+                "deck_name": deck_name,
+            }
+        except Exception as e:
+            return {"error": f"Karte {card_id} nicht gefunden: {e}"}
+
+    return run_on_main_thread(_load, timeout=9)
+
+
+registry.register(ToolDefinition(
+    name="show_card",
+    schema=SHOW_CARD_SCHEMA,
+    execute_fn=execute_show_card,
+    category="content",
+    config_key=None,
+    agent="tutor",
+    display_type="widget",
+    timeout_seconds=10,
+))
+
+
+# ---------------------------------------------------------------------------
 # Search Deck Tool
 # ---------------------------------------------------------------------------
 

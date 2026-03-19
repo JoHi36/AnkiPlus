@@ -1,6 +1,7 @@
 import React from 'react';
 
 const loadingLabels = {
+  show_card: "Lädt Karte...",
   search_deck: "Sucht Karten...",
   get_learning_stats: "Lädt Statistiken...",
   spawn_plusi: "Plusi denkt nach...",

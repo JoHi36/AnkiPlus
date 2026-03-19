@@ -1,5 +1,6 @@
 import React from 'react';
 import PlusiWidget from './PlusiWidget';
+import CardWidget from './CardWidget';
 import CardListWidget from './CardListWidget';
 import StatsWidget from './StatsWidget';
 import ToolLoadingPlaceholder from './ToolLoadingPlaceholder';
@@ -34,6 +35,17 @@ export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, i
                   metaText={tw.result.meta || ''}
                   isLoading={false}
                   isFrozen={!isStreaming && !isLastMessage}
+                />
+              );
+            case 'show_card':
+              return (
+                <CardWidget
+                  key={`card-${i}`}
+                  cardId={tw.result.card_id}
+                  front={tw.result.front}
+                  back={tw.result.back}
+                  deckName={tw.result.deck_name}
+                  onCardClick={handleCardClick}
                 />
               );
             case 'search_deck':

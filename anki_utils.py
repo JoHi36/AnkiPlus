@@ -11,7 +11,8 @@ def run_on_main_thread(fn, timeout=14):
 
     Tool execute functions run in daemon threads (via _run_with_timeout in
     tool_executor.py), but Anki's mw.col is only safe on the main thread.
-    This helper uses QTimer.singleShot(0, ...) to marshal the call.
+    This helper uses Anki's mw.taskman.run_on_main() to marshal the call,
+    which is the official thread-safe way to post to the main thread.
 
     Args:
         fn: Callable that takes no arguments and returns a value.
@@ -26,7 +27,7 @@ def run_on_main_thread(fn, timeout=14):
         TimeoutError: If the main thread doesn't respond in time.
         Exception: Any exception raised by fn.
     """
-    from aqt.qt import QTimer
+    from aqt import mw
 
     result = {}
     error = {}
@@ -40,7 +41,10 @@ def run_on_main_thread(fn, timeout=14):
         finally:
             done.set()
 
-    QTimer.singleShot(0, _on_main)
+    # mw.taskman.run_on_main() is Anki's official API for posting
+    # callbacks to the main thread from background threads.
+    # Unlike QTimer.singleShot, this works reliably from any thread.
+    mw.taskman.run_on_main(_on_main)
     if not done.wait(timeout=timeout):
         raise TimeoutError("Main thread did not respond")
     if "value" in error:
