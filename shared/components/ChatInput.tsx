@@ -32,7 +32,6 @@ export interface ChatInputProps {
   onClose?: () => void; // Used by ESC handler in handleKeyDown to close the parent panel
   actionPrimary: ActionConfig;
   actionSecondary: ActionConfig;
-  companionMode?: boolean;
 }
 
 export default function ChatInput({
@@ -48,11 +47,12 @@ export default function ChatInput({
   onClose,
   actionPrimary,
   actionSecondary,
-  companionMode = false,
 }: ChatInputProps) {
   const [input, setInput] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const hasPlusiTag = input.trim().startsWith('@Plusi');
 
   // Auto-focus textarea when component mounts (chat panel opened)
   useEffect(() => {
@@ -63,13 +63,6 @@ export default function ChatInput({
     }, 200);
     return () => clearTimeout(timer);
   }, []);
-
-  // Focus textarea when companion mode activates
-  useEffect(() => {
-    if (companionMode && textareaRef.current) {
-      textareaRef.current.focus();
-    }
-  }, [companionMode]);
 
   // Auto-Grow textarea
   useEffect(() => {
@@ -133,30 +126,57 @@ export default function ChatInput({
         className="relative backdrop-blur-xl rounded-2xl overflow-visible transition-all duration-300"
         style={{
           backgroundColor: 'rgba(21,21,21,0.75)',
-          border: '1px solid rgba(255,255,255,0.08)',
+          border: hasPlusiTag ? '1px solid rgba(10,132,255,0.4)' : '1px solid rgba(255,255,255,0.08)',
           boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
         }}
       >
-        {/* Animated snake border — blue on focus, purple in companion mode */}
+        {/* Animated snake border — blue on focus or @Plusi tag */}
         <div
           className="absolute pointer-events-none transition-opacity duration-300"
           style={{
             inset: '-1px',
             borderRadius: '17px',
             padding: '1px',
-            background: companionMode
-              ? 'conic-gradient(from var(--border-angle, 0deg) at 50% 100%, rgba(99,102,241,0.0) 0deg, rgba(139,92,246,0.7) 60deg, rgba(99,102,241,0.2) 120deg, rgba(99,102,241,0.0) 180deg, rgba(99,102,241,0.2) 240deg, rgba(139,92,246,0.7) 300deg, rgba(99,102,241,0.0) 360deg)'
-              : 'conic-gradient(from var(--border-angle, 0deg) at 50% 100%, rgba(10,132,255,0.0) 0deg, rgba(10,132,255,0.5) 60deg, rgba(10,132,255,0.1) 120deg, rgba(10,132,255,0.0) 180deg, rgba(10,132,255,0.1) 240deg, rgba(10,132,255,0.5) 300deg, rgba(10,132,255,0.0) 360deg)',
+            background: 'conic-gradient(from var(--border-angle, 0deg) at 50% 100%, rgba(10,132,255,0.0) 0deg, rgba(10,132,255,0.5) 60deg, rgba(10,132,255,0.1) 120deg, rgba(10,132,255,0.0) 180deg, rgba(10,132,255,0.1) 240deg, rgba(10,132,255,0.5) 300deg, rgba(10,132,255,0.0) 360deg)',
             WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
             WebkitMaskComposite: 'xor',
             maskComposite: 'exclude',
-            opacity: companionMode ? 1 : (isFocused ? 1 : 0),
+            opacity: (isFocused || hasPlusiTag) ? 1 : 0,
             animation: 'borderRotate 4s linear infinite',
           }}
         />
 
         {/* Textarea area */}
         <div className="relative px-4 py-3">
+          {/* @Plusi tag overlay */}
+          {hasPlusiTag && (
+            <div
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                top: 0, left: 0, right: 0, bottom: 0,
+                padding: '12px 16px', // matches px-4 py-3 (16px / 12px)
+                pointerEvents: 'none',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                font: 'inherit',
+                lineHeight: 'inherit',
+                overflow: 'hidden',
+                zIndex: 0,
+              }}
+            >
+              <span style={{
+                background: 'rgba(10,132,255,.18)',
+                color: '#0a84ff',
+                padding: '1px 6px',
+                borderRadius: '4px',
+                fontWeight: 600,
+                fontSize: '13px',
+                fontFamily: "'Space Grotesk', sans-serif",
+              }}>@Plusi</span>
+              <span style={{ color: 'transparent' }}>{input.slice(6)}</span>
+            </div>
+          )}
           <textarea
             ref={textareaRef}
             value={input}
@@ -167,7 +187,7 @@ export default function ChatInput({
             placeholder="Stelle eine Frage..."
             rows={1}
             className="w-full min-h-[24px] max-h-[120px] p-0 pr-10 bg-transparent text-base-content text-[15px] leading-relaxed resize-none outline-none placeholder:text-base-content/25"
-            style={{ border: 'none' }}
+            style={{ border: 'none', position: 'relative', zIndex: 1 }}
           />
           {/* Send button — appears when text present */}
           {isLoading ? (
