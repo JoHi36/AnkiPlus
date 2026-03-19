@@ -475,6 +475,12 @@ function SemanticChunks({ data, isDone }: { data: Record<string, any>; isDone: b
 function MergeBar({ data }: { data: Record<string, any> }) {
   const kw = data.keyword_count || 0;
   const sem = data.semantic_count || 0;
+  const total = kw + sem;
+  // Weight position: 0 = all keyword, 1 = all semantic
+  const wp = typeof data.weight_position === 'number'
+    ? data.weight_position
+    : (total > 0 ? sem / total : 0.5);
+  const wpPct = `${Math.round(wp * 100)}%`;
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
@@ -490,18 +496,19 @@ function MergeBar({ data }: { data: Record<string, any> }) {
             right: 0,
             height: 1.5,
             borderRadius: 1,
-            background: 'linear-gradient(90deg, rgba(10,132,255,0.3), rgba(20,184,166,0.3))',
+            background: `linear-gradient(90deg, rgba(10,132,255,0.3) 0%, rgba(10,132,255,0.4) ${wpPct}, rgba(20,184,166,0.4) ${wpPct}, rgba(20,184,166,0.3) 100%)`,
           }}
         />
         <div
           style={{
             position: 'absolute',
-            left: '50%',
+            left: wpPct,
             transform: 'translateX(-50%)',
-            width: 5,
-            height: 5,
+            width: 6,
+            height: 6,
             borderRadius: '50%',
-            background: 'rgba(255,255,255,0.25)',
+            background: '#0a84ff',
+            boxShadow: '0 0 6px rgba(10,132,255,0.4)',
           }}
         />
       </div>
@@ -738,16 +745,18 @@ export default function ThoughtStream({
   const chronologicalDone = [...doneStack].reverse();
 
   // Collapse state
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const hasText = Boolean(message && message.trim().length > 0);
+  // Saved messages (not streaming) start collapsed; live messages start expanded
+  const [isCollapsed, setIsCollapsed] = useState(!isStreaming && hasText);
 
   // Auto-collapse when streaming text arrives and pipeline is done
+  // Only during live streaming — saved messages start collapsed and stay where user puts them
   useEffect(() => {
-    if (hasText && !isCollapsed && !isProcessing && !activeEntry) {
+    if (isStreaming && hasText && !isCollapsed && !isProcessing && !activeEntry) {
       const t = setTimeout(() => setIsCollapsed(true), 800);
       return () => clearTimeout(t);
     }
-  }, [hasText, isCollapsed, isProcessing, activeEntry]);
+  }, [isStreaming, hasText, isCollapsed, isProcessing, activeEntry]);
 
   // Expand when new pipeline starts
   useEffect(() => {
