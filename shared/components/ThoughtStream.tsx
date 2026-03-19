@@ -748,19 +748,24 @@ export default function ThoughtStream({
   const hasText = Boolean(message && message.trim().length > 0);
   // Saved messages (not streaming) start collapsed; live messages start expanded
   const [isCollapsed, setIsCollapsed] = useState(!isStreaming && hasText);
+  // Track if user manually expanded — prevents auto-collapse from overriding user intent
+  const userExpandedRef = useRef(false);
 
   // Auto-collapse when streaming text arrives and pipeline is done
-  // Only during live streaming — saved messages start collapsed and stay where user puts them
+  // Only during live streaming, and only if user hasn't manually expanded
   useEffect(() => {
-    if (isStreaming && hasText && !isCollapsed && !isProcessing && !activeEntry) {
+    if (isStreaming && hasText && !isCollapsed && !isProcessing && !activeEntry && !userExpandedRef.current) {
       const t = setTimeout(() => setIsCollapsed(true), 800);
       return () => clearTimeout(t);
     }
   }, [isStreaming, hasText, isCollapsed, isProcessing, activeEntry]);
 
-  // Expand when new pipeline starts
+  // Expand when new pipeline starts — reset user override
   useEffect(() => {
-    if (isProcessing) setIsCollapsed(false);
+    if (isProcessing) {
+      setIsCollapsed(false);
+      userExpandedRef.current = false;
+    }
   }, [isProcessing]);
 
   const hasCitations = Object.keys(citations).length > 0;
@@ -786,7 +791,7 @@ export default function ThoughtStream({
       {/* ── Collapsed view ── */}
       {isCollapsed && !isProcessing && !showLoadingBox && (
         <button
-          onClick={() => setIsCollapsed(false)}
+          onClick={() => { userExpandedRef.current = true; setIsCollapsed(false); }}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -819,7 +824,7 @@ export default function ThoughtStream({
           {/* Toggle row (when pipeline is done and has steps) */}
           {!isProcessing && totalSteps > 0 && (
             <button
-              onClick={() => setIsCollapsed(true)}
+              onClick={() => { userExpandedRef.current = false; setIsCollapsed(true); }}
               style={{
                 display: 'flex',
                 alignItems: 'center',
