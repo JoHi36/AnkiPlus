@@ -546,6 +546,7 @@ function PhaseRow({ step, data, status, isActive }: { step: string; data: Record
     <div
       style={{
         padding: '6px 0',
+        borderTop: '1px solid rgba(255,255,255,0.04)',
         animation: isActive ? undefined : 'ts-phaseReveal 0.25s ease-out both',
       }}
     >
@@ -764,7 +765,7 @@ export default function ThoughtStream({
   if (isLegacy) return <LegacyThoughtStream steps={steps} citations={citations} citationIndices={citationIndices} bridge={bridge} onPreviewCard={onPreviewCard} />;
 
   return (
-    <div style={{ marginBottom: 8, maxWidth: '100%', userSelect: 'none' }}>
+    <div style={{ marginBottom: 8, maxWidth: '100%', userSelect: 'none', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 4 }}>
       {/* ── Collapsed view ── */}
       {isCollapsed && !isProcessing && !showLoadingBox && (
         <button
