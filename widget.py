@@ -469,6 +469,48 @@ class ChatbotWidget(QWidget):
             except Exception as e:
                 print(f"_handle_js_message: saveCardSection error: {e}")
 
+        elif msg_type == 'getCardInsights':
+            try:
+                from .card_sessions_storage import load_insights
+                card_id = int(data) if isinstance(data, (int, str)) else data.get('cardId', 0)
+                result = load_insights(card_id)
+                payload = {"type": "cardInsightsLoaded", "cardId": card_id, "success": True, "data": result}
+                payload_json = json.dumps(payload, ensure_ascii=False)
+                js = f"""(function() {{
+                    var p = {payload_json};
+                    if (typeof window.ankiReceive === 'function') window.ankiReceive(p);
+                    window.dispatchEvent(new CustomEvent('ankiCardInsightsLoaded', {{detail: p}}));
+                }})();"""
+                self.web_view.page().runJavaScript(js)
+            except Exception as e:
+                print(f"_handle_js_message: getCardInsights error: {e}")
+
+        elif msg_type == 'saveCardInsights':
+            try:
+                from .card_sessions_storage import save_insights
+                card_id = data.get('cardId')
+                insights_data = data.get('insights')
+                if card_id and insights_data:
+                    save_insights(int(card_id), insights_data)
+            except Exception as e:
+                print(f"_handle_js_message: saveCardInsights error: {e}")
+
+        elif msg_type == 'getCardRevlog':
+            try:
+                from .card_sessions_storage import get_card_revlog
+                card_id = int(data) if isinstance(data, (int, str)) else data.get('cardId', 0)
+                result = get_card_revlog(card_id)
+                payload = {"type": "cardRevlogLoaded", "cardId": card_id, "success": True, "data": result}
+                payload_json = json.dumps(payload, ensure_ascii=False)
+                js = f"""(function() {{
+                    var p = {payload_json};
+                    if (typeof window.ankiReceive === 'function') window.ankiReceive(p);
+                    window.dispatchEvent(new CustomEvent('ankiCardRevlogLoaded', {{detail: p}}));
+                }})();"""
+                self.web_view.page().runJavaScript(js)
+            except Exception as e:
+                print(f"_handle_js_message: getCardRevlog error: {e}")
+
         elif msg_type == 'loadDeckMessages':
             deck_id = data if isinstance(data, (int, str)) else data.get('deckId')
             try:
