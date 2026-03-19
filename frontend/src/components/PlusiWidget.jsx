@@ -75,7 +75,7 @@ export default function PlusiWidget({
           <div className="plusi-mascot">
             <MascotCharacter
               mood={isLoading ? 'thinking' : mood}
-              size={48}
+              size={24}
               isThinking={isLoading}
               active={false}
             />
@@ -178,10 +178,6 @@ const PLUSI_CSS = `
     height: 24px;
     position: relative;
     overflow: visible;
-  }
-  .plusi-mascot > * {
-    transform: scale(0.5);
-    transform-origin: top left;
   }
   .plusi-mascot .mascot-shadow { display: none !important; }
 

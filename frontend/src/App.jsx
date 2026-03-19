@@ -912,6 +912,7 @@ function AppInner() {
               mood: payload.mood || 'neutral',
               text: payload.text || '',
               meta: payload.meta || '',
+              friendship: payload.friendship || null,
               error: payload.error || false,
             };
             if (!result.error) {
