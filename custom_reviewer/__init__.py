@@ -816,6 +816,16 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
             print(f"plusi:settings error: {e}")
         return (True, None)
 
+    elif message == "plusi:panel":
+        from ..plusi_panel import toggle_panel
+        toggle_panel()
+        return (True, None)
+
+    elif message == "plusi:panelClose":
+        from ..plusi_panel import toggle_panel
+        toggle_panel()
+        return (True, None)
+
     elif message == "chat:open":
         try:
             from .. import ui_setup

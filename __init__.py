@@ -494,6 +494,11 @@ def on_profile_loaded():
             except Exception as e:
                 print(f"Plusi self-reflect failed: {e}")
             sync_mood('neutral')
+            try:
+                from .plusi_panel import notify_new_diary_entry
+                notify_new_diary_entry()
+            except Exception:
+                pass
         except Exception as e:
             print(f"Plusi reflect error: {e}")
 

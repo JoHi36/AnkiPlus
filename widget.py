@@ -858,6 +858,9 @@ class ChatbotWidget(QWidget):
                     f.write(data + '\n')
             except Exception as e:
                 print(f"_handle_js_message: Fehler beim Schreiben von Debug-Log: {e}")
+        elif msg_type == 'plusiPanel':
+            from .plusi_panel import toggle_panel
+            toggle_panel()
         elif msg_type == 'plusiDirect':
             msg_data = data if isinstance(data, dict) else json.loads(data) if isinstance(data, str) else {}
             text = msg_data.get('text', '')
@@ -896,6 +899,16 @@ class ChatbotWidget(QWidget):
                 sync_mood(mood)
             except Exception as e:
                 print(f"plusi dock sync error: {e}")
+            # Notify panel of diary entry and state changes
+            try:
+                from .plusi_panel import notify_new_diary_entry, update_panel_mood, update_panel_friendship
+                if result.get('diary'):
+                    notify_new_diary_entry()
+                update_panel_mood(mood)
+                if friendship:
+                    update_panel_friendship(friendship)
+            except Exception as e:
+                print(f"plusi panel notify error: {e}")
             # Check if a reflect window is open — trigger after interaction
             try:
                 from . import check_and_trigger_reflect
