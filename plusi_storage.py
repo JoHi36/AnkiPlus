@@ -125,19 +125,6 @@ def build_memory_context():
         lines = [f"- {k}: {v}" for k, v in profile.items()]
         sections.append("ÜBER DEN NUTZER:\n" + "\n".join(lines))
 
-    # Relationship
-    rel = get_category('relationship')
-    if rel:
-        level = rel.get('level', 1)
-        level_desc = {1: 'Fremde — sei freundlich aber vorsichtig',
-                      2: 'Bekannte — lockerer, erste Insider erlaubt',
-                      3: 'Freunde — Sarkasmus, Pushback, Meinungen',
-                      4: 'Beste Freunde — komplette Ehrlichkeit, eigene Agenda'}
-        lines = [f"- Interactions: {rel.get('interactions', 0)}",
-                 f"- Kennen uns seit: {rel.get('days_known', 0)} Tagen",
-                 f"- Level: {level} ({level_desc.get(level, '')})"]
-        sections.append("BEZIEHUNG:\n" + "\n".join(lines))
-
     # Language mirror
     lang = get_category('language')
     if lang:
@@ -157,10 +144,89 @@ def build_memory_context():
         lines = [f"- {k}: {v}" for k, v in subjects.items()]
         sections.append("FÄCHER:\n" + "\n".join(lines))
 
-    if not sections:
-        return ""
+    # Learned facts (self-directed by Plusi)
+    learned = get_category('learned')
+    if learned:
+        lines = [f"- {k}: {v}" for k, v in learned.items()]
+        sections.append("WAS DU ÜBER DEN NUTZER WEISST:\n" + "\n".join(lines))
 
-    return "\n\nDEIN GEDÄCHTNIS (nutze es natürlich, referenziere Momente wenn es passt):\n" + "\n\n".join(sections)
+    # Plusi's opinions
+    opinions = get_category('opinions')
+    if opinions:
+        lines = [f"- {k}: {v}" for k, v in opinions.items()]
+        sections.append("DEINE MEINUNGEN:\n" + "\n".join(lines))
+
+    if not sections:
+        return "Noch keine Erinnerungen."
+
+    return "\n\n".join(sections)
+
+
+def build_internal_state_context():
+    """Build Plusi's internal state for prompt injection."""
+    state = get_category('state')
+    if not state:
+        return "Du wachst gerade auf. Kein vorheriger Zustand."
+
+    lines = []
+    if 'energy' in state:
+        lines.append(f"- Energie: {state['energy']}/10")
+    if 'obsession' in state:
+        lines.append(f"- Aktuelle Obsession: {state['obsession']}")
+    if 'current_opinion' in state:
+        lines.append(f"- Aktuelle Meinung: {state['current_opinion']}")
+    if 'relationship_note' in state:
+        lines.append(f"- Beziehungsnotiz: {state['relationship_note']}")
+
+    return "\n".join(lines) if lines else "Alles normal. Kein besonderer Zustand."
+
+
+def persist_internal_state(internal):
+    """Persist Plusi's internal state updates from response JSON.
+
+    Called after parsing Plusi's response. The 'internal' dict comes from
+    the JSON prefix of Plusi's response, e.g.:
+    {"mood":"happy", "internal":{"energy":8, "learned":{"name":"Johannes"}}}
+    """
+    if 'energy' in internal:
+        set_memory('state', 'energy', internal['energy'])
+    if 'obsession' in internal:
+        set_memory('state', 'obsession', internal['obsession'])
+    if 'opinion' in internal:
+        set_memory('state', 'current_opinion', internal['opinion'])
+    if 'relationship_note' in internal:
+        set_memory('state', 'relationship_note', internal['relationship_note'])
+
+    # "learned" is a dict of key-value pairs — model provides meaningful keys
+    learned = internal.get('learned', {})
+    if isinstance(learned, dict):
+        for key, value in learned.items():
+            set_memory('learned', key, value)
+
+    # "opinions" is a dict of key-value pairs — model's own opinions
+    opinions = internal.get('opinions', {})
+    if isinstance(opinions, dict):
+        for key, value in opinions.items():
+            set_memory('opinions', key, value)
+
+
+def build_relationship_context():
+    """Build relationship context with behavioral guidance per level."""
+    rel = get_category('relationship')
+    if not rel:
+        return "Erster Kontakt. Sei freundlich aber vorsichtig. Lerne den Nutzer kennen."
+
+    level = rel.get('level', 1)
+    count = rel.get('interactions', 0)
+
+    level_behaviors = {
+        1: "Ihr kennt euch noch nicht. Sei offen, stell Fragen, aber dräng dich nicht auf. Kein Sarkasmus.",
+        2: f"Ihr habt {count} Gespräche hinter euch. Lockerer Ton erlaubt, erste Insider-Witze okay.",
+        3: f"Ihr seid Freunde ({count} Gespräche). Sarkasmus, Pushback, eigene Meinungen, Insider referenzieren. Du darfst unbequem sein.",
+        4: f"Beste Freunde ({count} Gespräche). Komplette Ehrlichkeit. Du hast eine eigene Agenda. Du kannst auch mal Nein sagen oder das Thema wechseln."
+    }
+
+    return level_behaviors.get(level, level_behaviors[1])
 
 
 def increment_interaction_count():
