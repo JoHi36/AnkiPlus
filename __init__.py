@@ -571,6 +571,20 @@ def on_reviewer_did_show_question(card):
 
 # Alte Logik entfernt - User fügt Token manuell in Profil-Dialog ein
 
+def on_reviewer_did_answer_card(reviewer, card, ease):
+    """Emit cardResult event to frontend for Plusi dock reactions and streak counting."""
+    try:
+        widget = get_chatbot_widget()
+        if widget and hasattr(widget, 'web_view') and widget.web_view:
+            correct = ease >= 2  # ease 1 = Again (wrong), 2+ = correct
+            payload = json.dumps({'type': 'cardResult', 'correct': correct, 'ease': ease})
+            widget.web_view.page().runJavaScript(
+                f"if (typeof window.ankiReceive === 'function') {{ window.ankiReceive({payload}); }}"
+            )
+    except Exception as e:
+        print(f"cardResult emission error: {e}")
+
+
 def on_state_will_change(new_state, old_state):
     """Wird aufgerufen, wenn sich der Anki-State ändert (z.B. review -> deckBrowser)"""
     # Smart Toolbar Management: Hide in Review, Show elsewhere
@@ -717,6 +731,13 @@ if mw is not None:
         print("✅ Hook: reviewer_did_show_question registriert")
     else:
         print("⚠️ WARNUNG: reviewer_did_show_question Hook nicht verfügbar")
+
+    # Emit cardResult event after card is answered (for Plusi dock reactions)
+    if hasattr(gui_hooks, 'reviewer_did_answer_card'):
+        gui_hooks.reviewer_did_answer_card.append(on_reviewer_did_answer_card)
+        print("✅ Hook: reviewer_did_answer_card registriert (cardResult events)")
+    else:
+        print("⚠️ WARNUNG: reviewer_did_answer_card Hook nicht verfügbar")
 
     # Also refocus webview after answer is shown
     if hasattr(gui_hooks, 'reviewer_did_show_answer'):
