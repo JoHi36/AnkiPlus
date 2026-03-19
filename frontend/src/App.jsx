@@ -215,6 +215,12 @@ function AppInner() {
   // Card Preview State
   const [previewCard, setPreviewCard] = useState(null);
 
+  // Preview Mode State (for Card Preview Mode feature)
+  // null | {stage: 'peek'|'card_chat', cardId: number, previousChatState: object}
+  const [previewMode, setPreviewMode] = useState(null);
+  const previewModeRef = useRef(null);
+  useEffect(() => { previewModeRef.current = previewMode; }, [previewMode]);
+
   // Handler for opening card preview
   const handlePreviewCard = useCallback((cardData) => {
     console.log('🔍 Opening preview for card:', cardData);
@@ -953,6 +959,40 @@ function AppInner() {
           setMascotEnabled(payload.data.enabled);
         }
 
+        // Preview Mode Events
+        if (payload.type === 'previewMode') {
+          if (payload.data === null) {
+            // Preview closed — restore previous chat state
+            const currentPreviewMode = previewModeRef.current;
+            if (currentPreviewMode?.previousChatState) {
+              setActiveChat(currentPreviewMode.previousChatState.activeChat || 'session');
+            }
+            setPreviewMode(null);
+          } else {
+            const { stage, cardId } = payload.data;
+            if (stage === 'peek') {
+              setPreviewMode({
+                stage: 'peek',
+                cardId,
+                previousChatState: {
+                  activeChat: activeChatRef.current,
+                }
+              });
+            } else if (stage === 'card_chat') {
+              setPreviewMode(prev => ({
+                ...prev,
+                stage: 'card_chat',
+                cardId
+              }));
+              setActiveChat('session');
+              const currentBridge = bridgeRef.current;
+              if (currentBridge?.loadCardSession) {
+                currentBridge.loadCardSession(String(cardId));
+              }
+            }
+          }
+        }
+
         // configLoaded — sync mascot_enabled from full config
         if (payload.type === 'configLoaded' && payload.data) {
           window._cachedConfig = payload.data;
@@ -1382,6 +1422,20 @@ function AppInner() {
         sendPlusiDirect(plusiText);
       }
       return;
+    }
+
+    // Auto-transition from peek to card_chat when user sends a message
+    if (previewModeRef.current?.stage === 'peek') {
+      const peekCardId = previewModeRef.current.cardId;
+      setPreviewMode(prev => prev ? { ...prev, stage: 'card_chat' } : prev);
+      setActiveChat('session');
+      const currentBridge = bridgeRef.current;
+      if (currentBridge?.loadCardSession) {
+        currentBridge.loadCardSession(String(peekCardId));
+      }
+      if (window.ankiBridge) {
+        window.ankiBridge.addMessage('previewToggleChat', {});
+      }
     }
 
     // Immer im Chat bleiben

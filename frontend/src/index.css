@@ -30,6 +30,12 @@ html, body, #root {
   background-color: #161616 !important;
 }
 
+/* Preview Mode Fade Transitions */
+.preview-fade-enter { opacity: 0; }
+.preview-fade-enter-active { opacity: 1; transition: opacity 200ms ease-in; }
+.preview-fade-exit { opacity: 1; }
+.preview-fade-exit-active { opacity: 0; transition: opacity 200ms ease-out; }
+
 header,
 header *,
 [class*="header"],

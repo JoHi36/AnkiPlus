@@ -63,6 +63,12 @@ export function useAnki() {
               window.ankiBridge.addMessage('previewCard', String(cardId));
             }
           },
+          openPreview: (cardId) => {
+            console.log('Bridge: openPreview aufgerufen für Card:', cardId);
+            if (window.ankiBridge) {
+              window.ankiBridge.addMessage('openPreview', { cardId: String(cardId) });
+            }
+          },
           getCurrentConfig: () => {
             // Synchroner Aufruf - fordere Config an und warte auf Antwort
             console.log('Bridge: getCurrentConfig aufgerufen');
