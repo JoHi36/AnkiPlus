@@ -1,7 +1,6 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import MascotCharacter from './MascotCharacter';
 
 const MOOD_COLORS = {
   happy:     '#34d399',
@@ -36,6 +35,22 @@ const hexToRgb = (hex) => {
   return `${r},${g},${b}`;
 };
 
+// Static SVG mascot — no animation, just the plus with face
+function PlusiIcon({ size = 24 }) {
+  return (
+    <svg viewBox="0 0 120 120" width={size} height={size}>
+      <rect x="40" y="5" width="40" height="110" rx="8" fill="#0a84ff"/>
+      <rect x="5" y="35" width="110" height="40" rx="8" fill="#0a84ff"/>
+      <rect x="40" y="35" width="40" height="40" fill="#0a84ff"/>
+      <ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/>
+      <ellipse cx="49" cy="50" rx="4" ry="4" fill="#1a1a1a"/>
+      <ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/>
+      <ellipse cx="71" cy="50" rx="4" ry="4" fill="#1a1a1a"/>
+      <path d="M 46 66 Q 60 76 74 66" stroke="#1a1a1a" strokeWidth="3" fill="none" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
 export default function PlusiWidget({
   mood = 'neutral',
   text = '',
@@ -63,18 +78,9 @@ export default function PlusiWidget({
       >
         {isLoading && <div className="plusi-shimmer" />}
 
-        {/* Header: Mascot + Name + Mood */}
-        <div className="plusi-header">
-          <div className="plusi-mascot">
-            <div style={{ transform: 'scale(0.5)', transformOrigin: 'top left', width: 48, height: 48 }}>
-              <MascotCharacter
-                mood={isLoading ? 'thinking' : mood}
-                size={48}
-                isThinking={isLoading}
-                active={false}
-              />
-            </div>
-          </div>
+        {/* Top row: Mascot + Name + Mood */}
+        <div className="plusi-top">
+          <PlusiIcon size={24} />
           <span className="plusi-name">Plusi</span>
           <div style={{ flex: 1 }} />
           {resolvedMeta && (
@@ -151,22 +157,13 @@ const PLUSI_CSS = `
     font-family: 'Varela Round', -apple-system, sans-serif;
   }
 
-  /* ── Header ── */
-  .plusi-header {
+  /* ── Top row (renamed from header to avoid index.css override) ── */
+  .plusi-top {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 8px 11px 7px;
   }
-
-  .plusi-mascot {
-    flex-shrink: 0;
-    width: 24px;
-    height: 24px;
-    overflow: hidden;
-    position: relative;
-  }
-  .plusi-mascot .mascot-shadow { display: none !important; }
 
   .plusi-name {
     font-size: 11px;

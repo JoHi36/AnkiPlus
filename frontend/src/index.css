@@ -1,4 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Varela+Round&display=swap');
+@font-face {
+  font-family: 'Varela Round';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/VarelaRound-Regular.woff2') format('woff2');
+}
 
 @tailwind base;
 @tailwind components;
