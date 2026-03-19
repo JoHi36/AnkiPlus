@@ -312,3 +312,113 @@ registry.register(ToolDefinition(
     display_type="widget",
     timeout_seconds=30,
 ))
+
+
+# ---------------------------------------------------------------------------
+# Search Deck Tool
+# ---------------------------------------------------------------------------
+
+SEARCH_DECK_SCHEMA = {
+    "name": "search_deck",
+    "description": (
+        "Sucht Karten im Deck des Nutzers. Verwende dieses Tool wenn der Nutzer "
+        "nach bestimmten Karten fragt, Karten zu einem Thema sehen möchte, oder "
+        "du relevante Karten zeigen willst. Gibt eine Liste mit Karten-Vorschauen zurück."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Suchbegriff (wird gegen Front- und Back-Text der Karten gesucht)"
+            },
+            "deck_id": {
+                "type": "integer",
+                "description": "Deck-ID. Wenn nicht angegeben, wird im aktuellen Deck gesucht."
+            },
+            "max_results": {
+                "type": "integer",
+                "description": "Maximale Anzahl Ergebnisse (default: 10, max: 50)"
+            }
+        },
+        "required": ["query"]
+    }
+}
+
+
+def execute_search_deck(args):
+    """Search for cards in the user's deck.
+
+    Returns dict with query, cards array, total_found, showing.
+    Cards have card_id, front (plain text), back (plain text), deck_name.
+    """
+    try:
+        from .anki_utils import run_on_main_thread, strip_html_and_cloze
+    except ImportError:
+        from anki_utils import run_on_main_thread, strip_html_and_cloze
+
+    query = args.get("query", "")
+    deck_id = args.get("deck_id")
+    max_results = min(args.get("max_results", 10), 50)
+
+    if not query:
+        return {"query": "", "cards": [], "total_found": 0, "showing": 0}
+
+    def _search():
+        from aqt import mw
+
+        # Build Anki search string
+        search = query
+        if deck_id:
+            deck = mw.col.decks.get(int(deck_id))
+            if not deck:
+                return {"error": "Deck nicht gefunden"}
+            search = f'"deck:{deck["name"]}" {query}'
+        else:
+            did = mw.col.decks.selected()
+            deck = mw.col.decks.get(did)
+            if deck and deck["name"] != "Default":
+                search = f'"deck:{deck["name"]}" {query}'
+
+        card_ids = mw.col.find_cards(search, order=True)
+        total_found = len(card_ids)
+        showing = min(total_found, max_results)
+
+        cards = []
+        for cid in card_ids[:max_results]:
+            try:
+                card = mw.col.get_card(cid)
+                note = card.note()
+                front_fields = note.fields[0] if note.fields else ""
+                back_fields = note.fields[1] if len(note.fields) > 1 else ""
+                deck_name = mw.col.decks.name(card.did)
+                cards.append({
+                    "card_id": cid,
+                    "front": strip_html_and_cloze(front_fields)[:200],
+                    "back": strip_html_and_cloze(back_fields)[:200],
+                    "deck_name": deck_name,
+                })
+            except Exception:
+                continue
+
+        return {
+            "query": query,
+            "cards": cards,
+            "total_found": total_found,
+            "showing": showing,
+        }
+
+    # Inner timeout = timeout_seconds - 1
+    return run_on_main_thread(_search, timeout=14)
+
+
+registry.register(ToolDefinition(
+    name="search_deck",
+    schema=SEARCH_DECK_SCHEMA,
+    execute_fn=execute_search_deck,
+    category="content",
+    config_key=None,
+    agent="tutor",
+    display_type="widget",
+    timeout_seconds=15,
+))
