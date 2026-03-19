@@ -321,56 +321,63 @@ registry.register(ToolDefinition(
 SHOW_CARD_SCHEMA = {
     "name": "show_card",
     "description": (
-        "Zeigt eine einzelne Anki-Karte als Widget im Chat an. Verwende dieses Tool "
-        "wenn du eine bestimmte Karte aus deinem Kontext (z.B. aus den Referenzen/Citations) "
-        "hervorheben oder dem Nutzer zeigen möchtest. Die card_id bekommst du aus dem "
-        "Lernmaterial-Kontext (LERNMATERIAL-Abschnitt). Beispiel: 'Schau dir speziell "
-        "diese Karte an:' → show_card mit der card_id."
+        "Zeigt eine einzelne Anki-Karte als interaktives Widget im Chat an. "
+        "WICHTIG: Verwende dieses Tool wenn der Nutzer eine Karte sehen möchte und du "
+        "bereits Karten im LERNMATERIAL-Kontext hast. Die note_id findest du in den "
+        "Note-Nummern im LERNMATERIAL-Abschnitt (z.B. 'Note 12345' → note_id=12345). "
+        "NICHT search_deck verwenden wenn du bereits Karten im Kontext hast — "
+        "show_card ist schneller und zuverlässiger. "
+        "Beispiel: User sagt 'Zeig mir eine Karte zum Herz' → du hast Note 12345 "
+        "im LERNMATERIAL → show_card(note_id=12345)."
     ),
     "parameters": {
         "type": "object",
         "properties": {
-            "card_id": {
+            "note_id": {
                 "type": "integer",
-                "description": "Die Anki card_id der anzuzeigenden Karte"
+                "description": "Die Note-ID aus dem LERNMATERIAL-Kontext (die Zahl nach 'Note', z.B. bei 'Note 12345' ist note_id=12345)"
             }
         },
-        "required": ["card_id"]
+        "required": ["note_id"]
     }
 }
 
 
 def execute_show_card(args):
-    """Show a single card by ID as an inline widget.
+    """Show a single card by note_id as an inline widget.
 
-    Takes card_id from RAG context/citations, loads card data,
-    returns dict for CardWidget rendering.
+    Takes note_id from RAG context (the 'Note XXXXX' numbers),
+    finds the first card for that note, loads card data.
     """
     try:
         from .anki_utils import run_on_main_thread, strip_html_and_cloze
     except ImportError:
         from anki_utils import run_on_main_thread, strip_html_and_cloze
 
-    card_id = args.get("card_id")
-    if not card_id:
-        return {"error": "Keine card_id angegeben"}
+    note_id = args.get("note_id")
+    if not note_id:
+        return {"error": "Keine note_id angegeben"}
 
     def _load():
         from aqt import mw
         try:
-            card = mw.col.get_card(int(card_id))
-            note = card.note()
+            note = mw.col.get_note(int(note_id))
+            # Get first card for this note
+            card_ids = note.card_ids()
+            if not card_ids:
+                return {"error": f"Note {note_id} hat keine Karten"}
+            card = mw.col.get_card(card_ids[0])
             front = note.fields[0] if note.fields else ""
             back = note.fields[1] if len(note.fields) > 1 else ""
             deck_name = mw.col.decks.name(card.did)
             return {
-                "card_id": int(card_id),
+                "card_id": card_ids[0],
                 "front": strip_html_and_cloze(front)[:300],
                 "back": strip_html_and_cloze(back)[:300],
                 "deck_name": deck_name,
             }
         except Exception as e:
-            return {"error": f"Karte {card_id} nicht gefunden: {e}"}
+            return {"error": f"Note {note_id} nicht gefunden: {e}"}
 
     return run_on_main_thread(_load, timeout=9)
 
@@ -394,9 +401,11 @@ registry.register(ToolDefinition(
 SEARCH_DECK_SCHEMA = {
     "name": "search_deck",
     "description": (
-        "Sucht Karten im Deck des Nutzers. Verwende dieses Tool wenn der Nutzer "
-        "nach bestimmten Karten fragt, Karten zu einem Thema sehen möchte, oder "
-        "du relevante Karten zeigen willst. Gibt eine Liste mit Karten-Vorschauen zurück."
+        "Durchsucht das Deck des Nutzers und zeigt eine Liste von Karten-Vorschauen. "
+        "Verwende dieses Tool NUR wenn der Nutzer explizit seinen Kartenstapel durchsuchen will "
+        "(z.B. 'Zeig mir alle meine Pharmakologie-Karten', 'Welche Karten hab ich zu Anatomie?'). "
+        "NICHT verwenden wenn der Nutzer nur eine einzelne Karte sehen will — dafür show_card nutzen. "
+        "NICHT verwenden wenn du bereits Karten im LERNMATERIAL-Kontext hast — dafür show_card nutzen."
     ),
     "parameters": {
         "type": "object",
