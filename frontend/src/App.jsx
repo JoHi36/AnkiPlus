@@ -311,6 +311,10 @@ function AppInner() {
   const { mood, setEventMood, setAiMood, resetMood } = useMascot();
   const [mascotEnabled, setMascotEnabled] = useState(false);
 
+  const [consecutiveWrong, setConsecutiveWrong] = useState(0);
+  const activationCountRef = useRef(0);
+  const activationResetRef = useRef(null);
+
   // Plusi Direct — @Plusi inline messages
   const { sendDirect: sendPlusiDirect } = usePlusiDirect();
   const eventTriggerRef = useRef(null);
@@ -2105,14 +2109,26 @@ function AppInner() {
                             )}
 
                             {/* Sources — always visible, outside ThoughtStream */}
-                            {Object.keys(chatHook.currentCitations || {}).length > 0 && (
-                              <SourcesCarousel
-                                citations={chatHook.currentCitations}
-                                citationIndices={chatHook.currentCitationIndices || {}}
-                                bridge={bridge}
-                                onPreviewCard={handlePreviewCard}
-                              />
-                            )}
+                            {Object.keys(chatHook.currentCitations || {}).length > 0 && (() => {
+                              // Build citation indices from sorted keys (1-based)
+                              const cits = chatHook.currentCitations || {};
+                              const indices = {};
+                              let counter = 1;
+                              // Sort by sources.length desc (dual-source first)
+                              const sorted = Object.entries(cits).sort(([,a],[,b]) => (b.sources?.length || 0) - (a.sources?.length || 0));
+                              sorted.forEach(([key, cit]) => {
+                                const id = String(cit.noteId || cit.cardId || key);
+                                if (!indices[id]) indices[id] = counter++;
+                              });
+                              return (
+                                <SourcesCarousel
+                                  citations={cits}
+                                  citationIndices={indices}
+                                  bridge={bridge}
+                                  onPreviewCard={handlePreviewCard}
+                                />
+                              );
+                            })()}
                           </div>
                         )}
                         {(chatHook.isLoading || chatHook.streamingMessage) && !(
