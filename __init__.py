@@ -479,11 +479,13 @@ def on_profile_loaded():
         try:
             from .plusi_agent import self_reflect
             from .plusi_dock import sync_mood
-            from PyQt6.QtCore import QTimer
             sync_mood('reading')
-            result = self_reflect()
-            if result:
-                QTimer.singleShot(0, lambda: sync_mood('neutral'))
+            try:
+                self_reflect()
+            except Exception as e:
+                print(f"Plusi self-reflect failed: {e}")
+            # Always reset mood — even if self_reflect fails
+            sync_mood('neutral')
         except Exception as e:
             print(f"Plusi morning routine error: {e}")
     threading.Thread(target=_plusi_morning, daemon=True).start()
