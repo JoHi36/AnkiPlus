@@ -21,6 +21,7 @@
         MC_RESULT:  'mc-result',
         ANSWER:     'answer',
         HISTORY:    'history',
+        PREVIEW:    'preview',
     };
 
     let current = S.QUESTION;
@@ -181,6 +182,34 @@
                     { label: 'Weiter', shortcut: 'SPACE', onclick: 'pycmd("navigate:next")', color: 'rgba(255,255,255,0.88)', weight: '600' },
                     { label: chatOpen ? 'Schließen' : 'Nachfragen', shortcut: chatOpen ? 'ESC' : '↵', onclick: 'openFollowUp()' }
                 );
+                break;
+            }
+
+            case S.PREVIEW: {
+                // Answer visible, no rating buttons
+                const answerEl2 = $('#answer-section');
+                if (answerEl2) { answerEl2.classList.remove('hidden'); answerEl2.style.opacity = '1'; }
+                const dockActions = $('#dock-actions');
+                if (dockActions) {
+                    dockActions.innerHTML = `
+                        <div class="flex items-center justify-between w-full px-6 py-3">
+                            <button onclick="pycmd('preview:toggle_chat')" class="flex items-center gap-2 text-white/60 hover:text-white transition-colors">
+                                <span>Chat öffnen</span>
+                                <span class="text-xs text-white/30">ENTER</span>
+                            </button>
+                            <button onclick="pycmd('preview:close')" class="flex items-center gap-2 text-white/60 hover:text-white transition-colors">
+                                <span>Schließen</span>
+                                <span class="text-xs text-white/30">SPACE</span>
+                            </button>
+                        </div>
+                    `;
+                }
+                // Hide session progress
+                const progressEl = document.querySelector('.session-progress');
+                if (progressEl) progressEl.style.display = 'none';
+                // Hide navigation arrows
+                const navArrows = document.querySelectorAll('.nav-arrow');
+                navArrows.forEach(el => el.style.display = 'none');
                 break;
             }
         }
@@ -718,6 +747,15 @@
         setState(S.HISTORY);
     };
 
+    window.setPreviewMode = function() {
+        setState(S.PREVIEW);
+    };
+
+    window.updatePreviewChatLabel = function(isOpen) {
+        const btn = document.querySelector('#dock-actions button:first-child span:first-child');
+        if (btn) btn.textContent = isOpen ? 'Chat schließen' : 'Chat öffnen';
+    };
+
     /**
      * Show stored performance result in the dock for history cards.
      * Called by Python after loading the card's session from SQLite.
@@ -843,6 +881,13 @@
 
         if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undoCard(); return; }
         if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+        if (current === S.PREVIEW) {
+            if (e.code === 'Space') { e.preventDefault(); pycmd('preview:close'); return; }
+            if (e.code === 'Enter') { e.preventDefault(); pycmd('preview:toggle_chat'); return; }
+            if (e.code === 'Escape') { e.preventDefault(); pycmd('preview:close'); return; }
+            return; // All other keys disabled in preview
+        }
 
         // ArrowLeft/Right: Navigate review trail (previous/next card)
         if (e.key === 'ArrowLeft') { e.preventDefault(); pycmd('navigate:prev'); return; }
