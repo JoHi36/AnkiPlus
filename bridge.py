@@ -385,6 +385,17 @@ class WebBridge(QObject):
             print(f"Fehler in previewCard: {e}")
             print(traceback.format_exc())
     
+    @pyqtSlot(str, result=str)
+    def openPreview(self, card_id_str):
+        """Open card in two-stage preview mode. Works from any Anki state."""
+        try:
+            card_id = int(card_id_str)
+            from .custom_reviewer import open_preview
+            result = open_preview(card_id)
+            return json.dumps(result)
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
     @pyqtSlot()
     def openDeckBrowser(self):
         """Öffnet die Stapelübersicht (Deck Browser) in Anki"""

@@ -293,6 +293,10 @@ class ChatbotWidget(QWidget):
                 print(f"_handle_js_message: previewCard für CID {card_id}")
                 if self.bridge and hasattr(self.bridge, 'previewCard'):
                     self.bridge.previewCard(card_id)
+        elif msg_type == 'openPreview':
+            card_id = data.get('cardId') if isinstance(data, dict) else data
+            from .custom_reviewer import open_preview
+            open_preview(int(card_id))
         elif msg_type == 'cancelRequest':
             if self.current_request:
                 cancelled_msg = self.current_request
