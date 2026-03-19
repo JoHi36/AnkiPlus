@@ -281,8 +281,10 @@ def execute_plusi(args):
     """
     try:
         from .plusi_agent import run_plusi
+        from .plusi_storage import get_memory
     except ImportError:
         from plusi_agent import run_plusi
+        from plusi_storage import get_memory
 
     situation = args.get("situation", "")
     if not situation:
@@ -295,6 +297,8 @@ def execute_plusi(args):
         "mood": result.get("mood", "neutral"),
         "text": result.get("text", ""),
         "error": result.get("error", False),
+        "relationship_level": get_memory('relationship', 'level', 1),
+        "interaction_count": get_memory('relationship', 'interactions', 0),
     }
 
 
