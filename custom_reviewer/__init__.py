@@ -1308,9 +1308,16 @@ setTimeout(function() {
 
         # Inject Plusi dock into reviewer
         try:
-            from .plusi_dock import get_plusi_dock_injection
-        except ImportError:
-            from plusi_dock import get_plusi_dock_injection
+            from ..plusi_dock import get_plusi_dock_injection
+        except (ImportError, ValueError):
+            try:
+                import importlib, os, sys
+                _addon_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                if _addon_dir not in sys.path:
+                    sys.path.insert(0, _addon_dir)
+                from plusi_dock import get_plusi_dock_injection
+            except ImportError:
+                get_plusi_dock_injection = lambda: ''
         plusi_html = get_plusi_dock_injection()
 
         html = html.replace('</body>', override_css + auto_answer_js + plusi_html + '</body>')
