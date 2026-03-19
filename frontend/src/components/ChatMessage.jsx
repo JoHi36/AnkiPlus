@@ -12,7 +12,7 @@ import MultipleChoiceCard from './MultipleChoiceCard';
 import CitationBadge from './CitationBadge';
 import ThoughtStream from './ThoughtStream';
 import SourcesCarousel from './SourcesCarousel';
-import PlusiWidget from './PlusiWidget';
+import ToolWidgetRenderer from './ToolWidgetRenderer';
 import mermaid from 'mermaid';
 // SmilesDrawer wird dynamisch importiert, da es CommonJS ist und Vite-Probleme verursachen kann
 
@@ -1227,7 +1227,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
   const [score, setScore] = useState(null);
   const [reviewData, setReviewData] = useState(null);
   const [quizData, setQuizData] = useState(null);
-  const [plusiData, setPlusiData] = useState(null);
+  const [toolWidgets, setToolWidgets] = useState([]);
   const [intent, setIntent] = useState(null); // 'REVIEW', 'MC', 'HINT', 'EXPLANATION', 'MNEMONIC', 'CHAT'
   const [routerIntent, setRouterIntent] = useState(null); // Router intent: 'EXPLANATION', 'FACT_CHECK', 'MNEMONIC', 'QUIZ', 'CHAT'
   
@@ -1394,24 +1394,33 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
             }
         }
 
-        // 5. Tool markers ([[TOOL:{...}]])
-        const toolMatches = fixedMessage.matchAll(/\[\[TOOL:(\{.*?\})\]\]/g);
-        for (const match of toolMatches) {
-            try {
-                const toolData = JSON.parse(match[1]);
-                if (toolData.name === 'spawn_plusi') {
-                    if (toolData.displayType === 'loading') {
-                        setPlusiData({ _loading: true });
-                    } else if (toolData.displayType === 'widget' && toolData.result) {
-                        setPlusiData(toolData.result);
-                    } else if (toolData.displayType === 'error') {
-                        setPlusiData({ _error: true, message: toolData.error });
+        // 5. Tool markers ([[TOOL:{...}]]) → generic toolWidgets array
+        const toolMarkers = [...fixedMessage.matchAll(/\[\[TOOL:(\{.*?\})\]\]/g)];
+        if (toolMarkers.length > 0) {
+            setToolWidgets(prev => {
+                let updated = [...prev];
+                for (const match of toolMarkers) {
+                    try {
+                        const toolData = JSON.parse(match[1]);
+                        if (toolData.displayType === 'loading') {
+                            updated.push(toolData);
+                        } else if (toolData.displayType === 'widget' || toolData.displayType === 'error') {
+                            // Replace first loading entry for same tool name
+                            const loadingIdx = updated.findIndex(
+                                tw => tw.name === toolData.name && tw.displayType === 'loading'
+                            );
+                            if (loadingIdx >= 0) {
+                                updated[loadingIdx] = toolData;
+                            } else {
+                                updated.push(toolData);
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Failed to parse TOOL marker:', e);
                     }
                 }
-                // Future tools will be handled here
-            } catch (e) {
-                console.warn('Failed to parse TOOL marker:', e);
-            }
+                return updated;
+            });
         }
     }
   }, [fixedMessage, isUser]);
@@ -1698,7 +1707,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                 </>
             ) : (
                 /* Simple divider for saved bot messages without steps — only for pure text replies (no Plusi, no ReviewCard) */
-                !isUser && !plusiData && !reviewData && message && message.trim().length > 0 && (
+                !isUser && toolWidgets.length === 0 && !reviewData && message && message.trim().length > 0 && (
                   <div className="h-px my-2" style={{ background: 'rgba(255,255,255,0.06)' }} />
                 )
             )}
@@ -1708,14 +1717,13 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                 <ReviewResult data={reviewData} onAutoFlip={onAutoFlip} />
             )}
 
-            {/* Plusi Widget */}
-            {plusiData && (
-                <PlusiWidget
-                    mood={plusiData._loading ? 'thinking' : (plusiData.mood || 'neutral')}
-                    text={plusiData.text || ''}
-                    metaText={plusiData.meta || ''}
-                    isLoading={!!plusiData._loading}
-                    isFrozen={!isStreaming && !isLastMessage}
+            {/* Tool Widgets (Plusi, Cards, Stats, etc.) */}
+            {toolWidgets.length > 0 && (
+                <ToolWidgetRenderer
+                    toolWidgets={toolWidgets}
+                    bridge={bridge}
+                    isStreaming={isStreaming}
+                    isLastMessage={isLastMessage}
                 />
             )}
 
