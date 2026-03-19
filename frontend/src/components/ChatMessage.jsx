@@ -1221,7 +1221,7 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
  * ChatMessage Komponente - INTENT BASED RENDERING
  * Analysiert JSON-Daten oder Intents und rendert die entsprechende High-End Card.
  */
-function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, isStreaming = false, steps = [], citations = {}, pipelineSteps = [], bridge = null, onPreviewCard, onPerformanceCapture }) {
+function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, isStreaming = false, isLastMessage = false, steps = [], citations = {}, pipelineSteps = [], bridge = null, onPreviewCard, onPerformanceCapture }) {
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [answerFeedback, setAnswerFeedback] = useState(null);
   const [score, setScore] = useState(null);
@@ -1702,14 +1702,14 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                 <ReviewResult data={reviewData} onAutoFlip={onAutoFlip} />
             )}
 
-            {/* Plusi Companion Widget */}
+            {/* Plusi Widget */}
             {plusiData && (
                 <PlusiWidget
                     mood={plusiData._loading ? 'thinking' : (plusiData.mood || 'neutral')}
                     text={plusiData.text || ''}
                     metaText={plusiData.meta || ''}
                     isLoading={!!plusiData._loading}
-                    isFrozen={false}
+                    isFrozen={!isStreaming && !isLastMessage}
                 />
             )}
 
@@ -1752,6 +1752,7 @@ const MemoizedChatMessage = React.memo(ChatMessage, (prevProps, nextProps) => {
   return prevProps.message === nextProps.message &&
          prevProps.from === nextProps.from &&
          prevProps.isStreaming === nextProps.isStreaming &&
+         prevProps.isLastMessage === nextProps.isLastMessage &&
          prevProps.cardContext === nextProps.cardContext &&
          JSON.stringify(prevProps.steps) === JSON.stringify(nextProps.steps) &&
          JSON.stringify(prevProps.citations) === JSON.stringify(nextProps.citations);

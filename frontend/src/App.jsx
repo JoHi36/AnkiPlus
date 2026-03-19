@@ -185,7 +185,6 @@ function AppInner() {
   const reviewTrailHookRef = useRef(reviewTrailHook);
   const sessionContextRef = useRef(sessionContext);
   const handlePerformanceCaptureRef = useRef(null);
-  const handlePlusiDirectResultRef = useRef(null);
   useEffect(() => {
     cardSessionHookRef.current = cardSessionHook;
     cardContextHookRef.current = cardContextHook;
@@ -311,18 +310,9 @@ function AppInner() {
   // Mascot state
   const { mood, setEventMood, setAiMood, resetMood } = useMascot();
   const [mascotEnabled, setMascotEnabled] = useState(false);
-  const [companionMode, setCompanionMode] = useState(false);
-  const [bubbleText, setBubbleText] = useState(null);
-  const { send: sendToCompanion, handleChunk: handleCompanionChunk, isLoading: companionIsLoading } = useCompanion({
-    onMood: setAiMood,
-    onBubble: setBubbleText,
-  });
-  const [consecutiveWrong, setConsecutiveWrong] = useState(0);
-  const activationCountRef = useRef(0);
-  const activationResetRef = useRef(null);
 
   // Plusi Direct — @Plusi inline messages
-  const { sendDirect: sendPlusiDirect, handleResult: handlePlusiResult, isLoading: plusiDirectLoading } = usePlusiDirect();
+  const { sendDirect: sendPlusiDirect } = usePlusiDirect();
   const eventTriggerRef = useRef(null);
   const [streak, setStreak] = useState(0);
 
@@ -1978,6 +1968,7 @@ function AppInner() {
                                   steps={msg.steps || []}
                                   citations={msg.citations || {}}
                                   bridge={bridge}
+                                  isLastMessage={false}
                                   onAnswerSelect={(letter, isCorrect) => {
                                     console.log(`User selected ${letter}, correct: ${isCorrect}`);
                                   }}
@@ -2072,6 +2063,7 @@ function AppInner() {
                                                                 steps={nextMsg.steps || []}
                                                                 citations={nextMsg.citations || {}}
                                                                 bridge={bridge}
+                                                                isLastMessage={!chatHook.isLoading && !chatHook.streamingMessage}
                                                                 onAnswerSelect={(letter, isCorrect) => {
                                                                   console.log(`User selected ${letter}, correct: ${isCorrect}`);
                                                                 }}
