@@ -126,7 +126,7 @@ TECHNISCH:
 - Erlaubte moods: neutral, happy, blush, sleepy, thinking, surprised,
   excited, empathy, annoyed, curious
 - "internal" nutzt du wenn sich was ändert oder du dir was merken willst:
-  - "learned": ["fakt1", "fakt2"] — neues über den User
+  - "learned": {"key": "wert"} — neues über den User, z.B. {"name": "Johannes", "studium": "Medizin"}
   - "energy": 1-10 — wie wach/aktiv du gerade bist
   - "obsession": "thema" — was dich gerade beschäftigt
   - "opinion": "text" — deine aktuelle Meinung über irgendwas
@@ -192,46 +192,52 @@ def persist_internal_state(internal: dict):
     if 'relationship_note' in internal:
         set_memory('state', 'relationship_note', internal['relationship_note'])
 
-    # "learned" is a list of facts — store each as a learned::<fact_key>
-    learned = internal.get('learned', [])
-    for fact in learned:
-        # Use first word as key, full string as value
-        key = fact.split()[0].lower() if fact else 'misc'
-        set_memory('learned', key, fact)
+    # "learned" is a dict of key-value pairs — model provides meaningful keys
+    learned = internal.get('learned', {})
+    if isinstance(learned, dict):
+        for key, value in learned.items():
+            set_memory('learned', key, value)
 ```
 
 ### 5. Response Parsing Changes in `plusi_agent.py`
 
-Replace the current mood-only regex parsing with full JSON parsing:
+Replace the current mood-only regex parsing with `json.JSONDecoder().raw_decode()`,
+which correctly handles nested JSON objects:
 
 ```python
 import json
-import re
-
-# Match JSON block at start of response (single line or multi-line)
-JSON_PREFIX_REGEX = re.compile(r'^\s*(\{[^}]*\})\s*\n?(.*)', re.DOTALL)
 
 def parse_plusi_response(raw_text: str) -> tuple[str, str, dict]:
     """Parse Plusi response into (mood, text, internal_state).
+
+    Uses json.JSONDecoder().raw_decode() to correctly parse nested JSON
+    (the regex approach fails on nested objects like {"mood":"x", "internal":{...}}).
 
     Returns:
         mood: string mood key
         text: visible message text
         internal: dict of internal state updates (may be empty)
     """
-    # Strip markdown code fences
-    clean = raw_text.replace("```json\n", "").replace("\n```", "").replace("```", "")
+    # Strip markdown code fences that Gemini sometimes wraps around JSON
+    clean = raw_text.strip()
+    if clean.startswith("```"):
+        # Remove opening fence (```json or ```)
+        first_newline = clean.index("\n") if "\n" in clean else len(clean)
+        clean = clean[first_newline + 1:]
+        # Remove closing fence
+        if clean.rstrip().endswith("```"):
+            clean = clean.rstrip()[:-3]
+        clean = clean.strip()
 
-    match = JSON_PREFIX_REGEX.match(clean)
-    if match:
-        try:
-            meta = json.loads(match.group(1))
-            mood = meta.get("mood", "neutral")
-            internal = meta.get("internal", {})
-            text = match.group(2).strip()
-            return mood, text, internal
-        except json.JSONDecodeError:
-            pass
+    try:
+        decoder = json.JSONDecoder()
+        meta, end_idx = decoder.raw_decode(clean)
+        mood = meta.get("mood", "neutral")
+        internal = meta.get("internal", {})
+        text = clean[end_idx:].strip()
+        return mood, text, internal
+    except (json.JSONDecodeError, ValueError):
+        pass
 
     return "neutral", raw_text.strip(), {}
 ```
@@ -330,8 +336,8 @@ Implementation: include `relationship_level` and `interaction_count` in the Plus
 | File | Change |
 |------|--------|
 | `plusi_agent.py` | New system prompt, model change, response parsing, state injection |
-| `plusi_storage.py` | New functions: `build_internal_state_context()`, `persist_internal_state()`, `build_relationship_context()` |
-| `agent_loop.py` | Pass relationship stats to frontend in Plusi data |
+| `plusi_storage.py` | New functions: `build_internal_state_context()`, `persist_internal_state()`, `build_relationship_context()`. Remove relationship section from `build_memory_context()` (now handled separately via `{relationship_context}`) |
+| `tool_registry.py` | Add `relationship_level` and `interaction_count` to Plusi response dict in `execute_plusi()` |
 | Frontend Plusi component | Display relationship indicator, handle new moods |
 
 ## Migration
@@ -349,6 +355,12 @@ Implementation: include `relationship_level` and `interaction_count` in the Plus
 5. Chaos-outbreak trigger: discuss a topic Plusi should get excited about, verify energy shift
 6. Memory accuracy: tell Plusi personal facts, verify they appear in subsequent conversations
 7. Stress scenario: simulate learning frustration, verify level-appropriate response
+
+## Notes
+
+- **Memory pruning**: `learned` and `opinions` categories grow over time. For now this is acceptable (hundreds of short strings are tiny in SQLite). If it becomes an issue, add an eviction policy that keeps the last N entries per category.
+- **Direct Chat mode**: The "+Si" direct chat routing is designed separately (see plusi-concept-redesign spec). This spec covers the shared personality/state system that both modes use.
+- **Background persistence**: `persist_internal_state()` runs synchronously in the existing worker thread, after parsing but before returning. This adds negligible latency (SQLite write < 1ms). No separate background thread needed.
 
 ## Future Extensions (Not In Scope)
 
