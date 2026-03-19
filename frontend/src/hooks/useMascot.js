@@ -1,30 +1,50 @@
-// frontend/src/hooks/useMascot.js
 import { useState, useRef, useCallback } from 'react';
 
 export function useMascot() {
-  const [mood, setMoodState] = useState('neutral');
+  const [mood, setMood] = useState('neutral');
   const eventMoodRef = useRef('neutral');
-  const fallbackTimerRef = useRef(null);
+  const aiMoodRef = useRef(null);
+  const aiTimerRef = useRef(null);
+  const eventTimerRef = useRef(null);
 
-  // Set an event-driven mood (lower priority — overridden by AI mood)
+  const resolveMood = useCallback(() => {
+    if (aiMoodRef.current) return aiMoodRef.current;
+    if (eventMoodRef.current && eventMoodRef.current !== 'neutral') return eventMoodRef.current;
+    return 'neutral';
+  }, []);
+
   const setEventMood = useCallback((newMood) => {
     eventMoodRef.current = newMood;
-    setMoodState(newMood);
-  }, []);
+    setMood(resolveMood());
 
-  // Set an AI-driven mood (higher priority — falls back after 30s)
+    // Auto-revert event mood after 4s
+    clearTimeout(eventTimerRef.current);
+    if (newMood !== 'neutral') {
+      eventTimerRef.current = setTimeout(() => {
+        eventMoodRef.current = 'neutral';
+        setMood(resolveMood());
+      }, 4000);
+    }
+  }, [resolveMood]);
+
   const setAiMood = useCallback((newMood) => {
-    setMoodState(newMood);
-    if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
-    fallbackTimerRef.current = setTimeout(() => {
-      setMoodState(eventMoodRef.current || 'neutral');
-    }, 30000);
-  }, []);
+    aiMoodRef.current = newMood;
+    setMood(newMood);
 
-  // Reset to current event mood (e.g., when companion mode exits)
+    // Auto-revert AI mood after 30s
+    clearTimeout(aiTimerRef.current);
+    aiTimerRef.current = setTimeout(() => {
+      aiMoodRef.current = null;
+      setMood(resolveMood());
+    }, 30000);
+  }, [resolveMood]);
+
   const resetMood = useCallback(() => {
-    if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
-    setMoodState(eventMoodRef.current || 'neutral');
+    clearTimeout(aiTimerRef.current);
+    clearTimeout(eventTimerRef.current);
+    aiMoodRef.current = null;
+    eventMoodRef.current = 'neutral';
+    setMood('neutral');
   }, []);
 
   return { mood, setEventMood, setAiMood, resetMood };
