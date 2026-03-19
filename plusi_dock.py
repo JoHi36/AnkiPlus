@@ -308,8 +308,11 @@ PLUSI_JS = """
 
 
 def get_plusi_dock_injection():
-    """Return the complete HTML/CSS/JS to inject into a webview."""
-    return f'<style>{PLUSI_CSS}</style>\n{PLUSI_HTML}\n<script>{PLUSI_JS}</script>'
+    """Return the complete HTML/CSS/JS to inject into a webview.
+    Includes initial mood restore from persisted state."""
+    mood = get_persisted_mood()
+    init_script = f"\nwindow.addEventListener('DOMContentLoaded', function() {{ if(window._plusiSetMood) window._plusiSetMood('{mood}'); }});\nsetTimeout(function() {{ if(window._plusiSetMood) window._plusiSetMood('{mood}'); }}, 100);"
+    return f'<style>{PLUSI_CSS}</style>\n{PLUSI_HTML}\n<script>{PLUSI_JS}\n{init_script}</script>'
 
 
 def _get_active_webview():
@@ -334,21 +337,63 @@ def _get_active_webview():
 
 
 def set_mood(web_view_or_none=None, mood='neutral'):
-    """Update Plusi's mood in the given or active webview."""
-    web = web_view_or_none or _get_active_webview()
-    if web:
-        web.page().runJavaScript(f"window._plusiSetMood && window._plusiSetMood('{mood}');")
+    """Update Plusi's mood in the given or active webview.
+    Thread-safe: dispatches to main thread if called from a background thread."""
+    def _do():
+        web = web_view_or_none or _get_active_webview()
+        if web:
+            web.page().runJavaScript(f"window._plusiSetMood && window._plusiSetMood('{mood}');")
+
+    import threading
+    if threading.current_thread() is not threading.main_thread():
+        from aqt import mw
+        if mw and mw.taskman:
+            mw.taskman.run_on_main(_do)
+    else:
+        _do()
 
 
 def show_bubble(web_view_or_none=None, text='', mood='happy'):
-    """Show an event bubble next to Plusi."""
-    web = web_view_or_none or _get_active_webview()
-    if web:
-        web.page().runJavaScript(
-            f"window._plusiShowBubble && window._plusiShowBubble({json.dumps(text)}, '{mood}');"
-        )
+    """Show an event bubble next to Plusi.
+    Thread-safe: dispatches to main thread if called from a background thread."""
+    def _do():
+        web = web_view_or_none or _get_active_webview()
+        if web:
+            web.page().runJavaScript(
+                f"window._plusiShowBubble && window._plusiShowBubble({json.dumps(text)}, '{mood}');"
+            )
+
+    import threading
+    if threading.current_thread() is not threading.main_thread():
+        from aqt import mw
+        if mw and mw.taskman:
+            mw.taskman.run_on_main(_do)
+    else:
+        _do()
 
 
 def sync_mood(mood):
-    """Convenience: sync mood to whatever webview is currently active."""
+    """Convenience: sync mood to whatever webview is currently active.
+    Also persists the mood so it survives page reloads and app restarts."""
+    # Persist to storage
+    try:
+        try:
+            from .plusi_storage import set_memory
+        except ImportError:
+            from plusi_storage import set_memory
+        set_memory('state', 'last_mood', mood)
+    except Exception:
+        pass
     set_mood(None, mood)
+
+
+def get_persisted_mood():
+    """Get the last persisted mood, or 'neutral' as default."""
+    try:
+        try:
+            from .plusi_storage import get_memory
+        except ImportError:
+            from plusi_storage import get_memory
+        return get_memory('state', 'last_mood', 'neutral')
+    except Exception:
+        return 'neutral'
