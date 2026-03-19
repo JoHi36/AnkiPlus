@@ -52,19 +52,18 @@ export default function ChatInput({
   const [isFocused, setIsFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const hasPlusiTag = input.startsWith('@Plusi');
-
-  // Auto-detect @Plusi anywhere in text → move it to the front
+  // Detect @Plusi case-insensitive, normalize to @Plusi at front
   useEffect(() => {
-    if (input.startsWith('@Plusi')) return; // already at front
-    const match = input.match(/@Plusi/);
+    if (input.startsWith('@Plusi')) return;
+    const match = input.match(/@plusi/i);
     if (match && match.index !== undefined) {
-      // Remove @Plusi from where it was typed, prepend it
       const without = input.slice(0, match.index) + input.slice(match.index + 6);
-      const cleaned = without.replace(/^\s+/, ''); // trim leading space
+      const cleaned = without.replace(/^\s+/, '');
       setInput('@Plusi ' + cleaned);
     }
   }, [input]);
+
+  const hasPlusiTag = input.startsWith('@Plusi');
 
   // Auto-focus textarea when component mounts (chat panel opened)
   useEffect(() => {
@@ -169,9 +168,9 @@ export default function ChatInput({
           }}
         />
 
-        {/* Textarea area — normal textarea with @Plusi highlight overlay */}
-        <div className="relative px-4 py-3">
-          {/* Highlight overlay — mirrors textarea content, shows @Plusi highlighted + rest as normal text */}
+        {/* Textarea area — grid stack: overlay behind textarea, both same size */}
+        <div style={{ display: 'grid', padding: '12px 16px', position: 'relative' }}>
+          {/* Highlight overlay — same grid cell as textarea */}
           {hasPlusiTag && (() => {
             const idx = input.indexOf('@Plusi');
             const before = input.slice(0, idx);
@@ -180,11 +179,7 @@ export default function ChatInput({
               <div
                 aria-hidden="true"
                 style={{
-                  position: 'absolute',
-                  top: 0, left: 0, right: 0, bottom: 0,
-                  padding: 0,
-                  paddingRight: '40px',
-                  pointerEvents: 'none',
+                  gridArea: '1 / 1',
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
                   fontSize: '15px',
@@ -192,6 +187,9 @@ export default function ChatInput({
                   fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif',
                   overflow: 'hidden',
                   color: 'rgba(232,232,232,0.9)',
+                  paddingRight: '40px',
+                  pointerEvents: 'none',
+                  minHeight: '24px',
                 }}
               >
                 {before && <span>{before}</span>}
@@ -215,12 +213,21 @@ export default function ChatInput({
             onBlur={() => setIsFocused(false)}
             placeholder="Stelle eine Frage..."
             rows={1}
-            className="w-full min-h-[24px] max-h-[120px] p-0 pr-10 bg-transparent text-[15px] leading-relaxed resize-none outline-none placeholder:text-base-content/25"
             style={{
+              gridArea: '1 / 1',
+              width: '100%',
+              minHeight: '24px',
+              maxHeight: '120px',
+              padding: 0,
+              paddingRight: '40px',
+              background: 'transparent',
+              fontSize: '15px',
+              lineHeight: '1.625',
+              fontFamily: 'inherit',
+              resize: 'none',
+              outline: 'none',
               border: 'none',
-              position: 'relative',
-              zIndex: 1,
-              color: hasPlusiTag ? 'transparent' : undefined,
+              color: hasPlusiTag ? 'transparent' : 'rgba(232,232,232,0.9)',
               caretColor: 'white',
               WebkitTextFillColor: hasPlusiTag ? 'transparent' : undefined,
             }}
