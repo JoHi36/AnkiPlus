@@ -170,18 +170,16 @@
                 break;
 
             case S.HISTORY: {
-                showSection('dc-history');
-                // Update position display
-                const posEl = $('#history-position');
-                if (posEl && window._historyInfo) {
-                    const pos = window._historyInfo.position || 0;
-                    const total = window._historyInfo.total || 0;
-                    const distance = total - pos;
-                    posEl.textContent = pos + ' / ' + total + (distance > 0 ? '  (' + distance + ' zurück)' : '');
-                }
+                // Looks like ANSWER state but Space navigates right, Enter opens chat
+                showSection('dc-timer');
+                // Hide timer numbers, show neutral indicator
+                const secEl = $('#timer-seconds');
+                const ratEl = $('#timer-rating');
+                if (secEl) secEl.textContent = '';
+                if (ratEl) { ratEl.textContent = ''; ratEl.className = ''; }
                 setActions(
-                    { label: chatOpen ? 'Chat schließen' : 'Chat öffnen', shortcut: chatOpen ? 'ESC' : '↵', onclick: 'openFollowUp()' },
-                    null
+                    { label: 'Weiter', shortcut: 'SPACE', onclick: 'pycmd("navigate:next")', color: 'rgba(255,255,255,0.88)', weight: '600' },
+                    { label: chatOpen ? 'Schließen' : 'Nachfragen', shortcut: chatOpen ? 'ESC' : '↵', onclick: 'openFollowUp()' }
                 );
                 break;
             }
@@ -714,11 +712,87 @@
 
     /**
      * Enter HISTORY mode — called by Python when navigating to a previously-reviewed card.
-     * @param {object} info - { position, total }
+     * Looks like ANSWER state but Space=navigate right, Enter=open chat.
      */
-    window.setHistoryMode = function(info) {
-        window._historyInfo = info || {};
+    window.setHistoryMode = function() {
         setState(S.HISTORY);
+    };
+
+    /**
+     * Show stored performance result in the dock for history cards.
+     * Called by Python after loading the card's session from SQLite.
+     * @param {object} perfData - { type: 'mc'|'text'|'flip', score, attempts, ... }
+     */
+    window.showStoredPerformance = function(perfData) {
+        if (!perfData || current !== S.HISTORY) return;
+
+        const type = perfData.type;
+        const evalEl = $('#eval-result');
+
+        if (type === 'text' && perfData.score != null) {
+            // Text evaluation — show score bar
+            const score = perfData.score;
+            let ease, label, color, barColor;
+            if (score >= 90)      { ease = 4; label = 'Easy'; color = 'text-primary'; barColor = '#0a84ff'; }
+            else if (score >= 70) { ease = 3; label = 'Good'; color = 'text-success'; barColor = '#30d158'; }
+            else if (score >= 40) { ease = 2; label = 'Hard'; color = 'text-warning'; barColor = '#ffd60a'; }
+            else                  { ease = 1; label = 'Again'; color = 'text-error'; barColor = '#ff453a'; }
+
+            showSection('dc-eval');
+            if (evalEl) {
+                evalEl.innerHTML = `
+                    <div class="w-full h-[3px] bg-base-content/6 rounded-full overflow-hidden mb-2">
+                        <div class="h-full rounded-full" style="width: ${score}%; background: ${barColor}"></div>
+                    </div>
+                    <div class="flex items-baseline gap-2">
+                        <span class="font-mono text-xl font-bold ${color}">${score}%</span>
+                        <span class="text-xs font-semibold uppercase tracking-wide ${color}">${label}</span>
+                    </div>`;
+            }
+        } else if (type === 'mc') {
+            // MC — show stars
+            const attempts = perfData.attempts || 0;
+            const correct = perfData.correct != null ? perfData.correct : (attempts <= 3);
+            let ease;
+            if (correct) {
+                ease = attempts === 1 ? 3 : attempts === 2 ? 2 : 1;
+            } else {
+                ease = 1;
+            }
+            const colorMap = { 3: 'rgb(48,209,88)', 2: 'rgb(255,159,10)', 1: 'rgb(255,69,58)' };
+            const labelMap = { 3: 'Gut', 2: 'Schwierig', 1: 'Wiederholen' };
+            const starsColor = colorMap[ease];
+
+            showSection('dc-eval');
+            if (evalEl) {
+                let starsHtml = '';
+                for (let i = 0; i < 3; i++) {
+                    const dimmed = i < (attempts - 1);
+                    starsHtml += `<span style="font-size:22px;line-height:1;color:${dimmed ? 'rgba(255,255,255,0.12)' : starsColor};">★</span>`;
+                }
+                evalEl.innerHTML = `
+                    <div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:4px 0;">
+                        ${starsHtml}
+                        <span style="font-size:13px;color:rgba(255,255,255,0.3);margin:0 4px;">→</span>
+                        <span style="font-size:14px;font-weight:600;color:${starsColor};">${labelMap[ease]}</span>
+                    </div>`;
+            }
+        } else if (type === 'flip') {
+            // Simple flip — show the rating
+            const rating = perfData.ease || perfData.rating || 3;
+            const ratingMap = { 1: { label: 'Again', color: '#ff453a' }, 2: { label: 'Hard', color: '#ffd60a' }, 3: { label: 'Good', color: '#30d158' }, 4: { label: 'Easy', color: '#0a84ff' } };
+            const r = ratingMap[rating] || ratingMap[3];
+            const secEl = $('#timer-seconds');
+            const ratEl = $('#timer-rating');
+            if (secEl) { secEl.textContent = ''; }
+            if (ratEl) { ratEl.textContent = r.label; ratEl.style.color = r.color; ratEl.className = 'text-xs font-semibold uppercase tracking-wide'; }
+        }
+
+        // Keep HISTORY actions (Weiter = navigate, Nachfragen = chat)
+        setActions(
+            { label: 'Weiter', shortcut: 'SPACE', onclick: 'pycmd("navigate:next")', color: 'rgba(255,255,255,0.88)', weight: '600' },
+            { label: chatOpen ? 'Schließen' : 'Nachfragen', shortcut: chatOpen ? 'ESC' : '↵', onclick: 'openFollowUp()' }
+        );
     };
 
     window.setChatOpen = function(isOpen) {
@@ -776,7 +850,7 @@
 
         const handlers = {
             'Space': () => {
-                if (current === S.HISTORY) return; // no action in history mode
+                if (current === S.HISTORY) { pycmd('navigate:next'); return; }
                 if (current === S.QUESTION) showAnswer();
                 else if (current === S.MC_ACTIVE) revealAnswer();
                 else if (current === S.ANSWER) rateCard(autoRateEase || 3);

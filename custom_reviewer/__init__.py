@@ -590,23 +590,27 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                     import time as _time
                     if not getattr(rev.card, 'timer_started', None):
                         rev.card.timer_started = _time.time()
-                    print(f"CustomReviewer: 🔄 Loading next card {rev.card.id}...")
-                    if hasattr(rev, '_initWeb'):
-                        rev._initWeb()
-                    else:
-                        # Fallback: trigger stdHtml directly — our hook replaces body anyway
-                        rev.web.stdHtml("", context=rev)
+                    next_card = rev.card
+                    print(f"CustomReviewer: 🔄 Loading next card {next_card.id}...")
 
-                    # CRITICAL: Send cardContext directly to chat panel
-                    # (don't rely solely on reviewer_did_show_question hook)
-                    try:
-                        from .. import ui_setup
-                        chat_widget = getattr(ui_setup, '_chatbot_widget', None)
-                        if chat_widget and hasattr(chat_widget, 'card_tracker'):
-                            chat_widget.card_tracker.send_card_context(rev.card, is_question=True)
-                            print(f"CustomReviewer: ✅ cardContext sent to chat for next card {rev.card.id}")
-                    except Exception as ctx_e:
-                        print(f"CustomReviewer: ⚠️ Could not send cardContext after ease: {ctx_e}")
+                    # Defer _initWeb to avoid Qt re-entrancy SEGFAULT
+                    def _do_show_next(rev=rev, card=next_card):
+                        if hasattr(rev, '_initWeb'):
+                            rev._initWeb()
+                        else:
+                            rev.web.stdHtml("", context=rev)
+                        # Send cardContext to chat panel
+                        try:
+                            from .. import ui_setup
+                            chat_widget = getattr(ui_setup, '_chatbot_widget', None)
+                            if chat_widget and hasattr(chat_widget, 'card_tracker'):
+                                chat_widget.card_tracker.send_card_context(card, is_question=True)
+                                print(f"CustomReviewer: ✅ cardContext sent to chat for next card {card.id}")
+                        except Exception as ctx_e:
+                            print(f"CustomReviewer: ⚠️ Could not send cardContext after ease: {ctx_e}")
+
+                    from aqt.qt import QTimer
+                    QTimer.singleShot(0, _do_show_next)
                 else:
                     print("CustomReviewer: 📋 No more cards — going to overview")
                     mw.moveToState("overview")
@@ -823,28 +827,66 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                     rev = mw.reviewer
                     rev.card = card
                     # Set timer_started so _answerCard doesn't crash
-                    # (navigated cards don't have timer_started set by default)
                     import time as _time
                     card.timer_started = _time.time()
-                    # Flag to prevent _on_webview_content from corrupting the trail
-                    handle_custom_pycmd._is_navigating = True
-                    try:
-                        rev._initWeb()
-                    finally:
-                        handle_custom_pycmd._is_navigating = False
-                    print(f"CustomReviewer: Navigated to card {target_card_id} (trail {handle_custom_pycmd._trail_index + 1}/{len(trail)})")
 
-                    # CRITICAL: Send cardContext directly to chat panel
-                    # (don't rely on reviewer_did_show_question hook — it may
-                    #  fire before the webview is ready or get lost)
-                    try:
-                        from .. import ui_setup
-                        chat_widget = getattr(ui_setup, '_chatbot_widget', None)
-                        if chat_widget and hasattr(chat_widget, 'card_tracker'):
-                            chat_widget.card_tracker.send_card_context(card, is_question=True)
-                            print(f"CustomReviewer: ✅ cardContext sent to chat for card {target_card_id}")
-                    except Exception as nav_e:
-                        print(f"CustomReviewer: ⚠️ Could not send cardContext after navigate: {nav_e}")
+                    # Determine if navigated card should show in answered state
+                    # Cards behind the current trail position were already reviewed
+                    is_history = handle_custom_pycmd._trail_index < len(handle_custom_pycmd._review_trail) - 1
+
+                    # Defer _initWeb() to avoid SEGFAULT when called from
+                    # within a pycmd handler (Qt re-entrancy issue)
+                    def _do_navigate(rev=rev, card=card, target_id=target_card_id, show_answer=is_history):
+                        handle_custom_pycmd._is_navigating = True
+                        handle_custom_pycmd._show_answered = show_answer
+                        try:
+                            rev._initWeb()
+                        finally:
+                            handle_custom_pycmd._is_navigating = False
+                        print(f"CustomReviewer: Navigated to card {target_id} (trail {handle_custom_pycmd._trail_index + 1}/{len(handle_custom_pycmd._review_trail)}, answered={show_answer})")
+
+                        # Send cardContext to chat panel after webview is ready
+                        is_q = not show_answer
+                        try:
+                            from .. import ui_setup
+                            chat_widget = getattr(ui_setup, '_chatbot_widget', None)
+                            if chat_widget and hasattr(chat_widget, 'card_tracker'):
+                                chat_widget.card_tracker.send_card_context(card, is_question=is_q)
+                                print(f"CustomReviewer: ✅ cardContext sent to chat for card {target_id}")
+                        except Exception as nav_e:
+                            print(f"CustomReviewer: ⚠️ Could not send cardContext after navigate: {nav_e}")
+
+                        # For history cards: load and inject stored performance result
+                        if show_answer:
+                            try:
+                                from .card_sessions_storage import load_card_session
+                                session_data = load_card_session(target_id)
+                                if session_data:
+                                    sections = session_data.get('sections', [])
+                                    # Find the latest section with performance data
+                                    perf_section = None
+                                    for s in reversed(sections):
+                                        if s.get('performance_data'):
+                                            perf_section = s
+                                            break
+                                    if perf_section:
+                                        perf_data = perf_section['performance_data']
+                                        perf_json = json.dumps(perf_data) if not isinstance(perf_data, str) else perf_data
+                                        def _inject_perf():
+                                            try:
+                                                if mw and mw.reviewer and mw.reviewer.web:
+                                                    mw.reviewer.web.eval(
+                                                        f'if(window.showStoredPerformance) showStoredPerformance({perf_json});'
+                                                    )
+                                            except Exception:
+                                                pass
+                                        from aqt.qt import QTimer as _QT
+                                        _QT.singleShot(300, _inject_perf)
+                            except Exception as perf_e:
+                                print(f"CustomReviewer: ⚠️ Could not load performance for card {target_id}: {perf_e}")
+
+                    from aqt.qt import QTimer
+                    QTimer.singleShot(0, _do_navigate)
                 else:
                     print(f"CustomReviewer: Card {target_card_id} not found")
         except Exception as e:
@@ -958,9 +1000,13 @@ class CustomReviewer:
                     handle_custom_pycmd._trail_index = len(trail) - 1
 
             # Build custom HTML and replace the body
-            custom_html = self._build_reviewer_html(card, context)
+            # If navigating to a previously-reviewed card, show it answered
+            show_answered = getattr(handle_custom_pycmd, '_show_answered', False)
+            if show_answered:
+                handle_custom_pycmd._show_answered = False  # Reset flag
+            custom_html = self._build_reviewer_html(card, context, show_answered=show_answered)
             web_content.body = custom_html
-            print(f"CustomReviewer: ✅ Injected custom HTML for card {card.id} (trail {handle_custom_pycmd._trail_index + 1}/{len(trail)})")
+            print(f"CustomReviewer: ✅ Injected custom HTML for card {card.id} (trail {handle_custom_pycmd._trail_index + 1}/{len(handle_custom_pycmd._review_trail)})")
         except Exception as e:
             import traceback
             print(f"CustomReviewer: ❌ Error in hook: {e}")
@@ -1095,7 +1141,7 @@ class CustomReviewer:
             print(f"CustomReviewer: Error getting card info: {e}")
             return {}
 
-    def _build_reviewer_html(self, card, reviewer) -> str:
+    def _build_reviewer_html(self, card, reviewer, show_answered=False) -> str:
         """Generate completely custom HTML for the reviewer"""
         # Get card content
         question_html = card.question()
@@ -1194,8 +1240,6 @@ class CustomReviewer:
             )
 
         # CRITICAL FIX: Inject override CSS at the END of body tag
-        # This ensures it comes AFTER deck CSS (which is embedded in question_html/answer_html)
-        # and successfully overrides the white background from AMBOSS deck
         override_css = """
 <style>
 /* FORCE TRANSPARENCY: Override AMBOSS deck background */
@@ -1207,8 +1251,29 @@ class CustomReviewer:
     background-color: transparent !important;
 }
 </style>"""
-        # Insert before closing body tag to ensure it's last in cascade
-        html = html.replace('</body>', override_css + '</body>')
+        # Auto-show answer + HISTORY mode for previously-reviewed cards
+        auto_answer_js = ""
+        if show_answered:
+            auto_answer_js = """
+<script>
+// Flag to prevent load-event from resetting to QUESTION state
+window._historyPending = true;
+// Auto-show answer for previously-reviewed card, then switch to HISTORY dock mode
+document.addEventListener('DOMContentLoaded', function() {
+    if (typeof showAnswer === 'function') showAnswer();
+    setTimeout(function() {
+        if (typeof setHistoryMode === 'function') setHistoryMode();
+    }, 100);
+});
+setTimeout(function() {
+    if (typeof showAnswer === 'function') showAnswer();
+    setTimeout(function() {
+        if (typeof setHistoryMode === 'function') setHistoryMode();
+    }, 100);
+}, 50);
+</script>"""
+
+        html = html.replace('</body>', override_css + auto_answer_js + '</body>')
 
         return html
 

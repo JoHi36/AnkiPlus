@@ -60,6 +60,21 @@ div[id^="bottom"]:not(#reviewer *) {
     z-index: 1;
 }
 
+/* ═══ Tab Bar ═══ */
+.tab-btn {
+    box-shadow: none !important;
+    outline: none !important;
+    border: none !important;
+}
+.tab-btn:hover {
+    box-shadow: none !important;
+    outline: none !important;
+    border: none !important;
+}
+.tab-btn.tab-active {
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
+}
+
 /* ═══ Unified Dock ═══ */
 #unified-dock {
     transition: opacity 0.2s ease, transform 0.2s ease;
@@ -175,10 +190,10 @@ div[id^="bottom"]:not(#reviewer *) {
             </div>
             <!-- Center: Tabs -->
             <div class="flex items-center gap-0.5 p-[3px] bg-base-content/[0.04] rounded-lg">
-                <button class="px-4 py-[5px] text-xs font-medium text-base-content/[0.35] bg-transparent border-none rounded-md cursor-pointer hover:text-base-content/[0.55] transition-colors"
+                <button class="tab-btn px-4 py-[5px] text-xs font-medium text-base-content/[0.35] bg-transparent rounded-md cursor-pointer hover:text-base-content/[0.55] hover:bg-base-content/[0.04] transition-colors"
                         onclick="try{sessionStorage.removeItem('ap_session_active')}catch(e){};pycmd('deck:home')">Stapel</button>
-                <button class="px-4 py-[5px] text-xs font-semibold text-base-content bg-base-content/[0.08] border-none rounded-md cursor-pointer">Session</button>
-                <button class="px-4 py-[5px] text-xs font-medium text-base-content/[0.35] bg-transparent border-none rounded-md cursor-pointer hover:text-base-content/[0.55] transition-colors"
+                <button class="tab-btn tab-active px-4 py-[5px] text-xs font-semibold text-base-content bg-base-content/[0.08] rounded-md cursor-pointer">Session</button>
+                <button class="tab-btn px-4 py-[5px] text-xs font-medium text-base-content/[0.35] bg-transparent rounded-md cursor-pointer hover:text-base-content/[0.55] hover:bg-base-content/[0.04] transition-colors"
                         onclick="try{sessionStorage.removeItem('ap_session_active')}catch(e){};pycmd('deck:stats')">Statistik</button>
             </div>
             <!-- Right: Stats (numbers only) -->
@@ -213,7 +228,7 @@ div[id^="bottom"]:not(#reviewer *) {
              style="transform: translateX(-50%); width: min(750px, calc(100vw - 40px));">
 
             <div class="relative flex flex-col rounded-2xl"
-                 style="background: rgba(21,21,21,0.75); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 4px 24px rgba(0,0,0,0.4);">
+                 style="background: #151515; border: 1px solid rgba(255,255,255,0.0); box-shadow: 0 4px 24px rgba(0,0,0,0.4);">
 
                 <!-- Animated snake border for the entire dock (positioned outside via inset:-1px) -->
                 <div id="dock-snake-border" class="snake-border" style="inset:-1px;border-radius:17px;"></div>
