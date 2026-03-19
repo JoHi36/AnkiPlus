@@ -314,6 +314,27 @@
       <div class="pill-group" id="theme-pills"></div>
     </div>
     <div class="section">
+      <div class="section-title">Semantische Suche</div>
+      <div class="card">
+        <div class="row" style="flex-direction:column;align-items:stretch;gap:8px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div class="row-label">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <span>Karten-Embeddings</span>
+              <span id="embed-status-badge" class="badge" style="display:none;"></span>
+            </div>
+            <span id="embed-count" style="font-size:12px;color:var(--text-secondary);font-variant-numeric:tabular-nums;"></span>
+          </div>
+          <div class="quota-bar" style="height:3px;">
+            <div id="embed-bar" class="quota-fill" style="width:0%;background:var(--accent);transition:width 0.6s ease;"></div>
+          </div>
+          <div style="font-size:11px;color:var(--text-tertiary);line-height:1.5;">
+            Karten werden im Hintergrund indiziert, um semantisch ähnliche Inhalte zu finden.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="section">
       <div class="section-title" style="color:rgba(251,146,60,0.7);">Beta</div>
       <div class="card">
         <div class="row" onclick="toggleMascot()">
@@ -390,6 +411,7 @@ function renderAll() {
   renderResponseStyle();
   renderTools();
   renderMascot();
+  renderEmbeddingStatus();
 }
 
 // ── Tabs ──
@@ -577,6 +599,45 @@ function toggleTool(key) {
   config.aiTools[key] = !config.aiTools[key];
   bridge.saveAITools(JSON.stringify(config.aiTools));
   renderTools();
+}
+
+// ── Embedding Status ──
+let _embedPollTimer = null;
+
+function renderEmbeddingStatus() {
+  if (!bridge || !bridge.getEmbeddingStatus) return;
+  bridge.getEmbeddingStatus((json) => {
+    const s = JSON.parse(json);
+    const countEl = document.getElementById('embed-count');
+    const barEl = document.getElementById('embed-bar');
+    const badgeEl = document.getElementById('embed-status-badge');
+    if (!countEl) return;
+
+    const pct = s.totalCards > 0 ? Math.round((s.embeddedCards / s.totalCards) * 100) : 0;
+    countEl.textContent = s.embeddedCards + ' / ' + s.totalCards;
+    barEl.style.width = pct + '%';
+
+    if (s.isRunning) {
+      badgeEl.style.display = 'inline';
+      badgeEl.style.background = 'rgba(10,132,255,0.12)';
+      badgeEl.style.color = 'rgba(10,132,255,0.7)';
+      badgeEl.textContent = 'Läuft...';
+      // Poll while running
+      if (!_embedPollTimer) {
+        _embedPollTimer = setInterval(() => renderEmbeddingStatus(), 3000);
+      }
+    } else if (pct >= 100) {
+      badgeEl.style.display = 'inline';
+      badgeEl.style.background = 'rgba(34,197,94,0.12)';
+      badgeEl.style.color = 'rgba(34,197,94,0.7)';
+      badgeEl.textContent = 'Fertig';
+      barEl.style.background = '#22c55e';
+      if (_embedPollTimer) { clearInterval(_embedPollTimer); _embedPollTimer = null; }
+    } else {
+      badgeEl.style.display = 'none';
+      if (_embedPollTimer) { clearInterval(_embedPollTimer); _embedPollTimer = null; }
+    }
+  });
 }
 
 // ── Mascot ──

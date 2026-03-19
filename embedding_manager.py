@@ -43,8 +43,8 @@ def _unpack_floats(data, dim):
 
 
 class EmbeddingManager:
-    MODEL = "text-embedding-004"
-    EMBEDDING_DIM = 768
+    MODEL = "gemini-embedding-001"
+    EMBEDDING_DIM = 3072
     BATCH_SIZE = 50
     MIN_SIMILARITY = 0.3
 
@@ -321,7 +321,6 @@ class BackgroundEmbeddingThread(QThread):
             except Exception as e:
                 print(f"BackgroundEmbedding batch error: {e}, stopping background embedding")
                 break  # Stop on error instead of continuing to spam API
-                time.sleep(5)
 
             time.sleep(0.5)
 

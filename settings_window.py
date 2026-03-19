@@ -90,6 +90,45 @@ class SettingsBridge(QObject):
         except Exception as e:
             print(f"saveMascotEnabled error: {e}")
 
+    @pyqtSlot(result=str)
+    def getEmbeddingStatus(self):
+        """Return embedding progress: {total_cards, embedded_cards, is_running}"""
+        try:
+            try:
+                from .card_sessions_storage import count_embeddings
+            except ImportError:
+                from card_sessions_storage import count_embeddings
+
+            embedded = count_embeddings()
+
+            total = 0
+            try:
+                if mw and mw.col:
+                    total = len(mw.col.find_cards(""))
+            except Exception:
+                pass
+
+            is_running = False
+            try:
+                try:
+                    from . import get_embedding_manager
+                except ImportError:
+                    from __init__ import get_embedding_manager
+                mgr = get_embedding_manager()
+                if mgr and mgr._background_thread and mgr._background_thread.isRunning():
+                    is_running = True
+            except Exception:
+                pass
+
+            return json.dumps({
+                'totalCards': total,
+                'embeddedCards': embedded,
+                'isRunning': is_running,
+            })
+        except Exception as e:
+            print(f"getEmbeddingStatus error: {e}")
+            return json.dumps({'totalCards': 0, 'embeddedCards': 0, 'isRunning': False})
+
     @pyqtSlot(str)
     def saveAITools(self, tools_json):
         try:

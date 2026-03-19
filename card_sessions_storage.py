@@ -762,6 +762,12 @@ def delete_embedding(card_id):
     db.commit()
 
 
+def count_embeddings():
+    """Return total number of embedded cards."""
+    db = _get_db()
+    return db.execute("SELECT COUNT(*) FROM card_embeddings").fetchone()[0]
+
+
 def close_db():
     """Close DB connection (call on addon unload)."""
     global _db
