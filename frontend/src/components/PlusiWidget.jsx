@@ -110,16 +110,21 @@ const PLUSI_CSS = `
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 12px 5px;
-    background: rgba(10,132,255,.06);
+    padding: 8px 12px 7px;
+    background: rgba(10,132,255,.08);
   }
 
   .plusi-w-char {
     flex-shrink: 0;
-    width: 48px;
-    height: 52px;
+    width: 28px;
+    height: 28px;
     position: relative;
     overflow: visible;
+  }
+  /* Scale down the 48px character to fit 28px container — keeps proportions perfect */
+  .plusi-w-char > * {
+    transform: scale(0.58);
+    transform-origin: top left;
   }
   .plusi-w-char .mascot-shadow { display: none !important; }
 

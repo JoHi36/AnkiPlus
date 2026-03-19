@@ -157,39 +157,27 @@ export default function ChatInput({
           }}
         />
 
+        {/* @Plusi indicator — small chip above textarea when typing @Plusi */}
+        {hasPlusiTag && (
+          <div style={{ padding: '4px 16px 0', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              background: 'rgba(10,132,255,.15)',
+              color: 'rgba(10,132,255,.8)',
+              padding: '2px 8px',
+              borderRadius: '5px',
+              fontWeight: 600,
+              fontSize: '11px',
+              fontFamily: "'Space Grotesk', sans-serif",
+              letterSpacing: '0.03em',
+            }}>Plusi-Direkt</span>
+            <span style={{ fontSize: 10, color: 'rgba(255,255,255,.2)' }}>Nachricht geht direkt an Plusi</span>
+          </div>
+        )}
+
         {/* Textarea area */}
         <div className="relative px-4 py-3">
-          {/* @Plusi tag overlay — rendered OVER textarea with pointer-events:none */}
-          {hasPlusiTag && (
-            <div
-              aria-hidden="true"
-              style={{
-                position: 'absolute',
-                top: 0, left: 0, right: 0, bottom: 0,
-                padding: '12px 16px',
-                pointerEvents: 'none',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-                font: 'inherit',
-                lineHeight: 'inherit',
-                fontSize: '15px',
-                overflow: 'hidden',
-                zIndex: 2,
-              }}
-            >
-              <span style={{
-                background: 'rgba(10,132,255,.22)',
-                color: '#0a84ff',
-                padding: '2px 7px',
-                borderRadius: '5px',
-                fontWeight: 600,
-                fontSize: '14px',
-                fontFamily: "'Space Grotesk', sans-serif",
-                letterSpacing: '0.02em',
-              }}>@Plusi</span>
-              <span style={{ color: 'transparent' }}>{input.slice(6)}</span>
-            </div>
-          )}
           <textarea
             ref={textareaRef}
             value={input}
