@@ -11,6 +11,7 @@ import ReviewResult from './ReviewResult';
 import MultipleChoiceCard from './MultipleChoiceCard';
 import CitationBadge from './CitationBadge';
 import ThoughtStream from './ThoughtStream';
+import SourcesCarousel from './SourcesCarousel';
 import PlusiWidget from './PlusiWidget';
 import mermaid from 'mermaid';
 // SmilesDrawer wird dynamisch importiert, da es CommonJS ist und Vite-Probleme verursachen kann
@@ -1674,15 +1675,24 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
         {/* Content area - Full width for bot messages, no icon column */}
         <div className="w-full min-w-0">
             {/* 0. ThoughtStream - Shows during loading and after completion */}
-            {shouldRenderThoughtStream && (
-                <ThoughtStream
-                    steps={generateFallbackSteps}
-                    citations={citations}
-                    citationIndices={citationIndices}
-                    bridge={bridge}
-                    onPreviewCard={onPreviewCard}
-                    message={message}
-                />
+            {shouldRenderThoughtStream ? (
+                <>
+                  <ThoughtStream
+                      steps={generateFallbackSteps}
+                      message={message}
+                  />
+                  {Object.keys(citations).length > 0 && (
+                    <SourcesCarousel
+                      citations={citations}
+                      citationIndices={citationIndices || {}}
+                      bridge={bridge}
+                      onPreviewCard={onPreviewCard}
+                    />
+                  )}
+                </>
+            ) : (
+                /* Simple divider for saved bot messages without steps */
+                !isUser && <div className="h-px my-2" style={{ background: 'rgba(255,255,255,0.06)' }} />
             )}
             
             {/* 1. Review Card (Highest Priority) */}

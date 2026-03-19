@@ -24,6 +24,7 @@ import DeckBrowser from './components/DeckBrowser';
 import ErrorBoundary from './components/ErrorBoundary';
 import PaywallModal from './components/PaywallModal';
 import SectionDivider from './components/SectionDivider';
+import SourcesCarousel from './components/SourcesCarousel';
 import ReviewTrailIndicator from './components/ReviewTrailIndicator';
 import { BookOpen } from 'lucide-react';
 import { useFreeChat } from './hooks/useFreeChat';
@@ -2083,14 +2084,28 @@ function AppInner() {
                         {/* Pipeline ThoughtStream — rendered directly during loading */}
                         {chatHook.isLoading && (
                           <div className="w-full flex-none mb-2">
-                            <ThoughtStream
-                              pipelineSteps={chatHook.pipelineSteps || []}
-                              citations={chatHook.currentCitations || {}}
-                              isStreaming={true}
-                              bridge={bridge}
-                              onPreviewCard={handlePreviewCard}
-                              message={chatHook.streamingMessage || ''}
-                            />
+                            {/* ThoughtStream divider — v5 no longer renders sources */}
+                            {(chatHook.pipelineSteps && chatHook.pipelineSteps.length > 0) ? (
+                              <ThoughtStream
+                                pipelineSteps={chatHook.pipelineSteps || []}
+                                isStreaming={true}
+                                message={chatHook.streamingMessage || ''}
+                                steps={[]}
+                              />
+                            ) : (
+                              /* Simple divider for no-search messages */
+                              <div className="h-px my-2" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                            )}
+
+                            {/* Sources — always visible, outside ThoughtStream */}
+                            {Object.keys(chatHook.currentCitations || {}).length > 0 && (
+                              <SourcesCarousel
+                                citations={chatHook.currentCitations}
+                                citationIndices={chatHook.currentCitationIndices || {}}
+                                bridge={bridge}
+                                onPreviewCard={handlePreviewCard}
+                              />
+                            )}
                           </div>
                         )}
                         {(chatHook.isLoading || chatHook.streamingMessage) && !(
