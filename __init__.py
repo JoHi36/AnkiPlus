@@ -584,14 +584,13 @@ def on_reviewer_did_answer_card(reviewer, card, ease):
                 f"if (typeof window.ankiReceive === 'function') {{ window.ankiReceive({payload}); }}"
             )
 
-        # Also update Plusi dock in the reviewer main webview
+        # Also update Plusi dock in the main webview (reviewer/deckBrowser/overview)
         try:
             from plusi_dock import show_bubble
-            if mw and mw.reviewer and mw.reviewer.web:
-                if correct:
-                    show_bubble(mw.reviewer.web, 'Richtig! ✨', 'happy')
-                else:
-                    show_bubble(mw.reviewer.web, 'nächstes mal 💪', 'empathy')
+            if correct:
+                show_bubble(None, 'Richtig! ✨', 'happy')
+            else:
+                show_bubble(None, 'nächstes mal 💪', 'empathy')
         except Exception:
             pass
     except Exception as e:

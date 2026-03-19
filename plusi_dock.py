@@ -308,13 +308,43 @@ def get_plusi_dock_injection():
     return f'<style>{PLUSI_CSS}</style>\n{PLUSI_HTML}\n<script>{PLUSI_JS}</script>'
 
 
-def set_mood(web_view, mood):
-    """Update Plusi's mood in the given webview."""
-    web_view.page().runJavaScript(f"window._plusiSetMood && window._plusiSetMood('{mood}');")
+def _get_active_webview():
+    """Get the currently active main webview (reviewer, deckBrowser, or overview)."""
+    try:
+        from aqt import mw
+        if not mw:
+            return None
+        state = mw.state
+        if state == 'review' and mw.reviewer and mw.reviewer.web:
+            return mw.reviewer.web
+        elif state == 'deckBrowser' and hasattr(mw, 'deckBrowser') and mw.deckBrowser and mw.deckBrowser.web:
+            return mw.deckBrowser.web
+        elif state == 'overview' and hasattr(mw, 'overview') and mw.overview and mw.overview.web:
+            return mw.overview.web
+        # Fallback: try reviewer first
+        if mw.reviewer and mw.reviewer.web:
+            return mw.reviewer.web
+        return None
+    except Exception:
+        return None
 
 
-def show_bubble(web_view, text, mood='happy'):
+def set_mood(web_view_or_none=None, mood='neutral'):
+    """Update Plusi's mood in the given or active webview."""
+    web = web_view_or_none or _get_active_webview()
+    if web:
+        web.page().runJavaScript(f"window._plusiSetMood && window._plusiSetMood('{mood}');")
+
+
+def show_bubble(web_view_or_none=None, text='', mood='happy'):
     """Show an event bubble next to Plusi."""
-    web_view.page().runJavaScript(
-        f"window._plusiShowBubble && window._plusiShowBubble({json.dumps(text)}, '{mood}');"
-    )
+    web = web_view_or_none or _get_active_webview()
+    if web:
+        web.page().runJavaScript(
+            f"window._plusiShowBubble && window._plusiShowBubble({json.dumps(text)}, '{mood}');"
+        )
+
+
+def sync_mood(mood):
+    """Convenience: sync mood to whatever webview is currently active."""
+    set_mood(None, mood)

@@ -678,10 +678,8 @@ class ChatbotWidget(QWidget):
             )
             # Sync mood to main window Plusi dock
             try:
-                from plusi_dock import set_mood
-                from aqt import mw
-                if mw and mw.reviewer and mw.reviewer.web:
-                    set_mood(mw.reviewer.web, mood)
+                from plusi_dock import sync_mood
+                sync_mood(mood)
             except Exception:
                 pass
         except Exception as e:
@@ -814,10 +812,8 @@ class ChatbotWidget(QWidget):
             if payload.get('type') == 'plusiResult' or (isinstance(payload.get('mood'), str)):
                 mood = payload.get('mood', 'neutral')
                 try:
-                    from plusi_dock import set_mood
-                    from aqt import mw
-                    if mw and mw.reviewer and mw.reviewer.web:
-                        QTimer.singleShot(0, lambda: set_mood(mw.reviewer.web, mood))
+                    from plusi_dock import sync_mood
+                    QTimer.singleShot(0, lambda: sync_mood(mood))
                 except Exception:
                     pass
 

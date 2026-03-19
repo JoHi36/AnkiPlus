@@ -1579,17 +1579,16 @@ class CustomScreens:
                         if hasattr(mw, 'onPrefs'):
                             mw.onPrefs()
             elif action_type == 'plusiAsk':
-                # Open chat panel with @Plusi prefix
+                # Set @Plusi in the deck browser search bar and focus it
                 try:
-                    from . import ui_setup
-                    if not (hasattr(ui_setup, '_chatbot_dock') and ui_setup._chatbot_dock and ui_setup._chatbot_dock.isVisible()):
-                        if hasattr(ui_setup, 'toggle_chatbot'):
-                            ui_setup.toggle_chatbot()
-                    chat_widget = getattr(ui_setup, '_chatbot_widget', None)
-                    if chat_widget and hasattr(chat_widget, 'web_view'):
-                        chat_widget.web_view.page().runJavaScript(
-                            "window.dispatchEvent(new CustomEvent('plusi-ask-focus', {detail: {prefix: '@Plusi '}}));"
-                        )
+                    web = mw.deckBrowser.web if hasattr(mw, 'deckBrowser') and mw.deckBrowser else None
+                    if not web:
+                        web = mw.overview.web if hasattr(mw, 'overview') and mw.overview else None
+                    if web:
+                        web.page().runJavaScript("""
+                            var inp = document.getElementById('ap-search-input');
+                            if (inp) { inp.value = '@Plusi '; inp.focus(); inp.setSelectionRange(7, 7); }
+                        """)
                 except Exception as e:
                     print(f"plusiAsk error: {e}")
             elif action_type == 'plusiSettings':
