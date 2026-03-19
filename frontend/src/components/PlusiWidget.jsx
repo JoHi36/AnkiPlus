@@ -50,52 +50,39 @@ export default function PlusiWidget({
   const textParts = displayText.split('\n---\n');
   const rgb = hexToRgb(color);
 
-  const cardStyle = {
-    background: `rgba(${rgb}, 0.04)`,
-    border: `1px solid rgba(${rgb}, 0.15)`,
-    borderRadius: '10px',
-    overflow: 'hidden',
-    boxShadow: `0 0 16px rgba(${rgb}, 0.07)`,
-    margin: '10px 0 6px',
-    transition: 'all 0.3s ease',
-    opacity: isFrozen ? 0.55 : 1,
-    position: 'relative',
-  };
-
   return (
     <>
       <style>{PLUSI_CSS}</style>
-      <div style={cardStyle}>
-        {isLoading && <div className="plusi-shimmer" style={{
-          background: `linear-gradient(90deg, transparent 0%, rgba(${rgb},0.03) 40%, rgba(${rgb},0.06) 50%, rgba(${rgb},0.03) 60%, transparent 100%)`
-        }} />}
+      <div
+        className="plusi-card"
+        style={{
+          '--plusi-rgb': rgb,
+          '--plusi-color': color,
+          opacity: isFrozen ? 0.55 : 1,
+        }}
+      >
+        {isLoading && <div className="plusi-shimmer" />}
 
         {/* Header: Mascot + Name + Mood */}
         <div className="plusi-header">
           <div className="plusi-mascot">
-            <MascotCharacter
-              mood={isLoading ? 'thinking' : mood}
-              size={24}
-              isThinking={isLoading}
-              active={false}
-            />
+            <div style={{ transform: 'scale(0.5)', transformOrigin: 'top left', width: 48, height: 48 }}>
+              <MascotCharacter
+                mood={isLoading ? 'thinking' : mood}
+                size={48}
+                isThinking={isLoading}
+                active={false}
+              />
+            </div>
           </div>
-          <span className="plusi-name" style={{ color: `rgba(${rgb}, 0.7)` }}>
-            Plusi
-          </span>
+          <span className="plusi-name">Plusi</span>
           <div style={{ flex: 1 }} />
           {resolvedMeta && (
-            <span className="plusi-mood-text" style={{ color: `rgba(${rgb}, 0.4)` }}>
-              {resolvedMeta}
-            </span>
+            <span className="plusi-mood-text">{resolvedMeta}</span>
           )}
           <span
             className="plusi-mood-dot"
-            style={{
-              background: color,
-              boxShadow: `0 0 5px rgba(${rgb}, 0.5)`,
-              opacity: resolvedMeta ? 1 : 0.5,
-            }}
+            style={{ opacity: resolvedMeta ? 1 : 0.5 }}
           />
         </div>
 
@@ -106,9 +93,7 @@ export default function PlusiWidget({
           ) : (
             textParts.map((part, i) => (
               <React.Fragment key={i}>
-                {i > 0 && <div className="plusi-fade" style={{
-                  background: `radial-gradient(ellipse at center, rgba(${rgb},0.25) 0%, rgba(${rgb},0.08) 40%, transparent 80%)`
-                }} />}
+                {i > 0 && <div className="plusi-fade" />}
                 <div className="plusi-markdown">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {part.trim()}
@@ -124,18 +109,12 @@ export default function PlusiWidget({
           <div className="plusi-footer">
             <div className="plusi-footer-row">
               <div className="plusi-footer-left">
-                <span className="plusi-level-name" style={{ color: `rgba(${rgb}, 0.5)` }}>
-                  {friendship.levelName}
-                </span>
+                <span className="plusi-level-name">{friendship.levelName}</span>
                 {friendship.delta > 0 && (
-                  <span className="plusi-delta" style={{ color: `rgba(${rgb}, 0.6)` }}>
-                    ▲ +{friendship.delta}
-                  </span>
+                  <span className="plusi-delta plusi-delta-up">▲ +{friendship.delta}</span>
                 )}
                 {friendship.delta < 0 && (
-                  <span className="plusi-delta" style={{ color: `rgba(${rgb}, 0.55)` }}>
-                    ▼ {friendship.delta}
-                  </span>
+                  <span className="plusi-delta plusi-delta-down">▼ {friendship.delta}</span>
                 )}
               </div>
               <span className="plusi-points">
@@ -149,9 +128,6 @@ export default function PlusiWidget({
                   width: friendship.level >= 4
                     ? '100%'
                     : `${Math.min(100, (friendship.points / friendship.maxPoints) * 100)}%`,
-                  background: friendship.level >= 4
-                    ? `linear-gradient(90deg, rgba(${rgb},0.5), rgba(${rgb},0.7))`
-                    : `rgba(${rgb}, 0.5)`,
                 }}
               />
             </div>
@@ -165,6 +141,19 @@ export default function PlusiWidget({
 const PLUSI_CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Varela+Round&display=swap');
 
+  .plusi-card {
+    margin: 10px 0 6px;
+    background: rgba(var(--plusi-rgb), 0.04);
+    border: 1px solid rgba(var(--plusi-rgb), 0.15);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 0 16px rgba(var(--plusi-rgb), 0.07);
+    transition: all 0.3s ease;
+    position: relative;
+    font-family: 'Varela Round', -apple-system, sans-serif;
+  }
+
+  /* ── Header ── */
   .plusi-header {
     display: flex;
     align-items: center;
@@ -176,20 +165,20 @@ const PLUSI_CSS = `
     flex-shrink: 0;
     width: 24px;
     height: 24px;
+    overflow: hidden;
     position: relative;
-    overflow: visible;
   }
   .plusi-mascot .mascot-shadow { display: none !important; }
 
   .plusi-name {
     font-size: 11px;
     font-weight: 600;
-    font-family: 'Varela Round', -apple-system, sans-serif;
+    color: rgba(var(--plusi-rgb), 0.7);
   }
 
   .plusi-mood-text {
     font-size: 9px;
-    font-family: 'Varela Round', -apple-system, sans-serif;
+    color: rgba(var(--plusi-rgb), 0.4);
   }
 
   .plusi-mood-dot {
@@ -197,14 +186,16 @@ const PLUSI_CSS = `
     height: 5px;
     border-radius: 50%;
     flex-shrink: 0;
+    background: var(--plusi-color);
+    box-shadow: 0 0 5px rgba(var(--plusi-rgb), 0.5);
   }
 
+  /* ── Body ── */
   .plusi-body {
-    padding: 2px 11px 9px;
+    padding: 2px 11px 10px;
   }
 
   .plusi-markdown {
-    font-family: 'Varela Round', -apple-system, sans-serif;
     color: rgba(232,232,232,0.72);
   }
   .plusi-markdown p {
@@ -227,6 +218,7 @@ const PLUSI_CSS = `
   .plusi-fade {
     height: 1px;
     margin: 8px 0;
+    background: radial-gradient(ellipse at center, rgba(var(--plusi-rgb),0.25) 0%, rgba(var(--plusi-rgb),0.08) 40%, transparent 80%);
   }
 
   .plusi-placeholder {
@@ -234,11 +226,11 @@ const PLUSI_CSS = `
     color: rgba(154,154,154,0.35);
     font-style: italic;
     margin: 0;
-    font-family: 'Varela Round', -apple-system, sans-serif;
     position: relative;
     z-index: 2;
   }
 
+  /* ── Footer ── */
   .plusi-footer {
     padding: 6px 11px 7px;
     background: rgba(0,0,0,0.15);
@@ -260,18 +252,18 @@ const PLUSI_CSS = `
 
   .plusi-level-name {
     font-size: 9px;
-    font-family: 'Varela Round', -apple-system, sans-serif;
+    color: rgba(var(--plusi-rgb), 0.5);
   }
 
   .plusi-delta {
     font-size: 8px;
-    font-family: 'Varela Round', -apple-system, sans-serif;
   }
+  .plusi-delta-up { color: rgba(var(--plusi-rgb), 0.6); }
+  .plusi-delta-down { color: rgba(var(--plusi-rgb), 0.55); }
 
   .plusi-points {
     font-size: 8px;
     color: rgba(255,255,255,0.15);
-    font-family: 'Varela Round', -apple-system, sans-serif;
   }
 
   .plusi-bar-bg {
@@ -284,12 +276,15 @@ const PLUSI_CSS = `
   .plusi-bar-fill {
     height: 100%;
     border-radius: 1px;
+    background: rgba(var(--plusi-rgb), 0.5);
     transition: width 0.5s ease;
   }
 
+  /* ── Shimmer ── */
   .plusi-shimmer {
     position: absolute;
     top: 0; left: -100%; width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent 0%, rgba(var(--plusi-rgb),0.03) 40%, rgba(var(--plusi-rgb),0.06) 50%, rgba(var(--plusi-rgb),0.03) 60%, transparent 100%);
     animation: plusi-shimmer 2.5s ease-in-out infinite;
     pointer-events: none;
     z-index: 1;
