@@ -402,9 +402,9 @@ export function useAnki() {
               console.warn('Bridge: Fehler beim Parsen der Tools:', e);
             }
           },
-          companionChat: (systemPrompt, history, message) => {
+          plusiDirect: (text, deckId) => {
             if (window.ankiBridge) {
-              window.ankiBridge.addMessage('companionChat', { systemPrompt, history, message });
+              window.ankiBridge.addMessage('plusiDirect', JSON.stringify({ text, deck_id: deckId }));
             }
           }
         };
@@ -564,12 +564,11 @@ export function useAnki() {
               console.warn('Mock: localStorage nicht verfügbar');
             }
           },
-          companionChat: (systemPrompt, history, message) => {
-            console.log('Mock: companionChat', message?.substring(0, 50));
-            // Mock: simulate a companion response
+          plusiDirect: (text, deckId) => {
+            console.log('Mock: plusiDirect', text?.substring(0, 50));
             setTimeout(() => {
               if (window.ankiReceive) {
-                window.ankiReceive({ type: 'companionChunk', chunk: '{"mood":"happy"}\nHey! Das ist eine Mock-Antwort.', done: true });
+                window.ankiReceive({ type: 'plusi_direct_result', mood: 'happy', text: 'Hey! Das ist eine Mock-Antwort von Plusi.', meta: 'freut sich', error: false });
               }
             }, 800);
           }
