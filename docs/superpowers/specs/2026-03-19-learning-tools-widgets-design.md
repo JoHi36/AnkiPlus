@@ -45,7 +45,7 @@ The agentic core (Spec 1) provides the infrastructure — `ToolResponse`, `[[TOO
 }
 ```
 
-**Execute function:** Uses Anki's `col.find_notes()` with the query string, loads card data for each result. Returns:
+**Execute function:** Uses Anki's `col.find_cards()` with the query string, loads card data for each result. Card front/back text must be stripped of HTML tags and cloze markup for display. Returns:
 
 ```python
 def execute_search_deck(args):
@@ -53,7 +53,7 @@ def execute_search_deck(args):
     deck_id = args.get("deck_id")  # None = current deck
     max_results = min(args.get("max_results", 10), 50)
 
-    # Use Anki's search (runs on main thread via QTimer.singleShot)
+    # Runs on main thread via run_on_main_thread() helper (see Section 8)
     # Search in specific deck if deck_id provided
     # Returns plain dict (not json.dumps)
     return {
@@ -72,7 +72,11 @@ def execute_search_deck(args):
     }
 ```
 
-**Important:** Since Anki's collection can only be accessed from the main thread, the execute function must use `QTimer.singleShot(0, ...)` with a threading event to marshal the call. This is the same pattern used by `execute_plusi`.
+**Empty results:** When no cards match, returns `{"query": query, "cards": [], "total_found": 0, "showing": 0}`. The frontend renders an empty state ("Keine Karten gefunden").
+
+**Deck ID resolution:** If `deck_id` is None, uses `mw.col.decks.selected()` (the currently active deck in Anki). If `deck_id` is provided but invalid, returns an error dict: `{"error": "Deck nicht gefunden"}`.
+
+**HTML stripping:** Card front/back fields contain HTML. Strip with `anki.utils.strip_html()` or a simple regex. Cloze markup `{{c1::answer}}` should show as `answer`.
 
 #### `get_learning_stats` — Modular statistics display
 
@@ -121,7 +125,7 @@ def execute_learning_stats(args):
             "type": "streak",
             "current": 7,
             "best": 14,
-            "is_record": False  # True when current >= best
+            "is_record": False  # True when current >= best AND current > 0
         })
 
     if "heatmap" in modules:
@@ -145,10 +149,15 @@ def execute_learning_stats(args):
             "unseen_count": 302
         })
 
+    if not result_modules:
+        return {"error": "Keine Module angegeben"}
+
     return {"modules": result_modules}
 ```
 
-**Main thread access:** Same pattern as `search_deck` — uses `QTimer.singleShot(0, ...)` to marshal Anki collection access to the main Qt thread.
+**Empty modules:** If `modules` is empty or all requested modules fail, returns an error dict. The frontend shows the ToolErrorBadge.
+
+**Main thread access:** Same `run_on_main_thread()` helper as `search_deck` (see Section 8).
 
 ### 2. Frontend Widget System
 
@@ -182,11 +191,15 @@ Currently, ChatMessage.jsx has a single `plusiData` state for Plusi. This needs 
 const [plusiData, setPlusiData] = useState(null);
 
 // After:
-const [toolData, setToolData] = useState({});
-// toolData = { "spawn_plusi": {result}, "search_deck": {result}, ... }
+const [toolWidgets, setToolWidgets] = useState([]);
+// toolWidgets = [
+//   { name: "spawn_plusi", displayType: "widget", result: {...} },
+//   { name: "search_deck", displayType: "widget", result: {...} },
+//   { name: "search_deck", displayType: "loading" },
+// ]
 ```
 
-The `[[TOOL:...]]` parser sets data per tool name. Multiple tools in one message are supported.
+Uses an array instead of a keyed object. This supports multiple calls to the same tool in one message (e.g., two separate `search_deck` calls). The parser appends to the array. A `loading` entry is replaced by the `widget` entry for the same tool name when it arrives (first match).
 
 #### CardWidget — Single card display
 
@@ -218,7 +231,10 @@ Renders search results as a scrollable list.
 - Footer: "Als aktive Session setzen" button (disabled/placeholder for now)
 - Click on item calls `bridge.goToCard(cardId)`
 
-**Single vs. List decision:** The widget checks `cards.length`. If 1 → renders CardWidget. If >1 → renders CardListWidget.
+**Rendering decision based on `cards.length`:**
+- `0` → Empty state: "Keine Karten gefunden für '[query]'" in muted text, same container styling
+- `1` → CardWidget (single card with front + back)
+- `>1` → CardListWidget (scrollable list)
 
 #### StatsWidget — Modular stats container
 
@@ -307,7 +323,7 @@ Stat colors:    New=#0a84ff(70%), Learning=#ff9f0a(70%), Review=#30d158(70%)
 ### 5. Migration: PlusiWidget into generic system
 
 PlusiWidget currently has its own state (`plusiData`) and render slot. After this change:
-- `plusiData` merges into `toolData["spawn_plusi"]`
+- `plusiData` is removed; Plusi data lives in the `toolWidgets` array like all other tools
 - PlusiWidget renders through ToolWidgetRenderer like all other tools
 - PlusiWidget.jsx itself is unchanged — only the wiring in ChatMessage.jsx changes
 
@@ -318,7 +334,85 @@ The CardListWidget shows this button in its footer. For now:
 - Tooltip or small text: "Bald verfügbar"
 - Will be activated when Preview Mode feature is implemented (separate spec/chat)
 
-### 7. Out of Scope
+### 8. Main Thread Access Pattern
+
+Both `search_deck` and `get_learning_stats` need to access `mw.col` which is only safe on the main Qt thread. The tool executor runs tools in a daemon thread (via `_run_with_timeout`). We need a helper to marshal calls to the main thread.
+
+**Note:** `execute_plusi` does NOT use this pattern — it makes HTTP requests which are thread-safe. The new tools are the first to access `mw.col` from a tool.
+
+**Helper function** (add to `tool_registry.py` or a new `anki_utils.py`):
+
+```python
+def run_on_main_thread(fn, timeout=14):
+    """Run a function on the main Qt thread and wait for the result.
+
+    Args:
+        fn: Callable that takes no arguments and returns a value.
+        timeout: Max seconds to wait. Should be less than the tool's
+                 timeout_seconds to avoid double-timeout conflicts.
+
+    Returns:
+        The return value of fn.
+
+    Raises:
+        TimeoutError: If the main thread doesn't respond in time.
+        Exception: Any exception raised by fn.
+    """
+    from aqt.qt import QTimer
+    import threading
+
+    result = {}
+    error = {}
+    done = threading.Event()
+
+    def _on_main():
+        try:
+            result["value"] = fn()
+        except Exception as e:
+            error["value"] = e
+        finally:
+            done.set()
+
+    QTimer.singleShot(0, _on_main)
+    if not done.wait(timeout=timeout):
+        raise TimeoutError("Main thread did not respond")
+    if "value" in error:
+        raise error["value"]
+    return result["value"]
+```
+
+**Double-timeout prevention:** The `timeout` parameter of `run_on_main_thread` must be strictly less than the tool's `timeout_seconds`. For `search_deck` (15s timeout), inner wait is 14s. For `get_learning_stats` (10s timeout), inner wait is 9s. This ensures the inner wait always resolves (success or timeout) before the outer `_run_with_timeout` fires.
+
+**Usage in execute functions:**
+
+```python
+def execute_search_deck(args):
+    query = args.get("query", "")
+    deck_id = args.get("deck_id")
+    max_results = min(args.get("max_results", 10), 50)
+
+    def _search():
+        from aqt import mw
+        # Build Anki search string
+        search = query
+        if deck_id:
+            deck = mw.col.decks.get(deck_id)
+            if not deck:
+                return {"error": "Deck nicht gefunden"}
+            search = f'"deck:{deck["name"]}" {query}'
+        else:
+            did = mw.col.decks.selected()
+            deck = mw.col.decks.get(did)
+            if deck:
+                search = f'"deck:{deck["name"]}" {query}'
+
+        card_ids = mw.col.find_cards(search, order=True)
+        # ... build card list, strip HTML, etc.
+
+    return run_on_main_thread(_search, timeout=14)
+```
+
+### 9. Out of Scope
 
 - Preview Mode (separate feature — card opens in reviewer-like view without changing queue)
 - New stat modules beyond streak/heatmap/deck_overview (future, system is modular)
