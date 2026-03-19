@@ -648,78 +648,43 @@ class ChatbotWidget(QWidget):
                     f.write(data + '\n')
             except Exception as e:
                 print(f"_handle_js_message: Fehler beim Schreiben von Debug-Log: {e}")
-        elif msg_type == 'companionChat':
-            if isinstance(data, dict):
-                system_prompt = data.get('systemPrompt', '')
-                history = data.get('history', [])
-                message = data.get('message', '')
-                self._handle_companion_chat(system_prompt, history, message)
+        elif msg_type == 'plusiDirect':
+            msg_data = data if isinstance(data, dict) else json.loads(data) if isinstance(data, str) else {}
+            text = msg_data.get('text', '')
+            deck_id = msg_data.get('deck_id', None)
+            if text:
+                self._handle_plusi_direct(text, deck_id)
 
-    def _handle_companion_chat(self, system_prompt: str, history: list, message: str):
-        """Runs companion AI call in a background thread, streams companionChunk events to JS."""
+    def _handle_plusi_direct(self, text, deck_id=None):
+        """Route @Plusi messages directly to plusi_agent.py"""
         try:
-            from .ai_handler import get_ai_handler
-        except ImportError:
-            from ai_handler import get_ai_handler
+            try:
+                from .plusi_agent import run_plusi
+            except ImportError:
+                from plusi_agent import run_plusi
 
-        ai = get_ai_handler(widget=self)
-        if not ai.is_configured():
-            payload = {"type": "companionChunk", "chunk": "Ich kann gerade nicht antworten.", "done": True}
-            self.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
-            return
-
-        widget_ref = self
-
-        class CompanionThread(QThread):
-            chunk_signal = pyqtSignal(str, bool)
-
-            def __init__(self, ai_handler, system_prompt, prior_history, message):
-                super().__init__()
-                self.ai_handler = ai_handler
-                self.system_prompt = system_prompt
-                self.prior_history = prior_history or []
-                self.message = message
-                self._cancelled = False
-
-            def cancel(self):
-                self._cancelled = True
-
-            def run(self):
-                try:
-                    # Use prior history directly — system prompt is passed as override
-                    full_history = list(self.prior_history)
-
-                    def on_chunk(chunk, done, is_function_call=False):
-                        if not self._cancelled:
-                            self.chunk_signal.emit(chunk or "", bool(done))
-
-                    self.ai_handler.get_response(
-                        self.message,
-                        context=None,
-                        history=full_history,
-                        mode='compact',
-                        callback=on_chunk,
-                        system_prompt_override=self.system_prompt if self.system_prompt else None,
-                        model_override='gemini-2.0-flash',  # Lighter model for companion — higher rate limits
-                    )
-                except Exception as e:
-                    if not self._cancelled:
-                        self.chunk_signal.emit(f"Fehler: {e}", True)
-
-        if hasattr(self, '_companion_thread') and self._companion_thread is not None:
-            self._companion_thread.cancel()
-
-        thread = CompanionThread(ai, system_prompt, history, message)
-
-        def on_chunk(chunk, done):
-            payload = {"type": "companionChunk", "chunk": chunk, "done": done}
-            widget_ref.web_view.page().runJavaScript(
+            result = run_plusi(situation=text, deck_id=deck_id)
+            payload = {
+                'type': 'plusi_direct_result',
+                'mood': result.get('mood', 'neutral'),
+                'text': result.get('text', ''),
+                'meta': result.get('meta', ''),
+                'error': result.get('error', False)
+            }
+            self.web_view.page().runJavaScript(
                 f"window.ankiReceive({json.dumps(payload)});"
             )
-
-        thread.chunk_signal.connect(on_chunk)
-        self._companion_thread = thread
-        thread.start()
+        except Exception as e:
+            print(f"plusiDirect error: {e}")
+            payload = {
+                'type': 'plusi_direct_result',
+                'mood': 'neutral',
+                'text': '',
+                'error': True
+            }
+            self.web_view.page().runJavaScript(
+                f"window.ankiReceive({json.dumps(payload)});"
+            )
 
     def push_initial_state(self):
         """Sendet Start-Config an die Web-UI"""
