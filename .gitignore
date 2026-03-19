@@ -67,3 +67,7 @@ meta.json
 # Tooling
 .mcp.json
 .superpowers/
+
+# Cloud Function prototypes (separate deployment)
+backend/
+functions/
