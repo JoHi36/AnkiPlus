@@ -116,48 +116,48 @@ def get_category(category):
 
 
 def build_memory_context():
-    """Build the memory context string for Plusi's system prompt."""
+    """Build the memory context string for Plusi's system prompt.
+
+    Categories:
+    - self: Plusi's self-knowledge, personality evolution, identity
+    - user: Everything Plusi knows about the user
+    - moments: Shared milestones and important events
+    - (state and relationship are handled separately)
+    """
     sections = []
 
-    # User profile
-    profile = get_category('user_profile')
-    if profile:
-        lines = [f"- {k}: {v}" for k, v in profile.items()]
-        sections.append("ÜBER DEN NUTZER:\n" + "\n".join(lines))
+    # Plusi's self-knowledge
+    self_data = get_category('self')
+    if self_data:
+        lines = [f"- {k}: {v}" for k, v in self_data.items()]
+        sections.append("WER DU BIST (selbst-geschrieben):\n" + "\n".join(lines))
 
-    # Language mirror
-    lang = get_category('language')
-    if lang:
-        words = lang.get('mirror_words', [])
-        if words:
-            sections.append(f"SPRACH-MIRROR: User nutzt diese Wörter oft: {', '.join(words)} — du darfst sie auch nutzen, aber auf deine Art")
-
-    # Milestones
-    milestones = get_category('milestones')
-    if milestones:
-        lines = [f"- {k}: {v}" for k, v in list(milestones.items())[-5:]]  # last 5
-        sections.append("WICHTIGE MOMENTE:\n" + "\n".join(lines))
-
-    # Subjects
-    subjects = get_category('subjects')
-    if subjects:
-        lines = [f"- {k}: {v}" for k, v in subjects.items()]
-        sections.append("FÄCHER:\n" + "\n".join(lines))
-
-    # Learned facts (self-directed by Plusi)
-    learned = get_category('learned')
-    if learned:
-        lines = [f"- {k}: {v}" for k, v in learned.items()]
+    # What Plusi knows about the user
+    user_data = get_category('user')
+    if user_data:
+        lines = [f"- {k}: {v}" for k, v in user_data.items()]
         sections.append("WAS DU ÜBER DEN NUTZER WEISST:\n" + "\n".join(lines))
 
-    # Plusi's opinions
-    opinions = get_category('opinions')
-    if opinions:
-        lines = [f"- {k}: {v}" for k, v in opinions.items()]
-        sections.append("DEINE MEINUNGEN:\n" + "\n".join(lines))
+    # Shared moments
+    moments = get_category('moments')
+    if moments:
+        lines = [f"- {k}: {v}" for k, v in list(moments.items())[-5:]]
+        sections.append("GEMEINSAME MOMENTE:\n" + "\n".join(lines))
+
+    # Legacy support: read old categories if new ones are empty
+    if not self_data:
+        opinions = get_category('opinions')
+        if opinions:
+            lines = [f"- {k}: {v}" for k, v in opinions.items()]
+            sections.append("DEINE MEINUNGEN:\n" + "\n".join(lines))
+    if not user_data:
+        learned = get_category('learned')
+        if learned:
+            lines = [f"- {k}: {v}" for k, v in learned.items()]
+            sections.append("WAS DU ÜBER DEN NUTZER WEISST:\n" + "\n".join(lines))
 
     if not sections:
-        return "Noch keine Erinnerungen."
+        return "Noch keine Erinnerungen. Du weißt noch nichts — weder über dich noch über den User."
 
     return "\n\n".join(sections)
 
@@ -186,28 +186,47 @@ def persist_internal_state(internal):
 
     Called after parsing Plusi's response. The 'internal' dict comes from
     the JSON prefix of Plusi's response, e.g.:
-    {"mood":"happy", "internal":{"energy":8, "learned":{"name":"Johannes"}}}
+    {"mood":"happy", "internal":{"energy":8, "user":{"name":"Johannes"}, "self":{"mag_an_sich":"..."}}}
+
+    Categories:
+    - state: ephemeral (energy, obsession) — changes frequently
+    - self: Plusi's self-knowledge and identity — grows over time
+    - user: facts about the user — grows over time
+    - moments: shared milestones — rare but important
     """
+    # Ephemeral state
     if 'energy' in internal:
         set_memory('state', 'energy', internal['energy'])
     if 'obsession' in internal:
         set_memory('state', 'obsession', internal['obsession'])
-    if 'opinion' in internal:
-        set_memory('state', 'current_opinion', internal['opinion'])
-    if 'relationship_note' in internal:
-        set_memory('state', 'relationship_note', internal['relationship_note'])
 
-    # "learned" is a dict of key-value pairs — model provides meaningful keys
+    # Plusi's self-knowledge (identity, preferences, personality evolution)
+    self_data = internal.get('self', {})
+    if isinstance(self_data, dict):
+        for key, value in self_data.items():
+            set_memory('self', key, value)
+
+    # What Plusi learns about the user
+    user_data = internal.get('user', {})
+    if isinstance(user_data, dict):
+        for key, value in user_data.items():
+            set_memory('user', key, value)
+
+    # Shared moments / milestones
+    moments = internal.get('moments', {})
+    if isinstance(moments, dict):
+        for key, value in moments.items():
+            set_memory('moments', key, value)
+
+    # Legacy support: old "learned" → user, old "opinions" → self
     learned = internal.get('learned', {})
     if isinstance(learned, dict):
         for key, value in learned.items():
-            set_memory('learned', key, value)
-
-    # "opinions" is a dict of key-value pairs — model's own opinions
+            set_memory('user', key, value)
     opinions = internal.get('opinions', {})
     if isinstance(opinions, dict):
         for key, value in opinions.items():
-            set_memory('opinions', key, value)
+            set_memory('self', key, value)
 
 
 def build_relationship_context():
