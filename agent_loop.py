@@ -1,30 +1,136 @@
+"""
+agent_loop.py — Multi-turn agent loop with generic tool handling.
+
+Handles tool calls from Gemini, emits [[TOOL:...]] markers for the frontend,
+prunes context when it exceeds budget, and supports graceful error degradation.
+"""
+
 import json
 
 try:
     from .tool_executor import execute_tool
+    from .tool_registry import registry
 except ImportError:
     from tool_executor import execute_tool
+    from tool_registry import registry
 
 MAX_ITERATIONS = 5
+MAX_CONTEXT_CHARS = 100_000  # ~25k tokens
 
-MOOD_META = {
-    'happy': 'freut sich', 'empathy': 'fühlt mit dir', 'excited': 'ist aufgeregt',
-    'surprised': 'ist überrascht', 'sleepy': 'ist müde', 'blush': 'wird rot',
-    'thinking': 'denkt nach', 'neutral': '',
-}
+
+def _build_tool_marker(name: str, marker_type: str, result=None, error=None) -> str:
+    """Build a [[TOOL:{...}]] marker string for the frontend.
+
+    Args:
+        name: Tool name (e.g. 'spawn_plusi').
+        marker_type: One of 'loading', 'widget', 'error'.
+        result: Tool result data (for 'widget' type).
+        error: Error message string (for 'error' type).
+    """
+    payload = {"name": name, "displayType": marker_type}
+    if result is not None:
+        payload["result"] = result
+    if error is not None:
+        payload["error"] = error
+    return f"[[TOOL:{json.dumps(payload, ensure_ascii=False)}]]"
+
+
+def _prune_contents(contents: list) -> list:
+    """Prune contents array to stay within token budget.
+
+    Keeps the first message (system context) and last 4 entries (recent
+    interaction). Drops oldest middle entries first. O(n) in serialization.
+    """
+    sizes = [len(json.dumps(c)) for c in contents]
+    total = sum(sizes)
+    if total <= MAX_CONTEXT_CHARS:
+        return contents
+
+    protected_head_idx = 1
+    protected_tail_idx = max(protected_head_idx, len(contents) - 4)
+
+    head_size = sum(sizes[:protected_head_idx])
+    tail_size = sum(sizes[protected_tail_idx:])
+
+    # If protected entries alone exceed budget, just keep them
+    if head_size + tail_size > MAX_CONTEXT_CHARS:
+        return contents[:protected_head_idx] + contents[protected_tail_idx:]
+
+    # Walk backwards from tail to keep newest middle entries
+    remaining_budget = MAX_CONTEXT_CHARS - head_size - tail_size
+    kept_middle = []
+    for i in range(protected_tail_idx - 1, protected_head_idx - 1, -1):
+        if remaining_budget >= sizes[i]:
+            remaining_budget -= sizes[i]
+            kept_middle.insert(0, contents[i])
+        else:
+            break
+
+    return contents[:protected_head_idx] + kept_middle + contents[protected_tail_idx:]
+
+
+def _handle_tool_response(function_name, tool_response, callback):
+    """Process a tool response: emit markers and build Gemini response string.
+
+    Returns:
+        str: The response string to send back to Gemini as functionResponse.
+    """
+    if tool_response.status == "error":
+        # Graceful degradation: error marker + AI gets error info
+        marker = _build_tool_marker(function_name, "error",
+                                     error=tool_response.error_message)
+        if callback:
+            callback(marker, False, True)
+        return f"Error: {tool_response.error_message}"
+
+    if tool_response.display_type == "widget":
+        marker = _build_tool_marker(function_name, "widget",
+                                     result=tool_response.result)
+        if callback:
+            callback(marker, False, True)
+        # Tell Gemini the widget was displayed, don't echo full result
+        return json.dumps({"status": "displayed_to_user", "tool": function_name})
+
+    if tool_response.display_type == "markdown":
+        if callback:
+            callback(str(tool_response.result), False, True)
+        return str(tool_response.result)
+
+    # silent: nothing to frontend, just feed back to Gemini
+    return str(tool_response.result)
 
 
 def run_agent_loop(
-    stream_fn,          # The _stream_response method (bound) from AIHandler
-    stream_urls,        # List of streaming API URLs
-    data,               # Initial request data dict (contents, generationConfig, etc.)
-    callback=None,      # Streaming callback fn(chunk, done, is_function_call)
-    use_backend=False,  # Whether to use backend mode
-    backend_data=None,  # Backend-format request data
-    tools_array=None,   # Gemini tools array (for re-injection on follow-up calls)
-    system_instruction=None,  # System instruction DICT in Gemini format {"parts": [{"text": "..."}]}
-    model=None,         # Model string (for max_tokens calculation)
+    stream_fn,
+    stream_urls,
+    data,
+    callback=None,
+    use_backend=False,
+    backend_data=None,
+    tools_array=None,
+    system_instruction=None,
+    model=None,
 ):
+    """Run the multi-turn agent loop.
+
+    Streams from Gemini, detects tool calls, executes them with timeout,
+    emits [[TOOL:...]] markers for the frontend, prunes context, and
+    loops until the model returns pure text or MAX_ITERATIONS is reached.
+
+    Args:
+        stream_fn: Bound method AIHandler._stream_response.
+        stream_urls: List of streaming API URLs.
+        data: Initial Gemini request data dict.
+        callback: Optional streaming callback fn(chunk, done, is_function_call).
+        use_backend: Whether to use backend mode.
+        backend_data: Backend-format request data.
+        tools_array: Gemini tools array for re-injection.
+        system_instruction: System instruction dict {"parts": [{"text": "..."}]}.
+        model: Model string for maxOutputTokens calculation.
+
+    Returns:
+        str: The final accumulated text response.
+    """
     iteration = 0
     text_result = ""
 
@@ -32,48 +138,35 @@ def run_agent_loop(
         iteration += 1
         print(f"agent_loop: Iteration {iteration}/{MAX_ITERATIONS}")
 
-        # Call stream_fn (the existing _stream_response method)
+        # Stream from Gemini
         text_result, function_call = stream_fn(
             stream_urls, data, callback,
             use_backend=use_backend, backend_data=backend_data
         )
 
-        # No tool call → done, return text
+        # No tool call → done
         if not function_call:
             print(f"agent_loop: Fertig nach {iteration} Iteration(en)")
             return text_result
 
-        # Tool call detected → execute it
+        # Tool call detected
         function_name = function_call.get("name", "")
         function_args = function_call.get("args", {})
         print(f"agent_loop: Tool-Call erkannt: {function_name}")
 
-        # spawn_plusi: inject loading widget BEFORE the tool executes
-        if function_name == 'spawn_plusi' and callback:
-            callback('\n[[PLUSI_LOADING]]\n', False, False)
+        # Pre-execution: loading placeholder for widget tools
+        tool_def = registry.get(function_name)
+        if tool_def and tool_def.display_type == "widget" and callback:
+            loading_marker = _build_tool_marker(function_name, "loading")
+            callback(loading_marker, False, True)
 
-        tool_result = execute_tool(function_name, function_args)
+        # Execute tool (with timeout from ToolDefinition)
+        tool_response = execute_tool(function_name, function_args)
 
-        # Special: spawn_plusi — inject PlusiWidget data directly into the stream
-        if function_name == 'spawn_plusi' and callback:
-            try:
-                result_obj = json.loads(tool_result)
-                plusi_text = result_obj.get('text', '')
-                plusi_mood = result_obj.get('mood', 'neutral')
-                if plusi_text and not result_obj.get('error'):
-                    plusi_marker = '\n[[PLUSI_DATA: ' + json.dumps({
-                        "mood": plusi_mood,
-                        "text": plusi_text,
-                        "meta": MOOD_META.get(plusi_mood, ''),
-                    }, ensure_ascii=False) + ']]\n'
-                    callback(plusi_marker, False, False)
-                    print(f"agent_loop: PlusiWidget injected (mood={plusi_mood})")
-                    # Sanitize result for Gemini — remove text so it doesn't echo it
-                    tool_result = json.dumps({"status": "displayed", "mood": plusi_mood})
-            except Exception as e:
-                print(f"agent_loop: Plusi injection error: {e}")
+        # Handle response: emit markers, build Gemini response
+        gemini_response = _handle_tool_response(function_name, tool_response, callback)
 
-        # Get contents from data and append function call + response
+        # Append function call + response to contents
         contents = data.get("contents", [])
         contents.append({
             "role": "model",
@@ -83,9 +176,12 @@ def run_agent_loop(
             "role": "function",
             "parts": [{"functionResponse": {
                 "name": function_name,
-                "response": {"result": tool_result}
+                "response": {"result": gemini_response}
             }}]
         })
+
+        # Prune contents if over budget
+        contents = _prune_contents(contents)
 
         # Rebuild data for next iteration
         max_tokens = 8192 if model and "gemini-3-flash-preview" in model.lower() else 2000
