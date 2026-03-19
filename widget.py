@@ -881,6 +881,12 @@ class ChatbotWidget(QWidget):
                 sync_mood(mood)
             except Exception as e:
                 print(f"plusi dock sync error: {e}")
+            # Check if a reflect window is open — trigger after interaction
+            try:
+                from . import check_and_trigger_reflect
+                check_and_trigger_reflect()
+            except Exception:
+                pass
         except Exception as e:
             print(f"plusiDirect error: {e}")
             payload = {

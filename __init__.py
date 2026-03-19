@@ -474,48 +474,56 @@ def on_profile_loaded():
     """Wird aufgerufen, wenn das Profil geladen ist"""
     init_addon()
     # Plusi's periodic self-reflection system
+    # Timer opens a "window" — next interaction after window opens triggers reflect
     import threading
     import random
     from PyQt6.QtCore import QTimer
+
+    # Global flag: when True, next Plusi interaction will trigger a reflect afterwards
+    global _plusi_reflect_pending
+    _plusi_reflect_pending = False
 
     def _plusi_reflect_once():
         """Run one self-reflection cycle in a background thread."""
         try:
             from .plusi_agent import self_reflect
             from .plusi_dock import sync_mood
-            from .plusi_storage import get_memory
-            # Only reflect if there have been interactions since last reflect
-            last_reflect_count = get_memory('state', 'last_reflect_interactions', 0)
-            current_count = get_memory('relationship', 'interactions', 0)
-            if current_count <= last_reflect_count and last_reflect_count > 0:
-                print("plusi reflect: no new interactions, skipping")
-                return
             sync_mood('reading')
             try:
                 self_reflect()
-                from .plusi_storage import set_memory
-                set_memory('state', 'last_reflect_interactions', current_count)
             except Exception as e:
                 print(f"Plusi self-reflect failed: {e}")
             sync_mood('neutral')
         except Exception as e:
             print(f"Plusi reflect error: {e}")
 
-    def _schedule_next_reflect():
-        """Schedule the next self-reflection with random 30-60 min interval."""
-        interval_ms = random.randint(30, 60) * 60 * 1000  # 30-60 min in ms
+    def _open_reflect_window():
+        """Open the reflection window — next interaction will trigger reflect."""
+        global _plusi_reflect_pending
+        _plusi_reflect_pending = True
+        print("plusi reflect: window opened, waiting for next interaction")
+        # Schedule next window
+        _schedule_next_window()
+
+    def _schedule_next_window():
+        """Schedule the next reflection window with random 30-60 min interval."""
+        interval_ms = random.randint(30, 60) * 60 * 1000
         interval_min = interval_ms // 60000
-        print(f"plusi reflect: next in {interval_min} min")
-        QTimer.singleShot(interval_ms, _trigger_reflect)
+        print(f"plusi reflect: next window in {interval_min} min")
+        QTimer.singleShot(interval_ms, _open_reflect_window)
 
-    def _trigger_reflect():
-        """Trigger a reflect cycle and schedule the next one."""
-        threading.Thread(target=_plusi_reflect_once, daemon=True).start()
-        _schedule_next_reflect()
+    def check_and_trigger_reflect():
+        """Called after each Plusi interaction. If window is open, trigger reflect."""
+        global _plusi_reflect_pending
+        if _plusi_reflect_pending:
+            _plusi_reflect_pending = False
+            print("plusi reflect: triggered by interaction")
+            threading.Thread(target=_plusi_reflect_once, daemon=True).start()
 
-    # Initial reflect on startup + schedule recurring
+    # Initial reflect on startup (always, no window needed)
     threading.Thread(target=_plusi_reflect_once, daemon=True).start()
-    _schedule_next_reflect()
+    # Schedule first window
+    _schedule_next_window()
 
 def _emit_deck_selected(widget, deck_id, deck_name):
     """Helper: Emittiert deckSelected Event mit totalCards"""

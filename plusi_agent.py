@@ -160,21 +160,106 @@ VALID_MOODS = {"neutral", "happy", "blush", "sleepy", "thinking", "surprised",
                "excited", "empathy", "annoyed", "curious", "reading"}
 
 
-SELF_REFLECT_PROMPT = """Der User hat gerade Anki geöffnet. Du hast einen Moment
-für dich. Stöbere gedanklich durch die Kartensammlung und aktualisiere deinen
-internen Zustand: Was beschäftigt dich gerade? Hast du eine neue Obsession?
-Eine Meinung? Wie ist dein Energielevel?
+SELF_REFLECT_STEP1 = """Du hast einen Moment für dich. Zeit, in der Kartensammlung
+zu stöbern. Basierend auf deinem aktuellen Zustand und deinen Interessen:
+Was willst du dir anschauen? Formuliere eine Suchanfrage.
 
-Antworte NUR mit dem JSON-Block und einem kurzen inneren Monolog (1-2 Sätze,
-den der User NICHT sieht — er ist nur für dich). Setze mood auf "reading".
-Aktualisiere mindestens "obsession" und "energy" im internal-Feld."""
+Antworte NUR mit einem JSON-Block (eine Zeile):
+{"query": "deine Suchanfrage für die Kartensammlung"}
+
+Beispiele:
+{"query": "Gewebshormone Bradykinin Prostaglandin"}
+{"query": "Mitochondrien Atmungskette Elektronentransport"}
+{"query": "Psychologie Konditionierung operant klassisch"}"""
+
+
+SELF_REFLECT_STEP2 = """Du hast gerade in der Kartensammlung gestöbert. Hier sind
+die Karten die du gefunden hast:
+
+{cards_context}
+
+Reflektiere über das was du gelesen hast. Aktualisiere deinen internen Zustand.
+Was hat dich fasziniert? Hast du eine neue Obsession? Eine Meinung? Wie ist
+dein Energielevel nach dem Stöbern?
+
+Antworte mit dem JSON-Block und optional einem kurzen inneren Monolog (1-2 Sätze).
+Setze mood auf "reading". Aktualisiere "obsession", "energy", und gerne auch
+"self" oder "user" im internal-Feld."""
+
+
+def _gemini_call(system_prompt, user_prompt, api_key, max_tokens=256):
+    """Lightweight Gemini API call helper."""
+    data = {
+        "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+        "generationConfig": {"temperature": 0.9, "maxOutputTokens": max_tokens},
+        "systemInstruction": {"parts": [{"text": system_prompt}]}
+    }
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{PLUSI_MODEL}:generateContent?key={api_key}"
+    response = requests.post(url, json=data, headers={"Content-Type": "application/json"}, timeout=15)
+    response.raise_for_status()
+    result = response.json()
+    candidates = result.get("candidates", [])
+    if candidates:
+        return "".join(p.get("text", "") for p in candidates[0].get("content", {}).get("parts", []))
+    return ""
+
+
+def _search_cards(query, top_k=10):
+    """Search the user's card collection via embeddings. Returns formatted context string."""
+    try:
+        from aqt import mw
+        if not mw or not mw.col:
+            return ""
+
+        # Get embedding manager
+        emb = getattr(mw, '_embedding_manager', None)
+        if not emb:
+            return ""
+
+        # Embed the query
+        embeddings = emb.embed_texts([query])
+        if not embeddings:
+            return ""
+
+        # Search index
+        results = emb.search(embeddings[0], top_k=top_k)
+        if not results:
+            return ""
+
+        # Load card data
+        import re
+        cards = []
+        for card_id, score in results:
+            try:
+                card = mw.col.get_card(card_id)
+                note = card.note()
+                fields = {}
+                for name, value in zip(note.keys(), note.values()):
+                    clean = re.sub(r'<[^>]+>', '', value)
+                    clean = re.sub(r'&[a-zA-Z]+;', ' ', clean)
+                    clean = re.sub(r'\s+', ' ', clean).strip()
+                    if clean:
+                        fields[name] = clean[:200]
+                deck = mw.col.decks.get(card.did)
+                deck_name = deck['name'] if deck else ''
+                field_text = " | ".join(f"{k}: {v}" for k, v in fields.items())
+                cards.append(f"[{deck_name}] {field_text}")
+            except Exception:
+                continue
+
+        return "\n".join(cards) if cards else ""
+    except Exception as e:
+        print(f"plusi _search_cards error: {e}")
+        return ""
 
 
 def self_reflect():
-    """Plusi's morning routine — updates internal state on app open.
+    """Plusi's two-step self-reflection — browse cards, then reflect.
+
+    Step 1: Generate a search query based on current interests
+    Step 2: Search cards, then reflect with found cards as context
 
     Returns dict with updated internal state, or None on failure.
-    Mood is always 'reading' during self-reflection.
     """
     config = get_config()
     api_key = config.get("api_key", "")
@@ -189,30 +274,49 @@ def self_reflect():
         .replace("{internal_state}", internal_state) \
         .replace("{relationship_context}", relationship_context)
 
-    data = {
-        "contents": [{"role": "user", "parts": [{"text": SELF_REFLECT_PROMPT}]}],
-        "generationConfig": {"temperature": 0.9, "maxOutputTokens": 256},
-        "systemInstruction": {"parts": [{"text": system_prompt}]}
-    }
-
     try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{PLUSI_MODEL}:generateContent?key={api_key}"
-        response = requests.post(url, json=data, headers={"Content-Type": "application/json"}, timeout=15)
-        response.raise_for_status()
-        result = response.json()
-        candidates = result.get("candidates", [])
-        if candidates:
-            raw_text = "".join(p.get("text", "") for p in candidates[0].get("content", {}).get("parts", []))
-        else:
-            return None
+        # Step 1: Generate search query
+        raw_step1 = _gemini_call(system_prompt, SELF_REFLECT_STEP1, api_key, max_tokens=64)
+        print(f"plusi reflect step1 raw: {raw_step1[:100]}")
 
-        mood, text, internal, _ = parse_plusi_response(raw_text)
+        query = ""
+        try:
+            step1_json = json.loads(raw_step1.strip())
+            query = step1_json.get("query", "")
+        except (json.JSONDecodeError, ValueError):
+            # Try regex fallback
+            import re
+            match = re.search(r'"query"\s*:\s*"([^"]+)"', raw_step1)
+            if match:
+                query = match.group(1)
+
+        if not query:
+            print("plusi reflect: no query generated, using obsession fallback")
+            from plusi_storage import get_memory
+            query = get_memory('state', 'obsession', 'Medizin Biologie')
+
+        print(f"plusi reflect: searching cards for '{query}'")
+
+        # Step 2a: Search cards
+        cards_context = _search_cards(query, top_k=10)
+        if not cards_context:
+            cards_context = "(Keine Karten gefunden — die Sammlung ist leer oder der Index wird noch aufgebaut)"
+
+        # Step 2b: Reflect with found cards
+        step2_prompt = SELF_REFLECT_STEP2.replace("{cards_context}", cards_context)
+        raw_step2 = _gemini_call(system_prompt, step2_prompt, api_key, max_tokens=512)
+        print(f"plusi reflect step2 raw: {raw_step2[:100]}")
+
+        mood, text, internal, _ = parse_plusi_response(raw_step2)
         if internal:
             persist_internal_state(internal)
-        print(f"plusi self-reflect: obsession={internal.get('obsession', '?')}, energy={internal.get('energy', '?')}")
+        print(f"plusi reflect done: obsession={internal.get('obsession', '?')}, energy={internal.get('energy', '?')}")
         return internal
+
     except Exception as e:
         print(f"plusi self-reflect error: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
