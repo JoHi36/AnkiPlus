@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 /**
  * ImageWidget — renders images from show_card_media or search_image tools.
