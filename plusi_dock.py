@@ -21,8 +21,8 @@ PLUSI_CSS = """
 /* ── Plusi Dock Container ── */
 #plusi-dock {
   position: fixed;
-  bottom: 16px;
-  left: 16px;
+  bottom: 28px;
+  left: 28px;
   z-index: 9999;
   display: flex;
   align-items: flex-end;

@@ -665,9 +665,10 @@ class ChatbotWidget(QWidget):
                 from plusi_agent import run_plusi
 
             result = run_plusi(situation=text, deck_id=deck_id)
+            mood = result.get('mood', 'neutral')
             payload = {
                 'type': 'plusi_direct_result',
-                'mood': result.get('mood', 'neutral'),
+                'mood': mood,
                 'text': result.get('text', ''),
                 'meta': result.get('meta', ''),
                 'error': result.get('error', False)
@@ -675,6 +676,14 @@ class ChatbotWidget(QWidget):
             self.web_view.page().runJavaScript(
                 f"window.ankiReceive({json.dumps(payload)});"
             )
+            # Sync mood to main window Plusi dock
+            try:
+                from plusi_dock import set_mood
+                from aqt import mw
+                if mw and mw.reviewer and mw.reviewer.web:
+                    set_mood(mw.reviewer.web, mood)
+            except Exception:
+                pass
         except Exception as e:
             print(f"plusiDirect error: {e}")
             payload = {
@@ -800,6 +809,17 @@ class ChatbotWidget(QWidget):
             # Must run on main Qt thread — tool executor runs in AI thread
             js_code = f"window.ankiReceive({_json.dumps(payload)});"
             QTimer.singleShot(0, lambda: self.web_view.page().runJavaScript(js_code))
+
+            # Sync Plusi mood to main window dock
+            if payload.get('type') == 'plusiResult' or (isinstance(payload.get('mood'), str)):
+                mood = payload.get('mood', 'neutral')
+                try:
+                    from plusi_dock import set_mood
+                    from aqt import mw
+                    if mw and mw.reviewer and mw.reviewer.web:
+                        QTimer.singleShot(0, lambda: set_mood(mw.reviewer.web, mood))
+                except Exception:
+                    pass
 
         set_frontend_callback(_push_to_frontend)
 
