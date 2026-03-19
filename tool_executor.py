@@ -12,6 +12,18 @@ try:
 except ImportError:
     from tool_registry import registry
 
+# Global frontend callback — allows tools to push events to the UI
+_frontend_callback = None
+
+def set_frontend_callback(callback):
+    """Set the callback function that tools use to push events to the frontend."""
+    global _frontend_callback
+    _frontend_callback = callback
+
+def get_frontend_callback():
+    """Get the current frontend callback."""
+    return _frontend_callback
+
 
 @dataclass
 class ToolResponse:
