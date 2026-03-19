@@ -415,7 +415,42 @@ def load_deck_messages(deck_id, limit=50):
 
     # Reverse to get chronological (oldest first) order
     messages.reverse()
+
+    # Enrich with card front-text snippets
+    card_ids = [m['card_id'] for m in messages if m.get('card_id')]
+    if card_ids:
+        front_texts = _get_card_front_texts(list(set(card_ids)))
+        for m in messages:
+            cid = m.get('card_id')
+            if cid and cid in front_texts:
+                m['card_front'] = front_texts[cid]
+
     return messages
+
+
+def _get_card_front_texts(card_ids):
+    """Fetch front-text snippets for a list of card IDs from Anki's DB."""
+    import re
+    try:
+        from aqt import mw
+        if not mw or not mw.col:
+            return {}
+        result = {}
+        for cid in card_ids:
+            try:
+                card = mw.col.get_card(cid)
+                if card and card.note():
+                    fields = card.note().fields
+                    front = fields[0] if fields else ''
+                    front = re.sub(r'<[^>]+>', '', front).strip()
+                    if len(front) > 60:
+                        front = front[:57] + '…'
+                    result[cid] = front
+            except Exception:
+                pass
+        return result
+    except Exception:
+        return {}
 
 
 def save_deck_message(deck_id, message):

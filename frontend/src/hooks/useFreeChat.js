@@ -57,6 +57,12 @@ export function useFreeChat({ bridge, onLoadingChange, onCancelComplete }) {
       from: m.sender === 'assistant' ? 'bot' : (m.sender || 'user'),
       createdAt: m.created_at,
       citations: m.citations ? (typeof m.citations === 'string' ? JSON.parse(m.citations) : m.citations) : {},
+      steps: m.steps || null,
+      // Card/deck metadata for Free Chat display
+      cardId: m.card_id || null,
+      deckId: m.deck_id || null,
+      deckName: m.deck_name || null,
+      cardFront: m.card_front || null,
     }));
     setMessages(msgs);
     messagesLoadedRef.current = true;
