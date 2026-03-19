@@ -10,9 +10,147 @@ to replace the reviewer HTML content.
 import os
 import json
 import threading
+import time as _time
 from typing import Optional, Tuple
 from aqt import mw, gui_hooks
 from aqt.reviewer import Reviewer
+
+_preview_state = {
+    'active': False,
+    'stage': None,            # 'peek' | 'card_chat'
+    'card_id': None,
+    'previous_state': None,   # 'review' | 'overview' | 'deckBrowser'
+    'previous_card_id': None,
+    'previous_chat_tab': None,
+    '_transitioning': False,
+}
+
+
+def open_preview(card_id):
+    """Open a card in preview mode from any Anki state."""
+    from aqt import mw
+
+    # Close existing preview first (no stacking)
+    if _preview_state['active']:
+        close_preview(notify_frontend=False)
+
+    try:
+        card = mw.col.get_card(card_id)
+    except Exception:
+        return {"success": False, "error": "Card not found"}
+
+    # Save current state
+    _preview_state['active'] = True
+    _preview_state['stage'] = 'peek'
+    _preview_state['card_id'] = card_id
+    _preview_state['previous_state'] = mw.state
+    _preview_state['previous_card_id'] = (
+        mw.reviewer.card.id if mw.state == "review" and mw.reviewer and mw.reviewer.card else None
+    )
+
+    def _inject_preview():
+        """Inject card into reviewer after state transition."""
+        rev = mw.reviewer
+        if not rev:
+            return
+        rev.card = card
+        card.timer_started = _time.time()
+        # Mark as navigating to prevent trail tracking
+        handle_custom_pycmd._is_navigating = True
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(0, lambda: _do_init_preview(rev))
+
+    def _do_init_preview(rev):
+        handle_custom_pycmd._is_navigating = False
+        rev._initWeb()
+        # Notify frontend
+        _notify_frontend_preview('peek', card_id)
+
+    if mw.state == "review":
+        _inject_preview()
+    else:
+        # Transition to review state first.
+        # Keep _transitioning True until injection completes
+        _preview_state['_transitioning'] = True
+        from PyQt6.QtCore import QTimer
+
+        def _on_review_ready():
+            """Called after reviewer is initialized — inject our card."""
+            _preview_state['_transitioning'] = False
+            _inject_preview()
+
+        mw.moveToState("review")
+        # Delay injection to let reviewer fully initialize
+        QTimer.singleShot(100, _on_review_ready)
+
+    return {"success": True}
+
+
+def close_preview(notify_frontend=True):
+    """Close preview and restore previous state."""
+    from aqt import mw
+
+    if not _preview_state['active']:
+        return
+
+    prev_state = _preview_state['previous_state']
+    prev_card_id = _preview_state['previous_card_id']
+
+    # Reset state
+    _preview_state['active'] = False
+    _preview_state['stage'] = None
+    _preview_state['card_id'] = None
+    _preview_state['previous_state'] = None
+    _preview_state['previous_card_id'] = None
+    _preview_state['previous_chat_tab'] = None
+
+    if notify_frontend:
+        _notify_frontend_preview(None, None)
+
+    if prev_state == "review" and prev_card_id:
+        # Re-inject the session card
+        try:
+            card = mw.col.get_card(prev_card_id)
+            rev = mw.reviewer
+            if rev:
+                rev.card = card
+                card.timer_started = _time.time()
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(0, rev._initWeb)
+                return  # No state transition needed
+        except Exception:
+            pass
+        # Fallback: go to overview
+        _preview_state['_transitioning'] = True
+        mw.moveToState("overview")
+        _preview_state['_transitioning'] = False
+    elif prev_state in ("overview", "deckBrowser"):
+        _preview_state['_transitioning'] = True
+        mw.moveToState(prev_state)
+        _preview_state['_transitioning'] = False
+    else:
+        _preview_state['_transitioning'] = True
+        mw.moveToState("overview")
+        _preview_state['_transitioning'] = False
+
+
+def _notify_frontend_preview(stage, card_id):
+    """Send previewMode event to frontend."""
+    import json
+    from .. import ui_setup
+
+    widget = getattr(ui_setup, '_chatbot_widget', None)
+    if widget and widget.web_view:
+        if stage is None:
+            payload = json.dumps({"type": "previewMode", "data": None})
+        else:
+            payload = json.dumps({
+                "type": "previewMode",
+                "data": {"stage": stage, "cardId": card_id}
+            })
+        widget.web_view.page().runJavaScript(
+            f"window.ankiReceive({payload});"
+        )
 
 
 def _evaluate_answer_async(data):
@@ -813,6 +951,24 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                 mw.reviewer.web.eval('window.onMCOptions([]);')
         return (True, None)
 
+    elif message == "preview:close":
+        close_preview()
+        return (True, None)
+
+    elif message == "preview:toggle_chat":
+        if _preview_state['active']:
+            if _preview_state['stage'] == 'peek':
+                _preview_state['stage'] = 'card_chat'
+                _notify_frontend_preview('card_chat', _preview_state['card_id'])
+                if mw.reviewer and mw.reviewer.web:
+                    mw.reviewer.web.eval("window.updatePreviewChatLabel(true);")
+            else:
+                _preview_state['stage'] = 'peek'
+                _notify_frontend_preview('peek', _preview_state['card_id'])
+                if mw.reviewer and mw.reviewer.web:
+                    mw.reviewer.web.eval("window.updatePreviewChatLabel(false);")
+        return (True, None)
+
     elif message.startswith("navigate:"):
         # Review Trail Navigation
         # Supports: navigate:prev, navigate:next, navigate:<cardId>
@@ -1284,9 +1440,26 @@ class CustomReviewer:
     background-color: transparent !important;
 }
 </style>"""
+        # Check if we're in preview mode — inject preview JS instead of history mode
+        _is_preview = _preview_state.get('active', False)
+        if _is_preview:
+            auto_answer_js = """
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+        var ansEl = document.getElementById('answer-content');
+        if (ansEl) ansEl.style.display = '';
+        document.body.setAttribute('data-state', 'preview');
+        if (window.setPreviewMode) window.setPreviewMode();
+    }, 50);
+});
+</script>
+"""
+            html = html.replace('</body>', auto_answer_js + '</body>')
+
         # Auto-show answer + HISTORY mode for previously-reviewed cards
         auto_answer_js = ""
-        if show_answered:
+        if not _is_preview and show_answered:
             auto_answer_js = """
 <script>
 // Flag to prevent load-event from resetting to QUESTION state
