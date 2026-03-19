@@ -267,66 +267,13 @@ PLUSI_JS = """
     document.getElementById('plusi-menu').classList.remove('visible');
     document.getElementById('plusi-mascot').classList.remove('mascot-glow');
 
-    // Try to set @Plusi in the deck browser search bar first (if it exists)
-    var searchInput = document.getElementById('ap-search-input');
-    if (searchInput) {
-      searchInput.value = '@Plusi ';
-      searchInput.focus();
-      // Hide the custom placeholder overlay
-      var phWrap = document.getElementById('ap-placeholder-wrap');
-      if (phWrap) phWrap.style.display = 'none';
-
-      // Create tag overlay inside the search bar container
-      var existing = document.getElementById('plusi-search-tag');
-      if (existing) existing.remove();
-
-      var parent = searchInput.parentElement;
-      if (parent) {
-        parent.style.position = 'relative';
-        var tag = document.createElement('span');
-        tag.id = 'plusi-search-tag';
-        tag.textContent = '@Plusi';
-        tag.style.cssText = 'position:absolute;left:38px;top:50%;transform:translateY(-50%);' +
-          'background:rgba(10,132,255,.18);color:#0a84ff;padding:2px 6px;border-radius:4px;' +
-          'font-weight:600;font-size:inherit;font-family:inherit;pointer-events:none;z-index:2;';
-        parent.appendChild(tag);
-
-        // Make the @Plusi part of input text transparent so tag shows through
-        searchInput.style.color = 'rgba(232,232,232,0.9)';
-        searchInput.style.caretColor = 'white';
-
-        // Update tag visibility on input changes
-        searchInput.addEventListener('input', function onInput() {
-          var hasTag = searchInput.value.startsWith('@Plusi');
-          var tagEl = document.getElementById('plusi-search-tag');
-          if (hasTag && !tagEl) {
-            // Recreate tag
-            var t = document.createElement('span');
-            t.id = 'plusi-search-tag';
-            t.textContent = '@Plusi';
-            t.style.cssText = 'position:absolute;left:38px;top:50%;transform:translateY(-50%);' +
-              'background:rgba(10,132,255,.18);color:#0a84ff;padding:2px 6px;border-radius:4px;' +
-              'font-weight:600;font-size:inherit;font-family:inherit;pointer-events:none;z-index:2;';
-            parent.appendChild(t);
-          } else if (!hasTag && tagEl) {
-            tagEl.remove();
-            searchInput.style.color = '';
-            searchInput.style.caretColor = '';
-            searchInput.removeEventListener('input', onInput);
-          }
-        });
-      }
-
-      // Trigger input event so the search bar JS recognizes the value change
-      searchInput.dispatchEvent(new Event('input', { bubbles: true }));
-      searchInput.dispatchEvent(new Event('focus', { bubbles: true }));
-      setTimeout(function() { searchInput.setSelectionRange(7, 7); }, 50);
-      return;
-    }
-
-    // Fallback: signal to Python to open chat panel with @Plusi
+    // Always signal Python to open chat panel with @Plusi prefix
+    // (works in both reviewer and deck browser — Python opens side panel)
     if (typeof pycmd === 'function') {
       pycmd('plusi:ask');
+    } else {
+      // DeckBrowser fallback: use polling action
+      window._apAction = {type: 'plusiAsk'};
     }
   };
 

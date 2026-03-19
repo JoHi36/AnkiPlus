@@ -1456,8 +1456,6 @@ class CustomScreens:
         self.active = True
         self._hook_registered = False
         self._poll_timer = None
-        self._fc_thread = None
-        self._fc_history = []
 
     def enable(self):
         if not self._hook_registered:
@@ -1523,33 +1521,20 @@ class CustomScreens:
             elif action_type == 'freeChat':
                 text = action.get('text', '').strip()
                 if text:
-                    # Load persistent history from DB and show in UI
-                    db_messages = self._load_fc_db_messages()
-                    self._fc_history = [
-                        {'role': 'assistant' if m.get('sender') == 'assistant' else 'user', 'content': m.get('text', '')}
-                        for m in db_messages
-                    ]
-                    # Push historical messages to the native chat UI (after short delay for chat to open)
-                    if db_messages:
-                        QTimer.singleShot(150, lambda msgs=db_messages: self._fc_push_history_to_ui(msgs))
-                    self._fc_history.append({'role': 'user', 'content': text})
-                    self._save_fc_message(text, 'user')
-                    self._start_fc_request(text)
-            elif action_type == 'freeChatSend':
-                text = action.get('text', '').strip()
-                if text:
-                    self._fc_history.append({'role': 'user', 'content': text})
-                    self._save_fc_message(text, 'user')
-                    self._start_fc_request(text)
-            elif action_type in ('freeChatClose', 'freeChatCancel'):
-                if self._fc_thread is not None:
                     try:
-                        self._fc_thread.cancel()
-                    except Exception:
-                        pass
-                    self._fc_thread = None
-                if action_type == 'freeChatClose':
-                    self._fc_history = []
+                        from .overlay_chat import show_overlay_chat
+                    except ImportError:
+                        from overlay_chat import show_overlay_chat
+                    show_overlay_chat(initial_text=text)
+            elif action_type == 'freeChatSend':
+                # Legacy — overlay handles its own sends now
+                pass
+            elif action_type in ('freeChatClose', 'freeChatCancel'):
+                try:
+                    from .overlay_chat import hide_overlay_chat
+                except ImportError:
+                    from overlay_chat import hide_overlay_chat
+                hide_overlay_chat()
             elif action_type == 'cmd':
                 cmd = action.get('cmd', '')
                 if cmd == 'study':
@@ -1579,16 +1564,17 @@ class CustomScreens:
                         if hasattr(mw, 'onPrefs'):
                             mw.onPrefs()
             elif action_type == 'plusiAsk':
-                # Set @Plusi in the deck browser search bar and focus it
+                # Open side panel chat with @Plusi prefix (same behavior as in reviewer)
                 try:
-                    web = mw.deckBrowser.web if hasattr(mw, 'deckBrowser') and mw.deckBrowser else None
-                    if not web:
-                        web = mw.overview.web if hasattr(mw, 'overview') and mw.overview else None
-                    if web:
-                        web.page().runJavaScript("""
-                            var inp = document.getElementById('ap-search-input');
-                            if (inp) { inp.value = '@Plusi '; inp.focus(); inp.setSelectionRange(7, 7); }
-                        """)
+                    from . import ui_setup
+                    if not (hasattr(ui_setup, '_chatbot_dock') and ui_setup._chatbot_dock and ui_setup._chatbot_dock.isVisible()):
+                        if hasattr(ui_setup, 'toggle_chatbot'):
+                            ui_setup.toggle_chatbot()
+                    chat_widget = getattr(ui_setup, '_chatbot_widget', None)
+                    if chat_widget and hasattr(chat_widget, 'web_view'):
+                        chat_widget.web_view.page().runJavaScript(
+                            "window.dispatchEvent(new CustomEvent('plusi-ask-focus', {detail: {prefix: '@Plusi '}}));"
+                        )
                 except Exception as e:
                     print(f"plusiAsk error: {e}")
             elif action_type == 'plusiSettings':
