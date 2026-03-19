@@ -139,6 +139,7 @@ function AppInner() {
   const insightsHook = useInsights();
   const [showInsightsDashboard, setShowInsightsDashboard] = useState(false);
   const prevCardRef = useRef({ cardId: null, messages: [], cardContext: null });
+  const lastProcessedCardRef = useRef(null);
   // Create a setSessions wrapper that works with SessionContext
   const setSessionsWrapper = useCallback((updater) => {
     if (typeof updater === 'function') {
@@ -637,6 +638,13 @@ function AppInner() {
           const isQuestion = payload.data?.isQuestion;
           console.error('🔴 CARD_SWITCH: cardContext for cardId:', newCardId, 'isQuestion:', isQuestion);
 
+          // Dedup: skip if this card was already processed (dual dispatch)
+          if (newCardId && newCardId === lastProcessedCardRef.current) {
+            console.log('🔵 CARD_SWITCH: skipping duplicate for cardId:', newCardId);
+            return;
+          }
+          if (newCardId) lastProcessedCardRef.current = newCardId;
+
           // Cancel any in-flight AI request before switching cards
           if (_chat.isLoading) {
             _chat.handleStopRequest();
@@ -887,12 +895,8 @@ function AppInner() {
             _deck.setCurrentDeck(payload.currentDeck);
             _deck.handleDeckChange(payload.currentDeck);
           }
-          if (payload.message && payload.currentDeck?.isInDeck) {
-            if (_chat.appendMessageRef?.current) {
-              _chat.appendMessageRef.current(payload.message, 'bot');
-            }
+          // Don't append greeting when in review mode — InsightsDashboard is the empty state now
         }
-      }
 
         // Plusi Sub-Agent Events
         if (payload.type === 'plusiSkeleton') {
@@ -1085,6 +1089,13 @@ function AppInner() {
 
       const newCardId = payload.data?.cardId;
       const isQuestion = payload.data?.isQuestion;
+
+      // Dedup: skip if this card was already processed by ankiReceive handler
+      if (newCardId && newCardId === lastProcessedCardRef.current) {
+        console.log('🟢 CARD_SWITCH: skipping duplicate CustomEvent for cardId:', newCardId);
+        return;
+      }
+      if (newCardId) lastProcessedCardRef.current = newCardId;
 
       // Cancel any in-flight AI request before switching cards
       if (_chat.isLoading) {

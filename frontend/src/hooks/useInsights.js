@@ -11,6 +11,8 @@ export default function useInsights() {
   const loadInsights = useCallback((cardId) => {
     if (!cardId) return;
     setCurrentCardId(cardId);
+    setInsights(EMPTY_INSIGHTS);
+    setRevlogData([]);
     window.ankiBridge?.addMessage('getCardInsights', { cardId });
     window.ankiBridge?.addMessage('getCardRevlog', { cardId });
   }, []);
