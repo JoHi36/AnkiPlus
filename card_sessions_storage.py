@@ -584,6 +584,78 @@ def update_summary(card_id, summary):
         return False
 
 
+def load_insights(card_id):
+    """Load insights JSON from card_sessions.summary"""
+    try:
+        db = _get_db()
+        row = db.execute(
+            "SELECT summary FROM card_sessions WHERE card_id = ?",
+            (card_id,)
+        ).fetchone()
+        if row and row['summary']:
+            return json.loads(row['summary'])
+        return {"version": 1, "insights": []}
+    except Exception as e:
+        print(f"[card_sessions_storage] Error loading insights for card {card_id}: {e}")
+        return {"version": 1, "insights": []}
+
+
+def save_insights(card_id, insights_data):
+    """Save insights JSON to card_sessions.summary"""
+    try:
+        db = _get_db()
+        summary_str = json.dumps(insights_data, ensure_ascii=False)
+        existing = db.execute(
+            "SELECT card_id FROM card_sessions WHERE card_id = ?",
+            (card_id,)
+        ).fetchone()
+        if existing:
+            db.execute(
+                "UPDATE card_sessions SET summary = ?, updated_at = ? WHERE card_id = ?",
+                (summary_str, datetime.now().isoformat(), card_id)
+            )
+        else:
+            db.execute(
+                "INSERT INTO card_sessions (card_id, summary, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                (card_id, summary_str, datetime.now().isoformat(), datetime.now().isoformat())
+            )
+        db.commit()
+        return True
+    except Exception as e:
+        print(f"[card_sessions_storage] Error saving insights for card {card_id}: {e}")
+        return False
+
+
+def get_card_revlog(card_id, max_points=50):
+    """Fetch review history from Anki's revlog table. Must run on main thread."""
+    try:
+        from aqt import mw
+        if not mw or not mw.col:
+            return []
+        rows = mw.col.db.all(
+            "SELECT id, ease, ivl, time FROM revlog WHERE cid = ? ORDER BY id ASC",
+            card_id
+        )
+        if not rows:
+            return []
+        # Aggregate if too many points
+        if len(rows) > max_points:
+            step = len(rows) / max_points
+            rows = [rows[int(i * step)] for i in range(max_points)]
+        return [
+            {
+                "timestamp": row[0] // 1000,  # ms to seconds
+                "ease": row[1],               # 1-4
+                "ivl": row[2],                # interval after review
+                "time": row[3]                # time spent in ms
+            }
+            for row in rows
+        ]
+    except Exception as e:
+        print(f"[card_sessions_storage] Error fetching revlog for card {card_id}: {e}")
+        return []
+
+
 def delete_card_session(card_id):
     """Delete a card's entire session (cascade deletes sections + messages)."""
     db = _get_db()
