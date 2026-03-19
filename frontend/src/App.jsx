@@ -138,7 +138,6 @@ function AppInner() {
   const reviewTrailHook = useReviewTrail();
   const insightsHook = useInsights();
   const [showInsightsDashboard, setShowInsightsDashboard] = useState(false);
-  const prevCardRef = useRef({ cardId: null, messages: [], cardContext: null });
   const lastProcessedCardRef = useRef(null);
   // Create a setSessions wrapper that works with SessionContext
   const setSessionsWrapper = useCallback((updater) => {
@@ -203,11 +202,6 @@ function AppInner() {
     sessionContextRef.current = sessionContext;
     handlePerformanceCaptureRef.current = handlePerformanceCapture;
   });
-  // Keep prevCardRef in sync with latest messages and cardContext
-  useEffect(() => {
-    prevCardRef.current.messages = chatHook.messages;
-    prevCardRef.current.cardContext = cardContextHook.cardContext;
-  }, [chatHook.messages, cardContextHook.cardContext]);
   // Ref für messages container (für Auto-Scroll)
   const messagesContainerRef = useRef(null);
   // Ref für Header-Höhe (für sticky section headers)
@@ -658,15 +652,17 @@ function AppInner() {
               _cardSession.updateLocalMessages(prevCardId, _chat.messages);
             }
             // Auto-extract insights from previous card if enough messages
+            // Use _chat.messages directly (prevCardRef is unreliable due to async message loading)
             const _insights = insightsHookRef.current;
-            const prev = prevCardRef.current;
-            if (prev.cardId && prev.messages.length > 0) {
-              const userMsgCount = prev.messages.filter(m => m.from === 'user').length;
-              if (userMsgCount >= 2 && prev.cardContext) {
-                _insights.extractInsights(prev.cardId, prev.cardContext, prev.messages, null);
+            const currentCardContext = _cardCtx.cardContext;
+            if (prevCardId && _chat.messages && _chat.messages.length > 0) {
+              const userMsgCount = _chat.messages.filter(m => m.from === 'user').length;
+              console.error('🟡 EXTRACT CHECK: prevCardId=', prevCardId, 'messages=', _chat.messages.length, 'userMsgs=', userMsgCount);
+              if (userMsgCount >= 2 && currentCardContext) {
+                console.error('🟢 EXTRACT: Triggering extraction for card', prevCardId);
+                _insights.extractInsights(prevCardId, currentCardContext, _chat.messages, null);
               }
             }
-            prevCardRef.current = { cardId: newCardId, messages: [], cardContext: null };
             _session.handleCardShown(newCardId);
             // Clear chat and sections for new card
             _chat.setMessages([]);
@@ -1111,14 +1107,13 @@ function AppInner() {
         }
         // Auto-extract insights from previous card if enough messages
         const _insights = insightsHookRef.current;
-        const prev = prevCardRef.current;
-        if (prev.cardId && prev.messages.length > 0) {
-          const userMsgCount = prev.messages.filter(m => m.from === 'user').length;
-          if (userMsgCount >= 2 && prev.cardContext) {
-            _insights.extractInsights(prev.cardId, prev.cardContext, prev.messages, null);
+        const currentCardContext = _cardCtx.cardContext;
+        if (prevCardId && _chat.messages && _chat.messages.length > 0) {
+          const userMsgCount = _chat.messages.filter(m => m.from === 'user').length;
+          if (userMsgCount >= 2 && currentCardContext) {
+            _insights.extractInsights(prevCardId, currentCardContext, _chat.messages, null);
           }
         }
-        prevCardRef.current = { cardId: newCardId, messages: [], cardContext: null };
         _session.handleCardShown(newCardId);
         // Clear chat and sections for new card
         _chat.setMessages([]);

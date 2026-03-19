@@ -178,18 +178,20 @@ class InsightExtractionThread(QThread):
                 self.existing_insights, self.performance_data
             )
 
-            # Use non-streaming AI request with extraction prompt as system override
+            # Use non-streaming AI request — context=None to avoid doubling the card data
+            # (card content is already embedded in the extraction prompt)
+            print(f"🟢 InsightExtractionThread: Starting extraction for card {self.card_id}, prompt length={len(prompt)}")
             response = self.ai_handler.get_response(
-                user_message="Extrahiere die Erkenntnisse aus dem folgenden Chat.",
-                context=self.card_context,
+                user_message=prompt,
+                context=None,
                 history=[],
                 mode='compact',
-                system_prompt_override=prompt
             )
 
             if self._cancelled:
                 return
 
+            print(f"🟢 InsightExtractionThread: Response received, length={len(response) if response else 0}")
             if not response:
                 self.error_signal.emit(self.card_id, "Empty response from AI")
                 return
@@ -197,13 +199,13 @@ class InsightExtractionThread(QThread):
             result = parse_extraction_response(response)
 
             if result is None:
+                print(f"🟡 InsightExtractionThread: Parse failed, retrying...")
                 # Retry once
                 response = self.ai_handler.get_response(
-                    user_message="Extrahiere die Erkenntnisse aus dem folgenden Chat.",
-                    context=self.card_context,
+                    user_message=prompt,
+                    context=None,
                     history=[],
                     mode='compact',
-                    system_prompt_override=prompt
                 )
                 if self._cancelled:
                     return
@@ -589,6 +591,7 @@ class ChatbotWidget(QWidget):
                 print(f"_handle_js_message: getCardRevlog error: {e}")
 
         elif msg_type == 'extractInsights':
+            print(f"🟡 extractInsights received! cardId={data.get('cardId')}, messages={len(data.get('messages', []))}")
             card_id = data.get('cardId')
             card_context = data.get('cardContext', {})
             messages = data.get('messages', [])
