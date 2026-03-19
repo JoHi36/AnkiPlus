@@ -726,6 +726,7 @@ const STYLES = [
 
 function renderResponseStyle() {
   const el = document.getElementById('style-pills');
+  if (!el) return;  // Style pills removed from Agent tab
   el.innerHTML = STYLES.map(s =>
     `<button class="pill ${config.responseStyle === s.key ? 'active' : ''}" onclick="setStyle('${s.key}')">
       <span class="pill-icon">${s.icon}</span>${s.label}
