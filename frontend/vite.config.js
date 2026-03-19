@@ -32,9 +32,9 @@ export default defineConfig(({ mode }) => ({
       },
       output: {
         // Verwendet relative Pfade für lokale Dateien
-        assetFileNames: 'assets/[name].[ext]',
-        entryFileNames: 'assets/[name].js',
-        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]',
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
       },
       external: ['d3-sankey'], // Externalize d3-sankey to avoid build issues
     },

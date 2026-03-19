@@ -168,9 +168,35 @@ class CardTracker:
                 "data": context
             }
             
-            js = f"window.ankiReceive({json.dumps(payload)});"
+            payload_json = json.dumps(payload)
+            print(f"card_tracker: 🔴 SENDING cardContext to chat panel for cardId={context.get('cardId')}")
+            # Use BOTH window.ankiReceive AND CustomEvent for reliability
+            js = f"""(function() {{
+                var payload = {payload_json};
+                // Method 1: Direct ankiReceive call
+                if (typeof window.ankiReceive === 'function') {{
+                    window.ankiReceive(payload);
+                }} else {{
+                    console.error('🔴 card_tracker: window.ankiReceive is NOT a function!', typeof window.ankiReceive);
+                }}
+                // Method 2: CustomEvent fallback (more reliable)
+                window.dispatchEvent(new CustomEvent('ankiCardContext', {{detail: payload}}));
+                document.title = 'Card:' + payload.data.cardId;
+            }})();"""
             self.widget.web_view.page().runJavaScript(js)
-            
+
+            # Lazy embed current card for semantic search (after UI update)
+            try:
+                try:
+                    from . import get_embedding_manager
+                except ImportError:
+                    from __init__ import get_embedding_manager
+                emb_mgr = get_embedding_manager()
+                if emb_mgr:
+                    emb_mgr.ensure_embedded(card.id, context)
+            except Exception:
+                pass  # Don't block card display
+
         except Exception as e:
             import traceback
             print(f"Fehler beim Senden des Karten-Kontexts: {e}")

@@ -163,6 +163,15 @@ def toggle_chatbot():
         _chatbot_dock.show()
         # Tell reviewer dock to hide (chat panel is now visible)
         _notify_reviewer_chat_state(True)
+        # Trigger slide-in animation in React
+        try:
+            widget = get_chatbot_widget()
+            if widget and widget.web_view:
+                widget.web_view.page().runJavaScript(
+                    "window.ankiReceive && window.ankiReceive({type:'panelOpened'});"
+                )
+        except Exception:
+            pass
         # Prüfe aktuelles Deck beim Öffnen und sende deckSelected Event
         # Kleine Verzögerung, damit WebView bereit ist
         def check_and_send_deck():

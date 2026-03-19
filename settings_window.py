@@ -58,6 +58,7 @@ class SettingsBridge(QObject):
                 'responseStyle': config.get('response_style', 'balanced'),
                 'theme': config.get('theme', 'auto'),
                 'aiTools': config.get('ai_tools', {'images': True, 'diagrams': True, 'molecules': False}),
+                'mascotEnabled': config.get('mascot_enabled', False),
                 'isAuthenticated': is_authenticated,
                 'hasToken': bool(auth_token),
                 'profileName': profile_name,
@@ -81,6 +82,13 @@ class SettingsBridge(QObject):
             update_config(theme=theme)
         except Exception as e:
             print(f"saveTheme error: {e}")
+
+    @pyqtSlot(bool)
+    def saveMascotEnabled(self, enabled):
+        try:
+            update_config(mascot_enabled=bool(enabled))
+        except Exception as e:
+            print(f"saveMascotEnabled error: {e}")
 
     @pyqtSlot(str)
     def saveAITools(self, tools_json):

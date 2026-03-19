@@ -65,7 +65,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (firebaseUser) {
         try {
           // Firebase User object exposes refreshToken property
-          const refreshToken = (firebaseUser as any).spiTokenManager?.refreshToken
+          const refreshToken = (firebaseUser as any).stsTokenManager?.refreshToken
             || (firebaseUser as any).refreshToken
             || '';
           if (refreshToken) {
@@ -169,7 +169,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const getRefreshToken = (): string | null => {
     if (!user) return null;
     // Firebase User object has refreshToken property
-    const rt = (user as any).spiTokenManager?.refreshToken
+    const rt = (user as any).stsTokenManager?.refreshToken
       || (user as any).refreshToken
       || null;
     return rt || null;
