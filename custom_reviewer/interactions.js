@@ -186,9 +186,18 @@
             }
 
             case S.PREVIEW: {
-                // Answer visible, no rating buttons
+                // Hide question, show only answer (back side only)
+                const questionEl = document.querySelector('section.question');
+                if (questionEl) questionEl.style.display = 'none';
+                const cardDivider = $('#card-divider');
+                if (cardDivider) cardDivider.style.display = 'none';
+                // Show answer
                 const answerEl2 = $('#answer-section');
                 if (answerEl2) { answerEl2.classList.remove('hidden'); answerEl2.style.opacity = '1'; }
+                // Hide the answer input textfield
+                const dcInput = $('#dc-input');
+                if (dcInput) dcInput.style.display = 'none';
+                // Set preview action buttons
                 const dockActions = $('#dock-actions');
                 if (dockActions) {
                     dockActions.innerHTML = `

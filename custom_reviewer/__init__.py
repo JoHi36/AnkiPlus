@@ -1443,19 +1443,29 @@ class CustomReviewer:
         # Check if we're in preview mode — inject preview JS instead of history mode
         _is_preview = _preview_state.get('active', False)
         if _is_preview:
-            auto_answer_js = """
+            preview_js = """
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     setTimeout(function() {
-        var ansEl = document.getElementById('answer-content');
-        if (ansEl) ansEl.style.display = '';
+        // Hide question, show only answer (back side)
+        var questionEl = document.querySelector('section.question');
+        if (questionEl) questionEl.style.display = 'none';
+        var divider = document.getElementById('card-divider');
+        if (divider) divider.style.display = 'none';
+        // Show answer section
+        var ansSection = document.getElementById('answer-section');
+        if (ansSection) ansSection.classList.remove('hidden');
+        // Hide the answer input textfield
+        var inputEl = document.getElementById('dc-input');
+        if (inputEl) inputEl.style.display = 'none';
+        // Set preview state
         document.body.setAttribute('data-state', 'preview');
         if (window.setPreviewMode) window.setPreviewMode();
     }, 50);
 });
 </script>
 """
-            html = html.replace('</body>', auto_answer_js + '</body>')
+            html = html.replace('</body>', preview_js + '</body>')
 
         # Auto-show answer + HISTORY mode for previously-reviewed cards
         auto_answer_js = ""
