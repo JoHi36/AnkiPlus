@@ -1,8 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, ChevronDown } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import SourcesCarousel from './SourcesCarousel';
-import type { Citation } from './SourceCard';
 
 /* ═══════════════════════════════════════════════════
    ThoughtStream v4 — Smart Pipeline + Phase Animations
@@ -16,29 +12,38 @@ const MIN_PHASE_DURATION = 800;
 const DONE_GRACE = 300; // Extra ms to show results after done
 
 const KEYFRAMES = `
-@keyframes ts-shimmerWave {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+@keyframes ts-phaseReveal {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 @keyframes ts-dotPulse {
   0%, 100% { opacity: 0.3; transform: scale(1); }
   50% { opacity: 1; transform: scale(1.3); }
 }
-@keyframes ts-fadeBlurIn {
-  0% { filter: blur(4px); opacity: 0.3; }
-  100% { filter: blur(0); opacity: 1; }
+@keyframes ts-routerScan {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes ts-routerDotFloat {
+  0%, 100% { transform: translateX(0); opacity: 0.4; }
+  50% { transform: translateX(3px); opacity: 0.8; }
 }
 @keyframes ts-pulseIn {
   0% { opacity: 0; transform: scale(0.95); }
   100% { opacity: 1; transform: scale(1); }
 }
+@keyframes ts-fadeBlurIn {
+  0% { filter: blur(3px); opacity: 0.2; }
+  100% { filter: blur(0); opacity: 1; }
+}
 @keyframes ts-scanGlow {
-  0% { left: -30%; }
+  0% { left: -40%; }
   100% { left: 100%; }
 }
-@keyframes ts-numberSlide {
-  0% { transform: translateY(100%); opacity: 0; }
-  100% { transform: translateY(0); opacity: 1; }
+@keyframes ts-shimmerWave {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 `;
 
@@ -261,52 +266,135 @@ function useSmartPipeline(pipelineSteps: PipelineStep[]) {
 }
 
 /* ═══════════════════════════════════════════════════
-   PHASE-SPECIFIC CONTENT COMPONENTS
+   PHASE-SPECIFIC CONTENT COMPONENTS (v5)
    ═══════════════════════════════════════════════════ */
 
-/* ── Router Phase ── */
-function RouterContent({ data, isDone }: { data: Record<string, any>; isDone: boolean }) {
-  if (!isDone) return null;
-  const mode = MODE_LABELS[data.retrieval_mode] || data.retrieval_mode || '';
-  const scope = data.scope_label || '';
+/* ── Router Details (done state) ── */
+function RouterDetails({ data }: { data: Record<string, any> }) {
   if (!data.search_needed) {
     return (
-      <div className="mt-2 text-[11px] text-base-content/40">
+      <div style={{ marginTop: 4, fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>
         Keine Suche nötig — direkte Antwort
       </div>
     );
   }
+
+  const RESPONSE_LENGTH_LABELS: Record<string, string> = {
+    short: 'Kurz',
+    medium: 'Mittel',
+    long: 'Ausführlich',
+  };
+
+  const tags = [
+    {
+      label: 'Strategie',
+      value: MODE_LABELS[data.retrieval_mode] || data.retrieval_mode || '—',
+      icon: 'M8 2v12M2 8h12',
+    },
+    {
+      label: 'Scope',
+      value: data.scope_label || (data.scope === 'current' ? 'Aktueller Stapel' : 'Alle Stapel'),
+      icon: 'M2 3h12v10H2zM2 6h12',
+    },
+    {
+      label: 'Antwort',
+      value: RESPONSE_LENGTH_LABELS[data.response_length] || 'Mittel',
+      icon: 'M3 13V5h3v8M7 13V3h3v10M11 13V7h3v6',
+    },
+  ];
+
   return (
-    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
-      <span className="text-base-content/30">Suche <span className="text-base-content/50">{mode}</span></span>
-      {scope && <span className="text-base-content/30">Scope <span className="text-base-content/50">{scope}</span></span>}
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+      {tags.map((tag) => (
+        <div
+          key={tag.label}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 5,
+            fontSize: 11,
+            padding: '3px 8px',
+            borderRadius: 5,
+            background: 'rgba(255,255,255,0.03)',
+          }}
+        >
+          <svg width={10} height={10} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" style={{ opacity: 0.2 }}>
+            <path d={tag.icon} />
+          </svg>
+          <span style={{ color: 'rgba(255,255,255,0.13)' }}>{tag.label}</span>
+          <span style={{ color: 'rgba(255,255,255,0.35)', fontWeight: 500 }}>{tag.value}</span>
+        </div>
+      ))}
     </div>
   );
 }
 
-/* ── SQL Search Phase ── */
-function SqlContent({ data, isDone }: { data: Record<string, any>; isDone: boolean }) {
+/* ── Router Thinking (active state) ── */
+function RouterThinking() {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+      <div
+        style={{
+          width: 80,
+          height: 3,
+          borderRadius: 2,
+          background: 'linear-gradient(90deg, rgba(10,132,255,0.1), rgba(168,85,247,0.2), rgba(10,132,255,0.1))',
+          backgroundSize: '200% 100%',
+          animation: 'ts-shimmerWave 2s ease-in-out infinite',
+        }}
+      />
+      <div style={{ display: 'flex', gap: 3 }}>
+        {[0, 0.2, 0.4].map((delay, i) => (
+          <div
+            key={i}
+            style={{
+              width: 3,
+              height: 3,
+              borderRadius: '50%',
+              background: 'rgba(10,132,255,0.5)',
+              animation: `ts-dotPulse 1.5s ease-in-out ${delay}s infinite`,
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── SQL Tags ── */
+function SqlTags({ data, isDone }: { data: Record<string, any>; isDone: boolean }) {
   const queries = data.queries || [];
-  if (queries.length === 0 && !isDone) return null;
+  if (queries.length === 0) return null;
 
   return (
-    <div className="mt-2 flex flex-wrap gap-1.5">
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
       {queries.map((q: any, i: number) => (
         <div
           key={i}
-          className="inline-flex items-center gap-1.5 text-[11px] py-1 px-2.5 rounded-md"
           style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 5,
+            fontSize: 11,
+            padding: '3px 8px',
+            borderRadius: 5,
             background: 'rgba(255,255,255,0.05)',
             color: 'rgba(232,232,232,0.5)',
             animation: `ts-pulseIn 0.3s ease-out ${i * 0.15}s both`,
           }}
         >
-          <Search size={10} style={{ opacity: 0.3 }} />
+          <svg width={10} height={10} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" style={{ opacity: 0.3 }}>
+            <circle cx="7" cy="7" r="4.5" />
+            <path d="M10.5 10.5L14 14" />
+          </svg>
           <span>{q.text || q}</span>
           {isDone && typeof q.hits === 'number' && (
             <span
-              className="font-mono text-[10px]"
-              style={{ color: q.hits > 0 ? 'rgba(20,184,166,0.6)' : 'rgba(232,232,232,0.2)' }}
+              style={{
+                fontFamily: 'monospace',
+                fontSize: 10,
+                color: q.hits > 0 ? 'rgba(20,184,166,0.6)' : 'rgba(232,232,232,0.2)',
+              }}
             >
               {q.hits}
             </span>
@@ -317,41 +405,61 @@ function SqlContent({ data, isDone }: { data: Record<string, any>; isDone: boole
   );
 }
 
-/* ── Semantic Search Phase ── */
-function SemanticContent({ data, isDone }: { data: Record<string, any>; isDone: boolean }) {
+/* ── Semantic Chunks ── */
+function SemanticChunks({ data, isDone }: { data: Record<string, any>; isDone: boolean }) {
   const chunks = data.chunks || [];
   if (chunks.length === 0) return null;
 
   return (
-    <div className="mt-2 flex flex-col gap-1.5">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
       {chunks.slice(0, 3).map((chunk: any, i: number) => (
         <div
           key={i}
-          className="flex items-center gap-2.5 py-2 px-2.5 rounded-lg relative overflow-hidden"
-          style={{ background: 'rgba(255,255,255,0.02)' }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '5px 8px',
+            borderRadius: 6,
+            background: 'rgba(255,255,255,0.02)',
+            position: 'relative',
+            overflow: 'hidden',
+          }}
         >
-          {/* Glow scan overlay */}
+          {/* Scan glow overlay when active */}
           {!isDone && (
             <div
-              className="absolute top-0 h-full pointer-events-none"
               style={{
-                width: '30%',
-                left: '-30%',
+                position: 'absolute',
+                top: 0,
+                height: '100%',
+                width: '40%',
+                left: '-40%',
                 background: 'linear-gradient(90deg, transparent, rgba(10,132,255,0.08), transparent)',
                 animation: 'ts-scanGlow 2s ease-in-out infinite',
+                pointerEvents: 'none',
               }}
             />
           )}
           <span
-            className="text-[11px] font-mono flex-shrink-0"
-            style={{ color: '#0a84ff', opacity: 0.7, minWidth: 36 }}
+            style={{
+              fontSize: 11,
+              fontFamily: 'monospace',
+              color: '#0a84ff',
+              opacity: 0.7,
+              minWidth: 36,
+              flexShrink: 0,
+            }}
           >
             {typeof chunk.score === 'number' ? chunk.score.toFixed(3) : '—'}
           </span>
           <span
-            className="text-[11px] truncate"
             style={{
+              fontSize: 11,
               color: 'rgba(232,232,232,0.5)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
               animation: `ts-fadeBlurIn 0.8s ease-out ${i * 0.3}s both`,
             }}
           >
@@ -363,151 +471,168 @@ function SemanticContent({ data, isDone }: { data: Record<string, any>; isDone: 
   );
 }
 
-/* ── Merge Phase ── */
-function MergeContent({ data, isDone }: { data: Record<string, any>; isDone: boolean }) {
+/* ── Merge Bar ── */
+function MergeBar({ data }: { data: Record<string, any> }) {
   const kw = data.keyword_count || 0;
   const sem = data.semantic_count || 0;
-  const total = data.total || 0;
-  const wp = typeof data.weight_position === 'number' ? data.weight_position : 0.5;
-  const wpPct = `${Math.round(wp * 100)}%`;
-
-  if (!isDone && kw === 0 && sem === 0) return null;
 
   return (
-    <div className="mt-2">
-      {/* Labels row */}
-      <div className="flex justify-between items-center px-0.5">
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[9px] uppercase tracking-wider" style={{ color: 'rgba(232,232,232,0.2)' }}>Keyword</span>
-          <span className="text-[13px] font-semibold font-mono" style={{ color: 'rgba(10,132,255,0.6)' }}>{kw}</span>
-        </div>
-        <div className="flex flex-col gap-0.5 text-right">
-          <span className="text-[9px] uppercase tracking-wider" style={{ color: 'rgba(232,232,232,0.2)' }}>Semantic</span>
-          <span className="text-[13px] font-semibold font-mono" style={{ color: 'rgba(20,184,166,0.6)' }}>{sem}</span>
-        </div>
-      </div>
-      {/* Track with glow dot */}
-      <div className="relative h-8 my-2">
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+      <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'rgba(10,132,255,0.6)', fontWeight: 600 }}>
+        {kw}K
+      </span>
+      {/* Track */}
+      <div style={{ flex: 1, position: 'relative', height: 5, display: 'flex', alignItems: 'center' }}>
         <div
-          className="absolute top-1/2 left-0 right-0 h-[2px] -translate-y-1/2 rounded-sm"
           style={{
-            background: `linear-gradient(90deg, rgba(10,132,255,0.25) 0%, rgba(10,132,255,0.4) ${wpPct}, rgba(20,184,166,0.4) ${wpPct}, rgba(20,184,166,0.25) 100%)`,
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            height: 1.5,
+            borderRadius: 1,
+            background: 'linear-gradient(90deg, rgba(10,132,255,0.3), rgba(20,184,166,0.3))',
           }}
         />
         <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full"
           style={{
-            left: wpPct,
-            background: '#0a84ff',
-            boxShadow: '0 0 8px rgba(10,132,255,0.5), 0 0 20px rgba(10,132,255,0.2)',
-            transition: 'left 0.6s cubic-bezier(0.25, 0.1, 0.25, 1)',
+            position: 'absolute',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: 5,
+            height: 5,
+            borderRadius: '50%',
+            background: 'rgba(255,255,255,0.25)',
           }}
         />
       </div>
-      {/* Total */}
-      {isDone && total > 0 && (
-        <div className="text-center">
-          <div
-            className="text-[20px] font-semibold"
-            style={{
-              color: 'rgba(232,232,232,0.8)',
-              animation: 'ts-numberSlide 0.4s ease-out both',
-              overflow: 'hidden',
-            }}
-          >
-            {total}
-          </div>
-          <div className="text-[11px]" style={{ color: 'rgba(232,232,232,0.25)' }}>Quellen kombiniert</div>
-        </div>
-      )}
+      <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'rgba(20,184,166,0.6)', fontWeight: 600 }}>
+        {sem}S
+      </span>
     </div>
   );
 }
 
-/* ── Generating Phase (Shimmer) ── */
-function GeneratingContent() {
+/* ═══════════════════════════════════════════════════
+   PHASE ROW — Unified renderer for active + done
+   ═══════════════════════════════════════════════════ */
+
+function PhaseRow({ step, data, status, isActive }: { step: string; data: Record<string, any>; status: string; isActive: boolean }) {
+  const isDone = !isActive;
+
+  // Title logic
+  let title: string;
+  if (isActive) {
+    title = ACTIVE_TITLES[step] || 'Verarbeite...';
+  } else if (step === 'router') {
+    // Router done: show mode + scope instead of getDoneLabel
+    const mode = MODE_LABELS[data.retrieval_mode] || data.retrieval_mode || '';
+    const scope = data.scope_label || '';
+    title = scope ? `${mode} · ${scope}` : mode || 'Anfrage analysiert';
+  } else {
+    title = getDoneLabel(step, data, status);
+  }
+
+  // Highlight numbers in title
+  const titleParts = title.split(/(\d+)/);
+  const renderedTitle = titleParts.map((part, i) =>
+    /^\d+$/.test(part) ? (
+      <span key={i} style={{ color: 'rgba(255,255,255,0.55)', fontWeight: 600, fontFamily: 'monospace' }}>{part}</span>
+    ) : (
+      <span key={i}>{part}</span>
+    )
+  );
+
   return (
     <div
-      className="mt-2 h-[3px] rounded-sm overflow-hidden"
       style={{
-        background: 'linear-gradient(90deg, transparent 0%, rgba(10,132,255,0.05) 20%, rgba(10,132,255,0.3) 50%, rgba(10,132,255,0.05) 80%, transparent 100%)',
-        backgroundSize: '200% 100%',
-        animation: 'ts-shimmerWave 2s ease-in-out infinite',
+        padding: '6px 0',
+        animation: isActive ? undefined : 'ts-phaseReveal 0.25s ease-out both',
+      }}
+    >
+      {/* Title row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Dot */}
+        {isDone ? (
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'rgba(20,184,166,0.5)', flexShrink: 0 }} />
+        ) : (
+          <div
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: '#0a84ff',
+              flexShrink: 0,
+              animation: 'ts-dotPulse 1.5s ease-in-out infinite',
+            }}
+          />
+        )}
+        {/* Title */}
+        <span style={{ fontSize: 12, fontWeight: 500, color: isDone ? 'rgba(232,232,232,0.45)' : 'rgba(232,232,232,0.55)', flex: 1 }}>
+          {renderedTitle}
+        </span>
+        {/* Checkmark */}
+        {isDone && status !== 'error' && (
+          <span style={{ fontSize: 10, color: 'rgba(20,184,166,0.5)' }}>&#10003;</span>
+        )}
+      </div>
+
+      {/* Phase-specific content */}
+      <div style={{ marginLeft: 14 }}>
+        {step === 'router' && isActive && <RouterThinking />}
+        {step === 'router' && isDone && <RouterDetails data={data} />}
+        {step === 'sql_search' && <SqlTags data={data} isDone={isDone} />}
+        {step === 'semantic_search' && <SemanticChunks data={data} isDone={isDone} />}
+        {step === 'merge' && isDone && <MergeBar data={data} />}
+        {step === 'generating' && isActive && (
+          <div
+            style={{
+              marginTop: 4,
+              height: 3,
+              borderRadius: 2,
+              background: 'linear-gradient(90deg, transparent 0%, rgba(10,132,255,0.05) 20%, rgba(10,132,255,0.3) 50%, rgba(10,132,255,0.05) 80%, transparent 100%)',
+              backgroundSize: '200% 100%',
+              animation: 'ts-shimmerWave 2s ease-in-out infinite',
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Extending Line ── */
+function ExtendingLine() {
+  return (
+    <div
+      style={{
+        flex: 1,
+        height: 1,
+        marginLeft: 8,
+        background: 'linear-gradient(90deg, rgba(255,255,255,0.06), transparent)',
       }}
     />
   );
 }
 
-/* ═══════════════════════════════════════════════════
-   ACTIVE BOX — Shows current step with phase content
-   ═══════════════════════════════════════════════════ */
-
-function ActiveBox({ entry }: { entry: ActiveEntry }) {
-  const title = entry.status === 'active'
-    ? (ACTIVE_TITLES[entry.step] || 'Verarbeite...')
-    : getDoneLabel(entry.step, entry.data, entry.status);
-  const isDone = entry.status !== 'active';
-
+/* ── Chevron SVGs ── */
+function ChevronRight() {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -4, height: 0, marginBottom: 0, padding: 0 }}
-      transition={{ duration: 0.25, exit: { duration: 0.2 } }}
-      className="bg-[#1e1e1e] rounded-xl p-3 mb-1.5 border border-white/[0.04]"
-    >
-      {/* Title row */}
-      <div className="flex items-center gap-2">
-        {isDone ? (
-          <div className="w-1.5 h-1.5 rounded-full" style={{ background: 'rgba(20,184,166,0.5)' }} />
-        ) : (
-          <div
-            className="w-1.5 h-1.5 rounded-full bg-[#0a84ff]"
-            style={{ animation: 'ts-dotPulse 1.5s ease-in-out infinite' }}
-          />
-        )}
-        <span className={`text-[12px] font-medium ${isDone ? 'text-base-content/50' : 'text-base-content/55'}`}>
-          {title}
-        </span>
-        {isDone && entry.status !== 'error' && (
-          <span className="ml-auto text-[10px]" style={{ color: 'rgba(20,184,166,0.5)' }}>&#10003;</span>
-        )}
-      </div>
-
-      {/* Phase-specific content */}
-      {entry.step === 'router' && <RouterContent data={entry.data} isDone={isDone} />}
-      {entry.step === 'sql_search' && <SqlContent data={entry.data} isDone={isDone} />}
-      {entry.step === 'semantic_search' && <SemanticContent data={entry.data} isDone={isDone} />}
-      {entry.step === 'merge' && <MergeContent data={entry.data} isDone={isDone} />}
-      {entry.step === 'generating' && !isDone && <GeneratingContent />}
-    </motion.div>
+    <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.25 }}>
+      <path d="M6 4l4 4-4 4" />
+    </svg>
+  );
+}
+function ChevronDownIcon() {
+  return (
+    <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.25 }}>
+      <path d="M4 6l4 4 4-4" />
+    </svg>
   );
 }
 
-/* ── Loading Box (before any steps arrive) ── */
+/* ── Legacy fallback (old step format) ── */
 
-function LoadingBox() {
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="bg-[#1e1e1e] rounded-xl p-3 mb-1.5 border border-white/[0.04]"
-    >
-      <div className="flex items-center gap-2">
-        <div
-          className="w-1.5 h-1.5 rounded-full bg-[#0a84ff]"
-          style={{ animation: 'ts-dotPulse 1.5s ease-in-out infinite' }}
-        />
-        <span className="text-[12px] text-base-content/45">Analysiere Anfrage...</span>
-      </div>
-    </motion.div>
-  );
-}
-
-/* ── Done Step (timeline entry) ── */
-
-function DoneStep({ label, isError, isLast }: { label: string; isError: boolean; isLast: boolean }) {
+function LegacyDoneStep({ label, isError }: { label: string; isError: boolean }) {
   return (
     <div className="flex items-center gap-2 py-[5px]" style={{ borderTop: '1px solid rgba(255,255,255,0.03)' }}>
       <div className={`w-[5px] h-[5px] rounded-full flex-shrink-0 ${isError ? 'bg-error/40' : ''}`}
@@ -524,8 +649,6 @@ function DoneStep({ label, isError, isLast }: { label: string; isError: boolean;
     </div>
   );
 }
-
-/* ── Legacy fallback (old step format) ── */
 
 function LegacyThoughtStream({ steps, citations, citationIndices, bridge, onPreviewCard }: any) {
   const hasCitations = Object.keys(citations || {}).length > 0;
@@ -544,17 +667,14 @@ function LegacyThoughtStream({ steps, citations, citationIndices, bridge, onPrev
             onClick={() => setCollapsed(false)}
             className="flex items-center gap-1.5 w-full text-left py-1 opacity-40 hover:opacity-60 transition-opacity cursor-pointer"
           >
-            <ChevronDown className="w-3 h-3 text-base-content/25 -rotate-90" />
+            <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.25 }}>
+              <path d="M6 4l4 4-4 4" />
+            </svg>
             <span className="text-[11px] text-base-content/35">
               {labels.length} Schritt{labels.length !== 1 ? 'e' : ''}
               {hasCitations ? ` · ${Object.keys(citations).length} Quellen` : ''}
             </span>
           </button>
-          {hasCitations && (
-            <div className="mt-1 max-w-full overflow-hidden">
-              <SourcesCarousel citations={citations} citationIndices={citationIndices} bridge={bridge} onPreviewCard={onPreviewCard} />
-            </div>
-          )}
         </>
       ) : (
         <>
@@ -562,21 +682,18 @@ function LegacyThoughtStream({ steps, citations, citationIndices, bridge, onPrev
             onClick={() => setCollapsed(true)}
             className="flex items-center gap-1.5 w-full text-left py-1 mb-1 opacity-50 hover:opacity-70 transition-opacity cursor-pointer"
           >
-            <ChevronDown className="w-3 h-3 text-base-content/25" />
+            <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.25 }}>
+              <path d="M4 6l4 4 4-4" />
+            </svg>
             <span className="text-[11px] text-base-content/40">
               {labels.length} Schritt{labels.length !== 1 ? 'e' : ''}
             </span>
           </button>
           <div>
             {labels.map((label, i) => (
-              <DoneStep key={i} label={label} isError={false} isLast={i === labels.length - 1 && !hasCitations} />
+              <LegacyDoneStep key={i} label={label} isError={false} />
             ))}
           </div>
-          {hasCitations && (
-            <div className="mt-1 max-w-full overflow-hidden">
-              <SourcesCarousel citations={citations} citationIndices={citationIndices} bridge={bridge} onPreviewCard={onPreviewCard} />
-            </div>
-          )}
         </>
       )}
     </div>
@@ -584,7 +701,7 @@ function LegacyThoughtStream({ steps, citations, citationIndices, bridge, onPrev
 }
 
 /* ═══════════════════════════════════════════════════
-   MAIN COMPONENT
+   MAIN COMPONENT (v5)
    ═══════════════════════════════════════════════════ */
 
 export default function ThoughtStream({
@@ -600,12 +717,14 @@ export default function ThoughtStream({
 }: ThoughtStreamProps) {
   // Inject keyframes once
   useEffect(() => {
-    if (typeof document !== 'undefined' && !document.getElementById('ts-keyframes-v4')) {
+    if (typeof document !== 'undefined' && !document.getElementById('ts-keyframes-v5')) {
       const s = document.createElement('style');
-      s.id = 'ts-keyframes-v4';
+      s.id = 'ts-keyframes-v5';
       s.textContent = KEYFRAMES;
       document.head.appendChild(s);
       // Remove old keyframes if present
+      const oldV4 = document.getElementById('ts-keyframes-v4');
+      if (oldV4) oldV4.remove();
       const old = document.getElementById('ts-keyframes');
       if (old) old.remove();
     }
@@ -613,6 +732,9 @@ export default function ThoughtStream({
 
   const isLegacy = pipelineSteps.length === 0 && steps.length > 0;
   const { activeEntry, doneStack, isProcessing } = useSmartPipeline(pipelineSteps);
+
+  // Reverse doneStack for chronological display (doneStack is newest-first)
+  const chronologicalDone = [...doneStack].reverse();
 
   // Collapse state
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -632,7 +754,8 @@ export default function ThoughtStream({
   }, [isProcessing]);
 
   const hasCitations = Object.keys(citations).length > 0;
-  // Show when processing, has data, OR when streaming started but no events yet (LoadingBox)
+  const citationCount = Object.keys(citations).length;
+  // Show when processing, has data, OR when streaming started but no events yet
   const showLoadingBox = isStreaming && !isProcessing && !activeEntry && doneStack.length === 0 && pipelineSteps.length === 0 && !isLegacy;
   const hasContent = isProcessing || activeEntry !== null || doneStack.length > 0 || isLegacy || showLoadingBox;
   const totalSteps = doneStack.length;
@@ -641,72 +764,108 @@ export default function ThoughtStream({
   if (isLegacy) return <LegacyThoughtStream steps={steps} citations={citations} citationIndices={citationIndices} bridge={bridge} onPreviewCard={onPreviewCard} />;
 
   return (
-    <div className="mb-2 max-w-full select-none">
+    <div style={{ marginBottom: 8, maxWidth: '100%', userSelect: 'none' }}>
       {/* ── Collapsed view ── */}
       {isCollapsed && !isProcessing && !showLoadingBox && (
-        <>
-          <button
-            onClick={() => setIsCollapsed(false)}
-            className="flex items-center gap-1.5 w-full text-left py-1 opacity-40 hover:opacity-60 transition-opacity cursor-pointer"
-          >
-            <ChevronDown className="w-3 h-3 text-base-content/25 -rotate-90" />
-            <span className="text-[11px] text-base-content/35">
-              {totalSteps} Schritt{totalSteps !== 1 ? 'e' : ''}
-              {hasCitations ? ` · ${Object.keys(citations).length} Quellen` : ''}
-            </span>
-          </button>
-          {hasCitations && (
-            <div className="mt-1 mb-1 max-w-full overflow-hidden">
-              <SourcesCarousel citations={citations} citationIndices={citationIndices} bridge={bridge} onPreviewCard={onPreviewCard} />
-            </div>
-          )}
-        </>
+        <button
+          onClick={() => setIsCollapsed(false)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            width: '100%',
+            textAlign: 'left',
+            padding: '4px 0',
+            opacity: 0.4,
+            background: 'none',
+            border: 'none',
+            color: 'inherit',
+            cursor: 'pointer',
+            transition: 'opacity 0.2s',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.6'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.4'; }}
+        >
+          <ChevronRight />
+          <span style={{ fontSize: 11, color: 'rgba(232,232,232,0.35)' }}>
+            {totalSteps} Schritt{totalSteps !== 1 ? 'e' : ''}
+            {hasCitations ? ` · ${citationCount} Quellen` : ''}
+          </span>
+          <ExtendingLine />
+        </button>
       )}
 
       {/* ── Expanded view ── */}
       {(!isCollapsed || showLoadingBox) && (
         <div>
-          {/* Collapse button (when pipeline is done and has steps) */}
+          {/* Toggle row (when pipeline is done and has steps) */}
           {!isProcessing && totalSteps > 0 && (
             <button
               onClick={() => setIsCollapsed(true)}
-              className="flex items-center gap-1.5 w-full text-left py-1 mb-1 opacity-50 hover:opacity-70 transition-opacity cursor-pointer"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                width: '100%',
+                textAlign: 'left',
+                padding: '4px 0',
+                marginBottom: 4,
+                opacity: 0.5,
+                background: 'none',
+                border: 'none',
+                color: 'inherit',
+                cursor: 'pointer',
+                transition: 'opacity 0.2s',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.7'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.5'; }}
             >
-              <ChevronDown className="w-3 h-3 text-base-content/25" />
-              <span className="text-[11px] text-base-content/40">
+              <ChevronDownIcon />
+              <span style={{ fontSize: 11, color: 'rgba(232,232,232,0.4)' }}>
                 {totalSteps} Schritt{totalSteps !== 1 ? 'e' : ''}
               </span>
+              <ExtendingLine />
             </button>
           )}
 
-          {/* Active Box */}
-          <AnimatePresence mode="wait">
-            {activeEntry ? (
-              <ActiveBox key={activeEntry.step} entry={activeEntry} />
-            ) : (isProcessing || showLoadingBox) && doneStack.length === 0 ? (
-              <LoadingBox key="loading" />
-            ) : null}
-          </AnimatePresence>
-
-          {/* Done stack */}
-          {doneStack.length > 0 && (
-            <div className="ml-0.5">
-              {doneStack.map((entry, i) => (
-                <DoneStep
-                  key={entry.step}
-                  label={entry.label}
-                  isError={entry.isError}
-                  isLast={i === doneStack.length - 1 && !hasCitations}
-                />
-              ))}
+          {/* Loading state (before any steps arrive) */}
+          {(isProcessing || showLoadingBox) && doneStack.length === 0 && !activeEntry && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
+              <div
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  background: '#0a84ff',
+                  flexShrink: 0,
+                  animation: 'ts-dotPulse 1.5s ease-in-out infinite',
+                }}
+              />
+              <span style={{ fontSize: 12, color: 'rgba(232,232,232,0.45)' }}>Analysiere...</span>
+              <ExtendingLine />
             </div>
           )}
 
-          {/* Sources carousel */}
-          {hasCitations && (
-            <div className="mt-1 max-w-full overflow-hidden">
-              <SourcesCarousel citations={citations} citationIndices={citationIndices} bridge={bridge} onPreviewCard={onPreviewCard} />
-            </div>
+          {/* Chronological done phases */}
+          {chronologicalDone.map((entry) => (
+            <PhaseRow
+              key={entry.step}
+              step={entry.step}
+              data={pipelineSteps.find(s => s.step === entry.step)?.data || {}}
+              status={entry.isError ? 'error' : 'done'}
+              isActive={false}
+            />
+          ))}
+
+          {/* Active phase */}
+          {activeEntry && (
+            <PhaseRow
+              key={`active-${activeEntry.step}`}
+              step={activeEntry.step}
+              data={activeEntry.data}
+              status={activeEntry.status}
+              isActive={activeEntry.status === 'active'}
+            />
           )}
         </div>
       )}
