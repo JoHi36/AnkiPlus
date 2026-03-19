@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 
 /**
  * ImageWidget — renders images from show_card_media or search_image tools.
@@ -114,8 +114,24 @@ export default function ImageWidget({ data, toolName }) {
         borderRadius: 16,
         overflow: 'hidden',
       }}>
-        {/* Image — uses fetchImage bridge to load via Base64 */}
-        <InternetImage url={data.imageUrl} description={data.description} />
+        {/* Image — base64 data URL from Python, renders directly */}
+        {data.dataUrl ? (
+          <img
+            src={data.dataUrl}
+            alt={data.description || ''}
+            style={{
+              width: '100%',
+              maxHeight: 400,
+              objectFit: 'contain',
+              display: 'block',
+              background: 'rgba(255,255,255,0.02)',
+            }}
+          />
+        ) : (
+          <div style={{ padding: '20px', textAlign: 'center', color: 'rgba(255,69,58,0.6)', fontSize: 12 }}>
+            Bild konnte nicht geladen werden
+          </div>
+        )}
 
         {/* Source attribution */}
         <div style={{
@@ -138,80 +154,4 @@ export default function ImageWidget({ data, toolName }) {
   }
 
   return null;
-}
-
-
-/**
- * InternetImage — loads external image through fetchImage bridge (Base64).
- * QWebEngine blocks external URLs, so we must proxy through Python.
- */
-function InternetImage({ url, description }) {
-  const [dataUrl, setDataUrl] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  React.useEffect(() => {
-    if (!url) return;
-
-    // Listen for imageLoaded event from bridge
-    const handler = (event) => {
-      if (event.detail && event.detail.url === url) {
-        if (event.detail.dataUrl) {
-          setDataUrl(event.detail.dataUrl);
-          setLoading(false);
-        } else {
-          setError(event.detail.error || 'Bild konnte nicht geladen werden');
-          setLoading(false);
-        }
-      }
-    };
-    window.addEventListener('imageLoaded', handler);
-
-    // Request image fetch via bridge
-    if (window.ankiBridge && window.ankiBridge.addMessage) {
-      window.ankiBridge.addMessage('fetchImage', url);
-    }
-
-    return () => window.removeEventListener('imageLoaded', handler);
-  }, [url]);
-
-  if (loading) {
-    return (
-      <div style={{
-        padding: '40px 20px',
-        textAlign: 'center',
-        color: 'rgba(255,255,255,0.25)',
-        fontSize: 12,
-      }}>
-        Lade Bild...
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div style={{
-        padding: '20px',
-        textAlign: 'center',
-        color: 'rgba(255,69,58,0.6)',
-        fontSize: 12,
-      }}>
-        {error}
-      </div>
-    );
-  }
-
-  return (
-    <img
-      src={dataUrl}
-      alt={description || ''}
-      style={{
-        width: '100%',
-        maxHeight: 400,
-        objectFit: 'contain',
-        display: 'block',
-        background: 'rgba(255,255,255,0.02)',
-      }}
-    />
-  );
 }

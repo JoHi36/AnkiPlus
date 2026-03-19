@@ -821,12 +821,16 @@ SEARCH_IMAGE_SCHEMA = {
 
 
 def execute_search_image(args):
-    """Search for an image on the internet (PubChem / Wikimedia Commons).
+    """Search for an image on the internet and return it as base64 data URL.
 
-    Returns dict with imageUrl, source, description for widget rendering.
-    Uses the same search logic as bridge.searchImage().
+    Searches PubChem (molecules) and Wikimedia Commons, then fetches the
+    image bytes and encodes as data URL. The frontend can render directly
+    without needing a separate fetchImage bridge call.
     """
     import requests as req
+    import base64
+    import os
+    import hashlib
 
     query = args.get("query", "")
     image_type = args.get("image_type", "general")
@@ -834,23 +838,24 @@ def execute_search_image(args):
     if not query:
         return {"error": "Kein Suchbegriff angegeben"}
 
-    try:
+    def _find_image_url():
+        """Search APIs and return (url, source, description) or None."""
         # 1. PubChem for molecules
         if image_type == "molecule" or "molecule" in query.lower() or "molecular" in query.lower():
             try:
                 search_url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{req.utils.quote(query)}/JSON"
                 resp = req.get(search_url, timeout=5,
-                               headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'})
+                               headers={'User-Agent': 'Mozilla/5.0'})
                 if resp.status_code == 200:
                     data = resp.json()
                     if 'PC_Compounds' in data and data['PC_Compounds']:
                         cid = data['PC_Compounds'][0].get('id', {}).get('id', {}).get('cid', [None])[0]
                         if cid:
-                            return {
-                                "imageUrl": f"https://pubchem.ncbi.nlm.nih.gov/image/imgsrv.fcgi?cid={cid}&t=l",
-                                "source": "pubchem",
-                                "description": f"Molekülstruktur: {query}",
-                            }
+                            return (
+                                f"https://pubchem.ncbi.nlm.nih.gov/image/imgsrv.fcgi?cid={cid}&t=l",
+                                "pubchem",
+                                f"Molekülstruktur: {query}"
+                            )
             except Exception:
                 pass
 
@@ -867,16 +872,52 @@ def execute_search_image(args):
                 results = data.get('query', {}).get('search', [])
                 if results:
                     filename = results[0]['title'].replace('File:', '')
-                    filename_enc = req.utils.quote(filename.replace(' ', '_'))
-                    return {
-                        "imageUrl": f"https://commons.wikimedia.org/wiki/Special:FilePath/{filename_enc}?width=800",
-                        "source": "wikimedia",
-                        "description": f"{query}",
-                    }
+                    # Normalize Wikimedia URL to direct upload path
+                    fn_underscore = filename.replace(' ', '_')
+                    md5 = hashlib.md5(fn_underscore.encode('utf-8')).hexdigest()
+                    direct_url = f"https://upload.wikimedia.org/wikipedia/commons/{md5[0]}/{md5[:2]}/{req.utils.quote(fn_underscore)}"
+                    return (direct_url, "wikimedia", query)
         except Exception:
             pass
 
-        return {"error": f"Kein Bild gefunden für '{query}'"}
+        return None
+
+    def _fetch_as_data_url(url):
+        """Fetch image bytes and encode as data URL."""
+        resp = req.get(url, timeout=10,
+                       headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'})
+        resp.raise_for_status()
+
+        content_type = resp.headers.get('content-type', '').split(';')[0].strip()
+        if not content_type.startswith('image/'):
+            # Guess from extension
+            ext = os.path.splitext(url.split('?')[0])[1].lower()
+            ct_map = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+                      '.png': 'image/png', '.gif': 'image/gif',
+                      '.svg': 'image/svg+xml', '.webp': 'image/webp'}
+            content_type = ct_map.get(ext, 'image/png')
+
+        b64 = base64.b64encode(resp.content).decode('utf-8')
+        return f"data:{content_type};base64,{b64}"
+
+    try:
+        result = _find_image_url()
+        if not result:
+            return {"error": f"Kein Bild gefunden für '{query}'"}
+
+        url, source, description = result
+
+        # Fetch the image and encode as base64
+        try:
+            data_url = _fetch_as_data_url(url)
+        except Exception as e:
+            return {"error": f"Bild gefunden aber Download fehlgeschlagen: {str(e)[:80]}"}
+
+        return {
+            "dataUrl": data_url,
+            "source": source,
+            "description": description,
+        }
 
     except Exception as e:
         return {"error": f"Bildsuche fehlgeschlagen: {str(e)[:100]}"}
