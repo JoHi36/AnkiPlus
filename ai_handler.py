@@ -2057,16 +2057,20 @@ Karteninhalt: {question_clean[:500]}"""
 
     def _fix_router_queries(self, router_result, user_message, context):
         """Post-process router result: if question is context-dependent but queries don't contain card keywords, fix them."""
+        print(f"🔧 _fix_router_queries: router_result={bool(router_result)}, context={bool(context)}, search_needed={router_result.get('search_needed') if router_result else None}")
         if not router_result or not context:
+            print(f"🔧 _fix_router_queries: Skipping (no router_result or no context)")
             return router_result
         if not router_result.get('search_needed', False):
             return router_result
 
-        # Check if this is a context-dependent question
-        if not self._is_context_dependent_question(user_message):
+        is_ctx = self._is_context_dependent_question(user_message)
+        print(f"🔧 _fix_router_queries: is_context_dependent={is_ctx} for '{user_message[:50]}'")
+        if not is_ctx:
             return router_result  # Standalone question — trust the router
 
         card_keywords = self._extract_card_keywords(context)
+        print(f"🔧 _fix_router_queries: card_keywords={card_keywords[:5]}")
         if not card_keywords:
             return router_result
 
@@ -2198,7 +2202,9 @@ Karteninhalt: {question_clean[:500]}"""
                     pass
 
             # Debug-Logging
-            print(f"🔍 Router: user_message='{user_message[:100]}', has_context={bool(context)}, deck={deck_name}, tags={card_tags[:5]}")
+            print(f"🔍 Router: user_message='{user_message[:100]}', has_context={bool(context)}, deck={deck_name}")
+            print(f"🔍 Router: card_question='{card_question[:100] if card_question else 'LEER'}', card_answer='{card_answer[:80] if card_answer else 'LEER'}'")
+            print(f"🔍 Router: context keys={list(context.keys()) if context else 'None'}")
 
             router_prompt = f"""Du bist ein Such-Router für eine Lernkarten-App. Entscheide ob und wie gesucht werden soll.
 

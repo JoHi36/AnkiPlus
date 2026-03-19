@@ -88,6 +88,7 @@ class AIRequestThread(QThread):
     def run(self):
         try:
             context = self.widget_ref.current_card_context if self.widget_ref else None
+            print(f"🔍 AIRequestThread.run: context={'has cardId=' + str(context.get('cardId')) if context else 'None'}, question='{(context.get('frontField') or context.get('question') or '')[:60]}'" if context else "🔍 AIRequestThread.run: context=None")
 
             # Give the AI handler a callback to emit pipeline events via Qt signal
             def pipeline_callback(step, status, data):
