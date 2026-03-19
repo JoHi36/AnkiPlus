@@ -1949,10 +1949,14 @@ Karteninhalt: {question_clean[:500]}"""
         Uses _pipeline_signal_callback (set by AIRequestThread) for real-time
         event delivery instead of mw.taskman.run_on_main which batches events.
         """
-        # Record step label for persistence (only on 'done')
+        # Always record done labels (even during fallback) for persistence
         if status == 'done':
             label = self._step_done_label(step, data)
             self._current_step_labels.append(label)
+
+        # During scope fallback, skip re-emission of non-router steps to frontend
+        if getattr(self, '_fallback_in_progress', False) and step != 'router':
+            return
 
         # Emit via Qt signal callback (set by AIRequestThread)
         callback = getattr(self, '_pipeline_signal_callback', None)
@@ -3100,6 +3104,7 @@ REGELN:
         # Reset Request State
         self._current_request_steps = []
         self._current_step_labels = []
+        self._fallback_in_progress = False
         citations = {}
         
         try:

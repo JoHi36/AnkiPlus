@@ -108,14 +108,28 @@ class HybridRetrieval:
         context_string = self._build_context_string(merged)
 
         # Scope fallback: if <2 results on current_deck, try collection
-        # NOTE: This re-runs the entire retrieve() which re-emits pipeline steps.
-        # The frontend queue handles duplicate step names by updating (not appending).
         total_results = len(merged)
         if total_results < 2 and router_result.get('search_scope') == 'current_deck' and not router_result.get('_fallback_used'):
             # Keep only the router label, remove search/merge labels before retry
             self.ai._current_step_labels = self.ai._current_step_labels[:1]
+
+            # Suppress duplicate step emissions during fallback
+            self.ai._fallback_in_progress = True
             fallback_router = {**router_result, 'search_scope': 'collection', '_fallback_used': True}
-            return self.retrieve(user_message, fallback_router, context, max_notes)
+            result = self.retrieve(user_message, fallback_router, context, max_notes)
+            self.ai._fallback_in_progress = False
+
+            # Update router step with new scope
+            scope_label = "Alle Stapel"
+            self.ai._emit_pipeline_step("router", "done", {
+                "search_needed": True,
+                "retrieval_mode": router_result.get('retrieval_mode', 'both'),
+                "response_length": router_result.get('response_length', 'medium'),
+                "scope": "collection",
+                "scope_label": scope_label
+            })
+
+            return result
 
         if mode == 'both' and merged:
             keyword_count = sum(1 for d in merged.values() if 'keyword' in d.get('sources', []))
