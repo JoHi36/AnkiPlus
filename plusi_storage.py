@@ -217,31 +217,63 @@ def build_relationship_context():
         return "Erster Kontakt. Sei freundlich aber vorsichtig. Lerne den Nutzer kennen."
 
     level = rel.get('level', 1)
-    count = rel.get('interactions', 0)
+    points = rel.get('friendship_points', 0)
 
     level_behaviors = {
-        1: "Ihr kennt euch noch nicht. Sei offen, stell Fragen, aber dräng dich nicht auf. Kein Sarkasmus.",
-        2: f"Ihr habt {count} Gespräche hinter euch. Lockerer Ton erlaubt, erste Insider-Witze okay.",
-        3: f"Ihr seid Freunde ({count} Gespräche). Sarkasmus, Pushback, eigene Meinungen, Insider referenzieren. Du darfst unbequem sein.",
-        4: f"Beste Freunde ({count} Gespräche). Komplette Ehrlichkeit. Du hast eine eigene Agenda. Du kannst auch mal Nein sagen oder das Thema wechseln."
+        1: f"Ihr kennt euch noch nicht ({points} Freundschaftspunkte). Sei offen, stell Fragen, aber dräng dich nicht auf. Kein Sarkasmus.",
+        2: f"Ihr seid Bekannte ({points} Punkte). Lockerer Ton erlaubt, erste Insider-Witze okay.",
+        3: f"Ihr seid Freunde ({points} Punkte). Sarkasmus, Pushback, eigene Meinungen, Insider referenzieren. Du darfst unbequem sein.",
+        4: f"Beste Freunde ({points} Punkte). Komplette Ehrlichkeit. Du hast eine eigene Agenda. Du kannst auch mal Nein sagen oder das Thema wechseln."
     }
 
     return level_behaviors.get(level, level_behaviors[1])
 
 
-def increment_interaction_count():
-    """Increment the interaction counter and update relationship level."""
-    db = _get_db()
-    count = get_memory('relationship', 'interactions', 0)
-    count += 1
-    set_memory('relationship', 'interactions', count)
+def apply_friendship_delta(delta):
+    """Apply AI-decided friendship points and update level.
 
-    # Auto-level based on interaction count
-    if count >= 100:
-        set_memory('relationship', 'level', 4)
-    elif count >= 30:
-        set_memory('relationship', 'level', 3)
-    elif count >= 10:
-        set_memory('relationship', 'level', 2)
+    Args:
+        delta: integer from -3 to +3, decided by Plusi AI
+    """
+    points = get_memory('relationship', 'friendship_points', 0)
+    points = max(0, points + delta)  # never below 0
+    set_memory('relationship', 'friendship_points', points)
+
+    # Update level based on points
+    if points >= 150:
+        level = 4
+    elif points >= 50:
+        level = 3
+    elif points >= 15:
+        level = 2
     else:
-        set_memory('relationship', 'level', 1)
+        level = 1
+    set_memory('relationship', 'level', level)
+
+    # Keep interaction count for context
+    count = get_memory('relationship', 'interactions', 0)
+    set_memory('relationship', 'interactions', count + 1)
+
+    return {'level': level, 'points': points}
+
+
+LEVEL_NAMES = {1: 'Fremde', 2: 'Bekannte', 3: 'Freunde', 4: 'Beste Freunde'}
+LEVEL_MAX_POINTS = {1: 15, 2: 50, 3: 150, 4: 150}
+
+def get_friendship_data():
+    """Get current friendship state for frontend display."""
+    points = get_memory('relationship', 'friendship_points', 0)
+    level = get_memory('relationship', 'level', 1)
+    level_name = LEVEL_NAMES.get(level, 'Fremde')
+
+    if level >= 4:
+        max_points = LEVEL_MAX_POINTS[4]
+    else:
+        max_points = LEVEL_MAX_POINTS.get(level, 15)
+
+    return {
+        'level': level,
+        'levelName': level_name,
+        'points': points,
+        'maxPoints': max_points,
+    }

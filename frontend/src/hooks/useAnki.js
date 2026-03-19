@@ -568,7 +568,7 @@ export function useAnki() {
             console.log('Mock: plusiDirect', text?.substring(0, 50));
             setTimeout(() => {
               if (window.ankiReceive) {
-                window.ankiReceive({ type: 'plusi_direct_result', mood: 'happy', text: 'Hey! Das ist eine Mock-Antwort von Plusi.', meta: 'freut sich', error: false });
+                window.ankiReceive({ type: 'plusi_direct_result', mood: 'happy', text: 'Hey! Das ist eine Mock-Antwort von Plusi.', meta: 'freut sich', friendship: { level: 2, levelName: 'Bekannte', points: 23, maxPoints: 50, delta: 1 }, error: false });
               }
             }, 800);
           }

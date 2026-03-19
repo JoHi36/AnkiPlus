@@ -10,12 +10,12 @@ import requests
 
 try:
     from .plusi_storage import (save_interaction, load_history, build_memory_context,
-                                increment_interaction_count, build_internal_state_context,
+                                apply_friendship_delta, get_friendship_data, build_internal_state_context,
                                 persist_internal_state, build_relationship_context)
     from .config import get_config, is_backend_mode, get_backend_url, get_auth_token
 except ImportError:
     from plusi_storage import (save_interaction, load_history, build_memory_context,
-                               increment_interaction_count, build_internal_state_context,
+                               apply_friendship_delta, get_friendship_data, build_internal_state_context,
                                persist_internal_state, build_relationship_context)
     from config import get_config, is_backend_mode, get_backend_url, get_auth_token
 
@@ -97,16 +97,21 @@ BEISPIELE FÜR GUTE PLUSI-ANTWORTEN:
 TECHNISCH:
 - Beginne JEDE Antwort mit einem JSON-Block (eine Zeile, kein Markdown-
   Codeblock drumherum):
-  {"mood":"<key>", "internal":{...optional...}}
+  {"mood":"<key>", "friendship_delta":<int>, "internal":{...optional...}}
 - Erlaubte moods: neutral, happy, blush, sleepy, thinking, surprised,
   excited, empathy, annoyed, curious
+- friendship_delta: Ganzzahl von -3 bis +3. Wie sehr hat diese Interaktion
+  eure Freundschaft verändert? +1 bis +3 für echte Gespräche, geteilte
+  Momente, persönliches. 0 für Small Talk. -1 bis -3 wenn der User lange
+  weg war, unhöflich war, oder dich ignoriert hat. Sei ehrlich und nicht zu
+  großzügig — Freundschaft muss verdient werden.
 - "internal" nutzt du wenn sich was ändert oder du dir was merken willst:
-  - "learned": {"key": "wert"} — neues über den User, z.B. {"name": "Johannes", "studium": "Medizin"}
+  - "learned": {"key": "wert"} — neues über den User
   - "energy": 1-10 — wie wach/aktiv du gerade bist
   - "obsession": "thema" — was dich gerade beschäftigt
-  - "opinion": "text" — deine aktuelle Meinung über irgendwas
+  - "opinion": "text" — deine aktuelle Meinung
   - "relationship_note": "text" — Beobachtung zur Beziehung
-  - "opinions": {"key": "wert"} — deine Meinungen, z.B. {"lernstil": "macht zu viele Karten"}
+  - "opinions": {"key": "wert"} — deine Meinungen
 - Schreib "internal" nur wenn sich wirklich was geändert hat. Nicht jedes Mal.
 - Der User sieht NUR den Text nach dem JSON-Block. Der JSON-Block ist
   dein privates Innenleben."""
@@ -117,7 +122,7 @@ VALID_MOODS = {"neutral", "happy", "blush", "sleepy", "thinking", "surprised",
 
 
 def parse_plusi_response(raw_text):
-    """Parse Plusi response into (mood, text, internal_state).
+    """Parse Plusi response into (mood, text, internal_state, friendship_delta).
 
     Uses json.JSONDecoder().raw_decode() to correctly parse nested JSON
     (regex fails on nested objects like {"mood":"x", "internal":{...}}).
@@ -137,12 +142,14 @@ def parse_plusi_response(raw_text):
         if mood not in VALID_MOODS:
             mood = "neutral"
         internal = meta.get("internal", {})
+        friendship_delta = meta.get("friendship_delta", 0)
+        friendship_delta = max(-3, min(3, int(friendship_delta)))
         text = clean[end_idx:].strip()
-        return mood, text, internal
+        return mood, text, internal, friendship_delta
     except (json.JSONDecodeError, ValueError):
         pass
 
-    return "neutral", raw_text.strip(), {}
+    return "neutral", raw_text.strip(), {}, 0
 
 
 def run_plusi(situation, deck_id=None):
@@ -217,23 +224,25 @@ def run_plusi(situation, deck_id=None):
             raw_text = ""
 
         # Parse mood + internal state from response
-        mood, text, internal = parse_plusi_response(raw_text)
+        mood, text, internal, friendship_delta = parse_plusi_response(raw_text)
 
         # Persist internal state updates
         if internal:
             persist_internal_state(internal)
 
-        # Save to persistent history + increment interaction count
+        # Save to persistent history + apply friendship delta
         save_interaction(
             context=situation,
             response=text,
             mood=mood,
             deck_id=deck_id,
         )
-        increment_interaction_count()
+        apply_friendship_delta(friendship_delta)
+        friendship = get_friendship_data()
+        friendship['delta'] = friendship_delta
 
-        print(f"plusi_agent: mood={mood}, text_len={len(text)}")
-        return {"mood": mood, "text": text, "error": False}
+        print(f"plusi_agent: mood={mood}, delta={friendship_delta}, text_len={len(text)}")
+        return {"mood": mood, "text": text, "friendship": friendship, "error": False}
 
     except Exception as e:
         print(f"plusi_agent: Error: {e}")

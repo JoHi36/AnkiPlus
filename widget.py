@@ -90,6 +90,31 @@ class AIRequestThread(QThread):
             context = self.widget_ref.current_card_context if self.widget_ref else None
             print(f"🔍 AIRequestThread.run: context={'has cardId=' + str(context.get('cardId')) if context else 'None'}, question='{(context.get('frontField') or context.get('question') or '')[:60]}'" if context else "🔍 AIRequestThread.run: context=None")
 
+            # Load card-specific history from SQLite (moved here from main thread)
+            card_history = self.history
+            card_ctx = getattr(self, '_card_context_for_history', None)
+            if card_ctx and card_ctx.get('cardId'):
+                try:
+                    try:
+                        from .card_sessions_storage import load_card_session
+                    except ImportError:
+                        from card_sessions_storage import load_card_session
+                    card_id = card_ctx['cardId']
+                    session_data = load_card_session(card_id)
+                    db_messages = session_data.get('messages', [])
+                    if db_messages:
+                        recent = db_messages[-10:]
+                        card_history = [
+                            {'role': 'user' if m.get('sender') == 'user' else 'assistant',
+                             'content': m.get('text', '')}
+                            for m in recent if m.get('text')
+                        ]
+                        print(f"📋 AIThread: Card history loaded ({len(card_history)} msgs from card {card_id})")
+                    else:
+                        card_history = []
+                except Exception as e:
+                    print(f"⚠️ AIThread: Failed to load card history: {e}")
+
             # Give the AI handler a callback to emit pipeline events via Qt signal
             def pipeline_callback(step, status, data):
                 if self._cancelled:
@@ -106,7 +131,7 @@ class AIRequestThread(QThread):
                     self.metadata_signal.emit(self.request_id, steps or [], citations or [], step_labels or [])
 
             bot_msg = self.ai_handler.get_response_with_rag(
-                self.text, context=context, history=self.history,
+                self.text, context=context, history=card_history,
                 mode=self.mode, callback=stream_callback
             )
 
@@ -666,11 +691,13 @@ class ChatbotWidget(QWidget):
 
             result = run_plusi(situation=text, deck_id=deck_id)
             mood = result.get('mood', 'neutral')
+            friendship = result.get('friendship', {})
             payload = {
                 'type': 'plusi_direct_result',
                 'mood': mood,
                 'text': result.get('text', ''),
                 'meta': result.get('meta', ''),
+                'friendship': friendship,
                 'error': result.get('error', False)
             }
             self.web_view.page().runJavaScript(
@@ -842,36 +869,11 @@ class ChatbotWidget(QWidget):
             # Sende Loading-Indikator sofort (vor der API-Anfrage)
             loading_payload = {"type": "loading"}
             self.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(loading_payload)});")
-            
-            # Override history with card-specific messages from SQLite
-            # This prevents cross-card history contamination
-            card_history = history  # Default to frontend-provided history
-            if self.current_card_context and self.current_card_context.get('cardId'):
-                try:
-                    try:
-                        from .card_sessions_storage import load_card_session
-                    except ImportError:
-                        from card_sessions_storage import load_card_session
-                    card_id = self.current_card_context['cardId']
-                    session_data = load_card_session(card_id)
-                    db_messages = session_data.get('messages', [])
-                    if db_messages:
-                        # Use last 10 messages from THIS card only
-                        recent = db_messages[-10:]
-                        card_history = [
-                            {'role': 'user' if m.get('sender') == 'user' else 'assistant',
-                             'content': m.get('text', '')}
-                            for m in recent if m.get('text')
-                        ]
-                        print(f"📋 Widget: Using card-specific history ({len(card_history)} msgs from card {card_id})")
-                    else:
-                        card_history = []
-                        print(f"📋 Widget: No card history for card {card_id}, starting fresh")
-                except Exception as e:
-                    print(f"⚠️ Widget: Failed to load card history: {e}, using frontend history")
 
-            # Start AI request thread with request-ID based streaming
-            self._ai_thread = AIRequestThread(ai, text, self, history=card_history, mode=mode, request_id=request_id)
+            # Start AI request thread immediately — card history loading happens inside the thread
+            # to avoid blocking the main Qt thread
+            self._ai_thread = AIRequestThread(ai, text, self, history=history, mode=mode, request_id=request_id)
+            self._ai_thread._card_context_for_history = self.current_card_context
             self._ai_thread.chunk_signal.connect(self.on_streaming_chunk)
             self._ai_thread.finished_signal.connect(self.on_streaming_finished)
             self._ai_thread.error_signal.connect(self.on_streaming_error)

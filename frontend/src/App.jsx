@@ -882,7 +882,7 @@ function AppInner() {
             const plusiMarker = `[[TOOL:${JSON.stringify({
               name: "spawn_plusi",
               displayType: "widget",
-              result: { mood: payload.mood, text: payload.text, meta: meta }
+              result: { mood: payload.mood, text: payload.text, meta: meta, friendship: payload.friendship }
             })}]]`;
 
             // Append Plusi marker to the current streaming message
@@ -918,7 +918,7 @@ function AppInner() {
               const plusiMarker = `[[TOOL:${JSON.stringify({
                 name: "spawn_plusi",
                 displayType: "widget",
-                result: { mood: result.mood, text: result.text, meta: result.meta }
+                result: { mood: result.mood, text: result.text, meta: result.meta, friendship: result.friendship }
               })}]]`;
               // Add as a new bot message containing the Plusi widget
               _chatForPlusi.setMessages(prev => [
