@@ -2315,19 +2315,14 @@ function AppInner() {
             },
           }}
           actionSecondary={{
-            label: 'Übersicht',
+            label: showInsightsDashboard ? 'Chat' : 'Erkenntnisse',
             shortcut: '↵',
             onClick: () => {
-              // Short display text for chat, full instruction goes internally via mode
-              handleSend("Übersicht zu dieser Karte", { mode: 'detailed' });
+              if (chatHook.messages.length > 0) {
+                setShowInsightsDashboard(prev => !prev);
+              }
             },
-            disabled: chatHook.isLoading,
-            pulse: (() => {
-              const currentSection = cardContextHook.currentSectionId
-                ? cardContextHook.sections.find(s => s.id === cardContextHook.currentSectionId)
-                : null;
-              return currentSection?.performanceData?.score < 40;
-            })(),
+            disabled: chatHook.messages.length === 0,
           }}
         />
           </div>
