@@ -139,8 +139,6 @@ export default function PlusiWidget({
 }
 
 const PLUSI_CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Varela+Round&display=swap');
-
   .plusi-card {
     margin: 10px 0 6px;
     background: rgba(var(--plusi-rgb), 0.04);
