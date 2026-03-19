@@ -1,11 +1,13 @@
 // frontend/src/components/FreeChatSearchBar.jsx
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { ArrowUp } from 'lucide-react';
 
 /**
  * FreeChatSearchBar — special entry-point input for the free chat overlay.
  *
  * Visual: animated blue/purple conic-gradient snake border around a dark input.
  * Behavior: on Enter with non-empty text, calls onOpen(text).
+ * ⌘K focuses the input from anywhere; blue send arrow appears when typing.
  *
  * Props:
  *   onOpen(text: string) — called when user presses Enter with text
@@ -20,6 +22,27 @@ export default function FreeChatSearchBar({ onOpen }) {
       setValue('');
     }
   };
+
+  const handleSend = () => {
+    if (value.trim()) {
+      onOpen(value.trim());
+      setValue('');
+    }
+  };
+
+  /* ⌘K / Ctrl+K → focus the input */
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  const hasText = value.trim().length > 0;
 
   return (
     <div style={{ padding: '8px 16px 12px' }}>
@@ -82,12 +105,37 @@ export default function FreeChatSearchBar({ onOpen }) {
               fontSize: 13,
             }}
           />
-        </div>
-      </div>
 
-      {/* Hint */}
-      <div style={{ textAlign: 'right', fontSize: 10, color: '#2a2a40', marginTop: 4, paddingRight: 4 }}>
-        Enter zum Senden
+          {/* Right side: ⌘K badge when empty, blue send arrow when typing */}
+          {hasText ? (
+            <button
+              onClick={handleSend}
+              style={{
+                width: 24, height: 24, borderRadius: '50%',
+                background: '#6b8cff',
+                border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0, padding: 0,
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = '#8aa4ff'}
+              onMouseLeave={e => e.currentTarget.style.background = '#6b8cff'}
+            >
+              <ArrowUp size={14} color="#fff" strokeWidth={2.5} />
+            </button>
+          ) : (
+            <kbd style={{
+              fontSize: 10, fontWeight: 500,
+              color: 'rgba(255,255,255,0.22)',
+              background: 'rgba(255,255,255,0.06)',
+              borderRadius: 5,
+              padding: '2px 6px',
+              fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+              flexShrink: 0,
+              lineHeight: 1.3,
+            }}>⌘K</kbd>
+          )}
+        </div>
       </div>
 
       {/* CSS animation — transform:rotate produces smooth continuous spin */}

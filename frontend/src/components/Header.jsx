@@ -138,22 +138,6 @@ export default function Header({
             {title}
           </h1>
           
-          {/* Active Section Indicator - Klickbar für Sprung zur Karte */}
-          {/* Zeigt Ladezustand ODER Titel an */}
-          {!showSessionOverview && (animatingTitle || isAnimating) && (
-            <div 
-                className={`text-[10px] uppercase tracking-wider font-medium flex items-center justify-center gap-1.5 px-2 py-0.5 rounded-full transition-all duration-300 cursor-pointer group border border-base-content/20 ${
-                    isAnimating ? 'opacity-0 transform translate-y-1' : 'opacity-100 transform translate-y-0'
-                }`}
-                onClick={onSectionTitleClick}
-                title="Zur Lernkarte springen"
-            >
-              <span className={`w-1 h-1 rounded-full ${animatingTitle === "Lade Titel..." ? 'bg-warning animate-pulse' : 'bg-primary'}`}></span>
-              <span className="text-base-content/30 group-hover:text-primary transition-colors truncate max-w-[200px]">
-                {animatingTitle === "Lade Titel..." ? "Lade Titel..." : animatingTitle}
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Reset Button - rechts (nur wenn nicht in Session-Übersicht) */}

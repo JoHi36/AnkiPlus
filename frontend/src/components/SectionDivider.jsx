@@ -1,9 +1,78 @@
 import React, { useState } from 'react';
-import { BookOpen, HelpCircle, Clock, CheckCircle2, XCircle, AlertCircle, ChevronDown } from 'lucide-react';
+import { HelpCircle, Clock, CheckCircle2, XCircle, AlertCircle, ChevronDown } from 'lucide-react';
+
+/**
+ * Format a date for display in section headers.
+ * Today: "Heute", Yesterday: "Gestern", else: "15. Jan 2025"
+ */
+function formatSectionDate(dateStr) {
+  if (!dateStr) return null;
+  try {
+    const date = typeof dateStr === 'number' ? new Date(dateStr) : new Date(dateStr);
+    if (isNaN(date.getTime())) return null;
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dateDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const diffDays = Math.round((today - dateDay) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return 'Heute';
+    if (diffDays === 1) return 'Gestern';
+
+    const months = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+    return `${date.getDate()}. ${months[date.getMonth()]} ${date.getFullYear()}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if a section is from a past review (not today).
+ */
+function isPastReview(dateStr) {
+  if (!dateStr) return false;
+  try {
+    const date = typeof dateStr === 'number' ? new Date(dateStr) : new Date(dateStr);
+    if (isNaN(date.getTime())) return false;
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dateDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    return dateDay < today;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Get trend indicator comparing current score to previous review score.
+ * Returns null if no previous score exists (first review).
+ */
+function getTrend(section) {
+  if (!section) return null;
+
+  const perf = section.performanceData || section.performance_data;
+  if (!perf) return null;
+
+  // Parse performance data if it's a JSON string
+  const perfObj = typeof perf === 'string' ? (() => { try { return JSON.parse(perf); } catch { return null; } })() : perf;
+  if (!perfObj) return null;
+
+  const currentScore = perfObj.score;
+  if (currentScore == null) return null;
+
+  const previousScore = section.previousScore ?? section.previous_score;
+  if (previousScore == null) return null;
+
+  const diff = currentScore - previousScore;
+  if (diff > 5) return { direction: 'up', symbol: '↑', color: '#22c55e' };
+  if (diff < -5) return { direction: 'down', symbol: '↓', color: '#ef4444' };
+  return { direction: 'same', symbol: '→', color: '#94a3b8' };
+}
 
 /**
  * SectionDivider — Replaces the old inline section header.
- * Shows: section title (clickable), performance summary, expandable detail panel.
+ * Shows: section title (clickable), date, performance summary, expandable detail panel.
+ * Past review sections (from previous days) get a slightly muted style.
  *
  * Props:
  *   section        - { id, cardId, title, createdAt, performanceData? }
@@ -184,44 +253,51 @@ export default function SectionDivider({ section, isFirst = false, onGoToCard, l
   };
 
   const isLoading = section.title === "Lade Titel...";
+  const dateLabel = formatSectionDate(section.createdAt);
+  const isPast = isPastReview(section.createdAt);
 
   return (
     <div
       id={section.id}
       data-section-id={section.id}
-      className={`group/section backdrop-blur-sm ${isFirst ? 'pt-2 pb-4' : 'pt-6 pb-4 mt-6'}`}
+      className={`group/section backdrop-blur-sm ${isFirst ? 'pt-2 pb-4' : 'pt-6 pb-4 mt-6'} ${isPast ? 'opacity-60' : ''}`}
       style={{ backgroundColor: '#161616' }}
     >
-      {/* Row 1: Title badge + gradient line */}
+      {/* Row 1: Title badge + date + gradient line */}
       <div className="flex items-center gap-3">
-        <button
-          onClick={() => {
-            if (section.cardId && onGoToCard) {
-              onGoToCard(section.cardId);
-            }
-          }}
-          className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full bg-base-content/5 border border-base-content/10 group-hover/section:bg-primary/10 group-hover/section:border-primary/20 transition-all cursor-pointer"
-          title="Zur Lernkarte springen"
-        >
-          <BookOpen size={13} className="text-base-content/40 group-hover/section:text-primary/70 transition-colors" />
-          <span className="text-xs font-medium text-base-content/50 group-hover/section:text-base-content/80 transition-colors">
-            {isLoading ? (
-              <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 border-2 border-base-content/20 border-t-primary/50 rounded-full animate-spin" />
-                <span className="italic text-base-content/30">Generiere...</span>
-              </span>
-            ) : (
-              typeof section.title === 'string' ? section.title : 'Lernkarte'
-            )}
+        {/* Date label */}
+        {dateLabel && (
+          <span className={`text-[10px] tracking-wide uppercase ${isPast ? 'text-base-content/20' : 'text-base-content/25'}`}>
+            {dateLabel}
           </span>
-        </button>
-        <div className="flex-1 h-px bg-gradient-to-r from-base-content/15 via-base-content/8 to-transparent group-hover/section:from-primary/25 group-hover/section:via-primary/10 transition-all duration-300" />
+        )}
+
+        <div className={`flex-1 h-px bg-gradient-to-r transition-all duration-300 ${
+          isPast
+            ? 'from-base-content/8 via-base-content/4 to-transparent'
+            : 'from-base-content/15 via-base-content/8 to-transparent group-hover/section:from-primary/25 group-hover/section:via-primary/10'
+        }`} />
       </div>
 
       {/* Row 2: Performance summary + expand button (only if performance data exists) */}
       {hasPerformance && (
         <div className="flex items-center gap-2 mt-2.5 pl-1">
           {renderPerformanceBadge()}
+
+          {/* Trend indicator (only shown from 2nd review onwards) */}
+          {(() => {
+            const trend = getTrend(section);
+            if (!trend) return null;
+            return (
+              <span
+                className="text-[11px] font-semibold leading-none"
+                style={{ color: trend.color }}
+                title={trend.direction === 'up' ? 'Verbessert' : trend.direction === 'down' ? 'Verschlechtert' : 'Gleichbleibend'}
+              >
+                {trend.symbol}
+              </span>
+            );
+          })()}
 
           {/* Expand/collapse button */}
           <button
