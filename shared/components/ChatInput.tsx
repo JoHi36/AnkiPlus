@@ -54,6 +54,18 @@ export default function ChatInput({
 
   const hasPlusiTag = input.startsWith('@Plusi');
 
+  // Auto-detect @Plusi anywhere in text → move it to the front
+  useEffect(() => {
+    if (input.startsWith('@Plusi')) return; // already at front
+    const match = input.match(/@Plusi/);
+    if (match && match.index !== undefined) {
+      // Remove @Plusi from where it was typed, prepend it
+      const without = input.slice(0, match.index) + input.slice(match.index + 6);
+      const cleaned = without.replace(/^\s+/, ''); // trim leading space
+      setInput('@Plusi ' + cleaned);
+    }
+  }, [input]);
+
   // Auto-focus textarea when component mounts (chat panel opened)
   useEffect(() => {
     const timer = setTimeout(() => {
