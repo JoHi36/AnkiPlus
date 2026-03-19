@@ -709,10 +709,13 @@ class ChatbotWidget(QWidget):
             )
             # Sync mood to main window Plusi dock
             try:
-                from plusi_dock import sync_mood
+                try:
+                    from .plusi_dock import sync_mood
+                except ImportError:
+                    from plusi_dock import sync_mood
                 sync_mood(mood)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"plusi dock sync error: {e}")
         except Exception as e:
             print(f"plusiDirect error: {e}")
             payload = {

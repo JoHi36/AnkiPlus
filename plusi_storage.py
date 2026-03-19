@@ -102,6 +102,13 @@ def set_memory(category, key, value):
     db.commit()
 
 
+def delete_memory(category, key):
+    """Delete a value from Plusi's memory store."""
+    db = _get_db()
+    db.execute("DELETE FROM plusi_memory WHERE category = ? AND key = ?", (category, key))
+    db.commit()
+
+
 def get_category(category):
     """Get all entries in a memory category as a dict."""
     db = _get_db()
@@ -200,23 +207,23 @@ def persist_internal_state(internal):
     if 'obsession' in internal:
         set_memory('state', 'obsession', internal['obsession'])
 
+    def _persist_category(category, data):
+        """Write dict entries to a category. null values delete the key."""
+        if isinstance(data, dict):
+            for key, value in data.items():
+                if value is None:
+                    delete_memory(category, key)
+                else:
+                    set_memory(category, key, value)
+
     # Plusi's self-knowledge (identity, preferences, personality evolution)
-    self_data = internal.get('self', {})
-    if isinstance(self_data, dict):
-        for key, value in self_data.items():
-            set_memory('self', key, value)
+    _persist_category('self', internal.get('self', {}))
 
     # What Plusi learns about the user
-    user_data = internal.get('user', {})
-    if isinstance(user_data, dict):
-        for key, value in user_data.items():
-            set_memory('user', key, value)
+    _persist_category('user', internal.get('user', {}))
 
     # Shared moments / milestones
-    moments = internal.get('moments', {})
-    if isinstance(moments, dict):
-        for key, value in moments.items():
-            set_memory('moments', key, value)
+    _persist_category('moments', internal.get('moments', {}))
 
     # Legacy support: old "learned" → user, old "opinions" → self
     learned = internal.get('learned', {})
