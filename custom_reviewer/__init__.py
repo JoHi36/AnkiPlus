@@ -645,6 +645,39 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
             mw.onStats()
         return (True, None)
 
+    elif message == "plusi:ask":
+        # Open chat panel with @Plusi prefix
+        try:
+            from .. import ui_setup
+            if not (hasattr(ui_setup, '_chatbot_dock') and ui_setup._chatbot_dock and ui_setup._chatbot_dock.isVisible()):
+                if hasattr(ui_setup, 'toggle_chatbot'):
+                    ui_setup.toggle_chatbot()
+            # Send @Plusi focus event to React
+            chat_widget = getattr(ui_setup, '_chatbot_widget', None)
+            if chat_widget and hasattr(chat_widget, 'web_view'):
+                import json
+                chat_widget.web_view.page().runJavaScript(
+                    "window.dispatchEvent(new CustomEvent('plusi-ask-focus', {detail: {prefix: '@Plusi '}}));"
+                )
+        except Exception as e:
+            print(f"plusi:ask error: {e}")
+        return (True, None)
+
+    elif message == "plusi:settings":
+        try:
+            from .. import ui_setup
+            if not (hasattr(ui_setup, '_chatbot_dock') and ui_setup._chatbot_dock and ui_setup._chatbot_dock.isVisible()):
+                if hasattr(ui_setup, 'toggle_chatbot'):
+                    ui_setup.toggle_chatbot()
+            chat_widget = getattr(ui_setup, '_chatbot_widget', None)
+            if chat_widget and hasattr(chat_widget, 'web_view'):
+                chat_widget.web_view.page().runJavaScript(
+                    "window.dispatchEvent(new CustomEvent('open-settings'));"
+                )
+        except Exception as e:
+            print(f"plusi:settings error: {e}")
+        return (True, None)
+
     elif message == "chat:open":
         try:
             from .. import ui_setup
@@ -1273,7 +1306,14 @@ setTimeout(function() {
 }, 50);
 </script>"""
 
-        html = html.replace('</body>', override_css + auto_answer_js + '</body>')
+        # Inject Plusi dock into reviewer
+        try:
+            from .plusi_dock import get_plusi_dock_injection
+        except ImportError:
+            from plusi_dock import get_plusi_dock_injection
+        plusi_html = get_plusi_dock_injection()
+
+        html = html.replace('</body>', override_css + auto_answer_js + plusi_html + '</body>')
 
         return html
 

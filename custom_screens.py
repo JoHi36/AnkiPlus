@@ -44,6 +44,21 @@ except ImportError:
 # NOTE: Legacy sessions_storage (JSON) removed — per-card SQLite is now used instead.
 
 
+# ─── Plusi dock injection ────────────────────────────────────────────────────
+
+def _get_plusi_dock_html():
+    """Get the Plusi dock HTML/CSS/JS for injection into main window webviews."""
+    try:
+        try:
+            from .plusi_dock import get_plusi_dock_injection
+        except ImportError:
+            from plusi_dock import get_plusi_dock_injection
+        return get_plusi_dock_injection()
+    except Exception as e:
+        print(f"Plusi dock injection error: {e}")
+        return ''
+
+
 # ─── Shared CSS loader ────────────────────────────────────────────────────────
 
 def _load_reviewer_css():
@@ -894,6 +909,7 @@ def _wrap_page(top_bar_html, content_html, extra_js='', show_account_widget=True
         f'{_account_widget() if show_account_widget else ""}'
         f'</div>'
         f'<script>{_TOGGLE_JS}{extra_js}</script>'
+        f'{_get_plusi_dock_html()}'
         f'</body></html>'
     )
 
@@ -1562,6 +1578,33 @@ class CustomScreens:
                     except Exception:
                         if hasattr(mw, 'onPrefs'):
                             mw.onPrefs()
+            elif action_type == 'plusiAsk':
+                # Open chat panel with @Plusi prefix
+                try:
+                    from . import ui_setup
+                    if not (hasattr(ui_setup, '_chatbot_dock') and ui_setup._chatbot_dock and ui_setup._chatbot_dock.isVisible()):
+                        if hasattr(ui_setup, 'toggle_chatbot'):
+                            ui_setup.toggle_chatbot()
+                    chat_widget = getattr(ui_setup, '_chatbot_widget', None)
+                    if chat_widget and hasattr(chat_widget, 'web_view'):
+                        chat_widget.web_view.page().runJavaScript(
+                            "window.dispatchEvent(new CustomEvent('plusi-ask-focus', {detail: {prefix: '@Plusi '}}));"
+                        )
+                except Exception as e:
+                    print(f"plusiAsk error: {e}")
+            elif action_type == 'plusiSettings':
+                try:
+                    from . import ui_setup
+                    if not (hasattr(ui_setup, '_chatbot_dock') and ui_setup._chatbot_dock and ui_setup._chatbot_dock.isVisible()):
+                        if hasattr(ui_setup, 'toggle_chatbot'):
+                            ui_setup.toggle_chatbot()
+                    chat_widget = getattr(ui_setup, '_chatbot_widget', None)
+                    if chat_widget and hasattr(chat_widget, 'web_view'):
+                        chat_widget.web_view.page().runJavaScript(
+                            "window.dispatchEvent(new CustomEvent('open-settings'));"
+                        )
+                except Exception as e:
+                    print(f"plusiSettings error: {e}")
             elif action_type == 'upgradeBadge':
                 # Open addon settings — same as 'cmd':'settings'
                 try:

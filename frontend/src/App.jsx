@@ -28,7 +28,7 @@ import SourcesCarousel from './components/SourcesCarousel';
 import ReviewTrailIndicator from './components/ReviewTrailIndicator';
 import { BookOpen } from 'lucide-react';
 import { useFreeChat } from './hooks/useFreeChat';
-import MascotShell from './components/MascotShell';
+// MascotShell moved to main window (plusi_dock.py) — no longer imported
 import { useMascot } from './hooks/useMascot';
 import { usePlusiDirect } from './hooks/usePlusiDirect';
 
@@ -2173,16 +2173,7 @@ function AppInner() {
 
       </main>
 
-      {/* Mascot — bottom-left, ALWAYS visible (Stapelansicht + Session) */}
-      <MascotShell
-        mood={mood}
-        onPlusiAsk={() => {
-          window.dispatchEvent(new CustomEvent('plusi-ask-focus', { detail: { prefix: '@Plusi ' } }));
-        }}
-        onOpenSettings={() => setShowProfile(true)}
-        onEvent={eventTriggerRef}
-        enabled={mascotEnabled}
-      />
+      {/* Mascot moved to main Anki window (plusi_dock.py) — no longer rendered in React */}
 
       {!showSessionOverview && (
         <>

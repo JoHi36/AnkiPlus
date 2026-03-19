@@ -574,13 +574,26 @@ def on_reviewer_did_show_question(card):
 def on_reviewer_did_answer_card(reviewer, card, ease):
     """Emit cardResult event to frontend for Plusi dock reactions and streak counting."""
     try:
+        correct = ease >= 2  # ease 1 = Again (wrong), 2+ = correct
+
+        # Send to chat panel (React)
         widget = get_chatbot_widget()
         if widget and hasattr(widget, 'web_view') and widget.web_view:
-            correct = ease >= 2  # ease 1 = Again (wrong), 2+ = correct
             payload = json.dumps({'type': 'cardResult', 'correct': correct, 'ease': ease})
             widget.web_view.page().runJavaScript(
                 f"if (typeof window.ankiReceive === 'function') {{ window.ankiReceive({payload}); }}"
             )
+
+        # Also update Plusi dock in the reviewer main webview
+        try:
+            from plusi_dock import show_bubble
+            if mw and mw.reviewer and mw.reviewer.web:
+                if correct:
+                    show_bubble(mw.reviewer.web, 'Richtig! ✨', 'happy')
+                else:
+                    show_bubble(mw.reviewer.web, 'nächstes mal 💪', 'empathy')
+        except Exception:
+            pass
     except Exception as e:
         print(f"cardResult emission error: {e}")
 
