@@ -275,24 +275,51 @@ PLUSI_JS = """
       // Hide the custom placeholder overlay
       var phWrap = document.getElementById('ap-placeholder-wrap');
       if (phWrap) phWrap.style.display = 'none';
-      // Style the input to show @Plusi as blue
-      searchInput.style.color = '#0a84ff';
-      searchInput.style.fontWeight = '600';
-      // Revert color when user types more (after the @Plusi prefix)
-      searchInput.addEventListener('input', function onInput() {
-        if (searchInput.value.startsWith('@Plusi')) {
-          searchInput.style.color = '#0a84ff';
-          searchInput.style.fontWeight = '600';
-        } else {
-          searchInput.style.color = '';
-          searchInput.style.fontWeight = '';
-          searchInput.removeEventListener('input', onInput);
-        }
-      });
+
+      // Create tag overlay inside the search bar container
+      var existing = document.getElementById('plusi-search-tag');
+      if (existing) existing.remove();
+
+      var parent = searchInput.parentElement;
+      if (parent) {
+        parent.style.position = 'relative';
+        var tag = document.createElement('span');
+        tag.id = 'plusi-search-tag';
+        tag.textContent = '@Plusi';
+        tag.style.cssText = 'position:absolute;left:38px;top:50%;transform:translateY(-50%);' +
+          'background:rgba(10,132,255,.18);color:#0a84ff;padding:2px 6px;border-radius:4px;' +
+          'font-weight:600;font-size:inherit;font-family:inherit;pointer-events:none;z-index:2;';
+        parent.appendChild(tag);
+
+        // Make the @Plusi part of input text transparent so tag shows through
+        searchInput.style.color = 'rgba(232,232,232,0.9)';
+        searchInput.style.caretColor = 'white';
+
+        // Update tag visibility on input changes
+        searchInput.addEventListener('input', function onInput() {
+          var hasTag = searchInput.value.startsWith('@Plusi');
+          var tagEl = document.getElementById('plusi-search-tag');
+          if (hasTag && !tagEl) {
+            // Recreate tag
+            var t = document.createElement('span');
+            t.id = 'plusi-search-tag';
+            t.textContent = '@Plusi';
+            t.style.cssText = 'position:absolute;left:38px;top:50%;transform:translateY(-50%);' +
+              'background:rgba(10,132,255,.18);color:#0a84ff;padding:2px 6px;border-radius:4px;' +
+              'font-weight:600;font-size:inherit;font-family:inherit;pointer-events:none;z-index:2;';
+            parent.appendChild(t);
+          } else if (!hasTag && tagEl) {
+            tagEl.remove();
+            searchInput.style.color = '';
+            searchInput.style.caretColor = '';
+            searchInput.removeEventListener('input', onInput);
+          }
+        });
+      }
+
       // Trigger input event so the search bar JS recognizes the value change
       searchInput.dispatchEvent(new Event('input', { bubbles: true }));
       searchInput.dispatchEvent(new Event('focus', { bubbles: true }));
-      // Set cursor after "@Plusi "
       setTimeout(function() { searchInput.setSelectionRange(7, 7); }, 50);
       return;
     }
