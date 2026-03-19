@@ -216,10 +216,77 @@ Minimal visual refresh only:
 
 ## Token Usage Data
 
-The current system tracks deep/flash mode usage separately. The new design shows a unified "Token" usage:
-- Adapt `useQuota` hook or create wrapper that presents unified token count
-- Weekly reset instead of daily (or keep daily — confirm with backend)
-- The 7-day bar chart needs `useUsageHistory` daily data, mapped to token counts
+The current system tracks deep/flash mode usage separately (deep mode + flash mode). The new design shows a **unified "Token" usage** — no more flash/deep distinction for the user.
+
+- **Unit:** Abstract "tokens" — the backend already tracks usage counts per day. Map existing `useUsageHistory` daily data to a single unified token count.
+- **Reset cadence:** Daily reset (keep existing behavior). The usage bar shows "today" consumption, the 7-day chart shows the week at a glance.
+- **Limit:** Derived from tier (free: low limit, Student: medium, Exam Pro: high/unlimited).
+- **Over-limit state:** Progress bar turns amber/orange, label changes to "Limit erreicht". No blocking on the frontend — the backend handles rate limiting. The UI just reflects the state.
+- **Data source:** Adapt `useQuota` hook to return a single `{ used, limit, remaining }` object instead of separate deep/flash. The `useUsageHistory` hook provides `dailyUsage` array for the 7-day chart.
+
+## Account Page States
+
+### Free Tier (no subscription)
+- Plan name: "Starter."
+- Price line: "Kostenlos"
+- Buttons: "Upgrade" (primary blue) — no "Verwalten" button (nothing to manage)
+- Usage bar shows free-tier limit
+
+### Active Subscription (Student / Exam Pro)
+- Plan name: "Student." or "Exam Pro."
+- Price line: "4,99 € / Monat — verlängert sich am {date}" or "14,99 € / Monat..."
+- Buttons: "Upgrade" (if Student) + "Verwalten" (opens Stripe portal)
+- Exam Pro shows only "Verwalten" (already highest tier)
+
+### Cancelled Subscription (pending expiry)
+- Plan name still shows current tier
+- Price line: "Gekündigt — aktiv bis {date}"
+- Buttons: "Verwalten" (to reactivate via Stripe portal)
+- Subtle amber indicator instead of default blue
+
+### Unlimited (Exam Pro)
+- Usage bar hidden or shows "Unbegrenzt" label instead of progress bar
+- Week chart still shown for informational purposes
+
+## Auth Page: Link-Code Handling
+
+- `?link={code}` parameter works on **both** tabs (Login and Register)
+- When present, after successful login OR registration, redirect to `/auth/callback?link={code}`
+- The redirect from `/register` to `/login` **must forward query parameters**: `<Navigate to={"/login" + location.search} />`
+- Tab selection is not affected by link-code — user chooses freely
+
+## Redirects
+
+All old routes redirect client-side via React Router `<Navigate>`:
+- `/register` → `/login` (with query params forwarded)
+- `/install` → `/` (landing page, scroll to install section via anchor or state)
+- `/dashboard`, `/dashboard/*` → `/account`
+
+Server-side 301 redirects are not critical — the site is an SPA on Vercel with catch-all routing. Client-side redirects are sufficient.
+
+## Account Deletion Flow
+
+1. User clicks "Permanent löschen" in the Account collapsed section
+2. Confirmation modal appears: "Bist du sicher? Dein Account und alle Daten werden permanent gelöscht."
+3. User must type "LÖSCHEN" to confirm (destructive action pattern)
+4. If email/password account: reauthentication prompt before deletion
+5. On success: redirect to `/` landing page
+
+## Transitions & Animations
+
+- **Collapsed sections:** 200ms ease height transition (CSS only, no Framer Motion)
+- **Tab switch:** instant swap, no animation (content is simple enough)
+- **Page load:** subtle fade-in (opacity 0→1, 300ms) on main content
+- **No stagger animations, no spring curves, no glow pulse effects**
+- Keep it minimal — the design speaks for itself
+
+## Responsive Behavior
+
+- **Auth page:** Card stays centered, max-width 380px, works on all viewports
+- **Account page:** max-width 800px, padding adjusts on mobile (px-4 instead of px-10)
+- **Hero card:** Buttons stack vertically on mobile (flex-col below sm breakpoint)
+- **Week chart:** Always visible, bars flex to fill width
+- **Collapsed sections:** Same behavior on all viewports
 
 ## Success Criteria
 
@@ -228,5 +295,7 @@ The current system tracks deep/flash mode usage separately. The new design shows
 3. Anki.plus logo used everywhere
 4. Account page loads in single view, no sidebar navigation
 5. All existing functionality preserved (Stripe, Firebase auth, link-code flow)
-6. Old routes redirect to new ones
+6. Old routes redirect to new ones (with query param forwarding)
 7. Design matches landing page aesthetic (font-light, low opacity, minimal)
+8. Free tier, active, cancelled, and unlimited states all handled
+9. Account deletion requires typed confirmation
