@@ -1394,20 +1394,24 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
             }
         }
 
-        // 5. Plusi Data Parsing ([[PLUSI_DATA: {...}]] or [[PLUSI_LOADING]])
-        const plusiMatch = fixedMessage.match(/\[\[PLUSI_DATA:\s*(\{[\s\S]*?\})\s*\]\]/);
-        if (plusiMatch && plusiMatch[1]) {
+        // 5. Tool markers ([[TOOL:{...}]])
+        const toolMatches = fixedMessage.matchAll(/\[\[TOOL:(\{.*?\})\]\]/g);
+        for (const match of toolMatches) {
             try {
-                const data = JSON.parse(plusiMatch[1]);
-                if (data && data.text) {
-                    setPlusiData(data);
+                const toolData = JSON.parse(match[1]);
+                if (toolData.name === 'spawn_plusi') {
+                    if (toolData.displayType === 'loading') {
+                        setPlusiData({ _loading: true });
+                    } else if (toolData.displayType === 'widget' && toolData.result) {
+                        setPlusiData(toolData.result);
+                    } else if (toolData.displayType === 'error') {
+                        setPlusiData({ _error: true, message: toolData.error });
+                    }
                 }
+                // Future tools will be handled here
             } catch (e) {
-                console.warn('Failed to parse PLUSI_DATA:', e);
+                console.warn('Failed to parse TOOL marker:', e);
             }
-        } else if (fixedMessage.includes('[[PLUSI_LOADING]]')) {
-            // Show loading widget while Plusi's AI call is in progress
-            setPlusiData({ _loading: true });
         }
     }
   }, [fixedMessage, isUser]);
@@ -1494,8 +1498,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
   processedMessage = processedMessage.replace(/\[\[EVALUATION_DATA:\s*\{[\s\S]*?\}\s*\]\]/g, '');
   processedMessage = processedMessage.replace(/\[\[SCORE:\s*\d+\]\]/g, '');
   processedMessage = processedMessage.replace(/\[\[INTENT:\s*\w+\]\]/g, '');
-  processedMessage = processedMessage.replace(/\[\[PLUSI_DATA:\s*\{[\s\S]*?\}\s*\]\]/g, '');
-  processedMessage = processedMessage.replace(/\[\[PLUSI_LOADING\]\]/g, '');
+  processedMessage = processedMessage.replace(/\[\[TOOL:\{.*?\}\]\]/g, '');
   // Remove "JSON undefined" artefacts if any leaked
   processedMessage = processedMessage.replace(/JSON\s*\n\s*undefined/g, '');
   
