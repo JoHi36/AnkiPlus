@@ -196,9 +196,7 @@ export default function ChatInput({
                 <span style={{
                   background: 'rgba(10,132,255,.18)',
                   color: '#0a84ff',
-                  padding: '1px 3px',
-                  borderRadius: '4px',
-                  fontWeight: 600,
+                  borderRadius: '3px',
                 }}>@Plusi</span>
                 {after && <span>{after}</span>}
               </div>
