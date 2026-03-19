@@ -573,15 +573,6 @@ class AIHandler:
                 
                 # Bei 403 (Forbidden): Quota-Fehler (kein Retry)
                 if response.status_code == 403:
-                    # #region agent log
-                    import time
-                    log_path = "/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log"
-                    try:
-                        with open(log_path, 'a', encoding='utf-8') as f:
-                            f.write(json.dumps({"location": "ai_handler.py:619", "message": "403 QUOTA_EXCEEDED received from backend", "data": {"status_code": response.status_code, "response_text": response.text[:200]}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "A"}) + "\n")
-                    except:
-                        pass
-                    # #endregion
                     try:
                         error_data = response.json()
                         error_code = error_data.get("error", {}).get("code", "QUOTA_EXCEEDED")
@@ -1204,15 +1195,6 @@ class AIHandler:
                 
                 # Bei 403: Quota-Fehler
                 if response.status_code == 403:
-                    # #region agent log
-                    import time
-                    log_path = "/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log"
-                    try:
-                        with open(log_path, 'a', encoding='utf-8') as f:
-                            f.write(json.dumps({"location": "ai_handler.py:1281", "message": "403 QUOTA_EXCEEDED in stream_response", "data": {"status_code": response.status_code}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "A"}) + "\n")
-                    except:
-                        pass
-                    # #endregion
                     try:
                         error_text = response.text[:500]
                         error_data = json.loads(error_text) if error_text.startswith('{') else {}

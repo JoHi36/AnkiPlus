@@ -16,10 +16,12 @@ import json
 _startup_time = time.time()
 
 # #region agent log
-_DEBUG_LOG_PATH = "/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/.cursor/debug.log"
+_DEBUG_LOG_PATH = None  # Disabled — set to a path to enable debug logging
 
 def _write_debug_log(hypothesis_id, location, message, data=None):
     """Schreibt Debug-Log als NDJSON in die Log-Datei"""
+    if not _DEBUG_LOG_PATH:
+        return
     try:
         elapsed = time.time() - _startup_time
         log_entry = {

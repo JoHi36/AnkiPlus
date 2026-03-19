@@ -52,6 +52,7 @@ class EmbeddingManager:
         self._api_key = api_key
         self._backend_url = backend_url
         self._auth_headers_fn = auth_headers_fn
+        self._backend_failed = False  # Skip backend after first auth failure
         self._index = []       # list of normalized float lists
         self._card_ids = []    # card_id list aligned with index rows
         self._lock = threading.Lock()
@@ -73,8 +74,8 @@ class EmbeddingManager:
 
         import requests as http_requests
 
-        # Backend-Modus: Embeddings über Cloud Function
-        if self._backend_url and self._auth_headers_fn:
+        # Backend-Modus: Embeddings über Cloud Function (skip if previously failed)
+        if self._backend_url and self._auth_headers_fn and not self._backend_failed:
             try:
                 embed_url = f"{self._backend_url}/embed"
                 headers = {**self._auth_headers_fn(), "Content-Type": "application/json"}
@@ -85,7 +86,8 @@ class EmbeddingManager:
                 data = response.json()
                 return data.get("embeddings", [])
             except Exception as e:
-                print(f"EmbeddingManager: Backend-Fehler: {e}, Fallback auf direkte API")
+                print(f"EmbeddingManager: Backend-Fehler: {e}, Fallback auf direkte API (Backend wird übersprungen)")
+                self._backend_failed = True
 
         # Direkter Gemini API Modus (Fallback)
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.MODEL}:batchEmbedContents"
