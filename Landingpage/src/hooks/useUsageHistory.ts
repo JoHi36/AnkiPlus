@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { DailyUsage } from '../components/UsageChart';
+
+export interface DailyUsage {
+  date: string; // YYYY-MM-DD
+  flash: number;
+  deep: number;
+}
 
 export interface UsageHistoryData {
   dailyUsage: DailyUsage[];
