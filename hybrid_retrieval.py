@@ -56,9 +56,12 @@ class HybridRetrieval:
                         if m:
                             query_data.append({"text": m.group(2), "hits": int(m.group(1))})
 
+                # total_hits = number of unique notes found (not sum of query hits)
+                # But display the sum of individual query hits for better UX
+                query_hits_sum = sum(q.get('hits', 0) for q in query_data) if query_data else sql_total
                 self.ai._emit_pipeline_step("sql_search", "done", {
                     "queries": query_data,
-                    "total_hits": sql_total
+                    "total_hits": query_hits_sum or sql_total
                 })
             except Exception as e:
                 print(f"⚠️ HybridRetrieval: SQL retrieval failed: {e}")

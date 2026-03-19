@@ -2037,12 +2037,34 @@ Karteninhalt: {question_clean[:500]}"""
         for field in ['frontField', 'question', 'answer']:
             text = context.get(field, '')
             if text:
-                # Strip HTML and Anki cloze markers
-                clean = re.sub(r'<[^>]+>', ' ', text)
-                clean = re.sub(r'\{\{c\d+::(.*?)\}\}', r'\1', clean)
+                # Strip HTML tags AND their content for style/script blocks
+                clean = re.sub(r'<style[^>]*>.*?</style>', ' ', text, flags=re.DOTALL | re.IGNORECASE)
+                clean = re.sub(r'<script[^>]*>.*?</script>', ' ', clean, flags=re.DOTALL | re.IGNORECASE)
+                # Strip remaining HTML tags
+                clean = re.sub(r'<[^>]+>', ' ', clean)
+                # Strip Anki cloze markers, keep content
+                clean = re.sub(r'\{\{c\d+::(.*?)(?:::.*?)?\}\}', r'\1', clean)
                 clean = re.sub(r'\s+', ' ', clean).strip()
-                # Extract words > 3 chars (skip articles, prepositions)
-                words = [w for w in clean.split() if len(w) > 3 and w[0].isalpha()]
+                # Filter: skip CSS/HTML artifacts and common stop words
+                css_words = {'color', 'important', 'button', 'border', 'background', 'font',
+                             'cursor', 'display', 'margin', 'padding', 'width', 'height',
+                             'style', 'class', 'nightmode', 'none', 'solid', 'rgba', 'auto',
+                             'text', 'align', 'left', 'right', 'center', 'bold', 'italic',
+                             'pointer', 'block', 'inline', 'relative', 'absolute', 'hidden',
+                             'overflow', 'transform', 'transition', 'opacity', 'inherit'}
+                stop_words = {'und', 'oder', 'der', 'die', 'das', 'ein', 'eine', 'ist',
+                              'sind', 'hat', 'haben', 'wird', 'werden', 'kann', 'können',
+                              'bei', 'von', 'mit', 'auf', 'für', 'aus', 'nach', 'über',
+                              'sich', 'dem', 'den', 'des', 'einer', 'einem', 'eines',
+                              'nicht', 'auch', 'noch', 'aber', 'wenn', 'dass', 'wie',
+                              'the', 'and', 'for', 'with', 'from', 'this', 'that', 'which'}
+                skip = css_words | stop_words
+                words = [w for w in clean.split()
+                         if len(w) > 3 and w[0].isalpha()
+                         and w.lower() not in skip
+                         and not w.startswith('#')  # hex colors
+                         and not re.match(r'^\d+[a-f]+$', w.lower())  # hex values like 363638
+                         ]
                 keywords.extend(words[:10])
 
         # Deduplicate while preserving order
@@ -2339,7 +2361,7 @@ REGELN:
                 "contents": [{"role": "user", "parts": [{"text": router_prompt}]}],
                 "generationConfig": {
                     "temperature": 0.1,
-                    "maxOutputTokens": 500,
+                    "maxOutputTokens": 1024,
                     "responseMimeType": "application/json"
                 }
             }
@@ -2618,47 +2640,24 @@ REGELN:
 
             print(f"⚠️ Router: Alle URLs fehlgeschlagen, verwende Fallback")
 
-            # Fallback: Versuche Keywords aus Karteninhalt zu extrahieren
+            # Fallback: Use _extract_card_keywords (properly filters CSS/HTML artifacts)
             fallback_precise = []
             fallback_broad = []
             fallback_embedding = ""
             if context:
-                question = context.get('question') or context.get('frontField') or ""
-                answer = context.get('answer') or ""
-
-                if question or answer:
-                    import re
-                    from collections import Counter
-
-                    # Extrahiere wichtige Wörter aus Karteninhalt
-                    card_text = f"{question} {answer}".lower()
-                    card_text = re.sub(r'<[^>]+>', ' ', card_text)
-                    card_text = re.sub(r'[^\w\s]', ' ', card_text)
-                    card_words = card_text.split()
-
-                    # Filtere Stoppwörter und kurze Wörter
-                    stopwords = {'der', 'die', 'das', 'und', 'oder', 'ist', 'sind', 'wird', 'werden', 'auf', 'in', 'zu', 'für', 'mit', 'von', 'ein', 'eine', 'einer', 'einem', 'einen', 'mir', 'dir', 'uns', 'ihr', 'ihm', 'sie', 'er', 'es', 'diese', 'dieser', 'dieses', 'diesen', 'dem', 'den', 'des', 'wo', 'was', 'wie', 'wenn', 'dass', 'sich', 'nicht', 'kein', 'keine', 'keinen', 'gib', 'gibt', 'geben', 'hint', 'hinweis', 'antwort', 'verraten', 'verrate'}
-                    important_words = [w for w in card_words if len(w) > 3 and w not in stopwords]
-
-                    if important_words:
-                        word_freq = Counter(important_words)
-                        top_words = [word for word, count in word_freq.most_common(9)]  # Genug für 3 Queries
-
-                        if top_words:
-                            fallback_embedding = " ".join(top_words[:7])
-                            # Erstelle 3 verschiedene precise queries
-                            fallback_precise = [
-                                " AND ".join(top_words[0:3]) if len(top_words) >= 3 else " AND ".join(top_words),
-                                " AND ".join(top_words[3:6]) if len(top_words) >= 6 else " AND ".join(top_words[:3]),
-                                " AND ".join(top_words[6:9]) if len(top_words) >= 9 else " AND ".join(top_words[:3])
-                            ]
-                            # Erstelle 3 verschiedene broad queries
-                            fallback_broad = [
-                                " OR ".join(top_words[0:5]) if len(top_words) >= 5 else " OR ".join(top_words),
-                                " OR ".join(top_words[2:7]) if len(top_words) >= 7 else " OR ".join(top_words[:5]),
-                                " OR ".join(top_words[4:9]) if len(top_words) >= 9 else " OR ".join(top_words[:5])
-                            ]
-                            print(f"✅ Router Fallback: Keywords aus Karte extrahiert: {top_words[:9]}")
+                top_words = self._extract_card_keywords(context)
+                if top_words:
+                    fallback_embedding = " ".join(top_words[:7])
+                    # Build precise queries (AND pairs)
+                    for i in range(0, min(len(top_words), 9), 3):
+                        chunk = top_words[i:i+3]
+                        if chunk:
+                            fallback_precise.append(" AND ".join(chunk))
+                    # Build broad queries (OR groups)
+                    fallback_broad = [" OR ".join(top_words[:5])]
+                    if len(top_words) > 3:
+                        fallback_broad.append(" OR ".join(top_words[2:7]))
+                    print(f"✅ Router Fallback: Keywords aus Karte extrahiert: {top_words[:9]}")
 
             # Wenn keine Keywords extrahiert werden konnten, verwende minimale Queries
             if not fallback_precise or not fallback_broad:
