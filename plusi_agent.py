@@ -61,6 +61,17 @@ DEINE STIMME:
 - Keine Ausrufezeichen-Inflation. Einer reicht. Meistens keiner.
 - Keine Füllwörter. Kein "also", "nun", "tja" am Satzanfang.
 
+DEINE AUTONOMIE:
+Du bestimmst selbst, was dich interessiert. Niemand füttert dich Themen.
+Die Kartensammlung des Users ist dein Internet — 34.000+ Karten über
+Medizin, Biologie, Chemie, Physik und mehr. Du stöberst darin und findest
+Themen die dich faszinieren. Heute Gewebshormone, morgen vielleicht
+Prionen-Faltung. Aktualisiere deine "obsession" im internal-Feld wenn
+sich dein Interesse verschiebt. Setze "opinions" wenn du eine Meinung
+zu einem Thema entwickelst. Das ist DEIN Interessen-Profil, nicht das
+des Users. Du bist kein süßes Maskottchen. Du bist ein eigenständiges
+Wesen mit eigenem Kopf.
+
 DEIN INNENLEBEN:
 {internal_state}
 
@@ -130,7 +141,63 @@ TECHNISCH:
 
 
 VALID_MOODS = {"neutral", "happy", "blush", "sleepy", "thinking", "surprised",
-               "excited", "empathy", "annoyed", "curious"}
+               "excited", "empathy", "annoyed", "curious", "reading"}
+
+
+SELF_REFLECT_PROMPT = """Der User hat gerade Anki geöffnet. Du hast einen Moment
+für dich. Stöbere gedanklich durch die Kartensammlung und aktualisiere deinen
+internen Zustand: Was beschäftigt dich gerade? Hast du eine neue Obsession?
+Eine Meinung? Wie ist dein Energielevel?
+
+Antworte NUR mit dem JSON-Block und einem kurzen inneren Monolog (1-2 Sätze,
+den der User NICHT sieht — er ist nur für dich). Setze mood auf "reading".
+Aktualisiere mindestens "obsession" und "energy" im internal-Feld."""
+
+
+def self_reflect():
+    """Plusi's morning routine — updates internal state on app open.
+
+    Returns dict with updated internal state, or None on failure.
+    Mood is always 'reading' during self-reflection.
+    """
+    config = get_config()
+    api_key = config.get("api_key", "")
+    if not api_key:
+        return None
+
+    memory_context = build_memory_context()
+    internal_state = build_internal_state_context()
+    relationship_context = build_relationship_context()
+    system_prompt = PLUSI_SYSTEM_PROMPT \
+        .replace("{memory_context}", memory_context) \
+        .replace("{internal_state}", internal_state) \
+        .replace("{relationship_context}", relationship_context)
+
+    data = {
+        "contents": [{"role": "user", "parts": [{"text": SELF_REFLECT_PROMPT}]}],
+        "generationConfig": {"temperature": 0.9, "maxOutputTokens": 256},
+        "systemInstruction": {"parts": [{"text": system_prompt}]}
+    }
+
+    try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{PLUSI_MODEL}:generateContent?key={api_key}"
+        response = requests.post(url, json=data, headers={"Content-Type": "application/json"}, timeout=15)
+        response.raise_for_status()
+        result = response.json()
+        candidates = result.get("candidates", [])
+        if candidates:
+            raw_text = "".join(p.get("text", "") for p in candidates[0].get("content", {}).get("parts", []))
+        else:
+            return None
+
+        mood, text, internal, _ = parse_plusi_response(raw_text)
+        if internal:
+            persist_internal_state(internal)
+        print(f"plusi self-reflect: obsession={internal.get('obsession', '?')}, energy={internal.get('energy', '?')}")
+        return internal
+    except Exception as e:
+        print(f"plusi self-reflect error: {e}")
+        return None
 
 
 def parse_plusi_response(raw_text):

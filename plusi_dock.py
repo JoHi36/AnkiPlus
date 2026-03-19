@@ -210,6 +210,7 @@ PLUSI_JS = """
     empathy:  { bodyAnim: 'mascot-droop',  colorClass: 'mascot-dark', mouth: 'mascot-mouth-sad',  dockAnim: 'pd-droop' },
     excited:  { bodyAnim: 'mascot-bounce', colorClass: 'mascot-purple', mouth: 'mascot-mouth-wide', dockAnim: 'pd-bounce' },
     thinking: { bodyAnim: 'mascot-float',  colorClass: 'mascot-blue', mouth: 'mascot-mouth-d',    dockAnim: 'pd-float' },
+    reading:  { bodyAnim: 'mascot-tilt',   colorClass: 'mascot-blue', mouth: 'mascot-mouth-d',    dockAnim: 'pd-float' },
   };
 
   function setMood(mood) {

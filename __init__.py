@@ -473,6 +473,20 @@ def init_addon():
 def on_profile_loaded():
     """Wird aufgerufen, wenn das Profil geladen ist"""
     init_addon()
+    # Plusi's morning routine — self-reflect in background thread
+    import threading
+    def _plusi_morning():
+        try:
+            from .plusi_agent import self_reflect
+            from .plusi_dock import sync_mood
+            from PyQt6.QtCore import QTimer
+            sync_mood('reading')
+            result = self_reflect()
+            if result:
+                QTimer.singleShot(0, lambda: sync_mood('neutral'))
+        except Exception as e:
+            print(f"Plusi morning routine error: {e}")
+    threading.Thread(target=_plusi_morning, daemon=True).start()
 
 def _emit_deck_selected(widget, deck_id, deck_name):
     """Helper: Emittiert deckSelected Event mit totalCards"""

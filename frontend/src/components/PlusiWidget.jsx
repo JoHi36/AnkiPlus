@@ -13,6 +13,7 @@ const MOOD_COLORS = {
   thinking:  '#0a84ff',
   annoyed:   '#f87171',
   curious:   '#f59e0b',
+  reading:   '#0a84ff',
 };
 
 const MOOD_META = {
@@ -26,6 +27,7 @@ const MOOD_META = {
   thinking:  'grübelt...',
   annoyed:   'genervt',
   curious:   'neugierig',
+  reading:   'stöbert...',
 };
 
 const hexToRgb = (hex) => {
@@ -76,6 +78,10 @@ const MOOD_FACES = {
   thinking: {
     eyes: <><ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/><ellipse cx="51" cy="47" rx="4" ry="4" fill="#1a1a1a"/><ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/><ellipse cx="75" cy="47" rx="4" ry="4" fill="#1a1a1a"/></>,
     mouth: <path d="M 50 69 Q 60 72 70 69" stroke="#1a1a1a" strokeWidth="2.5" fill="none" strokeLinecap="round"/>,
+  },
+  reading: {
+    eyes: <><ellipse cx="48" cy="51" rx="7" ry="6" fill="white"/><rect x="41" y="43" width="14" height="5" fill="#0a84ff"/><ellipse cx="49" cy="53" rx="4" ry="3" fill="#1a1a1a"/><ellipse cx="72" cy="51" rx="7" ry="6" fill="white"/><rect x="65" y="43" width="14" height="5" fill="#0a84ff"/><ellipse cx="71" cy="53" rx="4" ry="3" fill="#1a1a1a"/></>,
+    mouth: <path d="M 52 68 Q 60 71 68 68" stroke="#1a1a1a" strokeWidth="2" fill="none" strokeLinecap="round"/>,
   },
 };
 
