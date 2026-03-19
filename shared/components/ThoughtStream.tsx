@@ -751,14 +751,15 @@ export default function ThoughtStream({
   // Track if user manually expanded — prevents auto-collapse from overriding user intent
   const userExpandedRef = useRef(false);
 
-  // Auto-collapse when streaming text arrives and pipeline is done
-  // Only during live streaming, and only if user hasn't manually expanded
+  // Auto-collapse: when streaming message text appears, collapse the pipeline
+  // Two conditions: (a) text arrived, (b) user hasn't manually re-expanded
+  // This fires regardless of isProcessing/activeEntry — text arriving = time to collapse
   useEffect(() => {
-    if (isStreaming && hasText && !isCollapsed && !isProcessing && !activeEntry && !userExpandedRef.current) {
+    if (hasText && !isCollapsed && !userExpandedRef.current) {
       const t = setTimeout(() => setIsCollapsed(true), 800);
       return () => clearTimeout(t);
     }
-  }, [isStreaming, hasText, isCollapsed, isProcessing, activeEntry]);
+  }, [hasText, isCollapsed]);
 
   // Expand when new pipeline starts — reset user override
   useEffect(() => {
