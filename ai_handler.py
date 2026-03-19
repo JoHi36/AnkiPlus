@@ -2099,7 +2099,8 @@ Antworte NUR mit JSON:
   "embedding_query": "semantisch reicher Suchtext aus Kartenkontext + Frage synthetisiert",
   "precise_queries": ["keyword1 AND keyword2", ...],
   "broad_queries": ["keyword1 OR keyword2", ...],
-  "search_scope": "current_deck" | "collection"
+  "search_scope": "current_deck" | "collection",
+  "response_length": "short" | "medium" | "long"
 }}
 
 REGELN:
@@ -2109,7 +2110,8 @@ REGELN:
 - precise_queries: 2-3 AND-Queries aus Karten-Keywords (nicht aus Benutzerfrage)
 - broad_queries: 2-3 OR-Queries für breitere Suche
 - search_scope: "current_deck" als Default, "collection" nur bei fächerübergreifenden Fragen
-- retrieval_mode: "both" als Default, "sql" für exakte Fakten, "semantic" für konzeptuelle Fragen"""
+- retrieval_mode: "both" als Default, "sql" für exakte Fakten, "semantic" für konzeptuelle Fragen
+- response_length: "short" für einfache Fakten, "medium" für Erklärungen, "long" für detaillierte Vergleiche oder mehrteilige Fragen"""
 
             # Backend-Modus: Router über Cloud Function (API-Key serverseitig)
             if use_backend:
@@ -2177,7 +2179,8 @@ REGELN:
                     "search_needed": router_result.get("search_needed", True),
                     "retrieval_mode": retrieval_mode,
                     "scope": router_result.get("search_scope", "current_deck"),
-                    "scope_label": scope_label
+                    "scope_label": scope_label,
+                    "response_length": router_result.get("response_length", "medium")
                 })
 
                 print(f"✅ Router (Backend): search_needed={router_result.get('search_needed')}, retrieval_mode={retrieval_mode}")
@@ -2450,7 +2453,8 @@ REGELN:
                                         "search_needed": router_result.get("search_needed", True),
                                         "retrieval_mode": retrieval_mode,
                                         "scope": router_result.get("search_scope", "current_deck"),
-                                        "scope_label": scope_label
+                                        "scope_label": scope_label,
+                                        "response_length": router_result.get("response_length", "medium")
                                     })
 
                                     # Finale Log-Ausgabe
@@ -2565,7 +2569,8 @@ REGELN:
                 "search_needed": True,
                 "retrieval_mode": "both",
                 "scope": "current_deck",
-                "scope_label": scope_label
+                "scope_label": scope_label,
+                "response_length": "medium"
             })
 
             return {
