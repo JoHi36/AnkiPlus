@@ -595,10 +595,16 @@ class ChatbotWidget(QWidget):
             existing_insights = data.get('existingInsights', {"version": 1, "insights": []})
             performance_data = data.get('performanceData')
 
-            # Cancel any pending extraction
+            # Cancel any pending extraction only for the SAME card
+            # Different cards can run — the previous extraction should finish
             if hasattr(self, '_extraction_thread') and self._extraction_thread and self._extraction_thread.isRunning():
-                self._extraction_thread.cancel()
-                self._extraction_thread.wait(1000)
+                if self._extraction_thread.card_id == card_id:
+                    self._extraction_thread.cancel()
+                    self._extraction_thread.wait(1000)
+                else:
+                    # Let the previous extraction finish in background
+                    # It will save to SQLite independently
+                    print(f"_handle_js_message: extractInsights - letting previous extraction for card {self._extraction_thread.card_id} continue")
 
             def _on_extraction_done(cid, result_json):
                 try:
@@ -626,9 +632,15 @@ class ChatbotWidget(QWidget):
                 except Exception as e:
                     print(f"_on_extraction_error error: {e}")
 
+            try:
+                from .ai_handler import get_ai_handler
+            except ImportError:
+                from ai_handler import get_ai_handler
+            ai = get_ai_handler()
+
             self._extraction_thread = InsightExtractionThread(
                 card_id, card_context, messages,
-                existing_insights, performance_data, self.ai_handler
+                existing_insights, performance_data, ai
             )
             self._extraction_thread.finished_signal.connect(_on_extraction_done)
             self._extraction_thread.error_signal.connect(_on_extraction_error)
