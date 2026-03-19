@@ -333,7 +333,15 @@ class AIHandler:
 
         # Erweitere System Prompt mit RAG-Anweisungen falls RAG-Kontext vorhanden
         if rag_context and rag_context.get("cards"):
-            rag_instruction = "\n\nWICHTIG: Du hast Zugriff auf relevante Anki-Karten als Kontext. Verwende diese Informationen, um präzise und fundierte Antworten zu geben. Zitiere IMMER deine Quellen mit dem Format [[CardID]] direkt im Text, wenn du Informationen aus den Karten verwendest."
+            rag_instruction = """\n\nQUELLEN-SYSTEM (WICHTIG):
+Du hast nummerierte Quellen-Karten als Kontext. Verwende diese Informationen für präzise Antworten.
+
+ZITIER-REGELN:
+- Verwende IMMER das Format [[CardID]] wenn du Informationen aus einer Karte nutzt (z.B. [[1735567472099]])
+- Setze die Citation DIREKT nach dem Satz oder Fakt, der daraus stammt
+- Jede wichtige Aussage sollte eine Citation haben
+- Die Karten sind nummeriert — die Nummern erscheinen dem Nutzer als [1], [2], [3] etc.
+- Die aktuelle Karte (die der Nutzer gerade lernt) ist immer die wichtigste Quelle"""
             system_instruction = system_instruction + rag_instruction
 
         # Erstelle Tools Array für Function Calling (nur wenn aktiviert)
@@ -918,7 +926,15 @@ class AIHandler:
 
         # Erweitere System Prompt mit RAG-Anweisungen falls RAG-Kontext vorhanden
         if rag_context and rag_context.get("cards"):
-            rag_instruction = "\n\nWICHTIG: Du hast Zugriff auf relevante Anki-Karten als Kontext. Verwende diese Informationen, um präzise und fundierte Antworten zu geben. Zitiere IMMER deine Quellen mit dem Format [[CardID]] direkt im Text, wenn du Informationen aus den Karten verwendest."
+            rag_instruction = """\n\nQUELLEN-SYSTEM (WICHTIG):
+Du hast nummerierte Quellen-Karten als Kontext. Verwende diese Informationen für präzise Antworten.
+
+ZITIER-REGELN:
+- Verwende IMMER das Format [[CardID]] wenn du Informationen aus einer Karte nutzt (z.B. [[1735567472099]])
+- Setze die Citation DIREKT nach dem Satz oder Fakt, der daraus stammt
+- Jede wichtige Aussage sollte eine Citation haben
+- Die Karten sind nummeriert — die Nummern erscheinen dem Nutzer als [1], [2], [3] etc.
+- Die aktuelle Karte (die der Nutzer gerade lernt) ist immer die wichtigste Quelle"""
             system_instruction = system_instruction + rag_instruction
         
         # Tools Array — built from central registry
@@ -2089,7 +2105,7 @@ Karteninhalt: {question_clean[:500]}"""
 Benutzer-Nachricht: "{user_message}"
 {f'Letzte Antwort: "{last_assistant_message[:200]}"' if last_assistant_message else ''}
 
-Karten-Kontext:
+Aktuelle Karte (die der Nutzer gerade lernt):
 - Frage: {card_question}
 - Antwort: {card_answer}
 - Deck: {deck_name}
@@ -2100,22 +2116,33 @@ Antworte NUR mit JSON:
 {{
   "search_needed": true/false,
   "retrieval_mode": "sql" | "semantic" | "both",
-  "embedding_query": "semantisch reicher Suchtext aus Kartenkontext + Frage synthetisiert",
+  "embedding_query": "semantisch reicher Suchtext",
   "precise_queries": ["keyword1 AND keyword2", ...],
   "broad_queries": ["keyword1 OR keyword2", ...],
   "search_scope": "current_deck" | "collection",
   "response_length": "short" | "medium" | "long"
 }}
 
+KONTEXT-ERKENNUNG (KRITISCH):
+Bestimme zuerst, ob die Frage sich auf die aktuelle Karte/Gesprächskontext bezieht oder ein eigenständiges Thema ist.
+
+Kontextbezogene Fragen erkennen: "was ist damit gemeint", "erkläre das genauer", "ich verstehe das nicht", "was bedeutet das", "kannst du das erklären", "erzähl mir mehr darüber", Pronomen wie "das", "es", "dieser".
+→ Bei kontextbezogenen Fragen: Nutze Karten-Kontext + letzte Antwort um spezifische Queries zu erstellen.
+  embedding_query MUSS die Schlüsselbegriffe der Karte enthalten.
+  Beispiel: Karte="Nucleotid", Frage="ich verstehe das nicht" → embedding_query="Nucleotid Aufbau Base Zucker Phosphat Purin Pyrimidin"
+
+Eigenständige Fragen erkennen: Enthält eigene Fachbegriffe die NICHT auf der Karte stehen.
+→ Bei eigenständigen Fragen: Ignoriere Kartenkontext, erstelle Queries aus der Frage selbst.
+  Beispiel: Karte="Nucleotid", Frage="wie viel Volumen hat das Herz?" → embedding_query="Herzvolumen Herzgröße Pumpleistung"
+
 REGELN:
-- search_needed=false bei Smalltalk, Danke, Meta-Fragen
-- embedding_query: Synthese aus Karteninhalt + Benutzerfrage. NIEMALS die Benutzerfrage wörtlich verwenden.
-  Beispiel: Frage="Was ist das?", Karte="Mitochondrium" → embedding_query="Mitochondrium Zellatmung Organell Funktion"
-- precise_queries: 2-3 AND-Queries aus Karten-Keywords (nicht aus Benutzerfrage)
+- search_needed=false NUR bei Smalltalk, Danke, Meta-Fragen über die App
+- embedding_query: NIEMALS die Benutzerfrage wörtlich verwenden. Immer zu fachlichen Suchbegriffen expandieren.
+- precise_queries: 2-3 AND-Queries aus den relevanten Keywords (Karte ODER Frage, je nach Kontext)
 - broad_queries: 2-3 OR-Queries für breitere Suche
 - search_scope: "current_deck" als Default, "collection" nur bei fächerübergreifenden Fragen
 - retrieval_mode: "both" als Default, "sql" für exakte Fakten, "semantic" für konzeptuelle Fragen
-- response_length: "short" für einfache Fakten, "medium" für Erklärungen, "long" für detaillierte Vergleiche oder mehrteilige Fragen"""
+- response_length: "short" für einfache Fakten, "medium" für Erklärungen, "long" für detaillierte Vergleiche"""
 
             # Backend-Modus: Router über Cloud Function (API-Key serverseitig)
             if use_backend:
@@ -3171,18 +3198,66 @@ REGELN:
                         context_string = retrieval_result.get("context_string", "")
                         citations = retrieval_result.get("citations", {})
 
+                        # Inject current card as primary source if not already in citations
+                        if context and context.get('cardId'):
+                            current_card_id = str(context['cardId'])
+                            if current_card_id not in citations:
+                                import re as _re
+                                _q = context.get('question') or context.get('frontField') or ''
+                                _a = context.get('answer') or ''
+                                _q_clean = _re.sub(r'<[^>]+>', ' ', _q).strip()[:200]
+                                _a_clean = _re.sub(r'<[^>]+>', ' ', _a).strip()[:200]
+                                citations[current_card_id] = {
+                                    'noteId': context.get('noteId', context['cardId']),
+                                    'cardId': context['cardId'],
+                                    'question': _q_clean,
+                                    'answer': _a_clean,
+                                    'fields': context.get('fields', {}),
+                                    'deckName': context.get('deckName', ''),
+                                    'isCurrentCard': True,
+                                    'sources': ['current'],
+                                }
+                                # Prepend current card context to the RAG context string
+                                context_string = f"[Aktuelle Karte - CardID {current_card_id}] Frage: {_q_clean} | Antwort: {_a_clean}\n{context_string}"
+
                         # Convert context_string to list format for backward compatibility
                         formatted_cards = [line for line in context_string.split("\n") if line.strip()]
 
                         rag_context = {
                             "cards": formatted_cards,
                             "reasoning": router_result.get("reasoning", ""),
-                            "citations": citations  # NEW: Include citations
+                            "citations": citations  # Include citations with current card
                         }
                         print(f"RAG: {len(formatted_cards)} Karten fuer Kontext verwendet, {len(citations)} Citations")
                     else:
                         print(f"RAG: Keine Karten gefunden")
-            
+
+            # Even without search, include current card as context for the AI
+            if not rag_context and context and context.get('cardId'):
+                import re as _re
+                current_card_id = str(context['cardId'])
+                _q = context.get('question') or context.get('frontField') or ''
+                _a = context.get('answer') or ''
+                _q_clean = _re.sub(r'<[^>]+>', ' ', _q).strip()[:200]
+                _a_clean = _re.sub(r'<[^>]+>', ' ', _a).strip()[:200]
+                if _q_clean or _a_clean:
+                    rag_context = {
+                        "cards": [f"[Aktuelle Karte - CardID {current_card_id}] Frage: {_q_clean} | Antwort: {_a_clean}"],
+                        "citations": {
+                            current_card_id: {
+                                'noteId': context.get('noteId', context['cardId']),
+                                'cardId': context['cardId'],
+                                'question': _q_clean,
+                                'answer': _a_clean,
+                                'fields': context.get('fields', {}),
+                                'deckName': context.get('deckName', ''),
+                                'isCurrentCard': True,
+                                'sources': ['current'],
+                            }
+                        }
+                    }
+                    citations = rag_context["citations"]
+
             # Stage 3: Generator (mit RAG-Kontext falls vorhanden)
             self._refresh_config()
 
