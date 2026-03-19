@@ -47,7 +47,21 @@ def _init_tables(db):
             PRIMARY KEY (category, key)
         )
     """)
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS plusi_diary (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            entry_text TEXT NOT NULL,
+            cipher_text TEXT DEFAULT '[]',
+            category TEXT NOT NULL DEFAULT 'gemerkt',
+            mood TEXT NOT NULL DEFAULT 'neutral'
+        )
+    ''')
     db.execute("CREATE INDEX IF NOT EXISTS idx_plusi_history_time ON plusi_history(timestamp)")
+    db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_plusi_diary_time
+        ON plusi_diary(timestamp DESC)
+    ''')
     db.commit()
 
 
@@ -303,3 +317,33 @@ def get_friendship_data():
         'points': points,
         'maxPoints': max_points,
     }
+
+
+def save_diary_entry(entry_text, cipher_parts, category='gemerkt', mood='neutral'):
+    """Save a parsed diary entry. cipher_parts is a list of encrypted strings."""
+    db = _get_db()
+    db.execute(
+        'INSERT INTO plusi_diary (timestamp, entry_text, cipher_text, category, mood) VALUES (?, ?, ?, ?, ?)',
+        (datetime.now().isoformat(), entry_text, json.dumps(cipher_parts), category, mood)
+    )
+    db.commit()
+
+
+def load_diary(limit=50, offset=0):
+    """Load diary entries, newest first. Returns list of dicts."""
+    db = _get_db()
+    rows = db.execute(
+        'SELECT id, timestamp, entry_text, cipher_text, category, mood FROM plusi_diary ORDER BY timestamp DESC LIMIT ? OFFSET ?',
+        (limit, offset)
+    ).fetchall()
+    entries = []
+    for row in rows:
+        entries.append({
+            'id': row[0],
+            'timestamp': row[1],
+            'entry_text': row[2],
+            'cipher_parts': json.loads(row[3]),
+            'category': row[4],
+            'mood': row[5]
+        })
+    return entries
