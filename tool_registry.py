@@ -109,11 +109,13 @@ class ToolDefinition:
 
     name: str
     schema: Dict[str, Any]
-    execute_fn: Callable[[Dict[str, Any]], str]
+    execute_fn: Callable[[Dict[str, Any]], Any]
     category: str = "content"
     config_key: Optional[str] = None
     agent: str = "tutor"
     disabled_modes: List[str] = field(default_factory=list)
+    display_type: str = "markdown"     # "markdown" | "widget" | "silent"
+    timeout_seconds: int = 30          # Per-tool timeout in seconds
 
 
 # ---------------------------------------------------------------------------
@@ -236,6 +238,8 @@ registry.register(
         config_key="diagrams",
         agent="tutor",
         disabled_modes=["compact"],
+        display_type="markdown",
+        timeout_seconds=10,
     )
 )
 
@@ -272,30 +276,26 @@ PLUSI_SCHEMA = {
 def execute_plusi(args):
     """Execute spawn_plusi — calls the Plusi sub-agent.
 
-    Returns full result (mood + text) so agent_loop can inject [[PLUSI_DATA:]] marker
-    into the stream. The agent_loop sanitizes the result before sending to Gemini.
+    Returns dict with mood, text, error keys. The agent loop's generic
+    marker system handles [[TOOL:...]] injection into the stream.
     """
     try:
         from .plusi_agent import run_plusi
     except ImportError:
         from plusi_agent import run_plusi
 
-    # Remove internal args that aren't for the tool
-    args.pop('_frontend_callback', None)
-
     situation = args.get("situation", "")
     if not situation:
-        return json.dumps({"status": "error", "message": "No situation provided"})
+        return {"status": "error", "message": "No situation provided", "error": True}
 
     result = run_plusi(situation)
 
-    # Return FULL data — agent_loop handles injection + sanitization
-    return json.dumps({
+    return {
         "status": "displayed",
         "mood": result.get("mood", "neutral"),
         "text": result.get("text", ""),
         "error": result.get("error", False),
-    }, ensure_ascii=False)
+    }
 
 
 registry.register(ToolDefinition(
@@ -305,4 +305,6 @@ registry.register(ToolDefinition(
     category='content',
     config_key='plusi',
     agent='tutor',
+    display_type="widget",
+    timeout_seconds=30,
 ))

@@ -1,52 +1,95 @@
+"""
+tool_executor.py — Execute registered tools with timeout and structured responses.
+"""
+
+import json
+import threading
+from dataclasses import dataclass
+from typing import Any, Callable, Dict
+
 try:
     from .tool_registry import registry
 except ImportError:
     from tool_registry import registry
 
 
-# Global callback for tools that need to communicate with the frontend
-_frontend_callback = None
+@dataclass
+class ToolResponse:
+    """Structured envelope for tool execution results."""
+    status: str            # "success" | "error"
+    result: Any            # The actual content (string, dict, etc.)
+    display_type: str      # "markdown" | "widget" | "silent"
+    error_message: str = ""  # User-facing error description (on failure)
 
 
-def set_frontend_callback(callback):
-    """Set a callback function for tools that need to push events to frontend."""
-    global _frontend_callback
-    _frontend_callback = callback
+def _run_with_timeout(fn: Callable, args: Dict, timeout: int) -> Any:
+    """Run a function in a thread with a timeout.
 
-
-def get_frontend_callback():
-    """Get the frontend callback (or None)."""
-    return _frontend_callback
-
-
-def execute_tool(tool_name, args):
+    Note: On timeout, the worker thread is NOT killed (Python has no safe
+    thread-kill). It continues as a daemon thread until completion or process
+    exit. Tools accessing Qt state should marshal via QTimer.singleShot(0, ...).
     """
-    Execute a tool by name with the given arguments.
+    result_container = {}
+    error_container = {}
+    done_event = threading.Event()
+
+    def worker():
+        try:
+            result_container["value"] = fn(args)
+        except Exception as e:
+            error_container["value"] = e
+        finally:
+            done_event.set()
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    if not done_event.wait(timeout=timeout):
+        raise TimeoutError(f"Tool execution exceeded {timeout}s")
+    if "value" in error_container:
+        raise error_container["value"]
+    return result_container["value"]
+
+
+def execute_tool(tool_name: str, args: Dict[str, Any]) -> ToolResponse:
+    """Execute a tool by name with timeout and structured response.
 
     Args:
-        tool_name: The function name from Gemini's functionCall
-        args: Dict of arguments from Gemini's functionCall
+        tool_name: The function name from Gemini's functionCall.
+        args: Dict of arguments from Gemini's functionCall.
 
     Returns:
-        str: The tool result (to be sent back to Gemini as functionResponse)
+        ToolResponse with status, result, display_type, and optional error.
     """
     print(f"[tool_executor] Executing tool: {tool_name}, args: {args}")
 
     tool = registry.get(tool_name)
     if tool is None:
-        error_msg = f"Unknown tool: {tool_name}"
-        print(f"[tool_executor] Error: {error_msg}")
-        return error_msg
+        return ToolResponse(
+            status="error", result="",
+            display_type="silent",
+            error_message=f"Unknown tool: {tool_name}"
+        )
 
     try:
-        # For spawn_plusi, inject frontend callback
-        if tool_name == 'spawn_plusi' and _frontend_callback:
-            args['_frontend_callback'] = _frontend_callback
-
-        result = tool.execute_fn(args)
-        print(f"[tool_executor] Tool '{tool_name}' returned: {result}")
-        return result
+        result = _run_with_timeout(tool.execute_fn, args, tool.timeout_seconds)
+        print(f"[tool_executor] Tool '{tool_name}' returned successfully")
+        return ToolResponse(
+            status="success", result=result,
+            display_type=tool.display_type
+        )
+    except TimeoutError:
+        msg = f"{tool.name}: Timeout nach {tool.timeout_seconds}s"
+        print(f"[tool_executor] {msg}")
+        return ToolResponse(
+            status="error", result="",
+            display_type=tool.display_type,
+            error_message=msg
+        )
     except Exception as e:
-        error_msg = f"Error executing tool '{tool_name}': {e}"
-        print(f"[tool_executor] {error_msg}")
-        return error_msg
+        msg = f"Error executing tool '{tool_name}': {e}"
+        print(f"[tool_executor] {msg}")
+        return ToolResponse(
+            status="error", result="",
+            display_type=tool.display_type,
+            error_message=str(e)
+        )

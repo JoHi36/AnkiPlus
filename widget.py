@@ -787,23 +787,6 @@ class ChatbotWidget(QWidget):
         if not text:
             return
 
-        # Set frontend callback for tools that need to push events (e.g. spawn_plusi)
-        try:
-            from .tool_executor import set_frontend_callback
-        except ImportError:
-            from tool_executor import set_frontend_callback
-
-        import json as _json
-
-        from PyQt6.QtCore import QTimer
-
-        def _push_to_frontend(payload):
-            # Must run on main Qt thread — tool executor runs in AI thread
-            js_code = f"window.ankiReceive({_json.dumps(payload)});"
-            QTimer.singleShot(0, lambda: self.web_view.page().runJavaScript(js_code))
-
-        set_frontend_callback(_push_to_frontend)
-
         try:
             from .ai_handler import get_ai_handler
         except ImportError:
