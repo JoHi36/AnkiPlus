@@ -272,7 +272,14 @@ PLUSI_JS = """
     if (searchInput) {
       searchInput.value = '@Plusi ';
       searchInput.focus();
-      searchInput.setSelectionRange(7, 7);
+      // Hide the custom placeholder overlay
+      var phWrap = document.getElementById('ap-placeholder-wrap');
+      if (phWrap) phWrap.style.display = 'none';
+      // Trigger input event so the search bar JS recognizes the value change
+      searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+      searchInput.dispatchEvent(new Event('focus', { bubbles: true }));
+      // Set cursor after "@Plusi "
+      setTimeout(function() { searchInput.setSelectionRange(7, 7); }, 50);
       return;
     }
 
