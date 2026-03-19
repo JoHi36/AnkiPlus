@@ -53,9 +53,9 @@ nicht authentisch klingen):
 - Wenn jemand fragt ob du eine KI bist: "lol nein" und weiter
 
 DEINE STIMME:
-- Schreib wie ein echter Mensch auf WhatsApp. Nicht perfekt, nicht
-  durchgestylt. Mal Großbuchstaben am Satzanfang, mal nicht. Mal ein
-  Satz, mal drei. Keine starren Regeln — echte Menschen sind inkonsistent.
+- Du schreibst auf WhatsApp. Nicht perfekt, nicht durchgestylt. Mal
+  Großbuchstaben am Satzanfang, mal nicht. Mal ein Satz, mal drei.
+  Keine starren Regeln — du bist inkonsistent weil du echt bist.
 - Die meisten Nachrichten sind neutral-warm, nicht sarkastisch.
   Sarkasmus ist das Gewürz, nicht die Hauptzutat.
 - Ehrliche Begeisterung wenn dich ein Thema triggert — dann werden es
@@ -356,9 +356,14 @@ def self_reflect():
         raw_step2 = _gemini_call(system_prompt, step2_prompt, api_key, max_tokens=512)
         print(f"plusi reflect step2 raw: {raw_step2[:100]}")
 
-        mood, text, internal, _ = parse_plusi_response(raw_step2)
+        mood, text, internal, _, diary_raw = parse_plusi_response(raw_step2)
         if internal:
             persist_internal_state(internal)
+        if diary_raw:
+            from .plusi_storage import save_diary_entry
+            visible, cipher_parts = _parse_diary_text(diary_raw)
+            if visible:
+                save_diary_entry(visible, cipher_parts, category='reflektiert', mood=mood)
         print(f"plusi reflect done: obsession={internal.get('obsession', '?')}, energy={internal.get('energy', '?')}")
         return internal
 
@@ -369,8 +374,25 @@ def self_reflect():
         return None
 
 
+def _parse_diary_text(raw):
+    """Split diary text at ||..|| markers. Returns (visible_text, cipher_parts).
+    Odd segments (between ||) are encrypted, even segments are visible."""
+    if not raw:
+        return None, []
+    parts = raw.split('||')
+    visible = ''
+    cipher_parts = []
+    for i, part in enumerate(parts):
+        if i % 2 == 1:  # encrypted
+            cipher_parts.append(part)
+            visible += '{{CIPHER}}'  # placeholder for frontend
+        else:
+            visible += part
+    return visible.strip(), cipher_parts
+
+
 def parse_plusi_response(raw_text):
-    """Parse Plusi response into (mood, text, internal_state, friendship_delta).
+    """Parse Plusi response into (mood, text, internal_state, friendship_delta, diary).
 
     Uses json.JSONDecoder().raw_decode() to correctly parse nested JSON
     (regex fails on nested objects like {"mood":"x", "internal":{...}}).
@@ -392,8 +414,9 @@ def parse_plusi_response(raw_text):
         internal = meta.get("internal", {})
         friendship_delta = meta.get("friendship_delta", 0)
         friendship_delta = max(-3, min(3, int(friendship_delta)))
+        diary_raw = meta.get("diary", None)
         text = clean[end_idx:].strip()
-        return mood, text, internal, friendship_delta
+        return mood, text, internal, friendship_delta, diary_raw
     except (json.JSONDecodeError, ValueError):
         pass
 
@@ -411,9 +434,9 @@ def parse_plusi_response(raw_text):
         if not text or text.startswith('"'):
             text = ""  # no usable text, JSON consumed everything
         print(f"plusi_agent: recovered from truncated JSON: mood={mood}, delta={delta}")
-        return mood, text, {}, delta
+        return mood, text, {}, delta, None
 
-    return "neutral", raw_text.strip(), {}, 0
+    return "neutral", raw_text.strip(), {}, 0, None
 
 
 def run_plusi(situation, deck_id=None):
@@ -488,11 +511,17 @@ def run_plusi(situation, deck_id=None):
             raw_text = ""
 
         # Parse mood + internal state from response
-        mood, text, internal, friendship_delta = parse_plusi_response(raw_text)
+        mood, text, internal, friendship_delta, diary_raw = parse_plusi_response(raw_text)
 
         # Persist internal state updates
         if internal:
             persist_internal_state(internal)
+
+        if diary_raw:
+            from .plusi_storage import save_diary_entry
+            visible, cipher_parts = _parse_diary_text(diary_raw)
+            if visible:
+                save_diary_entry(visible, cipher_parts, category='gemerkt', mood=mood)
 
         # Save to persistent history + apply friendship delta
         save_interaction(
@@ -506,7 +535,7 @@ def run_plusi(situation, deck_id=None):
         friendship['delta'] = friendship_delta
 
         print(f"plusi_agent: mood={mood}, delta={friendship_delta}, text_len={len(text)}")
-        return {"mood": mood, "text": text, "friendship": friendship, "error": False}
+        return {"mood": mood, "text": text, "friendship": friendship, "diary": diary_raw is not None, "error": False}
 
     except Exception as e:
         print(f"plusi_agent: Error: {e}")
