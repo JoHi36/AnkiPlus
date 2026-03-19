@@ -1337,8 +1337,6 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
   const fixedMessage = fixIncompleteLatex(safeMessage);
   
   const isUser = from === 'user';
-  const messageLength = fixedMessage.length;
-  const useBubble = isUser && messageLength < 200;
 
   // Initialize Mermaid when component mounts (only for bot messages)
   useEffect(() => {
@@ -1425,32 +1423,20 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
     }
   }, [reviewData]); // intentionally exclude onPerformanceCapture to avoid loops
 
-  // Render Logic für User Messages (Bubble)
+  // Render Logic für User Messages (Section Heading)
   if (isUser) {
-    // Check for [[OVERVIEW]] marker — show as a compact pill instead of full prompt
-    const isOverviewRequest = fixedMessage.startsWith('[[OVERVIEW]]');
-    if (isOverviewRequest) {
-      return (
-        <div className="flex justify-end mb-6 animate-in slide-in-from-right-4 duration-300">
-          <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-primary text-[13px] font-medium">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-            Übersicht angefordert
-          </div>
-        </div>
-      );
-    }
+    // [[OVERVIEW]] is a system-internal trigger — render as heading like any other user message
+    const displayText = fixedMessage.startsWith('[[OVERVIEW]]')
+      ? fixedMessage.slice('[[OVERVIEW]]'.length).trim() || 'Übersicht'
+      : fixedMessage;
 
     return (
-      <div className="flex justify-end mb-10 animate-in slide-in-from-right-4 duration-300">
-        {/* Content area */}
-        <div className={`max-w-[85%] ${
-          useBubble
-            ? 'bg-base-300/60 text-base-content px-5 py-3 rounded-2xl rounded-br-sm shadow-sm'
-            : 'bg-base-300/40 text-base-content px-5 py-4 rounded-xl'
-        }`}>
-          <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
-            {fixedMessage}
-          </p>
+      <div className="pt-4">
+        <div
+          className="text-[14.5px] font-medium leading-[1.45]"
+          style={{ color: 'rgba(255,255,255,0.85)' }}
+        >
+          {displayText}
         </div>
       </div>
     );
