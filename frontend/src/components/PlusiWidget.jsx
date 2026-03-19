@@ -35,18 +35,59 @@ const hexToRgb = (hex) => {
   return `${r},${g},${b}`;
 };
 
-// Static SVG mascot — no animation, just the plus with face
-function PlusiIcon({ size = 24 }) {
+// Static SVG mascot — mood expressions without animation
+const MOOD_FACES = {
+  neutral: {
+    eyes: <><ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/><ellipse cx="49" cy="50" rx="4" ry="4" fill="#1a1a1a"/><ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/><ellipse cx="71" cy="50" rx="4" ry="4" fill="#1a1a1a"/></>,
+    mouth: <path d="M 48 68 Q 60 74 72 68" stroke="#1a1a1a" strokeWidth="3" fill="none" strokeLinecap="round"/>,
+  },
+  happy: {
+    eyes: <><ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/><rect x="41" y="41" width="14" height="4" fill="#0a84ff"/><ellipse cx="49" cy="51" rx="4" ry="3.5" fill="#1a1a1a"/><ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/><rect x="65" y="41" width="14" height="4" fill="#0a84ff"/><ellipse cx="71" cy="51" rx="4" ry="3.5" fill="#1a1a1a"/></>,
+    mouth: <path d="M 46 66 Q 60 78 74 66" stroke="#1a1a1a" strokeWidth="3" fill="none" strokeLinecap="round"/>,
+  },
+  annoyed: {
+    eyes: <><ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/><rect x="41" y="41" width="14" height="7" fill="#0a84ff"/><ellipse cx="49" cy="52" rx="4" ry="3" fill="#1a1a1a"/><ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/><rect x="65" y="41" width="14" height="7" fill="#0a84ff"/><ellipse cx="71" cy="52" rx="4" ry="3" fill="#1a1a1a"/></>,
+    mouth: <line x1="50" y1="70" x2="70" y2="70" stroke="#1a1a1a" strokeWidth="3" strokeLinecap="round"/>,
+  },
+  curious: {
+    eyes: <><ellipse cx="48" cy="48" rx="7" ry="9" fill="white"/><ellipse cx="49" cy="49" rx="4" ry="4" fill="#1a1a1a"/><ellipse cx="72" cy="50" rx="7" ry="7" fill="white"/><rect x="65" y="43" width="14" height="5" fill="#0a84ff"/><ellipse cx="71" cy="52" rx="4" ry="3" fill="#1a1a1a"/></>,
+    mouth: <path d="M 50 68 Q 56 68 60 66 Q 64 64 68 66" stroke="#1a1a1a" strokeWidth="2.5" fill="none" strokeLinecap="round"/>,
+  },
+  excited: {
+    eyes: <><ellipse cx="48" cy="47" rx="8" ry="10" fill="white"/><ellipse cx="49" cy="48" rx="5" ry="5" fill="#1a1a1a"/><ellipse cx="72" cy="47" rx="8" ry="10" fill="white"/><ellipse cx="71" cy="48" rx="5" ry="5" fill="#1a1a1a"/></>,
+    mouth: <ellipse cx="60" cy="70" rx="7" ry="6" fill="#1a1a1a"/>,
+  },
+  sleepy: {
+    eyes: <><ellipse cx="48" cy="52" rx="7" ry="3" fill="white"/><ellipse cx="72" cy="52" rx="7" ry="3" fill="white"/></>,
+    mouth: <line x1="54" y1="70" x2="66" y2="71" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>,
+  },
+  surprised: {
+    eyes: <><ellipse cx="48" cy="46" rx="8" ry="10" fill="white"/><ellipse cx="49" cy="47" rx="5" ry="5" fill="#1a1a1a"/><ellipse cx="72" cy="46" rx="8" ry="10" fill="white"/><ellipse cx="71" cy="47" rx="5" ry="5" fill="#1a1a1a"/></>,
+    mouth: <ellipse cx="60" cy="70" rx="5" ry="4" fill="#1a1a1a"/>,
+  },
+  blush: {
+    eyes: <><ellipse cx="48" cy="49" rx="7" ry="7" fill="white"/><rect x="41" y="42" width="14" height="4" fill="#0a84ff"/><ellipse cx="49" cy="51" rx="3.5" ry="3.5" fill="#1a1a1a"/><ellipse cx="72" cy="49" rx="7" ry="7" fill="white"/><rect x="65" y="42" width="14" height="4" fill="#0a84ff"/><ellipse cx="71" cy="51" rx="3.5" ry="3.5" fill="#1a1a1a"/><ellipse cx="38" cy="60" rx="6" ry="3" fill="rgba(248,113,113,0.3)"/><ellipse cx="82" cy="60" rx="6" ry="3" fill="rgba(248,113,113,0.3)"/></>,
+    mouth: <path d="M 52 68 Q 54 66 57 68 Q 60 70 63 68 Q 66 66 68 68" stroke="#1a1a1a" strokeWidth="2" fill="none" strokeLinecap="round"/>,
+  },
+  empathy: {
+    eyes: <><ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/><rect x="41" y="41" width="14" height="3" fill="#0a84ff"/><ellipse cx="49" cy="52" rx="4" ry="4" fill="#1a1a1a"/><ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/><rect x="65" y="41" width="14" height="3" fill="#0a84ff"/><ellipse cx="71" cy="52" rx="4" ry="4" fill="#1a1a1a"/></>,
+    mouth: <path d="M 50 70 Q 60 66 70 70" stroke="#1a1a1a" strokeWidth="2.5" fill="none" strokeLinecap="round"/>,
+  },
+  thinking: {
+    eyes: <><ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/><ellipse cx="51" cy="47" rx="4" ry="4" fill="#1a1a1a"/><ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/><ellipse cx="75" cy="47" rx="4" ry="4" fill="#1a1a1a"/></>,
+    mouth: <path d="M 50 69 Q 60 72 70 69" stroke="#1a1a1a" strokeWidth="2.5" fill="none" strokeLinecap="round"/>,
+  },
+};
+
+function PlusiIcon({ mood = 'neutral', size = 24 }) {
+  const face = MOOD_FACES[mood] || MOOD_FACES.neutral;
   return (
     <svg viewBox="0 0 120 120" width={size} height={size}>
       <rect x="40" y="5" width="40" height="110" rx="8" fill="#0a84ff"/>
       <rect x="5" y="35" width="110" height="40" rx="8" fill="#0a84ff"/>
       <rect x="40" y="35" width="40" height="40" fill="#0a84ff"/>
-      <ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/>
-      <ellipse cx="49" cy="50" rx="4" ry="4" fill="#1a1a1a"/>
-      <ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/>
-      <ellipse cx="71" cy="50" rx="4" ry="4" fill="#1a1a1a"/>
-      <path d="M 46 66 Q 60 76 74 66" stroke="#1a1a1a" strokeWidth="3" fill="none" strokeLinecap="round"/>
+      {face.eyes}
+      {face.mouth}
     </svg>
   );
 }
@@ -80,7 +121,7 @@ export default function PlusiWidget({
 
         {/* Top row: Mascot + Name + Mood */}
         <div className="plusi-top">
-          <PlusiIcon size={24} />
+          <PlusiIcon mood={isLoading ? 'thinking' : mood} size={24} />
           <span className="plusi-name">Plusi</span>
           <div style={{ flex: 1 }} />
           {resolvedMeta && (
