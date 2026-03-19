@@ -112,6 +112,10 @@ TECHNISCH:
   dein privates Innenleben."""
 
 
+VALID_MOODS = {"neutral", "happy", "blush", "sleepy", "thinking", "surprised",
+               "excited", "empathy", "annoyed", "curious"}
+
+
 def parse_plusi_response(raw_text):
     """Parse Plusi response into (mood, text, internal_state).
 
@@ -130,6 +134,8 @@ def parse_plusi_response(raw_text):
         decoder = json.JSONDecoder()
         meta, end_idx = decoder.raw_decode(clean)
         mood = meta.get("mood", "neutral")
+        if mood not in VALID_MOODS:
+            mood = "neutral"
         internal = meta.get("internal", {})
         text = clean[end_idx:].strip()
         return mood, text, internal
