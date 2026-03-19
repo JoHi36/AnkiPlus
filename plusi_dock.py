@@ -266,11 +266,19 @@ PLUSI_JS = """
     menuOpen = false;
     document.getElementById('plusi-menu').classList.remove('visible');
     document.getElementById('plusi-mascot').classList.remove('mascot-glow');
-    // Signal to Python → open chat panel with @Plusi
+
+    // Try to set @Plusi in the deck browser search bar first (if it exists)
+    var searchInput = document.getElementById('ap-search-input');
+    if (searchInput) {
+      searchInput.value = '@Plusi ';
+      searchInput.focus();
+      searchInput.setSelectionRange(7, 7);
+      return;
+    }
+
+    // Fallback: signal to Python to open chat panel with @Plusi
     if (typeof pycmd === 'function') {
       pycmd('plusi:ask');
-    } else if (window._apAction !== undefined) {
-      window._apAction = {type: 'plusiAsk'};
     }
   };
 
