@@ -205,12 +205,17 @@ PLUSI_JS = """
 
   // Mood configurations
   var MOODS = {
-    neutral:  { bodyAnim: 'mascot-float',  colorClass: 'mascot-blue', mouth: 'mascot-mouth-d',    dockAnim: 'pd-float' },
-    happy:    { bodyAnim: 'mascot-bounce', colorClass: 'mascot-blue', mouth: 'mascot-mouth-wide', dockAnim: 'pd-bounce' },
-    empathy:  { bodyAnim: 'mascot-droop',  colorClass: 'mascot-dark', mouth: 'mascot-mouth-sad',  dockAnim: 'pd-droop' },
-    excited:  { bodyAnim: 'mascot-bounce', colorClass: 'mascot-purple', mouth: 'mascot-mouth-wide', dockAnim: 'pd-bounce' },
-    thinking: { bodyAnim: 'mascot-float',  colorClass: 'mascot-blue', mouth: 'mascot-mouth-d',    dockAnim: 'pd-float' },
-    reading:  { bodyAnim: 'mascot-tilt',   colorClass: 'mascot-blue', mouth: 'mascot-mouth-d',    dockAnim: 'pd-float' },
+    neutral:   { bodyAnim: 'mascot-float',    colorClass: 'mascot-blue',   mouth: 'mascot-mouth-d',    dockAnim: 'pd-float' },
+    happy:     { bodyAnim: 'mascot-bounce',   colorClass: 'mascot-blue',   mouth: 'mascot-mouth-wide', dockAnim: 'pd-bounce' },
+    annoyed:   { bodyAnim: 'mascot-float',    colorClass: 'mascot-dark',   mouth: 'mascot-mouth-d',    dockAnim: 'pd-float' },
+    curious:   { bodyAnim: 'mascot-tilt',     colorClass: 'mascot-blue',   mouth: 'mascot-mouth-d',    dockAnim: 'pd-float' },
+    excited:   { bodyAnim: 'mascot-dance',    colorClass: 'mascot-purple', mouth: 'mascot-mouth-wide', dockAnim: 'pd-bounce' },
+    sleepy:    { bodyAnim: 'mascot-sway',     colorClass: 'mascot-grey',   mouth: 'mascot-mouth-tiny', dockAnim: 'pd-float' },
+    surprised: { bodyAnim: 'mascot-pop-once', colorClass: 'mascot-blue',   mouth: 'mascot-mouth-o',    dockAnim: 'pd-bounce' },
+    blush:     { bodyAnim: 'mascot-wiggle',   colorClass: 'mascot-blush',  mouth: 'mascot-mouth-tiny', dockAnim: 'pd-float' },
+    empathy:   { bodyAnim: 'mascot-droop',    colorClass: 'mascot-dark',   mouth: 'mascot-mouth-sad',  dockAnim: 'pd-droop' },
+    thinking:  { bodyAnim: 'mascot-float',    colorClass: 'mascot-blue',   mouth: 'mascot-mouth-d',    dockAnim: 'pd-float' },
+    reading:   { bodyAnim: 'mascot-tilt',     colorClass: 'mascot-blue',   mouth: 'mascot-mouth-d',    dockAnim: 'pd-float' },
   };
 
   function setMood(mood) {
@@ -375,6 +380,7 @@ def show_bubble(web_view_or_none=None, text='', mood='happy'):
 def sync_mood(mood):
     """Convenience: sync mood to whatever webview is currently active.
     Also persists the mood so it survives page reloads and app restarts."""
+    print(f"plusi_dock.sync_mood: {mood}")
     # Persist to storage
     try:
         try:

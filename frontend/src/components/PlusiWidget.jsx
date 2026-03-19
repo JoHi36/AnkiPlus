@@ -20,7 +20,7 @@ const MOOD_META = {
   happy:     'freut sich',
   empathy:   'fühlt mit',
   excited:   'aufgeregt',
-  neutral:   '',
+  neutral:   'chillt',
   sleepy:    'müde',
   surprised: 'überrascht',
   blush:     'verlegen',
