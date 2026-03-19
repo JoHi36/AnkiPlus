@@ -52,6 +52,7 @@ def _init_schema(db):
             performance_type TEXT,
             performance_data TEXT,
             previous_score  REAL,
+            type            TEXT DEFAULT 'review',
             FOREIGN KEY (card_id) REFERENCES card_sessions(card_id) ON DELETE CASCADE
         );
 
@@ -141,6 +142,16 @@ def _migrate_schema(db):
             CREATE INDEX IF NOT EXISTS idx_messages_card      ON messages(card_id);
             CREATE INDEX IF NOT EXISTS idx_messages_deck_time ON messages(deck_id, created_at);
         """)
+
+    # Type column migration: add type column to review_sections for preview marker
+    try:
+        cursor = db.execute("PRAGMA table_info(review_sections)")
+        section_cols = {row[1] for row in cursor.fetchall()}
+        if 'type' not in section_cols:
+            db.execute("ALTER TABLE review_sections ADD COLUMN type TEXT DEFAULT 'review'")
+            db.commit()
+    except Exception:
+        pass  # Column already exists
 
     # Pipeline data migration: add pipeline_data column for full ThoughtStream persistence
     if 'pipeline_data' not in cols:
@@ -526,15 +537,17 @@ def save_section(card_id, section):
             perf = json.dumps(perf, ensure_ascii=False)
 
         previous_score = section.get('previous_score') if section.get('previous_score') is not None else section.get('previousScore')
+        section_type = section.get('type', 'review')
 
         db.execute("""
-            INSERT INTO review_sections (id, card_id, title, created_at, performance_type, performance_data, previous_score)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO review_sections (id, card_id, title, created_at, performance_type, performance_data, previous_score, type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 title            = COALESCE(excluded.title, title),
                 performance_type = COALESCE(excluded.performance_type, performance_type),
                 performance_data = COALESCE(excluded.performance_data, performance_data),
-                previous_score   = COALESCE(excluded.previous_score, previous_score)
+                previous_score   = COALESCE(excluded.previous_score, previous_score),
+                type             = excluded.type
         """, (
             section.get('id'),
             card_id,
@@ -543,6 +556,7 @@ def save_section(card_id, section):
             section.get('performance_type') or section.get('performanceType'),
             perf,
             previous_score,
+            section_type,
         ))
 
         db.execute("UPDATE card_sessions SET updated_at = ? WHERE card_id = ?", (now, card_id))
