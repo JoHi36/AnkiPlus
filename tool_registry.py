@@ -673,3 +673,222 @@ registry.register(ToolDefinition(
     display_type="widget",
     timeout_seconds=10,
 ))
+
+
+# ---------------------------------------------------------------------------
+# Show Card Media Tool
+# ---------------------------------------------------------------------------
+
+SHOW_CARD_MEDIA_SCHEMA = {
+    "name": "show_card_media",
+    "description": (
+        "Zeigt Bilder aus einer Anki-Karte im Chat an. Verwende dieses Tool wenn eine Karte "
+        "im LERNMATERIAL-Kontext Bilder enthält (erkennbar an <img> Tags in den Feldern) und "
+        "du dem Nutzer das Bild zeigen möchtest. Die note_id findest du im LERNMATERIAL "
+        "als 'Note XXXXX'. BEVORZUGE dieses Tool gegenüber search_image — die Bilder sind "
+        "bereits lokal vorhanden und laden sofort. "
+        "Beispiel: LERNMATERIAL enthält 'Note 12345: Field Front: <img src=\"herz.jpg\">' "
+        "→ show_card_media(note_id=12345)."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "note_id": {
+                "type": "integer",
+                "description": "Die Note-ID aus dem LERNMATERIAL-Kontext"
+            }
+        },
+        "required": ["note_id"]
+    }
+}
+
+
+def execute_show_card_media(args):
+    """Extract and return images from an Anki card's fields.
+
+    Reads all fields, finds <img src="..."> tags, resolves filenames
+    against collection.media/, and returns base64-encoded images.
+    """
+    import re
+    import base64
+    import os
+
+    try:
+        from .anki_utils import run_on_main_thread, strip_html_and_cloze
+    except ImportError:
+        from anki_utils import run_on_main_thread, strip_html_and_cloze
+
+    note_id = args.get("note_id")
+    if not note_id:
+        return {"error": "Keine note_id angegeben"}
+
+    def _load():
+        from aqt import mw
+
+        try:
+            note = mw.col.get_note(int(note_id))
+        except Exception:
+            return {"error": f"Note {note_id} nicht gefunden"}
+
+        # Find all <img src="..."> in all fields
+        images = []
+        media_dir = mw.col.media.dir()
+
+        for field in note.fields:
+            img_matches = re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', field)
+            for filename in img_matches:
+                filepath = os.path.join(media_dir, filename)
+                if os.path.exists(filepath):
+                    try:
+                        with open(filepath, 'rb') as f:
+                            data = f.read()
+                        # Detect content type
+                        ext = os.path.splitext(filename)[1].lower()
+                        ct_map = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+                                  '.png': 'image/png', '.gif': 'image/gif',
+                                  '.webp': 'image/webp', '.svg': 'image/svg+xml'}
+                        content_type = ct_map.get(ext, 'image/png')
+                        b64 = base64.b64encode(data).decode('utf-8')
+                        images.append({
+                            "filename": filename,
+                            "dataUrl": f"data:{content_type};base64,{b64}",
+                        })
+                    except Exception:
+                        continue
+
+        if not images:
+            return {"error": f"Keine Bilder in Note {note_id} gefunden"}
+
+        # Get card context for display
+        front = strip_html_and_cloze(note.fields[0])[:150] if note.fields else ""
+        card_ids = note.card_ids()
+        deck_name = ""
+        if card_ids:
+            card = mw.col.get_card(card_ids[0])
+            deck_name = mw.col.decks.name(card.did)
+
+        return {
+            "note_id": int(note_id),
+            "front": front,
+            "deck_name": deck_name,
+            "images": images,
+        }
+
+    return run_on_main_thread(_load, timeout=9)
+
+
+registry.register(ToolDefinition(
+    name="show_card_media",
+    schema=SHOW_CARD_MEDIA_SCHEMA,
+    execute_fn=execute_show_card_media,
+    category="content",
+    config_key=None,
+    agent="tutor",
+    display_type="widget",
+    timeout_seconds=10,
+))
+
+
+# ---------------------------------------------------------------------------
+# Search Image Tool
+# ---------------------------------------------------------------------------
+
+SEARCH_IMAGE_SCHEMA = {
+    "name": "search_image",
+    "description": (
+        "Sucht ein Bild im Internet (Wikimedia Commons, PubChem) und zeigt es im Chat an. "
+        "Verwende dieses Tool NUR wenn keine passenden Bilder in den Karten des Nutzers "
+        "vorhanden sind — prüfe zuerst ob show_card_media funktioniert. "
+        "Geeignet für: Molekülstrukturen, anatomische Abbildungen, wissenschaftliche Diagramme. "
+        "Für Moleküle wird automatisch PubChem verwendet, sonst Wikimedia Commons."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Suchbegriff auf Englisch (z.B. 'ATP molecule', 'human heart anatomy', 'mitochondria')"
+            },
+            "image_type": {
+                "type": "string",
+                "enum": ["molecule", "anatomy", "general"],
+                "description": "Bildtyp: 'molecule' für Molekülstrukturen (PubChem), 'anatomy' oder 'general' für andere (Wikimedia)"
+            }
+        },
+        "required": ["query"]
+    }
+}
+
+
+def execute_search_image(args):
+    """Search for an image on the internet (PubChem / Wikimedia Commons).
+
+    Returns dict with imageUrl, source, description for widget rendering.
+    Uses the same search logic as bridge.searchImage().
+    """
+    import requests as req
+
+    query = args.get("query", "")
+    image_type = args.get("image_type", "general")
+
+    if not query:
+        return {"error": "Kein Suchbegriff angegeben"}
+
+    try:
+        # 1. PubChem for molecules
+        if image_type == "molecule" or "molecule" in query.lower() or "molecular" in query.lower():
+            try:
+                search_url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{req.utils.quote(query)}/JSON"
+                resp = req.get(search_url, timeout=5,
+                               headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'})
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if 'PC_Compounds' in data and data['PC_Compounds']:
+                        cid = data['PC_Compounds'][0].get('id', {}).get('id', {}).get('cid', [None])[0]
+                        if cid:
+                            return {
+                                "imageUrl": f"https://pubchem.ncbi.nlm.nih.gov/image/imgsrv.fcgi?cid={cid}&t=l",
+                                "source": "pubchem",
+                                "description": f"Molekülstruktur: {query}",
+                            }
+            except Exception:
+                pass
+
+        # 2. Wikimedia Commons
+        try:
+            params = {
+                'action': 'query', 'format': 'json', 'list': 'search',
+                'srsearch': query, 'srnamespace': 6, 'srlimit': 5, 'origin': '*'
+            }
+            resp = req.get("https://commons.wikimedia.org/w/api.php", params=params, timeout=5,
+                           headers={'User-Agent': 'Anki-Chatbot-Addon/1.0'})
+            if resp.status_code == 200:
+                data = resp.json()
+                results = data.get('query', {}).get('search', [])
+                if results:
+                    filename = results[0]['title'].replace('File:', '')
+                    filename_enc = req.utils.quote(filename.replace(' ', '_'))
+                    return {
+                        "imageUrl": f"https://commons.wikimedia.org/wiki/Special:FilePath/{filename_enc}?width=800",
+                        "source": "wikimedia",
+                        "description": f"{query}",
+                    }
+        except Exception:
+            pass
+
+        return {"error": f"Kein Bild gefunden für '{query}'"}
+
+    except Exception as e:
+        return {"error": f"Bildsuche fehlgeschlagen: {str(e)[:100]}"}
+
+
+registry.register(ToolDefinition(
+    name="search_image",
+    schema=SEARCH_IMAGE_SCHEMA,
+    execute_fn=execute_search_image,
+    category="content",
+    config_key="images",
+    agent="tutor",
+    display_type="widget",
+    timeout_seconds=15,
+))

@@ -4,6 +4,7 @@ import CardWidget from './CardWidget';
 import CardListWidget from './CardListWidget';
 import StatsWidget from './StatsWidget';
 import ToolLoadingPlaceholder from './ToolLoadingPlaceholder';
+import ImageWidget from './ImageWidget';
 import ToolErrorBadge from './ToolErrorBadge';
 
 export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, isLastMessage }) {
@@ -33,6 +34,7 @@ export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, i
                   mood={tw.result.mood || 'neutral'}
                   text={tw.result.text || ''}
                   metaText={tw.result.meta || ''}
+                  friendship={tw.result.friendship || null}
                   isLoading={false}
                   isFrozen={!isStreaming && !isLastMessage}
                 />
@@ -61,6 +63,10 @@ export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, i
               );
             case 'get_learning_stats':
               return <StatsWidget key={`stats-${i}`} modules={tw.result.modules} />;
+            case 'show_card_media':
+              return <ImageWidget key={`media-${i}`} data={tw.result} toolName="show_card_media" />;
+            case 'search_image':
+              return <ImageWidget key={`img-${i}`} data={tw.result} toolName="search_image" />;
             default:
               return null;
           }

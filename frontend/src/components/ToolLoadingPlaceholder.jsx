@@ -2,7 +2,9 @@ import React from 'react';
 
 const loadingLabels = {
   show_card: "Lädt Karte...",
+  show_card_media: "Lädt Bild aus Karte...",
   search_deck: "Sucht Karten...",
+  search_image: "Sucht Bild...",
   get_learning_stats: "Lädt Statistiken...",
   spawn_plusi: "Plusi denkt nach...",
 };
