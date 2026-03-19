@@ -1664,10 +1664,11 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
     if (isStreaming) return false; // Live pipeline is handled by App.jsx
 
     const hasSteps = steps.length > 0 || generateFallbackSteps.length > 0;
+    const hasPipelineData = pipelineSteps && pipelineSteps.length > 0;
     const hasCitations = Object.keys(citations).length > 0;
 
-    return hasSteps || hasCitations;
-  }, [isUser, isStreaming, steps.length, generateFallbackSteps.length, citations]);
+    return hasSteps || hasPipelineData || hasCitations;
+  }, [isUser, isStreaming, steps.length, generateFallbackSteps.length, pipelineSteps, citations]);
 
   // === RENDER RETURN ===
   return (
@@ -1678,7 +1679,9 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
             {shouldRenderThoughtStream ? (
                 <>
                   <ThoughtStream
+                      pipelineSteps={pipelineSteps || []}
                       steps={generateFallbackSteps}
+                      citations={citations}
                       message={message}
                   />
                   {Object.keys(citations).length > 0 && (

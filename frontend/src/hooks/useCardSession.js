@@ -149,6 +149,7 @@ export function useCardSession(bridge) {
           created_at: message.createdAt || message.timestamp || new Date().toISOString(),
           steps: message.steps,
           citations: message.citations,
+          pipeline_data: message.pipeline_data,
         }
       };
       window.ankiBridge.addMessage('saveCardMessage', JSON.stringify(payload));

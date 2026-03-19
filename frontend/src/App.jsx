@@ -1967,6 +1967,7 @@ function AppInner() {
                                   cardContext={cardContextHook.cardContext}
                                   steps={msg.steps || []}
                                   citations={msg.citations || {}}
+                                  pipelineSteps={msg.pipeline_data || []}
                                   bridge={bridge}
                                   isLastMessage={false}
                                   onAnswerSelect={(letter, isCorrect) => {
@@ -2062,6 +2063,7 @@ function AppInner() {
                                                                 cardContext={cardContextHook.cardContext}
                                                                 steps={nextMsg.steps || []}
                                                                 citations={nextMsg.citations || {}}
+                                                                pipelineSteps={nextMsg.pipeline_data || []}
                                                                 bridge={bridge}
                                                                 isLastMessage={!chatHook.isLoading && !chatHook.streamingMessage}
                                                                 onAnswerSelect={(letter, isCorrect) => {

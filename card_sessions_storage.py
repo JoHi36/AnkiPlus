@@ -65,6 +65,7 @@ def _init_schema(db):
             steps      TEXT,
             citations  TEXT,
             request_id TEXT,
+            pipeline_data TEXT,
             FOREIGN KEY (card_id) REFERENCES card_sessions(card_id) ON DELETE CASCADE
         );
 
@@ -141,6 +142,13 @@ def _migrate_schema(db):
             CREATE INDEX IF NOT EXISTS idx_messages_deck_time ON messages(deck_id, created_at);
         """)
 
+    # Pipeline data migration: add pipeline_data column for full ThoughtStream persistence
+    if 'pipeline_data' not in cols:
+        try:
+            db.execute("ALTER TABLE messages ADD COLUMN pipeline_data TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
     db.commit()
 
 
@@ -185,7 +193,7 @@ def load_card_session(card_id):
     messages = []
     for r in rows:
         m = dict(r)
-        for field in ('steps', 'citations'):
+        for field in ('steps', 'citations', 'pipeline_data'):
             if m.get(field):
                 try:
                     m[field] = json.loads(m[field])
@@ -337,12 +345,15 @@ def save_message(card_id, message):
         citations = message.get('citations')
         if citations is not None and not isinstance(citations, str):
             citations = json.dumps(citations, ensure_ascii=False)
+        pipeline_data = message.get('pipeline_data')
+        if pipeline_data is not None and not isinstance(pipeline_data, str):
+            pipeline_data = json.dumps(pipeline_data, ensure_ascii=False)
         request_id = message.get('request_id') or message.get('requestId')
 
         msg_id = message.get('id') or str(uuid.uuid4())
         db.execute("""
-            INSERT OR REPLACE INTO messages (id, card_id, section_id, text, sender, created_at, steps, citations, request_id, deck_id, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO messages (id, card_id, section_id, text, sender, created_at, steps, citations, request_id, deck_id, source, pipeline_data)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             msg_id,
             card_id,
@@ -355,6 +366,7 @@ def save_message(card_id, message):
             request_id,
             deck_id,
             message.get('source', 'tutor'),
+            pipeline_data,
         ))
 
         db.execute("UPDATE card_sessions SET updated_at = ? WHERE card_id = ?", (now, card_id))
@@ -405,7 +417,7 @@ def load_deck_messages(deck_id, limit=50):
     messages = []
     for r in rows:
         m = dict(r)
-        for field in ('steps', 'citations'):
+        for field in ('steps', 'citations', 'pipeline_data'):
             if m.get(field):
                 try:
                     m[field] = json.loads(m[field])

@@ -113,7 +113,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
   
   // Nachricht hinzufügen (für Bot-Antworten)
   // Verwendet Refs um immer die aktuelle Session-ID und Section-ID zu haben
-  const appendMessage = useCallback((text, from, steps = [], citations = {}, requestId = null, stepLabels = []) => {
+  const appendMessage = useCallback((text, from, steps = [], citations = {}, requestId = null, stepLabels = [], pipelineData = null) => {
     console.log(`💬 useChat: Füge Nachricht hinzu (${from}):`, text.substring(0, 50) + (text.length > 50 ? '...' : ''));
     const newMessage = {
       text,
@@ -122,7 +122,8 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       sectionId: currentSectionIdRef.current,  // Verwende Ref statt Props
       steps: stepLabels && stepLabels.length > 0 ? stepLabels : (steps || []),  // NEW: Reasoning steps (prefer stepLabels)
       citations: citations || {},  // NEW: Citations map
-      request_id: requestId || activeRequestIdRef.current  // Link to request
+      request_id: requestId || activeRequestIdRef.current,  // Link to request
+      pipeline_data: pipelineData,  // Full pipeline step data for persistent ThoughtStream
     };
     
     setMessages((prev) => {
@@ -664,7 +665,11 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
 
               // CRITICAL: Always save steps and citations, even if empty, to maintain consistency
               // This ensures the ThoughtStream has the same data during streaming and after saving
-              appendMessageRef.current(prev, 'bot', finalSteps, finalCitations, activeRequestIdRef.current, finalStepLabels);
+              // Save full pipeline data for persistent ThoughtStream v5
+              const finalPipelineData = pipelineStepsRef.current && pipelineStepsRef.current.length > 0
+                ? pipelineStepsRef.current
+                : null;
+              appendMessageRef.current(prev, 'bot', finalSteps, finalCitations, activeRequestIdRef.current, finalStepLabels, finalPipelineData);
 
               // CRITICAL: Set isLoading to false AFTER message is saved
               // This ensures StreamingChatMessage continues to render until saved message is available
