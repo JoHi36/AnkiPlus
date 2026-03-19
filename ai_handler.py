@@ -679,89 +679,10 @@ ZITIER-REGELN:
                     if "content" in candidate and "parts" in candidate["content"]:
                         parts = candidate["content"]["parts"]
                         
-                        # Suche nach Function Call
-                        function_call = None
-                        for part in parts:
-                            if "functionCall" in part:
-                                function_call = part["functionCall"]
-                                break
-                        
-                        # Wenn Function Call vorhanden, führe Tool aus und sende Ergebnis zurück
-                        if function_call:
-                            function_name = function_call.get("name", "")
-                            print(f"🔧 _get_google_response: Function Call erkannt: {function_name}")
-                            
-                            if function_name:
-                                # Führe Tool aus (generisch über Registry)
-                                try:
-                                    from .tool_executor import execute_tool
-                                except ImportError:
-                                    from tool_executor import execute_tool
-                                tool_result = execute_tool(function_name, function_call.get("args", {}))
-                                
-                                # Erstelle neuen Request mit Function Response
-                                # Füge Function Response zu contents hinzu
-                                contents_with_function_response = contents.copy()
-                                contents_with_function_response.append({
-                                    "role": "model",
-                                    "parts": parts  # Original Response mit Function Call
-                                })
-                                contents_with_function_response.append({
-                                    "role": "function",
-                                    "parts": [{
-                                        "functionResponse": {
-                                            "name": function_name,
-                                            "response": {
-                                                "result": tool_result
-                                            }
-                                        }
-                                    }]
-                                })
-                                
-                                # Erstelle neuen Request für finale Antwort
-                                # CRITICAL: Set max_output_tokens to 8192 for gemini-3-flash-preview
-                                max_tokens_final = 8192 if "gemini-3-flash-preview" in model.lower() else 2000
-                                data_final = {
-                                    "contents": contents_with_function_response,
-                                    "generationConfig": {
-                                        "temperature": 0.7,
-                                        "maxOutputTokens": max_tokens_final
-                                    }
-                                }
-                                
-                                if system_instruction and system_instruction.strip():
-                                    data_final["systemInstruction"] = {
-                                        "parts": [{
-                                            "text": system_instruction
-                                        }]
-                                    }
-                                
-                                if tools_array:
-                                    data_final["tools"] = tools_array
-                                
-                                # Sende Request für finale Antwort
-                                print(f"🔧 _get_google_response: Sende Function Response zurück, warte auf finale Antwort...")
-                                response_final = requests.post(url, json=data_final, timeout=30)
-                                response_final.raise_for_status()
-                                result_final = response_final.json()
-                                
-                                # Extrahiere finale Antwort
-                                if "candidates" in result_final and len(result_final["candidates"]) > 0:
-                                    candidate_final = result_final["candidates"][0]
-                                    if "content" in candidate_final and "parts" in candidate_final["content"]:
-                                        if len(candidate_final["content"]["parts"]) > 0:
-                                            final_text = candidate_final["content"]["parts"][0].get("text", "")
-                                            print(f"✅ _get_google_response: Finale Antwort erhalten, Länge: {len(final_text)}")
-                                            return final_text
-                                
-                                raise Exception("Konnte finale Antwort nach Function Call nicht extrahieren")
-                            
-                            else:
-                                print(f"⚠️ _get_google_response: Unbekanntes Tool: {function_name}")
-                                # Fallback: Versuche Text zu extrahieren
-                                pass
-                        
-                        # Kein Function Call - normale Text-Antwort
+                        # Tool calls are handled by run_agent_loop() in the
+                        # streaming path. Non-streaming path returns text only.
+
+                        # Normale Text-Antwort
                         if len(parts) > 0:
                             text_part = parts[0].get("text", "")
                             if text_part:
