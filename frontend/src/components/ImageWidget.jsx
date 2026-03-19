@@ -124,7 +124,8 @@ export default function ImageWidget({ data, toolName }) {
               maxHeight: 400,
               objectFit: 'contain',
               display: 'block',
-              background: 'rgba(255,255,255,0.02)',
+              background: '#ffffff',
+              padding: 12,
             }}
           />
         ) : (
