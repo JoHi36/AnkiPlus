@@ -244,6 +244,22 @@ def parse_plusi_response(raw_text):
     except (json.JSONDecodeError, ValueError):
         pass
 
+    # Fallback: try to extract mood from truncated/malformed JSON
+    import re
+    mood_match = re.search(r'"mood"\s*:\s*"(\w+)"', clean)
+    delta_match = re.search(r'"friendship_delta"\s*:\s*(-?\d+)', clean)
+    if mood_match:
+        mood = mood_match.group(1) if mood_match.group(1) in VALID_MOODS else "neutral"
+        delta = int(delta_match.group(1)) if delta_match else 0
+        delta = max(-3, min(3, delta))
+        # Try to find text after the broken JSON — look for last } or end of JSON-like content
+        text_start = clean.rfind('}')
+        text = clean[text_start + 1:].strip() if text_start > 0 else ""
+        if not text or text.startswith('"'):
+            text = ""  # no usable text, JSON consumed everything
+        print(f"plusi_agent: recovered from truncated JSON: mood={mood}, delta={delta}")
+        return mood, text, {}, delta
+
     return "neutral", raw_text.strip(), {}, 0
 
 
@@ -290,7 +306,7 @@ def run_plusi(situation, deck_id=None):
         "contents": contents,
         "generationConfig": {
             "temperature": 0.8,
-            "maxOutputTokens": 1024,
+            "maxOutputTokens": 2048,
         },
         "systemInstruction": {
             "parts": [{"text": system_prompt}]
