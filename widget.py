@@ -147,6 +147,81 @@ class AIRequestThread(QThread):
             self.ai_handler._pipeline_signal_callback = None
 
 
+class InsightExtractionThread(QThread):
+    """Background thread for insight extraction."""
+    finished_signal = pyqtSignal(int, str)  # card_id, insights_json
+    error_signal = pyqtSignal(int, str)     # card_id, error_message
+
+    def __init__(self, card_id, card_context, messages, existing_insights, performance_data, ai_handler):
+        super().__init__()
+        self.card_id = card_id
+        self.card_context = card_context
+        self.messages = messages
+        self.existing_insights = existing_insights
+        self.performance_data = performance_data
+        self.ai_handler = ai_handler
+        self._cancelled = False
+
+    def cancel(self):
+        self._cancelled = True
+
+    def run(self):
+        if self._cancelled:
+            return
+        try:
+            from .insight_extractor import build_extraction_prompt, parse_extraction_response
+
+            prompt = build_extraction_prompt(
+                self.card_context, self.messages,
+                self.existing_insights, self.performance_data
+            )
+
+            # Use non-streaming AI request with extraction prompt as system override
+            response = self.ai_handler.get_response(
+                user_message="Extrahiere die Erkenntnisse aus dem folgenden Chat.",
+                context=self.card_context,
+                history=[],
+                mode='compact',
+                system_prompt_override=prompt
+            )
+
+            if self._cancelled:
+                return
+
+            if not response:
+                self.error_signal.emit(self.card_id, "Empty response from AI")
+                return
+
+            result = parse_extraction_response(response)
+
+            if result is None:
+                # Retry once
+                response = self.ai_handler.get_response(
+                    user_message="Extrahiere die Erkenntnisse aus dem folgenden Chat.",
+                    context=self.card_context,
+                    history=[],
+                    mode='compact',
+                    system_prompt_override=prompt
+                )
+                if self._cancelled:
+                    return
+                result = parse_extraction_response(response) if response else None
+
+            if result is None:
+                self.error_signal.emit(self.card_id, "Failed to parse extraction response after retry")
+                return
+
+            # Save to storage
+            from .card_sessions_storage import save_insights
+            save_insights(self.card_id, result)
+
+            self.finished_signal.emit(self.card_id, json.dumps(result, ensure_ascii=False))
+
+        except Exception as e:
+            if not self._cancelled:
+                self.error_signal.emit(self.card_id, str(e))
+
+
 class ChatbotWidget(QWidget):
     """Web-basierte Chat-UI über QWebEngineView"""
 
@@ -510,6 +585,52 @@ class ChatbotWidget(QWidget):
                 self.web_view.page().runJavaScript(js)
             except Exception as e:
                 print(f"_handle_js_message: getCardRevlog error: {e}")
+
+        elif msg_type == 'extractInsights':
+            card_id = data.get('cardId')
+            card_context = data.get('cardContext', {})
+            messages = data.get('messages', [])
+            existing_insights = data.get('existingInsights', {"version": 1, "insights": []})
+            performance_data = data.get('performanceData')
+
+            # Cancel any pending extraction
+            if hasattr(self, '_extraction_thread') and self._extraction_thread and self._extraction_thread.isRunning():
+                self._extraction_thread.cancel()
+                self._extraction_thread.wait(1000)
+
+            def _on_extraction_done(cid, result_json):
+                try:
+                    payload = {"type": "insightExtractionComplete", "cardId": cid, "success": True, "insights": json.loads(result_json)}
+                    payload_json = json.dumps(payload, ensure_ascii=False)
+                    js = f"""(function() {{
+                        var p = {payload_json};
+                        if (typeof window.ankiReceive === 'function') window.ankiReceive(p);
+                        window.dispatchEvent(new CustomEvent('ankiInsightExtractionComplete', {{detail: p}}));
+                    }})();"""
+                    self.web_view.page().runJavaScript(js)
+                except Exception as e:
+                    print(f"_on_extraction_done error: {e}")
+
+            def _on_extraction_error(cid, err):
+                try:
+                    payload = {"type": "insightExtractionComplete", "cardId": cid, "success": False, "error": err}
+                    payload_json = json.dumps(payload, ensure_ascii=False)
+                    js = f"""(function() {{
+                        var p = {payload_json};
+                        if (typeof window.ankiReceive === 'function') window.ankiReceive(p);
+                        window.dispatchEvent(new CustomEvent('ankiInsightExtractionComplete', {{detail: p}}));
+                    }})();"""
+                    self.web_view.page().runJavaScript(js)
+                except Exception as e:
+                    print(f"_on_extraction_error error: {e}")
+
+            self._extraction_thread = InsightExtractionThread(
+                card_id, card_context, messages,
+                existing_insights, performance_data, self.ai_handler
+            )
+            self._extraction_thread.finished_signal.connect(_on_extraction_done)
+            self._extraction_thread.error_signal.connect(_on_extraction_error)
+            self._extraction_thread.start()
 
         elif msg_type == 'loadDeckMessages':
             deck_id = data if isinstance(data, (int, str)) else data.get('deckId')
