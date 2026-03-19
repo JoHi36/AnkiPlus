@@ -1,5 +1,4 @@
 import React from 'react';
-import { Star } from 'lucide-react';
 
 /**
  * SourceCard Component
@@ -13,7 +12,7 @@ export interface Citation {
   id?: string | number;
   deckName?: string;
   front?: string;
-  isCurrentCard?: boolean;
+  sources?: string[];
   fields?: Record<string, string>;
   [key: string]: any;
 }
@@ -21,11 +20,10 @@ export interface Citation {
 export interface SourceCardProps {
   citation: Citation;
   index?: number;
-  isCurrentCard?: boolean;
   onClick?: (citation: Citation) => void;
 }
 
-export default function SourceCard({ citation, index, isCurrentCard = false, onClick }: SourceCardProps) {
+export default function SourceCard({ citation, index, onClick }: SourceCardProps) {
   const cardId = citation?.noteId || citation?.cardId || citation?.id;
 
   // Content extraction
@@ -68,21 +66,23 @@ export default function SourceCard({ citation, index, isCurrentCard = false, onC
     <>
       {/* Top Bar / Deck Info */}
       <div className="px-3 py-1.5 border-b border-base-300 flex items-center gap-2">
-        {/* Current Card Badge or Number Badge */}
-        {isCurrentCard ? (
-          <div className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0 bg-primary/20 text-[10px] font-bold text-primary" title="Aktuelle Karte">
-            <Star className="w-2.5 h-2.5 fill-primary" />
-          </div>
-        ) : (
-          <div className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0 bg-base-300 text-[10px] font-bold text-base-content/70">
-            {index !== undefined && index !== 999 ? index : '#'}
-          </div>
-        )}
+        {/* Number Badge */}
+        <div className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0 bg-base-300 text-[10px] font-bold text-base-content/70">
+          {index !== undefined && index !== 999 ? index : '#'}
+        </div>
         <span className="text-[10px] font-medium text-base-content/50 truncate" title={deckName}>
           {shortDeck}
         </span>
-        {isCurrentCard && (
-          <span className="text-[10px] font-semibold text-primary/80 ml-auto">Aktuell</span>
+        {citation.sources && citation.sources.length === 1 && (
+          <span style={{
+            fontSize: '8px',
+            marginLeft: '4px',
+            color: citation.sources[0] === 'keyword'
+              ? 'rgba(10,132,255,0.35)'
+              : 'rgba(100,210,180,0.35)'
+          }}>
+            {citation.sources[0]}
+          </span>
         )}
       </div>
 
@@ -97,7 +97,6 @@ export default function SourceCard({ citation, index, isCurrentCard = false, onC
   );
 
   // If onClick is provided, render as button, otherwise as div
-  // All cards use the same styling (no special blue for current card)
   if (onClick) {
     return (
       <button
@@ -108,6 +107,16 @@ export default function SourceCard({ citation, index, isCurrentCard = false, onC
                    rounded-lg border transition-all duration-200
                    hover:shadow-sm overflow-hidden"
       >
+        {/* Dual-source star badge */}
+        {citation.sources && citation.sources.length > 1 && (
+          <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center"
+               style={{ background: '#121212' }}>
+            <svg viewBox="0 0 12 12" fill="none" className="w-2.5 h-2.5">
+              <path d="M6 1l1.5 3 3.5.5-2.5 2.4.6 3.5L6 8.9 2.9 10.4l.6-3.5L1 4.5 4.5 4z"
+                    fill="rgba(255,180,50,0.7)"/>
+            </svg>
+          </div>
+        )}
         {CardContent}
       </button>
     );
@@ -120,6 +129,16 @@ export default function SourceCard({ citation, index, isCurrentCard = false, onC
                  bg-base-200 border-base-300
                  rounded-lg border overflow-hidden"
     >
+      {/* Dual-source star badge */}
+      {citation.sources && citation.sources.length > 1 && (
+        <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center"
+             style={{ background: '#121212' }}>
+          <svg viewBox="0 0 12 12" fill="none" className="w-2.5 h-2.5">
+            <path d="M6 1l1.5 3 3.5.5-2.5 2.4.6 3.5L6 8.9 2.9 10.4l.6-3.5L1 4.5 4.5 4z"
+                  fill="rgba(255,180,50,0.7)"/>
+          </svg>
+        </div>
+      )}
       {CardContent}
     </div>
   );

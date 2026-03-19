@@ -51,7 +51,7 @@ export default function CitationBadge({ cardId, citation, onClick, index }) {
             <SourceCard 
               citation={citation}
               index={index}
-              isCurrentCard={citation.isCurrentCard}
+
               onClick={onClick ? () => onClick(cardId, citation) : null} // Enable click in tooltip
             />
             

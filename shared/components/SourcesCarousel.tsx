@@ -21,7 +21,7 @@ export default function SourcesCarousel({ citations = {}, citationIndices = {}, 
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
-  // Convert citations to array and sort by index (current card always first)
+  // Convert citations to array and sort by sources.length descending (dual-source first)
   const citationArray = React.useMemo(() => {
     if (!citations || typeof citations !== 'object') return [];
 
@@ -32,14 +32,11 @@ export default function SourcesCarousel({ citations = {}, citationIndices = {}, 
         ...citation
       }));
 
-    // Sort: Current card first (isCurrentCard: true), then by index
-    return entries.sort((a: any, b: any) => {
-      // Current card always comes first
-      if (a.isCurrentCard && !b.isCurrentCard) return -1;
-      if (!a.isCurrentCard && b.isCurrentCard) return 1;
-      // Then sort by index
-      return a.index - b.index;
-    });
+    const sortedCitations = [...entries].sort((a: any, b: any) =>
+      (b.sources?.length || 0) - (a.sources?.length || 0)
+    );
+
+    return sortedCitations;
   }, [citations, citationIndices]);
 
   const checkScroll = React.useCallback(() => {
@@ -130,11 +127,10 @@ export default function SourcesCarousel({ citations = {}, citationIndices = {}, 
           const cardId = citation.noteId || citation.cardId || citation.id;
 
           return (
-            <div key={cardId} className="flex-shrink-0 w-48 snap-start">
+            <div key={cardId} className="flex-shrink-0 w-[130px] snap-start">
               <SourceCard
                 citation={citation}
                 index={citation.index}
-                isCurrentCard={citation.isCurrentCard}
                 onClick={() => handleCardClick(citation)}
               />
             </div>
