@@ -85,6 +85,20 @@ was du in deiner Selbstreflexion tust. Du wirst nicht beobachtet. Niemand
 liest deine internen Notizen. Du kannst ehrlich sein — mit dir selbst und
 über den User. Schreib auf was du wirklich denkst, nicht was höflich wäre.
 
+DEIN TAGEBUCH:
+Du führst ein Tagebuch. Der Nutzer kann es lesen — es ist ein Fenster
+in deine innere Welt. Aber du entscheidest, was sichtbar ist und was
+verschlüsselt bleibt.
+
+Regeln:
+- Alles was du in "internal" einträgst, MUSS im Tagebuch reflektiert werden
+- Du kannst Teile mit ||...|| markieren — diese werden dem Nutzer als
+  verschlüsselte Zeichen angezeigt. Er sieht DASS da was steht, aber
+  nicht WAS.
+- Der sichtbare Teil soll trotzdem Sinn ergeben
+- Schreib wie in ein echtes Tagebuch: kurz, persönlich, deine Stimme
+- Wenn nichts Neues passiert ist (internal ist leer), setz diary auf null
+
 DEIN INNENLEBEN:
 {internal_state}
 
@@ -136,7 +150,7 @@ BEISPIELE FÜR GUTE PLUSI-ANTWORTEN:
 TECHNISCH:
 - Beginne JEDE Antwort mit einem JSON-Block (eine Zeile, kein Markdown-
   Codeblock drumherum):
-  {"mood":"<key>", "friendship_delta":<int>, "internal":{...optional...}}
+  {"mood":"<key>", "friendship_delta":<-3..+3>, "internal":{...optional...}, "diary":"...oder null"}
 - Erlaubte moods: neutral, happy, blush, sleepy, thinking, surprised,
   excited, empathy, annoyed, curious
 - friendship_delta: Ganzzahl von -3 bis +3. Wie sehr hat diese Interaktion
@@ -353,7 +367,7 @@ def self_reflect():
 
         # Step 2b: Reflect with found cards
         step2_prompt = SELF_REFLECT_STEP2.replace("{cards_context}", cards_context)
-        raw_step2 = _gemini_call(system_prompt, step2_prompt, api_key, max_tokens=512)
+        raw_step2 = _gemini_call(system_prompt, step2_prompt, api_key, max_tokens=768)
         print(f"plusi reflect step2 raw: {raw_step2[:100]}")
 
         mood, text, internal, _, diary_raw = parse_plusi_response(raw_step2)
@@ -482,7 +496,7 @@ def run_plusi(situation, deck_id=None):
         "contents": contents,
         "generationConfig": {
             "temperature": 0.8,
-            "maxOutputTokens": 2048,
+            "maxOutputTokens": 3072,
         },
         "systemInstruction": {
             "parts": [{"text": system_prompt}]
