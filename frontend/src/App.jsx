@@ -577,7 +577,7 @@ function AppInner() {
             b.getAuthToken();
           }
         }
-        // Dispatch auth events as CustomEvents for ProfileDialog/SettingsModal
+        // Dispatch auth events as CustomEvents for ProfileDialog
         if (['authTokenLoaded', 'authStatusLoaded', 'auth_success', 'auth_error', 'auth_logout', 'auth_linking', 'auth_link_expired', 'auth_link_timeout'].includes(payload.type)) {
           window.dispatchEvent(new CustomEvent('ankiAuthEvent', { detail: payload }));
         }
@@ -2157,19 +2157,19 @@ function AppInner() {
 
       </main>
 
+      {/* Mascot — bottom-left, ALWAYS visible (Stapelansicht + Session) */}
+      <MascotShell
+        mood={mood}
+        onPlusiAsk={() => {
+          window.dispatchEvent(new CustomEvent('plusi-ask-focus', { detail: { prefix: '@Plusi ' } }));
+        }}
+        onOpenSettings={() => setShowProfile(true)}
+        onEvent={eventTriggerRef}
+        enabled={mascotEnabled}
+      />
+
       {!showSessionOverview && (
         <>
-          {/* Mascot — bottom-left, above input */}
-          <MascotShell
-            mood={mood}
-            onPlusiAsk={() => {
-              // Dispatch a custom event that ChatInput can listen to for prefilling @Plusi
-              window.dispatchEvent(new CustomEvent('plusi-ask-focus', { detail: { prefix: '@Plusi ' } }));
-            }}
-            onOpenSettings={() => setShowProfile(true)}
-            onEvent={eventTriggerRef}
-            enabled={mascotEnabled}
-          />
           {/* Chat Input — full-width dock at bottom */}
           <div className="fixed bottom-0 left-0 right-0 z-50 px-4 pb-4">
         <ChatInput
