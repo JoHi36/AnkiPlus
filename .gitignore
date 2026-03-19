@@ -53,3 +53,17 @@ config.json
 # Environment files
 .env
 .env.local
+
+# SQLite runtime databases
+*.db
+*.db-shm
+*.db-wal
+
+# Cache & backup files
+mc_cache.json
+sessions.json.bak
+meta.json
+
+# Tooling
+.mcp.json
+.superpowers/
