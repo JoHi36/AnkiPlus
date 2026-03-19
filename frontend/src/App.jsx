@@ -31,6 +31,8 @@ import { useFreeChat } from './hooks/useFreeChat';
 // MascotShell moved to main window (plusi_dock.py) — no longer imported
 import { useMascot } from './hooks/useMascot';
 import { usePlusiDirect } from './hooks/usePlusiDirect';
+import InsightsDashboard from './components/InsightsDashboard';
+import useInsights from './hooks/useInsights';
 
 /**
  * Inner App Component - wrapped by SessionContextProvider
@@ -134,6 +136,9 @@ function AppInner() {
   const cardContextHook = useCardContext();
   const cardSessionHook = useCardSession(bridge);
   const reviewTrailHook = useReviewTrail();
+  const insightsHook = useInsights();
+  const [showInsightsDashboard, setShowInsightsDashboard] = useState(false);
+  const prevCardRef = useRef({ cardId: null, messages: [], cardContext: null });
   // Create a setSessions wrapper that works with SessionContext
   const setSessionsWrapper = useCallback((updater) => {
     if (typeof updater === 'function') {
@@ -183,6 +188,7 @@ function AppInner() {
   const modelsHookRef = useRef(modelsHook);
   const deckTrackingHookRef = useRef(deckTrackingHook);
   const reviewTrailHookRef = useRef(reviewTrailHook);
+  const insightsHookRef = useRef(insightsHook);
   const sessionContextRef = useRef(sessionContext);
   const handlePerformanceCaptureRef = useRef(null);
   useEffect(() => {
@@ -192,9 +198,15 @@ function AppInner() {
     modelsHookRef.current = modelsHook;
     deckTrackingHookRef.current = deckTrackingHook;
     reviewTrailHookRef.current = reviewTrailHook;
+    insightsHookRef.current = insightsHook;
     sessionContextRef.current = sessionContext;
     handlePerformanceCaptureRef.current = handlePerformanceCapture;
   });
+  // Keep prevCardRef in sync with latest messages and cardContext
+  useEffect(() => {
+    prevCardRef.current.messages = chatHook.messages;
+    prevCardRef.current.cardContext = cardContextHook.cardContext;
+  }, [chatHook.messages, cardContextHook.cardContext]);
   // Ref für messages container (für Auto-Scroll)
   const messagesContainerRef = useRef(null);
   // Ref für Header-Höhe (für sticky section headers)
@@ -637,6 +649,16 @@ function AppInner() {
             if (prevCardId && _chat.messages && _chat.messages.length > 0) {
               _cardSession.updateLocalMessages(prevCardId, _chat.messages);
             }
+            // Auto-extract insights from previous card if enough messages
+            const _insights = insightsHookRef.current;
+            const prev = prevCardRef.current;
+            if (prev.cardId && prev.messages.length > 0) {
+              const userMsgCount = prev.messages.filter(m => m.from === 'user').length;
+              if (userMsgCount >= 2 && prev.cardContext) {
+                _insights.extractInsights(prev.cardId, prev.cardContext, prev.messages, null);
+              }
+            }
+            prevCardRef.current = { cardId: newCardId, messages: [], cardContext: null };
             _session.handleCardShown(newCardId);
             // Clear chat and sections for new card
             _chat.setMessages([]);
@@ -644,6 +666,8 @@ function AppInner() {
             _cardCtx.setCurrentSectionId(null);
             // Per-Card Session: Load card's session from SQLite
             _cardSession.loadCardSession(newCardId);
+            // Load insights for new card
+            _insights.loadInsights(newCardId);
             // Review Trail
             _trail.addCard(newCardId);
           }
@@ -1074,12 +1098,24 @@ function AppInner() {
         if (prevCardId && _chat.messages && _chat.messages.length > 0) {
           _cardSession.updateLocalMessages(prevCardId, _chat.messages);
         }
+        // Auto-extract insights from previous card if enough messages
+        const _insights = insightsHookRef.current;
+        const prev = prevCardRef.current;
+        if (prev.cardId && prev.messages.length > 0) {
+          const userMsgCount = prev.messages.filter(m => m.from === 'user').length;
+          if (userMsgCount >= 2 && prev.cardContext) {
+            _insights.extractInsights(prev.cardId, prev.cardContext, prev.messages, null);
+          }
+        }
+        prevCardRef.current = { cardId: newCardId, messages: [], cardContext: null };
         _session.handleCardShown(newCardId);
         // Clear chat and sections for new card
         _chat.setMessages([]);
         _cardCtx.setSections([]);
         _cardCtx.setCurrentSectionId(null);
         _cardSession.loadCardSession(newCardId);
+        // Load insights for new card
+        _insights.loadInsights(newCardId);
         _trail.addCard(newCardId);
       }
     };
@@ -1736,13 +1772,29 @@ function AppInner() {
 
   const handleResetChat = useCallback(() => {
     if (confirm('Möchtest du den Chat wirklich zurücksetzen? Alle Nachrichten und Abschnitte werden gelöscht.')) {
+      const userMsgCount = chatHook.messages.filter(m => m.from === 'user').length;
+      if (userMsgCount >= 2 && cardContextHook.cardContext?.cardId) {
+        insightsHook.extractInsights(
+          cardContextHook.cardContext.cardId,
+          cardContextHook.cardContext,
+          chatHook.messages,
+          null
+        );
+      }
       chatHook.setMessages([]);
       cardContextHook.setSections([]);
       cardContextHook.setCurrentSectionId(null);
     }
-  }, [chatHook, cardContextHook]);
+  }, [chatHook, cardContextHook, insightsHook]);
   
   // Prüfe ob Reset-Button inaktiv sein soll (keine Messages und keine Sections)
+  // Reset insights dashboard toggle when messages are cleared
+  useEffect(() => {
+    if (chatHook.messages.length === 0) {
+      setShowInsightsDashboard(false);
+    }
+  }, [chatHook.messages.length]);
+
   const isResetDisabled = chatHook.messages.length === 0 && cardContextHook.sections.length === 0;
   
   const handleRequestHint = cardContextHook.createHandleRequestHint(handleSend);
@@ -1949,12 +2001,14 @@ function AppInner() {
                 className="h-full overflow-y-auto px-4 pt-20 pb-40 max-w-3xl mx-auto w-full scrollbar-thin relative z-10"
               >
 
-                {chatHook.messages.length === 0 && !chatHook.isLoading && !chatHook.streamingMessage ? (
-            <div className="flex items-center justify-center h-full">
-              <p className="text-[13px] text-base-content/20 tracking-tight">
-                Stelle eine Frage zur aktuellen Karte.
-              </p>
-            </div>
+                {(chatHook.messages.length === 0 || showInsightsDashboard) && !chatHook.isLoading && !chatHook.streamingMessage ? (
+            <InsightsDashboard
+              insights={insightsHook.insights}
+              cardStats={cardContextHook.cardContext?.stats || {}}
+              chartData={insightsHook.chartData}
+              isExtracting={insightsHook.isExtracting}
+              onCitationClick={(cardId) => bridge.goToCard?.(String(cardId))}
+            />
           ) : (
             <>
               {/* Finde letzte User-Nachricht für Interaction Container */}
