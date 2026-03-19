@@ -115,13 +115,26 @@ def _run_with_timeout(fn: Callable, args: Dict, timeout: int) -> Any:
     return result_container["value"]
 ```
 
+**Timeout limitation:** The timeout abandons the *result* but does not kill the worker thread (Python has no safe thread-kill mechanism). The daemon thread continues running until it completes or the process exits. Tools that access Qt state from the worker thread should use `QTimer.singleShot(0, ...)` to marshal calls to the main thread — this is already the pattern used by `execute_plusi()`. If a tool hangs permanently, the daemon thread is cleaned up on Anki exit.
+
 ### 4. Agent Loop (rewritten)
 
 Three changes to `agent_loop.py`:
 
 #### a) Generic tool marker (replaces Plusi special-case)
 
-After executing a tool, the loop emits a stream marker based on `display_type`:
+Before executing a tool, emit a loading marker for widget-type tools so the frontend can show a placeholder:
+
+```python
+# Pre-execution: loading placeholder for widget tools
+tool_def = registry.get(function_name)
+if tool_def and tool_def.display_type == "widget":
+    loading_marker = _build_tool_marker(function_name, "loading")
+    if callback:
+        callback(loading_marker, False, True)
+```
+
+After executing the tool, emit the result marker based on `display_type`:
 
 ```python
 tool_response = execute_tool(function_name, function_args)
@@ -138,7 +151,8 @@ elif tool_response.display_type == "widget":
     marker = _build_tool_marker(function_name, "widget", result=tool_response.result)
     if callback:
         callback(marker, False, True)
-    gemini_response = _sanitize_for_gemini(function_name, tool_response.result)
+    # Tell Gemini the widget was displayed, don't echo the full result back
+    gemini_response = json.dumps({"status": "displayed_to_user", "tool": function_name})
 
 elif tool_response.display_type == "markdown":
     if callback:
@@ -153,8 +167,8 @@ elif tool_response.display_type == "silent":
 The `_build_tool_marker` function produces the unified marker format:
 
 ```python
-def _build_tool_marker(name: str, display_type: str, result=None, error=None) -> str:
-    payload = {"name": name, "displayType": display_type}
+def _build_tool_marker(name: str, marker_type: str, result=None, error=None) -> str:
+    payload = {"name": name, "displayType": marker_type}
     if result is not None:
         payload["result"] = result
     if error is not None:
@@ -178,40 +192,60 @@ Budget: ~100,000 characters (≈25k tokens) for the entire `contents` array.
 MAX_CONTEXT_CHARS = 100_000
 
 def _prune_contents(contents: List[Dict]) -> List[Dict]:
-    total = sum(len(json.dumps(c)) for c in contents)
+    # Cache sizes to avoid repeated serialization (O(n) not O(n^2))
+    sizes = [len(json.dumps(c)) for c in contents]
+    total = sum(sizes)
     if total <= MAX_CONTEXT_CHARS:
         return contents
 
     # Always keep: first message (system context), last 2 interactions
-    protected_head = contents[:1]
-    protected_tail = contents[-4:]  # last 2 pairs (model+function or user+model)
-    middle = contents[1:-4]
+    protected_head_idx = 1
+    protected_tail_idx = max(protected_head_idx, len(contents) - 4)
+
+    head_size = sum(sizes[:protected_head_idx])
+    tail_size = sum(sizes[protected_tail_idx:])
+
+    # If protected entries alone exceed budget, truncate largest entry
+    if head_size + tail_size > MAX_CONTEXT_CHARS:
+        return contents[:protected_head_idx] + contents[protected_tail_idx:]
 
     # Remove oldest middle entries until under budget
-    while middle and sum(len(json.dumps(c)) for c in protected_head + middle + protected_tail) > MAX_CONTEXT_CHARS:
-        middle.pop(0)
+    middle_start = protected_head_idx
+    remaining_budget = MAX_CONTEXT_CHARS - head_size - tail_size
 
-    return protected_head + middle + protected_tail
+    # Walk backwards from tail to keep newest middle entries
+    kept_middle = []
+    for i in range(protected_tail_idx - 1, middle_start - 1, -1):
+        if remaining_budget >= sizes[i]:
+            remaining_budget -= sizes[i]
+            kept_middle.insert(0, contents[i])
+        else:
+            break  # Can't fit any more
+
+    return contents[:protected_head_idx] + kept_middle + contents[protected_tail_idx:]
 ```
 
 Called before each Gemini API request in the loop.
 
 ### 5. Stream Marker Format
 
-Unified format for all tool results in the text stream:
+Markers are used for `widget`, `loading`, and `error` types only. `markdown` results are injected as raw text (no marker). `silent` results produce no frontend output.
 
 ```
+[[TOOL:{"name":"spawn_plusi","displayType":"loading"}]]
 [[TOOL:{"name":"spawn_plusi","displayType":"widget","result":{"mood":"happy","text":"Hey!"}}]]
-[[TOOL:{"name":"create_mermaid_diagram","displayType":"markdown","result":"```mermaid\ngraph TD\n  A-->B\n```"}]]
-[[TOOL:{"name":"create_card","displayType":"silent"}]]
 [[TOOL:{"name":"spawn_plusi","displayType":"error","error":"Timeout nach 30s"}]]
 ```
 
+**Not wrapped in markers** (injected as raw text in the stream):
+- `markdown` tools: result string is sent directly via callback (e.g., Mermaid code block)
+- `silent` tools: nothing sent to frontend
+
 Frontend parser (Spec 2 implements this, but the contract is defined here):
-- Regex: `/\[\[TOOL:(.*?)\]\]/g`
+- Regex: `/\[\[TOOL:(\{.*?\})\]\]/g` (matches JSON object between markers)
 - Parse JSON payload
-- Render based on `displayType`: widget → tool-specific component, markdown → inline markdown, silent → nothing, error → error badge
-- During loading (before tool completes): placeholder widget with tool name + spinner
+- Render based on `displayType`: `loading` → placeholder with spinner, `widget` → tool-specific component, `error` → error badge
+- When a `widget` marker arrives for the same tool name as an existing `loading` marker, replace the placeholder with the actual widget
 
 ### 6. Changes to Existing Tools
 
@@ -222,25 +256,37 @@ Frontend parser (Spec 2 implements this, but the contract is defined here):
 
 **Plusi (`spawn_plusi`):**
 - Add: `display_type="widget"`, `timeout_seconds=30`
-- No change to `execute_plusi()` function — still returns `{mood, text}`
+- **Change:** `execute_plusi()` must return a dict (not `json.dumps(dict)`), so the marker system can serialize it correctly without double-encoding. Drop the `json.dumps()` wrapper in the return statement.
 - **Delete:** All `spawn_plusi` special-case code in `agent_loop.py` (the `if function_name == 'spawn_plusi'` block, `[[PLUSI_DATA:...]]` injection, result sanitization)
 - The generic widget marker system handles it now
 
-### 7. Max Iterations
+### 7. Non-Streaming Tool Execution Path
+
+`ai_handler.py` has a legacy non-streaming code path (~line 690-757) that calls `execute_tool()` directly, bypassing the agent loop. After this refactoring, `execute_tool()` returns `ToolResponse` instead of a string, which would break this path.
+
+**Decision:** Route the non-streaming path through `run_agent_loop()` as well. The agent loop already handles both streaming and non-streaming (callback=None) cases. This eliminates the duplicate tool-execution logic and ensures all tool calls go through the same pipeline (timeout, structured response, error handling). If the non-streaming path is unused, remove it entirely.
+
+### 8. Plusi `_frontend_callback` Mechanism
+
+The current `tool_executor.py` injects `_frontend_callback` into args when the tool is `spawn_plusi`. This is a special-case mechanism for Plusi to emit loading state directly to the frontend.
+
+**Decision:** Remove this mechanism. The generic `loading` marker (emitted by the agent loop before tool execution) replaces the need for tools to emit their own loading state. The agent loop now handles pre-execution loading markers for all widget-type tools uniformly.
+
+### 9. Max Iterations
 
 Stays hardcoded at 5 in `agent_loop.py`. Sufficient for all current use cases. Will move to admin console configuration in the future.
 
-### 8. Migration Path
+### 10. Migration Path
 
 1. Add `ToolResponse` dataclass and `_run_with_timeout` to `tool_executor.py`
-2. Update `execute_tool()` to return `ToolResponse` instead of string
-3. Add `display_type` and `timeout_seconds` to `ToolDefinition` dataclass
+2. Update `execute_tool()` to return `ToolResponse` instead of string, remove `_frontend_callback` injection
+3. Add `display_type` and `timeout_seconds` to `ToolDefinition` dataclass, update `execute_fn` type to `Callable[[Dict[str, Any]], Any]`
 4. Update Mermaid and Plusi registrations with new fields
-5. Rewrite agent loop: generic marker system, remove Plusi special-case, add pruning
-6. Update `ai_handler.py` to work with new `ToolResponse` (wherever it inspects tool results)
-7. Update frontend `[[PLUSI_DATA:...]]` parser to new `[[TOOL:...]]` format (minimal change, bridges to Spec 2)
+5. Rewrite agent loop: generic marker system (loading + result + error), remove Plusi special-case, add pruning
+6. Route non-streaming tool path in `ai_handler.py` through `run_agent_loop()` or remove it
+7. Minimal frontend change: swap `[[PLUSI_DATA:...]]` regex for `[[TOOL:...]]` regex in existing parser (bridges to Spec 2)
 
-### 9. Out of Scope
+### 11. Out of Scope
 
 - New tools (Spec 2)
 - Frontend widget components (Spec 2)
