@@ -599,6 +599,14 @@ def on_reviewer_did_answer_card(reviewer, card, ease):
 
 def on_state_will_change(new_state, old_state):
     """Wird aufgerufen, wenn sich der Anki-State ändert (z.B. review -> deckBrowser)"""
+    from .custom_reviewer import _preview_state
+
+    # Auto-close preview if user manually navigates away (not our own transition)
+    if _preview_state.get('active', False) and not _preview_state.get('_transitioning', False):
+        from .custom_reviewer import close_preview
+        close_preview(notify_frontend=True)
+        # Don't return — let normal state_will_change logic run
+
     # Smart Toolbar Management: Hide in Review, Show elsewhere
     config = mw.addonManager.getConfig(__name__) or {}
     if config.get("use_custom_reviewer", True):
@@ -649,11 +657,13 @@ def on_state_will_change(new_state, old_state):
                 print(f"⚠️ Error hiding toolbar: {e}")
         # Hide chat panel when leaving review state
         if new_state != "review":
-            try:
-                from .ui_setup import close_chatbot_panel
-                close_chatbot_panel()
-            except Exception:
-                pass
+            # Skip chat panel close if we're in a preview transition
+            if not _preview_state.get('_transitioning', False):
+                try:
+                    from .ui_setup import close_chatbot_panel
+                    close_chatbot_panel()
+                except Exception:
+                    pass
 
         if new_state not in ("review", "deckBrowser", "overview"):
             # Leaving custom state - Restore toolbar
