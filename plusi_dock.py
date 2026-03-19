@@ -48,47 +48,24 @@ PLUSI_CSS = """
 
 /* ── Mascot Character (48px) ── */
 .mascot-body { position: relative; width: 48px; height: 48px; transition: opacity 0.3s; }
-.mascot-ph { position: absolute; height: 38.5%; border-radius: 3px; top: 30.7%; left: 0; width: 100%; }
-.mascot-pv { position: absolute; width: 38.5%; border-radius: 3px; top: 0; left: 30.7%; height: 100%; }
-
-.mascot-blue   .mascot-ph, .mascot-blue   .mascot-pv { background: #007AFF; }
-.mascot-grey   .mascot-ph, .mascot-grey   .mascot-pv { background: #4b5563; }
-.mascot-purple .mascot-ph, .mascot-purple .mascot-pv { background: #7c3aed; }
-.mascot-dark   .mascot-ph, .mascot-dark   .mascot-pv { background: #1d4ed8; filter: brightness(0.75); }
-
-.mascot-face {
-  position: absolute; top: 30.7%; left: 30.7%;
-  width: 38.5%; height: 38.5%; z-index: 3;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-}
-.mascot-eyes-row { display: flex; gap: 5px; }
-.mascot-eye {
-  width: 5px; height: 6px; background: white; border-radius: 50%;
-  position: relative; overflow: hidden; flex-shrink: 0;
-  transition: height 0.3s, border-radius 0.3s;
-  animation: mascot-blink 5s ease-in-out infinite;
-}
-@keyframes mascot-blink { 0%,85%,100%{transform:scaleY(1)} 91%{transform:scaleY(0.05)} }
-
-.mascot-pupil {
-  position: absolute; width: 2.5px; height: 2.5px;
-  background: #002a6e; border-radius: 50%; top: 1.5px; left: 1px;
-}
-.mascot-pupil-wander { animation: p-wander 6s ease-in-out infinite; }
-@keyframes p-wander { 0%,100%{transform:translate(0,0)} 25%{transform:translate(1px,0)} 50%{transform:translate(0,1px)} 75%{transform:translate(-1px,0)} }
-
-.mascot-mouth-d     { width: 10px; height: 5px; background: #003a80; border-radius: 0 0 7px 7px; margin-top: 2px; }
-.mascot-mouth-smile { width: 11px; height: 5px; background: #003a80; border-radius: 0 0 8px 8px; margin-top: 1px; }
-.mascot-mouth-wide  { width: 13px; height: 7px; background: #003a80; border-radius: 0 0 9px 9px; margin-top: 2px; }
-.mascot-mouth-sad   { width: 10px; height: 5px; background: #1e3a8a; border-radius: 7px 7px 0 0; margin-top: 4px; }
 
 .mascot-float    { animation: m-float 3.5s ease-in-out infinite; }
 .mascot-bounce   { animation: m-bounce 0.55s ease-in-out infinite alternate; }
 .mascot-droop    { animation: m-droop 4s ease-in-out infinite; }
+.mascot-tilt     { animation: m-tilt 4s ease-in-out infinite; }
+.mascot-sway     { animation: m-sway 5s ease-in-out infinite; }
+.mascot-wiggle   { animation: m-wiggle 1.5s ease-in-out infinite; }
+.mascot-dance    { animation: m-dance 0.4s ease-in-out infinite alternate; }
+.mascot-pop-once { animation: m-pop 0.5s ease-out; }
 
 @keyframes m-float  { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
 @keyframes m-bounce { 0%{transform:translateY(0) scale(1,1)} 100%{transform:translateY(-9px) scale(1.04,0.97)} }
 @keyframes m-droop  { 0%,100%{transform:translateY(0) rotate(-1deg)} 50%{transform:translateY(3px) rotate(1deg)} }
+@keyframes m-tilt   { 0%,100%{transform:rotate(0deg)} 50%{transform:rotate(-8deg)} }
+@keyframes m-sway   { 0%,100%{transform:translateX(0)} 50%{transform:translateX(4px)} }
+@keyframes m-wiggle { 0%,100%{transform:rotate(0deg)} 25%{transform:rotate(3deg)} 75%{transform:rotate(-3deg)} }
+@keyframes m-dance  { 0%{transform:translateY(0) rotate(-3deg)} 100%{transform:translateY(-8px) rotate(3deg)} }
+@keyframes m-pop    { 0%{transform:scale(1)} 40%{transform:scale(1.25)} 100%{transform:scale(1)} }
 
 .mascot-shadow { width: 32px; height: 4px; background: #007AFF15; border-radius: 50%; margin: 4px auto 0; }
 .mascot-shadow.mascot-float { animation: s-float 3.5s ease-in-out infinite; }
@@ -160,18 +137,21 @@ PLUSI_CSS = """
 
 PLUSI_HTML = """
 <div id="plusi-dock" class="pd-float">
-  <!-- Character -->
+  <!-- Character (SVG-based, matches PlusiIcon in chat widget) -->
   <div id="plusi-dock-char" onclick="window._plusiToggleMenu()">
-    <div class="mascot-body mascot-float mascot-blue" id="plusi-mascot">
-      <div class="mascot-ph"></div>
-      <div class="mascot-pv"></div>
-      <div class="mascot-face">
-        <div class="mascot-eyes-row">
-          <div class="mascot-eye"><div class="mascot-pupil mascot-pupil-wander"></div></div>
-          <div class="mascot-eye" style="animation-delay:0.3s"><div class="mascot-pupil mascot-pupil-wander" style="animation-delay:0.5s"></div></div>
-        </div>
-        <div class="mascot-mouth mascot-mouth-d" id="plusi-mouth"></div>
-      </div>
+    <div class="mascot-body mascot-float" id="plusi-mascot">
+      <svg id="plusi-svg" viewBox="0 0 120 120" width="48" height="48">
+        <rect x="40" y="5" width="40" height="110" rx="8" fill="#0a84ff"/>
+        <rect x="5" y="35" width="110" height="40" rx="8" fill="#0a84ff"/>
+        <rect x="40" y="35" width="40" height="40" fill="#0a84ff"/>
+        <g id="plusi-face">
+          <ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/>
+          <ellipse cx="49" cy="50" rx="4" ry="4" fill="#1a1a1a"/>
+          <ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/>
+          <ellipse cx="71" cy="50" rx="4" ry="4" fill="#1a1a1a"/>
+          <path d="M 48 68 Q 60 74 72 68" stroke="#1a1a1a" stroke-width="3" fill="none" stroke-linecap="round"/>
+        </g>
+      </svg>
     </div>
     <div class="mascot-shadow mascot-float" id="plusi-shadow"></div>
   </div>
@@ -203,32 +183,50 @@ PLUSI_JS = """
   var menuOpen = false;
   var bubbleTimer = null;
 
-  // Mood configurations
+  // SVG face definitions — matches PlusiIcon in chat widget
+  var FACES = {
+    neutral:   '<ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/><ellipse cx="49" cy="50" rx="4" ry="4" fill="#1a1a1a"/><ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/><ellipse cx="71" cy="50" rx="4" ry="4" fill="#1a1a1a"/><path d="M 48 68 Q 60 74 72 68" stroke="#1a1a1a" stroke-width="3" fill="none" stroke-linecap="round"/>',
+    happy:     '<ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/><rect x="41" y="41" width="14" height="4" fill="#0a84ff"/><ellipse cx="49" cy="51" rx="4" ry="3.5" fill="#1a1a1a"/><ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/><rect x="65" y="41" width="14" height="4" fill="#0a84ff"/><ellipse cx="71" cy="51" rx="4" ry="3.5" fill="#1a1a1a"/><path d="M 46 66 Q 60 78 74 66" stroke="#1a1a1a" stroke-width="3" fill="none" stroke-linecap="round"/>',
+    annoyed:   '<ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/><rect x="41" y="41" width="14" height="7" fill="#0a84ff"/><ellipse cx="49" cy="52" rx="4" ry="3" fill="#1a1a1a"/><ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/><rect x="65" y="41" width="14" height="7" fill="#0a84ff"/><ellipse cx="71" cy="52" rx="4" ry="3" fill="#1a1a1a"/><line x1="50" y1="70" x2="70" y2="70" stroke="#1a1a1a" stroke-width="3" stroke-linecap="round"/>',
+    curious:   '<ellipse cx="48" cy="48" rx="7" ry="9" fill="white"/><ellipse cx="49" cy="49" rx="4" ry="4" fill="#1a1a1a"/><ellipse cx="72" cy="50" rx="7" ry="7" fill="white"/><rect x="65" y="43" width="14" height="5" fill="#0a84ff"/><ellipse cx="71" cy="52" rx="4" ry="3" fill="#1a1a1a"/><path d="M 50 68 Q 56 68 60 66 Q 64 64 68 66" stroke="#1a1a1a" stroke-width="2.5" fill="none" stroke-linecap="round"/>',
+    excited:   '<ellipse cx="48" cy="47" rx="8" ry="10" fill="white"/><ellipse cx="49" cy="48" rx="5" ry="5" fill="#1a1a1a"/><ellipse cx="72" cy="47" rx="8" ry="10" fill="white"/><ellipse cx="71" cy="48" rx="5" ry="5" fill="#1a1a1a"/><ellipse cx="60" cy="70" rx="7" ry="6" fill="#1a1a1a"/>',
+    sleepy:    '<ellipse cx="48" cy="52" rx="7" ry="3" fill="white"/><ellipse cx="72" cy="52" rx="7" ry="3" fill="white"/><line x1="54" y1="70" x2="66" y2="71" stroke="#1a1a1a" stroke-width="2.5" stroke-linecap="round"/>',
+    surprised: '<ellipse cx="48" cy="46" rx="8" ry="10" fill="white"/><ellipse cx="49" cy="47" rx="5" ry="5" fill="#1a1a1a"/><ellipse cx="72" cy="46" rx="8" ry="10" fill="white"/><ellipse cx="71" cy="47" rx="5" ry="5" fill="#1a1a1a"/><ellipse cx="60" cy="70" rx="5" ry="4" fill="#1a1a1a"/>',
+    blush:     '<ellipse cx="48" cy="49" rx="7" ry="7" fill="white"/><rect x="41" y="42" width="14" height="4" fill="#0a84ff"/><ellipse cx="49" cy="51" rx="3.5" ry="3.5" fill="#1a1a1a"/><ellipse cx="72" cy="49" rx="7" ry="7" fill="white"/><rect x="65" y="42" width="14" height="4" fill="#0a84ff"/><ellipse cx="71" cy="51" rx="3.5" ry="3.5" fill="#1a1a1a"/><ellipse cx="38" cy="60" rx="6" ry="3" fill="rgba(248,113,113,0.3)"/><ellipse cx="82" cy="60" rx="6" ry="3" fill="rgba(248,113,113,0.3)"/><path d="M 52 68 Q 54 66 57 68 Q 60 70 63 68 Q 66 66 68 68" stroke="#1a1a1a" stroke-width="2" fill="none" stroke-linecap="round"/>',
+    empathy:   '<ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/><rect x="41" y="41" width="14" height="3" fill="#0a84ff"/><ellipse cx="49" cy="52" rx="4" ry="4" fill="#1a1a1a"/><ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/><rect x="65" y="41" width="14" height="3" fill="#0a84ff"/><ellipse cx="71" cy="52" rx="4" ry="4" fill="#1a1a1a"/><path d="M 50 70 Q 60 66 70 70" stroke="#1a1a1a" stroke-width="2.5" fill="none" stroke-linecap="round"/>',
+    thinking:  '<ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/><ellipse cx="51" cy="47" rx="4" ry="4" fill="#1a1a1a"/><ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/><ellipse cx="75" cy="47" rx="4" ry="4" fill="#1a1a1a"/><path d="M 50 69 Q 60 72 70 69" stroke="#1a1a1a" stroke-width="2.5" fill="none" stroke-linecap="round"/>',
+    reading:   '<ellipse cx="48" cy="51" rx="7" ry="6" fill="white"/><rect x="41" y="43" width="14" height="5" fill="#0a84ff"/><ellipse cx="49" cy="53" rx="4" ry="3" fill="#1a1a1a"/><ellipse cx="72" cy="51" rx="7" ry="6" fill="white"/><rect x="65" y="43" width="14" height="5" fill="#0a84ff"/><ellipse cx="71" cy="53" rx="4" ry="3" fill="#1a1a1a"/><path d="M 52 68 Q 60 71 68 68" stroke="#1a1a1a" stroke-width="2" fill="none" stroke-linecap="round"/>',
+  };
+
+  // Body animation per mood
   var MOODS = {
-    neutral:   { bodyAnim: 'mascot-float',    colorClass: 'mascot-blue',   mouth: 'mascot-mouth-d',    dockAnim: 'pd-float' },
-    happy:     { bodyAnim: 'mascot-bounce',   colorClass: 'mascot-blue',   mouth: 'mascot-mouth-wide', dockAnim: 'pd-bounce' },
-    annoyed:   { bodyAnim: 'mascot-float',    colorClass: 'mascot-dark',   mouth: 'mascot-mouth-d',    dockAnim: 'pd-float' },
-    curious:   { bodyAnim: 'mascot-tilt',     colorClass: 'mascot-blue',   mouth: 'mascot-mouth-d',    dockAnim: 'pd-float' },
-    excited:   { bodyAnim: 'mascot-dance',    colorClass: 'mascot-purple', mouth: 'mascot-mouth-wide', dockAnim: 'pd-bounce' },
-    sleepy:    { bodyAnim: 'mascot-sway',     colorClass: 'mascot-grey',   mouth: 'mascot-mouth-tiny', dockAnim: 'pd-float' },
-    surprised: { bodyAnim: 'mascot-pop-once', colorClass: 'mascot-blue',   mouth: 'mascot-mouth-o',    dockAnim: 'pd-bounce' },
-    blush:     { bodyAnim: 'mascot-wiggle',   colorClass: 'mascot-blush',  mouth: 'mascot-mouth-tiny', dockAnim: 'pd-float' },
-    empathy:   { bodyAnim: 'mascot-droop',    colorClass: 'mascot-dark',   mouth: 'mascot-mouth-sad',  dockAnim: 'pd-droop' },
-    thinking:  { bodyAnim: 'mascot-float',    colorClass: 'mascot-blue',   mouth: 'mascot-mouth-d',    dockAnim: 'pd-float' },
-    reading:   { bodyAnim: 'mascot-tilt',     colorClass: 'mascot-blue',   mouth: 'mascot-mouth-d',    dockAnim: 'pd-float' },
+    neutral:   { bodyAnim: 'mascot-float',    dockAnim: 'pd-float' },
+    happy:     { bodyAnim: 'mascot-bounce',   dockAnim: 'pd-bounce' },
+    annoyed:   { bodyAnim: 'mascot-float',    dockAnim: 'pd-float' },
+    curious:   { bodyAnim: 'mascot-tilt',     dockAnim: 'pd-float' },
+    excited:   { bodyAnim: 'mascot-dance',    dockAnim: 'pd-bounce' },
+    sleepy:    { bodyAnim: 'mascot-sway',     dockAnim: 'pd-float' },
+    surprised: { bodyAnim: 'mascot-pop-once', dockAnim: 'pd-bounce' },
+    blush:     { bodyAnim: 'mascot-wiggle',   dockAnim: 'pd-float' },
+    empathy:   { bodyAnim: 'mascot-droop',    dockAnim: 'pd-droop' },
+    thinking:  { bodyAnim: 'mascot-float',    dockAnim: 'pd-float' },
+    reading:   { bodyAnim: 'mascot-tilt',     dockAnim: 'pd-float' },
   };
 
   function setMood(mood) {
     var m = MOODS[mood] || MOODS.neutral;
+    var face = FACES[mood] || FACES.neutral;
     var mascot = document.getElementById('plusi-mascot');
-    var mouth = document.getElementById('plusi-mouth');
+    var faceEl = document.getElementById('plusi-face');
     var shadow = document.getElementById('plusi-shadow');
     var dock = document.getElementById('plusi-dock');
-    if (!mascot) return;
+    if (!mascot || !faceEl) return;
 
-    // Reset classes
-    mascot.className = 'mascot-body ' + m.bodyAnim + ' ' + m.colorClass;
-    mouth.className = 'mascot-mouth ' + m.mouth;
+    // Update SVG face
+    faceEl.innerHTML = face;
+
+    // Update body animation
+    mascot.className = 'mascot-body ' + m.bodyAnim;
     shadow.className = 'mascot-shadow ' + m.bodyAnim;
     dock.className = m.dockAnim;
 
