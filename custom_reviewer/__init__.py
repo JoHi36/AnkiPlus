@@ -801,17 +801,10 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
 
     elif message == "plusi:settings":
         try:
-            from ..ui import setup as ui_setup
-            if not (hasattr(ui_setup, '_chatbot_dock') and ui_setup._chatbot_dock and ui_setup._chatbot_dock.isVisible()):
-                if hasattr(ui_setup, 'toggle_chatbot'):
-                    ui_setup.toggle_chatbot()
-            chat_widget = getattr(ui_setup, '_chatbot_widget', None)
-            if chat_widget and hasattr(chat_widget, 'web_view'):
-                chat_widget.web_view.page().runJavaScript(
-                    "window.dispatchEvent(new CustomEvent('open-settings'));"
-                )
+            from ..ui.settings import show_settings
+            show_settings()
         except Exception as e:
-            logger.error(f"plusi:settings error: {e}")
+            logger.error("plusi:settings error: %s", e)
         return (True, None)
 
     elif message == "plusi:panel":

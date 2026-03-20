@@ -407,7 +407,8 @@ class ChatbotWidget(QWidget):
             # Utilities
             'openUrl': lambda d: self.bridge.openUrl(d) if isinstance(d, str) else None,
             'debugLog': self._msg_debug_log,
-            'plusiPanel': self._msg_plusi_panel,
+            'plusiPanel': self._msg_plusi_settings,
+            'plusiSettings': self._msg_plusi_settings,
             'plusiDirect': self._msg_plusi_direct,
         }
         return handlers.get(msg_type)
@@ -685,11 +686,15 @@ class ChatbotWidget(QWidget):
             pass
 
     def _msg_plusi_panel(self, data):
+        """Legacy: redirects to settings."""
+        self._msg_plusi_settings(data)
+
+    def _msg_plusi_settings(self, data):
         try:
-            from ..plusi.panel import toggle_panel
+            from ..ui.settings import show_settings
         except ImportError:
-            from plusi.panel import toggle_panel
-        toggle_panel()
+            from ui.settings import show_settings
+        show_settings()
 
     def _msg_plusi_direct(self, data):
         msg_data = data if isinstance(data, dict) else json.loads(data) if isinstance(data, str) else {}

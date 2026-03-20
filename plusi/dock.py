@@ -294,9 +294,9 @@ PLUSI_JS = """
       _clickTimer = setTimeout(function() {
         _clickCount = 0;
         if (typeof pycmd === 'function') {
-          pycmd('plusi:panel');
+          pycmd('plusi:settings');
         } else {
-          window._apAction = {type: 'plusiPanel'};
+          window._apAction = {type: 'plusiSettings'};
         }
       }, 300);
     } else if (_clickCount === 2) {

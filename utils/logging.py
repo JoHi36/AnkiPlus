@@ -14,6 +14,40 @@ Usage in any module:
 
 import logging
 import sys
+import time
+from collections import deque
+
+
+# ---------------------------------------------------------------------------
+# Ring Buffer Handler — keeps recent log entries in memory for "Copy Logs"
+# ---------------------------------------------------------------------------
+class RingBufferHandler(logging.Handler):
+    """Stores the last *maxlen* log records with timestamps for later retrieval."""
+
+    def __init__(self, maxlen=500):
+        super().__init__()
+        self._buffer = deque(maxlen=maxlen)
+
+    def emit(self, record):
+        self._buffer.append(record)
+
+    def get_recent(self, max_age_seconds=1200):
+        """Return formatted log lines from the last *max_age_seconds* (default 20 min)."""
+        cutoff = time.time() - max_age_seconds
+        formatter = AnkiPlusFormatter()
+        lines = []
+        for record in self._buffer:
+            if record.created >= cutoff:
+                lines.append(formatter.format(record))
+        return lines
+
+
+_ring_buffer = RingBufferHandler(maxlen=500)
+
+
+def get_recent_logs(max_age_seconds=1200):
+    """Public API: return recent log lines (last 20 min by default)."""
+    return _ring_buffer.get_recent(max_age_seconds)
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +129,10 @@ def _setup_root_logger():
     handler.setFormatter(AnkiPlusFormatter())
 
     root.addHandler(handler)
+
+    # Ring buffer handler — stores recent entries for "Copy Logs" feature
+    _ring_buffer.setLevel(logging.DEBUG)
+    root.addHandler(_ring_buffer)
 
     # Don't propagate to Python's root logger (avoids duplicate output)
     root.propagate = False

@@ -342,6 +342,78 @@ class SettingsBridge(QObject):
         except Exception as e:
             logger.error("SettingsBridge._complete_link_auth: Fehler: %s", e)
 
+    @pyqtSlot(result=str)
+    def copyLogs(self):
+        """Copy recent logs + debug info to clipboard."""
+        try:
+            import platform
+            try:
+                from ..utils.logging import get_recent_logs
+            except ImportError:
+                from utils.logging import get_recent_logs
+
+            # Header with system info
+            lines = ["AnkiPlus Debug Info", "=" * 40]
+
+            # Anki version
+            try:
+                from anki import version as anki_version
+                lines.append(f"Anki: {anki_version}")
+            except Exception:
+                lines.append("Anki: unknown")
+
+            lines.append(f"OS: {platform.system()} {platform.release()}")
+            lines.append(f"Python: {platform.python_version()}")
+
+            # Addon version (from manifest if available)
+            try:
+                manifest_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "manifest.json")
+                if os.path.exists(manifest_path):
+                    with open(manifest_path) as f:
+                        manifest = json.load(f)
+                        lines.append(f"Addon: {manifest.get('name', '?')} v{manifest.get('version', '?')}")
+            except Exception:
+                pass
+
+            # Auth status (no tokens!)
+            config = get_config()
+            lines.append(f"Auth: {'yes' if config.get('auth_validated') else 'no'}")
+            lines.append(f"Backend: {'connected' if config.get('backend_mode') else 'local'}")
+
+            lines.append("")
+            lines.append("Recent Logs (last 20 min)")
+            lines.append("-" * 40)
+
+            log_lines = get_recent_logs(max_age_seconds=1200)
+            if log_lines:
+                lines.extend(log_lines)
+            else:
+                lines.append("(keine Logs vorhanden)")
+
+            text = "\n".join(lines)
+
+            # Copy to clipboard
+            clipboard = QApplication.clipboard()
+            clipboard.setText(text)
+
+            logger.info("Logs copied to clipboard (%d lines)", len(log_lines))
+            return json.dumps({"success": True, "lineCount": len(log_lines)})
+        except Exception as e:
+            logger.error("copyLogs error: %s", e)
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot()
+    def openDiary(self):
+        """Open the Plusi diary panel."""
+        try:
+            try:
+                from ..plusi.panel import toggle_panel
+            except ImportError:
+                from plusi.panel import toggle_panel
+            toggle_panel()
+        except Exception as e:
+            logger.error("openDiary error: %s", e)
+
     @pyqtSlot()
     def openAnkiPrefs(self):
         try:

@@ -34,7 +34,7 @@
   /* ── Layout ── */
   .container { padding: 24px 32px 32px; }
 
-  /* ── Header Pill Tabs (matches Stapel/Session/Statistik) ── */
+  /* ── Header Pill Tabs ── */
   .tab-bar {
     display: flex;
     align-items: center;
@@ -118,7 +118,7 @@
   }
   .toggle.on .knob { transform: translateX(16px); }
 
-  /* ── Pill selector (for theme / response style) ── */
+  /* ── Pill selector (for theme) ── */
   .pill-group {
     display: flex; gap: 6px; flex-wrap: wrap;
   }
@@ -215,8 +215,6 @@
     font-size: 9px; font-weight: 600; letter-spacing: 0.4px; padding: 2px 7px;
     border-radius: 5px;
   }
-  .badge-free { background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.2); }
-  .badge-pro { background: rgba(10,132,255,0.12); color: rgba(10,132,255,0.7); }
 
   @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -252,7 +250,6 @@
     font-size: 13px;
     color: var(--text-secondary);
   }
-  /* Show when embedded in narrow panel (~260–280px wide) */
   @media (max-width: 350px) {
     .panel-back-bar { display: flex; }
   }
@@ -263,19 +260,26 @@
     width: 100%; height: 1px; background: var(--border); margin: 12px 0;
   }
 
-  /* ── Anki tab ── */
-  .anki-prefs-list { display: flex; flex-direction: column; gap: 8px; }
-  .anki-prefs-item {
+  /* ── Clickable row item (Anki prefs, copy logs) ── */
+  .action-item {
     display: flex; align-items: center; justify-content: space-between;
     padding: 12px 16px; border-radius: 10px; border: 1px solid var(--border);
     background: var(--surface); cursor: pointer; transition: all 0.15s;
   }
-  .anki-prefs-item:hover { background: var(--surface-hover); border-color: var(--border-hover); }
-  .anki-prefs-item .item-left { display: flex; align-items: center; gap: 10px; }
-  .anki-prefs-item .item-left svg { width: 15px; height: 15px; color: var(--text-tertiary); }
-  .anki-prefs-item .item-label { font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.7); }
-  .anki-prefs-item .item-arrow { color: var(--text-tertiary); }
-  .anki-prefs-item .item-arrow svg { width: 13px; height: 13px; }
+  .action-item:hover { background: var(--surface-hover); border-color: var(--border-hover); }
+  .action-item .item-left { display: flex; align-items: center; gap: 10px; }
+  .action-item .item-left svg { width: 15px; height: 15px; color: var(--text-tertiary); }
+  .action-item .item-label { font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.7); }
+  .action-item .item-right { color: var(--text-tertiary); font-size: 12px; display: flex; align-items: center; gap: 4px; }
+  .action-item .item-right svg { width: 13px; height: 13px; }
+
+  /* ── Success flash for copy button ── */
+  .copy-success {
+    border-color: rgba(34,197,94,0.2) !important;
+  }
+  .copy-success .item-label { color: rgba(34,197,94,0.7) !important; }
+  .copy-success .item-left svg { color: rgba(34,197,94,0.7) !important; }
+  .copy-success .item-right { color: rgba(34,197,94,0.7) !important; }
 </style>
 </head>
 <body>
@@ -286,18 +290,16 @@
 </div>
 
 <div class="container">
-  <!-- Header Pill Tabs -->
+  <!-- Header Pill Tabs — 2 tabs -->
   <div class="tab-bar">
     <div class="tab-pill-group">
-      <button class="tab-pill active" data-tab="profil" onclick="switchTab('profil')">Profil</button>
-      <button class="tab-pill" data-tab="allgemein" onclick="switchTab('allgemein')">Allgemein</button>
-      <button class="tab-pill" data-tab="ki" onclick="switchTab('ki')">Agent</button>
-      <button class="tab-pill" data-tab="anki" onclick="switchTab('anki')">Anki</button>
+      <button class="tab-pill active" data-tab="konto" onclick="switchTab('konto')">Konto</button>
+      <button class="tab-pill" data-tab="agent" onclick="switchTab('agent')">Agent</button>
     </div>
   </div>
 
-  <!-- ═══ PROFIL TAB ═══ -->
-  <div class="tab-content active" id="tab-profil">
+  <!-- ═══ KONTO TAB ═══ -->
+  <div class="tab-content active" id="tab-konto">
     <div id="profile-loading" class="auth-center">
       <div style="color:var(--text-tertiary);font-size:13px;">Lade...</div>
     </div>
@@ -349,46 +351,74 @@
       <div class="auth-subtitle">Dein Account wurde erfolgreich verknüpft.</div>
     </div>
 
-    <!-- Authentifiziert: Profil + Abo -->
+    <!-- Authentifiziert: Profil + Abo (verschmolzen) -->
     <div id="profile-auth" style="display:none;">
-
-      <!-- Profil-Header: Avatar + Name + Email -->
-      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-bottom:24px;">
-        <div id="profile-avatar" style="width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#fff;letter-spacing:0.5px;"></div>
-        <div id="profile-display-name" style="font-size:15px;font-weight:600;color:var(--text);margin-top:4px;"></div>
-        <div id="profile-email" style="font-size:12px;color:var(--text-tertiary);"></div>
-      </div>
-
-      <!-- Abo-Card mit integriertem "Verwalten" Link -->
       <div class="section">
+        <div class="section-title">Abo</div>
         <div class="tier-card">
+          <!-- Profil-Header inline: Avatar + Name/Email links, Tier-Icon rechts -->
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
             <div style="display:flex;align-items:center;gap:12px;">
-              <div class="tier-icon" id="tier-icon-container"></div>
+              <div id="profile-avatar" style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff;letter-spacing:0.5px;flex-shrink:0;"></div>
               <div>
-                <div class="tier-name" id="tier-name">Starter</div>
-                <div class="tier-desc" id="tier-desc">Kostenloser Einstieg</div>
+                <div id="profile-display-name" style="font-size:14px;font-weight:600;color:var(--text);"></div>
+                <div id="profile-email" style="font-size:11px;color:var(--text-tertiary);margin-top:1px;"></div>
               </div>
             </div>
-            <button class="link-btn" onclick="bridge.openUrl('https://anki-plus.vercel.app/dashboard/subscription')" style="font-size:11px;color:var(--accent);padding:4px 0;">
-              Verwalten →
-            </button>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div class="tier-icon" id="tier-icon-container"></div>
+              <div>
+                <div class="tier-name" id="tier-name" style="font-size:13px;">Starter</div>
+                <div class="tier-desc" id="tier-desc" style="font-size:10px;">Kostenloser Einstieg</div>
+              </div>
+            </div>
           </div>
           <div class="quota-section" id="quota-section" style="display:none;"></div>
+          <!-- Verwalten + Abmelden -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding-top:10px;border-top:1px solid var(--border);margin-top:10px;">
+            <button class="link-btn" onclick="bridge.openUrl('https://anki-plus.vercel.app/dashboard/subscription')" style="font-size:11px;color:var(--accent);">
+              Abo verwalten &rarr;
+            </button>
+            <button class="link-btn" style="font-size:11px;color:rgba(239,68,68,0.4);" onclick="handleLogout()">Abmelden</button>
+          </div>
         </div>
       </div>
-
-      <!-- Nur Abmelden -->
-      <button class="link-btn" style="margin-top:12px;width:100%;text-align:center;color:rgba(239,68,68,0.4);font-size:11px;" onclick="handleLogout()">Abmelden</button>
     </div>
-  </div>
 
-  <!-- ═══ ALLGEMEIN TAB ═══ -->
-  <div class="tab-content" id="tab-allgemein">
+    <!-- ── Allgemeine Einstellungen (immer sichtbar) ── -->
     <div class="section">
       <div class="section-title">Erscheinungsbild</div>
       <div class="pill-group" id="theme-pills"></div>
     </div>
+
+    <div class="section">
+      <div class="section-title">Weiteres</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div class="action-item" onclick="bridge.openAnkiPrefs()">
+          <div class="item-left">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <span class="item-label">Anki-Einstellungen</span>
+          </div>
+          <div class="item-right">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+        <div class="action-item" id="copy-logs-btn" onclick="copyLogs()">
+          <div class="item-left">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            <span class="item-label">Logs kopieren</span>
+          </div>
+          <div class="item-right">
+            <span id="copy-logs-hint" style="font-size:11px;">Debug-Info in Zwischenablage</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ AGENT TAB ═══ -->
+  <div class="tab-content" id="tab-agent">
+    <!-- Karten-Embeddings -->
     <div class="section">
       <div class="section-title">Semantische Suche</div>
       <div class="card">
@@ -410,70 +440,26 @@
         </div>
       </div>
     </div>
-    <div class="section">
-      <div class="section-title" style="color:rgba(251,146,60,0.7);">Beta</div>
-      <div class="card">
-        <div class="row" onclick="toggleMascot()">
-          <div class="row-label">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 8v8M8 12h8"/></svg>
-            <span>Mascot Companion</span>
-            <span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px;background:rgba(251,146,60,0.1);color:rgba(251,146,60,0.7);">Beta</span>
-          </div>
-          <button class="toggle" id="mascot-toggle" onclick="event.stopPropagation();toggleMascot()"><div class="knob"></div></button>
-        </div>
-        <div style="padding:8px 16px 12px;font-size:11px;color:var(--text-tertiary);line-height:1.5;border-top:1px solid var(--border);">
-          Animiertes Maskottchen mit eigenem Charakter, das auf deine Lernfortschritte reagiert.
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══ AGENT TAB ═══ -->
-  <div class="tab-content" id="tab-ki">
-    <!-- Mini Dashboard -->
-    <div class="section" style="display:flex; gap:8px;">
-      <div class="card" style="flex:1; text-align:center; padding:14px 0;">
-        <div id="dash-tools-active" style="font-size:22px; font-weight:700; color:var(--text); letter-spacing:-0.5px;">0</div>
-        <div style="font-size:10px; color:var(--text-tertiary); text-transform:uppercase; letter-spacing:0.3px; margin-top:2px;">Tools aktiv</div>
-      </div>
-      <div class="card" style="flex:1; text-align:center; padding:14px 0;">
-        <div id="dash-sub-agents" style="font-size:22px; font-weight:700; color:var(--text); letter-spacing:-0.5px;">0</div>
-        <div style="font-size:10px; color:var(--text-tertiary); text-transform:uppercase; letter-spacing:0.3px; margin-top:2px;">Sub-Agents</div>
-      </div>
-    </div>
-
-    <!-- Sub-Agents -->
-    <div class="section">
-      <div class="section-title">Sub-Agents</div>
-      <div class="card" id="subagents-card"></div>
-    </div>
 
     <!-- Agent Tools -->
     <div class="section">
       <div class="section-title">Agent Tools</div>
       <div class="card" id="tools-card"></div>
     </div>
-  </div>
 
-  <!-- ═══ ANKI TAB ═══ -->
-  <div class="tab-content" id="tab-anki">
+    <!-- Plusi -->
     <div class="section">
-      <div class="section-title">Anki-Einstellungen</div>
-      <div class="anki-prefs-list">
-        <div class="anki-prefs-item" onclick="bridge.openAnkiPrefs()">
-          <div class="item-left">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            <span class="item-label">Einstellungen öffnen</span>
-          </div>
-          <div class="item-arrow">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-          </div>
+      <div class="section-title">Plusi</div>
+      <div class="card" id="subagents-card"></div>
+      <!-- Tagebuch ansehen -->
+      <div class="action-item" id="diary-btn" onclick="openDiary()" style="margin-top:8px;">
+        <div class="item-left">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          <span class="item-label">Tagebuch ansehen</span>
         </div>
-      </div>
-    </div>
-    <div class="section">
-      <div style="font-size:11px;color:var(--text-tertiary);line-height:1.6;padding:0 2px;">
-        Öffnet die nativen Anki-Einstellungen (Erscheinungsbild, Wiederholung, Netzwerk, etc.)
+        <div class="item-right">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
       </div>
     </div>
   </div>
@@ -484,13 +470,13 @@ let bridge = null;
 let config = {};
 
 // ── Init ──
-new QWebChannel(qt.webChannelTransport, (ch) => {
+new QWebChannel(qt.webChannelTransport, function(ch) {
   bridge = ch.objects.bridge;
   loadConfig();
 });
 
 function loadConfig() {
-  bridge.getConfig((json) => {
+  bridge.getConfig(function(json) {
     config = JSON.parse(json);
     renderAll();
   });
@@ -499,20 +485,18 @@ function loadConfig() {
 function renderAll() {
   renderProfile();
   renderTheme();
-  renderResponseStyle();
   renderTools();
-  renderMascot();
   renderEmbeddingStatus();
 }
 
 // ── Tabs ──
 function switchTab(tab) {
-  document.querySelectorAll('.tab-pill').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-  document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === 'tab-' + tab));
+  document.querySelectorAll('.tab-pill').forEach(function(t) { t.classList.toggle('active', t.dataset.tab === tab); });
+  document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.toggle('active', c.id === 'tab-' + tab); });
 }
 
 // ── Profile ──
-let _wasUnauthenticated = true;
+var _wasUnauthenticated = true;
 
 function renderProfile() {
   document.getElementById('profile-loading').style.display = 'none';
@@ -527,14 +511,14 @@ function renderProfile() {
       _wasUnauthenticated = false;
       document.getElementById('profile-auth').style.display = 'none';
       document.getElementById('profile-success').style.display = 'flex';
-      setTimeout(() => {
+      setTimeout(function() {
         document.getElementById('profile-success').style.display = 'none';
         document.getElementById('profile-auth').style.display = 'block';
-        bridge.getQuota((json) => { renderTier(JSON.parse(json)); });
+        bridge.getQuota(function(json) { renderTier(JSON.parse(json)); });
       }, 1500);
     } else {
       document.getElementById('profile-auth').style.display = 'block';
-      bridge.getQuota((json) => { renderTier(JSON.parse(json)); });
+      bridge.getQuota(function(json) { renderTier(JSON.parse(json)); });
     }
   } else {
     _wasUnauthenticated = true;
@@ -544,15 +528,13 @@ function renderProfile() {
 }
 
 function renderProfileHeader() {
-  const email = config.userEmail || '';
-  const name = config.profileName || email.split('@')[0] || 'User';
+  var email = config.userEmail || '';
+  var name = config.profileName || email.split('@')[0] || 'User';
 
-  // Avatar with initials and gradient
-  const initials = name.charAt(0).toUpperCase();
-  const avatarEl = document.getElementById('profile-avatar');
-  // Deterministic color from name
-  const hue = (name.charCodeAt(0) * 7 + (name.charCodeAt(1) || 0) * 13) % 360;
-  avatarEl.style.background = `linear-gradient(135deg, hsl(${hue}, 60%, 45%), hsl(${(hue + 40) % 360}, 50%, 35%))`;
+  var initials = name.charAt(0).toUpperCase();
+  var avatarEl = document.getElementById('profile-avatar');
+  var hue = (name.charCodeAt(0) * 7 + (name.charCodeAt(1) || 0) * 13) % 360;
+  avatarEl.style.background = 'linear-gradient(135deg, hsl(' + hue + ', 60%, 45%), hsl(' + ((hue + 40) % 360) + ', 50%, 35%))';
   avatarEl.textContent = initials;
 
   document.getElementById('profile-display-name').textContent = name;
@@ -561,57 +543,52 @@ function renderProfileHeader() {
 }
 
 function renderTier(quota) {
-  let name = 'Free', desc = 'Kostenloser Einstieg', color = 'var(--text-tertiary)', bg = 'rgba(255,255,255,0.04)';
-  let iconSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>';
+  var name = 'Free', desc = 'Kostenloser Einstieg', color = 'var(--text-tertiary)', bg = 'rgba(255,255,255,0.04)';
+  var iconSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>';
 
   if (quota && quota.tier === 'tier1') {
-    name = 'Student'; desc = 'Für ambitionierte Studenten'; color = 'var(--teal)'; bg = 'rgba(20,184,166,0.1)';
+    name = 'Student'; desc = 'Ambitionierte Studenten'; color = 'var(--teal)'; bg = 'rgba(20,184,166,0.1)';
     iconSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 6 3 6 3s3 0 6-3v-5"/></svg>';
   } else if (quota && quota.tier === 'tier2') {
     name = 'Exam Pro'; desc = 'Maximale Power'; color = 'var(--purple)'; bg = 'rgba(167,139,250,0.1)';
     iconSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"/></svg>';
   }
 
-  document.getElementById('tier-icon-container').innerHTML = iconSvg;
-  document.getElementById('tier-icon-container').style.background = bg;
-  document.getElementById('tier-icon-container').style.color = color;
-  document.getElementById('tier-icon-container').querySelector('svg').style.stroke = color;
+  var iconContainer = document.getElementById('tier-icon-container');
+  iconContainer.innerHTML = iconSvg;
+  iconContainer.style.background = bg;
+  iconContainer.style.color = color;
+  iconContainer.querySelector('svg').style.stroke = color;
   document.getElementById('tier-name').textContent = name;
   document.getElementById('tier-desc').textContent = desc;
 
-  // Quota — show combined "Anfragen heute" for simplicity
-  const qs = document.getElementById('quota-section');
+  var qs = document.getElementById('quota-section');
   if (quota && quota.deep) {
     qs.style.display = 'block';
     qs.innerHTML = '';
-    // Deep mode = primary quota that matters
     if (quota.deep.limit !== -1) {
       qs.innerHTML += quotaBarHTML('Anfragen heute', quota.deep.used, quota.deep.limit, sparklesSvg());
     } else {
-      // Unlimited — show a subtle "unlimited" indicator
       qs.innerHTML = '<div style="font-size:11px;color:var(--text-tertiary);text-align:center;padding:4px 0;">Unbegrenzte Anfragen</div>';
     }
   }
 }
 
 function quotaBarHTML(label, used, limit, iconSvg) {
-  const unlimited = limit === -1;
-  const pct = unlimited ? 0 : Math.min(100, (used / limit) * 100);
-  const color = unlimited ? 'rgba(255,255,255,0.1)' : pct > 80 ? 'rgba(239,68,68,0.7)' : pct > 50 ? 'rgba(251,191,36,0.7)' : 'rgba(255,255,255,0.25)';
-  return `<div class="quota-row">
-    <div class="quota-label">
-      <div class="quota-label-left">${iconSvg}<span>${label}</span></div>
-      <div class="quota-label-right"><span class="used">${used}</span> <span class="limit">/ ${unlimited ? '∞' : limit}</span></div>
-    </div>
-    <div class="quota-bar"><div class="quota-fill" style="width:${unlimited ? 0 : pct}%;background:${color};"></div></div>
-  </div>`;
+  var unlimited = limit === -1;
+  var pct = unlimited ? 0 : Math.min(100, (used / limit) * 100);
+  var color = unlimited ? 'rgba(255,255,255,0.1)' : pct > 80 ? 'rgba(239,68,68,0.7)' : pct > 50 ? 'rgba(251,191,36,0.7)' : 'rgba(255,255,255,0.25)';
+  return '<div class="quota-row">' +
+    '<div class="quota-label">' +
+      '<div class="quota-label-left">' + iconSvg + '<span>' + label + '</span></div>' +
+      '<div class="quota-label-right"><span class="used">' + used + '</span> <span class="limit">/ ' + (unlimited ? '\u221E' : limit) + '</span></div>' +
+    '</div>' +
+    '<div class="quota-bar"><div class="quota-fill" style="width:' + (unlimited ? 0 : pct) + '%;background:' + color + ';"></div></div>' +
+  '</div>';
 }
 
 function sparklesSvg() {
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>';
-}
-function zapSvg() {
-  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>';
 }
 
 function handleLogout() {
@@ -620,48 +597,35 @@ function handleLogout() {
   renderProfile();
 }
 
-function handleRelogin() {
-  // Direkt neuen Link-Code Flow starten (alten Token behalten bis neuer da ist)
-  config.isAuthenticated = false;
-  _wasUnauthenticated = true;
-  renderProfile();
-  setTimeout(() => startLinkAuth(), 200);
-}
-
-let _linkAuthActive = false;
+var _linkAuthActive = false;
 
 function startLinkAuth() {
   if (_linkAuthActive) return;
   _linkAuthActive = true;
   hideAuthError();
 
-  const btn = document.getElementById('link-auth-btn');
-  const btnText = document.getElementById('link-auth-btn-text');
-  const hint = document.getElementById('link-auth-hint');
+  var btn = document.getElementById('link-auth-btn');
+  var btnText = document.getElementById('link-auth-btn-text');
+  var hint = document.getElementById('link-auth-hint');
 
   btn.disabled = true;
   btnText.textContent = 'Warte auf Anmeldung...';
-  // Spinner SVG ersetzen
   btn.querySelector('svg').style.display = 'none';
   btn.insertAdjacentHTML('afterbegin', '<span id="link-spinner" style="display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0;"></span>');
   hint.style.display = 'block';
 
-  // Rufe bridge.startLinkAuth() auf — öffnet Browser, pollt automatisch
   bridge.startLinkAuth();
-
-  // Auf Auth-Events hören (Erfolg, Fehler, Timeout)
   _waitForAuthResult();
 }
 
 function _waitForAuthResult() {
-  // Poll config alle 2s für max 5 Minuten (Bridge pollt parallel)
-  let attempts = 0;
-  const maxAttempts = 150;
+  var attempts = 0;
+  var maxAttempts = 150;
 
-  const pollInterval = setInterval(() => {
+  var pollInterval = setInterval(function() {
     attempts++;
-    bridge.getConfig((json) => {
-      const c = JSON.parse(json);
+    bridge.getConfig(function(json) {
+      var c = JSON.parse(json);
       if (c.isAuthenticated) {
         clearInterval(pollInterval);
         config = c;
@@ -674,20 +638,20 @@ function _waitForAuthResult() {
       clearInterval(pollInterval);
       _linkAuthActive = false;
       _resetLinkAuthBtn();
-      showAuthError('Zeitüberschreitung — bitte versuche es erneut.');
+      showAuthError('Zeitüberschreitung \u2014 bitte versuche es erneut.');
     }
   }, 2000);
 }
 
 function _resetLinkAuthBtn() {
-  const btn = document.getElementById('link-auth-btn');
-  const btnText = document.getElementById('link-auth-btn-text');
-  const hint = document.getElementById('link-auth-hint');
-  const spinner = document.getElementById('link-spinner');
+  var btn = document.getElementById('link-auth-btn');
+  var btnText = document.getElementById('link-auth-btn-text');
+  var hint = document.getElementById('link-auth-hint');
+  var spinner = document.getElementById('link-spinner');
   if (spinner) spinner.remove();
   if (btn) {
     btn.disabled = false;
-    const svg = btn.querySelector('svg');
+    var svg = btn.querySelector('svg');
     if (svg) svg.style.display = '';
   }
   if (btnText) btnText.textContent = 'Anmelden';
@@ -695,16 +659,15 @@ function _resetLinkAuthBtn() {
 }
 
 function verifyToken() {
-  const input = document.getElementById('token-input');
-  const token = input.value.trim();
+  var input = document.getElementById('token-input');
+  var token = input.value.trim();
   if (!token) { showAuthError('Bitte gib einen Token ein'); return; }
   hideAuthError();
-  const btn = document.getElementById('verify-btn');
+  var btn = document.getElementById('verify-btn');
   btn.disabled = true; btn.textContent = 'Verifiziere...';
   bridge.authenticate(token, '');
-  // Re-check after a short delay
-  setTimeout(() => {
-    bridge.getConfig((json) => {
+  setTimeout(function() {
+    bridge.getConfig(function(json) {
       config = JSON.parse(json);
       btn.disabled = false; btn.textContent = 'Token verifizieren';
       if (config.isAuthenticated) {
@@ -726,19 +689,19 @@ function hideAuthError() {
 }
 
 // ── Theme ──
-const THEMES = [
+var THEMES = [
   { key: 'auto', label: 'System', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>' },
   { key: 'dark', label: 'Dunkel', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>' },
   { key: 'light', label: 'Hell', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>' },
 ];
 
 function renderTheme() {
-  const el = document.getElementById('theme-pills');
-  el.innerHTML = THEMES.map(t =>
-    `<button class="pill ${config.theme === t.key ? 'active' : ''}" onclick="setTheme('${t.key}')">
-      <span class="pill-icon">${t.icon}</span>${t.label}
-    </button>`
-  ).join('');
+  var el = document.getElementById('theme-pills');
+  el.innerHTML = THEMES.map(function(t) {
+    return '<button class="pill ' + (config.theme === t.key ? 'active' : '') + '" onclick="setTheme(\'' + t.key + '\')">' +
+      '<span class="pill-icon">' + t.icon + '</span>' + t.label +
+    '</button>';
+  }).join('');
 }
 
 function setTheme(key) {
@@ -747,81 +710,50 @@ function setTheme(key) {
   renderTheme();
 }
 
-// ── Response Style ──
-const STYLES = [
-  { key: 'concise', label: 'Präzise', icon: '⚡' },
-  { key: 'balanced', label: 'Ausgewogen', icon: '⚖️' },
-  { key: 'detailed', label: 'Detailliert', icon: '📖' },
-  { key: 'friendly', label: 'Freundlich', icon: '😊' },
+// ── Agent Tools + Plusi ──
+var SUB_AGENTS = [
+  { key: 'plusi', label: 'Plusi', desc: 'Lern-Begleiter mit Pers\u00F6nlichkeit, Tagebuch & Stimmungen', emoji: '\uD83E\uDDE0', badge: 'Beta' },
 ];
 
-function renderResponseStyle() {
-  const el = document.getElementById('style-pills');
-  if (!el) return;  // Style pills removed from Agent tab
-  el.innerHTML = STYLES.map(s =>
-    `<button class="pill ${config.responseStyle === s.key ? 'active' : ''}" onclick="setStyle('${s.key}')">
-      <span class="pill-icon">${s.icon}</span>${s.label}
-    </button>`
-  ).join('');
-}
-
-function setStyle(key) {
-  config.responseStyle = key;
-  bridge.saveResponseStyle(key);
-  renderResponseStyle();
-}
-
-// ── Agent Tools ──
-const SUB_AGENTS = [
-  { key: 'plusi', label: 'Plusi', desc: 'Emotionaler Lern-Begleiter mit Persönlichkeit', emoji: '🧠' },
-];
-
-const AGENT_TOOLS = [
-  { key: 'cards', label: 'Kartensuche', desc: 'Karten aus dem Deck suchen und anzeigen', emoji: '🔍' },
-  { key: 'images', label: 'Bilder', desc: 'Bilder aus Karten und Internet anzeigen', emoji: '🖼' },
-  { key: 'diagrams', label: 'Diagramme', desc: 'Mermaid-Diagramme für Visualisierungen', emoji: '📊' },
-  { key: 'stats', label: 'Statistiken', desc: 'Streak, Heatmap, Deck-Überblick', emoji: '📈' },
-  { key: 'molecules', label: 'Moleküle', desc: 'Molekülstrukturen darstellen', emoji: '⚗️', badge: 'Beta' },
+var AGENT_TOOLS = [
+  { key: 'cards', label: 'Kartensuche', desc: 'Karten aus dem Deck suchen und anzeigen', emoji: '\uD83D\uDD0D' },
+  { key: 'images', label: 'Bilder', desc: 'Bilder aus Karten und Internet anzeigen', emoji: '\uD83D\uDDBC' },
+  { key: 'diagrams', label: 'Diagramme', desc: 'Mermaid-Diagramme f\u00FCr Visualisierungen', emoji: '\uD83D\uDCCA' },
+  { key: 'stats', label: 'Statistiken', desc: 'Streak, Heatmap, Deck-\u00DCberblick', emoji: '\uD83D\uDCC8' },
+  { key: 'molecules', label: 'Molek\u00FCle', desc: 'Molek\u00FClstrukturen darstellen', emoji: '\u2697\uFE0F', badge: 'Beta' },
 ];
 
 function renderToolRow(t, accentBg) {
-  const tools = config.aiTools || {};
-  const on = tools[t.key] !== false;  // Default to true if key missing
-  const bg = accentBg || 'rgba(10,132,255,0.08)';
-  const badgeHtml = t.badge ? ` <span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px;background:rgba(251,191,36,0.08);color:rgba(251,191,36,0.5);">${t.badge}</span>` : '';
-  return `<div class="row" onclick="toggleTool('${t.key}')" style="gap:12px;justify-content:flex-start;">
-    <div style="width:32px;height:32px;border-radius:8px;background:${bg};display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">${t.emoji}</div>
-    <div style="flex:1;min-width:0;">
-      <div style="font-size:13px;font-weight:500;color:var(--text);">${t.label}${badgeHtml}</div>
-      <div style="font-size:11px;color:var(--text-tertiary);margin-top:1px;">${t.desc}</div>
-    </div>
-    <button class="toggle ${on ? 'on' : ''}" onclick="event.stopPropagation();toggleTool('${t.key}')" style="flex-shrink:0;"><div class="knob"></div></button>
-  </div>`;
+  var tools = config.aiTools || {};
+  var on = tools[t.key] !== false;
+  var bg = accentBg || 'rgba(10,132,255,0.08)';
+  var badgeHtml = t.badge ? ' <span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px;background:rgba(251,191,36,0.08);color:rgba(251,191,36,0.5);">' + t.badge + '</span>' : '';
+  var toggleFn = "toggleTool('" + t.key + "')";
+  return '<div class="row" onclick="' + toggleFn + '" style="gap:12px;justify-content:flex-start;">' +
+    '<div style="width:32px;height:32px;border-radius:8px;background:' + bg + ';display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">' + t.emoji + '</div>' +
+    '<div style="flex:1;min-width:0;">' +
+      '<div style="font-size:13px;font-weight:500;color:var(--text);">' + t.label + badgeHtml + '</div>' +
+      '<div style="font-size:11px;color:var(--text-tertiary);margin-top:1px;">' + t.desc + '</div>' +
+    '</div>' +
+    '<button class="toggle ' + (on ? 'on' : '') + '" onclick="event.stopPropagation();' + toggleFn + '" style="flex-shrink:0;"><div class="knob"></div></button>' +
+  '</div>';
 }
 
 function renderTools() {
-  const tools = config.aiTools || {};
-
-  // Sub-Agents (purple accent)
-  const saEl = document.getElementById('subagents-card');
-  if (saEl) {
-    saEl.innerHTML = SUB_AGENTS.map(t => renderToolRow(t, 'rgba(167,139,250,0.08)')).join('');
-  }
+  var tools = config.aiTools || {};
 
   // Agent Tools (blue accent)
-  const toolsEl = document.getElementById('tools-card');
+  var toolsEl = document.getElementById('tools-card');
   if (toolsEl) {
-    toolsEl.innerHTML = AGENT_TOOLS.map(t => renderToolRow(t)).join('');
+    toolsEl.innerHTML = AGENT_TOOLS.map(function(t) { return renderToolRow(t); }).join('');
   }
 
-  // Dashboard counters
-  const allItems = [...SUB_AGENTS, ...AGENT_TOOLS];
-  const activeCount = allItems.filter(t => tools[t.key] !== false).length;
-  const subAgentCount = SUB_AGENTS.filter(t => tools[t.key] !== false).length;
-  const dashTools = document.getElementById('dash-tools-active');
-  const dashSA = document.getElementById('dash-sub-agents');
-  if (dashTools) dashTools.textContent = activeCount;
-  if (dashSA) dashSA.textContent = subAgentCount;
+  // Sub-Agents (purple accent)
+  var saEl = document.getElementById('subagents-card');
+  if (saEl) {
+    saEl.innerHTML = SUB_AGENTS.map(function(t) { return renderToolRow(t, 'rgba(167,139,250,0.08)'); }).join('');
+  }
+
 }
 
 function toggleTool(key) {
@@ -831,19 +763,26 @@ function toggleTool(key) {
   renderTools();
 }
 
+// ── Open Diary ──
+function openDiary() {
+  if (bridge && bridge.openDiary) {
+    bridge.openDiary();
+  }
+}
+
 // ── Embedding Status ──
-let _embedPollTimer = null;
+var _embedPollTimer = null;
 
 function renderEmbeddingStatus() {
   if (!bridge || !bridge.getEmbeddingStatus) return;
-  bridge.getEmbeddingStatus((json) => {
-    const s = JSON.parse(json);
-    const countEl = document.getElementById('embed-count');
-    const barEl = document.getElementById('embed-bar');
-    const badgeEl = document.getElementById('embed-status-badge');
+  bridge.getEmbeddingStatus(function(json) {
+    var s = JSON.parse(json);
+    var countEl = document.getElementById('embed-count');
+    var barEl = document.getElementById('embed-bar');
+    var badgeEl = document.getElementById('embed-status-badge');
     if (!countEl) return;
 
-    const pct = s.totalCards > 0 ? Math.round((s.embeddedCards / s.totalCards) * 100) : 0;
+    var pct = s.totalCards > 0 ? Math.round((s.embeddedCards / s.totalCards) * 100) : 0;
     countEl.textContent = s.embeddedCards + ' / ' + s.totalCards;
     barEl.style.width = pct + '%';
 
@@ -851,10 +790,9 @@ function renderEmbeddingStatus() {
       badgeEl.style.display = 'inline';
       badgeEl.style.background = 'rgba(10,132,255,0.12)';
       badgeEl.style.color = 'rgba(10,132,255,0.7)';
-      badgeEl.textContent = 'Läuft...';
-      // Poll while running
+      badgeEl.textContent = 'L\u00E4uft...';
       if (!_embedPollTimer) {
-        _embedPollTimer = setInterval(() => renderEmbeddingStatus(), 3000);
+        _embedPollTimer = setInterval(function() { renderEmbeddingStatus(); }, 3000);
       }
     } else if (pct >= 100) {
       badgeEl.style.display = 'inline';
@@ -870,18 +808,26 @@ function renderEmbeddingStatus() {
   });
 }
 
-// ── Mascot ──
-function renderMascot() {
-  const toggle = document.getElementById('mascot-toggle');
-  if (!toggle) return;
-  if (config.mascotEnabled) toggle.classList.add('on');
-  else toggle.classList.remove('on');
-}
+// ── Copy Logs ──
+function copyLogs() {
+  var item = document.getElementById('copy-logs-btn');
+  var hint = document.getElementById('copy-logs-hint');
+  if (!bridge || !bridge.copyLogs) return;
 
-function toggleMascot() {
-  config.mascotEnabled = !config.mascotEnabled;
-  bridge.saveMascotEnabled(config.mascotEnabled);
-  renderMascot();
+  bridge.copyLogs(function(json) {
+    var result = JSON.parse(json);
+    if (result.success) {
+      item.classList.add('copy-success');
+      hint.textContent = 'Kopiert! (' + result.lineCount + ' Zeilen)';
+      setTimeout(function() {
+        item.classList.remove('copy-success');
+        hint.textContent = 'Debug-Info in Zwischenablage';
+      }, 2000);
+    } else {
+      hint.textContent = 'Fehler beim Kopieren';
+      setTimeout(function() { hint.textContent = 'Debug-Info in Zwischenablage'; }, 2000);
+    }
+  });
 }
 
 // ── Panel back navigation ──
