@@ -5,8 +5,13 @@ Verwaltet das Tracking von Anki-Karten und sendet Kontext an das Frontend
 
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor
 from aqt import gui_hooks
 from aqt.qt import QTimer
+
+_embed_executor = ThreadPoolExecutor(max_workers=1)
+
+_css_cache = None  # Cached CSS content
 
 
 class CardTracker:
@@ -188,12 +193,12 @@ class CardTracker:
             # Lazy embed current card for semantic search (after UI update)
             try:
                 try:
-                    from . import get_embedding_manager
+                    from .. import get_embedding_manager
                 except ImportError:
                     from __init__ import get_embedding_manager
                 emb_mgr = get_embedding_manager()
                 if emb_mgr:
-                    emb_mgr.ensure_embedded(card.id, context)
+                    _embed_executor.submit(emb_mgr.ensure_embedded, card.id, context)
             except Exception:
                 pass  # Don't block card display
 
@@ -212,16 +217,20 @@ class CardTracker:
             
             print(f"🎨 card_tracker: _inject_card_styles aufgerufen für Karte {card.id}")
             
-            # Lade Minimal CSS-Datei (CSS-Only Styling)
-            addon_dir = os.path.dirname(os.path.abspath(__file__))
+            # Lade Minimal CSS-Datei (CSS-Only Styling) — cached after first read
+            global _css_cache
+            addon_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             css_path = os.path.join(addon_dir, 'reviewer_minimal.css')
-            
-            if not os.path.exists(css_path):
-                print(f"❌ card_tracker: CSS-Datei nicht gefunden: {css_path}")
-                return
-            
-            with open(css_path, 'r', encoding='utf-8') as f:
-                css_content = f.read()
+
+            if _css_cache is None:
+                try:
+                    with open(css_path, 'r', encoding='utf-8') as f:
+                        _css_cache = f.read()
+                except FileNotFoundError:
+                    print(f"❌ card_tracker: CSS-Datei nicht gefunden: {css_path}")
+                    return
+
+            css_content = _css_cache
             
             print(f"✅ card_tracker: CSS geladen - {len(css_content)} Zeichen")
             print(f"✅ CSS Preview: {css_content[:100]}...")
@@ -313,8 +322,8 @@ class CardTracker:
             
             # Lade JavaScript-Dateien (nur einmal)
             if not self.js_injected:
-                addon_dir = os.path.dirname(os.path.abspath(__file__))
-                
+                addon_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
                 # Lade Premium JS (Interaktivität - falls vorhanden)
                 premium_js_path = os.path.join(addon_dir, 'reviewer_premium.js')
                 if os.path.exists(premium_js_path):
