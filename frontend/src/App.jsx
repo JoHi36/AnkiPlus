@@ -943,8 +943,9 @@ function AppInner() {
               meta: payload.meta || '',
               friendship: payload.friendship || null,
               error: payload.error || false,
+              silent: payload.silent || false,
             };
-            if (!result.error) {
+            if (!result.error && !result.silent && result.text) {
               const plusiMarker = `[[TOOL:${JSON.stringify({
                 name: "spawn_plusi",
                 displayType: "widget",
@@ -954,6 +955,18 @@ function AppInner() {
               _chatForPlusi.setMessages(prev => [
                 ...prev,
                 { id: Date.now(), from: 'bot', text: plusiMarker }
+              ]);
+              setAiMood(result.mood);
+            } else if (result.silent) {
+              // Silent response — show muted message, still sync mood
+              const silentMarker = `[[TOOL:${JSON.stringify({
+                name: "spawn_plusi",
+                displayType: "widget",
+                result: { mood: result.mood, text: '*Plusi antwortet nicht.*', meta: '', friendship: result.friendship }
+              })}]]`;
+              _chatForPlusi.setMessages(prev => [
+                ...prev,
+                { id: Date.now(), from: 'bot', text: silentMarker }
               ]);
               setAiMood(result.mood);
             }

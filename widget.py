@@ -879,12 +879,14 @@ class ChatbotWidget(QWidget):
             result = run_plusi(situation=text, deck_id=deck_id)
             mood = result.get('mood', 'neutral')
             friendship = result.get('friendship', {})
+            is_silent = result.get('silent', False)
             payload = {
                 'type': 'plusi_direct_result',
                 'mood': mood,
                 'text': result.get('text', ''),
                 'meta': result.get('meta', ''),
                 'friendship': friendship,
+                'silent': is_silent,
                 'error': result.get('error', False)
             }
             self.web_view.page().runJavaScript(
