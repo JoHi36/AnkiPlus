@@ -94,7 +94,7 @@ header *,
 
 /* Syntax Highlighter Anpassungen für Dark Mode */
 .markdown-content pre[class*="language-"] {
-  @apply bg-[#1e1e1e];
+  background: var(--ds-bg-canvas);
 }
 
 /* Nested Lists */
