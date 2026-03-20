@@ -111,7 +111,7 @@ function getDoneLabel(step: string, data: Record<string, any>, status: string): 
     case 'router': {
       const mode = MODE_LABELS[data.retrieval_mode] || data.retrieval_mode || '';
       const scope = data.scope_label || '';
-      if (!data.search_needed) return 'Keine Suche nötig';
+      if (!data.search_needed) return 'Direkte Antwort';
       return scope ? `${mode} · ${scope}` : mode || 'Anfrage analysiert';
     }
     case 'sql_search':
@@ -271,37 +271,35 @@ function useSmartPipeline(pipelineSteps: PipelineStep[]) {
 
 /* ── Router Details (done state) ── */
 function RouterDetails({ data }: { data: Record<string, any> }) {
-  if (!data.search_needed) {
-    return (
-      <div style={{ marginTop: 4, fontSize: 11, color: 'var(--ds-text-placeholder)' }}>
-        Keine Suche nötig — direkte Antwort
-      </div>
-    );
-  }
-
-  const MAX_SOURCES_LABELS: Record<string, string> = {
-    low: 'Wenig (5)',
-    medium: 'Mittel (10)',
-    high: 'Viel (15)',
+  const RESPONSE_LENGTH_LABELS: Record<string, string> = {
+    short: 'Kurz',
+    medium: 'Mittel',
+    long: 'Ausführlich',
   };
 
-  const tags = [
-    {
-      label: 'Strategie',
-      value: MODE_LABELS[data.retrieval_mode] || data.retrieval_mode || '—',
-      icon: 'M8 2v12M2 8h12',
-    },
-    {
-      label: 'Scope',
-      value: data.scope_label || (data.scope === 'current' ? 'Aktueller Stapel' : 'Alle Stapel'),
-      icon: 'M2 3h12v10H2zM2 6h12',
-    },
-    {
-      label: 'Quellen',
-      value: MAX_SOURCES_LABELS[data.max_sources] || 'Mittel (10)',
-      icon: 'M3 13V5h3v8M7 13V3h3v10M11 13V7h3v6',
-    },
-  ];
+  const tags = data.search_needed === false
+    ? [
+        { label: 'Strategie', value: 'Direkte Antwort', icon: 'M8 2v12M2 8h12' },
+        { label: 'Kontext', value: 'Nicht benötigt', icon: 'M2 3h12v10H2zM2 6h12' },
+        { label: 'Antwort', value: RESPONSE_LENGTH_LABELS[data.response_length] || 'Mittel', icon: 'M3 13V5h3v8M7 13V3h3v10M11 13V7h3v6' },
+      ]
+    : [
+        {
+          label: 'Strategie',
+          value: MODE_LABELS[data.retrieval_mode] || data.retrieval_mode || '—',
+          icon: 'M8 2v12M2 8h12',
+        },
+        {
+          label: 'Scope',
+          value: data.scope_label || (data.scope === 'current' ? 'Aktueller Stapel' : 'Alle Stapel'),
+          icon: 'M2 3h12v10H2zM2 6h12',
+        },
+        {
+          label: 'Quellen',
+          value: ({ low: 'Wenig (5)', medium: 'Mittel (10)', high: 'Viel (15)' } as Record<string, string>)[data.max_sources] || 'Mittel (10)',
+          icon: 'M3 13V5h3v8M7 13V3h3v10M11 13V7h3v6',
+        },
+      ];
 
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
@@ -530,10 +528,13 @@ function PhaseRow({ step, data, status, isActive, isFirst = false, animate = tru
   if (isActive) {
     title = ACTIVE_TITLES[step] || 'Verarbeite...';
   } else if (step === 'router') {
-    // Router done: show mode + scope instead of getDoneLabel
-    const mode = MODE_LABELS[data.retrieval_mode] || data.retrieval_mode || '';
-    const scope = data.scope_label || '';
-    title = scope ? `${mode} · ${scope}` : mode || 'Anfrage analysiert';
+    if (!data.search_needed) {
+      title = 'Direkte Antwort';
+    } else {
+      const mode = MODE_LABELS[data.retrieval_mode] || data.retrieval_mode || '';
+      const scope = data.scope_label || '';
+      title = scope ? `${mode} · ${scope}` : mode || 'Anfrage analysiert';
+    }
   } else {
     title = getDoneLabel(step, data, status);
   }
@@ -768,14 +769,6 @@ export default function ThoughtStream({
 
   if (!hasContent) return null;
   if (isLegacy) return <LegacyThoughtStream steps={steps} citations={citations} citationIndices={citationIndices} bridge={bridge} onPreviewCard={onPreviewCard} />;
-
-  // No-search shortcut: if only step is router with search_needed=false, just show a simple line
-  const isNoSearch = !isProcessing && !activeEntry && doneStack.length > 0 &&
-    doneStack.every(d => d.step === 'router') &&
-    pipelineSteps.some(s => s.step === 'router' && s.data?.search_needed === false);
-  if (isNoSearch) {
-    return <div style={{ height: 1, margin: '8px 0', background: 'var(--ds-border-subtle)' }} />;
-  }
 
   return (
     <div style={{ marginTop: 12, maxWidth: '100%', userSelect: 'none' }}>
