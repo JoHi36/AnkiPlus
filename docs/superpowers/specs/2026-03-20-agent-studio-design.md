@@ -117,12 +117,38 @@ The Agent Studio replaces the chat message area when activated. It is **not** an
 
 ### Action Buttons (Bottom Bar)
 
-The two action buttons are **always the same**, in every view:
+The two action buttons have **consistent labels** but their behavior is view-aware:
 
-- **Left:** `Weiter SPACE` — next card / close current view
-- **Right:** `Agent Studio ↵` — open Agent Studio
+- **Left:** `Weiter SPACE` — in Chat: next card. In Agent Studio / Plusi-Menü: close view → return to Chat.
+- **Right:** `Agent Studio ↵` — in Chat: open Agent Studio. In Agent Studio: navigate to Plusi-Menü. In Plusi-Menü: navigate back to Agent Studio.
+
+The labels stay the same to maintain visual consistency and remote-control readiness. The behavior routing happens in App.jsx based on `activeView`.
 
 When the chat input is focused, the `↵` shortcut hint on the right button is hidden (since Enter sends the message). The button itself remains visible and clickable.
+
+### InsightsDashboard Viewing
+
+The InsightsDashboard (empty-state widget) is shown automatically when the chat has no messages (as before). It is **not** accessed via a button or shortcut — it is simply the default content area when there are no chat messages. The previous "Erkenntnisse ↵" toggle button is removed.
+
+### ChatInput Behavior Across Views
+
+The ChatInput component is rendered in all three views (Chat, Agent Studio, Plusi-Menü). Its behavior:
+
+- **If user types text and hits Enter:** Always sends a chat message and switches back to Chat view (if not already there). This ensures the input always "just works" regardless of which view is active.
+- **If input is empty and Enter key is pressed:** Triggers the view-specific action (open Agent Studio / navigate to Plusi-Menü / navigate back).
+- **Space key:** Only triggers the action button when the textarea is not focused (same logic as current implementation).
+
+### `Cmd+.` Registration
+
+Register `Cmd+.` as a global keyboard shortcut in `App.jsx`'s top-level `keydown` event handler (not in ChatInput). It toggles between Chat and Agent Studio. Note: test for conflicts with macOS system shortcuts — if `Cmd+.` conflicts, fall back to `Cmd+Shift+.`.
+
+### Plusi Dock Tap Across Views
+
+If the user taps the Plusi Dock icon while already in Agent Studio, it navigates to Plusi-Menü. If already in Plusi-Menü, it's a no-op. From Chat, it opens Plusi-Menü directly (skipping Agent Studio).
+
+### Embedding Status Data
+
+The embedding progress data (count, total, status) is fetched via the existing `bridge.getEmbeddingStatus()` method (already used in `settings.html`'s `renderEmbeddingStatus()`). AgentStudio polls this on mount and listens for updates via `ankiReceive` events.
 
 ---
 
@@ -181,7 +207,7 @@ A subtle inline button appears below the chat messages when **3 or more messages
 
 The existing `InsightsDashboard.jsx` component gets a small addition:
 - Newly extracted insights have a **blue bullet** (instead of grey) and a small "neu" label (9px, `rgba(10,132,255,0.35)`) inline after the text
-- The "neu" marking is shown **once** — after the user has seen the empty state with new insights, the marking is cleared
+- The "neu" marking is shown **once** — cleared when the InsightsDashboard component mounts with new insights (i.e., the user sees the empty state). The "seen" flag is stored in React state per card session (via `useCardSession`), so it resets naturally per card but persists across view switches within the same card.
 - The widget layout, stats, charts, and styling remain **completely unchanged**
 
 ### Animation Specs
