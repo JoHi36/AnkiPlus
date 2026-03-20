@@ -437,6 +437,8 @@ class ChatbotWidget(QWidget):
             'saveAITools': self._msg_save_ai_tools,
             'saveMascotEnabled': self._msg_save_mascot_enabled,
             'getEmbeddingStatus': self._msg_get_embedding_status,
+            'getPlusiMenuData': self._msg_get_plusi_menu_data,
+            'savePlusiAutonomy': self._msg_save_plusi_autonomy,
             'saveTheme': self._msg_save_theme,
             'getTheme': self._msg_get_theme,
             # Auth
@@ -739,11 +741,25 @@ class ChatbotWidget(QWidget):
         # Dynamically hide/show the native Plusi dock in reviewer/deckBrowser webviews
         try:
             try:
-                from ..plusi.dock import hide_dock
+                from ..plusi.dock import hide_dock, get_plusi_dock_injection, _get_active_webview
             except ImportError:
-                from plusi.dock import hide_dock
+                from plusi.dock import hide_dock, get_plusi_dock_injection, _get_active_webview
             if not enabled:
                 hide_dock()
+            else:
+                # Re-inject dock into active webview when Plusi is turned back on
+                web = _get_active_webview()
+                if web:
+                    injection = get_plusi_dock_injection()
+                    if injection:
+                        # Check if dock already exists before injecting
+                        js = (
+                            "if(!document.getElementById('plusi-dock')){"
+                            "var _r=document.createRange();"
+                            "var _f=_r.createContextualFragment(%s);"
+                            "document.body.appendChild(_f);}"
+                        ) % json.dumps(injection)
+                        web.page().runJavaScript(js)
         except Exception as e:
             logger.warning("Failed to toggle Plusi dock: %s", e)
 
@@ -787,6 +803,87 @@ class ChatbotWidget(QWidget):
             self._send_to_frontend_with_event(
                 "embeddingStatusLoaded", {"type": "embeddingStatusLoaded", "data": result},
                 "ankiEmbeddingStatusLoaded")
+
+    def _msg_get_plusi_menu_data(self, data=None):
+        """Return all data needed for the Plusi Menu view."""
+        try:
+            try:
+                from ..plusi.storage import (
+                    compute_personality_position, get_memory,
+                    get_friendship_data, load_diary, get_category
+                )
+                from ..config import get_config
+            except ImportError:
+                from plusi.storage import (
+                    compute_personality_position, get_memory,
+                    get_friendship_data, load_diary, get_category
+                )
+                from config import get_config
+
+            # Personality
+            position = compute_personality_position()
+            trail = get_memory('personality', 'trail', default=[])
+
+            # Current state — mood from most recent diary entry
+            state_data = get_category('state')
+            last_mood = 'neutral'
+            try:
+                diary_entries = load_diary(limit=1)
+                if diary_entries:
+                    last_mood = diary_entries[0].get('mood', 'neutral')
+            except Exception:
+                pass
+
+            state = {
+                'energy': state_data.get('energy', 5),
+                'mood': last_mood,
+                'obsession': state_data.get('obsession', None),
+            }
+
+            # Friendship
+            friendship = get_friendship_data()
+
+            # Diary (full list)
+            diary = load_diary(limit=50)
+
+            # Autonomy config
+            config = get_config()
+            autonomy = config.get('plusi_autonomy', {})
+
+            result = {
+                'personality': {
+                    'position': {'x': position['x'], 'y': position['y']},
+                    'quadrant': position['quadrant'],
+                    'quadrant_label': position['quadrant_label'],
+                    'confident': position['confident'],
+                    'trail': trail,
+                },
+                'state': state,
+                'friendship': friendship,
+                'diary': diary,
+                'autonomy': autonomy,
+            }
+
+            self._send_to_frontend_with_event(
+                'plusiMenuData', result, 'ankiPlusiMenuDataLoaded'
+            )
+        except Exception:
+            logger.exception("Failed to load Plusi menu data")
+            self._send_to_frontend_with_event(
+                'plusiMenuData', {}, 'ankiPlusiMenuDataLoaded'
+            )
+
+    def _msg_save_plusi_autonomy(self, data):
+        """Save Plusi autonomy config (token budget, capabilities)."""
+        try:
+            try:
+                from ..config import update_config
+            except ImportError:
+                from config import update_config
+            if isinstance(data, dict):
+                update_config(plusi_autonomy=data)
+        except Exception:
+            logger.exception("Failed to save Plusi autonomy config")
 
     def _msg_save_theme(self, data):
         """Save theme setting and push it back to all web views."""
