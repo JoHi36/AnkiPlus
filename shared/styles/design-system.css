@@ -1,189 +1,437 @@
 /*
  * ═══════════════════════════════════════════════════════════
- * AnkiPlus Design System
+ * AnkiPlus Design System — Single Source of Truth
  * ═══════════════════════════════════════════════════════════
  *
- * Single source of truth for both Reviewer and Chat Frontend.
- * Every component references these tokens and patterns.
+ * Material = Function
+ * Every surface communicates its purpose through its visual
+ * weight: deep backgrounds recede, canvas surfaces are neutral,
+ * frosted glass elevates interactive docks, overlays float.
+ * Color is reserved for meaning — never decoration.
  *
- * USAGE:
- *   Reviewer (custom_reviewer/styles.css): @import or paste tokens
- *   Frontend (tailwind.config.js):         Map tokens to Tailwind values
+ * RENDERING CONTEXTS:
+ *   React frontend           — imported in frontend/src/main.jsx
+ *   Custom Reviewer HTML/CSS — @import or paste :root block
+ *   Shared TypeScript comps  — imported in shared/components/
+ *   Qt/QSS (Python)          — tokens extracted manually to QSS
+ *   Plusi inline HTML        — paste :root block into <style>
  *
- * RULES:
- *   1. No component may define its own colors — use tokens
+ * DESIGN RULES:
+ *   1. No component may define its own colors — use tokens only
  *   2. No borders on child elements inside a container
  *   3. Separators are always 1px, always --ds-border-subtle
- *   4. Backgrounds go dark→light as elements elevate
+ *   4. Backgrounds go deep → canvas → frosted as surfaces elevate
  *   5. Buttons inside containers: transparent bg, text-color only
  *   6. Border-radius is consistent per component tier
+ *   7. Interactive states use tint tokens, never hardcoded rgba
+ *   8. Rating aliases use var() so they adapt to light mode
+ * ═══════════════════════════════════════════════════════════
  */
 
 
-/* ═══ 1. COLOR TOKENS ═══ */
+/* ─────────────────────────────────────────────────────────
+   1. DARK MODE TOKENS  (default / :root)
+   ───────────────────────────────────────────────────────── */
 :root {
-    /* Backgrounds — Elevation Stack */
-    --ds-bg-page:      #1A1A1A;   /* Page background, both panels */
-    --ds-bg-inset:     #151515;   /* Inset containers (input fields, docks) */
-    --ds-bg-elevated:  #222224;   /* Elevated surfaces (card box, modals) */
-    --ds-bg-overlay:   #2C2C2E;   /* Floating overlays (tooltips, popovers) */
 
-    /* Text — Opacity Hierarchy */
-    --ds-text-primary:    rgba(255, 255, 255, 0.92);
-    --ds-text-secondary:  rgba(255, 255, 255, 0.55);
-    --ds-text-tertiary:   rgba(255, 255, 255, 0.35);
-    --ds-text-muted:      rgba(255, 255, 255, 0.18);
-    --ds-text-placeholder: rgba(255, 255, 255, 0.30);
+  /* ── Backgrounds ── */
+  --ds-bg-deep:     #141416;   /* Chat panel, diary — deepest surface  */
+  --ds-bg-canvas:   #1C1C1E;   /* Main surface — neutral working area  */
+  --ds-bg-frosted:  #161618;   /* Input docks, frosted glass layers     */
+  --ds-bg-overlay:  #3A3A3C;   /* Tooltips, popovers — floating         */
 
-    /* Borders — Only 2 levels */
-    --ds-border-subtle:  rgba(255, 255, 255, 0.06);
-    --ds-border-medium:  rgba(255, 255, 255, 0.12);
+  /* ── Text — Opacity Hierarchy ── */
+  --ds-text-primary:     rgba(255, 255, 255, 0.92);
+  --ds-text-secondary:   rgba(255, 255, 255, 0.55);
+  --ds-text-tertiary:    rgba(255, 255, 255, 0.35);
+  --ds-text-placeholder: rgba(255, 255, 255, 0.30);
+  --ds-text-muted:       rgba(255, 255, 255, 0.18);
 
-    /* Accent Colors — Semantic */
-    --ds-accent:   #0a84ff;   /* Primary action, links */
-    --ds-green:    #30d158;   /* Success, Good rating */
-    --ds-yellow:   #ffd60a;   /* Warning, Hard rating */
-    --ds-red:      #ff453a;   /* Error, Again rating */
-    --ds-purple:   #bf5af2;   /* Deep mode */
+  /* ── Borders — 2 Levels ── */
+  --ds-border-subtle: rgba(255, 255, 255, 0.06);
+  --ds-border-medium: rgba(255, 255, 255, 0.12);
 
-    /* Stats Colors */
-    --ds-stat-new:      rgba(10, 132, 255, 0.85);
-    --ds-stat-learning: rgba(255, 159, 10, 0.85);
-    --ds-stat-review:   rgba(48, 209, 88, 0.85);
+  /* ── Semantic Colors (Apple HIG dark palette) ── */
+  --ds-accent:  #0A84FF;
+  --ds-green:   #30D158;
+  --ds-yellow:  #FFD60A;
+  --ds-red:     #FF453A;
+  --ds-purple:  #BF5AF2;
 
-    /* Rating Colors (same as semantic, named for clarity) */
-    --ds-rate-again: #ff453a;
-    --ds-rate-hard:  #ffd60a;
-    --ds-rate-good:  #30d158;
-    --ds-rate-easy:  #0a84ff;
+  /* ── Stats Colors ── */
+  --ds-stat-new:      rgba(10, 132, 255, 0.85);
+  --ds-stat-learning: rgba(255, 159, 10, 0.85);
+  --ds-stat-review:   rgba(48, 209, 88, 0.85);
 
+  /* ── Interaction Tints ── */
+  --ds-hover-tint:  rgba(255, 255, 255, 0.04);
+  --ds-active-tint: rgba(255, 255, 255, 0.08);
+  --ds-green-tint:  rgba(48, 209, 88, 0.08);
+  --ds-red-tint:    rgba(255, 69, 58, 0.05);
 
-    /* ═══ 2. SPACING ═══ */
-    --ds-space-xs:  4px;
-    --ds-space-sm:  8px;
-    --ds-space-md:  12px;
-    --ds-space-lg:  16px;
-    --ds-space-xl:  24px;
-    --ds-space-2xl: 32px;
+  /* ── Rating Aliases — var() refs so light mode overrides work ── */
+  --ds-rate-again: var(--ds-red);
+  --ds-rate-hard:  var(--ds-yellow);
+  --ds-rate-good:  var(--ds-green);
+  --ds-rate-easy:  var(--ds-accent);
 
 
-    /* ═══ 3. BORDER RADIUS — 3 Tiers ═══ */
-    --ds-radius-sm:  8px;    /* Small elements (pills, badges) */
-    --ds-radius-md:  12px;   /* Medium elements (buttons, options) */
-    --ds-radius-lg:  16px;   /* Large containers (cards, docks) */
-    --ds-radius-xl:  22px;   /* Extra large (page-level surfaces) */
+  /* ─────────────────────────────────────────────────────────
+     2. SPACING
+     ───────────────────────────────────────────────────────── */
+  --ds-space-xs:  4px;
+  --ds-space-sm:  8px;
+  --ds-space-md:  12px;
+  --ds-space-lg:  16px;
+  --ds-space-xl:  24px;
+  --ds-space-2xl: 32px;
 
 
-    /* ═══ 4. TYPOGRAPHY ═══ */
-    --ds-font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
-    --ds-font-mono: "SF Mono", ui-monospace, monospace;
-    --ds-text-xs:  11px;
-    --ds-text-sm:  12px;
-    --ds-text-base: 13px;
-    --ds-text-md:  14px;
-    --ds-text-lg:  15px;
-    --ds-text-xl:  18px;
-    --ds-text-2xl: 20px;
+  /* ─────────────────────────────────────────────────────────
+     3. BORDER RADIUS — 4 Tiers
+     ───────────────────────────────────────────────────────── */
+  --ds-radius-sm: 8px;    /* Pills, badges, small controls    */
+  --ds-radius-md: 12px;   /* Buttons, options, inline items   */
+  --ds-radius-lg: 16px;   /* Cards, docks, panels             */
+  --ds-radius-xl: 22px;   /* Page-level surfaces, large sheets */
 
 
-    /* ═══ 5. SHADOWS — 2 Levels ═══ */
-    --ds-shadow-sm:  0 2px 8px rgba(0, 0, 0, 0.2);
-    --ds-shadow-md:  0 4px 24px rgba(0, 0, 0, 0.35);
-    --ds-shadow-lg:  0 8px 40px rgba(0, 0, 0, 0.5);
+  /* ─────────────────────────────────────────────────────────
+     4. TYPOGRAPHY
+     ───────────────────────────────────────────────────────── */
+  --ds-font-sans:  -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  --ds-font-brand: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --ds-font-mono:  "SF Mono", "Cascadia Code", ui-monospace, monospace;
+
+  --ds-text-xs:   11px;
+  --ds-text-sm:   12px;
+  --ds-text-base: 13px;
+  --ds-text-md:   14px;
+  --ds-text-lg:   15px;
+  --ds-text-xl:   18px;
+  --ds-text-2xl:  20px;
 
 
-    /* ═══ 6. ANIMATION ═══ */
-    --ds-ease:     cubic-bezier(0.16, 1, 0.3, 1);
-    --ds-duration: 200ms;
+  /* ─────────────────────────────────────────────────────────
+     5. SHADOWS
+     ───────────────────────────────────────────────────────── */
+  --ds-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --ds-shadow-md: 0 4px 24px rgba(0, 0, 0, 0.35);
+  --ds-shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.5);
+
+
+  /* ─────────────────────────────────────────────────────────
+     6. ANIMATION
+     ───────────────────────────────────────────────────────── */
+  --ds-ease:     cubic-bezier(0.16, 1, 0.3, 1);
+  --ds-duration: 200ms;
 }
 
 
-/*
- * ═══════════════════════════════════════════════════════════
- * COMPONENT SPECIFICATIONS
- * ═══════════════════════════════════════════════════════════
- *
- * These are the reference specs. Both the reviewer CSS and
- * the React/Tailwind frontend must match these exactly.
- *
- *
- * ── CONTAINER (Input Dock, Chat Input) ──
- *   background:    var(--ds-bg-inset)    = #151515
- *   border:        1px solid var(--ds-border-medium)
- *   border-radius: var(--ds-radius-lg)   = 16px
- *   shadow:        var(--ds-shadow-md)
- *
- *
- * ── ELEVATED SURFACE (Card Box, Modals) ──
- *   background:    var(--ds-bg-elevated) = #222224
- *   border:        1px solid var(--ds-border-subtle)
- *   border-radius: var(--ds-radius-lg)   = 16px
- *   shadow:        var(--ds-shadow-sm)
- *
- *
- * ── TEXT INPUT (inside a container) ──
- *   background:    transparent
- *   border:        none
- *   color:         var(--ds-text-primary)
- *   font-size:     var(--ds-text-lg)     = 15px
- *   padding:       12px 16px
- *   placeholder:   var(--ds-text-placeholder)
- *
- *
- * ── SEPARATOR (inside a container) ──
- *   1px solid var(--ds-border-subtle)
- *   Full width, no margin
- *   Applied as border-top or border-bottom
- *
- *
- * ── ACTION BUTTON (inside a container) ──
- *   background:    transparent
- *   border:        none
- *   color:         var(--ds-text-secondary)
- *   font-size:     var(--ds-text-base)   = 13px
- *   font-weight:   500
- *   padding:       11px 16px
- *   hover:         color → var(--ds-text-primary)
- *   NO background change on hover (text color only)
- *
- *
- * ── SEND BUTTON ──
- *   background:    var(--ds-accent)
- *   border:        none
- *   border-radius: 50%
- *   size:          30px × 30px
- *   color:         white
- *   Hidden when empty, scale-in when text present
- *
- *
- * ── RATING BUTTON ──
- *   Same as ACTION BUTTON, but with semantic color:
- *   Again: var(--ds-rate-again)
- *   Hard:  var(--ds-rate-hard)
- *   Good:  var(--ds-rate-good)
- *   Easy:  var(--ds-rate-easy)
- *
- *
- * ── MC OPTION ──
- *   background:    transparent
- *   border:        none
- *   border-radius: var(--ds-radius-md)   = 12px
- *   padding:       12px 14px
- *   hover:         background rgba(255,255,255,0.04)
- *   Correct:       background rgba(48,209,88,0.08), color var(--ds-green)
- *   Wrong:         background rgba(255,69,58,0.05), color var(--ds-red), line-through
- *
- *
- * ── TAB (Segmented Control) ──
- *   Container:     background rgba(255,255,255,0.04), radius var(--ds-radius-sm)
- *   Tab:           transparent, text var(--ds-text-tertiary), 12px, weight 500
- *   Active Tab:    background rgba(255,255,255,0.08), text var(--ds-text-primary), weight 600
- *
- *
- * ── KEYBOARD HINT ──
- *   font-family:   var(--ds-font-mono)
- *   font-size:     10px
- *   color:         var(--ds-text-muted)
- *   No background, no border (just subtle text)
- *
- */
+/* ─────────────────────────────────────────────────────────
+   2. LIGHT MODE OVERRIDES
+   ───────────────────────────────────────────────────────── */
+[data-theme="light"] {
+  --ds-bg-deep:     #ECECF0;
+  --ds-bg-canvas:   #FFFFFF;
+  --ds-bg-frosted:  #F9F9FB;
+  --ds-bg-overlay:  #E5E5EA;
+
+  --ds-text-primary:     rgba(0, 0, 0, 0.85);
+  --ds-text-secondary:   rgba(60, 60, 67, 0.60);
+  --ds-text-tertiary:    rgba(60, 60, 67, 0.30);
+  --ds-text-placeholder: rgba(60, 60, 67, 0.25);
+  --ds-text-muted:       rgba(60, 60, 67, 0.18);
+
+  --ds-border-subtle: rgba(0, 0, 0, 0.04);
+  --ds-border-medium: rgba(0, 0, 0, 0.10);
+
+  --ds-accent:  #007AFF;
+  --ds-green:   #34C759;
+  --ds-yellow:  #FF9F0A;
+  --ds-red:     #FF3B30;
+  --ds-purple:  #AF52DE;
+
+  --ds-stat-new:      rgba(0, 122, 255, 0.85);
+  --ds-stat-learning: rgba(255, 159, 10, 0.85);
+  --ds-stat-review:   rgba(52, 199, 89, 0.85);
+
+  --ds-hover-tint:  rgba(0, 0, 0, 0.03);
+  --ds-active-tint: rgba(0, 0, 0, 0.06);
+  --ds-green-tint:  rgba(52, 199, 89, 0.08);
+  --ds-red-tint:    rgba(255, 59, 48, 0.06);
+
+  --ds-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --ds-shadow-md: 0 4px 24px rgba(0, 0, 0, 0.10);
+  --ds-shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.15);
+
+  /* Rating aliases re-resolve automatically via var(--ds-red) etc. */
+}
+
+
+/* ─────────────────────────────────────────────────────────
+   3. COMPONENT CLASSES  (.ds-*)
+   All properties reference tokens only — no hardcoded colors.
+   ───────────────────────────────────────────────────────── */
+
+/* ── Frosted Glass Container ── */
+.ds-frosted {
+  background: var(--ds-bg-frosted);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--ds-border-medium);
+  box-shadow: var(--ds-shadow-md);
+  border-radius: var(--ds-radius-lg);
+}
+
+/* ── Borderless Content Container ── */
+.ds-borderless {
+  background: var(--ds-bg-canvas);
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: var(--ds-radius-lg);
+}
+
+/* ── Input Dock ──
+   Full-width dock housing a textarea + action row + send button.
+   The textarea and action buttons are transparent children;
+   the dock itself owns the surface and border.               */
+.ds-input-dock {
+  display: flex;
+  flex-direction: column;
+  background: var(--ds-bg-frosted);
+  border: 1px solid var(--ds-border-medium);
+  border-radius: var(--ds-radius-lg);
+  box-shadow: var(--ds-shadow-md);
+  overflow: hidden;
+}
+
+.ds-input-dock textarea {
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  color: var(--ds-text-primary);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-lg);
+  padding: var(--ds-space-md) var(--ds-space-lg);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ds-input-dock textarea::placeholder {
+  color: var(--ds-text-placeholder);
+}
+
+.ds-input-dock .ds-input-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-xs);
+  padding: var(--ds-space-sm) var(--ds-space-md);
+  border-top: 1px solid var(--ds-border-subtle);
+}
+
+.ds-input-dock .ds-action-btn {
+  background: transparent;
+  border: none;
+  color: var(--ds-text-secondary);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-base);
+  font-weight: 500;
+  padding: var(--ds-space-sm) var(--ds-space-md);
+  border-radius: var(--ds-radius-sm);
+  cursor: pointer;
+  transition: color var(--ds-duration) var(--ds-ease);
+}
+
+.ds-input-dock .ds-action-btn:hover {
+  color: var(--ds-text-primary);
+  /* Background intentionally unchanged — text color only */
+}
+
+.ds-input-dock .ds-send-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--ds-accent);
+  border: none;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin-left: auto;
+  flex-shrink: 0;
+  transition: opacity var(--ds-duration) var(--ds-ease),
+              transform var(--ds-duration) var(--ds-ease);
+}
+
+.ds-input-dock .ds-send-btn:hover {
+  opacity: 0.85;
+}
+
+.ds-input-dock .ds-send-btn[data-empty="true"] {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.7);
+}
+
+
+/* ── AI Thought Step ── */
+.ds-thought-step {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ds-space-sm);
+  padding: var(--ds-space-sm) var(--ds-space-md);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-hover-tint);
+  transition: background var(--ds-duration) var(--ds-ease);
+}
+
+.ds-thought-step:hover {
+  background: var(--ds-active-tint);
+}
+
+.ds-thought-step .ds-thought-icon {
+  color: var(--ds-text-tertiary);
+  flex-shrink: 0;
+}
+
+.ds-thought-step .ds-thought-text {
+  color: var(--ds-text-secondary);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-sm);
+  line-height: 1.5;
+}
+
+.ds-thought-step.ds-thought-active .ds-thought-text {
+  color: var(--ds-text-primary);
+}
+
+
+/* ── Multiple Choice Option ── */
+.ds-mc-option {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-sm);
+  padding: var(--ds-space-md) 14px;
+  border-radius: var(--ds-radius-md);
+  border: none;
+  background: transparent;
+  color: var(--ds-text-primary);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-md);
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+  transition: background var(--ds-duration) var(--ds-ease),
+              color var(--ds-duration) var(--ds-ease);
+}
+
+.ds-mc-option:hover {
+  background: var(--ds-hover-tint);
+}
+
+.ds-mc-option.correct {
+  background: var(--ds-green-tint);
+  color: var(--ds-green);
+}
+
+.ds-mc-option.wrong {
+  background: var(--ds-red-tint);
+  color: var(--ds-red);
+  text-decoration: line-through;
+}
+
+
+/* ── Review Result / Quiz Feedback ── */
+.ds-review-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-sm);
+  padding: var(--ds-space-md) var(--ds-space-lg);
+  border-radius: var(--ds-radius-lg);
+  border: 1px solid var(--ds-border-subtle);
+  background: var(--ds-bg-canvas);
+}
+
+.ds-review-result.correct {
+  border-color: var(--ds-green);
+  background: var(--ds-green-tint);
+}
+
+.ds-review-result.incorrect {
+  border-color: var(--ds-red);
+  background: var(--ds-red-tint);
+}
+
+.ds-review-result .ds-result-label {
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ds-text-tertiary);
+}
+
+.ds-review-result.correct .ds-result-label {
+  color: var(--ds-green);
+}
+
+.ds-review-result.incorrect .ds-result-label {
+  color: var(--ds-red);
+}
+
+.ds-review-result .ds-result-body {
+  color: var(--ds-text-primary);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-md);
+  line-height: 1.6;
+}
+
+
+/* ── Tab Bar / Segmented Control ── */
+.ds-tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: var(--ds-hover-tint);
+  border-radius: var(--ds-radius-sm);
+}
+
+.ds-tab {
+  flex: 1;
+  padding: var(--ds-space-xs) var(--ds-space-sm);
+  border-radius: calc(var(--ds-radius-sm) - 2px);
+  border: none;
+  background: transparent;
+  color: var(--ds-text-tertiary);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-xs);
+  font-weight: 500;
+  text-align: center;
+  cursor: pointer;
+  transition: background var(--ds-duration) var(--ds-ease),
+              color var(--ds-duration) var(--ds-ease);
+  white-space: nowrap;
+}
+
+.ds-tab:hover {
+  color: var(--ds-text-secondary);
+}
+
+.ds-tab.active,
+.ds-tab[aria-selected="true"] {
+  background: var(--ds-active-tint);
+  color: var(--ds-text-primary);
+  font-weight: 600;
+}
+
+
+/* ── Keyboard Hint ── */
+.ds-kbd {
+  font-family: var(--ds-font-mono);
+  font-size: 10px;
+  color: var(--ds-text-muted);
+  /* No background or border — just subtle monospaced text */
+}
