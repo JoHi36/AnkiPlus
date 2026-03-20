@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, AlertCircle, Loader2, Eye, EyeOff, Zap, GraduationCap, Crown, CreditCard, Sparkles, LogOut, ExternalLink } from 'lucide-react';
+import { X, AlertCircle, Loader2, Eye, EyeOff, Zap, GraduationCap, Crown, CreditCard, Sparkles, LogOut, ExternalLink, Sun, Moon, Monitor } from 'lucide-react';
 
 /**
  * Profile Dialog Komponente
@@ -7,7 +7,7 @@ import { X, AlertCircle, Loader2, Eye, EyeOff, Zap, GraduationCap, Crown, Credit
  * 1. Nicht authentifiziert: Nur Token-Eingabe (zentriert, im Mittelpunkt)
  * 2. Authentifiziert: Abo-Status + "Abo verwalten" Button
  */
-export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
+export default function ProfileDialog({ isOpen, onClose, bridge, isReady, currentTheme = 'dark' }) {
   const [authToken, setAuthToken] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,6 +20,19 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
   });
   const [quotaStatus, setQuotaStatus] = useState(null);
   const [currentAuthToken, setCurrentAuthToken] = useState('');
+  const [selectedTheme, setSelectedTheme] = useState(currentTheme || 'dark');
+
+  // Sync selectedTheme when currentTheme prop changes
+  useEffect(() => {
+    if (currentTheme) setSelectedTheme(currentTheme);
+  }, [currentTheme]);
+
+  const handleThemeChange = (newTheme) => {
+    setSelectedTheme(newTheme);
+    if (bridge && bridge.saveTheme) {
+      bridge.saveTheme(newTheme);
+    }
+  };
 
   // Lade Auth-Status beim Öffnen
   useEffect(() => {
@@ -325,6 +338,31 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
           >
             <X size={18} />
           </button>
+        </div>
+
+        {/* Theme Selector — always visible */}
+        <div className="px-5 pt-4 pb-3 border-b border-base-content/5">
+          <p className="text-xs font-medium text-base-content/50 uppercase tracking-wider mb-2">Erscheinungsbild</p>
+          <div className="flex gap-2">
+            {[
+              { value: 'dark', label: 'Dunkel', Icon: Moon },
+              { value: 'light', label: 'Hell', Icon: Sun },
+              { value: 'system', label: 'System', Icon: Monitor },
+            ].map(({ value, label, Icon }) => (
+              <button
+                key={value}
+                onClick={() => handleThemeChange(value)}
+                className={`flex-1 flex flex-col items-center gap-1.5 py-2.5 px-2 rounded-xl border text-xs font-medium transition-all ${
+                  selectedTheme === value
+                    ? 'border-primary/50 bg-primary/10 text-primary'
+                    : 'border-base-content/10 bg-base-200/30 text-base-content/60 hover:bg-base-200/60 hover:text-base-content/80'
+                }`}
+              >
+                <Icon size={16} strokeWidth={1.8} />
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="overflow-y-auto p-5">

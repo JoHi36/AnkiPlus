@@ -23,6 +23,11 @@ try:
 except ImportError:
     from tokens_qt import get_tokens
 
+try:
+    from .theme import get_resolved_theme
+except ImportError:
+    from theme import get_resolved_theme
+
 # Pre-compiled regex patterns for HTML processing (hot path)
 _RE_HR = re.compile(r'<hr[^>]*/?>',  re.IGNORECASE)
 _RE_BOTTOM_TABLE = re.compile(
@@ -282,7 +287,7 @@ def apply_global_dark_theme():
     except Exception:
         pass
     
-    _t = get_tokens("dark")
+    _t = get_tokens(get_resolved_theme())
     global_stylesheet = f"""
     /* ============================================
        GLOBAL: Alle Widgets
@@ -751,14 +756,24 @@ def on_webview_will_set_content(web_content, context):
             elif has_html:
                 web_content.html = html
         
-        _wt = get_tokens("dark")
+        _resolved_theme = get_resolved_theme()
+        _wt = get_tokens(_resolved_theme)
+        _text_color = "rgba(255, 255, 255, 0.9)" if _resolved_theme == "dark" else "rgba(0, 0, 0, 0.85)"
         web_content.head += f"""
         <style>
         html, body {{
             background-color: {_wt['bg_canvas']} !important;
-            color: rgba(255, 255, 255, 0.9) !important;
+            color: {_text_color} !important;
         }}
         </style>
+        """
+
+        web_content.head += f"""
+        <script>
+        (function() {{
+            document.documentElement.setAttribute('data-theme', '{_resolved_theme}');
+        }})();
+        </script>
         """
 
         web_content.head += """
@@ -817,14 +832,19 @@ def on_webview_will_set_content(web_content, context):
         """
     except Exception as e:
         _debug_log(f"⚠️ Fehler bei HTML-Modifikation: {e}")
-        _wt = get_tokens("dark")
+        _resolved_theme = get_resolved_theme()
+        _wt = get_tokens(_resolved_theme)
+        _text_color = "rgba(255, 255, 255, 0.9)" if _resolved_theme == "dark" else "rgba(0, 0, 0, 0.85)"
         web_content.head += f"""
         <style>
         html, body {{
             background-color: {_wt['bg_canvas']} !important;
-            color: rgba(255, 255, 255, 0.9) !important;
+            color: {_text_color} !important;
         }}
         </style>
+        <script>
+        (function() {{ document.documentElement.setAttribute('data-theme', '{_resolved_theme}'); }})();
+        </script>
         """
 
 

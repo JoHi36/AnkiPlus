@@ -842,9 +842,9 @@ class WebBridge(QObject):
         """Gibt das aktuelle Theme zurück"""
         try:
             config = get_config(force_reload=True)
-            return config.get("theme", "auto")
+            return config.get("theme", "dark")
         except (ValueError, KeyError, AttributeError):
-            return "auto"
+            return "dark"
 
     @pyqtSlot(str)
     def saveTheme(self, theme):

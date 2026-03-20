@@ -15,20 +15,59 @@ try:
 except ImportError:
     from tokens_qt import DARK_TOKENS, LIGHT_TOKENS
 
+
+def _detect_system_theme() -> str:
+    """Detect the OS/Qt palette theme. Returns 'light' or 'dark'."""
+    try:
+        from aqt import mw
+        if mw and mw.pm and hasattr(mw.pm, 'night_mode'):
+            return "dark" if mw.pm.night_mode() else "light"
+    except Exception:
+        pass
+    try:
+        from aqt.qt import QApplication, QPalette
+        app = QApplication.instance()
+        if app:
+            color = app.palette().color(QPalette.ColorRole.Window)
+            return "dark" if color.lightness() < 128 else "light"
+    except Exception:
+        pass
+    return "dark"
+
+
+def get_resolved_theme() -> str:
+    """
+    Returns the effective theme string ('dark' or 'light'), resolving
+    'system' by querying the OS/Qt palette.
+    """
+    config = get_config()
+    theme = config.get("theme", "dark")
+    # Legacy value guard
+    if theme == "auto":
+        theme = "dark"
+    if theme == "system":
+        return _detect_system_theme()
+    if theme in ("dark", "light"):
+        return theme
+    return "dark"
+
+
+def get_theme_attribute() -> str:
+    """
+    Returns the HTML attribute string to apply to <html> for light mode,
+    or an empty string for dark mode (dark is the CSS default).
+
+    Usage in HTML templates:
+        <html {get_theme_attribute()}>
+    """
+    return 'data-theme="light"' if get_resolved_theme() == "light" else ""
+
+
 def get_theme_styles():
     """Gibt die Styles basierend auf dem aktuellen Theme zurück"""
-    config = get_config()
-    theme = config.get("theme", "auto")
-    
-    # Auto-Theme: Erkenne System-Theme
-    if theme == "auto":
-        # Versuche System-Theme zu erkennen (vereinfacht - könnte verbessert werden)
-        theme = "dark"  # Default zu dark, könnte später System-Theme erkennen
-    
-    if theme == "light":
+    if get_resolved_theme() == "light":
         return LIGHT_THEME
-    else:
-        return DARK_THEME
+    return DARK_THEME
 
 # Dark Theme Styles - Edles Teal/Türkis-Blau
 DARK_THEME = {

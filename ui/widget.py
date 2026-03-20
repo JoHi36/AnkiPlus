@@ -397,6 +397,8 @@ class ChatbotWidget(QWidget):
             'getAITools': self._msg_get_ai_tools,
             'saveAITools': self._msg_save_ai_tools,
             'saveMascotEnabled': self._msg_save_mascot_enabled,
+            'saveTheme': self._msg_save_theme,
+            'getTheme': self._msg_get_theme,
             # Auth
             'authenticate': self._msg_authenticate,
             'getAuthStatus': lambda d: self._send_to_frontend("authStatusLoaded", json.loads(self.bridge.getAuthStatus())),
@@ -616,11 +618,17 @@ class ChatbotWidget(QWidget):
 
     def _msg_get_current_config(self, data):
         config = get_config(force_reload=True)
+        try:
+            from .theme import get_resolved_theme
+        except ImportError:
+            from ui.theme import get_resolved_theme
         self._send_to_frontend("configLoaded", {
             "api_key": config.get("api_key", "").strip(),
             "provider": "google",
             "model": config.get("model_name", ""),
             "mascot_enabled": config.get("mascot_enabled", False),
+            "theme": config.get("theme", "dark"),
+            "resolvedTheme": get_resolved_theme(),
         })
 
     def _msg_fetch_models(self, data):
@@ -659,6 +667,50 @@ class ChatbotWidget(QWidget):
         update_config(mascot_enabled=enabled)
         self.config = get_config(force_reload=True)
         self._send_to_frontend("mascotEnabledSaved", {"enabled": enabled})
+
+    def _msg_save_theme(self, data):
+        """Save theme setting and push it back to all web views."""
+        theme = str(data) if data else "dark"
+        if theme not in ("dark", "light", "system"):
+            theme = "dark"
+        update_config(theme=theme)
+        self.config = get_config(force_reload=True)
+        self._apply_theme_to_webview()
+
+    def _msg_get_theme(self, data):
+        """Return current (resolved) theme to the frontend."""
+        try:
+            from .theme import get_resolved_theme
+        except ImportError:
+            from ui.theme import get_resolved_theme
+        resolved = get_resolved_theme()
+        config = get_config(force_reload=True)
+        stored = config.get("theme", "dark")
+        self._send_to_frontend("themeLoaded", {"theme": stored, "resolvedTheme": resolved})
+
+    def _apply_theme_to_webview(self):
+        """Push the current theme to the React app via JS."""
+        if not self.web_view:
+            return
+        try:
+            from .theme import get_resolved_theme
+        except ImportError:
+            from ui.theme import get_resolved_theme
+        config = get_config(force_reload=True)
+        stored_theme = config.get("theme", "dark")
+        resolved = get_resolved_theme()
+        js = f"""
+        (function() {{
+            document.documentElement.setAttribute('data-theme', '{resolved}');
+            if (typeof window.ankiReceive === 'function') {{
+                window.ankiReceive({{
+                    type: 'themeChanged',
+                    data: {{ theme: '{stored_theme}', resolvedTheme: '{resolved}' }}
+                }});
+            }}
+        }})();
+        """
+        self.web_view.page().runJavaScript(js)
 
     def _msg_authenticate(self, data):
         if isinstance(data, dict):
@@ -770,7 +822,7 @@ class ChatbotWidget(QWidget):
         """Sendet Start-Config an die Web-UI"""
         api_key = self.config.get("api_key", "")
         provider = "google"  # Immer Google
-        
+
         # Lade Modelle live wenn API-Key vorhanden
         models = []
         if api_key.strip():
@@ -783,7 +835,7 @@ class ChatbotWidget(QWidget):
                 models = self._build_model_list()  # Fallback
         else:
             models = self._build_model_list()  # Fallback wenn kein API-Key
-        
+
         # Hole aktuelles Deck-Info
         try:
             deck_info = self.bridge.getCurrentDeck()
@@ -791,7 +843,15 @@ class ChatbotWidget(QWidget):
         except Exception as e:
             logger.error("Fehler beim Abrufen des Decks: %s", e)
             deck_data = {"deckId": None, "deckName": None, "isInDeck": False}
-        
+
+        # Resolve current theme
+        try:
+            from .theme import get_resolved_theme
+        except ImportError:
+            from ui.theme import get_resolved_theme
+        stored_theme = self.config.get("theme", "dark")
+        resolved_theme = get_resolved_theme()
+
         payload = {
             "type": "init",
             "models": models,
@@ -799,10 +859,14 @@ class ChatbotWidget(QWidget):
             "provider": provider,
             "hasApiKey": bool(api_key.strip()),
             "message": "Hallo! Ich bin der Anki Chatbot. Wie kann ich Ihnen helfen?",
-            "currentDeck": deck_data
+            "currentDeck": deck_data,
+            "theme": stored_theme,
+            "resolvedTheme": resolved_theme,
         }
         js = f"window.ankiReceive({json.dumps(payload)});"
         self.web_view.page().runJavaScript(js)
+        # Also apply data-theme attribute immediately
+        self._apply_theme_to_webview()
     
     def push_updated_models(self):
         """Sendet aktualisierte Model-Liste an die Web-UI"""

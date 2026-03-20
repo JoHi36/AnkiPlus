@@ -346,6 +346,22 @@ function AppInner() {
   const handleFreeChatOpenRef = useRef(null);
   useEffect(() => { freeChatOpenRef.current = freeChatOpen; }, [freeChatOpen]);
 
+  // Theme state — 'dark' | 'light' | 'system'; resolvedTheme is the effective value
+  const [theme, setTheme] = useState('dark');
+  const [resolvedTheme, setResolvedTheme] = useState('dark');
+
+  // Apply data-theme to document root whenever resolvedTheme changes
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', resolvedTheme);
+  }, [resolvedTheme]);
+
+  // Load theme from config on bridge ready
+  useEffect(() => {
+    if (isReady && bridge && bridge.getTheme) {
+      bridge.getTheme();
+    }
+  }, [isReady, bridge]);
+
   // Mascot state
   const { mood, setEventMood, setAiMood, resetMood } = useMascot();
   const [mascotEnabled, setMascotEnabled] = useState(false);
@@ -903,6 +919,9 @@ function AppInner() {
             _deck.setCurrentDeck(payload.currentDeck);
             _deck.handleDeckChange(payload.currentDeck);
           }
+          // Apply theme from init payload
+          if (payload.theme) setTheme(payload.theme);
+          if (payload.resolvedTheme) setResolvedTheme(payload.resolvedTheme);
           // Don't append greeting when in review mode — InsightsDashboard is the empty state now
         }
 
@@ -1041,11 +1060,23 @@ function AppInner() {
           }
         }
 
-        // configLoaded — sync mascot_enabled from full config
+        // configLoaded — sync mascot_enabled and theme from full config
         if (payload.type === 'configLoaded' && payload.data) {
           window._cachedConfig = payload.data;
           const mascotVal = payload.data?.mascot_enabled ?? false;
           setMascotEnabled(mascotVal);
+          if (payload.data.theme) setTheme(payload.data.theme);
+          if (payload.data.resolvedTheme) setResolvedTheme(payload.data.resolvedTheme);
+        }
+
+        // Theme events
+        if (payload.type === 'themeChanged' && payload.data) {
+          if (payload.data.theme) setTheme(payload.data.theme);
+          if (payload.data.resolvedTheme) setResolvedTheme(payload.data.resolvedTheme);
+        }
+        if (payload.type === 'themeLoaded' && payload.data) {
+          if (payload.data.theme) setTheme(payload.data.theme);
+          if (payload.data.resolvedTheme) setResolvedTheme(payload.data.resolvedTheme);
         }
       };
       ankiReceiveRef.current = true;
@@ -1071,6 +1102,8 @@ function AppInner() {
               deckTrackingHookRef.current.setCurrentDeck(payload.currentDeck);
               deckTrackingHookRef.current.handleDeckChange(payload.currentDeck);
             }
+            if (payload.theme) setTheme(payload.theme);
+            if (payload.resolvedTheme) setResolvedTheme(payload.resolvedTheme);
           }
         });
       }
@@ -2354,6 +2387,7 @@ function AppInner() {
         onClose={() => setShowProfile(false)}
         bridge={bridge}
         isReady={isReady}
+        currentTheme={theme}
       />
 
       {/* Card Preview Modal removed — replaced by universal Preview Mode */}

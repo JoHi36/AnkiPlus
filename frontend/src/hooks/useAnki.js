@@ -412,6 +412,18 @@ export function useAnki() {
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('plusiDirect', JSON.stringify({ text, deck_id: deckId }));
             }
+          },
+          saveTheme: (theme) => {
+            console.log('Bridge: saveTheme aufgerufen:', theme);
+            if (window.ankiBridge) {
+              window.ankiBridge.addMessage('saveTheme', theme);
+            }
+          },
+          getTheme: () => {
+            console.log('Bridge: getTheme aufgerufen');
+            if (window.ankiBridge) {
+              window.ankiBridge.addMessage('getTheme', null);
+            }
           }
         };
         
@@ -577,6 +589,19 @@ export function useAnki() {
                 window.ankiReceive({ type: 'plusi_direct_result', mood: 'happy', text: 'Hey! Das ist eine Mock-Antwort von Plusi.', meta: 'freut sich', friendship: { level: 2, levelName: 'Bekannte', points: 23, maxPoints: 50, delta: 1 }, error: false });
               }
             }, 800);
+          },
+          saveTheme: (theme) => {
+            console.log('Mock: saveTheme', theme);
+            document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
+            if (window.ankiReceive) {
+              window.ankiReceive({ type: 'themeChanged', data: { theme, resolvedTheme: theme === 'light' ? 'light' : 'dark' } });
+            }
+          },
+          getTheme: () => {
+            console.log('Mock: getTheme');
+            if (window.ankiReceive) {
+              window.ankiReceive({ type: 'themeLoaded', data: { theme: 'dark', resolvedTheme: 'dark' } });
+            }
           }
         });
         setIsReady(true);

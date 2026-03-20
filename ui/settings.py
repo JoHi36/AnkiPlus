@@ -80,7 +80,7 @@ class SettingsBridge(QObject):
 
             return json.dumps({
                 'responseStyle': config.get('response_style', 'balanced'),
-                'theme': config.get('theme', 'auto'),
+                'theme': config.get('theme', 'dark'),
                 'aiTools': config.get('ai_tools', {'images': True, 'diagrams': True, 'molecules': False}),
                 'mascotEnabled': config.get('mascot_enabled', False),
                 'isAuthenticated': is_authenticated,

@@ -24,7 +24,7 @@ DEFAULT_CONFIG = {
     "backend_url": "",  # Backend URL (Standard: Firebase Function URL)
     "auth_validated": False,  # Wurde der Token erfolgreich validiert?
     "response_style": "balanced",  # balanced, concise, detailed, friendly
-    "theme": "auto",  # auto, dark, light
+    "theme": "dark",  # dark, light, system
     "ai_tools": {
         "plusi": True,       # Sub-Agent: Plusi companion
         "cards": True,       # Tool: Card search + show
@@ -113,6 +113,10 @@ def load_config():
                 if "firebase" not in config:
                     config["firebase"] = DEFAULT_CONFIG["firebase"].copy()
                 
+                # Migration: "auto" → "dark" (legacy value renamed)
+                if config.get("theme") == "auto":
+                    config["theme"] = "dark"
+
                 # Migration: Backend-URL setzen falls nicht vorhanden
                 if "backend_url" not in config or not config.get("backend_url"):
                     config["backend_url"] = DEFAULT_BACKEND_URL
