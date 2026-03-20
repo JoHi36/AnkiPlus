@@ -272,17 +272,17 @@ def persist_internal_state(internal):
 # ── Personality computation ─────────────────────────────────────────────
 
 ENERGY_LOG_MAX = 100
-PERSONALITY_SNAPSHOT_MAX = 50
+PERSONALITY_SNAPSHOT_MAX = 20
 CONFIDENCE_THRESHOLD = 5  # min interactions AND energy entries
 
 
 def _append_energy_log(energy):
     """Append an energy reading to the rolling energy log."""
-    log = get_memory('state', 'energy_log', [])
+    log = get_memory('personality', 'energy_log', [])
     log.append({'energy': energy, 'ts': datetime.now().isoformat()})
     if len(log) > ENERGY_LOG_MAX:
         log = log[-ENERGY_LOG_MAX:]
-    set_memory('state', 'energy_log', log)
+    set_memory('personality', 'energy_log', log)
 
 
 def compute_personality_position():
@@ -303,14 +303,19 @@ def compute_personality_position():
     total_interactions = sum(counts.values())
 
     # Get energy log
-    energy_log = get_memory('state', 'energy_log', [])
+    energy_log = get_memory('personality', 'energy_log', [])
 
     # Check confidence
     confident = (total_interactions >= CONFIDENCE_THRESHOLD
                  and len(energy_log) >= CONFIDENCE_THRESHOLD)
 
     if not confident:
-        return {'x': 0.5, 'y': 0.5, 'quadrant_label': 'Unknown', 'confident': False}
+        return {
+            'x': 0.5, 'y': 0.5,
+            'quadrant': 'unknown',
+            'quadrant_label': 'Noch zu wenig Daten',
+            'confident': False,
+        }
 
     # X-axis: chat ratio
     chat_count = counts.get('chat', 0)
@@ -326,30 +331,37 @@ def compute_personality_position():
     y = max(0.0, min(1.0, y))
 
     # Determine quadrant
-    if x >= 0.5 and y >= 0.5:
-        quadrant = 'Entertainer'
-    elif x < 0.5 and y >= 0.5:
-        quadrant = 'Mystic'
-    elif x >= 0.5 and y < 0.5:
-        quadrant = 'Companion'
-    else:
-        quadrant = 'Philosopher'
+    # Y-axis: active (high energy, y>=0.5) vs still (low energy, y<0.5)
+    # X-axis: sachlich (introvert/reflect, x<0.5) vs persönlich (social/chat, x>=0.5)
+    if y >= 0.5 and x < 0.5:
+        quadrant = 'forscher'
+        quadrant_label = 'Forscher — aktiv · sachlich'
+    elif y >= 0.5 and x >= 0.5:
+        quadrant = 'begleiter'
+        quadrant_label = 'Begleiter — aktiv · persönlich'
+    elif y < 0.5 and x < 0.5:
+        quadrant = 'denker'
+        quadrant_label = 'Denker — still · sachlich'
+    else:  # y < 0.5 and x >= 0.5
+        quadrant = 'vertrauter'
+        quadrant_label = 'Vertrauter — still · persönlich'
 
-    return {'x': x, 'y': y, 'quadrant_label': quadrant, 'confident': confident}
+    return {'x': x, 'y': y, 'quadrant': quadrant, 'quadrant_label': quadrant_label, 'confident': confident}
 
 
 def _save_personality_snapshot(position):
     """Save a timestamped personality snapshot to the rolling log."""
-    snapshots = get_memory('self', 'personality_snapshots', [])
+    snapshots = get_memory('personality', 'trail', [])
     snapshots.append({
         'x': position['x'],
         'y': position['y'],
+        'quadrant': position['quadrant'],
         'quadrant_label': position['quadrant_label'],
         'ts': datetime.now().isoformat(),
     })
     if len(snapshots) > PERSONALITY_SNAPSHOT_MAX:
         snapshots = snapshots[-PERSONALITY_SNAPSHOT_MAX:]
-    set_memory('self', 'personality_snapshots', snapshots)
+    set_memory('personality', 'trail', snapshots)
 
 
 def build_relationship_context():
