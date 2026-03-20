@@ -10,24 +10,6 @@ export default {
   ],
   theme: {
     extend: {
-      colors: {
-        // Anki Chatbot Design-System (Frontend specific)
-        'bg-dark': '#161616',
-        'bg-panel': '#161616',
-        'bg-muted': '#252525',
-        'text-primary': '#e8e8e8',
-        'text-hint': '#9a9a9a',
-        'accent': '#0a84ff',
-        'accent-strong': '#0071e3',
-        'accent-soft': '#40a0ff',
-      },
-      // fontFamily defined in preset via CSS vars; override only if needed
-      borderRadius: {
-        'xl': '22px',
-        'lg': '18px',
-        'md': '12px',
-        'sm': '8px',
-      },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
       },
@@ -47,19 +29,20 @@ export default {
     themes: [
       {
         dark: {
-          "base-100": "#161616",
-          "base-200": "#161616",
-          "base-300": "#252525",
-          "base-content": "#e8e8e8",
-          "primary": "#0a84ff",
-          "primary-content": "#ffffff",
-          "secondary": "#40a0ff",
-          "accent": "#0071e3",
-          "neutral": "#9a9a9a",
-          "info": "#4a9eff",
-          "success": "#14b8a6",
-          "warning": "#fbbf24",
-          "error": "#ef4444",
+          "base-100": "var(--ds-bg-canvas)",
+          "base-200": "var(--ds-bg-deep)",
+          "base-300": "var(--ds-bg-overlay)",
+          "base-content": "var(--ds-text-primary)",
+          "primary": "var(--ds-accent)",
+          "primary-content": "white",
+          "secondary": "var(--ds-purple)",
+          "accent": "var(--ds-accent)",
+          "neutral": "var(--ds-bg-overlay)",
+          "neutral-content": "var(--ds-text-secondary)",
+          "info": "var(--ds-accent)",
+          "success": "var(--ds-green)",
+          "warning": "var(--ds-yellow)",
+          "error": "var(--ds-red)",
         },
       },
     ],
@@ -70,4 +53,3 @@ export default {
     logs: false,
   },
 };
-
