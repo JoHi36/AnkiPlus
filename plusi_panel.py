@@ -121,6 +121,24 @@ body {
     user-select: none;
     cursor: default;
 }
+.discoveries {
+    margin-top: 6px;
+    padding-left: 8px;
+    border-left: 2px solid rgba(251,191,36,0.15);
+}
+.discovery {
+    font-size: 12px;
+    color: rgba(255,255,255,0.4);
+    padding: 3px 0;
+    cursor: pointer;
+    transition: color 0.15s;
+}
+.discovery:hover {
+    color: rgba(251,191,36,0.7);
+}
+.discovery-icon {
+    font-size: 10px;
+}
 .plusi-bottom {
     position: fixed;
     bottom: 14px; left: 18px; right: 18px;
@@ -347,6 +365,16 @@ function renderEntries(entries) {
         html += '<div class="entry">';
         html += '<div class="entry-time">' + formatTime(e.timestamp) + ' <span class="entry-tag ' + tagClass + '">' + tagLabel + '</span></div>';
         html += '<div class="entry-text">' + text + '</div>';
+        if (e.discoveries && e.discoveries.length > 0) {
+            html += '<div class="discoveries">';
+            e.discoveries.forEach(function(d) {
+                html += '<div class="discovery" onclick="window._apAction={type:\'goToCard\',cardId:' + d.card_id + '}">';
+                html += '<span class="discovery-icon">🔍</span> ';
+                html += '<span class="discovery-why">' + d.why + '</span>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
         html += '</div>';
     });
 
@@ -479,7 +507,7 @@ def _get_current_friendship():
         return {'level': 1, 'levelName': 'Fremde', 'points': 0, 'maxPoints': 15}
 
 
-def _handle_panel_message(msg_type):
+def _handle_panel_message(msg_type, msg_data=None):
     if msg_type == 'loadDiary':
         _send_diary_data()
     elif msg_type == 'panelSettings':
@@ -488,6 +516,17 @@ def _handle_panel_message(msg_type):
         toggle_panel()
     elif msg_type == 'panelBack':
         _back_to_diary()
+    elif msg_type == 'goToCard':
+        card_id = msg_data.get('cardId') if msg_data else None
+        if card_id:
+            try:
+                from aqt import mw
+                from aqt.browser import Browser
+                browser = Browser(mw)
+                browser.search_for(f"cid:{card_id}")
+                browser.show()
+            except Exception as e:
+                print(f"plusi panel goToCard error: {e}")
 
 
 def _send_diary_data():
@@ -595,7 +634,7 @@ def _on_panel_poll_result(result):
     try:
         data = json.loads(result) if isinstance(result, str) else result
         if data and 'type' in data:
-            _handle_panel_message(data['type'])
+            _handle_panel_message(data['type'], data)
     except Exception:
         pass
 
