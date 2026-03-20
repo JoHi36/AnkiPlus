@@ -108,6 +108,17 @@ Colors adapt between modes for optimal contrast (Apple HIG values).
 | `--ds-stat-learning` | `rgba(255, 159, 10, 0.85)` | `rgba(255, 159, 10, 0.85)` |
 | `--ds-stat-review` | `rgba(48, 209, 88, 0.85)` | `rgba(52, 199, 89, 0.85)` |
 
+Note: `--ds-stat-learning` is identical in both modes — orange maintains sufficient contrast on both dark and light backgrounds.
+
+### Interaction State Tokens
+
+| Token | Dark | Light |
+|-------|------|-------|
+| `--ds-hover-tint` | `rgba(255, 255, 255, 0.04)` | `rgba(0, 0, 0, 0.03)` |
+| `--ds-active-tint` | `rgba(255, 255, 255, 0.08)` | `rgba(0, 0, 0, 0.06)` |
+| `--ds-green-tint` | `rgba(48, 209, 88, 0.08)` | `rgba(52, 199, 89, 0.08)` |
+| `--ds-red-tint` | `rgba(255, 69, 58, 0.05)` | `rgba(255, 59, 48, 0.06)` |
+
 ### Rating Colors (aliases for clarity)
 
 ```css
@@ -202,7 +213,21 @@ Three levels. Use sparingly — the Material = Function principle handles most d
 | `--ds-shadow-md` | `0 4px 24px rgba(0, 0, 0, 0.35)` |
 | `--ds-shadow-lg` | `0 8px 40px rgba(0, 0, 0, 0.5)` |
 
-Light mode uses reduced opacity: `0.06`, `0.10`, `0.15`.
+### Dark Mode
+
+| Token | Value |
+|-------|-------|
+| `--ds-shadow-sm` | `0 2px 8px rgba(0, 0, 0, 0.2)` |
+| `--ds-shadow-md` | `0 4px 24px rgba(0, 0, 0, 0.35)` |
+| `--ds-shadow-lg` | `0 8px 40px rgba(0, 0, 0, 0.5)` |
+
+### Light Mode
+
+| Token | Value |
+|-------|-------|
+| `--ds-shadow-sm` | `0 2px 8px rgba(0, 0, 0, 0.06)` |
+| `--ds-shadow-md` | `0 4px 24px rgba(0, 0, 0, 0.10)` |
+| `--ds-shadow-lg` | `0 8px 40px rgba(0, 0, 0, 0.15)` |
 
 ---
 
@@ -212,6 +237,8 @@ Light mode uses reduced opacity: `0.06`, `0.10`, `0.15`.
 |-------|-------|
 | `--ds-ease` | `cubic-bezier(0.16, 1, 0.3, 1)` |
 | `--ds-duration` | `200ms` |
+
+Animation tokens are mode-independent.
 
 ---
 
@@ -329,14 +356,14 @@ Used for: MC grid in Reviewer and React MultipleChoiceCard.
   transition: background var(--ds-duration) var(--ds-ease);
 }
 .ds-mc-option:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--ds-hover-tint);
 }
 .ds-mc-option.correct {
-  background: rgba(48, 209, 88, 0.08);
+  background: var(--ds-green-tint);
   color: var(--ds-green);
 }
 .ds-mc-option.wrong {
-  background: rgba(255, 69, 58, 0.05);
+  background: var(--ds-red-tint);
   color: var(--ds-red);
   text-decoration: line-through;
 }
@@ -367,7 +394,7 @@ Used for: Top bar tabs (Stapel / Session / Statistik).
 ```css
 .ds-tab-bar {
   display: flex;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--ds-hover-tint);
   border-radius: var(--ds-radius-sm);
   padding: 2px;
   gap: 1px;
@@ -384,7 +411,7 @@ Used for: Top bar tabs (Stapel / Session / Statistik).
   transition: all var(--ds-duration) var(--ds-ease);
 }
 .ds-tab.active {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--ds-active-tint);
   color: var(--ds-text-primary);
   font-weight: 600;
 }
@@ -444,19 +471,19 @@ export default {
         'mono':  'var(--ds-font-mono)',
       },
       borderRadius: {
-        'sm': '8px',
-        'md': '12px',
-        'lg': '16px',
-        'xl': '22px',
+        'sm': 'var(--ds-radius-sm)',
+        'md': 'var(--ds-radius-md)',
+        'lg': 'var(--ds-radius-lg)',
+        'xl': 'var(--ds-radius-xl)',
       },
       fontSize: {
-        'xs':   '11px',
-        'sm':   '12px',
-        'base': '13px',
-        'md':   '14px',
-        'lg':   '15px',
-        'xl':   '18px',
-        '2xl':  '20px',
+        'xs':   'var(--ds-text-xs)',
+        'sm':   'var(--ds-text-sm)',
+        'base': 'var(--ds-text-base)',
+        'md':   'var(--ds-text-md)',
+        'lg':   'var(--ds-text-lg)',
+        'xl':   'var(--ds-text-xl)',
+        '2xl':  'var(--ds-text-2xl)',
       },
     },
   },
@@ -486,9 +513,104 @@ Both `frontend/tailwind.config.js` and `custom_reviewer/tailwind.config.js` exte
 
 Theme is toggled by setting `data-theme="light"` on the `<html>` element. All contexts respond automatically.
 
+Complete light mode override block:
+
+```css
+[data-theme="light"] {
+  --ds-bg-deep:       #ECECF0;
+  --ds-bg-canvas:     #FFFFFF;
+  --ds-bg-frosted:    #F9F9FB;
+  --ds-bg-overlay:    #E5E5EA;
+  --ds-text-primary:    rgba(0, 0, 0, 0.85);
+  --ds-text-secondary:  rgba(60, 60, 67, 0.60);
+  --ds-text-tertiary:   rgba(60, 60, 67, 0.30);
+  --ds-text-placeholder: rgba(60, 60, 67, 0.25);
+  --ds-text-muted:      rgba(60, 60, 67, 0.18);
+  --ds-border-subtle:   rgba(0, 0, 0, 0.04);
+  --ds-border-medium:   rgba(0, 0, 0, 0.10);
+  --ds-accent:   #007AFF;
+  --ds-green:    #34C759;
+  --ds-yellow:   #FF9F0A;
+  --ds-red:      #FF3B30;
+  --ds-purple:   #AF52DE;
+  --ds-stat-new:      rgba(0, 122, 255, 0.85);
+  --ds-stat-learning: rgba(255, 159, 10, 0.85);
+  --ds-stat-review:   rgba(52, 199, 89, 0.85);
+  --ds-hover-tint:  rgba(0, 0, 0, 0.03);
+  --ds-active-tint: rgba(0, 0, 0, 0.06);
+  --ds-green-tint:  rgba(52, 199, 89, 0.08);
+  --ds-red-tint:    rgba(255, 59, 48, 0.06);
+  --ds-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --ds-shadow-md: 0 4px 24px rgba(0, 0, 0, 0.10);
+  --ds-shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.15);
+}
+```
+
+### Qt/QSS Token Subset
+
+`ui/tokens_qt.py` must sync these values (the only tokens Qt needs):
+
+| Python key | Dark | Light | Used for |
+|-----------|------|-------|----------|
+| `bg_deep` | `#141416` | `#ECECF0` | DockWidget background |
+| `bg_canvas` | `#1C1C1E` | `#FFFFFF` | Main window, central widget |
+| `bg_overlay` | `#3A3A3C` | `#E5E5EA` | Menu backgrounds |
+| `text_primary` | `#EAEAEB` | `#1A1A1A` | Labels, text (solid hex approximation) |
+| `text_secondary` | `#8C8C8C` | `#6C6C70` | Secondary labels |
+| `accent` | `#0A84FF` | `#007AFF` | Buttons, links |
+| `border_subtle` | `#1F1F21` | `#E0E0E0` | Separators (solid hex approximation) |
+| `border_medium` | `#2E2E30` | `#C8C8CC` | Input borders |
+| `green` | `#30D158` | `#34C759` | Success states |
+| `red` | `#FF453A` | `#FF3B30` | Error states |
+
+Note: Qt/QSS does not support `rgba()` or CSS variables. Values are solid hex approximations of the opacity-based tokens, computed against the expected background color.
+
 ---
 
-## 12. Design Rules
+## 12. Migration — Breaking Changes
+
+The existing `design-system.css` uses a different token naming scheme. This table maps old to new:
+
+| Old Token | New Token | Notes |
+|-----------|-----------|-------|
+| `--ds-bg-page` | `--ds-bg-canvas` | Renamed, value changes from `#1A1A1A` to `#1C1C1E` |
+| `--ds-bg-inset` | `--ds-bg-frosted` | Renamed, value changes from `#151515` to `#161618` |
+| `--ds-bg-elevated` | *(removed)* | No longer needed — use `.ds-borderless` pattern instead |
+| `--ds-bg-overlay` | `--ds-bg-overlay` | Same name, value changes from `#2C2C2E` to `#3A3A3C` |
+| *(new)* | `--ds-bg-deep` | New token for chat/diary backgrounds |
+| *(new)* | `--ds-font-brand` | New token for Space Grotesk |
+| *(new)* | `--ds-hover-tint` | New interaction state token |
+| *(new)* | `--ds-active-tint` | New interaction state token |
+| *(new)* | `--ds-green-tint` | New interaction state token |
+| *(new)* | `--ds-red-tint` | New interaction state token |
+
+**Files that reference old tokens and need updating:**
+- `shared/styles/design-system.css` — the source file itself
+- `shared/styles/theme.css` — secondary theme layer
+- `custom_reviewer/styles.css` — compiled CSS (rebuild after updating)
+- `custom_reviewer/interactions.js` — may reference old token names
+- `plusi/dock.py` — hardcoded inline CSS values
+- `plusi/panel.py` — hardcoded inline CSS values
+- `ui/global_theme.py` — Qt stylesheet values
+- `ui/theme.py` — legacy theme dict
+
+**Rating color aliases must use `var()` references** (not hardcoded hex) so they automatically adapt to light mode:
+```css
+--ds-rate-again: var(--ds-red);    /* NOT #ff453a */
+--ds-rate-hard:  var(--ds-yellow); /* NOT #ffd60a */
+```
+
+---
+
+## 13. Shared Assets — Plusi Mascot
+
+The Plusi mascot SVG (48px, 12 mood states) exists in 3 places: `plusi/dock.py` (Python dict), `plusi/panel.py` (Python dict), and `frontend/src/components/MascotCharacter.jsx` (React). This is not solved by CSS classes since it is SVG markup, not styling.
+
+**Solution:** Extract the SVG face definitions into a single JSON file (`shared/assets/plusi-faces.json`). Both Python and React import from this file. The CSS styling for the mascot container and animations is handled by `.ds-*` classes; the SVG paths come from the shared JSON.
+
+---
+
+## 14. Design Rules
 
 1. **No component may define its own colors** — use tokens
 2. **No borders on child elements inside a container** — use separators
