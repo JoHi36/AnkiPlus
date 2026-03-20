@@ -1,17 +1,15 @@
-import sharedConfig from '../shared/config/tailwind.shared.js';
+import preset from '../shared/config/tailwind.preset.js';
 
 /** @type {import('tailwindcss').Config} */
 export default {
+  presets: [preset],
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
     "../shared/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
-    ...sharedConfig.theme,
-    extend: {
-      ...sharedConfig.theme?.extend,
-    },
+    extend: {},
   },
   plugins: [require('daisyui')],
   daisyui: {
