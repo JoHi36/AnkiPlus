@@ -29,6 +29,10 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady, curren
 
   const handleThemeChange = (newTheme) => {
     setSelectedTheme(newTheme);
+    // Apply immediately on this webview (don't wait for Python roundtrip)
+    const resolved = newTheme === 'system' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : newTheme;
+    document.documentElement.setAttribute('data-theme', resolved);
+    // Tell Python to save + push to all other webviews
     if (bridge && bridge.saveTheme) {
       bridge.saveTheme(newTheme);
     }

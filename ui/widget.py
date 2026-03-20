@@ -689,9 +689,15 @@ class ChatbotWidget(QWidget):
 
     def _msg_save_theme(self, data):
         """Save theme setting and push it back to all web views."""
-        theme = str(data) if data else "dark"
+        if isinstance(data, dict):
+            theme = data.get("theme", data.get("value", str(data)))
+        else:
+            theme = str(data) if data else "dark"
+        theme = theme.strip().lower()
         if theme not in ("dark", "light", "system"):
+            logger.warning("Invalid theme value: %s, falling back to dark", theme)
             theme = "dark"
+        logger.info("Saving theme: %s", theme)
         update_config(theme=theme)
         self.config = get_config(force_reload=True)
         self._apply_theme_to_webview()
