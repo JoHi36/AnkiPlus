@@ -67,11 +67,11 @@ def _init_tables(db):
     # Migrations — idempotent (SQLite has no ADD COLUMN IF NOT EXISTS)
     try:
         db.execute("ALTER TABLE plusi_history ADD COLUMN history_type TEXT DEFAULT 'chat'")
-    except Exception:
+    except sqlite3.OperationalError:
         pass  # column already exists
     try:
         db.execute("ALTER TABLE plusi_diary ADD COLUMN discoveries TEXT DEFAULT '[]'")
-    except Exception:
+    except sqlite3.OperationalError:
         pass  # column already exists
     db.commit()
 

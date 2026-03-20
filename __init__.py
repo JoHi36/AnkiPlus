@@ -600,14 +600,14 @@ def on_state_will_change(new_state, old_state):
                 # macOS specific: disable unified toolbar
                 try:
                     mw.setUnifiedTitleAndToolBarOnMac(False)
-                except:
+                except (AttributeError, RuntimeError):
                     pass
 
                 # Try to hide menubar
                 try:
                     if hasattr(mw, 'menuBar') and mw.menuBar():
                         mw.menuBar().setVisible(False)
-                except:
+                except (AttributeError, RuntimeError):
                     pass
 
                 # Bottom bars: class-level patches prevent drawing,
@@ -650,7 +650,7 @@ def on_state_will_change(new_state, old_state):
                 try:
                     if hasattr(mw, 'menuBar') and mw.menuBar():
                         mw.menuBar().setVisible(True)
-                except:
+                except (AttributeError, RuntimeError):
                     pass
 
                 print("🎨 State: {} → Toolbar restored".format(new_state))

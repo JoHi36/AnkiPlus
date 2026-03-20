@@ -481,7 +481,7 @@ def execute_search_deck(args):
                     "back": strip_html_and_cloze(back_fields)[:200],
                     "deck_name": deck_name,
                 })
-            except Exception:
+            except (KeyError, AttributeError, TypeError):
                 continue
 
         return {
@@ -724,7 +724,7 @@ def execute_show_card_media(args):
 
         try:
             note = mw.col.get_note(int(note_id))
-        except Exception:
+        except (ValueError, KeyError, AttributeError):
             return {"error": f"Note {note_id} nicht gefunden"}
 
         # Find all <img src="..."> in all fields
@@ -750,7 +750,7 @@ def execute_show_card_media(args):
                             "filename": filename,
                             "dataUrl": f"data:{content_type};base64,{b64}",
                         })
-                    except Exception:
+                    except (IOError, OSError, ValueError):
                         continue
 
         if not images:

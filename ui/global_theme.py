@@ -939,7 +939,7 @@ def setup_global_theme():
             try:
                 _continuous_restyle_timer.stop()
                 _continuous_restyle_timer.deleteLater()
-            except:
+            except (RuntimeError, AttributeError):
                 pass
             _continuous_restyle_timer = None
         
@@ -949,19 +949,19 @@ def setup_global_theme():
     try:
         if hasattr(gui_hooks, 'profile_will_close'):
             gui_hooks.profile_will_close.append(cleanup_theme)
-    except:
+    except (AttributeError,):
         pass
-    
+
     try:
         if hasattr(gui_hooks, 'unload_profile_cleanup'):
             gui_hooks.unload_profile_cleanup.append(cleanup_theme)
-    except:
+    except (AttributeError,):
         pass
-    
+
     try:
         if hasattr(gui_hooks, 'main_window_will_close'):
             gui_hooks.main_window_will_close.append(cleanup_theme)
-    except:
+    except (AttributeError,):
         pass
     
     _debug_log("✅ Global Theme Setup abgeschlossen (wartend auf ersten State-Change)")

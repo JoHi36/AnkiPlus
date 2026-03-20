@@ -120,7 +120,7 @@ class CardTracker:
             if mw and mw.col:
                 try:
                     deck_name = mw.col.decks.name(card.did)
-                except:
+                except (KeyError, AttributeError):
                     pass
             
             # Hole Karten-Statistiken

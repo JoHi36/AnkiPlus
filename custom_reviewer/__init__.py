@@ -212,7 +212,7 @@ def _evaluate_answer_async(data):
             try:
                 if mw and mw.reviewer and mw.reviewer.web:
                     mw.reviewer.web.eval(f'window.onEvaluationResult({json.dumps({"error": str(e)})});')
-            except:
+            except (AttributeError, RuntimeError):
                 pass
         mw.taskman.run_on_main(inject_error)
 
@@ -381,7 +381,7 @@ def _generate_mc_async(data, deck_answers=None):
             try:
                 if mw and mw.reviewer and mw.reviewer.web:
                     mw.reviewer.web.eval('window.onMCOptions([]);')
-            except:
+            except (AttributeError, RuntimeError):
                 pass
         mw.taskman.run_on_main(inject_error)
 
@@ -1258,7 +1258,7 @@ class CustomReviewer:
                     labels = mw.col.sched.describe_next_states(states)
                     if labels and len(labels) >= 4:
                         return list(labels[:4])
-                except:
+                except (AttributeError, KeyError, RuntimeError):
                     pass
 
             # Fallback: Use answerButtons count and default labels

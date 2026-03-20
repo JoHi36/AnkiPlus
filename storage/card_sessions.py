@@ -150,7 +150,7 @@ def _migrate_schema(db):
         if 'type' not in section_cols:
             db.execute("ALTER TABLE review_sections ADD COLUMN type TEXT DEFAULT 'review'")
             db.commit()
-    except Exception:
+    except (sqlite3.Error, KeyError, ValueError):
         pass  # Column already exists
 
     # Pipeline data migration: add pipeline_data column for full ThoughtStream persistence
@@ -310,7 +310,7 @@ def save_card_session(card_id, data):
         db.commit()
         return True
 
-    except Exception as e:
+    except (sqlite3.Error, KeyError, ValueError) as e:
         print(f"CardSessionsDB: Error saving session for card {card_id}: {e}")
         db.rollback()
         return False
@@ -324,7 +324,7 @@ def _get_deck_for_card(card_id):
             card = aqt.mw.col.get_card(card_id)
             if card:
                 return card.did, aqt.mw.col.decks.name(card.did)
-    except Exception:
+    except (sqlite3.Error, KeyError, ValueError):
         pass
     return None, None
 
@@ -386,7 +386,7 @@ def save_message(card_id, message):
         db.commit()
         return True
 
-    except Exception as e:
+    except (sqlite3.Error, KeyError, ValueError) as e:
         print(f"CardSessionsDB: Error saving message for card {card_id}: {e}")
         db.rollback()
         return False
@@ -469,10 +469,10 @@ def _get_card_front_texts(card_ids):
                     if len(front) > 60:
                         front = front[:57] + '…'
                     result[cid] = front
-            except Exception:
+            except (sqlite3.Error, KeyError, ValueError):
                 pass
         return result
-    except Exception:
+    except (sqlite3.Error, KeyError, ValueError):
         return {}
 
 
@@ -513,7 +513,7 @@ def save_deck_message(deck_id, message):
         db.commit()
         return True
 
-    except Exception as e:
+    except (sqlite3.Error, KeyError, ValueError) as e:
         print(f"CardSessionsDB: Error saving deck message for deck {deck_id}: {e}")
         db.rollback()
         return False
@@ -563,7 +563,7 @@ def save_section(card_id, section):
         db.commit()
         return True
 
-    except Exception as e:
+    except (sqlite3.Error, KeyError, ValueError) as e:
         print(f"CardSessionsDB: Error saving section for card {card_id}: {e}")
         db.rollback()
         return False
@@ -579,7 +579,7 @@ def update_summary(card_id, summary):
         )
         db.commit()
         return True
-    except Exception as e:
+    except (sqlite3.Error, KeyError, ValueError) as e:
         print(f"CardSessionsDB: Error updating summary for card {card_id}: {e}")
         return False
 
@@ -595,7 +595,7 @@ def load_insights(card_id):
         if row and row['summary']:
             return json.loads(row['summary'])
         return {"version": 1, "insights": []}
-    except Exception as e:
+    except (sqlite3.Error, KeyError, ValueError) as e:
         print(f"[card_sessions_storage] Error loading insights for card {card_id}: {e}")
         return {"version": 1, "insights": []}
 
@@ -621,7 +621,7 @@ def save_insights(card_id, insights_data):
             )
         db.commit()
         return True
-    except Exception as e:
+    except (sqlite3.Error, KeyError, ValueError) as e:
         print(f"[card_sessions_storage] Error saving insights for card {card_id}: {e}")
         return False
 
@@ -651,7 +651,7 @@ def get_card_revlog(card_id, max_points=50):
             }
             for row in rows
         ]
-    except Exception as e:
+    except (sqlite3.Error, KeyError, ValueError) as e:
         print(f"[card_sessions_storage] Error fetching revlog for card {card_id}: {e}")
         return []
 
@@ -663,7 +663,7 @@ def delete_card_session(card_id):
         db.execute("DELETE FROM card_sessions WHERE card_id = ?", (int(card_id),))
         db.commit()
         return True
-    except Exception as e:
+    except (sqlite3.Error, KeyError, ValueError) as e:
         print(f"CardSessionsDB: Error deleting session for card {card_id}: {e}")
         return False
 
@@ -806,7 +806,7 @@ def migrate_from_json(sessions_json_path=None):
         print(f"CardSessionsDB: sessions.json renamed to {backup_path}")
         return True
 
-    except Exception as e:
+    except (sqlite3.Error, KeyError, ValueError) as e:
         import traceback
         print(f"CardSessionsDB: Migration error: {e}")
         traceback.print_exc()
