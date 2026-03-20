@@ -231,6 +231,32 @@
   }
   .link-btn:hover { color: var(--text-secondary); }
 
+  /* ── Panel back bar (shown when embedded in narrow panel) ── */
+  .panel-back-bar {
+    display: none;
+    padding: 12px 16px;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-back-bar:hover { background: var(--surface-hover); }
+  .panel-back-bar svg {
+    width: 14px; height: 14px;
+    stroke: var(--text-secondary);
+    fill: none; stroke-width: 2;
+    stroke-linecap: round; stroke-linejoin: round;
+    flex-shrink: 0;
+  }
+  .panel-back-bar span {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  /* Show when embedded in narrow panel (~260–280px wide) */
+  @media (max-width: 350px) {
+    .panel-back-bar { display: flex; }
+  }
+
   .form-group { width: 100%; display: flex; flex-direction: column; gap: 10px; }
 
   .divider {
@@ -253,6 +279,11 @@
 </style>
 </head>
 <body>
+
+<div class="panel-back-bar" onclick="goBackToDiary()">
+  <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+  <span>Plusi</span>
+</div>
 
 <div class="container">
   <!-- Header Pill Tabs -->
@@ -851,6 +882,13 @@ function toggleMascot() {
   config.mascotEnabled = !config.mascotEnabled;
   bridge.saveMascotEnabled(config.mascotEnabled);
   renderMascot();
+}
+
+// ── Panel back navigation ──
+function goBackToDiary() {
+  if (bridge && bridge.closeWindow) {
+    bridge.closeWindow();
+  }
 }
 </script>
 </body>

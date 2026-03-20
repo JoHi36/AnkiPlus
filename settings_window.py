@@ -46,13 +46,26 @@ class SettingsBridge(QObject):
             auth_validated = config.get('auth_validated', False)
             is_authenticated = bool(auth_token) and auth_validated
 
-            # Profile name
+            # Profile name from Anki
             profile_name = ''
             try:
                 if mw and mw.pm and mw.pm.name:
                     profile_name = mw.pm.name
             except Exception:
                 pass
+
+            # Extract email from JWT token (Firebase ID tokens contain email in payload)
+            user_email = ''
+            if auth_token:
+                try:
+                    import base64
+                    parts = auth_token.split('.')
+                    if len(parts) == 3:
+                        payload_b64 = parts[1] + '=' * (4 - len(parts[1]) % 4)
+                        payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+                        user_email = payload.get('email', '')
+                except Exception:
+                    pass
 
             return json.dumps({
                 'responseStyle': config.get('response_style', 'balanced'),
@@ -62,6 +75,7 @@ class SettingsBridge(QObject):
                 'isAuthenticated': is_authenticated,
                 'hasToken': bool(auth_token),
                 'profileName': profile_name,
+                'userEmail': user_email,
                 'backendUrl': config.get('backend_url', ''),
                 'authToken': auth_token,
             })
@@ -138,30 +152,54 @@ class SettingsBridge(QObject):
             print(f"saveAITools error: {e}")
 
     @pyqtSlot(str, str)
-    def authenticate(self, token, refresh_token):
-        """Validate token against backend."""
+    def authenticate(self, token, refresh_token=""):
+        """Validate token against backend. Accepts plain token or JSON format."""
         try:
             import requests
+
+            # Support JSON format: {"token": "...", "refreshToken": "..."}
+            token_str = token.strip()
+            if token_str.startswith('{'):
+                try:
+                    token_data = json.loads(token_str)
+                    token = token_data.get('token', '') or token_data.get('idToken', '')
+                    refresh_token = token_data.get('refreshToken', '') or refresh_token
+                except json.JSONDecodeError:
+                    pass
+
+            if not token or not token.strip():
+                return
+
             config = get_config()
             backend_url = config.get('backend_url', '').strip()
             if not backend_url:
-                from .config import DEFAULT_BACKEND_URL
+                try:
+                    from .config import DEFAULT_BACKEND_URL
+                except ImportError:
+                    from config import DEFAULT_BACKEND_URL
                 backend_url = DEFAULT_BACKEND_URL
 
-            update_config(auth_token=token.strip(), refresh_token=refresh_token.strip(), auth_validated=False)
+            update_config(
+                auth_token=token.strip(),
+                refresh_token=refresh_token.strip() if refresh_token else "",
+                backend_url=backend_url,
+                backend_mode=True,
+                auth_validated=False
+            )
 
             resp = requests.get(
                 f"{backend_url}/user/quota",
                 headers={'Authorization': f'Bearer {token.strip()}'},
-                timeout=10,
+                timeout=15,
             )
             if resp.status_code == 200:
                 update_config(auth_validated=True)
-                return
+                print("SettingsBridge.authenticate: Token validiert!")
             else:
                 update_config(auth_validated=False)
+                print(f"SettingsBridge.authenticate: Validierung fehlgeschlagen ({resp.status_code})")
         except Exception as e:
-            print(f"authenticate error: {e}")
+            print(f"SettingsBridge.authenticate error: {e}")
 
     @pyqtSlot(result=str)
     def getQuota(self):
@@ -200,6 +238,104 @@ class SettingsBridge(QObject):
         import webbrowser
         webbrowser.open(url)
 
+    @pyqtSlot(result=str)
+    def startLinkAuth(self):
+        """Start the Link-Code auth flow: generate code, open browser, poll for tokens."""
+        import secrets
+        import threading
+        import webbrowser
+
+        try:
+            link_code = secrets.token_urlsafe(24)
+            print(f"SettingsBridge.startLinkAuth: Code generiert ({link_code[:8]}...)")
+
+            login_url = f"https://anki-plus.vercel.app/login?link={link_code}"
+            webbrowser.open(login_url)
+
+            def poll_for_tokens():
+                import time
+                import requests as req
+                config = get_config()
+                backend_url = config.get('backend_url', '').strip()
+                if not backend_url:
+                    try:
+                        from .config import DEFAULT_BACKEND_URL
+                    except ImportError:
+                        from config import DEFAULT_BACKEND_URL
+                    backend_url = DEFAULT_BACKEND_URL
+
+                max_attempts = 150  # 5 min at 2s interval
+
+                for attempt in range(max_attempts):
+                    time.sleep(2)
+                    try:
+                        response = req.get(
+                            f"{backend_url}/auth/link/{link_code}",
+                            headers={"Content-Type": "application/json"},
+                            timeout=5
+                        )
+                        if response.status_code == 200:
+                            data = response.json()
+                            id_token = data.get("idToken", "")
+                            refresh_token = data.get("refreshToken", "")
+                            if id_token:
+                                print(f"SettingsBridge.startLinkAuth: Tokens empfangen! (Attempt {attempt+1})")
+                                # Save and validate on main thread
+                                mw.taskman.run_on_main(
+                                    lambda t=id_token, r=refresh_token: self._complete_link_auth(t, r)
+                                )
+                                return
+                        elif response.status_code == 410:
+                            print("SettingsBridge.startLinkAuth: Link-Code abgelaufen")
+                            return
+                    except Exception as e:
+                        if attempt % 10 == 0:
+                            print(f"SettingsBridge.startLinkAuth: Polling-Fehler ({attempt+1}): {e}")
+
+                print("SettingsBridge.startLinkAuth: Timeout nach 5 Min")
+
+            thread = threading.Thread(target=poll_for_tokens, daemon=True, name="SettingsLinkAuthPoll")
+            thread.start()
+
+            return json.dumps({"success": True, "linkCode": link_code})
+        except Exception as e:
+            print(f"SettingsBridge.startLinkAuth error: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    def _complete_link_auth(self, id_token, refresh_token):
+        """Called on main thread when link auth tokens are received."""
+        try:
+            import requests as req
+            config = get_config()
+            backend_url = config.get('backend_url', '').strip()
+            if not backend_url:
+                try:
+                    from .config import DEFAULT_BACKEND_URL
+                except ImportError:
+                    from config import DEFAULT_BACKEND_URL
+                backend_url = DEFAULT_BACKEND_URL
+
+            update_config(
+                auth_token=id_token.strip(),
+                refresh_token=refresh_token.strip() if refresh_token else "",
+                backend_url=backend_url,
+                backend_mode=True,
+                auth_validated=False
+            )
+
+            resp = req.get(
+                f"{backend_url}/user/quota",
+                headers={"Authorization": f"Bearer {id_token.strip()}"},
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                update_config(auth_validated=True)
+                print("SettingsBridge._complete_link_auth: Token validiert!")
+            else:
+                print(f"SettingsBridge._complete_link_auth: Validierung fehlgeschlagen ({resp.status_code})")
+        except Exception as e:
+            print(f"SettingsBridge._complete_link_auth: Fehler: {e}")
+
     @pyqtSlot()
     def openAnkiPrefs(self):
         try:
@@ -210,6 +346,10 @@ class SettingsBridge(QObject):
 
     @pyqtSlot()
     def closeWindow(self):
+        """Close settings window, or go back to diary when embedded in panel."""
+        if hasattr(self, '_panel_back') and self._panel_back:
+            self._panel_back()
+            return
         global _settings_window
         if _settings_window:
             _settings_window.close()

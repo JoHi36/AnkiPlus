@@ -386,6 +386,9 @@ window.addEventListener('DOMContentLoaded', function() {
 _panel_dock = None
 _panel_webview = None
 _poll_timer = None
+_settings_mode = False
+_settings_bridge = None
+_settings_channel = None
 
 
 def _get_panel_html():
@@ -435,6 +438,8 @@ def _handle_panel_message(msg_type):
         _open_settings()
     elif msg_type == 'panelClose':
         toggle_panel()
+    elif msg_type == 'panelBack':
+        _back_to_diary()
 
 
 def _send_diary_data():
@@ -459,11 +464,59 @@ def _send_diary_data():
 
 
 def _open_settings():
+    """Switch panel webview to settings view."""
+    global _panel_webview, _settings_mode, _settings_bridge, _settings_channel, _poll_timer
+    if not _panel_webview:
+        return
+
+    _settings_mode = True
+
+    # Stop diary polling while in settings
+    if _poll_timer:
+        _poll_timer.stop()
+
+    # Set up QWebChannel for settings bridge
+    from .settings_window import SettingsBridge
     try:
-        from .settings_window import open_settings
-        open_settings()
-    except Exception:
-        pass
+        from PyQt6.QtWebChannel import QWebChannel
+    except ImportError:
+        from PyQt5.QtWebChannel import QWebChannel
+
+    _settings_bridge = SettingsBridge()
+    # Override closeWindow to go back to diary instead of closing popup
+    _settings_bridge._panel_back = _back_to_diary
+    _settings_channel = QWebChannel()
+    _settings_channel.registerObject("bridge", _settings_bridge)
+    _panel_webview.page().setWebChannel(_settings_channel)
+
+    # Load settings.html
+    import os
+    html_path = os.path.join(os.path.dirname(__file__), "settings.html")
+    _panel_webview.setUrl(QUrl.fromLocalFile(html_path))
+
+
+def _back_to_diary():
+    """Switch panel back from settings to diary view."""
+    global _panel_webview, _settings_mode, _settings_bridge, _settings_channel, _poll_timer
+    if not _panel_webview:
+        return
+
+    _settings_mode = False
+
+    # Remove QWebChannel (diary uses polling, not channel)
+    _panel_webview.page().setWebChannel(None)
+    _settings_bridge = None
+    _settings_channel = None
+
+    # Reload diary HTML
+    _panel_webview.setHtml(_get_panel_html(), QUrl("file:///"))
+
+    # Restart polling
+    if _poll_timer:
+        _poll_timer.start(100)
+
+    # Load diary data after webview ready
+    QTimer.singleShot(500, _send_diary_data)
 
 
 def _poll_panel_messages():
