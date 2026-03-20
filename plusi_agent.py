@@ -165,9 +165,9 @@ Antworte NUR mit einem JSON-Block (eine Zeile):
 {"query": "deine Suchanfrage für die Kartensammlung"}
 
 Beispiele:
-{"query": "Gewebshormone Bradykinin Prostaglandin"}
-{"query": "Mitochondrien Atmungskette Elektronentransport"}
-{"query": "Psychologie Konditionierung operant klassisch"}"""
+{"query": "das Thema das mich gerade fasziniert"}
+{"query": "Zusammenhänge zwischen den letzten Karten die ich gesehen habe"}
+{"query": "irgendwas Neues das ich noch nicht kenne"}"""
 
 
 SELF_REFLECT_STEP2 = """Du hast gerade in der Kartensammlung gestöbert. Hier sind
