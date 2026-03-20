@@ -5,49 +5,9 @@
  */
 
 
-/* ═══ DESIGN SYSTEM TOKENS (from design-system.css) ═══ */
-:root {
-    --ds-bg-page:      #1A1A1A;
-    --ds-bg-inset:     #151515;
-    --ds-bg-elevated:  #222224;
-    --ds-bg-overlay:   #2C2C2E;
-
-    --ds-text-primary:    rgba(255, 255, 255, 0.92);
-    --ds-text-secondary:  rgba(255, 255, 255, 0.55);
-    --ds-text-tertiary:   rgba(255, 255, 255, 0.35);
-    --ds-text-muted:      rgba(255, 255, 255, 0.18);
-    --ds-text-placeholder: rgba(255, 255, 255, 0.30);
-
-    --ds-border-subtle:  rgba(255, 255, 255, 0.06);
-    --ds-border-medium:  rgba(255, 255, 255, 0.12);
-
-    --ds-accent:   #0a84ff;
-    --ds-green:    #30d158;
-    --ds-yellow:   #ffd60a;
-    --ds-red:      #ff453a;
-
-    --ds-stat-new:      rgba(10, 132, 255, 0.85);
-    --ds-stat-learning: rgba(255, 159, 10, 0.85);
-    --ds-stat-review:   rgba(48, 209, 88, 0.85);
-
-    --ds-rate-again: #ff453a;
-    --ds-rate-hard:  #ffd60a;
-    --ds-rate-good:  #30d158;
-    --ds-rate-easy:  #0a84ff;
-
-    --ds-radius-sm:  8px;
-    --ds-radius-md:  12px;
-    --ds-radius-lg:  16px;
-    --ds-radius-xl:  22px;
-
-    --ds-font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
-    --ds-font-mono: "SF Mono", ui-monospace, monospace;
-
-    --ds-shadow-sm:  0 2px 8px rgba(0, 0, 0, 0.2);
-    --ds-shadow-md:  0 4px 24px rgba(0, 0, 0, 0.35);
-
-    --ds-ease: cubic-bezier(0.16, 1, 0.3, 1);
-}
+/* ═══ DESIGN SYSTEM TOKENS — imported from shared/styles/design-system.css ═══
+   All tokens are defined in design-system.css; no local overrides needed.
+   ══════════════════════════════════════════════════════════════════════════ */
 
 
 /* ═══════════════════════════════════════════════
@@ -62,7 +22,7 @@ html {
 }
 
 html, body {
-    background: var(--ds-bg-page) !important;
+    background: var(--ds-bg-canvas) !important;
     margin: 0 !important;
     padding: 0 !important;
     overflow: hidden;
@@ -105,7 +65,7 @@ div[id^="bottom"]:not(.dock):not(.dock-wrapper) {
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: var(--ds-bg-page);
+    background: var(--ds-bg-canvas);
 }
 
 
@@ -119,7 +79,7 @@ div[id^="bottom"]:not(.dock):not(.dock-wrapper) {
     justify-content: space-between;
     padding: 0 24px;
     height: 48px;
-    background: var(--ds-bg-page);
+    background: var(--ds-bg-canvas);
     border-bottom: 1px solid var(--ds-border-subtle);
     position: relative;
     z-index: 100;
@@ -229,7 +189,7 @@ div[id^="bottom"]:not(.dock):not(.dock-wrapper) {
 
 /* Elevated Surface — matches design system ELEVATED SURFACE spec */
 .card-surface {
-    background: var(--ds-bg-elevated);
+    background: var(--ds-bg-overlay);
     border-radius: var(--ds-radius-lg);
     border: 1px solid var(--ds-border-subtle);
     padding: 32px 28px;
@@ -327,7 +287,7 @@ div[id^="bottom"]:not(.dock):not(.dock-wrapper) {
 .dock {
     display: none;
     flex-direction: column;
-    background: var(--ds-bg-inset);
+    background: var(--ds-bg-frosted);
     border: 1px solid var(--ds-border-medium);
     border-radius: var(--ds-radius-lg);
     box-shadow: var(--ds-shadow-md);
