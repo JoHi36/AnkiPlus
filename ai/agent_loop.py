@@ -9,10 +9,10 @@ import json
 
 try:
     from .tool_executor import execute_tool
-    from .tool_registry import registry
+    from .tools import registry
 except ImportError:
     from tool_executor import execute_tool
-    from tool_registry import registry
+    from tools import registry
 
 MAX_ITERATIONS = 5
 MAX_CONTEXT_CHARS = 100_000  # ~25k tokens

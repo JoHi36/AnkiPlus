@@ -6,17 +6,17 @@ Implementiert Google Gemini API-Integration
 import requests
 import json
 import time
-from .config import (
+from ..config import (
     get_config, RESPONSE_STYLES, is_backend_mode, get_backend_url,
     get_auth_token, get_refresh_token, update_config
 )
 from .system_prompt import get_system_prompt
 
 try:
-    from .tool_registry import registry as tool_registry
+    from .tools import registry as tool_registry
     from .agent_loop import run_agent_loop
 except ImportError:
-    from tool_registry import registry as tool_registry
+    from tools import registry as tool_registry
     from agent_loop import run_agent_loop
 
 # User-friendly error messages
@@ -124,110 +124,31 @@ class AIHandler:
         self.config = get_config(force_reload=True)
     
     def _get_auth_headers(self):
-        """Gibt Authorization Headers zurück für Backend-Requests"""
-        from .config import get_or_create_device_id
-
-        # Immer Device-ID mitsenden als Fallback für Anonymous-Modus
-        device_id = get_or_create_device_id()
-        headers = {
-            "Content-Type": "application/json",
-            "X-Device-Id": device_id
-        }
-
-        # Proaktiver Token-Refresh vor Ablauf
-        self._ensure_valid_token()
-
-        auth_token = get_auth_token()
-        if auth_token:
-            headers["Authorization"] = f"Bearer {auth_token}"
-
-        return headers
-    
-    def _refresh_auth_token(self):
-        """Ruft Backend Refresh-Endpoint auf und speichert neues Token"""
+        """Delegiert an auth_manager Modul."""
         try:
-            refresh_token = get_refresh_token()
-            if not refresh_token:
-                print("_refresh_auth_token: Kein Refresh-Token vorhanden")
-                return False
+            from .auth import get_auth_headers
+        except ImportError:
+            from auth import get_auth_headers
+        return get_auth_headers()
 
-            backend_url = get_backend_url()
-            refresh_url = f"{backend_url}/auth/refresh"
-
-            response = requests.post(
-                refresh_url,
-                json={"refreshToken": refresh_token},
-                headers={"Content-Type": "application/json"},
-                timeout=10
-            )
-
-            if response.status_code == 200:
-                data = response.json()
-                new_token = data.get("idToken")
-                if new_token:
-                    # Speichere neues ID-Token UND ggf. neues Refresh-Token
-                    new_refresh = data.get("refreshToken", "")
-                    update_kwargs = {
-                        "auth_token": new_token,
-                        "auth_validated": True,
-                    }
-                    if new_refresh:
-                        update_kwargs["refresh_token"] = new_refresh
-                    update_config(**update_kwargs)
-                    print("_refresh_auth_token: Token erfolgreich erneuert")
-                    self._refresh_config()
-                    return True
-                else:
-                    print("_refresh_auth_token: Kein neues Token in Response")
-                    return False
-            elif response.status_code == 401:
-                # Refresh-Token ungültig/abgelaufen → User muss sich neu einloggen
-                print("_refresh_auth_token: Refresh-Token ungültig (401)")
-                update_config(auth_validated=False)
-                return False
-            else:
-                print(f"_refresh_auth_token: Refresh fehlgeschlagen (Status: {response.status_code})")
-                return False
-        except Exception as e:
-            print(f"_refresh_auth_token: Fehler beim Token-Refresh: {e}")
-            return False
+    def _refresh_auth_token(self):
+        """Delegiert an auth_manager Modul."""
+        try:
+            from .auth import refresh_auth_token
+        except ImportError:
+            from auth import refresh_auth_token
+        result = refresh_auth_token()
+        if result:
+            self._refresh_config()
+        return result
     
     def _ensure_valid_token(self):
-        """Prüft Token-Gültigkeit und refresht proaktiv vor Ablauf"""
-        auth_token = get_auth_token()
-        if not auth_token:
-            return False
-
-        # Decode JWT payload (ohne Signatur-Validierung) um exp zu prüfen
+        """Delegiert an auth_manager Modul."""
         try:
-            import base64
-            # JWT: header.payload.signature
-            parts = auth_token.split('.')
-            if len(parts) != 3:
-                return bool(auth_token)
-
-            # Payload base64url-decodieren
-            payload_b64 = parts[1]
-            # Padding hinzufügen
-            payload_b64 += '=' * (4 - len(payload_b64) % 4)
-            payload = json.loads(base64.urlsafe_b64decode(payload_b64))
-
-            exp = payload.get('exp', 0)
-            import time
-            now = time.time()
-
-            # Token läuft in weniger als 5 Minuten ab → proaktiv refreshen
-            if exp - now < 300:
-                print(f"🔄 Token läuft in {int(exp - now)}s ab, proaktiver Refresh")
-                if self._refresh_auth_token():
-                    return True
-                # Token abgelaufen und Refresh fehlgeschlagen
-                if exp < now:
-                    return False
-            return True
-        except Exception:
-            # Bei Decode-Fehler: Token als gültig annehmen, Backend validiert
-            return bool(auth_token)
+            from .auth import ensure_valid_token
+        except ImportError:
+            from auth import ensure_valid_token
+        return ensure_valid_token()
     
     def get_response(self, user_message, context=None, history=None, mode='compact', callback=None, system_prompt_override=None, model_override=None):
         """
@@ -362,24 +283,8 @@ ZITIER-REGELN (PFLICHT):
         has_long_history = history and len(history) > 2
         
         if context:
-            import re
-            
-            # Hilfsfunktion zum Bereinigen von HTML
-            def clean_html(text, max_len=1500):
-                if not text:
-                    return ""
-                # Entferne HTML-Tags
-                clean = re.sub(r'<[^>]+>', ' ', text)
-                # Entferne mehrfache Leerzeichen
-                clean = re.sub(r'\s+', ' ', clean)
-                # Entferne HTML-Entities
-                clean = re.sub(r'&[a-zA-Z]+;', ' ', clean)
-                clean = clean.strip()
-                # Begrenze Länge
-                if len(clean) > max_len:
-                    clean = clean[:max_len] + "..."
-                return clean
-            
+            from ..utils.text import clean_html
+
             # Erstelle Kontext-String mit BEGRENZTER Länge
             # Bei langer Historie, verwende kürzeren Kontext
             context_parts = []
@@ -886,19 +791,8 @@ ZITIER-REGELN (PFLICHT):
         has_long_history = history and len(history) > 2
         
         if context:
-            import re
-            
-            def clean_html(text, max_len=1500):
-                if not text:
-                    return ""
-                clean = re.sub(r'<[^>]+>', ' ', text)
-                clean = re.sub(r'\s+', ' ', clean)
-                clean = re.sub(r'&[a-zA-Z]+;', ' ', clean)
-                clean = clean.strip()
-                if len(clean) > max_len:
-                    clean = clean[:max_len] + "..."
-                return clean
-            
+            from ..utils.text import clean_html
+
             context_parts = []
             is_question = context.get('isQuestion', True)
             
@@ -2134,9 +2028,9 @@ Karteninhalt: {question_clean[:500]}"""
             last_assistant_message = ""
             try:
                 try:
-                    from . import card_sessions_storage
+                    from ..storage import card_sessions as card_sessions_storage
                 except ImportError:
-                    import card_sessions_storage
+                    from storage import card_sessions as card_sessions_storage
                 if context and context.get('cardId'):
                     session_data = card_sessions_storage.load_card_session(context['cardId'])
                     messages = session_data.get('messages', [])
@@ -2835,35 +2729,8 @@ REGELN:
                 print("⚠️ RAG Retrieval: Keine Queries vorhanden")
                 return {"context_string": "", "citations": {}}
             
-            # Hilfsfunktion für Image-Extraktion
-            import re
-            def extract_images_from_html(text):
-                """Extrahiert alle Bild-URLs aus HTML-Text"""
-                if not text:
-                    return []
-                img_pattern = r'<img[^>]+src=["\']([^"\']+)["\']'
-                matches = re.findall(img_pattern, text, re.IGNORECASE)
-                image_urls = []
-                for url in matches:
-                    url = url.strip()
-                    if url:
-                        image_urls.append(url)
-                return image_urls
-            
-            # Hilfsfunktion für HTML-Bereinigung
-            def clean_html(text, max_len=2000):
-                """Bereinigt HTML-Text und extrahiert Bilder"""
-                if not text:
-                    return ("", [])
-                image_urls = extract_images_from_html(text)
-                clean = re.sub(r'<[^>]+>', ' ', text)
-                clean = re.sub(r'\s+', ' ', clean)
-                clean = re.sub(r'&[a-zA-Z]+;', ' ', clean)
-                clean = clean.strip()
-                if len(clean) > max_len:
-                    clean = clean[:max_len] + "..."
-                return (clean, image_urls)
-            
+            from ..utils.text import clean_html_with_images as clean_html
+
             # Extrahiere Deck-Name für Citations
             deck_name = None
             if context and context.get('deckName'):
@@ -3243,9 +3110,9 @@ REGELN:
                     _emb_mgr = None
                     try:
                         try:
-                            from . import get_embedding_manager
+                            from .. import get_embedding_manager
                         except ImportError:
-                            from __init__ import get_embedding_manager
+                            from .. import get_embedding_manager
                         _emb_mgr = get_embedding_manager()
                     except Exception:
                         pass
@@ -3256,9 +3123,9 @@ REGELN:
                         # Use hybrid retrieval (SQL + semantic)
                         try:
                             try:
-                                from .hybrid_retrieval import HybridRetrieval
+                                from .retrieval import HybridRetrieval
                             except ImportError:
-                                from hybrid_retrieval import HybridRetrieval
+                                from retrieval import HybridRetrieval
                             hybrid = HybridRetrieval(_emb_mgr, self)
                             retrieval_result = hybrid.retrieve(user_message, router_result, context, max_notes=max_notes)
                         except Exception as e:

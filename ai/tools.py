@@ -280,9 +280,9 @@ def execute_plusi(args):
     marker system handles [[TOOL:...]] injection into the stream.
     """
     try:
-        from .plusi_agent import run_plusi
+        from ..plusi.agent import run_plusi
     except ImportError:
-        from plusi_agent import run_plusi
+        from plusi.agent import run_plusi
 
     situation = args.get("situation", "")
     if not situation:
@@ -349,9 +349,9 @@ def execute_show_card(args):
     finds the first card for that note, loads card data.
     """
     try:
-        from .anki_utils import run_on_main_thread, strip_html_and_cloze
+        from ..utils.anki import run_on_main_thread, strip_html_and_cloze
     except ImportError:
-        from anki_utils import run_on_main_thread, strip_html_and_cloze
+        from utils.anki import run_on_main_thread, strip_html_and_cloze
 
     note_id = args.get("note_id")
     if not note_id:
@@ -436,9 +436,9 @@ def execute_search_deck(args):
     Cards have card_id, front (plain text), back (plain text), deck_name.
     """
     try:
-        from .anki_utils import run_on_main_thread, strip_html_and_cloze
+        from ..utils.anki import run_on_main_thread, strip_html_and_cloze
     except ImportError:
-        from anki_utils import run_on_main_thread, strip_html_and_cloze
+        from utils.anki import run_on_main_thread, strip_html_and_cloze
 
     query = args.get("query", "")
     deck_id = args.get("deck_id")
@@ -546,9 +546,9 @@ def execute_learning_stats(args):
     plus type-specific data (streak, heatmap, deck_overview).
     """
     try:
-        from .anki_utils import run_on_main_thread
+        from ..utils.anki import run_on_main_thread
     except ImportError:
-        from anki_utils import run_on_main_thread
+        from utils.anki import run_on_main_thread
 
     modules = args.get("modules", [])
     deck_id = args.get("deck_id")
@@ -711,9 +711,9 @@ def execute_show_card_media(args):
     import os
 
     try:
-        from .anki_utils import run_on_main_thread, strip_html_and_cloze
+        from ..utils.anki import run_on_main_thread, strip_html_and_cloze
     except ImportError:
-        from anki_utils import run_on_main_thread, strip_html_and_cloze
+        from utils.anki import run_on_main_thread, strip_html_and_cloze
 
     note_id = args.get("note_id")
     if not note_id:

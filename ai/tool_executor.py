@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict
 
 try:
-    from .tool_registry import registry
+    from .tools import registry
 except ImportError:
-    from tool_registry import registry
+    from tools import registry
 
 # Global frontend callback — allows tools to push events to the UI
 _frontend_callback = None

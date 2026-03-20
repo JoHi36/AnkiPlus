@@ -142,9 +142,9 @@ class EmbeddingManager:
 
     def load_index(self):
         try:
-            from card_sessions_storage import load_all_embeddings
+            from storage.card_sessions import load_all_embeddings
         except ImportError:
-            from .card_sessions_storage import load_all_embeddings
+            from ..storage.card_sessions import load_all_embeddings
 
         rows = load_all_embeddings()
         with self._lock:
@@ -201,9 +201,9 @@ class EmbeddingManager:
 
     def ensure_embedded(self, card_id, card_data):
         try:
-            from card_sessions_storage import load_embedding, save_embedding
+            from storage.card_sessions import load_embedding, save_embedding
         except ImportError:
-            from .card_sessions_storage import load_embedding, save_embedding
+            from ..storage.card_sessions import load_embedding, save_embedding
 
         text = self._card_to_text(card_data)
         if not text.strip():
@@ -265,9 +265,9 @@ class BackgroundEmbeddingThread(QThread):
 
     def run(self):
         try:
-            from card_sessions_storage import load_all_embeddings, save_embedding
+            from storage.card_sessions import load_all_embeddings, save_embedding
         except ImportError:
-            from .card_sessions_storage import load_all_embeddings, save_embedding
+            from ..storage.card_sessions import load_all_embeddings, save_embedding
 
         try:
             all_cards = self.get_all_cards_fn()

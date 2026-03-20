@@ -67,37 +67,57 @@ class HybridRetrieval:
                 print(f"⚠️ HybridRetrieval: SQL retrieval failed: {e}")
                 self.ai._emit_pipeline_step("sql_search", "error", {"message": str(e)})
 
-        # Semantic retrieval — use embedding_query from router
+        # Semantic retrieval — use embedding_queries (multi-query) from router
         if mode in ('semantic', 'both') and self.emb:
             try:
                 self.ai._emit_pipeline_step("semantic_search", "active")
-                embedding_query = router_result.get('embedding_query', user_message)
-                query_embeddings = self.emb.embed_texts([embedding_query])
-                if query_embeddings:
-                    exclude = []
-                    if context and context.get('cardId'):
-                        exclude.append(context['cardId'])
-                    semantic_results = self.emb.search(
-                        query_embeddings[0],
+
+                # Support multi-query: embedding_queries (array) or legacy embedding_query (string)
+                embedding_queries = router_result.get('embedding_queries', [])
+                if not embedding_queries:
+                    legacy = router_result.get('embedding_query', user_message)
+                    embedding_queries = [legacy] if legacy else [user_message]
+                embedding_queries = [q for q in embedding_queries if q and q.strip()][:3]
+
+                exclude = []
+                if context and context.get('cardId'):
+                    exclude.append(context['cardId'])
+
+                # Batch all embedding queries into a single call, then search per embedding
+                seen_cards = {}  # card_id -> best_score
+                all_embeddings = self.emb.embed_texts(embedding_queries)
+                for eq, emb in zip(embedding_queries, all_embeddings or []):
+                    if not emb:
+                        continue
+                    results = self.emb.search(
+                        emb,
                         top_k=max_notes,
                         exclude_card_ids=exclude
                     )
-                    semantic_total = len(semantic_results)
+                    for card_id, score in results:
+                        if card_id not in seen_cards or score > seen_cards[card_id]:
+                            seen_cards[card_id] = score
 
-                    # Build chunk previews for top 3
-                    chunks = []
-                    for card_id, score in semantic_results[:3]:
-                        card_data = self._load_card_data(card_id)
-                        snippet = ""
-                        if card_data and card_data.get('fields'):
-                            first_field = next(iter(card_data['fields'].values()), "")
-                            snippet = first_field[:60]
-                        chunks.append({"score": round(score, 3), "snippet": snippet})
+                # Sort merged results by score descending, take top max_notes
+                semantic_results = sorted(seen_cards.items(), key=lambda x: x[1], reverse=True)[:max_notes]
+                semantic_total = len(semantic_results)
 
-                    self.ai._emit_pipeline_step("semantic_search", "done", {
-                        "chunks": chunks,
-                        "total_hits": semantic_total
-                    })
+                # Build chunk previews for top 3
+                chunks = []
+                for card_id, score in semantic_results[:3]:
+                    card_data = self._load_card_data(card_id)
+                    snippet = ""
+                    if card_data and card_data.get('fields'):
+                        field_values = list(card_data['fields'].values())
+                        raw = field_values[1] if len(field_values) > 1 else field_values[0]
+                        snippet = (raw or "")[:60]
+                    chunks.append({"score": round(score, 3), "snippet": snippet})
+
+                self.ai._emit_pipeline_step("semantic_search", "done", {
+                    "chunks": chunks,
+                    "total_hits": semantic_total,
+                    "embedding_queries": embedding_queries
+                })
             except Exception as e:
                 print(f"⚠️ HybridRetrieval: Semantic retrieval failed: {e}")
                 self.ai._emit_pipeline_step("semantic_search", "error", {"message": str(e)})
@@ -162,27 +182,35 @@ class HybridRetrieval:
             merged[note_id] = {**data, 'sources': ['keyword']}
 
         # Enrich semantic results with card data from Anki
+        # CRITICAL: SQL citations are keyed by note_id (str), so we must resolve
+        # card_id → note_id for semantic results to enable proper overlap detection.
         if semantic_results:
             for card_id, score in semantic_results:
-                card_id_str = str(card_id)
+                card_data = self._load_card_data(card_id)
+                if not card_data:
+                    continue
 
-                if card_id_str in merged:
-                    # Card found by both — boost priority
-                    merged[card_id_str]['sources'].append('semantic')
-                    merged[card_id_str]['similarity_score'] = score
+                # Use note_id as key (same as SQL citations) for correct overlap detection
+                note_id_str = str(card_data.get('noteId', card_id))
+
+                if note_id_str in merged:
+                    # Note found by both SQL and semantic — boost priority
+                    if 'semantic' not in merged[note_id_str].get('sources', []):
+                        merged[note_id_str]['sources'].append('semantic')
+                    merged[note_id_str]['similarity_score'] = max(
+                        score, merged[note_id_str].get('similarity_score', 0)
+                    )
                 else:
-                    # Semantic-only result — need to load card data
-                    card_data = self._load_card_data(card_id)
-                    if card_data:
-                        merged[card_id_str] = {
-                            'noteId': card_data.get('noteId', card_id),
-                            'cardId': card_id,
-                            'fields': card_data.get('fields', {}),
-                            'deckName': card_data.get('deckName', ''),
-                            'isCurrentCard': False,
-                            'similarity_score': score,
-                            'sources': ['semantic']
-                        }
+                    # Semantic-only result
+                    merged[note_id_str] = {
+                        'noteId': card_data.get('noteId', card_id),
+                        'cardId': card_id,
+                        'fields': card_data.get('fields', {}),
+                        'deckName': card_data.get('deckName', ''),
+                        'isCurrentCard': False,
+                        'similarity_score': score,
+                        'sources': ['semantic']
+                    }
 
         # Sort: both sources first, then by similarity score, then by note_id
         sorted_items = sorted(
