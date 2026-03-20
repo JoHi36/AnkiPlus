@@ -160,11 +160,17 @@ def save_config(config):
         return False
 
 def get_config(force_reload=False):
-    """Gibt die aktuelle Konfiguration zurück"""
-    if force_reload or not hasattr(mw, '_chatbot_config'):
-        mw._chatbot_config = load_config()
-        logger.info(f"Config geladen. API-Key vorhanden: {'Ja' if mw._chatbot_config.get('api_key') else 'Nein'} (Länge: {len(mw._chatbot_config.get('api_key', ''))})")
-    return mw._chatbot_config
+    """Gibt die aktuelle Konfiguration zurück (thread-safe, never returns None)"""
+    if mw is None:
+        return dict(DEFAULT_CONFIG)
+    try:
+        if force_reload or not hasattr(mw, '_chatbot_config') or mw._chatbot_config is None:
+            mw._chatbot_config = load_config()
+            logger.info(f"Config geladen. API-Key vorhanden: {'Ja' if mw._chatbot_config.get('api_key') else 'Nein'} (Länge: {len(mw._chatbot_config.get('api_key', ''))})")
+        return mw._chatbot_config
+    except (RuntimeError, AttributeError):
+        # Thread-safety: mw may not be accessible from worker threads
+        return dict(DEFAULT_CONFIG)
 
 def update_config(mascot_enabled=None, **kwargs):
     """Aktualisiert die Konfiguration"""

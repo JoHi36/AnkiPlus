@@ -61,7 +61,7 @@ class AIHandler:
     PHASE_FINISHED = "finished"
 
     def __init__(self, widget=None):
-        self.config = get_config()
+        self.config = get_config() or {}
         self.widget = widget  # Widget reference for UI state emission
         self._current_request_steps = []  # Track steps for the current request
         self._current_request_id = None
@@ -70,7 +70,7 @@ class AIHandler:
 
     def _refresh_config(self):
         """Lädt die Config neu, um sicherzustellen dass API-Key aktuell ist"""
-        self.config = get_config(force_reload=True)
+        self.config = get_config(force_reload=True) or {}
 
     def _get_auth_headers(self):
         """Delegiert an auth_manager Modul."""
