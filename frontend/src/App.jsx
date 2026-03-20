@@ -368,6 +368,11 @@ function AppInner() {
   // Mascot state
   const { mood, setEventMood, setAiMood, resetMood } = useMascot();
   const [mascotEnabled, setMascotEnabled] = useState(false);
+  const mascotEnabledRef = useRef(false);
+  useEffect(() => {
+    mascotEnabledRef.current = mascotEnabled;
+    window._plusiEnabled = mascotEnabled; // Expose for useChat.js @Plusi guard
+  }, [mascotEnabled]);
 
   const [consecutiveWrong, setConsecutiveWrong] = useState(0);
   const activationCountRef = useRef(0);
@@ -378,12 +383,16 @@ function AppInner() {
   const eventTriggerRef = useRef(null);
   const [streak, setStreak] = useState(0);
 
-  // Idle timer — set mascot to sleepy after 10 minutes of inactivity
+  // Idle timer — set mascot to sleepy after 10 minutes of inactivity (only when Plusi enabled)
   const idleTimerRef = useRef(null);
   const setEventMoodRef = useRef(setEventMood);
   useEffect(() => { setEventMoodRef.current = setEventMood; }, [setEventMood]);
 
   useEffect(() => {
+    if (!mascotEnabled) {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      return;
+    }
     const resetIdle = () => {
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
       idleTimerRef.current = setTimeout(() => setEventMoodRef.current('sleepy'), 10 * 60 * 1000);
@@ -396,7 +405,7 @@ function AppInner() {
       window.removeEventListener('keydown', resetIdle);
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     };
-  }, []);
+  }, [mascotEnabled]);
 
   // Load mascot_enabled from config on bridge ready
   useEffect(() => {
@@ -918,12 +927,14 @@ function AppInner() {
           // Don't append greeting when in review mode — InsightsDashboard is the empty state now
         }
 
-        // Plusi Sub-Agent Events
+        // Plusi Sub-Agent Events (ignored when Plusi is disabled)
         if (payload.type === 'plusiSkeleton') {
+          if (!mascotEnabledRef.current) return;
           console.log('🔵 Plusi skeleton received');
         }
 
         if (payload.type === 'plusiResult') {
+          if (!mascotEnabledRef.current) return;
           console.log('🔵 Plusi result received:', payload.mood, payload.text?.substring(0, 50));
           if (!payload.error && payload.text) {
             const meta = {
@@ -957,8 +968,9 @@ function AppInner() {
           }
         }
 
-        // Plusi Direct Result — @Plusi inline messages
+        // Plusi Direct Result — @Plusi inline messages (ignored when Plusi is disabled)
         if (payload.type === 'plusi_direct_result') {
+          if (!mascotEnabledRef.current) return;
           const _chatForPlusi = chatHookRef.current;
           if (_chatForPlusi) {
             const result = {
@@ -997,8 +1009,8 @@ function AppInner() {
           }
         }
 
-        // Card Result — streak tracking + mascot reactions
-        if (payload.type === 'cardResult') {
+        // Card Result — streak tracking + mascot reactions (only when Plusi enabled)
+        if (payload.type === 'cardResult' && mascotEnabledRef.current) {
           if (payload.correct) {
             setStreak(prev => {
               const newStreak = prev + 1;
@@ -1482,8 +1494,8 @@ function AppInner() {
       setActiveView('chat');
     }
 
-    // @Plusi intercept — route to Plusi Direct instead of main AI
-    if (text.trim().startsWith('@Plusi')) {
+    // @Plusi intercept — route to Plusi Direct instead of main AI (only when Plusi enabled)
+    if (mascotEnabled && text.trim().startsWith('@Plusi')) {
       const plusiText = text.trim().slice(6).trim();
       if (plusiText) {
         // Add user message to chat
@@ -1585,23 +1597,9 @@ function AppInner() {
     }
   }, [bridge]);
 
-  // Keyboard Navigation: ArrowLeft/Right for review trail, Cmd+ArrowUp/Down for messages
+  // Keyboard Navigation: Cmd+ArrowUp/Down for messages
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // ArrowLeft/Right ALWAYS navigate cards, even from textarea
-      if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-        if (e.key === 'ArrowLeft') {
-          e.preventDefault();
-          handleTrailNavigateLeft();
-          return;
-        }
-        if (e.key === 'ArrowRight') {
-          e.preventDefault();
-          handleTrailNavigateRight();
-          return;
-        }
-      }
-
       // Skip remaining shortcuts if in input/textarea
       const tag = e.target.tagName.toLowerCase();
       if (tag === 'textarea' || tag === 'input' || e.target.isContentEditable) return;
@@ -1699,6 +1697,28 @@ function AppInner() {
     };
     window.addEventListener('keydown', handleGlobalShortcut);
     return () => window.removeEventListener('keydown', handleGlobalShortcut);
+  }, []);
+
+  // Report text field focus state to Python for global shortcut routing
+  useEffect(() => {
+    const onFocusIn = (e) => {
+      const tag = e.target.tagName.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) {
+        window.ankiBridge?.addMessage('textFieldFocus', { focused: true });
+      }
+    };
+    const onFocusOut = (e) => {
+      const tag = e.target.tagName.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) {
+        window.ankiBridge?.addMessage('textFieldFocus', { focused: false });
+      }
+    };
+    document.addEventListener('focusin', onFocusIn);
+    document.addEventListener('focusout', onFocusOut);
+    return () => {
+      document.removeEventListener('focusin', onFocusIn);
+      document.removeEventListener('focusout', onFocusOut);
+    };
   }, []);
 
   // Settings öffnen
@@ -2359,6 +2379,7 @@ function AppInner() {
           authStatus={authStatus}
           currentAuthToken={currentAuthToken}
           onClose={handleClose}
+          plusiEnabled={mascotEnabled}
           actionPrimary={{
             label: activeView === 'plusiMenu' ? 'Zurück' : 'Weiter',
             shortcut: 'SPACE',

@@ -34,6 +34,7 @@ export interface ChatInputProps {
   onClose?: () => void; // Used by ESC handler in handleKeyDown to close the parent panel
   actionPrimary: ActionConfig;
   actionSecondary: ActionConfig;
+  plusiEnabled?: boolean; // When false, @Plusi detection/highlighting is disabled
 }
 
 export default function ChatInput({
@@ -49,6 +50,7 @@ export default function ChatInput({
   onClose,
   actionPrimary,
   actionSecondary,
+  plusiEnabled = true,
 }: ChatInputProps) {
   const [input, setInput] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -56,6 +58,7 @@ export default function ChatInput({
 
   // Detect @Plusi case-insensitive, normalize to @Plusi at front
   useEffect(() => {
+    if (!plusiEnabled) return;
     if (input.startsWith('@Plusi')) return;
     const match = input.match(/@plusi/i);
     if (match && match.index !== undefined) {
@@ -63,22 +66,32 @@ export default function ChatInput({
       const cleaned = without.replace(/^\s+/, '');
       setInput('@Plusi ' + cleaned);
     }
-  }, [input]);
+  }, [input, plusiEnabled]);
 
-  const hasPlusiTag = input.startsWith('@Plusi');
+  const hasPlusiTag = plusiEnabled && input.startsWith('@Plusi');
 
-  // Auto-focus textarea when component mounts (chat panel opened)
+  // Listen for global shortcut filter events (Enter → send, Escape → clear+blur)
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (textareaRef.current) {
-        textareaRef.current.focus();
+    const handleSend = () => {
+      if (input.trim()) {
+        handleSubmit();
       }
-    }, 200);
-    return () => clearTimeout(timer);
-  }, []);
+    };
+    const handleClearAndBlur = () => {
+      setInput('');
+      textareaRef.current?.blur();
+    };
+    window.addEventListener('ankiSendMessage', handleSend);
+    window.addEventListener('ankiClearAndBlur', handleClearAndBlur);
+    return () => {
+      window.removeEventListener('ankiSendMessage', handleSend);
+      window.removeEventListener('ankiClearAndBlur', handleClearAndBlur);
+    };
+  }, [input, handleSubmit]);
 
   // Listen for "Plusi fragen" from MascotShell context menu
   useEffect(() => {
+    if (!plusiEnabled) return;
     const handler = (e: any) => {
       const prefix = e.detail?.prefix || '@Plusi ';
       setInput(prefix);
@@ -86,7 +99,7 @@ export default function ChatInput({
     };
     window.addEventListener('plusi-ask-focus', handler);
     return () => window.removeEventListener('plusi-ask-focus', handler);
-  }, []);
+  }, [plusiEnabled]);
 
   // Auto-Grow textarea
   useEffect(() => {
@@ -130,19 +143,6 @@ export default function ChatInput({
       }
     }
   };
-
-  // Global keydown for Space shortcut (when textarea not focused)
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).tagName === 'TEXTAREA' || (e.target as HTMLElement).tagName === 'INPUT') return;
-      if (e.code === 'Space') {
-        e.preventDefault();
-        actionPrimary.onClick();
-      }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [actionPrimary.onClick]);
 
   return (
     <div className="w-full relative">
@@ -209,6 +209,7 @@ export default function ChatInput({
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
             placeholder="Stelle eine Frage..."
+            data-chat-input="true"
             rows={1}
             style={{
               gridArea: '1 / 1',
