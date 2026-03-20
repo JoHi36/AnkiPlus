@@ -36,7 +36,7 @@ const CAPABILITIES = [
   {
     key: 'can_comment_events',
     label: 'Event-Kommentare',
-    desc: '🔒 Ab Lv 3 · Freunde',
+    desc: 'Ab Lv 3 · Freunde',
     locked: true,
     requiredLevel: 3,
   },
@@ -85,6 +85,105 @@ function Toggle({ on, onChange, disabled = false }) {
   );
 }
 
+// ─── Custom Slider ──────────────────────────────────────────────────────────
+
+function BudgetSlider({ min, max, step, value, onChange }) {
+  const trackRef = useRef(null);
+  const dragging = useRef(false);
+
+  const pct = ((value - min) / (max - min)) * 100;
+
+  const calcValue = useCallback((clientX) => {
+    const rect = trackRef.current.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const raw = min + ratio * (max - min);
+    const stepped = Math.round(raw / step) * step;
+    return Math.max(min, Math.min(max, stepped));
+  }, [min, max, step]);
+
+  const handleTrackClick = useCallback((e) => {
+    onChange(calcValue(e.clientX));
+  }, [calcValue, onChange]);
+
+  const handlePointerDown = useCallback((e) => {
+    e.preventDefault();
+    dragging.current = true;
+
+    const onMove = (ev) => {
+      if (!dragging.current) return;
+      const clientX = ev.touches ? ev.touches[0].clientX : ev.clientX;
+      onChange(calcValue(clientX));
+    };
+
+    const onUp = () => {
+      dragging.current = false;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onUp);
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onUp);
+  }, [calcValue, onChange]);
+
+  return (
+    <div
+      ref={trackRef}
+      onClick={handleTrackClick}
+      style={{
+        position: 'relative',
+        height: 24,
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+      }}
+    >
+      {/* Track background */}
+      <div style={{
+        position: 'absolute',
+        left: 0, right: 0,
+        height: 6,
+        borderRadius: 4,
+        background: 'var(--ds-bg-overlay, #3A3A3C)',
+      }} />
+
+      {/* Filled portion */}
+      <div style={{
+        position: 'absolute',
+        left: 0,
+        width: `${pct}%`,
+        height: 6,
+        borderRadius: 4,
+        background: 'linear-gradient(90deg, #30D158, #0A84FF)',
+      }} />
+
+      {/* Thumb */}
+      <div
+        onMouseDown={handlePointerDown}
+        onTouchStart={handlePointerDown}
+        style={{
+          position: 'absolute',
+          left: `${pct}%`,
+          top: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: 18,
+          height: 18,
+          borderRadius: '50%',
+          background: '#fff',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
+          cursor: 'pointer',
+          zIndex: 1,
+        }}
+      />
+    </div>
+  );
+}
+
+// ─── Main Component ─────────────────────────────────────────────────────────
+
 export default function AutonomyCard({ autonomy, friendshipLevel = 0, onSave }) {
   const [config, setConfig] = useState(() => ({
     token_budget: 500,
@@ -112,8 +211,7 @@ export default function AutonomyCard({ autonomy, friendshipLevel = 0, onSave }) 
     }, 500);
   }, [onSave]);
 
-  const handleBudgetChange = useCallback((e) => {
-    const value = Number(e.target.value);
+  const handleBudgetChange = useCallback((value) => {
     setConfig(prev => {
       const next = { ...prev, token_budget: value };
       triggerSave(next);
@@ -158,18 +256,12 @@ export default function AutonomyCard({ autonomy, friendshipLevel = 0, onSave }) 
             </span>
           </div>
 
-          <input
-            type="range"
+          <BudgetSlider
             min={100}
             max={2000}
             step={100}
             value={config.token_budget}
             onChange={handleBudgetChange}
-            style={{
-              width: '100%',
-              accentColor: 'var(--ds-accent, #0A84FF)',
-              cursor: 'pointer',
-            }}
           />
         </div>
 

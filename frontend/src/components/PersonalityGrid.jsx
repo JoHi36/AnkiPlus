@@ -1,8 +1,8 @@
 import React from 'react';
 
-const PAD = 12;
-const RANGE = 276;
-const SIZE = 300;
+const PAD = 24;
+const RANGE = 272;
+const SIZE = 320;
 
 function toSVG(x, y) {
   return {
@@ -14,47 +14,31 @@ function toSVG(x, y) {
 const QUADRANTS = [
   {
     id: 'forscher',
-    name: 'Forscher',
-    desc: 'Neugierig · Analytisch',
     cx: '25%',
     cy: '25%',
     color: '#5AC8FA',
-    labelX: SIZE * 0.25,
-    labelY: SIZE * 0.25,
   },
   {
     id: 'begleiter',
-    name: 'Begleiter',
-    desc: 'Warm · Engagiert',
     cx: '75%',
     cy: '25%',
     color: '#30D158',
-    labelX: SIZE * 0.75,
-    labelY: SIZE * 0.25,
   },
   {
     id: 'denker',
-    name: 'Denker',
-    desc: 'Tiefgründig · Ruhig',
     cx: '25%',
     cy: '75%',
     color: '#BF5AF2',
-    labelX: SIZE * 0.25,
-    labelY: SIZE * 0.75,
   },
   {
     id: 'vertrauter',
-    name: 'Vertrauter',
-    desc: 'Verlässlich · Nah',
     cx: '75%',
     cy: '75%',
     color: '#FF9F0A',
-    labelX: SIZE * 0.75,
-    labelY: SIZE * 0.75,
   },
 ];
 
-const MINOR_GRID = [81, 219];
+const MINOR_GRID = [PAD + RANGE * 0.25, PAD + RANGE * 0.75];
 const CENTER = SIZE / 2;
 
 export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail = [], quadrant = '', confident = true }) {
@@ -86,6 +70,8 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
           borderRadius: 16,
           padding: 20,
           border: '1px solid var(--ds-border, rgba(255,255,255,0.06))',
+          maxWidth: 280,
+          margin: '0 auto',
         }}
       >
         <svg
@@ -178,37 +164,6 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
             </React.Fragment>
           ))}
 
-          {/* Quadrant labels */}
-          {QUADRANTS.map(q => (
-            <g key={`label-${q.id}`} opacity="0.28">
-              <text
-                x={q.labelX}
-                y={q.labelY - 7}
-                textAnchor="middle"
-                dominantBaseline="middle"
-                fontFamily={svgFont}
-                fontSize="10"
-                fontWeight="600"
-                fill="white"
-                letterSpacing="0.5"
-              >
-                {q.name.toUpperCase()}
-              </text>
-              <text
-                x={q.labelX}
-                y={q.labelY + 9}
-                textAnchor="middle"
-                dominantBaseline="middle"
-                fontFamily={svgFont}
-                fontSize="8.5"
-                fill="white"
-                opacity="0.7"
-              >
-                {q.desc}
-              </text>
-            </g>
-          ))}
-
           {/* Axis labels */}
           <text
             x={CENTER} y={PAD - 1}
@@ -223,7 +178,7 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
             AKTIV
           </text>
           <text
-            x={CENTER} y={PAD + RANGE + 9}
+            x={CENTER} y={PAD + RANGE + 16}
             textAnchor="middle"
             dominantBaseline="hanging"
             fontFamily={svgFont}
@@ -235,7 +190,7 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
             REFLEKTIV
           </text>
           <text
-            x={PAD - 2}
+            x={PAD - 8}
             y={CENTER}
             textAnchor="middle"
             dominantBaseline="middle"
@@ -244,12 +199,12 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
             fontWeight="500"
             fill="rgba(255,255,255,0.28)"
             letterSpacing="1"
-            transform={`rotate(-90, ${PAD - 2}, ${CENTER})`}
+            transform={`rotate(-90, ${PAD - 8}, ${CENTER})`}
           >
             SACH
           </text>
           <text
-            x={PAD + RANGE + 2}
+            x={PAD + RANGE + 8}
             y={CENTER}
             textAnchor="middle"
             dominantBaseline="middle"
@@ -258,7 +213,7 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
             fontWeight="500"
             fill="rgba(255,255,255,0.28)"
             letterSpacing="1"
-            transform={`rotate(90, ${PAD + RANGE + 2}, ${CENTER})`}
+            transform={`rotate(90, ${PAD + RANGE + 8}, ${CENTER})`}
           >
             MENSCH
           </text>
