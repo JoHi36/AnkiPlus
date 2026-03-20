@@ -414,7 +414,7 @@ function SemanticChunks({ data, isDone, animate = true }: { data: Record<string,
         <div
           key={i}
           style={{
-            display: 'flex',
+            display: 'inline-flex',
             alignItems: 'center',
             gap: 8,
             padding: '5px 8px',
@@ -422,6 +422,7 @@ function SemanticChunks({ data, isDone, animate = true }: { data: Record<string,
             background: 'var(--ds-hover-tint)',
             position: 'relative',
             overflow: 'hidden',
+            maxWidth: '100%',
           }}
         >
           {/* Scan glow overlay when active */}
@@ -765,7 +766,8 @@ export default function ThoughtStream({
   const citationCount = Object.keys(citations).length;
   // Show when processing, has data, OR when streaming started but no events yet
   const showLoadingBox = isStreaming && !isProcessing && !activeEntry && doneStack.length === 0 && pipelineSteps.length === 0 && !isLegacy;
-  const hasContent = isProcessing || activeEntry !== null || doneStack.length > 0 || isLegacy || showLoadingBox;
+  // Include pipelineSteps.length > 0 to prevent flash: steps arrive before useSmartPipeline effect runs
+  const hasContent = isProcessing || activeEntry !== null || doneStack.length > 0 || isLegacy || showLoadingBox || (isStreaming && pipelineSteps.length > 0);
   const totalSteps = doneStack.length;
 
   if (!hasContent) return null;
@@ -774,7 +776,7 @@ export default function ThoughtStream({
   return (
     <div style={{ marginTop: 12, maxWidth: '100%', userSelect: 'none' }}>
       {/* ── Collapsed view ── */}
-      {isCollapsed && !isProcessing && !showLoadingBox && (
+      {isCollapsed && !isProcessing && !showLoadingBox && !(isStreaming && pipelineSteps.length > 0 && !activeEntry) && (
         <button
           onClick={() => { userExpandedRef.current = true; setIsCollapsed(false); }}
           style={{
@@ -804,7 +806,7 @@ export default function ThoughtStream({
       )}
 
       {/* ── Expanded view ── */}
-      {(!isCollapsed || showLoadingBox) && (
+      {(!isCollapsed || showLoadingBox || (isStreaming && pipelineSteps.length > 0 && !activeEntry)) && (
         <div>
           {/* Toggle row (when pipeline is done and has steps) */}
           {!isProcessing && totalSteps > 0 && (
@@ -836,8 +838,8 @@ export default function ThoughtStream({
             </button>
           )}
 
-          {/* Loading state (before any steps arrive) */}
-          {(isProcessing || showLoadingBox) && doneStack.length === 0 && !activeEntry && (
+          {/* Loading state (before any steps arrive, or during async gap) */}
+          {((isProcessing || showLoadingBox) && doneStack.length === 0 && !activeEntry || (isStreaming && pipelineSteps.length > 0 && !activeEntry && doneStack.length === 0)) && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
               <div
                 style={{

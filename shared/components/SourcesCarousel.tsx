@@ -116,7 +116,7 @@ export default function SourcesCarousel({ citations = {}, citationIndices = {}, 
       {/* Carousel Container */}
       <div
         ref={scrollContainerRef}
-        className="flex gap-3 overflow-x-auto pb-2 pt-1 px-1
+        className="flex items-stretch gap-3 overflow-x-auto pb-2 pt-1 px-1
                    scrollbar-hide snap-x max-w-full"
         style={{
           scrollbarWidth: 'none',
@@ -131,7 +131,7 @@ export default function SourcesCarousel({ citations = {}, citationIndices = {}, 
           const cardId = citation.noteId || citation.cardId || citation.id;
 
           return (
-            <div key={cardId} className="flex-shrink-0 w-[130px] snap-start">
+            <div key={cardId} className="flex-shrink-0 w-[130px] snap-start h-full">
               <SourceCard
                 citation={citation}
                 index={citation.index}

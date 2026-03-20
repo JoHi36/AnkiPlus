@@ -68,17 +68,17 @@ export default function SourceCard({ citation, index, onClick }: SourceCardProps
   const isKeyword = !isBoth && sources.includes('keyword');
   const isSemantic = !isBoth && sources.includes('semantic');
   const badgeStyle: React.CSSProperties = isBoth
-    ? { background: 'rgba(255,180,50,0.25)', color: 'rgba(255,200,80,0.9)' }
+    ? { background: 'color-mix(in srgb, var(--ds-yellow) 25%, transparent)', color: 'var(--ds-yellow)' }
     : isKeyword
-      ? { background: 'rgba(10,132,255,0.2)', color: 'rgba(80,170,255,0.9)' }
+      ? { background: 'color-mix(in srgb, var(--ds-accent) 20%, transparent)', color: 'var(--ds-accent)' }
       : isSemantic
-        ? { background: 'rgba(20,184,166,0.2)', color: 'rgba(80,220,200,0.9)' }
-        : { background: 'var(--fallback-b3,oklch(var(--b3)/1))' };
+        ? { background: 'color-mix(in srgb, var(--ds-green) 20%, transparent)', color: 'var(--ds-green)' }
+        : { background: 'var(--ds-bg-overlay)' };
 
   const CardContent = (
     <>
       {/* Top Bar / Deck Info */}
-      <div className="px-3 py-1.5 border-b border-base-300 flex items-center gap-2">
+      <div className="px-3 py-1.5 border-b flex items-center gap-2" style={{ borderColor: 'var(--ds-border-subtle)' }}>
         {/* Number Badge — colored by source type */}
         <div
           className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0 text-[10px] font-bold"
@@ -86,7 +86,7 @@ export default function SourceCard({ citation, index, onClick }: SourceCardProps
         >
           {index !== undefined && index !== 999 ? index : '#'}
         </div>
-        <span className="text-[10px] font-medium text-base-content/50 truncate" title={deckName}>
+        <span className="text-[10px] font-medium truncate" style={{ color: 'var(--ds-text-secondary)' }} title={deckName}>
           {shortDeck}
         </span>
       </div>
@@ -94,7 +94,8 @@ export default function SourceCard({ citation, index, onClick }: SourceCardProps
       {/* Content Snippet */}
       <div className="p-3 flex-1 flex flex-col gap-2">
         <p
-          className="text-xs font-medium text-base-content/80 line-clamp-3 leading-relaxed"
+          className="text-xs font-medium line-clamp-3 leading-relaxed"
+          style={{ color: 'var(--ds-text-primary)' }}
           dangerouslySetInnerHTML={{ __html: parsedContent }}
         />
       </div>
@@ -106,11 +107,17 @@ export default function SourceCard({ citation, index, onClick }: SourceCardProps
     return (
       <button
         onClick={() => onClick(citation)}
-        className="w-full text-left
+        className="w-full h-full text-left
                    group relative flex flex-col
-                   bg-base-200 hover:bg-base-300 border-base-300 hover:border-primary/30
                    rounded-lg border transition-all duration-200
                    hover:shadow-sm overflow-hidden"
+        style={{
+          background: 'var(--ds-bg-frosted)',
+          borderColor: 'var(--ds-border-medium)',
+          color: 'var(--ds-text-primary)',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--ds-accent) 30%, var(--ds-border-medium))'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--ds-border-medium)'; }}
       >
         {/* Dual-source star badge */}
         {citation.sources && citation.sources.length > 1 && (
@@ -129,10 +136,14 @@ export default function SourceCard({ citation, index, onClick }: SourceCardProps
 
   return (
     <div
-      className="w-full
+      className="w-full h-full
                  group relative flex flex-col
-                 bg-base-200 border-base-300
                  rounded-lg border overflow-hidden"
+      style={{
+        background: 'var(--ds-bg-frosted)',
+        borderColor: 'var(--ds-border-medium)',
+        color: 'var(--ds-text-primary)',
+      }}
     >
       {/* Dual-source star badge */}
       {citation.sources && citation.sources.length > 1 && (
