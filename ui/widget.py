@@ -1125,7 +1125,7 @@ class ChatbotWidget(QWidget):
 
     def on_streaming_finished(self, request_id):
         self.current_request = None
-        if hasattr(self, '_ai_thread'):
+        if hasattr(self, '_ai_thread') and self._ai_thread is not None:
             self._ai_thread.quit()
             self._ai_thread.wait(1000)
             self._ai_thread = None
