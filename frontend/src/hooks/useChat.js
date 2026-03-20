@@ -365,10 +365,43 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     updateCurrentSteps([]);  // Reset steps for new request
     updateCurrentCitations({});  // Reset citations for new request
     updatePipelineSteps([]);  // Reset pipeline steps for new request
-    
+
+    // @Plusi direct mode — skip router, emit synthetic pipeline, route via plusiDirect
+    const isPlusiDirect = /^@plusi\b/i.test(text);
+    if (isPlusiDirect) {
+      // Emit synthetic router-active immediately
+      updatePipelineSteps([{ step: 'router', status: 'active', data: {}, timestamp: Date.now() }]);
+
+      // After 700ms, emit router-done (simulated thinking)
+      setTimeout(() => {
+        updatePipelineSteps(prev => prev.map(s => s.step === 'router' ? {
+          ...s,
+          status: 'done',
+          data: {
+            search_needed: false,
+            retrieval_mode: 'none',
+            response_length: 'short',
+            scope: 'none',
+            scope_label: ''
+          },
+          timestamp: Date.now()
+        } : s));
+      }, 700);
+    }
+
+    if (isPlusiDirect) {
+      // Strip @Plusi prefix
+      const cleanText = text.replace(/^@plusi\s*/i, '').trim() || text;
+      // Use existing plusiDirect bridge — handles run_plusi(), mood sync, panel notify
+      if (bridge && bridge.plusiDirect) {
+        bridge.plusiDirect(cleanText, null); // deck_id=null, backend resolves current deck
+      }
+      return; // Skip normal sendMessage flow — no router, no main model
+    }
+
     // Store message for potential retry
     setLastFailedMessage({ text, context });
-    
+
     if (bridge && bridge.sendMessage) {
       console.log('📤 useChat: Sende an API mit Historie:', conversationHistory.length, 'Nachrichten, Modus:', mode, 'requestId:', requestId);
       try {
