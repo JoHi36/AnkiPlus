@@ -23,14 +23,14 @@ DARK_TOKENS = {
 }
 
 LIGHT_TOKENS = {
-    "bg_deep": "#D8D8DC",
-    "bg_canvas": "#E8E7E3",
-    "bg_overlay": "#CFCFD3",
+    "bg_deep": "#D5D4D0",
+    "bg_canvas": "#E4E3DF",
+    "bg_overlay": "#CBCAC6",
     "text_primary": "#1A1A1A",
     "text_secondary": "#6C6C70",
     "accent": "#007AFF",
-    "border_subtle": "#CDCDC8",
-    "border_medium": "#B8B8B4",
+    "border_subtle": "#CCCBC7",
+    "border_medium": "#BBBAB6",
     "green": "#34C759",
     "red": "#FF3B30",
 }

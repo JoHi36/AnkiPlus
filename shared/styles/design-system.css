@@ -134,19 +134,19 @@
 [data-theme="light"] {
   color-scheme: light;
 
-  --ds-bg-deep:     #D8D8DC;   /* Sidebar — noticeably darker than canvas */
-  --ds-bg-canvas:   #E8E7E3;   /* Main surface — warm beige-gray */
-  --ds-bg-frosted:  #F5F4F2;   /* Frosted glass — near-white, the light accent */
-  --ds-bg-overlay:  #CFCFD3;   /* Tooltips */
+  --ds-bg-deep:     #D5D4D0;   /* Sidebar — warm gray, darker than canvas */
+  --ds-bg-canvas:   #E4E3DF;   /* Main surface — warm beige-gray */
+  --ds-bg-frosted:  #FAFAF8;   /* Frosted glass — near-white, the bright "glass" accent */
+  --ds-bg-overlay:  #CBCAC6;   /* Tooltips */
 
   --ds-text-primary:     rgba(0, 0, 0, 0.85);
   --ds-text-secondary:   rgba(60, 60, 67, 0.60);
-  --ds-text-tertiary:    rgba(60, 60, 67, 0.30);
-  --ds-text-placeholder: rgba(60, 60, 67, 0.25);
-  --ds-text-muted:       rgba(60, 60, 67, 0.18);
+  --ds-text-tertiary:    rgba(60, 60, 67, 0.35);
+  --ds-text-placeholder: rgba(60, 60, 67, 0.30);
+  --ds-text-muted:       rgba(60, 60, 67, 0.22);
 
-  --ds-border-subtle: rgba(0, 0, 0, 0.04);
-  --ds-border-medium: rgba(0, 0, 0, 0.10);
+  --ds-border-subtle: rgba(0, 0, 0, 0.10);
+  --ds-border-medium: rgba(0, 0, 0, 0.18);
 
   --ds-accent:  #007AFF;
   --ds-green:   #34C759;
@@ -163,9 +163,9 @@
   --ds-green-tint:  rgba(52, 199, 89, 0.08);
   --ds-red-tint:    rgba(255, 59, 48, 0.06);
 
-  --ds-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
-  --ds-shadow-md: 0 4px 24px rgba(0, 0, 0, 0.10);
-  --ds-shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.15);
+  --ds-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.10);
+  --ds-shadow-md: 0 4px 20px rgba(0, 0, 0, 0.14);
+  --ds-shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.20);
 
   /* Rating aliases re-resolve automatically via var(--ds-red) etc. */
 }
