@@ -33,6 +33,7 @@ import { useMascot } from './hooks/useMascot';
 import { usePlusiDirect } from './hooks/usePlusiDirect';
 import InsightsDashboard from './components/InsightsDashboard';
 import useInsights from './hooks/useInsights';
+import PlusiMenu from './components/PlusiMenu';
 
 // Stable empty references — prevent new object creation on every render
 const EMPTY_STEPS = [];
@@ -2075,9 +2076,7 @@ function AppInner() {
                     Agent Studio (placeholder)
                   </div>
                 ) : activeView === 'plusiMenu' ? (
-                  <div style={{ padding: 40, textAlign: 'center', color: 'rgba(232,232,232,0.3)' }}>
-                    Plusi Menu (placeholder)
-                  </div>
+                  <PlusiMenu />
                 ) : (chatHook.messages.length === 0 || showInsightsDashboard) && !chatHook.isLoading && !chatHook.streamingMessage ? (
             <InsightsDashboard
               insights={insightsHook.insights}
