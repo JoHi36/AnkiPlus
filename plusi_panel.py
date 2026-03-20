@@ -14,7 +14,7 @@ PANEL_CSS = """
 body {
     margin: 0;
     padding: 0;
-    background: #13131f;
+    background: #1A1A1A;
     font-family: 'Varela Round', sans-serif;
     -webkit-font-smoothing: antialiased;
     overflow: hidden;
@@ -30,7 +30,7 @@ body {
     -webkit-backdrop-filter: blur(12px);
     mask-image: linear-gradient(to bottom, black 0%, black 40%, transparent 100%);
     -webkit-mask-image: linear-gradient(to bottom, black 0%, black 40%, transparent 100%);
-    background: linear-gradient(to bottom, rgba(19,19,31,0.9) 0%, rgba(19,19,31,0.5) 50%, transparent 100%);
+    background: linear-gradient(to bottom, rgba(26,26,26,0.9) 0%, rgba(26,26,26,0.5) 50%, transparent 100%);
     pointer-events: none;
 }
 .glass-bottom {
@@ -42,7 +42,7 @@ body {
     -webkit-backdrop-filter: blur(12px);
     mask-image: linear-gradient(to top, black 0%, black 40%, transparent 100%);
     -webkit-mask-image: linear-gradient(to top, black 0%, black 40%, transparent 100%);
-    background: linear-gradient(to top, rgba(19,19,31,0.9) 0%, rgba(19,19,31,0.5) 50%, transparent 100%);
+    background: linear-gradient(to top, rgba(26,26,26,0.9) 0%, rgba(26,26,26,0.5) 50%, transparent 100%);
     pointer-events: none;
 }
 .btn-settings, .btn-close {
@@ -220,9 +220,10 @@ PANEL_HTML = """
 
 <div class="plusi-bottom">
     <div style="width:40px;height:40px;flex-shrink:0;">
-        <svg class="plusi-body" viewBox="0 0 120 120" id="plusi-panel-svg">
-            <rect x="35" y="10" width="50" height="100" rx="16" fill="#2563eb"/>
-            <rect x="10" y="35" width="100" height="50" rx="16" fill="#2563eb"/>
+        <svg class="plusi-body" viewBox="0 0 120 120" width="40" height="40" id="plusi-panel-svg">
+            <rect x="40" y="5" width="40" height="110" rx="8" fill="#0a84ff"/>
+            <rect x="5" y="35" width="110" height="40" rx="8" fill="#0a84ff"/>
+            <rect x="40" y="35" width="40" height="40" fill="#0a84ff"/>
             <g id="plusi-panel-face"></g>
         </svg>
     </div>
@@ -512,11 +513,11 @@ def toggle_panel():
 
     _panel_dock.setStyleSheet("""
         QDockWidget {
-            background: #13131f;
+            background: #1A1A1A;
             border: none;
         }
         QDockWidget > QWidget {
-            background: #13131f;
+            background: #1A1A1A;
         }
     """)
 
@@ -525,8 +526,8 @@ def toggle_panel():
     layout.setContentsMargins(0, 0, 0, 0)
 
     _panel_webview = QWebEngineView()
-    _panel_webview.setStyleSheet("background: #13131f;")
-    _panel_webview.page().setBackgroundColor(QColor('#13131f'))
+    _panel_webview.setStyleSheet("background: #1A1A1A;")
+    _panel_webview.page().setBackgroundColor(QColor('#1A1A1A'))
     _panel_webview.setHtml(_get_panel_html(), QUrl("file:///"))
     layout.addWidget(_panel_webview)
 
