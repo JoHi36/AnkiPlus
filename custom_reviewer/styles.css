@@ -650,8 +650,15 @@ div[id^="bottom"]:not(.dock):not(.dock-wrapper) {
 /* ═══════════════════════════════════════════════
    FOCUS STATES
    ═══════════════════════════════════════════════ */
+.dock-action:focus,
 .dock-action:focus-visible,
-.dock-btn:focus-visible,
+.dock-btn:focus,
+.dock-btn:focus-visible {
+    outline: none;
+    box-shadow: none;
+    border: none;
+}
+
 .mc-option:focus-visible,
 .tab:focus-visible {
     outline: 2px solid var(--ds-accent);

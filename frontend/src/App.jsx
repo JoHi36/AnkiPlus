@@ -2001,7 +2001,7 @@ function AppInner() {
           style={{
             position: 'absolute', bottom: -56, left: 0, right: 0,
             height: 56, pointerEvents: 'none', zIndex: 10,
-            background: 'linear-gradient(to bottom, var(--ds-bg-deep) 0%, rgba(22,22,22,0.85) 30%, rgba(22,22,22,0.4) 65%, transparent 100%)',
+            background: 'linear-gradient(to bottom, var(--ds-bg-deep) 0%, var(--ds-bg-deep) 30%, transparent 100%)',
           }}
         />
       </div>
@@ -2044,7 +2044,7 @@ function AppInner() {
                 style={{
                   top: `${headerHeight}px`,
                   height: '40px',
-                  background: 'linear-gradient(to bottom, hsl(var(--b1)) 0%, hsl(var(--b1) / 0.9) 30%, hsl(var(--b1) / 0.0) 100%)'
+                  background: 'linear-gradient(to bottom, var(--ds-bg-deep) 0%, var(--ds-bg-deep) 30%, transparent 100%)'
                 }}
               />
               <div

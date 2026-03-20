@@ -114,6 +114,12 @@ div[id^="bottom"]:not(#reviewer *) {
 .dock-action:hover {
     background: var(--ds-hover-tint);
 }
+.dock-action:focus,
+.dock-action:focus-visible {
+    outline: none;
+    box-shadow: none;
+    border: none;
+}
 .dock-action .shortcut {
     font-family: ui-monospace, monospace;
     font-size: 10px;
@@ -171,6 +177,9 @@ div[id^="bottom"]:not(#reviewer *) {
     resize: none !important;
     box-shadow: none !important;
     min-height: unset !important;
+}
+#user-answer::placeholder {
+    color: var(--ds-text-placeholder) !important;
 }
 
 /* ═══ MC Options (card area) ═══ */
@@ -251,7 +260,7 @@ div[id^="bottom"]:not(#reviewer *) {
                 <div id="dc-input" class="dock-section">
                     <div class="relative px-4 py-3">
                         <textarea id="user-answer"
-                                  class="w-full min-h-[24px] max-h-[120px] p-0 pr-10 bg-transparent border-none text-base-content text-[15px] leading-relaxed resize-none outline-none placeholder:text-base-content/[0.25]"
+                                  class="w-full min-h-[24px] max-h-[120px] p-0 pr-10 bg-transparent border-none text-base-content text-[15px] leading-relaxed resize-none outline-none"
                                   style="border:none;background:transparent;outline:none;resize:none;box-shadow:none;color:var(--ds-text-secondary);font-family:inherit;font-size:15px;line-height:1.625;width:100%;padding:0;padding-right:40px;"
                                   placeholder="Antwort eingeben..."
                                   rows="1"
