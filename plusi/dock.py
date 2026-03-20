@@ -383,9 +383,9 @@ def sync_mood(mood):
     # Persist to storage
     try:
         try:
-            from .plusi_storage import set_memory
+            from .storage import set_memory
         except ImportError:
-            from plusi_storage import set_memory
+            from storage import set_memory
         set_memory('state', 'last_mood', mood)
     except Exception:
         pass
@@ -396,9 +396,9 @@ def get_persisted_mood():
     """Get the last persisted mood, or 'neutral' as default."""
     try:
         try:
-            from .plusi_storage import get_memory
+            from .storage import get_memory
         except ImportError:
-            from plusi_storage import get_memory
+            from storage import get_memory
         return get_memory('state', 'last_mood', 'neutral')
     except Exception:
         return 'neutral'

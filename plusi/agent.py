@@ -9,14 +9,14 @@ import json
 import requests
 
 try:
-    from .plusi_storage import (save_interaction, load_history, build_memory_context,
-                                apply_friendship_delta, get_friendship_data, build_internal_state_context,
-                                persist_internal_state, build_relationship_context)
-    from .config import get_config, is_backend_mode, get_backend_url, get_auth_token
+    from .storage import (save_interaction, load_history, build_memory_context,
+                           apply_friendship_delta, get_friendship_data, build_internal_state_context,
+                           persist_internal_state, build_relationship_context)
+    from ..config import get_config, is_backend_mode, get_backend_url, get_auth_token
 except ImportError:
-    from plusi_storage import (save_interaction, load_history, build_memory_context,
-                               apply_friendship_delta, get_friendship_data, build_internal_state_context,
-                               persist_internal_state, build_relationship_context)
+    from storage import (save_interaction, load_history, build_memory_context,
+                          apply_friendship_delta, get_friendship_data, build_internal_state_context,
+                          persist_internal_state, build_relationship_context)
     from config import get_config, is_backend_mode, get_backend_url, get_auth_token
 
 PLUSI_MODEL = 'gemini-3-flash-preview'
@@ -350,9 +350,9 @@ def self_reflect():
         if not query:
             print("plusi reflect: no query generated, using obsession fallback")
             try:
-                from .plusi_storage import get_memory
+                from .storage import get_memory
             except ImportError:
-                from plusi_storage import get_memory
+                from storage import get_memory
             query = get_memory('state', 'obsession', 'Medizin Biologie')
 
         print(f"plusi reflect: searching cards for '{query}'")
@@ -378,12 +378,12 @@ def self_reflect():
 
         # Diary logic: explicit diary, meaningful change, or discoveries
         if diary_raw:
-            from .plusi_storage import save_diary_entry
+            from .storage import save_diary_entry
             visible, cipher_parts = _parse_diary_text(diary_raw)
             if visible:
                 save_diary_entry(visible, cipher_parts, category='reflektiert', mood=mood, discoveries=discoveries)
         elif meaningful_changed:
-            from .plusi_storage import save_diary_entry
+            from .storage import save_diary_entry
             changes = []
             if internal.get('self'):
                 changes.append(f"self: {json.dumps(internal['self'], ensure_ascii=False)}")
@@ -394,7 +394,7 @@ def self_reflect():
             auto_text = "Interne Änderung: " + ", ".join(changes)
             save_diary_entry(auto_text, [], category='reflektiert', mood=mood, discoveries=discoveries)
         elif discoveries:
-            from .plusi_storage import save_diary_entry
+            from .storage import save_diary_entry
             why_texts = [d.get('why', '?') for d in discoveries]
             auto_text = "Gefunden: " + "; ".join(why_texts)
             save_diary_entry(auto_text, [], category='forscht', mood=mood, discoveries=discoveries)
@@ -566,13 +566,13 @@ def run_plusi(situation, deck_id=None):
         meaningful_changed = bool(internal.get('self') or internal.get('user') or internal.get('moments'))
 
         if diary_raw:
-            from .plusi_storage import save_diary_entry
+            from .storage import save_diary_entry
             visible, cipher_parts = _parse_diary_text(diary_raw)
             if visible:
                 save_diary_entry(visible, cipher_parts, category='gemerkt', mood=mood)
         elif meaningful_changed:
             # Auto-generate diary entry for meaningful changes without explicit diary
-            from .plusi_storage import save_diary_entry
+            from .storage import save_diary_entry
             changes = []
             if internal.get('self'):
                 changes.append(f"self: {json.dumps(internal['self'], ensure_ascii=False)}")

@@ -459,7 +459,7 @@ _settings_channel = None
 
 def _get_panel_html():
     """Build complete HTML document for the panel webview."""
-    from .plusi_dock import get_faces_dict
+    from .dock import get_faces_dict
     faces_json = json.dumps(get_faces_dict())
     mood = _get_current_mood()
     energy = _get_current_energy()
@@ -484,7 +484,7 @@ window.addEventListener('DOMContentLoaded', function() {{
 
 def _get_current_mood():
     try:
-        from .plusi_storage import get_memory
+        from .storage import get_memory
         return get_memory('state', 'last_mood', 'neutral')
     except Exception:
         return 'neutral'
@@ -492,7 +492,7 @@ def _get_current_mood():
 
 def _get_current_energy():
     try:
-        from .plusi_storage import get_memory
+        from .storage import get_memory
         val = get_memory('state', 'energy', 5)
         return int(val)
     except (Exception, ValueError, TypeError):
@@ -501,7 +501,7 @@ def _get_current_energy():
 
 def _get_current_friendship():
     try:
-        from .plusi_storage import get_friendship_data
+        from .storage import get_friendship_data
         return get_friendship_data()
     except Exception:
         return {'level': 1, 'levelName': 'Fremde', 'points': 0, 'maxPoints': 15}
@@ -534,7 +534,7 @@ def _send_diary_data():
     if not _panel_webview:
         return
     try:
-        from .plusi_storage import load_diary, get_friendship_data, get_memory
+        from .storage import load_diary, get_friendship_data, get_memory
         entries = load_diary(limit=50)
         mood = get_memory('state', 'last_mood', 'neutral')
         energy = get_memory('state', 'energy', 5)
@@ -569,7 +569,7 @@ def _open_settings():
         _poll_timer.stop()
 
     # Set up QWebChannel for settings bridge
-    from .settings_window import SettingsBridge
+    from ..settings_window import SettingsBridge
     try:
         from PyQt6.QtWebChannel import QWebChannel
     except ImportError:
@@ -584,7 +584,7 @@ def _open_settings():
 
     # Load settings.html
     import os
-    html_path = os.path.join(os.path.dirname(__file__), "settings.html")
+    html_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "settings.html")
     _panel_webview.setUrl(QUrl.fromLocalFile(html_path))
 
 
@@ -696,7 +696,7 @@ def toggle_panel():
 def _set_dock_plusi_visible(visible):
     """Show/hide the dock Plusi character via JS injection."""
     try:
-        from .plusi_dock import _get_active_webview
+        from .dock import _get_active_webview
         web = _get_active_webview()
         if web:
             display = 'flex' if visible else 'none'
