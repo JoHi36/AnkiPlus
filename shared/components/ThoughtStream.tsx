@@ -99,7 +99,7 @@ const STEP_NAMES: Record<string, string> = {
 };
 
 const ACTIVE_TITLES: Record<string, string> = {
-  router: 'Analysiere Anfrage...',
+  router: 'Suchstrategie wird festgelegt...',
   sql_search: 'Durchsuche Karten...',
   semantic_search: 'Semantische Suche...',
   merge: 'Kombiniere Quellen...',
@@ -328,34 +328,46 @@ function RouterDetails({ data }: { data: Record<string, any> }) {
   );
 }
 
-/* ── Router Thinking (active state) ── */
+/* ── Router Thinking (active state) — Skeleton tags matching done layout ── */
 function RouterThinking() {
+  const skeletonTags = [
+    { label: 'Strategie', width: 72, icon: 'M8 2v12M2 8h12' },
+    { label: 'Scope', width: 64, icon: 'M2 3h12v10H2zM2 6h12' },
+    { label: 'Quellen', width: 56, icon: 'M3 13V5h3v8M7 13V3h3v10M11 13V7h3v6' },
+  ];
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-      <div
-        style={{
-          width: 80,
-          height: 3,
-          borderRadius: 2,
-          background: 'linear-gradient(90deg, rgba(10,132,255,0.1), rgba(168,85,247,0.2), rgba(10,132,255,0.1))',
-          backgroundSize: '200% 100%',
-          animation: 'ts-shimmerWave 2s ease-in-out infinite',
-        }}
-      />
-      <div style={{ display: 'flex', gap: 3 }}>
-        {[0, 0.2, 0.4].map((delay, i) => (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+      {skeletonTags.map((tag) => (
+        <div
+          key={tag.label}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 5,
+            fontSize: 11,
+            padding: '3px 8px',
+            borderRadius: 5,
+            background: 'var(--ds-hover-tint)',
+          }}
+        >
+          <svg width={10} height={10} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" style={{ opacity: 0.2 }}>
+            <path d={tag.icon} />
+          </svg>
+          <span style={{ color: 'var(--ds-text-muted)' }}>{tag.label}</span>
+          {/* Shimmer placeholder for value */}
           <div
-            key={i}
             style={{
-              width: 3,
-              height: 3,
-              borderRadius: '50%',
-              background: 'rgba(10,132,255,0.5)',
-              animation: `ts-dotPulse 1.5s ease-in-out ${delay}s infinite`,
+              width: tag.width,
+              height: 10,
+              borderRadius: 3,
+              background: 'linear-gradient(90deg, var(--ds-hover-tint), var(--ds-active-tint), var(--ds-hover-tint))',
+              backgroundSize: '200% 100%',
+              animation: 'ts-shimmerWave 2s ease-in-out infinite',
             }}
           />
-        ))}
-      </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -808,37 +820,56 @@ export default function ThoughtStream({
       {/* ── Expanded view ── */}
       {(!isCollapsed || showLoadingBox || (isStreaming && pipelineSteps.length > 0 && !activeEntry)) && (
         <div>
-          {/* Toggle row (when pipeline is done and has steps) */}
-          {!isProcessing && totalSteps > 0 && (
-            <button
-              onClick={() => { userExpandedRef.current = false; setIsCollapsed(true); }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                width: '100%',
-                textAlign: 'left',
-                padding: '4px 0',
-                marginBottom: 4,
-                opacity: 0.5,
-                background: 'none',
-                border: 'none',
-                color: 'inherit',
-                cursor: 'pointer',
-                transition: 'opacity 0.2s',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.7'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.5'; }}
-            >
-              <ChevronDownIcon />
-              <span style={{ fontSize: 11, color: 'var(--ds-text-tertiary)' }}>
-                {totalSteps} Schritt{totalSteps !== 1 ? 'e' : ''}
-              </span>
-              <ExtendingLine />
-            </button>
-          )}
+          {/* Header row — always visible in expanded view */}
+          {(() => {
+            const isLoading = (isProcessing || showLoadingBox) && totalSteps === 0;
+            const isLoadingGap = isStreaming && pipelineSteps.length > 0 && !activeEntry && doneStack.length === 0;
 
-          {/* Loading state: show as router step with shimmer (before useSmartPipeline processes) */}
+            if (isLoading || isLoadingGap) {
+              // During loading: non-interactive header with extending line
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0', marginBottom: 4, opacity: 0.5 }}>
+                  <ChevronDownIcon />
+                  <span style={{ fontSize: 11, color: 'var(--ds-text-tertiary)' }}>Schritte</span>
+                  <ExtendingLine />
+                </div>
+              );
+            }
+            if (totalSteps > 0) {
+              // Done: clickable toggle to collapse
+              return (
+                <button
+                  onClick={() => { userExpandedRef.current = false; setIsCollapsed(true); }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '4px 0',
+                    marginBottom: 4,
+                    opacity: 0.5,
+                    background: 'none',
+                    border: 'none',
+                    color: 'inherit',
+                    cursor: 'pointer',
+                    transition: 'opacity 0.2s',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.7'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.5'; }}
+                >
+                  <ChevronDownIcon />
+                  <span style={{ fontSize: 11, color: 'var(--ds-text-tertiary)' }}>
+                    {totalSteps} Schritt{totalSteps !== 1 ? 'e' : ''}
+                  </span>
+                  <ExtendingLine />
+                </button>
+              );
+            }
+            return null;
+          })()}
+
+          {/* Loading state: show router skeleton as first step */}
           {((isProcessing || showLoadingBox) && doneStack.length === 0 && !activeEntry || (isStreaming && pipelineSteps.length > 0 && !activeEntry && doneStack.length === 0)) && (
             <div style={{ marginLeft: 16 }}>
               <PhaseRow
