@@ -17,15 +17,15 @@ def get_embedding_manager():
 
 # UI-Setup Import
 try:
-    from .ui_setup import setup_ui, setup_menu, get_chatbot_widget
+    from .ui.setup import setup_ui, setup_menu, get_chatbot_widget
 except ImportError:
-    from ui_setup import setup_ui, setup_menu, get_chatbot_widget
+    from ui.setup import setup_ui, setup_menu, get_chatbot_widget
 
 # Global Theme Import
 try:
-    from .anki_global_theme import setup_global_theme
+    from .ui.global_theme import setup_global_theme
 except ImportError:
-    from anki_global_theme import setup_global_theme
+    from ui.global_theme import setup_global_theme
 
 # Custom Reviewer Import
 try:
@@ -35,231 +35,153 @@ except ImportError:
 
 # Custom Screens Import (DeckBrowser + Overview)
 try:
-    from .custom_screens import custom_screens
+    from .ui.custom_screens import custom_screens
 except ImportError:
-    from custom_screens import custom_screens
+    from ui.custom_screens import custom_screens
 
-# Card Styling - Nur CSS (kein HTML-Transformer mehr)
-
-def hide_native_bottom_bar():
-    """Versteckt die native Anki Bottom Bar auf Qt-Ebene"""
-    try:
-        if mw and hasattr(mw, 'reviewer') and mw.reviewer:
-            # Hide the bottom web widget (Qt level)
-            if hasattr(mw.reviewer, 'bottom') and mw.reviewer.bottom:
-                mw.reviewer.bottom.web.hide()
-                print("✅ Native bottom bar hidden (Qt level)")
-
-            # Alternative: Direct access via bottomWeb
-            if hasattr(mw.reviewer, '_bottomWeb'):
-                mw.reviewer._bottomWeb.hide()
-                print("✅ Native bottomWeb hidden (Qt level)")
-
-    except Exception as e:
-        print(f"⚠️ Could not hide native bottom bar: {e}")
-
-def hide_deckbrowser_bottom():
-    """Versteckt die DeckBrowser Bottom Bar (Qt-Level, separates Widget)"""
-    try:
-        if mw and hasattr(mw, 'deckBrowser') and mw.deckBrowser:
-            if hasattr(mw.deckBrowser, 'bottom') and mw.deckBrowser.bottom:
-                if hasattr(mw.deckBrowser.bottom, 'web'):
-                    web = mw.deckBrowser.bottom.web
-                    web.hide()
-                    web.setFixedHeight(0)
-                    web.setMaximumHeight(0)
-                    web.setMinimumHeight(0)
-                    print("✅ DeckBrowser bottom bar hidden")
-    except Exception as e:
-        print(f"⚠️ Could not hide deckBrowser bottom: {e}")
-
-def show_deckbrowser_bottom():
-    """Zeigt die DeckBrowser Bottom Bar wieder an"""
-    try:
-        if mw and hasattr(mw, 'deckBrowser') and mw.deckBrowser:
-            if hasattr(mw.deckBrowser, 'bottom') and mw.deckBrowser.bottom:
-                if hasattr(mw.deckBrowser.bottom, 'web'):
-                    web = mw.deckBrowser.bottom.web
-                    web.setMaximumHeight(16777215)
-                    web.setMinimumHeight(0)
-                    if hasattr(web, 'adjustHeightToFit'):
-                        web.adjustHeightToFit()
-                    web.show()
-                    print("✅ DeckBrowser bottom bar restored")
-    except Exception as e:
-        print(f"⚠️ Could not restore deckBrowser bottom: {e}")
-
-def hide_native_toolbar():
-    """Versteckt die native Anki Toolbar für Immersive Mode.
-
-    WICHTIG: mw.toolbar ist KEIN QWidget, sondern eine Python-Wrapper-Klasse.
-    Nur mw.toolbar.web (TopWebView) ist ein QWidget mit hide()/show() Methoden.
-    """
-    try:
-        if not mw:
-            return
-
-        # Methode 1: mw.toolbar.web (die eigentliche TopWebView)
-        if hasattr(mw, 'toolbar') and mw.toolbar and hasattr(mw.toolbar, 'web'):
-            try:
-                web = mw.toolbar.web
-                # Prüfe ob Widget noch existiert
-                if web and hasattr(web, 'isVisible'):
-                    web.hide()
-                    web.setFixedHeight(0)
-                    web.setMaximumHeight(0)
-                    web.setMinimumHeight(0)
-                    print("✅ Toolbar.web hidden")
-            except (RuntimeError, AttributeError) as e:
-                print(f"⚠️ toolbar.web error: {e}")
-
-        # Methode 2: mw.toolbarWeb (alternative Referenz, sollte gleich sein)
-        if hasattr(mw, 'toolbarWeb') and mw.toolbarWeb:
-            try:
-                web = mw.toolbarWeb
-                if hasattr(web, 'isVisible'):
-                    web.hide()
-                    web.setFixedHeight(0)
-                    web.setMaximumHeight(0)
-                    web.setMinimumHeight(0)
-                    print("✅ toolbarWeb hidden")
-            except (RuntimeError, AttributeError) as e:
-                print(f"⚠️ toolbarWeb error: {e}")
-
-    except Exception as e:
-        print(f"⚠️ Could not hide native toolbar: {e}")
-
-def show_native_bottom_bar():
-    """Zeigt die native Anki Bottom Bar wieder an (für Cleanup)"""
-    try:
-        if mw and hasattr(mw, 'reviewer') and mw.reviewer:
-            # Show the bottom web widget
-            if hasattr(mw.reviewer, 'bottom') and mw.reviewer.bottom:
-                mw.reviewer.bottom.web.show()
-                print("✅ Native bottom bar restored (Qt level)")
-            
-            # Alternative: Direct access via bottomWeb
-            if hasattr(mw.reviewer, '_bottomWeb'):
-                mw.reviewer._bottomWeb.show()
-                print("✅ Native bottomWeb restored (Qt level)")
-                
-    except Exception as e:
-        print(f"⚠️ Could not restore native bottom bar: {e}")
-
-def show_native_toolbar():
-    """Zeigt die native Anki Toolbar wieder an (Cleanup).
-
-    WICHTIG: mw.toolbar ist KEIN QWidget. Nur mw.toolbar.web ist ein QWidget.
-    """
-    try:
-        if not mw:
-            return
-
-        # Methode 1: mw.toolbar.web
-        if hasattr(mw, 'toolbar') and mw.toolbar and hasattr(mw.toolbar, 'web'):
-            try:
-                web = mw.toolbar.web
-                if web and hasattr(web, 'isVisible'):
-                    # Reset height constraints
-                    web.setMaximumHeight(16777215)  # QWIDGETSIZE_MAX
-                    web.setMinimumHeight(0)
-                    # Trigger height recalculation
-                    if hasattr(web, 'adjustHeightToFit'):
-                        web.adjustHeightToFit()
-                    web.show()
-                    print("✅ Toolbar.web restored")
-            except (RuntimeError, AttributeError) as e:
-                print(f"⚠️ toolbar.web restore error: {e}")
-
-        # Methode 2: mw.toolbarWeb
-        if hasattr(mw, 'toolbarWeb') and mw.toolbarWeb:
-            try:
-                web = mw.toolbarWeb
-                if hasattr(web, 'isVisible'):
-                    web.setMaximumHeight(16777215)
-                    web.setMinimumHeight(0)
-                    if hasattr(web, 'adjustHeightToFit'):
-                        web.adjustHeightToFit()
-                    web.show()
-                    print("✅ toolbarWeb restored")
-            except (RuntimeError, AttributeError) as e:
-                print(f"⚠️ toolbarWeb restore error: {e}")
-
-    except Exception as e:
-        print(f"⚠️ Could not restore native toolbar: {e}")
-
-def hide_native_top_separator():
-    """Versteckt eventuelle zusätzliche UI-Elemente oben im Reviewer.
-
-    Diese Funktion ist jetzt vereinfacht - die Hauptarbeit macht hide_native_toolbar().
-    """
-    # Die Hauptarbeit wird von hide_native_toolbar() erledigt.
-    # Diese Funktion existiert nur noch für Kompatibilität.
+# ── Early class-level patches (MUST run at import time, before first render) ──
+# Anki renders DeckBrowser during profile load, BEFORE profile_did_open fires.
+# If we patch inside init_addon(), we're too late for the initial render.
+try:
+    from aqt.deckbrowser import DeckBrowser as _DB
+    _DB._orig_drawButtons = _DB._drawButtons
+    _DB._drawButtons = lambda self: None
+except Exception:
     pass
 
-def show_native_top_separator():
-    """Zeigt eventuelle zusätzliche UI-Elemente wieder an.
+try:
+    from aqt.toolbar import Toolbar as _TB, BottomBar as _BB
+    _TB._orig_redraw = _TB.redraw
+    def _noop_redraw(self):
+        from aqt import gui_hooks
+        gui_hooks.top_toolbar_did_redraw(self)
+    _TB.redraw = _noop_redraw
+    _TB._orig_draw = _TB.draw
+    _TB.draw = lambda self, buf="", web_context=None, link_handler=None: None
 
-    Diese Funktion ist jetzt vereinfacht - die Hauptarbeit macht show_native_toolbar().
-    """
-    # Die Hauptarbeit wird von show_native_toolbar() erledigt.
+    # Patch BottomBar.draw to actively HIDE the widget instead of drawing content.
+    # This catches ALL bottom bars (DeckBrowser, Overview, Reviewer) and ensures
+    # the Qt widget itself is invisible — not just empty.
+    _BB._orig_draw = _BB.draw
+    def _suppress_bottom_draw(self, buf="", web_context=None, link_handler=None):
+        self.web.hide()
+        self.web.setFixedHeight(0)
+        self.web.setMaximumHeight(0)
+    _BB.draw = _suppress_bottom_draw
+except Exception:
     pass
 
-def hide_splitter_visuals():
-    """Macht den Resize-Handle zwischen Hauptfenster und Chat-Panel unsichtbar (Ghost Handle).
-
-    Der Handle bleibt funktional (kann gegriffen und gezogen werden), ist aber optisch transparent.
-    """
-    if mw is None:
-        return
-
+# Hide the Qt widgets as early as possible — state_did_change fires before first paint
+def _early_hide_native_ui(*args):
+    """Hide toolbar + bottomWeb at every state change."""
     try:
-        style = """
-        /* 1px dezenter Trenner zwischen Dock-Widgets und Main Window */
-        QMainWindow::separator {
-            background: rgba(255, 255, 255, 0.04);
-            width: 1px !important;
-            height: 1px !important;
-            border: none;
-            margin: 0px;
-            padding: 0px;
-        }
+        if mw and hasattr(mw, 'toolbar') and mw.toolbar and hasattr(mw.toolbar, 'web'):
+            mw.toolbar.web.hide()
+            mw.toolbar.web.setFixedHeight(0)
+            mw.toolbar.web.setMaximumHeight(0)
+    except Exception:
+        pass
+    try:
+        if mw and hasattr(mw, 'bottomWeb') and mw.bottomWeb:
+            mw.bottomWeb.hide()
+            mw.bottomWeb.setFixedHeight(0)
+            mw.bottomWeb.setMaximumHeight(0)
+    except Exception:
+        pass
 
-        QMainWindow::separator:hover {
-            background: rgba(255, 255, 255, 0.08);
-            width: 1px !important;
-        }
+gui_hooks.state_did_change.append(_early_hide_native_ui)
 
-        /* Falls ein QSplitter verwendet wird */
-        QSplitter::handle {
-            background: rgba(255, 255, 255, 0.04);
-            width: 1px !important;
-            border: none;
-            margin: 0px;
-            padding: 0px;
-        }
+# Set dark background on all webviews immediately — prevents native UI flash.
+# Without this, mw.web briefly shows the native Anki content (white/gray)
+# before custom_screens replaces it with our dark UI.
+def _set_dark_backgrounds():
+    try:
+        from PyQt6.QtGui import QColor, QPalette
+        dark = QColor("#1a1a1a")
 
-        QSplitter::handle:hover {
-            background: rgba(255, 255, 255, 0.08);
-            width: 1px !important;
-        }
-        """
+        # Main webview (shows deckBrowser/overview/reviewer content)
+        if hasattr(mw, 'web') and mw.web:
+            mw.web.page().setBackgroundColor(dark)
 
-        # Vorhandenes Stylesheet erweitern, nicht überschreiben
-        current_style = mw.styleSheet()
-        mw.setStyleSheet(current_style + style)
-        print("✅ Resize Handle: 1px dezent")
-    except Exception as e:
-        print(f"⚠️ Fehler beim Verstecken des Splitters: {e}")
+        # Bottom webview
+        if hasattr(mw, 'bottomWeb') and mw.bottomWeb:
+            mw.bottomWeb.page().setBackgroundColor(dark)
+
+        # Toolbar webview
+        if hasattr(mw, 'toolbar') and mw.toolbar and hasattr(mw.toolbar, 'web'):
+            mw.toolbar.web.page().setBackgroundColor(dark)
+
+        # Main window + central widget background
+        mw.setStyleSheet("QMainWindow { background: #1a1a1a; }")
+        central = mw.centralWidget()
+        if central:
+            p = central.palette()
+            p.setColor(QPalette.ColorRole.Window, dark)
+            central.setPalette(p)
+            central.setAutoFillBackground(True)
+    except Exception:
+        pass
+
+QTimer.singleShot(0, _set_dark_backgrounds)
+
+# Permanently suppress mw.bottomWeb — patch show() and adjustHeightToFit()
+# so Anki can never make it visible again, regardless of timing.
+def _suppress_bottom_web():
+    try:
+        bw = getattr(mw, 'bottomWeb', None)
+        if not bw or getattr(bw, '_suppressed', False):
+            return
+        bw.hide()
+        bw.setFixedHeight(0)
+        bw.setMaximumHeight(0)
+        bw.setMinimumHeight(0)
+        bw.show = lambda: None
+        bw.adjustHeightToFit = lambda: None
+        bw._suppressed = True
+    except Exception:
+        pass
+    try:
+        tw = getattr(mw.toolbar, 'web', None) if hasattr(mw, 'toolbar') and mw.toolbar else None
+        if tw and not getattr(tw, '_suppressed', False):
+            tw.hide()
+            tw.setFixedHeight(0)
+            tw.setMaximumHeight(0)
+            tw.setMinimumHeight(0)
+            tw.show = lambda: None
+            tw._suppressed = True
+    except Exception:
+        pass
+
+# Burst: try at multiple early moments to catch whenever mw.bottomWeb appears
+for _delay in (0, 50, 150, 300):
+    QTimer.singleShot(_delay, _suppress_bottom_web)
+
+# UI Manager Import — zentrales Management der nativen Anki-UI-Elemente
+try:
+    from .ui.manager import (
+        hide_native_bottom_bar, show_native_bottom_bar,
+        hide_deckbrowser_bottom, show_deckbrowser_bottom,
+        hide_native_toolbar, show_native_toolbar,
+        hide_native_top_separator, show_native_top_separator,
+        hide_splitter_visuals, focus_reviewer_webview
+    )
+except ImportError:
+    from ui.manager import (
+        hide_native_bottom_bar, show_native_bottom_bar,
+        hide_deckbrowser_bottom, show_deckbrowser_bottom,
+        hide_native_toolbar, show_native_toolbar,
+        hide_native_top_separator, show_native_top_separator,
+        hide_splitter_visuals, focus_reviewer_webview
+    )
 
 def _init_embedding_manager():
     """Initialize EmbeddingManager for semantic search (called after profile load)"""
     global _embedding_manager
     try:
         try:
-            from .embedding_manager import EmbeddingManager
+            from .ai.embeddings import EmbeddingManager
         except ImportError:
-            from embedding_manager import EmbeddingManager
+            from ai.embeddings import EmbeddingManager
 
         try:
             from .config import is_backend_mode, get_backend_url, get_auth_token
@@ -317,7 +239,7 @@ def init_addon():
 
     # Migrate sessions.json → SQLite (one-time, on first load)
     try:
-        from .card_sessions_storage import migrate_from_json
+        from .storage.card_sessions import migrate_from_json
         migrate_from_json()
     except Exception as e:
         print(f"Card sessions migration skipped: {e}")
@@ -326,10 +248,10 @@ def init_addon():
     def _startup_token_refresh():
         try:
             from .config import get_auth_token, get_refresh_token, is_backend_mode
-            from .ai_handler import get_ai_handler
+            from .ai.handler import get_ai_handler
         except ImportError:
             from config import get_auth_token, get_refresh_token, is_backend_mode
-            from ai_handler import get_ai_handler
+            from ai.handler import get_ai_handler
 
         if not (is_backend_mode() and get_refresh_token()):
             return
@@ -364,10 +286,10 @@ def init_addon():
         """Periodischer Token-Refresh alle 30 Minuten"""
         try:
             from .config import get_refresh_token, is_backend_mode
-            from .ai_handler import get_ai_handler
+            from .ai.handler import get_ai_handler
         except ImportError:
             from config import get_refresh_token, is_backend_mode
-            from ai_handler import get_ai_handler
+            from ai.handler import get_ai_handler
 
         if is_backend_mode() and get_refresh_token():
             handler = get_ai_handler()
@@ -398,11 +320,10 @@ def init_addon():
         QTimer.singleShot(80, custom_screens.refresh_if_visible)
         print("Custom Screens: Enabled on addon init")
 
-        # Fix: If Anki starts directly in deckBrowser state, no state_will_change fires.
-        # Explicitly hide toolbar + bottom bar now.
+        # Hide toolbar + bottom bar on Qt level (backup to class-level patches)
+        hide_native_toolbar()
         if getattr(mw, 'state', '') in ('deckBrowser', 'overview'):
-            QTimer.singleShot(200, hide_native_toolbar)
-            QTimer.singleShot(200, hide_deckbrowser_bottom)
+            hide_deckbrowser_bottom()
             def _fix_db_margins():
                 try:
                     central = mw.centralWidget()
@@ -447,11 +368,11 @@ def init_addon():
             except Exception as e:
                 print(f"⚠️ Could not patch reviewer bottom: {e}")
 
-            # Hide native bottom bar on Qt level (backup)
-            QTimer.singleShot(500, hide_native_bottom_bar)
-
-            # Hide native top separator on Qt level
-            QTimer.singleShot(500, hide_native_top_separator)
+            # Class-level patches (DeckBrowser._drawButtons, Toolbar.draw/redraw)
+            # are already applied at module import time above.
+            # Just hide the Qt widgets as backup for anything already rendered.
+            hide_native_bottom_bar()
+            hide_native_toolbar()
             
             # NOTE: Toolbar hiding moved to state_did_change hook
             # to only hide in review state, not globally
@@ -480,14 +401,15 @@ def on_profile_loaded():
     from PyQt6.QtCore import QTimer
 
     # Global flag: when True, next Plusi interaction will trigger a reflect afterwards
-    global _plusi_reflect_pending
+    global _plusi_reflect_pending, _plusi_reflect_lock
     _plusi_reflect_pending = False
+    _plusi_reflect_lock = threading.Lock()
 
     def _plusi_reflect_once():
         """Run one self-reflection cycle in a background thread."""
         try:
-            from .plusi_agent import self_reflect
-            from .plusi_dock import sync_mood
+            from .plusi.agent import self_reflect
+            from .plusi.dock import sync_mood
             sync_mood('reading')
             try:
                 self_reflect()
@@ -495,12 +417,21 @@ def on_profile_loaded():
                 print(f"Plusi self-reflect failed: {e}")
             sync_mood('neutral')
             try:
-                from .plusi_panel import notify_new_diary_entry
+                from .plusi.panel import notify_new_diary_entry
                 notify_new_diary_entry()
             except Exception:
                 pass
         except Exception as e:
             print(f"Plusi reflect error: {e}")
+
+    def _run_guarded_reflect():
+        """Run _plusi_reflect_once with a guard to prevent concurrent executions."""
+        if not _plusi_reflect_lock.acquire(blocking=False):
+            return
+        try:
+            _plusi_reflect_once()
+        finally:
+            _plusi_reflect_lock.release()
 
     def _open_reflect_window():
         """Open the reflection window — next interaction will trigger reflect."""
@@ -520,13 +451,13 @@ def on_profile_loaded():
     def check_and_trigger_reflect():
         """Called after each Plusi interaction. If window is open, trigger reflect."""
         global _plusi_reflect_pending
-        if _plusi_reflect_pending:
+        if _plusi_reflect_pending and not _plusi_reflect_lock.locked():
             _plusi_reflect_pending = False
             print("plusi reflect: triggered by interaction")
-            threading.Thread(target=_plusi_reflect_once, daemon=True).start()
+            threading.Thread(target=_run_guarded_reflect, daemon=True).start()
 
     # Initial reflect on startup (always, no window needed)
-    threading.Thread(target=_plusi_reflect_once, daemon=True).start()
+    threading.Thread(target=_run_guarded_reflect, daemon=True).start()
     # Schedule first window
     _schedule_next_window()
 
@@ -579,32 +510,14 @@ def _emit_deck_selected(widget, deck_id, deck_name):
         import traceback
         traceback.print_exc()
 
-def focus_reviewer_webview():
-    """Force focus back to the reviewer webview so keyboard shortcuts work.
-
-    Anki's Qt operations (showing answer, rating) can steal focus from the webview,
-    causing JS keydown events to not fire. This forces focus back.
-    """
-    try:
-        if mw and hasattr(mw, 'reviewer') and mw.reviewer and hasattr(mw.reviewer, 'web'):
-            web = mw.reviewer.web
-            if web and hasattr(web, 'setFocus'):
-                web.setFocus()
-                # Also ensure the page itself has focus via JS
-                web.eval('document.body.focus(); window.focus();')
-    except Exception as e:
-        print(f"⚠️ Could not focus reviewer webview: {e}")
-
 def on_reviewer_did_show_question(card):
     """Wird aufgerufen, wenn eine Karte im Reviewer angezeigt wird"""
-    # Ensure native bottom bar stays hidden (Qt level)
+    # Ensure native bottom bar stays suppressed
     config = mw.addonManager.getConfig(__name__) or {}
     if config.get("use_custom_reviewer", True):
         hide_native_bottom_bar()
-        hide_native_top_separator()
-        # CRITICAL: Force focus to webview so keyboard shortcuts work
-        QTimer.singleShot(50, focus_reviewer_webview)
-        QTimer.singleShot(200, focus_reviewer_webview)
+        # Force focus to webview so keyboard shortcuts work
+        QTimer.singleShot(100, focus_reviewer_webview)
 
     # Deck-Event senden (nur wenn Widget existiert)
     widget = get_chatbot_widget()
@@ -642,7 +555,7 @@ def on_reviewer_did_answer_card(reviewer, card, ease):
 
         # Also update Plusi dock in the main webview (reviewer/deckBrowser/overview)
         try:
-            from plusi_dock import show_bubble
+            from plusi.dock import show_bubble
             if correct:
                 show_bubble(None, 'Richtig! ✨', 'happy')
             else:
@@ -697,20 +610,13 @@ def on_state_will_change(new_state, old_state):
                 except:
                     pass
 
-                # Hide DeckBrowser bottom bar when entering deckBrowser
-                # Multiple delays: Anki re-shows the bar after full render
+                # Bottom bars: class-level patches prevent drawing,
+                # but also suppress the Qt widget as backup
                 if new_state == "deckBrowser":
-                    QTimer.singleShot(150, hide_deckbrowser_bottom)
-                    QTimer.singleShot(400, hide_deckbrowser_bottom)
-                    QTimer.singleShot(800, hide_deckbrowser_bottom)
+                    hide_deckbrowser_bottom()
 
-                # Hide reviewer bottom bar immediately when entering review
-                # Multiple delays because Anki re-creates the bar after render
                 if new_state == "review":
-                    QTimer.singleShot(50, hide_native_bottom_bar)
-                    QTimer.singleShot(200, hide_native_bottom_bar)
-                    QTimer.singleShot(500, hide_native_bottom_bar)
-                    QTimer.singleShot(1000, hide_native_bottom_bar)
+                    hide_native_bottom_bar()
 
                 print(f"🎨 State: {new_state} → Toolbar hidden")
             except Exception as e:
@@ -720,7 +626,7 @@ def on_state_will_change(new_state, old_state):
             # Skip chat panel close if we're in a preview transition
             if not (_preview_state and _preview_state.get('_transitioning', False)):
                 try:
-                    from .ui_setup import close_chatbot_panel
+                    from .ui.setup import close_chatbot_panel
                     close_chatbot_panel()
                 except Exception:
                     pass
