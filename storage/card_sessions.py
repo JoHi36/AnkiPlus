@@ -324,7 +324,7 @@ def _get_deck_for_card(card_id):
             card = aqt.mw.col.get_card(card_id)
             if card:
                 return card.did, aqt.mw.col.decks.name(card.did)
-    except (sqlite3.Error, KeyError, ValueError):
+    except (sqlite3.Error, KeyError, ValueError, AttributeError):
         pass
     return None, None
 
@@ -806,7 +806,7 @@ def migrate_from_json(sessions_json_path=None):
         print(f"CardSessionsDB: sessions.json renamed to {backup_path}")
         return True
 
-    except (sqlite3.Error, KeyError, ValueError) as e:
+    except (sqlite3.Error, KeyError, ValueError, OSError) as e:
         import traceback
         print(f"CardSessionsDB: Migration error: {e}")
         traceback.print_exc()
