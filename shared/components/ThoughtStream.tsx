@@ -362,7 +362,7 @@ function RouterThinking() {
 }
 
 /* ── SQL Tags ── */
-function SqlTags({ data, isDone }: { data: Record<string, any>; isDone: boolean }) {
+function SqlTags({ data, isDone, animate = true }: { data: Record<string, any>; isDone: boolean; animate?: boolean }) {
   const queries = data.queries || [];
   if (queries.length === 0) return null;
 
@@ -380,7 +380,7 @@ function SqlTags({ data, isDone }: { data: Record<string, any>; isDone: boolean 
             borderRadius: 5,
             background: 'var(--ds-hover-tint)',
             color: 'var(--ds-text-secondary)',
-            animation: `ts-pulseIn 0.3s ease-out ${i * 0.15}s both`,
+            animation: animate ? `ts-pulseIn 0.3s ease-out ${i * 0.15}s both` : undefined,
           }}
         >
           <svg width={10} height={10} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" style={{ opacity: 0.3 }}>
@@ -406,7 +406,7 @@ function SqlTags({ data, isDone }: { data: Record<string, any>; isDone: boolean 
 }
 
 /* ── Semantic Chunks ── */
-function SemanticChunks({ data, isDone }: { data: Record<string, any>; isDone: boolean }) {
+function SemanticChunks({ data, isDone, animate = true }: { data: Record<string, any>; isDone: boolean; animate?: boolean }) {
   const chunks = data.chunks || [];
 
   return (
@@ -426,7 +426,7 @@ function SemanticChunks({ data, isDone }: { data: Record<string, any>; isDone: b
           }}
         >
           {/* Scan glow overlay when active */}
-          {!isDone && (
+          {!isDone && animate && (
             <div
               style={{
                 position: 'absolute',
@@ -459,7 +459,7 @@ function SemanticChunks({ data, isDone }: { data: Record<string, any>; isDone: b
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              animation: `ts-fadeBlurIn 0.8s ease-out ${i * 0.3}s both`,
+              animation: animate ? `ts-fadeBlurIn 0.8s ease-out ${i * 0.3}s both` : undefined,
             }}
           >
             {chunk.snippet || chunk.text || ''}
@@ -522,7 +522,7 @@ function MergeBar({ data }: { data: Record<string, any> }) {
    PHASE ROW — Unified renderer for active + done
    ═══════════════════════════════════════════════════ */
 
-function PhaseRow({ step, data, status, isActive, isFirst = false }: { step: string; data: Record<string, any>; status: string; isActive: boolean; isFirst?: boolean }) {
+function PhaseRow({ step, data, status, isActive, isFirst = false, animate = true }: { step: string; data: Record<string, any>; status: string; isActive: boolean; isFirst?: boolean; animate?: boolean }) {
   const isDone = !isActive;
 
   // Title logic
@@ -553,7 +553,7 @@ function PhaseRow({ step, data, status, isActive, isFirst = false }: { step: str
       style={{
         padding: '6px 0',
         borderTop: isFirst ? 'none' : '1px solid var(--ds-hover-tint)',
-        animation: isActive ? undefined : 'ts-phaseReveal 0.25s ease-out both',
+        animation: (!animate || isActive) ? undefined : 'ts-phaseReveal 0.25s ease-out both',
       }}
     >
       {/* Title row */}
@@ -569,7 +569,7 @@ function PhaseRow({ step, data, status, isActive, isFirst = false }: { step: str
               borderRadius: '50%',
               background: 'var(--ds-accent)',
               flexShrink: 0,
-              animation: 'ts-dotPulse 1.5s ease-in-out infinite',
+              animation: animate ? 'ts-dotPulse 1.5s ease-in-out infinite' : undefined,
             }}
           />
         )}
@@ -585,23 +585,11 @@ function PhaseRow({ step, data, status, isActive, isFirst = false }: { step: str
 
       {/* Phase-specific content */}
       <div style={{ marginLeft: 14 }}>
-        {step === 'router' && isActive && <RouterThinking />}
+        {step === 'router' && isActive && animate && <RouterThinking />}
         {step === 'router' && isDone && <RouterDetails data={data} />}
-        {step === 'sql_search' && <SqlTags data={data} isDone={isDone} />}
-        {step === 'semantic_search' && <SemanticChunks data={data} isDone={isDone} />}
+        {step === 'sql_search' && <SqlTags data={data} isDone={isDone} animate={animate} />}
+        {step === 'semantic_search' && <SemanticChunks data={data} isDone={isDone} animate={animate} />}
         {step === 'merge' && isDone && <MergeBar data={data} />}
-        {step === 'generating' && isActive && (
-          <div
-            style={{
-              marginTop: 4,
-              height: 3,
-              borderRadius: 2,
-              background: 'linear-gradient(90deg, transparent 0%, rgba(10,132,255,0.05) 20%, rgba(10,132,255,0.3) 50%, rgba(10,132,255,0.05) 80%, transparent 100%)',
-              backgroundSize: '200% 100%',
-              animation: 'ts-shimmerWave 2s ease-in-out infinite',
-            }}
-          />
-        )}
       </div>
     </div>
   );
@@ -739,6 +727,7 @@ export default function ThoughtStream({
 
   const isLegacy = pipelineSteps.length === 0 && steps.length > 0;
   const { activeEntry, doneStack, isProcessing } = useSmartPipeline(pipelineSteps);
+  const animate = isStreaming || isProcessing;
 
   // Reverse doneStack for chronological display (doneStack is newest-first)
   const chronologicalDone = [...doneStack].reverse();
@@ -861,7 +850,7 @@ export default function ThoughtStream({
                   borderRadius: '50%',
                   background: 'var(--ds-accent)',
                   flexShrink: 0,
-                  animation: 'ts-dotPulse 1.5s ease-in-out infinite',
+                  animation: animate ? 'ts-dotPulse 1.5s ease-in-out infinite' : undefined,
                 }}
               />
               <span style={{ fontSize: 12, color: 'var(--ds-text-tertiary)' }}>Analysiere...</span>
@@ -880,6 +869,7 @@ export default function ThoughtStream({
                 status={entry.isError ? 'error' : 'done'}
                 isActive={false}
                 isFirst={idx === 0}
+                animate={animate}
               />
             ))}
 
@@ -892,6 +882,7 @@ export default function ThoughtStream({
                 status={activeEntry.status}
                 isActive={activeEntry.status === 'active'}
                 isFirst={chronologicalDone.length === 0}
+                animate={animate}
               />
             )}
           </div>
