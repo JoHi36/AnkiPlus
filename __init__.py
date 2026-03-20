@@ -169,7 +169,7 @@ try:
         hide_deckbrowser_bottom, show_deckbrowser_bottom,
         hide_native_toolbar, show_native_toolbar,
         hide_native_top_separator, show_native_top_separator,
-        hide_splitter_visuals, focus_reviewer_webview
+        hide_splitter_visuals
     )
 except ImportError:
     from ui.manager import (
@@ -177,7 +177,7 @@ except ImportError:
         hide_deckbrowser_bottom, show_deckbrowser_bottom,
         hide_native_toolbar, show_native_toolbar,
         hide_native_top_separator, show_native_top_separator,
-        hide_splitter_visuals, focus_reviewer_webview
+        hide_splitter_visuals
     )
 
 def _init_embedding_manager():
@@ -520,8 +520,6 @@ def on_reviewer_did_show_question(card):
     config = mw.addonManager.getConfig(__name__) or {}
     if config.get("use_custom_reviewer", True):
         hide_native_bottom_bar()
-        # Force focus to webview so keyboard shortcuts work
-        QTimer.singleShot(100, focus_reviewer_webview)
 
     # Deck-Event senden (nur wenn Widget existiert)
     widget = get_chatbot_widget()
@@ -727,15 +725,6 @@ if mw is not None:
     else:
         logger.warning("⚠️ WARNUNG: reviewer_did_answer_card Hook nicht verfügbar")
 
-    # Also refocus webview after answer is shown
-    if hasattr(gui_hooks, 'reviewer_did_show_answer'):
-        def on_reviewer_did_show_answer(card):
-            config = mw.addonManager.getConfig(__name__) or {}
-            if config.get("use_custom_reviewer", True):
-                QTimer.singleShot(50, focus_reviewer_webview)
-        gui_hooks.reviewer_did_show_answer.append(on_reviewer_did_show_answer)
-        logger.info("✅ Hook: reviewer_did_show_answer registriert (refocus)")
-    
     if hasattr(gui_hooks, 'state_will_change'):
         gui_hooks.state_will_change.append(on_state_will_change)
         logger.info("✅ Hook: state_will_change registriert")
