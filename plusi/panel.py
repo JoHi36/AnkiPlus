@@ -16,11 +16,30 @@ from PyQt6.QtCore import Qt, QUrl, QTimer
 from PyQt6.QtGui import QColor
 
 
+PANEL_CSS_VARS = """
+:root {
+  --ds-bg-deep:          #141416;
+  --ds-bg-canvas:        #1C1C1E;
+  --ds-bg-frosted:       #161618;
+  --ds-bg-overlay:       #3A3A3C;
+  --ds-text-primary:     rgba(255, 255, 255, 0.92);
+  --ds-text-secondary:   rgba(255, 255, 255, 0.55);
+  --ds-text-tertiary:    rgba(255, 255, 255, 0.35);
+  --ds-text-placeholder: rgba(255, 255, 255, 0.30);
+  --ds-text-muted:       rgba(255, 255, 255, 0.18);
+  --ds-border-subtle:    rgba(255, 255, 255, 0.06);
+  --ds-border-medium:    rgba(255, 255, 255, 0.12);
+  --ds-accent:           #0A84FF;
+  --ds-hover-tint:       rgba(255, 255, 255, 0.04);
+  --ds-active-tint:      rgba(255, 255, 255, 0.08);
+}
+"""
+
 PANEL_CSS = """
 body {
     margin: 0;
     padding: 0;
-    background: #1A1A1A;
+    background: var(--ds-bg-canvas);
     font-family: 'Varela Round', sans-serif;
     -webkit-font-smoothing: antialiased;
     overflow: hidden;
@@ -63,7 +82,7 @@ body {
 .btn-close { top: 16px; right: 18px; }
 .btn-settings svg, .btn-close svg {
     width: 16px; height: 16px;
-    stroke: rgba(255,255,255,0.4);
+    stroke: var(--ds-text-tertiary);
     fill: none;
     stroke-width: 1.8;
     stroke-linecap: round;
@@ -81,7 +100,7 @@ body {
     font-family: -apple-system, 'Inter', system-ui, sans-serif;
     font-size: 10px;
     font-weight: 600;
-    color: rgba(255,255,255,0.16);
+    color: var(--ds-text-muted);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     margin-bottom: 14px;
@@ -90,13 +109,13 @@ body {
 .day-marker:not(:first-child) {
     margin-top: 22px;
     padding-top: 18px;
-    border-top: 1px solid rgba(255,255,255,0.03);
+    border-top: 1px solid var(--ds-border-subtle);
 }
 .entry { margin-bottom: 16px; }
 .entry-time {
     font-family: -apple-system, 'Inter', system-ui, sans-serif;
     font-size: 9.5px;
-    color: rgba(255,255,255,0.18);
+    color: var(--ds-text-muted);
     font-weight: 500;
     margin-bottom: 4px;
     display: flex;
@@ -118,7 +137,7 @@ body {
 .entry-text {
     font-size: 13.5px;
     line-height: 1.65;
-    color: rgba(255,255,255,0.55);
+    color: var(--ds-text-secondary);
 }
 .cipher {
     color: rgba(255,255,255,0.08);
@@ -134,7 +153,7 @@ body {
 }
 .discovery {
     font-size: 12px;
-    color: rgba(255,255,255,0.4);
+    color: var(--ds-text-tertiary);
     padding: 3px 0;
     cursor: pointer;
     transition: color 0.15s;
@@ -184,7 +203,7 @@ body {
 .energy-bar {
     flex: 1;
     height: 3px;
-    background: rgba(255,255,255,0.04);
+    background: var(--ds-hover-tint);
     border-radius: 2px;
     overflow: hidden;
 }
@@ -196,7 +215,7 @@ body {
 .mood-label {
     font-family: -apple-system, 'Inter', system-ui, sans-serif;
     font-size: 9px;
-    color: rgba(255,255,255,0.3);
+    color: var(--ds-text-placeholder);
     font-weight: 500;
     white-space: nowrap;
     min-width: 0;
@@ -210,14 +229,14 @@ body {
 .friendship-label {
     font-family: -apple-system, 'Inter', system-ui, sans-serif;
     font-size: 9px;
-    color: rgba(255,255,255,0.2);
+    color: var(--ds-text-muted);
     font-weight: 500;
     white-space: nowrap;
 }
 .friendship-track {
     flex: 1;
     height: 2.5px;
-    background: rgba(255,255,255,0.04);
+    background: var(--ds-hover-tint);
     border-radius: 2px;
     overflow: hidden;
 }
@@ -236,7 +255,7 @@ body {
 }
 .empty-state {
     text-align: center;
-    color: rgba(255,255,255,0.2);
+    color: var(--ds-text-muted);
     font-size: 13px;
     margin-top: 40px;
 }
@@ -474,7 +493,7 @@ def _get_panel_html():
     return f"""<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
-<style>{PANEL_CSS}</style>
+<style>{PANEL_CSS_VARS}{PANEL_CSS}</style>
 </head><body>
 {PANEL_HTML}
 <script>
