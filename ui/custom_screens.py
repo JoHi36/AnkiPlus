@@ -54,7 +54,7 @@ def _get_plusi_dock_html():
 
 def _load_reviewer_css():
     """Load compiled reviewer.css (DaisyUI + Tailwind) for shared visual framework."""
-    addon_dir = os.path.join(os.path.dirname(__file__), 'custom_reviewer')
+    addon_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'custom_reviewer')
     css_path = os.path.join(addon_dir, 'reviewer.css')
     if os.path.exists(css_path):
         with open(css_path, 'r', encoding='utf-8') as f:
