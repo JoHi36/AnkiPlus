@@ -8,6 +8,7 @@ export default function InsightsDashboard({
   chartData = { main: [], flip: [], mc: [], text: [] },
   isExtracting = false,
   onCitationClick,
+  newInsightIds = [],
 }) {
   const hasInsights = insights.insights?.length > 0;
   const hasStats = (cardStats.reps || 0) > 0;
@@ -45,15 +46,28 @@ export default function InsightsDashboard({
               {insights.insights.length} Erkenntnisse gesammelt
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {insights.insights.map((insight, i) => (
-                <InsightBullet
-                  key={i}
-                  text={insight.text}
-                  type={insight.type}
-                  citations={insight.citations}
-                  onCitationClick={onCitationClick}
-                />
-              ))}
+              {insights.insights.map((insight, i) => {
+                const isNew = newInsightIds.includes(i);
+                return (
+                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                    <InsightBullet
+                      text={insight.text}
+                      type={insight.type}
+                      citations={insight.citations}
+                      onCitationClick={onCitationClick}
+                      bulletColor={isNew ? 'rgba(10,132,255,0.4)' : undefined}
+                    />
+                    {isNew && (
+                      <span style={{
+                        fontSize: 9, color: 'rgba(10,132,255,0.35)',
+                        fontWeight: 500, flexShrink: 0, marginTop: 4,
+                      }}>
+                        neu
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </>
         ) : (

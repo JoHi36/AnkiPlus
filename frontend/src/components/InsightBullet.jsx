@@ -5,7 +5,8 @@ const DOT_COLORS = {
   weakness: 'rgba(180,80,70,0.55)',
 };
 
-export default function InsightBullet({ text, type = 'learned', citations = [], onCitationClick }) {
+export default function InsightBullet({ text, type = 'learned', citations = [], onCitationClick, bulletColor }) {
+  const dotColor = bulletColor || DOT_COLORS[type] || DOT_COLORS.learned;
   return (
     <div style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
       <div
@@ -13,7 +14,7 @@ export default function InsightBullet({ text, type = 'learned', citations = [], 
           width: 6,
           height: 6,
           borderRadius: '50%',
-          background: DOT_COLORS[type] || DOT_COLORS.learned,
+          background: dotColor,
           flexShrink: 0,
           marginTop: 6,
         }}
