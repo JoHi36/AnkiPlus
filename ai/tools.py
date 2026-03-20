@@ -359,6 +359,8 @@ def execute_show_card(args):
 
     def _load():
         from aqt import mw
+        if not mw or not mw.col:
+            return {"error": "Anki-Datenbank nicht verfügbar"}
         try:
             note = mw.col.get_note(int(note_id))
             # Get first card for this note
@@ -449,6 +451,8 @@ def execute_search_deck(args):
 
     def _search():
         from aqt import mw
+        if not mw or not mw.col:
+            return {"error": "Anki-Datenbank nicht verfügbar"}
 
         # Build Anki search string
         search = query

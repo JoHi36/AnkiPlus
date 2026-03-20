@@ -23,6 +23,30 @@ _db = None
 MAX_MESSAGES_PER_CARD = 200
 
 
+# ---------------------------------------------------------------------------
+#  Serialization helpers (avoid duplicated JSON encode/decode logic)
+# ---------------------------------------------------------------------------
+
+def _to_json(value):
+    """Serialize a non-string value to JSON string. Pass through strings and None."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False) if value else None
+
+
+def _parse_json_fields(row_dict: dict, fields: tuple) -> dict:
+    """Parse JSON strings for specified fields in a row dict (in-place)."""
+    for field in fields:
+        if row_dict.get(field):
+            try:
+                row_dict[field] = json.loads(row_dict[field])
+            except (json.JSONDecodeError, TypeError):
+                pass
+    return row_dict
+
+
 def _get_db():
     """Lazy-init SQLite connection (one per process)."""
     global _db
@@ -209,13 +233,7 @@ def load_card_session(card_id):
     ).fetchall()
     messages = []
     for r in rows:
-        m = dict(r)
-        for field in ('steps', 'citations', 'pipeline_data'):
-            if m.get(field):
-                try:
-                    m[field] = json.loads(m[field])
-                except (json.JSONDecodeError, TypeError):
-                    pass
+        m = _parse_json_fields(dict(r), ('steps', 'citations', 'pipeline_data'))
         messages.append(m)
 
     return {
@@ -264,9 +282,7 @@ def save_card_session(card_id, data):
 
         # Upsert sections
         for sec in data.get('sections', []):
-            perf = sec.get('performance_data') or sec.get('performanceData')
-            if perf and not isinstance(perf, str):
-                perf = json.dumps(perf, ensure_ascii=False)
+            perf = _to_json(sec.get('performance_data') or sec.get('performanceData'))
             previous_score = sec.get('previous_score') if sec.get('previous_score') is not None else sec.get('previousScore')
             db.execute("""
                 INSERT INTO review_sections (id, card_id, title, created_at, performance_type, performance_data, previous_score)
@@ -288,12 +304,8 @@ def save_card_session(card_id, data):
 
         # Upsert messages
         for msg in data.get('messages', []):
-            steps = msg.get('steps')
-            if not isinstance(steps, str):
-                steps = json.dumps(steps, ensure_ascii=False) if steps else None
-            citations = msg.get('citations')
-            if not isinstance(citations, str):
-                citations = json.dumps(citations, ensure_ascii=False) if citations else None
+            steps = _to_json(msg.get('steps'))
+            citations = _to_json(msg.get('citations'))
             request_id = msg.get('request_id') or msg.get('requestId')
             db.execute("""
                 INSERT OR REPLACE INTO messages (id, card_id, section_id, text, sender, created_at, steps, citations, request_id)
@@ -356,15 +368,9 @@ def save_message(card_id, message):
                 WHERE card_id = ? AND deck_id IS NULL
             """, (deck_id, deck_name, card_id))
 
-        steps = message.get('steps')
-        if steps is not None and not isinstance(steps, str):
-            steps = json.dumps(steps, ensure_ascii=False)
-        citations = message.get('citations')
-        if citations is not None and not isinstance(citations, str):
-            citations = json.dumps(citations, ensure_ascii=False)
-        pipeline_data = message.get('pipeline_data')
-        if pipeline_data is not None and not isinstance(pipeline_data, str):
-            pipeline_data = json.dumps(pipeline_data, ensure_ascii=False)
+        steps = _to_json(message.get('steps'))
+        citations = _to_json(message.get('citations'))
+        pipeline_data = _to_json(message.get('pipeline_data'))
         request_id = message.get('request_id') or message.get('requestId')
 
         msg_id = message.get('id') or str(uuid.uuid4())
@@ -433,13 +439,7 @@ def load_deck_messages(deck_id, limit=50):
 
     messages = []
     for r in rows:
-        m = dict(r)
-        for field in ('steps', 'citations', 'pipeline_data'):
-            if m.get(field):
-                try:
-                    m[field] = json.loads(m[field])
-                except (json.JSONDecodeError, TypeError):
-                    pass
+        m = _parse_json_fields(dict(r), ('steps', 'citations', 'pipeline_data'))
         messages.append(m)
 
     # Reverse to get chronological (oldest first) order
@@ -489,12 +489,8 @@ def save_deck_message(deck_id, message):
     now = datetime.now().isoformat()
 
     try:
-        steps = message.get('steps')
-        if steps is not None and not isinstance(steps, str):
-            steps = json.dumps(steps, ensure_ascii=False)
-        citations = message.get('citations')
-        if citations is not None and not isinstance(citations, str):
-            citations = json.dumps(citations, ensure_ascii=False)
+        steps = _to_json(message.get('steps'))
+        citations = _to_json(message.get('citations'))
         request_id = message.get('request_id') or message.get('requestId')
         source = message.get('source', 'tutor')
         msg_id = message.get('id') or str(uuid.uuid4())
@@ -538,10 +534,7 @@ def save_section(card_id, section):
             VALUES (?, ?, ?)
         """, (card_id, now, now))
 
-        perf = section.get('performance_data') or section.get('performanceData')
-        if perf and not isinstance(perf, str):
-            perf = json.dumps(perf, ensure_ascii=False)
-
+        perf = _to_json(section.get('performance_data') or section.get('performanceData'))
         previous_score = section.get('previous_score') if section.get('previous_score') is not None else section.get('previousScore')
         section_type = section.get('type', 'review')
 
@@ -751,9 +744,7 @@ def migrate_from_json(sessions_json_path=None):
                 """, (card_id, deck_id, deck_name, sec.get('createdAt', ''), sec.get('createdAt', '')))
 
                 # Insert section
-                perf = sec.get('performanceData')
-                if perf and not isinstance(perf, str):
-                    perf = json.dumps(perf, ensure_ascii=False)
+                perf = _to_json(sec.get('performanceData'))
                 perf_type = None
                 if isinstance(sec.get('performanceData'), dict):
                     perf_type = sec['performanceData'].get('type')
@@ -778,12 +769,8 @@ def migrate_from_json(sessions_json_path=None):
                 if not card_id:
                     continue
 
-                steps = msg.get('steps')
-                if not isinstance(steps, str):
-                    steps = json.dumps(steps, ensure_ascii=False) if steps else None
-                citations = msg.get('citations')
-                if not isinstance(citations, str):
-                    citations = json.dumps(citations, ensure_ascii=False) if citations else None
+                steps = _to_json(msg.get('steps'))
+                citations = _to_json(msg.get('citations'))
 
                 db.execute("""
                     INSERT OR IGNORE INTO messages (id, card_id, section_id, text, sender, created_at, steps, citations)

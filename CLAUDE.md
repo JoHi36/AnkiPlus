@@ -215,13 +215,7 @@ Custom reviewer caches CSS/JS/HTML files in memory (`_css_cache`, `_js_cache`, `
 
 ## AI Provider Support
 
-The addon supports three AI providers with live model fetching:
-
-1. **OpenAI**: Models fetched from API (GPT-4o, GPT-4 Turbo, GPT-3.5)
-2. **Anthropic**: Static model list (Claude 3.5 Sonnet, Claude 3 Opus/Sonnet/Haiku) - API doesn't provide model list endpoint
-3. **Google Gemini**: Models fetched from API (Gemini 1.5 Pro/Flash, Gemini Pro)
-
-API calls are handled in `ai/handler.py` with streaming support and proper error handling.
+The addon uses **Google Gemini** as its AI provider (Gemini 3 Flash). API calls are handled in `ai/handler.py` with streaming support, and the agent loop in `ai/agent_loop.py` handles tool use cycles.
 
 ## Frontend Technology Stack
 
@@ -285,12 +279,32 @@ The 100ms polling interval is a deliberate trade-off:
 
 Some operations require `QTimer.singleShot()` delays (typically 100-500ms) to ensure Anki components are fully initialized before accessing them. This is especially important for reviewer state transitions.
 
-## Testing Strategy
+## Testing
+
+### Unit Tests
+
+```bash
+python3 run_tests.py          # Run all tests
+python3 run_tests.py -v       # Verbose output
+python3 run_tests.py -k text  # Only tests matching "text"
+```
+
+`run_tests.py` mocks the entire `aqt`/PyQt module tree so tests run without Anki installed. Tests use in-memory SQLite databases for storage tests.
+
+Test files:
+- `tests/test_text.py` — HTML cleaning, image extraction
+- `tests/test_system_prompt.py` — Prompt construction, insights injection
+- `tests/test_card_sessions.py` — SQLite CRUD, sessions, messages, embeddings, insights
+- `tests/test_config.py` — Config loading, merging, defaults, save/load
+
+When adding new pure-logic functions (no Qt/Anki dependency), add corresponding unit tests.
+
+### Manual Testing
 
 1. **Browser Development**: Use `npm run dev` to develop UI in browser with mock bridges
 2. **Anki Integration Testing**: Build with `npm run build`, restart Anki, test in real environment
 3. **State Testing**: Test transitions between deck browser, overview, and review states
-4. **API Testing**: Test with actual API keys for OpenAI, Anthropic, Google
+4. **API Testing**: Test with actual API keys for Google Gemini
 5. **Error Scenarios**: Test network failures, API errors, missing dependencies
 
 ## Performance Considerations
@@ -307,6 +321,63 @@ Some operations require `QTimer.singleShot()` delays (typically 100-500ms) to en
 - No automatic credential transmission
 - Firebase authentication tokens managed locally
 - User must manually add authentication tokens in profile dialog
+
+## Code Quality Standards
+
+### Logging
+
+Every module uses the centralized logging system:
+
+```python
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+```
+
+Log levels:
+- `logger.debug()` — Trace details only relevant during development (variable values, flow tracing)
+- `logger.info()` — Important state changes (config loaded, request started, session saved)
+- `logger.warning()` — Recoverable issues (fallback used, token expiring, missing optional feature)
+- `logger.error()` — Failures that affect functionality (API error, DB write failed, missing required data)
+- `logger.exception()` — Same as error but auto-includes the full traceback
+
+Rules:
+- Never log API keys, tokens, or secrets (logging their length is OK)
+- Use `%s` format placeholders, not f-strings, in logger calls: `logger.info("Loaded %s cards", count)`
+- All exceptions must be logged — never use bare `except: pass`
+
+### Error Handling
+
+- Always catch specific exception types, not bare `except:`
+- Always check `mw.col` is not `None` before accessing Anki's database
+- Use `try/except` with logging inside `run_on_main_thread()` callbacks
+- Return structured error dicts from tool functions: `{"error": "Description"}`
+- Bridge methods (`ui/bridge.py`) use `logger.exception()` for errors with tracebacks
+
+### Threading
+
+- UI operations MUST run on the main thread — use `run_on_main_thread()` from `utils/anki.py`
+- AI API calls run in `QThread` subclasses with signal/slot communication
+- SQLite uses WAL mode for concurrent read safety
+- Use `threading.Lock()` for shared mutable state accessed from multiple threads
+
+### Constants
+
+- No magic numbers — define named constants at module level
+- Example: `MAX_MESSAGES_PER_CARD = 200`, `DOCK_DEFAULT_WIDTH = 450`
+
+### Imports
+
+All modules use the dual try/except pattern for compatibility (running as Anki addon vs standalone):
+
+```python
+try:
+    from ..config import get_config    # As Anki addon (relative import)
+except ImportError:
+    from config import get_config      # Standalone / testing
+```
 
 ## References
 

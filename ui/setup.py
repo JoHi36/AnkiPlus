@@ -104,9 +104,12 @@ def toggle_chatbot():
         mw.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, _chatbot_dock)
         
         # Resizable: Min/Max Breite setzen
-        _chatbot_dock.setMinimumWidth(350)
-        _chatbot_dock.setMaximumWidth(800)
-        _chatbot_dock.resize(450, mw.height())  # Standardbreite
+        DOCK_MIN_WIDTH = 350
+        DOCK_MAX_WIDTH = 800
+        DOCK_DEFAULT_WIDTH = 450
+        _chatbot_dock.setMinimumWidth(DOCK_MIN_WIDTH)
+        _chatbot_dock.setMaximumWidth(DOCK_MAX_WIDTH)
+        _chatbot_dock.resize(DOCK_DEFAULT_WIDTH, mw.height())
         
         # Style für Main Window Splitter (zwischen Dock und Reviewer)
         # 1px dezenter Trenner — kein padding, kein margin, !important überschreibt alles

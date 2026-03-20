@@ -118,5 +118,6 @@ def ensure_valid_token():
             if exp < now:
                 return False
         return True
-    except Exception:
+    except Exception as e:
+        logger.warning("Token-Validierung fehlgeschlagen: %s", e)
         return bool(auth_token)
