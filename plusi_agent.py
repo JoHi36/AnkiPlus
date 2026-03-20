@@ -21,7 +21,7 @@ except ImportError:
 
 PLUSI_MODEL = 'gemini-3-flash-preview'
 
-MAX_HISTORY = 10  # last 10 interactions as context
+MAX_HISTORY = 20  # last 20 interactions as context (includes invisible reflect/silent entries)
 
 PLUSI_SYSTEM_PROMPT = """Ich bin Plusi.
 
@@ -210,7 +210,7 @@ def _search_cards(query, top_k=10):
     try:
         from aqt import mw
         if not mw or not mw.col:
-            return ""
+            return []
 
         import re
 
@@ -255,7 +255,7 @@ def _search_cards(query, top_k=10):
                 card_scores[card_id] = 0.5  # base score for SQL-only
 
         if not card_scores:
-            return ""
+            return []
 
         # Sort by score, take top_k
         ranked = sorted(card_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
@@ -276,15 +276,15 @@ def _search_cards(query, top_k=10):
                 deck = mw.col.decks.get(card.did)
                 deck_name = deck['name'] if deck else ''
                 field_text = " | ".join(f"{k}: {v}" for k, v in fields.items())
-                cards.append(f"[{deck_name}] {field_text}")
+                cards.append((card_id, f"[ID:{card_id}] [{deck_name}] {field_text}"))
             except Exception:
                 continue
 
         print(f"plusi search: {len(semantic_results)} semantic + {len(sql_card_ids)} sql → {len(cards)} merged")
-        return "\n".join(cards) if cards else ""
+        return cards
     except Exception as e:
         print(f"plusi _search_cards error: {e}")
-        return ""
+        return []
 
 
 def self_reflect():
@@ -335,9 +335,11 @@ def self_reflect():
         print(f"plusi reflect: searching cards for '{query}'")
 
         # Step 2a: Search cards
-        cards_context = _search_cards(query, top_k=10)
-        if not cards_context:
+        card_tuples = _search_cards(query, top_k=10)
+        if not card_tuples:
             cards_context = "(Keine Karten gefunden — die Sammlung ist leer oder der Index wird noch aufgebaut)"
+        else:
+            cards_context = "\n".join(text for _, text in card_tuples)
 
         # Step 2b: Reflect with found cards
         step2_prompt = SELF_REFLECT_STEP2.replace("{cards_context}", cards_context)
