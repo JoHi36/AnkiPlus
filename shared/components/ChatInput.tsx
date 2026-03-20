@@ -3,10 +3,12 @@ import { ArrowUp, Square } from 'lucide-react';
 
 /**
  * ChatInput — Unified dock-style input component
- * Matches the reviewer's floating dock design:
+ * Uses .ds-input-dock from design-system.css (single source of truth)
+ * to match the reviewer's floating dock exactly.
+ *
  *   - Textarea on top (with animated snake border on focus)
  *   - Send button (absolute, appears when text present)
- *   - Action row at bottom: configurable via actionPrimary/actionSecondary props
+ *   - Split action row at bottom: configurable via actionPrimary/actionSecondary props
  *
  * Typing a question + Enter sends a concrete question (compact mode).
  */
@@ -145,12 +147,8 @@ export default function ChatInput({
   return (
     <div className="w-full relative">
       <div
-        className="relative backdrop-blur-xl rounded-2xl overflow-visible transition-all duration-300"
-        style={{
-          backgroundColor: 'var(--ds-bg-frosted)',
-          border: hasPlusiTag ? '1px solid rgba(10,132,255,0.4)' : '1px solid var(--ds-border-medium)',
-          boxShadow: 'var(--ds-shadow-md)',
-        }}
+        className="ds-input-dock relative overflow-visible transition-all duration-300"
+        style={hasPlusiTag ? { borderColor: 'rgba(10,132,255,0.4)' } : undefined}
       >
         {/* Animated snake border — blue on focus or @Plusi tag */}
         <div
@@ -169,7 +167,7 @@ export default function ChatInput({
         />
 
         {/* Textarea area — grid stack: overlay behind textarea, both same size */}
-        <div style={{ display: 'grid', padding: '12px 16px', position: 'relative' }}>
+        <div style={{ display: 'grid', position: 'relative' }}>
           {/* Highlight overlay — same grid cell as textarea */}
           {hasPlusiTag && (() => {
             const idx = input.indexOf('@Plusi');
@@ -182,11 +180,12 @@ export default function ChatInput({
                   gridArea: '1 / 1',
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
-                  fontSize: '15px',
+                  fontSize: 'var(--ds-text-lg)',
                   lineHeight: '1.625',
-                  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif',
+                  fontFamily: 'var(--ds-font-sans)',
                   overflow: 'hidden',
                   color: 'var(--ds-text-primary)',
+                  padding: 'var(--ds-space-md) var(--ds-space-lg)',
                   paddingRight: '40px',
                   pointerEvents: 'none',
                   minHeight: '24px',
@@ -213,19 +212,10 @@ export default function ChatInput({
             rows={1}
             style={{
               gridArea: '1 / 1',
-              width: '100%',
               minHeight: '24px',
               maxHeight: '120px',
-              padding: 0,
               paddingRight: '40px',
-              background: 'transparent',
-              fontSize: '15px',
-              lineHeight: '1.625',
-              fontFamily: 'inherit',
-              resize: 'none',
-              outline: 'none',
-              border: 'none',
-              color: hasPlusiTag ? 'transparent' : 'var(--ds-text-primary)',
+              color: hasPlusiTag ? 'transparent' : undefined,
               caretColor: 'var(--ds-text-primary)',
               WebkitTextFillColor: hasPlusiTag ? 'transparent' : undefined,
             }}
@@ -235,85 +225,57 @@ export default function ChatInput({
             <button
               type="button"
               onClick={onStop}
-              className="absolute right-3 bottom-2.5 w-[30px] h-[30px] rounded-full flex items-center justify-center border-none cursor-pointer transition-all duration-150"
-              style={{ background: 'rgba(255,69,58,0.15)' }}
+              className="ds-send-btn absolute"
+              style={{
+                right: 'var(--ds-space-md)',
+                bottom: '10px',
+                background: 'rgba(255,69,58,0.15)',
+              }}
             >
-              <Square size={10} className="text-error" fill="currentColor" />
+              <Square size={10} style={{ color: 'var(--ds-red)' }} fill="currentColor" />
             </button>
           ) : (
             <button
               type="button"
               onClick={() => handleSubmit()}
-              className={`absolute right-3 bottom-2.5 w-[30px] h-[30px] rounded-full flex items-center justify-center border-none cursor-pointer transition-all duration-150 ${
-                input.trim()
-                  ? 'opacity-100 scale-100 bg-primary'
-                  : 'opacity-0 scale-75 pointer-events-none bg-primary'
-              }`}
+              className="ds-send-btn absolute"
+              data-empty={!input.trim() ? 'true' : undefined}
+              style={{
+                right: 'var(--ds-space-md)',
+                bottom: '10px',
+              }}
             >
-              <ArrowUp size={14} strokeWidth={2.5} className="text-base-100" />
+              <ArrowUp size={14} strokeWidth={2.5} style={{ color: 'white' }} />
             </button>
           )}
         </div>
 
-        {/* Action row — configurable via actionPrimary/actionSecondary props */}
-        <div
-          className="flex items-center"
-          style={{ borderTop: '1px solid var(--ds-border-subtle)' }}
-        >
-          {/* Primary action (left) */}
+        {/* Split action row — primary (left) | divider | secondary (right) */}
+        <div className="ds-split-actions">
           <button
             type="button"
             onClick={actionPrimary.onClick}
             disabled={actionPrimary.disabled}
-            className="flex-1 flex items-center justify-center gap-1 h-[44px] bg-transparent border-none cursor-pointer transition-colors duration-100 hover:bg-black/[0.04] disabled:opacity-30 disabled:cursor-not-allowed"
-            style={{
-              fontFamily: 'inherit',
-              fontSize: '13px',
-              fontWeight: '600',
-              color: 'var(--ds-text-primary)',
-              borderRadius: '0',
-              borderBottomLeftRadius: '16px',
-            }}
+            className="ds-split-btn"
           >
             {actionPrimary.label}
             {actionPrimary.shortcut && (
-              <span style={{
-                fontFamily: 'ui-monospace, monospace',
-                fontSize: '10px',
-                color: 'var(--ds-text-muted)',
-                marginLeft: '4px',
-              }}>{actionPrimary.shortcut}</span>
+              <span className="ds-kbd">{actionPrimary.shortcut}</span>
             )}
           </button>
 
-          {/* Divider */}
-          <div style={{ width: '1px', height: '16px', background: 'var(--ds-border-subtle)', flexShrink: 0 }} />
+          <div className="ds-split-divider" />
 
-          {/* Secondary action (right) */}
           <button
             type="button"
             onClick={actionSecondary.onClick}
             disabled={actionSecondary.disabled}
-            className={`flex-1 flex items-center justify-center gap-1.5 h-[44px] bg-transparent border-none cursor-pointer transition-all duration-200 hover:bg-black/[0.04] disabled:opacity-30 disabled:cursor-not-allowed ${
-              actionSecondary.pulse ? 'animate-pulse' : ''
-            }`}
-            style={{
-              fontFamily: 'inherit',
-              fontSize: '13px',
-              fontWeight: '500',
-              color: actionSecondary.pulse ? 'var(--ds-accent)' : 'var(--ds-text-tertiary)',
-              borderRadius: '0',
-              borderBottomRightRadius: '16px',
-            }}
+            className={`ds-split-btn${actionSecondary.pulse ? ' animate-pulse' : ''}`}
+            style={actionSecondary.pulse ? { color: 'var(--ds-accent)' } : undefined}
           >
             {actionSecondary.label}
             {actionSecondary.shortcut && (
-              <span style={{
-                fontFamily: 'ui-monospace, monospace',
-                fontSize: '10px',
-                color: 'var(--ds-text-muted)',
-                marginLeft: '4px',
-              }}>{actionSecondary.shortcut}</span>
+              <span className="ds-kbd">{actionSecondary.shortcut}</span>
             )}
           </button>
         </div>

@@ -277,6 +277,63 @@
   transform: scale(0.7);
 }
 
+/* ── Split Action Row ──
+   Two equal buttons side-by-side with a 1px divider.
+   Used when the dock has primary + secondary actions (e.g. Show Answer / Overview). */
+.ds-input-dock .ds-split-actions {
+  display: flex;
+  align-items: center;
+  border-top: 1px solid var(--ds-border-subtle);
+}
+
+.ds-input-dock .ds-split-actions .ds-split-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--ds-border-subtle);
+  flex-shrink: 0;
+}
+
+.ds-input-dock .ds-split-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 44px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-base);
+  font-weight: 500;
+  color: var(--ds-text-tertiary);
+  padding: 0 var(--ds-space-md);
+  transition: background var(--ds-duration) var(--ds-ease);
+}
+
+.ds-input-dock .ds-split-btn:hover {
+  background: var(--ds-hover-tint);
+}
+
+.ds-input-dock .ds-split-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.ds-input-dock .ds-split-btn:first-child {
+  border-bottom-left-radius: var(--ds-radius-lg);
+  font-weight: 600;
+  color: var(--ds-text-primary);
+}
+
+.ds-input-dock .ds-split-btn:last-child {
+  border-bottom-right-radius: var(--ds-radius-lg);
+}
+
+.ds-input-dock .ds-split-btn .ds-kbd {
+  margin-left: 4px;
+}
+
 
 /* ── AI Thought Step ── */
 .ds-thought-step {
