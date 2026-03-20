@@ -11,6 +11,12 @@ from aqt import mw
 from aqt.qt import *
 
 try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+
+try:
     from PyQt6.QtWebEngineWidgets import QWebEngineView
 except ImportError:
     try:
@@ -108,7 +114,7 @@ class OverlayChatWidget(QWidget):
             for msg in messages:
                 self._route_message(msg.get('type'), msg.get('data'))
         except Exception as e:
-            print(f"OverlayChat: message parse error: {e}")
+            logger.error("OverlayChat: message parse error: %s", e)
 
     def _route_message(self, msg_type, data):
         """Route messages from React to appropriate handlers."""
@@ -119,14 +125,14 @@ class OverlayChatWidget(QWidget):
                 payload = {"type": "deckMessagesLoaded", "deckId": deck_id, "messages": messages}
                 self._send_to_react(payload)
             except Exception as e:
-                print(f"OverlayChat: loadDeckMessages error: {e}")
+                logger.error("OverlayChat: loadDeckMessages error: %s", e)
 
         elif msg_type == 'saveDeckMessage':
             try:
                 msg_data = json.loads(data) if isinstance(data, str) else data
                 save_deck_message(int(msg_data.get('deckId', 0)), msg_data.get('message', {}))
             except Exception as e:
-                print(f"OverlayChat: saveDeckMessage error: {e}")
+                logger.error("OverlayChat: saveDeckMessage error: %s", e)
 
         elif msg_type == 'sendMessage':
             try:
@@ -135,7 +141,7 @@ class OverlayChatWidget(QWidget):
                 if text.strip():
                     self._start_ai_request(text, msg_data)
             except Exception as e:
-                print(f"OverlayChat: sendMessage error: {e}")
+                logger.error("OverlayChat: sendMessage error: %s", e)
 
         elif msg_type == 'cancelRequest':
             if self._current_thread:

@@ -60,6 +60,12 @@ try:
 except ImportError:
     from utils.card_tracker import CardTracker
 
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+
 # NOTE: Legacy sessions_storage (JSON) removed — per-card SQLite is now used instead.
 
 
@@ -89,7 +95,7 @@ class AIRequestThread(QThread):
     def run(self):
         try:
             context = self.widget_ref.current_card_context if self.widget_ref else None
-            print(f"🔍 AIRequestThread.run: context={'has cardId=' + str(context.get('cardId')) if context else 'None'}, question='{(context.get('frontField') or context.get('question') or '')[:60]}'" if context else "🔍 AIRequestThread.run: context=None")
+            logger.debug("🔍 AIRequestThread.run: context=%s, question='%s'" if context else "🔍 AIRequestThread.run: context=None", 'has cardId=' + str(context.get('cardId')) if context else 'None', (context.get('frontField') or context.get('question') or '')[:60])
 
             # Load card-specific history from SQLite (moved here from main thread)
             card_history = self.history
@@ -110,11 +116,11 @@ class AIRequestThread(QThread):
                              'content': m.get('text', '')}
                             for m in recent if m.get('text')
                         ]
-                        print(f"📋 AIThread: Card history loaded ({len(card_history)} msgs from card {card_id})")
+                        logger.debug("📋 AIThread: Card history loaded (%s msgs from card %s)", len(card_history), card_id)
                     else:
                         card_history = []
                 except Exception as e:
-                    print(f"⚠️ AIThread: Failed to load card history: {e}")
+                    logger.error("⚠️ AIThread: Failed to load card history: %s", e)
 
             # Give the AI handler a callback to emit pipeline events via Qt signal
             def pipeline_callback(step, status, data):
@@ -141,9 +147,7 @@ class AIRequestThread(QThread):
                 self.finished_signal.emit(self.request_id)
         except Exception as e:
             if not self._cancelled:
-                import traceback
-                print(f"AIRequestThread: Exception: {str(e)}")
-                print(traceback.format_exc())
+                logger.debug("AIRequestThread: Exception: %s", str(e))
                 self.error_signal.emit(self.request_id, str(e))
         finally:
             self.ai_handler._pipeline_signal_callback = None
@@ -180,7 +184,7 @@ class InsightExtractionThread(QThread):
 
             # Use non-streaming AI request — context=None to avoid doubling the card data
             # (card content is already embedded in the extraction prompt)
-            print(f"🟢 InsightExtractionThread: Starting extraction for card {self.card_id}, prompt length={len(prompt)}")
+            logger.debug("🟢 InsightExtractionThread: Starting extraction for card %s, prompt length=%s", self.card_id, len(prompt))
             response = self.ai_handler.get_response(
                 user_message=prompt,
                 context=None,
@@ -191,7 +195,7 @@ class InsightExtractionThread(QThread):
             if self._cancelled:
                 return
 
-            print(f"🟢 InsightExtractionThread: Response received, length={len(response) if response else 0}")
+            logger.debug("🟢 InsightExtractionThread: Response received, length=%s", len(response) if response else 0)
             if not response:
                 self.error_signal.emit(self.card_id, "Empty response from AI")
                 return
@@ -199,7 +203,7 @@ class InsightExtractionThread(QThread):
             result = parse_extraction_response(response)
 
             if result is None:
-                print(f"🟡 InsightExtractionThread: Parse failed, retrying...")
+                logger.debug("🟡 InsightExtractionThread: Parse failed, retrying...")
                 # Retry once
                 response = self.ai_handler.get_response(
                     user_message=prompt,
@@ -285,13 +289,13 @@ class ChatbotWidget(QWidget):
         console.log('ankiBridge initialisiert (Message-Queue System)');
         """
         self.web_view.page().runJavaScript(js_code)
-        print("JavaScript Bridge initialisiert (Message-Queue System)")
+        logger.info("JavaScript Bridge initialisiert (Message-Queue System)")
         
         # Starte Polling für Nachrichten
         self.message_timer = QTimer()
         self.message_timer.timeout.connect(self._poll_messages)
         self.message_timer.start(200)  # Alle 200ms prüfen
-        print("Message-Polling gestartet (200ms Intervall)")
+        logger.info("Message-Polling gestartet (200ms Intervall)")
 
     def _poll_messages(self):
         """Pollt JavaScript nach neuen Nachrichten"""
@@ -310,9 +314,7 @@ class ChatbotWidget(QWidget):
                 for msg in messages:
                     self._handle_js_message(msg.get('type'), msg.get('data'))
             except Exception as e:
-                print(f"Fehler beim Verarbeiten von Nachrichten: {e}")
-                import traceback
-                traceback.print_exc()
+                logger.exception("Fehler beim Verarbeiten von Nachrichten: %s", e)
         
         self.web_view.page().runJavaScript(js_code, handle_messages)
 
@@ -340,11 +342,9 @@ class ChatbotWidget(QWidget):
             try:
                 handler(data)
             except Exception as e:
-                print(f"_handle_js_message: Fehler bei {msg_type}: {e}")
-                import traceback
-                traceback.print_exc()
+                logger.exception("_handle_js_message: Fehler bei %s: %s", msg_type, e)
         else:
-            print(f"_handle_js_message: Unbekannter Typ: {msg_type}")
+            logger.debug("_handle_js_message: Unbekannter Typ: %s", msg_type)
 
     def _get_message_handler(self, msg_type):
         """Gibt den Handler für einen Message-Typ zurück."""
@@ -455,7 +455,7 @@ class ChatbotWidget(QWidget):
                     'if(window.setChatOpen) setChatOpen(false);'
                     'if(window.rateCard) rateCard(window.autoRateEase || 3);')
         except Exception as e:
-            print(f"advanceCard error: {e}")
+            logger.error("advanceCard error: %s", e)
 
     def _msg_preview_card(self, data):
         if data and self.bridge and hasattr(self.bridge, 'previewCard'):
@@ -729,7 +729,7 @@ class ChatbotWidget(QWidget):
                     from plusi.dock import sync_mood
                 sync_mood(mood)
             except Exception as e:
-                print(f"plusi dock sync error: {e}")
+                logger.error("plusi dock sync error: %s", e)
             # Notify panel of diary entry and state changes
             try:
                 from ..plusi.panel import notify_new_diary_entry, update_panel_mood, update_panel_friendship
@@ -739,7 +739,7 @@ class ChatbotWidget(QWidget):
                 if friendship:
                     update_panel_friendship(friendship)
             except Exception as e:
-                print(f"plusi panel notify error: {e}")
+                logger.error("plusi panel notify error: %s", e)
             # Check if a reflect window is open — trigger after interaction
             try:
                 from .. import check_and_trigger_reflect
@@ -747,7 +747,7 @@ class ChatbotWidget(QWidget):
             except Exception:
                 pass
         except Exception as e:
-            print(f"plusiDirect error: {e}")
+            logger.error("plusiDirect error: %s", e)
             payload = {
                 'type': 'plusi_direct_result',
                 'mood': 'neutral',
@@ -771,7 +771,7 @@ class ChatbotWidget(QWidget):
                 ai = get_ai_handler()
                 models = ai.fetch_available_models(provider, api_key)
             except Exception as e:
-                print(f"Fehler beim Laden der Modelle: {e}")
+                logger.error("Fehler beim Laden der Modelle: %s", e)
                 models = self._build_model_list()  # Fallback
         else:
             models = self._build_model_list()  # Fallback wenn kein API-Key
@@ -781,7 +781,7 @@ class ChatbotWidget(QWidget):
             deck_info = self.bridge.getCurrentDeck()
             deck_data = json.loads(deck_info)
         except Exception as e:
-            print(f"Fehler beim Abrufen des Decks: {e}")
+            logger.error("Fehler beim Abrufen des Decks: %s", e)
             deck_data = {"deckId": None, "deckName": None, "isInDeck": False}
         
         payload = {
@@ -809,20 +809,18 @@ class ChatbotWidget(QWidget):
                 from ..ai.handler import get_ai_handler
                 ai = get_ai_handler()
                 models = ai.fetch_available_models(provider, api_key)
-                print(f"push_updated_models: {len(models) if models else 0} Modelle geladen")
+                logger.info("push_updated_models: %s Modelle geladen", len(models) if models else 0)
                 # Wenn keine Modelle zurückgegeben wurden, verwende Fallback
                 if not models:
-                    print("push_updated_models: Keine Modelle, verwende Fallback")
+                    logger.debug("push_updated_models: Keine Modelle, verwende Fallback")
                     models = self._build_model_list()
             except Exception as e:
                 error_msg = str(e)
-                print(f"Fehler beim Laden der Modelle in push_updated_models: {error_msg}")
-                import traceback
-                traceback.print_exc()
+                logger.exception("Fehler beim Laden der Modelle in push_updated_models: %s", error_msg)
                 error = error_msg
                 models = self._build_model_list()  # Fallback
         else:
-            print("push_updated_models: Kein API-Key, verwende Fallback")
+            logger.debug("push_updated_models: Kein API-Key, verwende Fallback")
             models = self._build_model_list()  # Fallback wenn kein API-Key
         
         payload = {
@@ -833,7 +831,7 @@ class ChatbotWidget(QWidget):
             "hasApiKey": bool(api_key.strip()),
             "error": error
         }
-        print(f"push_updated_models: Sende {len(models)} Modelle an Frontend")
+        logger.debug("push_updated_models: Sende %s Modelle an Frontend", len(models))
         js = f"window.ankiReceive({json.dumps(payload)});"
         self.web_view.page().runJavaScript(js)
 
@@ -918,7 +916,7 @@ class ChatbotWidget(QWidget):
                     card_id = self.current_card_context['cardId']
                     card_insights = load_insights(int(card_id))
                 except Exception as e:
-                    print(f"⚠️ Failed to load insights for card context: {e}")
+                    logger.error("⚠️ Failed to load insights for card context: %s", e)
 
             # Start AI request thread immediately — card history loading happens inside the thread
             # to avoid blocking the main Qt thread
@@ -1007,23 +1005,21 @@ class ChatbotWidget(QWidget):
 
     def _save_settings(self, api_key, provider, model_name):
         """Speichert Einstellungen (wird von JavaScript aufgerufen)"""
-        print(f"=" * 50)
-        print(f"_save_settings AUFGERUFEN:")
-        print(f"  - api_key Länge: {len(api_key) if api_key else 0}")
-        print(f"  - api_key erste 10 Zeichen: {api_key[:10] if api_key and len(api_key) >= 10 else api_key}")
-        print(f"  - provider: {provider}")
-        print(f"  - model_name: {model_name}")
-        print(f"=" * 50)
+        logger.debug("_save_settings AUFGERUFEN:")
+        logger.debug("  - api_key Länge: %s", len(api_key) if api_key else 0)
+        logger.debug("  - api_key erste 10 Zeichen: %s", api_key[:10] if api_key and len(api_key) >= 10 else api_key)
+        logger.debug("  - provider: %s", provider)
+        logger.debug("  - model_name: %s", model_name)
         
         success = update_config(api_key=api_key, model_provider=provider, model_name=model_name or "")
         if success:
-            print(f"_save_settings: ✓ Config erfolgreich gespeichert")
+            logger.info("_save_settings: ✓ Config erfolgreich gespeichert")
             self.config = get_config(force_reload=True)
-            print(f"_save_settings: Config neu geladen, API-Key Länge: {len(self.config.get('api_key', ''))}")
+            logger.info("_save_settings: Config neu geladen, API-Key Länge: %s", len(self.config.get('api_key', '')))
             # Warte kurz, damit Config gespeichert ist, dann lade Modelle
             QTimer.singleShot(100, self.push_updated_models)
         else:
-            print(f"_save_settings: ✗ FEHLER beim Speichern der Config!")
+            logger.error("_save_settings: ✗ FEHLER beim Speichern der Config!")
     
     def _go_to_card(self, card_id):
         """Springt zu einer bestimmten Lernkarte - öffnet sie im Vorschau-Modus"""
@@ -1032,13 +1028,13 @@ class ChatbotWidget(QWidget):
             from aqt.previewer import Previewer
             
             if mw is None or mw.col is None:
-                print(f"_go_to_card: mw oder mw.col ist None")
+                logger.debug("_go_to_card: mw oder mw.col ist None")
                 return
             
             # Suche die Karte
             card = mw.col.get_card(card_id)
             if not card:
-                print(f"_go_to_card: Karte {card_id} nicht gefunden")
+                logger.debug("_go_to_card: Karte %s nicht gefunden", card_id)
                 return
             
             # Erstelle eine einfache Previewer-Funktion
@@ -1074,7 +1070,7 @@ class ChatbotWidget(QWidget):
                 )
                 previewer.card = lambda: provider.card()
                 previewer.open()
-                print(f"_go_to_card: Karte {card_id} im SingleCardPreviewer geöffnet")
+                logger.info("_go_to_card: Karte %s im SingleCardPreviewer geöffnet", card_id)
             except ImportError:
                 # Fallback: Öffne im Browser mit Vorschau
                 from aqt.browser import Browser
@@ -1085,10 +1081,8 @@ class ChatbotWidget(QWidget):
                     browser.table.select_single(0)
                     # Öffne Vorschau-Fenster
                     browser.onTogglePreview()
-                print(f"_go_to_card: Karte {card_id} im Browser mit Vorschau geöffnet")
+                logger.info("_go_to_card: Karte %s im Browser mit Vorschau geöffnet", card_id)
                 
         except Exception as e:
-            import traceback
-            print(f"Fehler in _go_to_card: {e}")
-            print(traceback.format_exc())
+            logger.exception("Fehler in _go_to_card: %s", e)
 

@@ -13,8 +13,13 @@ NAVIGATION: Python polling approach (100ms interval).
 
 import os
 import json
-import traceback
 from aqt import mw, gui_hooks
+
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
 
 try:
     from aqt.qt import QTimer
@@ -46,7 +51,7 @@ def _get_plusi_dock_html():
             from plusi.dock import get_plusi_dock_injection
         return get_plusi_dock_injection()
     except Exception as e:
-        print(f"Plusi dock injection error: {e}")
+        logger.error("Plusi dock injection error: %s", e)
         return ''
 
 
@@ -85,7 +90,7 @@ def _get_due_counts():
                 traverse(child)
         traverse(tree)
     except Exception as e:
-        print(f"CustomScreens: due_counts error: {e}")
+        logger.error("CustomScreens: due_counts error: %s", e)
     return counts
 
 
@@ -104,7 +109,7 @@ def _get_card_distribution():
             else:
                 dist[did][1] += 1
     except Exception as e:
-        print(f"CustomScreens: card_distribution error: {e}")
+        logger.error("CustomScreens: card_distribution error: %s", e)
     return dist
 
 
@@ -1137,7 +1142,7 @@ class CustomScreens:
         if not self._hook_registered:
             gui_hooks.webview_will_set_content.append(self._on_webview_content)
             self._hook_registered = True
-            print("CustomScreens: Hook registered")
+            logger.info("CustomScreens: Hook registered")
         self.active = True
 
     def disable(self):
@@ -1149,7 +1154,7 @@ class CustomScreens:
             if mw and getattr(mw, 'state', None) == 'deckBrowser' and hasattr(mw, 'deckBrowser'):
                 mw.deckBrowser.refresh()
         except Exception as e:
-            print(f"CustomScreens: refresh error: {e}")
+            logger.error("CustomScreens: refresh error: %s", e)
 
     # ── Python polling navigation ──────────────────────────────────────────────
 
@@ -1242,7 +1247,7 @@ class CustomScreens:
                             "window.dispatchEvent(new CustomEvent('plusi-ask-focus', {detail: {prefix: '@Plusi '}}));"
                         )
                 except Exception as e:
-                    print(f"plusiAsk error: {e}")
+                    logger.error("plusiAsk error: %s", e)
             elif action_type == 'plusiSettings':
                 try:
                     from . import setup
@@ -1255,7 +1260,7 @@ class CustomScreens:
                             "window.dispatchEvent(new CustomEvent('open-settings'));"
                         )
                 except Exception as e:
-                    print(f"plusiSettings error: {e}")
+                    logger.error("plusiSettings error: %s", e)
             elif action_type == 'upgradeBadge':
                 # Open addon settings — same as 'cmd':'settings'
                 try:
@@ -1268,8 +1273,7 @@ class CustomScreens:
                     if hasattr(mw, 'onPrefs'):
                         mw.onPrefs()
         except Exception as e:
-            print(f"CustomScreens: action error: {e}")
-            traceback.print_exc()
+            logger.exception("CustomScreens: action error: %s", e)
 
     # ── Hook ──────────────────────────────────────────────────────────────────
 
@@ -1309,10 +1313,9 @@ class CustomScreens:
             html             = _deck_browser_html(tree, len(all_decks), total_new, total_learn, total_review, tier=tier)
             web_content.body  = html
             web_content.head  = ''
-            print(f"CustomScreens: ✅ DeckBrowser ({len(all_decks)} decks)")
+            logger.info("CustomScreens: ✅ DeckBrowser (%d decks)", len(all_decks))
         except Exception as e:
-            print(f"CustomScreens: ❌ DeckBrowser: {e}")
-            traceback.print_exc()
+            logger.exception("CustomScreens: ❌ DeckBrowser: %s", e)
 
     def _inject_overview(self, web_content):
         try:
@@ -1325,10 +1328,9 @@ class CustomScreens:
             html = _overview_html(deck_name, new_c, lrn_c, rev_c)
             web_content.body  = html
             web_content.head  = ''
-            print(f"CustomScreens: ✅ Overview '{deck_name}'")
+            logger.info("CustomScreens: ✅ Overview '%s'", deck_name)
         except Exception as e:
-            print(f"CustomScreens: ❌ Overview: {e}")
-            traceback.print_exc()
+            logger.exception("CustomScreens: ❌ Overview: %s", e)
 
 
 # Global instance

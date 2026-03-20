@@ -25,6 +25,12 @@ try:
 except ImportError:
     from ui.widget import ChatbotWidget
 
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+
 # Style-Funktionen
 def get_dock_widget_style():
     return """
@@ -74,7 +80,7 @@ def toggle_chatbot():
         try:
             focused = QApplication.focusWidget()
             if focused and _chatbot_dock.isAncestorOf(focused):
-                print("toggle_chatbot: Skipping close — focus is in chat panel")
+                logger.debug("toggle_chatbot: Skipping close — focus is in chat panel")
                 return
         except Exception:
             pass
@@ -185,11 +191,9 @@ def toggle_chatbot():
                             }
                         }
                         widget.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
-                        print(f"📚 toggle_chatbot: deckSelected Event gesendet - Deck: {deck_name}, Cards: {total_cards}")
+                        logger.info("📚 toggle_chatbot: deckSelected Event gesendet - Deck: %s, Cards: %s", deck_name, total_cards)
             except Exception as e:
-                print(f"Fehler beim Senden von deckSelected beim Öffnen: {e}")
-                import traceback
-                traceback.print_exc()
+                logger.exception("Fehler beim Senden von deckSelected beim Öffnen: %s", e)
         
         # Verzögerung, damit WebView vollständig geladen ist
         QTimer.singleShot(100, check_and_send_deck)
@@ -200,9 +204,7 @@ def show_settings():
         from .settings import show_settings as _show_native_settings
         _show_native_settings()
     except Exception as e:
-        print(f"Fehler beim Öffnen der Settings: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("Fehler beim Öffnen der Settings: %s", e)
 
 def close_chatbot_panel():
     """Schließt das Dock-Panel"""
@@ -228,7 +230,7 @@ def setup_keyboard_shortcut():
     # Shortcut erstellen: Cmd+I auf macOS, Ctrl+I auf Windows/Linux
     _shortcut = QShortcut(QKeySequence("Ctrl+I"), mw)
     _shortcut.activated.connect(toggle_chatbot)
-    print("Chatbot Shortcut erstellt: Cmd+I / Ctrl+I")
+    logger.info("Chatbot Shortcut erstellt: Cmd+I / Ctrl+I")
 
 def setup_toolbar_button():
     """Fügt einen Button zur Anki-Toolbar hinzu (ganz links)"""
@@ -253,12 +255,12 @@ def setup_toolbar_button():
         # Methode 1: mw.form.toolbar (Standard in Anki)
         if hasattr(mw, 'form') and hasattr(mw.form, 'toolbar'):
             toolbar = mw.form.toolbar
-            print("✅ Toolbar gefunden via mw.form.toolbar")
+            logger.info("✅ Toolbar gefunden via mw.form.toolbar")
         
         # Methode 2: mw.toolbar (direkt)
         elif hasattr(mw, 'toolbar') and mw.toolbar is not None:
             toolbar = mw.toolbar
-            print("✅ Toolbar gefunden via mw.toolbar")
+            logger.info("✅ Toolbar gefunden via mw.toolbar")
         
         # Methode 3: Toolbar im Hauptfenster suchen
         else:
@@ -266,43 +268,40 @@ def setup_toolbar_button():
             for widget in mw.findChildren(QToolBar):
                 if widget.isVisible():
                     toolbar = widget
-                    print(f"✅ Toolbar gefunden via findChildren: {widget.objectName()}")
+                    logger.info("✅ Toolbar gefunden via findChildren: %s", widget.objectName())
                     break
         
         if toolbar is None:
-            print("⚠️ Anki Toolbar nicht gefunden. Verfügbare Attribute:")
-            if hasattr(mw, 'form'):
-                print(f"   mw.form Attribute: {[attr for attr in dir(mw.form) if not attr.startswith('_')]}")
-            print(f"   mw Attribute: {[attr for attr in dir(mw) if 'tool' in attr.lower() or 'bar' in attr.lower()]}")
+            logger.warning("⚠️ Anki Toolbar nicht gefunden.")
             return
         
         # Debug: Alle verfügbaren Methoden/Attribute ausgeben
-        print(f"🔍 Toolbar Typ: {type(toolbar)}")
-        print(f"🔍 Toolbar Attribute: {[attr for attr in dir(toolbar) if not attr.startswith('_')]}")
+        logger.debug("🔍 Toolbar Typ: %s", type(toolbar))
+        logger.debug("🔍 Toolbar Attribute: %s", [attr for attr in dir(toolbar) if not attr.startswith('_')])
         
         # Prüfe ob es eine QToolBar ist (hat insertAction)
         if isinstance(toolbar, QToolBar):
             # Standard QToolBar: insertAction verwenden für Position ganz links
             toolbar.insertAction(None, action)
-            print(f"✅ Toolbar-Button 'AnKI+' ganz links hinzugefügt (QToolBar, Shortcut: {shortcut_text})")
+            logger.info("✅ Toolbar-Button 'AnKI+' ganz links hinzugefügt (QToolBar, Shortcut: %s)", shortcut_text)
         # Versuche verschiedene Methoden für Anki's Toolbar
         elif hasattr(toolbar, 'add_link'):
             # Anki's Toolbar hat möglicherweise add_link
             toolbar.add_link("AnKI+", toggle_chatbot)
-            print(f"✅ Toolbar-Button 'AnKI+' hinzugefügt via add_link (Shortcut: {shortcut_text})")
+            logger.info("✅ Toolbar-Button 'AnKI+' hinzugefügt via add_link (Shortcut: %s)", shortcut_text)
         elif hasattr(toolbar, 'link'):
             # Anki's Toolbar hat möglicherweise link
             toolbar.link("AnKI+", toggle_chatbot)
-            print(f"✅ Toolbar-Button 'AnKI+' hinzugefügt via link (Shortcut: {shortcut_text})")
+            logger.info("✅ Toolbar-Button 'AnKI+' hinzugefügt via link (Shortcut: %s)", shortcut_text)
         elif hasattr(toolbar, 'addAction'):
             # Standard addAction
             existing_actions = toolbar.actions() if hasattr(toolbar, 'actions') else []
             if existing_actions and hasattr(toolbar, 'insertAction'):
                 toolbar.insertAction(existing_actions[0], action)
-                print(f"✅ Toolbar-Button 'AnKI+' ganz links hinzugefügt (vor erster Action, Shortcut: {shortcut_text})")
+                logger.info("✅ Toolbar-Button 'AnKI+' ganz links hinzugefügt (vor erster Action, Shortcut: %s)", shortcut_text)
             else:
                 toolbar.addAction(action)
-                print(f"✅ Toolbar-Button 'AnKI+' hinzugefügt (Shortcut: {shortcut_text})")
+                logger.info("✅ Toolbar-Button 'AnKI+' hinzugefügt (Shortcut: %s)", shortcut_text)
         else:
             # Versuche, direkt ein Button-Widget hinzuzufügen
             try:
@@ -314,20 +313,17 @@ def setup_toolbar_button():
                 # Versuche, den Button zur Toolbar hinzuzufügen
                 if hasattr(toolbar, 'addWidget'):
                     toolbar.addWidget(button)
-                    print(f"✅ Toolbar-Button 'AnKI+' als Widget hinzugefügt (Shortcut: {shortcut_text})")
+                    logger.info("✅ Toolbar-Button 'AnKI+' als Widget hinzugefügt (Shortcut: %s)", shortcut_text)
                 elif hasattr(toolbar, 'insertWidget'):
                     toolbar.insertWidget(0, button)  # Ganz links
-                    print(f"✅ Toolbar-Button 'AnKI+' als Widget ganz links hinzugefügt (Shortcut: {shortcut_text})")
+                    logger.info("✅ Toolbar-Button 'AnKI+' als Widget ganz links hinzugefügt (Shortcut: %s)", shortcut_text)
                 else:
-                    print(f"⚠️ Toolbar hat keine bekannte Methode zum Hinzufügen von Widgets/Actions")
-                    print(f"   Verfügbare Methoden mit 'add' oder 'insert': {[m for m in dir(toolbar) if not m.startswith('_') and ('add' in m.lower() or 'insert' in m.lower())]}")
+                    logger.warning("⚠️ Toolbar hat keine bekannte Methode zum Hinzufügen von Widgets/Actions")
             except Exception as widget_error:
-                print(f"⚠️ Fehler beim Hinzufügen als Widget: {widget_error}")
+                logger.warning("⚠️ Fehler beim Hinzufügen als Widget: %s", widget_error)
         
     except Exception as e:
-        print(f"⚠️ Fehler beim Hinzufügen des Toolbar-Buttons: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("⚠️ Fehler beim Hinzufügen des Toolbar-Buttons: %s", e)
 
 def setup_ui():
     """Initialisiert die Chatbot-UI mit Keyboard Shortcut"""
@@ -348,9 +344,9 @@ def on_state_did_change(new_state, old_state):
             deck_json = widget.bridge.getCurrentDeck()
             js = f"window.ankiReceive({{type: 'currentDeck', data: {deck_json}}});"
             widget.web_view.page().runJavaScript(js)
-            print(f"State Change ({old_state} -> {new_state}): Deck-Update gesendet")
+            logger.debug("State Change (%s -> %s): Deck-Update gesendet", old_state, new_state)
     except Exception as e:
-        print(f"Fehler im State-Change-Hook: {e}")
+        logger.error("Fehler im State-Change-Hook: %s", e)
 
 def toggle_custom_reviewer(checked):
     """Toggle between custom and native reviewer"""
@@ -381,8 +377,6 @@ def toggle_custom_reviewer(checked):
     except Exception as e:
         from aqt.utils import showInfo
         showInfo(f"Error toggling custom reviewer: {e}")
-        import traceback
-        traceback.print_exc()
 
 
 def setup_menu():

@@ -28,6 +28,12 @@ try:
 except ImportError:
     from config import get_config, update_config
 
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+
 
 # Singleton instance
 _settings_window = None
@@ -80,7 +86,7 @@ class SettingsBridge(QObject):
                 'authToken': auth_token,
             })
         except Exception as e:
-            print(f"SettingsBridge.getConfig error: {e}")
+            logger.error("SettingsBridge.getConfig error: %s", e)
             return json.dumps({})
 
     @pyqtSlot(str)
@@ -88,21 +94,21 @@ class SettingsBridge(QObject):
         try:
             update_config(response_style=style)
         except Exception as e:
-            print(f"saveResponseStyle error: {e}")
+            logger.error("saveResponseStyle error: %s", e)
 
     @pyqtSlot(str)
     def saveTheme(self, theme):
         try:
             update_config(theme=theme)
         except Exception as e:
-            print(f"saveTheme error: {e}")
+            logger.error("saveTheme error: %s", e)
 
     @pyqtSlot(bool)
     def saveMascotEnabled(self, enabled):
         try:
             update_config(mascot_enabled=bool(enabled))
         except Exception as e:
-            print(f"saveMascotEnabled error: {e}")
+            logger.error("saveMascotEnabled error: %s", e)
 
     @pyqtSlot(result=str)
     def getEmbeddingStatus(self):
@@ -140,7 +146,7 @@ class SettingsBridge(QObject):
                 'isRunning': is_running,
             })
         except Exception as e:
-            print(f"getEmbeddingStatus error: {e}")
+            logger.error("getEmbeddingStatus error: %s", e)
             return json.dumps({'totalCards': 0, 'embeddedCards': 0, 'isRunning': False})
 
     @pyqtSlot(str)
@@ -149,7 +155,7 @@ class SettingsBridge(QObject):
             tools = json.loads(tools_json)
             update_config(ai_tools=tools)
         except Exception as e:
-            print(f"saveAITools error: {e}")
+            logger.error("saveAITools error: %s", e)
 
     @pyqtSlot(str, str)
     def authenticate(self, token, refresh_token=""):
@@ -194,12 +200,12 @@ class SettingsBridge(QObject):
             )
             if resp.status_code == 200:
                 update_config(auth_validated=True)
-                print("SettingsBridge.authenticate: Token validiert!")
+                logger.info("SettingsBridge.authenticate: Token validiert!")
             else:
                 update_config(auth_validated=False)
-                print(f"SettingsBridge.authenticate: Validierung fehlgeschlagen ({resp.status_code})")
+                logger.warning("SettingsBridge.authenticate: Validierung fehlgeschlagen (%s)", resp.status_code)
         except Exception as e:
-            print(f"SettingsBridge.authenticate error: {e}")
+            logger.error("SettingsBridge.authenticate error: %s", e)
 
     @pyqtSlot(result=str)
     def getQuota(self):
@@ -221,7 +227,7 @@ class SettingsBridge(QObject):
                 return json.dumps(resp.json())
             return json.dumps(None)
         except Exception as e:
-            print(f"getQuota error: {e}")
+            logger.error("getQuota error: %s", e)
             return json.dumps(None)
 
     @pyqtSlot()
@@ -229,9 +235,9 @@ class SettingsBridge(QObject):
         """Clear auth token and reset auth status."""
         try:
             update_config(auth_token="", refresh_token="", auth_validated=False)
-            print("SettingsBridge.logout: Auth cleared")
+            logger.info("SettingsBridge.logout: Auth cleared")
         except Exception as e:
-            print(f"logout error: {e}")
+            logger.error("logout error: %s", e)
 
     @pyqtSlot(str)
     def openUrl(self, url):
@@ -247,7 +253,7 @@ class SettingsBridge(QObject):
 
         try:
             link_code = secrets.token_urlsafe(24)
-            print(f"SettingsBridge.startLinkAuth: Code generiert ({link_code[:8]}...)")
+            logger.info("SettingsBridge.startLinkAuth: Code generiert (%s...)", link_code[:8])
 
             login_url = f"https://anki-plus.vercel.app/login?link={link_code}"
             webbrowser.open(login_url)
@@ -279,27 +285,27 @@ class SettingsBridge(QObject):
                             id_token = data.get("idToken", "")
                             refresh_token = data.get("refreshToken", "")
                             if id_token:
-                                print(f"SettingsBridge.startLinkAuth: Tokens empfangen! (Attempt {attempt+1})")
+                                logger.info("SettingsBridge.startLinkAuth: Tokens empfangen! (Attempt %d)", attempt+1)
                                 # Save and validate on main thread
                                 mw.taskman.run_on_main(
                                     lambda t=id_token, r=refresh_token: self._complete_link_auth(t, r)
                                 )
                                 return
                         elif response.status_code == 410:
-                            print("SettingsBridge.startLinkAuth: Link-Code abgelaufen")
+                            logger.warning("SettingsBridge.startLinkAuth: Link-Code abgelaufen")
                             return
                     except Exception as e:
                         if attempt % 10 == 0:
-                            print(f"SettingsBridge.startLinkAuth: Polling-Fehler ({attempt+1}): {e}")
+                            logger.warning("SettingsBridge.startLinkAuth: Polling-Fehler (%d): %s", attempt+1, e)
 
-                print("SettingsBridge.startLinkAuth: Timeout nach 5 Min")
+                logger.warning("SettingsBridge.startLinkAuth: Timeout nach 5 Min")
 
             thread = threading.Thread(target=poll_for_tokens, daemon=True, name="SettingsLinkAuthPoll")
             thread.start()
 
             return json.dumps({"success": True, "linkCode": link_code})
         except Exception as e:
-            print(f"SettingsBridge.startLinkAuth error: {e}")
+            logger.error("SettingsBridge.startLinkAuth error: %s", e)
             return json.dumps({"success": False, "error": str(e)})
 
     def _complete_link_auth(self, id_token, refresh_token):
@@ -330,11 +336,11 @@ class SettingsBridge(QObject):
             )
             if resp.status_code == 200:
                 update_config(auth_validated=True)
-                print("SettingsBridge._complete_link_auth: Token validiert!")
+                logger.info("SettingsBridge._complete_link_auth: Token validiert!")
             else:
-                print(f"SettingsBridge._complete_link_auth: Validierung fehlgeschlagen ({resp.status_code})")
+                logger.warning("SettingsBridge._complete_link_auth: Validierung fehlgeschlagen (%s)", resp.status_code)
         except Exception as e:
-            print(f"SettingsBridge._complete_link_auth: Fehler: {e}")
+            logger.error("SettingsBridge._complete_link_auth: Fehler: %s", e)
 
     @pyqtSlot()
     def openAnkiPrefs(self):
@@ -342,7 +348,7 @@ class SettingsBridge(QObject):
             if mw and hasattr(mw, 'onPrefs'):
                 mw.onPrefs()
         except Exception as e:
-            print(f"openAnkiPrefs error: {e}")
+            logger.error("openAnkiPrefs error: %s", e)
 
     @pyqtSlot()
     def closeWindow(self):

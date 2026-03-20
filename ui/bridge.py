@@ -28,6 +28,12 @@ try:
 except ImportError:
     from config import get_config, update_config, is_backend_mode, get_backend_url, get_auth_token, get_refresh_token, DEFAULT_BACKEND_URL
 
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+
 # NOTE: Legacy sessions_storage (JSON) removed — per-card SQLite is now used instead.
 
 
@@ -49,14 +55,14 @@ class WebBridge(QObject):
     @pyqtSlot()
     def cancelRequest(self):
         """Bricht die aktuelle Anfrage ab"""
-        print("cancelRequest: Anfrage abbrechen")
+        logger.debug("cancelRequest: Anfrage abbrechen")
         if self.current_request:
             cancelled_msg = self.current_request
             self.current_request = None
             
             # Breche Thread im Widget ab, falls vorhanden
             if hasattr(self.widget, '_ai_thread') and self.widget._ai_thread:
-                print(f"cancelRequest: Breche Thread im Widget ab...")
+                logger.debug("cancelRequest: Breche Thread im Widget ab...")
                 if hasattr(self.widget._ai_thread, 'cancel'):
                     self.widget._ai_thread.cancel()
                 self.widget._ai_thread.quit()
@@ -66,7 +72,7 @@ class WebBridge(QObject):
             # Sende Abbruch-Nachricht an UI
             payload = {"type": "bot", "message": "Anfrage abgebrochen."}
             self.widget.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
-            print(f"cancelRequest: Anfrage '{cancelled_msg[:50]}...' wurde abgebrochen")
+            logger.debug("cancelRequest: Anfrage '%s...' wurde abgebrochen", cancelled_msg[:50])
 
     @pyqtSlot(str)
     def setModel(self, model_name):
@@ -83,24 +89,24 @@ class WebBridge(QObject):
     @pyqtSlot(str, str, str)
     def saveSettings(self, api_key, provider, model_name):
         """Speichert Einstellungen"""
-        print(f"saveSettings aufgerufen: api_key Länge={len(api_key) if api_key else 0}, provider={provider}, model_name={model_name}")
+        logger.debug("saveSettings aufgerufen: api_key Länge=%s, provider=%s, model_name=%s", len(api_key) if api_key else 0, provider, model_name)
         # Speichere nur API-Key und Provider, Modell wird im Chat ausgewählt
         success = update_config(api_key=api_key, model_provider=provider, model_name=model_name or "")
         if success:
-            print(f"saveSettings: Config erfolgreich gespeichert")
+            logger.info("saveSettings: Config erfolgreich gespeichert")
             # Lade Config neu aus Datei (force_reload) und sende aktualisierte Model-Liste
             self.widget.config = get_config(force_reload=True)
             # Verifiziere, dass API-Key wirklich gespeichert wurde
             saved_api_key = self.widget.config.get("api_key", "")
             if saved_api_key == api_key:
-                print(f"saveSettings: ✓ API-Key erfolgreich verifiziert (Länge: {len(saved_api_key)})")
+                logger.info("saveSettings: ✓ API-Key erfolgreich verifiziert (Länge: %s)", len(saved_api_key))
             else:
-                print(f"saveSettings: ⚠ WARNUNG: API-Key stimmt nicht überein! Gespeichert: {len(saved_api_key)}, Erwartet: {len(api_key)}")
+                logger.warning("saveSettings: ⚠ WARNUNG: API-Key stimmt nicht überein! Gespeichert: %s, Erwartet: %s", len(saved_api_key), len(api_key))
             # Warte kurz, damit Config gespeichert ist, dann lade Modelle
             from aqt.qt import QTimer
             QTimer.singleShot(100, self.widget.push_updated_models)
         else:
-            print(f"saveSettings: ✗ FEHLER beim Speichern der Config!")
+            logger.error("saveSettings: ✗ FEHLER beim Speichern der Config!")
     
     @pyqtSlot(result=str)
     def getCurrentConfig(self):
@@ -108,7 +114,7 @@ class WebBridge(QObject):
         # Lade Config neu aus Datei (nicht aus Cache)
         config = get_config(force_reload=True)
         api_key = config.get("api_key", "")
-        print(f"getCurrentConfig: API-Key vorhanden: {'Ja' if api_key else 'Nein'} (Länge: {len(api_key)})")
+        logger.debug("getCurrentConfig: API-Key vorhanden: %s (Länge: %s)", 'Ja' if api_key else 'Nein', len(api_key))
         return json.dumps({
             "api_key": api_key,
             "provider": "google",  # Immer Google
@@ -125,13 +131,13 @@ class WebBridge(QObject):
             from ai.handler import get_ai_handler
         
         try:
-            print(f"fetchModels aufgerufen: provider={provider}, api_key_length={len(api_key) if api_key else 0}")
+            logger.debug("fetchModels aufgerufen: provider=%s, api_key_length=%s", provider, len(api_key) if api_key else 0)
             ai = get_ai_handler()
             models = ai.fetch_available_models(provider, api_key)
-            print(f"Modelle erhalten: {len(models) if models else 0} Modelle")
+            logger.debug("Modelle erhalten: %s Modelle", len(models) if models else 0)
             if models:
                 for m in models:
-                    print(f"  - {m.get('name', 'unknown')}: {m.get('label', 'no label')}")
+                    logger.debug("  - %s: %s", m.get('name', 'unknown'), m.get('label', 'no label'))
             
             # Gib immer ein JSON-Objekt zurück
             return json.dumps({
@@ -140,10 +146,8 @@ class WebBridge(QObject):
                 "error": None
             })
         except Exception as e:
-            import traceback
             error_msg = str(e)
-            print(f"Fehler in fetchModels: {error_msg}")
-            print(traceback.format_exc())
+            logger.exception("Fehler in fetchModels: %s", error_msg)
             # Gib Fehlerinformation zurück
             return json.dumps({
                 "success": False,
@@ -207,9 +211,7 @@ class WebBridge(QObject):
 
             return json.dumps({"deckId": None, "deckName": None, "isInDeck": False})
         except Exception as e:
-            import traceback
-            print(f"Fehler in getCurrentDeck: {e}")
-            print(traceback.format_exc())
+            logger.exception("Fehler in getCurrentDeck: %s", e)
             return json.dumps({"deckId": None, "deckName": None, "isInDeck": False, "error": str(e)})
     
     @pyqtSlot(result=str)
@@ -229,9 +231,7 @@ class WebBridge(QObject):
             
             return json.dumps({"decks": decks})
         except Exception as e:
-            import traceback
-            print(f"Fehler in getAvailableDecks: {e}")
-            print(traceback.format_exc())
+            logger.exception("Fehler in getAvailableDecks: %s", e)
             return json.dumps({"decks": [], "error": str(e)})
     
     @pyqtSlot(int)
@@ -240,18 +240,16 @@ class WebBridge(QObject):
         try:
             from aqt import mw
             if mw is None or mw.col is None:
-                print(f"openDeck: mw oder mw.col ist None")
+                logger.debug("openDeck: mw oder mw.col ist None")
                 return
             
             # Wähle Deck aus
             mw.col.decks.select(deck_id)
             # Öffne Reviewer
             mw.moveToState("review")
-            print(f"openDeck: Deck {deck_id} geöffnet")
+            logger.info("openDeck: Deck %s geöffnet", deck_id)
         except Exception as e:
-            import traceback
-            print(f"Fehler in openDeck: {e}")
-            print(traceback.format_exc())
+            logger.exception("Fehler in openDeck: %s", e)
 
     @pyqtSlot(str)
     def goToCard(self, card_id):
@@ -265,11 +263,9 @@ class WebBridge(QObject):
                 # Suche nach der Karten-ID
                 browser.form.searchEdit.lineEdit().setText(f"cid:{card_id}")
                 browser.onSearchActivated()
-                print(f"goToCard: Browser geöffnet für CID {card_id}")
+                logger.info("goToCard: Browser geöffnet für CID %s", card_id)
         except Exception as e:
-            import traceback
-            print(f"Fehler in goToCard: {e}")
-            print(traceback.format_exc())
+            logger.exception("Fehler in goToCard: %s", e)
     
     _CARD_CACHE_TTL = 10  # seconds
     _CARD_CACHE_MAX = 50
@@ -358,9 +354,7 @@ class WebBridge(QObject):
             return result_json
 
         except Exception as e:
-            import traceback
-            print(f"Fehler in getCardDetails: {e}")
-            print(traceback.format_exc())
+            logger.exception("Fehler in getCardDetails: %s", e)
             return json.dumps({"error": str(e)})
 
     @pyqtSlot(str)
@@ -371,13 +365,13 @@ class WebBridge(QObject):
             from aqt.previewer import Previewer
             
             if mw is None or mw.col is None:
-                print(f"previewCard: mw oder mw.col ist None")
+                logger.debug("previewCard: mw oder mw.col ist None")
                 return
             
             card_id_int = int(card_id)
             card = mw.col.get_card(card_id_int)
             if not card:
-                print(f"previewCard: Karte {card_id} nicht gefunden")
+                logger.debug("previewCard: Karte %s nicht gefunden", card_id)
                 return
             
             # Erstelle CardProvider für Previewer
@@ -398,12 +392,10 @@ class WebBridge(QObject):
             # Öffne Previewer als Dialog
             previewer = Previewer(mw, parent=mw, card=provider.card())
             previewer.show()
-            print(f"previewCard: Previewer geöffnet für CID {card_id}")
+            logger.info("previewCard: Previewer geöffnet für CID %s", card_id)
             
         except Exception as e:
-            import traceback
-            print(f"Fehler in previewCard: {e}")
-            print(traceback.format_exc())
+            logger.exception("Fehler in previewCard: %s", e)
     
     @pyqtSlot(str, result=str)
     def openPreview(self, card_id_str):
@@ -422,16 +414,14 @@ class WebBridge(QObject):
         try:
             from aqt import mw
             if mw is None:
-                print(f"openDeckBrowser: mw ist None")
+                logger.debug("openDeckBrowser: mw ist None")
                 return
 
             # Navigiere zur Stapelübersicht
             mw.moveToState("deckBrowser")
-            print(f"openDeckBrowser: Stapelübersicht geöffnet")
+            logger.info("openDeckBrowser: Stapelübersicht geöffnet")
         except Exception as e:
-            import traceback
-            print(f"Fehler in openDeckBrowser: {e}")
-            print(traceback.format_exc())
+            logger.exception("Fehler in openDeckBrowser: %s", e)
 
     @pyqtSlot()
     def openStats(self):
@@ -441,7 +431,7 @@ class WebBridge(QObject):
             if mw:
                 mw.onStats()
         except Exception as e:
-            print(f"Fehler in openStats: {e}")
+            logger.error("Fehler in openStats: %s", e)
 
     @pyqtSlot()
     def createNewDeck(self):
@@ -451,7 +441,7 @@ class WebBridge(QObject):
             if mw and mw.col:
                 mw.onCreateDeck()
         except Exception as e:
-            print(f"Fehler in createNewDeck: {e}")
+            logger.error("Fehler in createNewDeck: %s", e)
 
     @pyqtSlot()
     def openImport(self):
@@ -461,7 +451,7 @@ class WebBridge(QObject):
             if mw:
                 mw.onImport()
         except Exception as e:
-            print(f"Fehler in openImport: {e}")
+            logger.error("Fehler in openImport: %s", e)
 
     @pyqtSlot()
     def advanceCard(self):
@@ -475,7 +465,7 @@ class WebBridge(QObject):
             if mw and mw.reviewer and mw.reviewer.web:
                 mw.reviewer.web.eval('if(window.rateCard) rateCard(window.autoRateEase || 3);')
         except Exception as e:
-            print(f"Fehler in advanceCard: {e}")
+            logger.error("Fehler in advanceCard: %s", e)
     
     def _get_deck_stats(self, deck_id):
         """
@@ -506,7 +496,7 @@ class WebBridge(QObject):
             total_cards = len(card_ids)
             return {"totalCards": total_cards}
         except Exception as e:
-            print(f"Fehler in _get_deck_stats: {e}")
+            logger.error("Fehler in _get_deck_stats: %s", e)
             return None
     
     @pyqtSlot(int, result=str)
@@ -589,9 +579,7 @@ class WebBridge(QObject):
                 "level3Percent": level3_percent
             })
         except Exception as e:
-            import traceback
-            print(f"Fehler in getDeckStats: {e}")
-            print(traceback.format_exc())
+            logger.exception("Fehler in getDeckStats: %s", e)
             return json.dumps({"error": str(e)})
 
     @pyqtSlot()
@@ -602,11 +590,9 @@ class WebBridge(QObject):
             # Sicherstellen, dass wir im Haupt-Thread sind (für GUI-Operationen wichtig)
             if mw and mw.reviewer:
                 mw.reviewer._showAnswer()
-                print("showAnswer: Antwort angezeigt (mw.reviewer._showAnswer() aufgerufen)")
+                logger.debug("showAnswer: Antwort angezeigt (mw.reviewer._showAnswer() aufgerufen)")
         except Exception as e:
-            import traceback
-            print(f"Fehler in showAnswer: {e}")
-            print(traceback.format_exc())
+            logger.exception("Fehler in showAnswer: %s", e)
 
     @pyqtSlot()
     def hideAnswer(self):
@@ -620,10 +606,10 @@ class WebBridge(QObject):
                 # Setze den State zurück auf "question" und zeige die Frage
                 if hasattr(mw.reviewer, '_showQuestion'):
                     mw.reviewer._showQuestion()
-                    print("hideAnswer: Frage wieder angezeigt (_showQuestion)")
+                    logger.debug("hideAnswer: Frage wieder angezeigt (_showQuestion)")
                 elif hasattr(mw.reviewer, 'showQuestion'):
                     mw.reviewer.showQuestion()
-                    print("hideAnswer: Frage wieder angezeigt (showQuestion)")
+                    logger.debug("hideAnswer: Frage wieder angezeigt (showQuestion)")
                 else:
                     # Fallback: Lade Karte neu
                     if hasattr(mw.reviewer, 'card') and mw.reviewer.card:
@@ -631,13 +617,11 @@ class WebBridge(QObject):
                         # Rufe die Standard-Methode auf
                         mw.reviewer._initWeb()
                         mw.reviewer._showQuestion()
-                        print("hideAnswer: Karte neu geladen und Frage angezeigt")
+                        logger.debug("hideAnswer: Karte neu geladen und Frage angezeigt")
                     else:
-                        print("hideAnswer: Keine Karte aktiv")
+                        logger.debug("hideAnswer: Keine Karte aktiv")
         except Exception as e:
-            import traceback
-            print(f"Fehler in hideAnswer: {e}")
-            print(traceback.format_exc())
+            logger.exception("Fehler in hideAnswer: %s", e)
     
     @pyqtSlot(str, str, result=str)
     def generateSectionTitle(self, question, answer):
@@ -651,12 +635,10 @@ class WebBridge(QObject):
         Returns:
             JSON mit dem generierten Titel
         """
-        print("=" * 60)
-        print("bridge.generateSectionTitle: START")
-        print("=" * 60)
-        print(f"  Frage Länge: {len(question) if question else 0}")
-        print(f"  Antwort Länge: {len(answer) if answer else 0}")
-        print(f"  Frage (erste 100 Zeichen): {question[:100] if question else 'None'}...")
+        logger.debug("bridge.generateSectionTitle: START")
+        logger.debug("  Frage Länge: %s", len(question) if question else 0)
+        logger.debug("  Antwort Länge: %s", len(answer) if answer else 0)
+        logger.debug("  Frage (erste 100 Zeichen): %s...", question[:100] if question else 'None')
         
         try:
             from ..ai.handler import get_ai_handler
@@ -664,38 +646,34 @@ class WebBridge(QObject):
             from ai.handler import get_ai_handler
         
         try:
-            print(f"bridge.generateSectionTitle: Rufe get_ai_handler() auf...")
+            logger.debug("bridge.generateSectionTitle: Rufe get_ai_handler() auf...")
             ai = get_ai_handler()
-            print(f"bridge.generateSectionTitle: AI Handler erhalten, rufe get_section_title() auf...")
+            logger.debug("bridge.generateSectionTitle: AI Handler erhalten, rufe get_section_title() auf...")
             title = ai.get_section_title(question, answer)
-            print(f"bridge.generateSectionTitle: get_section_title() zurückgegeben: '{title}'")
+            logger.debug("bridge.generateSectionTitle: get_section_title() zurückgegeben: '%s'", title)
             
             # Prüfe ob "Lernkarte" ein Fallback ist (dann war etwas falsch)
             if title == "Lernkarte":
-                print(f"⚠️ bridge.generateSectionTitle: Titel ist Fallback 'Lernkarte' - möglicherweise Fehler")
+                logger.error("⚠️ bridge.generateSectionTitle: Titel ist Fallback 'Lernkarte' - möglicherweise Fehler")
                 return json.dumps({
                     "success": False,
                     "title": "Lernkarte",
                     "error": "Titel-Generierung fehlgeschlagen - siehe Debug-Logs für Details"
                 })
             
-            print(f"✅ bridge.generateSectionTitle: Erfolgreich, Titel: '{title}'")
-            print("=" * 60)
+            logger.info("✅ bridge.generateSectionTitle: Erfolgreich, Titel: '%s'", title)
             return json.dumps({
                 "success": True,
                 "title": title,
                 "error": None
             })
         except Exception as e:
-            import traceback
             error_msg = str(e)
             error_type = type(e).__name__
-            print(f"❌ bridge.generateSectionTitle: Exception aufgetreten")
-            print(f"  Exception Type: {error_type}")
-            print(f"  Error Message: {error_msg}")
-            print(f"  Full Traceback:")
-            print(traceback.format_exc())
-            print("=" * 60)
+            logger.error("❌ bridge.generateSectionTitle: Exception aufgetreten")
+            logger.error("  Exception Type: %s", error_type)
+            logger.error("  Error Message: %s", error_msg)
+            logger.exception("  Full Traceback:")
             return json.dumps({
                 "success": False,
                 "title": "Lernkarte",
@@ -713,13 +691,11 @@ class WebBridge(QObject):
             from ..storage.card_sessions import load_card_session
             card_id = int(card_id_str)
             data = load_card_session(card_id)
-            print(f"loadCardSession: card {card_id} — session={'yes' if data['session'] else 'no'}, "
-                  f"{len(data['sections'])} sections, {len(data['messages'])} messages")
+            logger.debug("loadCardSession: card %s — session=%s, %d sections, %d messages",
+                  card_id, 'yes' if data['session'] else 'no', len(data['sections']), len(data['messages']))
             return json.dumps(data, ensure_ascii=False)
         except Exception as e:
-            import traceback
-            print(f"Fehler in loadCardSession: {e}")
-            traceback.print_exc()
+            logger.exception("Fehler in loadCardSession: %s", e)
             return json.dumps({'session': None, 'sections': [], 'messages': []})
 
     @pyqtSlot(str, result=str)
@@ -732,12 +708,10 @@ class WebBridge(QObject):
             if not card_id:
                 return json.dumps({'success': False, 'error': 'Missing cardId'})
             success = save_card_session(card_id, data)
-            print(f"saveCardSession: card {card_id}, success={success}")
+            logger.debug("saveCardSession: card %s, success=%s", card_id, success)
             return json.dumps({'success': success, 'error': None})
         except Exception as e:
-            import traceback
-            print(f"Fehler in saveCardSession: {e}")
-            traceback.print_exc()
+            logger.exception("Fehler in saveCardSession: %s", e)
             return json.dumps({'success': False, 'error': str(e)})
 
     @pyqtSlot(str, result=str)
@@ -753,7 +727,7 @@ class WebBridge(QObject):
             success = save_message(card_id, message)
             return json.dumps({'success': success, 'error': None})
         except Exception as e:
-            print(f"Fehler in saveCardMessage: {e}")
+            logger.error("Fehler in saveCardMessage: %s", e)
             return json.dumps({'success': False, 'error': str(e)})
 
     @pyqtSlot(str, result=str)
@@ -769,7 +743,7 @@ class WebBridge(QObject):
             success = save_section(card_id, section)
             return json.dumps({'success': success, 'error': None})
         except Exception as e:
-            print(f"Fehler in saveCardSection: {e}")
+            logger.error("Fehler in saveCardSection: %s", e)
             return json.dumps({'success': False, 'error': str(e)})
 
     @pyqtSlot(str, result=str)
@@ -784,7 +758,7 @@ class WebBridge(QObject):
             messages = load_deck_messages(deck_id, limit=50)
             return json.dumps({"success": True, "messages": messages})
         except Exception as e:
-            print(f"loadDeckMessages error: {e}")
+            logger.error("loadDeckMessages error: %s", e)
             return json.dumps({"success": False, "messages": [], "error": str(e)})
 
     @pyqtSlot(str, result=str)
@@ -801,7 +775,7 @@ class WebBridge(QObject):
             success = save_deck_message(deck_id, message)
             return json.dumps({"success": success})
         except Exception as e:
-            print(f"saveDeckMessage error: {e}")
+            logger.error("saveDeckMessage error: %s", e)
             return json.dumps({"success": False, "error": str(e)})
 
     @pyqtSlot(str, str, result=str)
@@ -861,7 +835,7 @@ class WebBridge(QObject):
         try:
             update_config(response_style=style)
         except Exception as e:
-            print(f"saveResponseStyle: Fehler: {e}")
+            logger.error("saveResponseStyle: Fehler: %s", e)
 
     @pyqtSlot(result=str)
     def getTheme(self):
@@ -878,7 +852,7 @@ class WebBridge(QObject):
         try:
             update_config(theme=theme)
         except Exception as e:
-            print(f"saveTheme: Fehler: {e}")
+            logger.error("saveTheme: Fehler: %s", e)
 
     @pyqtSlot()
     def openAnkiPreferences(self):
@@ -888,7 +862,7 @@ class WebBridge(QObject):
             if hasattr(mw, 'onPrefs'):
                 mw.onPrefs()
         except Exception as e:
-            print(f"openAnkiPreferences: Fehler: {e}")
+            logger.error("openAnkiPreferences: Fehler: %s", e)
 
     @pyqtSlot(str, str, result=str)
     def authenticate(self, token, refresh_token=""):
@@ -908,14 +882,14 @@ class WebBridge(QObject):
                     token_data = json.loads(token_str)
                     token = token_data.get('token', '') or token_data.get('idToken', '')
                     refresh_token = token_data.get('refreshToken', '') or refresh_token
-                    print(f"authenticate: JSON-Format erkannt, Token + RefreshToken extrahiert")
+                    logger.debug("authenticate: JSON-Format erkannt, Token + RefreshToken extrahiert")
                 except json.JSONDecodeError:
                     pass  # Kein gültiges JSON, behandle als normalen Token
 
             if not token or not token.strip():
                 return json.dumps({"success": False, "error": "Kein Token angegeben"})
 
-            print(f"authenticate: Token erhalten (Länge: {len(token)}, RefreshToken: {'Ja' if refresh_token else 'Nein'})")
+            logger.debug("authenticate: Token erhalten (Länge: %s, RefreshToken: %s)", len(token), 'Ja' if refresh_token else 'Nein')
             
             # Speichere Token in Config (noch nicht validiert)
             update_config(
@@ -946,7 +920,7 @@ class WebBridge(QObject):
                 )
                 
                 if response.status_code == 200:
-                    print("authenticate: Token erfolgreich validiert")
+                    logger.info("authenticate: Token erfolgreich validiert")
                     # Markiere Token als validiert
                     update_config(auth_validated=True)
                     # Benachrichtige Frontend
@@ -954,23 +928,23 @@ class WebBridge(QObject):
                         payload = {"type": "auth_success", "message": "Authentifizierung erfolgreich"}
                         js_code = f"if (window.ankiReceive) {{ window.ankiReceive({json.dumps(payload)}); }}"
                         self.widget.web_view.page().runJavaScript(js_code)
-                        print(f"authenticate: Frontend benachrichtigt")
+                        logger.debug("authenticate: Frontend benachrichtigt")
                     return json.dumps({"success": True, "message": "Authentifizierung erfolgreich"})
                 elif response.status_code == 401:
                     error_msg = "Ungültiger Token - bitte prüfe deinen Token"
-                    print(f"authenticate: {error_msg} (Status: {response.status_code})")
+                    logger.error("authenticate: %s (Status: %s)", error_msg, response.status_code)
                     # Markiere Token als nicht validiert
                     update_config(auth_validated=False)
                     if self.widget and self.widget.web_view:
                         payload = {"type": "auth_error", "message": error_msg}
                         js_code = f"if (window.ankiReceive) {{ window.ankiReceive({json.dumps(payload)}); }}"
                         self.widget.web_view.page().runJavaScript(js_code)
-                        print(f"authenticate: Frontend benachrichtigt")
+                        logger.debug("authenticate: Frontend benachrichtigt")
                     return json.dumps({"success": False, "error": error_msg})
                 else:
                     # Token gespeichert, aber Validierung fehlgeschlagen (Netzwerkfehler etc.)
                     error_msg = f"Token gespeichert, aber Validierung fehlgeschlagen (Status: {response.status_code})"
-                    print(f"authenticate: {error_msg}")
+                    logger.error("authenticate: %s", error_msg)
                     # Token trotzdem speichern - kann später validiert werden
                     if self.widget and self.widget.web_view:
                         payload = {"type": "auth_error", "message": error_msg}
@@ -980,8 +954,8 @@ class WebBridge(QObject):
             except requests.exceptions.Timeout as e:
                 # Timeout - Cloud Function könnte Cold Start haben
                 error_msg = "Backend antwortet nicht (Timeout). Bitte versuche es erneut - die erste Anfrage kann länger dauern."
-                print(f"authenticate: {error_msg}")
-                print("Token wurde trotzdem gespeichert - kann später validiert werden")
+                logger.error("authenticate: %s", error_msg)
+                logger.info("Token wurde trotzdem gespeichert - kann später validiert werden")
                 if self.widget and self.widget.web_view:
                     payload = {"type": "auth_error", "message": error_msg}
                     js_code = f"if (window.ankiReceive) {{ window.ankiReceive({json.dumps(payload)}); }}"
@@ -990,18 +964,16 @@ class WebBridge(QObject):
             except requests.exceptions.RequestException as e:
                 # Netzwerkfehler - Token trotzdem speichern
                 error_msg = f"Netzwerkfehler bei Validierung: {str(e)}"
-                print(f"authenticate: {error_msg}")
-                print("Token wurde trotzdem gespeichert")
+                logger.error("authenticate: %s", error_msg)
+                logger.info("Token wurde trotzdem gespeichert")
                 if self.widget and self.widget.web_view:
                     payload = {"type": "auth_error", "message": error_msg}
                     js_code = f"if (window.ankiReceive) {{ window.ankiReceive({json.dumps(payload)}); }}"
                     self.widget.web_view.page().runJavaScript(js_code)
                 return json.dumps({"success": False, "error": error_msg})
         except Exception as e:
-            import traceback
             error_msg = str(e)
-            print(f"❌ authenticate: Fehler: {error_msg}")
-            print(traceback.format_exc())
+            logger.exception("❌ authenticate: Fehler: %s", error_msg)
             return json.dumps({"success": False, "error": error_msg})
     
     @pyqtSlot(result=str)
@@ -1024,9 +996,7 @@ class WebBridge(QObject):
             
             return json.dumps(status)
         except Exception as e:
-            import traceback
-            print(f"Fehler in getAuthStatus: {e}")
-            print(traceback.format_exc())
+            logger.exception("Fehler in getAuthStatus: %s", e)
             return json.dumps({
                 "authenticated": False,
                 "hasToken": False,
@@ -1042,9 +1012,7 @@ class WebBridge(QObject):
             auth_token = config.get('auth_token', '').strip()
             return json.dumps({"token": auth_token if auth_token else ""})
         except Exception as e:
-            import traceback
-            print(f"Fehler in getAuthToken: {e}")
-            print(traceback.format_exc())
+            logger.exception("Fehler in getAuthToken: %s", e)
             return json.dumps({"token": ""})
     
     @pyqtSlot(result=str)
@@ -1062,10 +1030,8 @@ class WebBridge(QObject):
             else:
                 return json.dumps({"success": False, "error": "Token-Refresh fehlgeschlagen"})
         except Exception as e:
-            import traceback
             error_msg = str(e)
-            print(f"Fehler in refreshAuth: {error_msg}")
-            print(traceback.format_exc())
+            logger.exception("Fehler in refreshAuth: %s", error_msg)
             return json.dumps({"success": False, "error": error_msg})
     
     @pyqtSlot(result=str)
@@ -1077,7 +1043,7 @@ class WebBridge(QObject):
                 refresh_token="",
                 auth_validated=False
             )
-            print("logout: Auth-Token gelöscht")
+            logger.info("logout: Auth-Token gelöscht")
             # Benachrichtige Frontend
             if self.widget and self.widget.web_view:
                 payload = {"type": "auth_logout", "message": "Abgemeldet"}
@@ -1085,9 +1051,7 @@ class WebBridge(QObject):
                 self.widget.web_view.page().runJavaScript(js_code)
             return json.dumps({"success": True})
         except Exception as e:
-            import traceback
-            print(f"Fehler in logout: {e}")
-            print(traceback.format_exc())
+            logger.exception("Fehler in logout: %s", e)
             return json.dumps({"success": False, "error": str(e)})
 
     @pyqtSlot(result=str)
@@ -1105,7 +1069,7 @@ class WebBridge(QObject):
         try:
             # Generiere 32-Zeichen Code (kryptographisch sicher)
             link_code = secrets.token_urlsafe(24)  # 32 chars base64url
-            print(f"startLinkAuth: Code generiert ({link_code[:8]}...)")
+            logger.debug("startLinkAuth: Code generiert (%s...)", link_code[:8])
 
             # Öffne Landing Page mit Link-Code
             login_url = f"https://anki-plus.vercel.app/login?link={link_code}"
@@ -1138,7 +1102,7 @@ class WebBridge(QObject):
                             refresh_token = data.get("refreshToken", "")
 
                             if id_token:
-                                print(f"startLinkAuth: Tokens empfangen! (Attempt {attempt+1})")
+                                logger.info("startLinkAuth: Tokens empfangen! (Attempt %s)", attempt+1)
                                 # Authentifiziere mit beiden Tokens
                                 # Muss auf dem Main-Thread laufen (Qt)
                                 from aqt import mw
@@ -1148,7 +1112,7 @@ class WebBridge(QObject):
                                 return
                         elif response.status_code == 410:
                             # Code abgelaufen
-                            print("startLinkAuth: Link-Code abgelaufen")
+                            logger.debug("startLinkAuth: Link-Code abgelaufen")
                             from aqt import mw
                             mw.taskman.run_on_main(
                                 lambda: self._notify_auth_event("auth_link_expired", "Link abgelaufen. Bitte erneut versuchen.")
@@ -1158,10 +1122,10 @@ class WebBridge(QObject):
                     except Exception as e:
                         # Netzwerkfehler — weiter versuchen
                         if attempt % 10 == 0:
-                            print(f"startLinkAuth: Polling-Fehler (Attempt {attempt+1}): {e}")
+                            logger.error("startLinkAuth: Polling-Fehler (Attempt %s): %s", attempt+1, e)
 
                 # Timeout nach 5 Minuten
-                print("startLinkAuth: Timeout nach 5 Minuten")
+                logger.debug("startLinkAuth: Timeout nach 5 Minuten")
                 from aqt import mw
                 mw.taskman.run_on_main(
                     lambda: self._notify_auth_event("auth_link_timeout", "Zeitüberschreitung. Bitte erneut versuchen.")
@@ -1172,9 +1136,7 @@ class WebBridge(QObject):
 
             return json.dumps({"success": True, "linkCode": link_code})
         except Exception as e:
-            import traceback
-            print(f"Fehler in startLinkAuth: {e}")
-            print(traceback.format_exc())
+            logger.exception("Fehler in startLinkAuth: %s", e)
             return json.dumps({"success": False, "error": str(e)})
 
     def _complete_link_auth(self, id_token, refresh_token):
@@ -1202,14 +1164,14 @@ class WebBridge(QObject):
 
             if response.status_code == 200:
                 update_config(auth_validated=True)
-                print("_complete_link_auth: Token validiert!")
+                logger.info("_complete_link_auth: Token validiert!")
                 self._notify_auth_event("auth_success", "Erfolgreich verbunden!")
             else:
                 # Token gespeichert, aber Validierung fehlgeschlagen
-                print(f"_complete_link_auth: Validierung fehlgeschlagen (Status: {response.status_code})")
+                logger.debug("_complete_link_auth: Validierung fehlgeschlagen (Status: %s)", response.status_code)
                 self._notify_auth_event("auth_success", "Verbunden (Validierung ausstehend)")
         except Exception as e:
-            print(f"_complete_link_auth: Fehler: {e}")
+            logger.error("_complete_link_auth: Fehler: %s", e)
             # Token wurde trotzdem gespeichert
             self._notify_auth_event("auth_success", "Verbunden")
 
@@ -1235,14 +1197,14 @@ class WebBridge(QObject):
         Verarbeitet Deep Link für Auth: anki://auth?token=...&refreshToken=...
         """
         try:
-            print(f"handleAuthDeepLink: Verarbeite URL: {url[:100]}...")
+            logger.debug("handleAuthDeepLink: Verarbeite URL: %s...", url[:100])
             
             # Extrahiere Tokens aus URL
             from urllib.parse import urlparse, parse_qs
             
             parsed = urlparse(url)
             if parsed.scheme != "anki" or parsed.netloc != "auth":
-                print(f"handleAuthDeepLink: Ungültiges URL-Format")
+                logger.debug("handleAuthDeepLink: Ungültiges URL-Format")
                 return json.dumps({"success": False, "error": "Ungültiges URL-Format"})
             
             params = parse_qs(parsed.query)
@@ -1250,7 +1212,7 @@ class WebBridge(QObject):
             refresh_token = params.get("refreshToken", [None])[0]
             
             if not token:
-                print(f"handleAuthDeepLink: Kein Token in URL gefunden")
+                logger.debug("handleAuthDeepLink: Kein Token in URL gefunden")
                 return json.dumps({"success": False, "error": "Kein Token in URL gefunden"})
             
             # Rufe authenticate auf
@@ -1259,17 +1221,15 @@ class WebBridge(QObject):
             # Parse Ergebnis
             result_data = json.loads(result)
             if result_data.get("success"):
-                print(f"handleAuthDeepLink: ✓ Auth erfolgreich")
+                logger.info("handleAuthDeepLink: ✓ Auth erfolgreich")
                 # Sende Bestätigung an Frontend
                 payload = {"type": "auth_success", "message": "Authentifizierung erfolgreich"}
                 self.widget.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
             
             return result
         except Exception as e:
-            import traceback
             error_msg = str(e)
-            print(f"Fehler in handleAuthDeepLink: {error_msg}")
-            print(traceback.format_exc())
+            logger.exception("Fehler in handleAuthDeepLink: %s", error_msg)
             return json.dumps({"success": False, "error": error_msg})
     
     @pyqtSlot(int, str, result=str)
@@ -1313,7 +1273,7 @@ class WebBridge(QObject):
                 }
                 model['flds'].append(field)
                 mw.col.models.save(model)
-                print(f"saveMultipleChoice: Custom Field '{field_name}' erstellt")
+                logger.info("saveMultipleChoice: Custom Field '%s' erstellt", field_name)
             
             # Validiere JSON-Format
             try:
@@ -1334,14 +1294,12 @@ class WebBridge(QObject):
             note[field_name] = json.dumps(quiz_data)
             note.flush()
             
-            print(f"saveMultipleChoice: MC-Daten für Card {card_id_int} gespeichert")
+            logger.info("saveMultipleChoice: MC-Daten für Card %s gespeichert", card_id_int)
             return json.dumps({"success": True, "error": None})
             
         except Exception as e:
-            import traceback
             error_msg = str(e)
-            print(f"Fehler in saveMultipleChoice: {error_msg}")
-            print(traceback.format_exc())
+            logger.exception("Fehler in saveMultipleChoice: %s", error_msg)
             return json.dumps({"success": False, "error": error_msg})
     
     @pyqtSlot(int, result=str)
@@ -1384,10 +1342,8 @@ class WebBridge(QObject):
                 return json.dumps({"success": False, "quizData": None, "error": f"Invalid JSON: {str(e)}"})
             
         except Exception as e:
-            import traceback
             error_msg = str(e)
-            print(f"Fehler in loadMultipleChoice: {error_msg}")
-            print(traceback.format_exc())
+            logger.exception("Fehler in loadMultipleChoice: %s", error_msg)
             return json.dumps({"success": False, "quizData": None, "error": error_msg})
     
     @pyqtSlot(int, result=str)

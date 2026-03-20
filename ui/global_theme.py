@@ -12,6 +12,12 @@ import re
 import time
 import json
 
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+
 # Pre-compiled regex patterns for HTML processing (hot path)
 _RE_HR = re.compile(r'<hr[^>]*/?>',  re.IGNORECASE)
 _RE_BOTTOM_TABLE = re.compile(
@@ -61,13 +67,13 @@ def _write_debug_log(hypothesis_id, location, message, data=None):
         with open(_DEBUG_LOG_PATH, "a") as f:
             f.write(json.dumps(log_entry) + "\n")
     except Exception as e:
-        print(f"[DEBUG LOG ERROR] {e}")
+        logger.error("[DEBUG LOG ERROR] %s", e)
 # #endregion
 
 def _debug_log(msg):
     """Debug-Logging mit Zeitstempel seit Start"""
     elapsed = time.time() - _startup_time
-    print(f"[THEME DEBUG {elapsed:.3f}s] {msg}")
+    logger.debug("[THEME DEBUG %.3fs] %s", elapsed, msg)
 
 # Globale Flagge: Ist die Anwendung noch aktiv?
 _app_running = True
@@ -678,9 +684,7 @@ def apply_global_dark_theme():
             pass
                 
     except Exception as e:
-        _debug_log(f"❌ Fehler beim Anwenden des Themes: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("❌ Fehler beim Anwenden des Themes: %s", e)
 
 
 def on_webview_will_set_content(web_content, context):

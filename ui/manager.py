@@ -12,6 +12,12 @@ try:
 except ImportError:
     mw = None
 
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+
 # Gespeicherte Original-show()-Methoden für sauberes Restore
 _patched_widgets = {}  # widget_id -> original_show_method
 
@@ -51,7 +57,7 @@ def hide_native_bottom_bar():
             if hasattr(mw.reviewer, '_bottomWeb') and mw.reviewer._bottomWeb:
                 _suppress_widget(mw.reviewer._bottomWeb)
     except Exception as e:
-        print(f"⚠️ Could not hide native bottom bar: {e}")
+        logger.warning("⚠️ Could not hide native bottom bar: %s", e)
 
 
 def show_native_bottom_bar():
@@ -63,7 +69,7 @@ def show_native_bottom_bar():
             if hasattr(mw.reviewer, '_bottomWeb') and mw.reviewer._bottomWeb:
                 _unsuppress_widget(mw.reviewer._bottomWeb)
     except Exception as e:
-        print(f"⚠️ Could not restore native bottom bar: {e}")
+        logger.warning("⚠️ Could not restore native bottom bar: %s", e)
 
 
 def hide_deckbrowser_bottom():
@@ -74,7 +80,7 @@ def hide_deckbrowser_bottom():
                 if hasattr(mw.deckBrowser.bottom, 'web'):
                     _suppress_widget(mw.deckBrowser.bottom.web)
     except Exception as e:
-        print(f"⚠️ Could not hide deckBrowser bottom: {e}")
+        logger.warning("⚠️ Could not hide deckBrowser bottom: %s", e)
 
 
 def show_deckbrowser_bottom():
@@ -85,7 +91,7 @@ def show_deckbrowser_bottom():
                 if hasattr(mw.deckBrowser.bottom, 'web'):
                     _unsuppress_widget(mw.deckBrowser.bottom.web)
     except Exception as e:
-        print(f"⚠️ Could not restore deckBrowser bottom: {e}")
+        logger.warning("⚠️ Could not restore deckBrowser bottom: %s", e)
 
 
 def hide_native_toolbar():
@@ -100,16 +106,16 @@ def hide_native_toolbar():
             try:
                 _suppress_widget(mw.toolbar.web)
             except (RuntimeError, AttributeError) as e:
-                print(f"⚠️ toolbar.web error: {e}")
+                logger.warning("⚠️ toolbar.web error: %s", e)
 
         if hasattr(mw, 'toolbarWeb') and mw.toolbarWeb:
             try:
                 _suppress_widget(mw.toolbarWeb)
             except (RuntimeError, AttributeError) as e:
-                print(f"⚠️ toolbarWeb error: {e}")
+                logger.warning("⚠️ toolbarWeb error: %s", e)
 
     except Exception as e:
-        print(f"⚠️ Could not hide native toolbar: {e}")
+        logger.warning("⚠️ Could not hide native toolbar: %s", e)
 
 
 def show_native_toolbar():
@@ -122,16 +128,16 @@ def show_native_toolbar():
             try:
                 _unsuppress_widget(mw.toolbar.web)
             except (RuntimeError, AttributeError) as e:
-                print(f"⚠️ toolbar.web restore error: {e}")
+                logger.warning("⚠️ toolbar.web restore error: %s", e)
 
         if hasattr(mw, 'toolbarWeb') and mw.toolbarWeb:
             try:
                 _unsuppress_widget(mw.toolbarWeb)
             except (RuntimeError, AttributeError) as e:
-                print(f"⚠️ toolbarWeb restore error: {e}")
+                logger.warning("⚠️ toolbarWeb restore error: %s", e)
 
     except Exception as e:
-        print(f"⚠️ Could not restore native toolbar: {e}")
+        logger.warning("⚠️ Could not restore native toolbar: %s", e)
 
 
 def unsuppress_all():
@@ -188,7 +194,7 @@ def hide_splitter_visuals():
         current_style = mw.styleSheet()
         mw.setStyleSheet(current_style + style)
     except Exception as e:
-        print(f"⚠️ Fehler beim Verstecken des Splitters: {e}")
+        logger.warning("⚠️ Fehler beim Verstecken des Splitters: %s", e)
 
 
 def focus_reviewer_webview():
@@ -200,4 +206,4 @@ def focus_reviewer_webview():
                 web.setFocus()
                 web.eval('document.body.focus(); window.focus();')
     except Exception as e:
-        print(f"⚠️ Could not focus reviewer webview: {e}")
+        logger.warning("⚠️ Could not focus reviewer webview: %s", e)
