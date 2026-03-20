@@ -3,11 +3,11 @@ import {
   User,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  signInWithPopup,
   GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
   sendPasswordResetEmail,
-  getRedirectResult,
 } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { createUserDocument } from '../utils/userSetup';
@@ -56,19 +56,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setLoading(false);
       return;
     }
-
-    // Handle redirect result from Google sign-in
-    getRedirectResult(auth).then(async (result) => {
-      if (result?.user) {
-        console.log('✅ Google redirect sign-in successful');
-        await createUserDocument(result.user.uid, result.user.email || '');
-      }
-    }).catch((error) => {
-      // Ignore "no redirect result" — that's normal on regular page loads
-      if (error.code !== 'auth/no-redirect-result') {
-        console.error('Redirect result error:', error.code, error.message);
-      }
-    });
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
@@ -133,12 +120,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       throw new Error('Firebase Auth is not configured. Please configure Firebase API keys.');
     }
     const provider = new GoogleAuthProvider();
-
-    // Try redirect directly — popups are unreliable (blocked by browsers, extensions, etc.)
     try {
-      const { signInWithRedirect } = await import('firebase/auth');
-      await signInWithRedirect(auth, provider);
-      // Page will redirect to Google, then back. onAuthStateChanged handles the rest.
+      const userCredential = await signInWithPopup(auth, provider);
+      if (userCredential.user) {
+        await createUserDocument(userCredential.user.uid, userCredential.user.email || '');
+      }
     } catch (error: any) {
       console.error('Google login error:', error.code, error.message, error);
       throw new Error(getAuthErrorMessage(error.code, error));
