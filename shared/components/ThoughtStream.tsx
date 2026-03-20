@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 
 /* ═══════════════════════════════════════════════════
    ThoughtStream v4 — Smart Pipeline + Phase Animations
@@ -560,7 +560,7 @@ function PhaseRow({ step, data, status, isActive, isFirst = false, animate = tru
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {/* Dot */}
         {isDone ? (
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'rgba(20,184,166,0.5)', flexShrink: 0 }} />
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'rgba(20,184,166,0.5)', flexShrink: 0, willChange: 'transform, opacity', contain: 'layout style' }} />
         ) : (
           <div
             style={{
@@ -570,6 +570,8 @@ function PhaseRow({ step, data, status, isActive, isFirst = false, animate = tru
               background: 'var(--ds-accent)',
               flexShrink: 0,
               animation: animate ? 'ts-dotPulse 1.5s ease-in-out infinite' : undefined,
+              willChange: 'transform, opacity',
+              contain: 'layout style',
             }}
           />
         )}
@@ -730,7 +732,7 @@ export default function ThoughtStream({
   const animate = isStreaming || isProcessing;
 
   // Reverse doneStack for chronological display (doneStack is newest-first)
-  const chronologicalDone = [...doneStack].reverse();
+  const chronologicalDone = useMemo(() => [...doneStack].reverse(), [doneStack]);
 
   // Collapse state
   const hasText = Boolean(message && message.trim().length > 0);
@@ -851,6 +853,8 @@ export default function ThoughtStream({
                   background: 'var(--ds-accent)',
                   flexShrink: 0,
                   animation: animate ? 'ts-dotPulse 1.5s ease-in-out infinite' : undefined,
+                  willChange: 'transform, opacity',
+                  contain: 'layout style',
                 }}
               />
               <span style={{ fontSize: 12, color: 'var(--ds-text-tertiary)' }}>Analysiere...</span>
