@@ -121,13 +121,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
     try {
       const provider = new GoogleAuthProvider();
-      const userCredential = await signInWithPopup(auth, provider);
+      let userCredential;
+      try {
+        userCredential = await signInWithPopup(auth, provider);
+      } catch (popupError: any) {
+        // If popup is blocked or cancelled, fall back to redirect
+        if (popupError.code === 'auth/popup-blocked' ||
+            popupError.code === 'auth/popup-closed-by-user' ||
+            popupError.code === 'auth/cancelled-popup-request') {
+          console.warn('Popup failed, falling back to redirect:', popupError.code);
+          const { signInWithRedirect } = await import('firebase/auth');
+          await signInWithRedirect(auth, provider);
+          return; // Redirect will navigate away
+        }
+        throw popupError;
+      }
       // Create user document if it doesn't exist
       if (userCredential.user) {
         await createUserDocument(userCredential.user.uid, userCredential.user.email || '');
       }
     } catch (error: any) {
-      console.error('Google login error:', error);
+      console.error('Google login error:', error.code, error.message, error);
       throw new Error(getAuthErrorMessage(error.code, error));
     }
   };
@@ -214,7 +228,13 @@ function getAuthErrorMessage(code: string, originalError?: any): string {
     case 'auth/network-request-failed':
       return 'Netzwerkfehler. Bitte überprüfe deine Internetverbindung.';
     case 'auth/popup-closed-by-user':
-      return 'Anmeldung abgebrochen.';
+      return 'Anmeldung abgebrochen. Versuche es erneut.';
+    case 'auth/popup-blocked':
+      return 'Popup wurde vom Browser blockiert. Bitte erlaube Popups für diese Seite.';
+    case 'auth/cancelled-popup-request':
+      return 'Popup-Anfrage abgebrochen. Versuche es erneut.';
+    case 'auth/unauthorized-domain':
+      return 'Diese Domain ist nicht für Google Sign-In autorisiert.';
     case 'auth/operation-not-allowed':
       return 'Diese Anmeldemethode ist nicht aktiviert. Bitte kontaktiere den Support.';
     case 'auth/requires-recent-login':
