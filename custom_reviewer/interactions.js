@@ -61,7 +61,7 @@
         // Build buttons with explicit inline border-radius (no pseudo-selectors).
         // Matches ChatInput.jsx exactly — clean hover fills to container edges.
         const btn = (a, position) => {
-            const color = a.color || 'rgba(255,255,255,0.35)';
+            const color = a.color || 'var(--ds-text-tertiary)';
             const weight = a.weight || '500';
             let radius = 'border-radius:0;';
             if (position === 'left' || position === 'only') radius += 'border-bottom-left-radius:16px;';
@@ -75,7 +75,7 @@
         };
 
         if (right) {
-            const divider = '<div style="width:1px;height:16px;background:rgba(255,255,255,0.06);flex-shrink:0;"></div>';
+            const divider = '<div style="width:1px;height:16px;background:var(--ds-border-subtle);flex-shrink:0;"></div>';
             el.innerHTML = btn(left, 'left') + divider + btn(right, 'right');
         } else {
             el.innerHTML = btn(left, 'only');
@@ -126,7 +126,7 @@
                 if (mcArea) { mcArea.classList.add('hidden'); mcArea.innerHTML = ''; }
                 showSection('dc-input');
                 setActions(
-                    { label: 'Show Answer', shortcut: 'SPACE', onclick: 'showAnswer()', color: 'rgba(255,255,255,0.88)', weight: '600' },
+                    { label: 'Show Answer', shortcut: 'SPACE', onclick: 'showAnswer()', color: 'var(--ds-text-primary)', weight: '600' },
                     { label: 'Multiple Choice', shortcut: '↵', onclick: 'startMCMode()' }
                 );
                 break;
@@ -157,7 +157,7 @@
             case S.MC_RESULT:
                 showSection('dc-eval');
                 setActions(
-                    { label: 'Weiter', shortcut: 'SPACE', onclick: 'proceedAfterEval()', color: 'rgba(255,255,255,0.88)', weight: '600' },
+                    { label: 'Weiter', shortcut: 'SPACE', onclick: 'proceedAfterEval()', color: 'var(--ds-text-primary)', weight: '600' },
                     { label: chatOpen ? 'Schließen' : 'Nachfragen', shortcut: chatOpen ? 'ESC' : '↵', onclick: 'openFollowUp()' }
                 );
                 break;
@@ -165,7 +165,7 @@
             case S.ANSWER:
                 showSection('dc-timer');
                 setActions(
-                    { label: 'Weiter', shortcut: 'SPACE', onclick: 'rateCard(autoRateEase||3)', color: 'rgba(255,255,255,0.88)', weight: '600' },
+                    { label: 'Weiter', shortcut: 'SPACE', onclick: 'rateCard(autoRateEase||3)', color: 'var(--ds-text-primary)', weight: '600' },
                     { label: chatOpen ? 'Schließen' : 'Nachfragen', shortcut: chatOpen ? 'ESC' : '↵', onclick: 'openFollowUp()' }
                 );
                 break;
@@ -179,7 +179,7 @@
                 if (secEl) secEl.textContent = '';
                 if (ratEl) { ratEl.textContent = ''; ratEl.className = ''; }
                 setActions(
-                    { label: 'Weiter', shortcut: 'SPACE', onclick: 'pycmd("navigate:next")', color: 'rgba(255,255,255,0.88)', weight: '600' },
+                    { label: 'Weiter', shortcut: 'SPACE', onclick: 'pycmd("navigate:next")', color: 'var(--ds-text-primary)', weight: '600' },
                     { label: chatOpen ? 'Schließen' : 'Nachfragen', shortcut: chatOpen ? 'ESC' : '↵', onclick: 'openFollowUp()' }
                 );
                 break;
@@ -256,16 +256,16 @@
 
     function getRatingForTime(elapsedSec) {
         const thresholds = getTimeThresholds();
-        if (elapsedSec <= thresholds.good) return { ease: 3, label: 'Good', color: 'text-success', hex: '#30d158' };
-        if (elapsedSec <= thresholds.hard) return { ease: 2, label: 'Hard', color: 'text-warning', hex: '#ffd60a' };
-        return { ease: 1, label: 'Again', color: 'text-error', hex: '#ff453a' };
+        if (elapsedSec <= thresholds.good) return { ease: 3, label: 'Good', color: 'text-success', hex: 'var(--ds-green)' };
+        if (elapsedSec <= thresholds.hard) return { ease: 2, label: 'Hard', color: 'text-warning', hex: 'var(--ds-yellow)' };
+        return { ease: 1, label: 'Again', color: 'text-error', hex: 'var(--ds-red)' };
     }
 
     const ratingOptions = [
-        { ease: 1, label: 'Again', color: 'text-error', hex: '#ff453a' },
-        { ease: 2, label: 'Hard', color: 'text-warning', hex: '#ffd60a' },
-        { ease: 3, label: 'Good', color: 'text-success', hex: '#30d158' },
-        { ease: 4, label: 'Easy', color: 'text-primary', hex: '#0a84ff' },
+        { ease: 1, label: 'Again', color: 'text-error', hex: 'var(--ds-red)' },
+        { ease: 2, label: 'Hard', color: 'text-warning', hex: 'var(--ds-yellow)' },
+        { ease: 3, label: 'Good', color: 'text-success', hex: 'var(--ds-green)' },
+        { ease: 4, label: 'Easy', color: 'text-primary', hex: 'var(--ds-accent)' },
     ];
 
     function updateTimerDisplay(elapsedSec) {
@@ -452,7 +452,7 @@
 
         const labels = { 1: 'Again', 2: 'Hard', 3: 'Good', 4: 'Easy' };
         const colors = { 1: 'text-error', 2: 'text-warning', 3: 'text-success', 4: 'text-primary' };
-        const barColors = { 1: '#ff453a', 2: '#ffd60a', 3: '#30d158', 4: '#0a84ff' };
+        const barColors = { 1: 'var(--ds-red)', 2: 'var(--ds-yellow)', 3: 'var(--ds-green)', 4: 'var(--ds-accent)' };
 
         const combinedFeedback = feedback + (missing && score < 70 ? ' ' + missing : '');
 
@@ -472,8 +472,8 @@
                         Meine Antwort
                     </button>
                 </div>
-                <div id="eval-user-ans" class="hidden mb-2 text-[11px] text-base-content/40 italic leading-relaxed px-1 pb-1" style="border-bottom: 1px solid rgba(255,255,255,0.05);">${lastUserAnswer}</div>
-                <div style="border-left: 2px solid ${barColors[autoRateEase]}40; padding: 5px 10px; border-radius: 0 4px 4px 0; color: rgba(255,255,255,0.55); font-size: 12px; line-height: 1.5;">
+                <div id="eval-user-ans" class="hidden mb-2 text-[11px] text-base-content/40 italic leading-relaxed px-1 pb-1" style="border-bottom: 1px solid var(--ds-border-subtle);">${lastUserAnswer}</div>
+                <div style="border-left: 2px solid ${barColors[autoRateEase]}40; padding: 5px 10px; border-radius: 0 4px 4px 0; color: var(--ds-text-secondary); font-size: 12px; line-height: 1.5;">
                     ${combinedFeedback}
                 </div>
             `;
@@ -498,13 +498,13 @@
             area.innerHTML = options.map((opt, i) => `
                 <button class="mc-opt" data-index="${i}" data-wrong="false"
                         onclick="selectMCOption(${i})"
-                        style="display:flex;flex-direction:column;width:100%;border-radius:9px;border:1px solid rgba(255,255,255,0.07);background:none;padding:0;cursor:pointer;text-align:left;">
+                        style="display:flex;flex-direction:column;width:100%;border-radius:9px;border:1px solid var(--ds-border-subtle);background:none;padding:0;cursor:pointer;text-align:left;">
                     <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;">
-                        <div class="mc-badge" style="width:24px;height:24px;border-radius:50%;border:1px solid rgba(255,255,255,0.13);display:flex;align-items:center;justify-content:center;font-size:10px;color:rgba(255,255,255,0.38);flex-shrink:0;">${String.fromCharCode(65 + i)}</div>
-                        <span class="mc-text" style="font-size:15px;color:rgba(255,255,255,0.75);flex:1;">${opt.text}</span>
+                        <div class="mc-badge" style="width:24px;height:24px;border-radius:50%;border:1px solid var(--ds-border-medium);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--ds-text-tertiary);flex-shrink:0;">${String.fromCharCode(65 + i)}</div>
+                        <span class="mc-text" style="font-size:15px;color:var(--ds-text-primary);flex:1;">${opt.text}</span>
                         <span class="mc-icon" style="font-size:14px;font-weight:700;margin-left:auto;display:none;"></span>
                     </div>
-                    <div class="mc-exp" style="display:none;width:100%;box-sizing:border-box;background:rgba(0,0,0,0.25);padding:8px 12px 10px 46px;font-size:11.5px;color:rgba(255,255,255,0.45);line-height:1.5;"></div>
+                    <div class="mc-exp" style="display:none;width:100%;box-sizing:border-box;background:rgba(0,0,0,0.25);padding:8px 12px 10px 46px;font-size:11.5px;color:var(--ds-text-secondary);line-height:1.5;"></div>
                 </button>
             `).join('');
         }
@@ -538,8 +538,8 @@
             // ── Correct (C3) ──
             btn.style.border = '1px solid rgba(48,209,88,0.45)';
             btn.style.background = 'rgba(48,209,88,0.12)';
-            if (badge) { badge.style.background = 'rgba(48,209,88,0.25)'; badge.style.border = '1px solid rgba(48,209,88,0.65)'; badge.style.color = 'rgb(48,209,88)'; }
-            if (icon) { icon.textContent = '✓'; icon.style.color = 'rgb(48,209,88)'; icon.style.display = 'block'; }
+            if (badge) { badge.style.background = 'rgba(48,209,88,0.25)'; badge.style.border = '1px solid rgba(48,209,88,0.65)'; badge.style.color = 'var(--ds-green)'; }
+            if (icon) { icon.textContent = '✓'; icon.style.color = 'var(--ds-green)'; icon.style.display = 'block'; }
             if (exp && mcOptions[index].explanation) { exp.textContent = mcOptions[index].explanation; exp.style.display = 'block'; }
             lockAllOptions();
             finishMC(true);
@@ -547,9 +547,9 @@
             // ── Wrong (W3) ──
             btn.style.border = '1px solid rgba(255,69,58,0.4)';
             btn.style.background = 'rgba(255,69,58,0.12)';
-            if (badge) { badge.style.background = 'rgba(255,69,58,0.25)'; badge.style.border = '1px solid rgba(255,69,58,0.6)'; badge.style.color = 'rgb(255,80,65)'; }
+            if (badge) { badge.style.background = 'rgba(255,69,58,0.25)'; badge.style.border = '1px solid rgba(255,69,58,0.6)'; badge.style.color = 'var(--ds-red)'; }
             if (text) { text.style.textDecoration = 'line-through'; text.style.textDecorationColor = 'rgba(255,69,58,0.4)'; }
-            if (icon) { icon.textContent = '✗'; icon.style.color = 'rgb(255,69,58)'; icon.style.display = 'block'; }
+            if (icon) { icon.textContent = '✗'; icon.style.color = 'var(--ds-red)'; icon.style.display = 'block'; }
             if (exp && mcOptions[index].explanation) { exp.textContent = mcOptions[index].explanation; exp.style.display = 'block'; }
             mcWrongPicks.push(index);
             degradeStar();
@@ -580,9 +580,9 @@
             correct.style.border = '1px solid rgba(48,209,88,0.45)';
             correct.style.background = 'rgba(48,209,88,0.12)';
             const badge = correct.querySelector('.mc-badge');
-            if (badge) { badge.style.background = 'rgba(48,209,88,0.25)'; badge.style.border = '1px solid rgba(48,209,88,0.65)'; badge.style.color = 'rgb(48,209,88)'; }
+            if (badge) { badge.style.background = 'rgba(48,209,88,0.25)'; badge.style.border = '1px solid rgba(48,209,88,0.65)'; badge.style.color = 'var(--ds-green)'; }
             const icon = correct.querySelector('.mc-icon');
-            if (icon) { icon.textContent = '✓'; icon.style.color = 'rgb(48,209,88)'; icon.style.display = 'block'; }
+            if (icon) { icon.textContent = '✓'; icon.style.color = 'var(--ds-green)'; icon.style.display = 'block'; }
             const exp = correct.querySelector('.mc-exp');
             if (exp && mcOptions[mcCorrectIndex] && mcOptions[mcCorrectIndex].explanation) {
                 exp.textContent = mcOptions[mcCorrectIndex].explanation;
@@ -604,7 +604,7 @@
         // Dim all remaining stars — manual reveal earns 0 stars
         document.querySelectorAll('#mc-stars-row .mc-star').forEach(s => {
             if (s.dataset.dimmed !== 'true') {
-                s.style.color = 'rgba(255,255,255,0.12)';
+                s.style.color = 'var(--ds-border-medium)';
                 s.dataset.dimmed = 'true';
             }
         });
@@ -635,7 +635,7 @@
             const s = document.createElement('span');
             s.className = 'mc-star';
             s.textContent = '★';
-            s.style.cssText = 'font-size:22px;line-height:1;color:rgba(255,255,255,0.85);';
+            s.style.cssText = 'font-size:22px;line-height:1;color:var(--ds-text-primary);';
             row.appendChild(s);
         }
     }
@@ -645,13 +645,13 @@
         const stars = document.querySelectorAll('#mc-stars-row .mc-star');
         const idx = mcWrongPicks.length - 1;
         if (stars[idx]) {
-            stars[idx].style.color = 'rgba(255,255,255,0.12)';
+            stars[idx].style.color = 'var(--ds-border-medium)';
             stars[idx].dataset.dimmed = 'true';
         }
     }
 
     function updateStarsRevealed(ease) {
-        const colorMap = { 3: 'rgb(48,209,88)', 2: 'rgb(255,159,10)', 1: 'rgb(255,69,58)' };
+        const colorMap = { 3: 'var(--ds-green)', 2: 'var(--ds-yellow)', 1: 'var(--ds-red)' };
         const labelMap = { 3: 'Gut', 2: 'Schwierig', 1: 'Wiederholen' };
         const color = colorMap[ease];
 
@@ -665,7 +665,7 @@
 
         // Append arrow + label
         row.insertAdjacentHTML('beforeend',
-            `<span style="font-size:13px;color:rgba(255,255,255,0.3);margin:0 4px;">→</span>`
+            `<span style="font-size:13px;color:var(--ds-text-placeholder);margin:0 4px;">→</span>`
             + `<span style="font-size:14px;font-weight:600;color:${color};">${labelMap[ease]}</span>`
         );
 
@@ -711,7 +711,7 @@
         container.innerHTML = `
             <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
                 <span class="loading loading-spinner loading-xs" style="width:10px;height:10px;opacity:0.5;"></span>
-                <span style="font-size:12px;color:rgba(255,255,255,0.45);">${activeStep.label}</span>
+                <span style="font-size:12px;color:var(--ds-text-secondary);">${activeStep.label}</span>
             </div>`;
     }
 
@@ -780,10 +780,10 @@
             // Text evaluation — show score bar
             const score = perfData.score;
             let ease, label, color, barColor;
-            if (score >= 90)      { ease = 4; label = 'Easy'; color = 'text-primary'; barColor = '#0a84ff'; }
-            else if (score >= 70) { ease = 3; label = 'Good'; color = 'text-success'; barColor = '#30d158'; }
-            else if (score >= 40) { ease = 2; label = 'Hard'; color = 'text-warning'; barColor = '#ffd60a'; }
-            else                  { ease = 1; label = 'Again'; color = 'text-error'; barColor = '#ff453a'; }
+            if (score >= 90)      { ease = 4; label = 'Easy'; color = 'text-primary'; barColor = 'var(--ds-accent)'; }
+            else if (score >= 70) { ease = 3; label = 'Good'; color = 'text-success'; barColor = 'var(--ds-green)'; }
+            else if (score >= 40) { ease = 2; label = 'Hard'; color = 'text-warning'; barColor = 'var(--ds-yellow)'; }
+            else                  { ease = 1; label = 'Again'; color = 'text-error'; barColor = 'var(--ds-red)'; }
 
             showSection('dc-eval');
             if (evalEl) {
@@ -806,7 +806,7 @@
             } else {
                 ease = 1;
             }
-            const colorMap = { 3: 'rgb(48,209,88)', 2: 'rgb(255,159,10)', 1: 'rgb(255,69,58)' };
+            const colorMap = { 3: 'var(--ds-green)', 2: 'var(--ds-yellow)', 1: 'var(--ds-red)' };
             const labelMap = { 3: 'Gut', 2: 'Schwierig', 1: 'Wiederholen' };
             const starsColor = colorMap[ease];
 
@@ -815,19 +815,19 @@
                 let starsHtml = '';
                 for (let i = 0; i < 3; i++) {
                     const dimmed = i < (attempts - 1);
-                    starsHtml += `<span style="font-size:22px;line-height:1;color:${dimmed ? 'rgba(255,255,255,0.12)' : starsColor};">★</span>`;
+                    starsHtml += `<span style="font-size:22px;line-height:1;color:${dimmed ? 'var(--ds-border-medium)' : starsColor};">★</span>`;
                 }
                 evalEl.innerHTML = `
                     <div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:4px 0;">
                         ${starsHtml}
-                        <span style="font-size:13px;color:rgba(255,255,255,0.3);margin:0 4px;">→</span>
+                        <span style="font-size:13px;color:var(--ds-text-placeholder);margin:0 4px;">→</span>
                         <span style="font-size:14px;font-weight:600;color:${starsColor};">${labelMap[ease]}</span>
                     </div>`;
             }
         } else if (type === 'flip') {
             // Simple flip — show the rating
             const rating = perfData.ease || perfData.rating || 3;
-            const ratingMap = { 1: { label: 'Again', color: '#ff453a' }, 2: { label: 'Hard', color: '#ffd60a' }, 3: { label: 'Good', color: '#30d158' }, 4: { label: 'Easy', color: '#0a84ff' } };
+            const ratingMap = { 1: { label: 'Again', color: 'var(--ds-red)' }, 2: { label: 'Hard', color: 'var(--ds-yellow)' }, 3: { label: 'Good', color: 'var(--ds-green)' }, 4: { label: 'Easy', color: 'var(--ds-accent)' } };
             const r = ratingMap[rating] || ratingMap[3];
             const secEl = $('#timer-seconds');
             const ratEl = $('#timer-rating');
@@ -837,7 +837,7 @@
 
         // Keep HISTORY actions (Weiter = navigate, Nachfragen = chat)
         setActions(
-            { label: 'Weiter', shortcut: 'SPACE', onclick: 'pycmd("navigate:next")', color: 'rgba(255,255,255,0.88)', weight: '600' },
+            { label: 'Weiter', shortcut: 'SPACE', onclick: 'pycmd("navigate:next")', color: 'var(--ds-text-primary)', weight: '600' },
             { label: chatOpen ? 'Schließen' : 'Nachfragen', shortcut: chatOpen ? 'ESC' : '↵', onclick: 'openFollowUp()' }
         );
     };
