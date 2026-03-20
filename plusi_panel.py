@@ -210,10 +210,6 @@ body {
     font-weight: 600;
     white-space: nowrap;
 }
-.decrypted {
-    color: rgba(255,255,255,0.4);
-    font-style: italic;
-}
 .empty-state {
     text-align: center;
     color: rgba(255,255,255,0.2);
@@ -283,23 +279,6 @@ var MOOD_COLORS = {
 };
 
 var FACES = {};
-var _friendshipLevel = 1;
-
-/* Friendship-gated decryption:
-   Level 1 (Fremde):        ~10% of cipher parts revealed
-   Level 2 (Bekannte):      ~40% revealed
-   Level 3 (Freunde):       ~70% revealed
-   Level 4 (Beste Freunde): 100% revealed */
-var REVEAL_RATES = { 1: 0.1, 2: 0.4, 3: 0.7, 4: 1.0 };
-
-function shouldReveal(entryId, cipherIndex) {
-    /* Deterministic: same entry+index always gives same result */
-    if (_friendshipLevel >= 4) return true;
-    var rate = REVEAL_RATES[_friendshipLevel] || 0.1;
-    /* Simple hash from entry id + cipher index */
-    var hash = ((entryId * 31 + cipherIndex * 17) % 100) / 100;
-    return hash < rate;
-}
 
 function fillCipher(len) {
     var s = '';
@@ -359,15 +338,9 @@ function renderEntries(entries) {
 
         var text = e.entry_text;
         var cipherIdx = 0;
-        var entryId = e.id || 0;
         text = text.replace(/\\{\\{CIPHER\\}\\}/g, function() {
             var cPart = (e.cipher_parts && e.cipher_parts[cipherIdx]) ? e.cipher_parts[cipherIdx] : '???';
-            var idx = cipherIdx;
             cipherIdx++;
-            if (shouldReveal(entryId, idx)) {
-                /* Decrypted — show real text with subtle styling */
-                return '<span class="decrypted">' + cPart + '</span>';
-            }
             return '<span class="cipher">' + fillCipher(cPart.length) + '</span>';
         });
 
@@ -406,7 +379,6 @@ function updateFriendship(data) {
 }
 
 window.diaryReceive = function(payload) {
-    if (payload.friendship && payload.friendship.level) _friendshipLevel = payload.friendship.level;
     if (payload.entries) renderEntries(payload.entries);
     if (payload.mood) updateMood(payload.mood, payload.energy);
     if (payload.friendship) updateFriendship(payload.friendship);
