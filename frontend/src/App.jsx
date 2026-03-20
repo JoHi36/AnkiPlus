@@ -165,6 +165,7 @@ function AppInner() {
   const reviewTrailHook = useReviewTrail();
   const insightsHook = useInsights();
   const [showInsightsDashboard, setShowInsightsDashboard] = useState(false);
+  const [activeView, setActiveView] = useState('chat'); // 'chat' | 'agentStudio' | 'plusiMenu'
   const lastProcessedCardRef = useRef(null);
   // Create a setSessions wrapper that works with SessionContext
   const setSessionsWrapper = useCallback((updater) => {
@@ -1492,6 +1493,10 @@ function AppInner() {
    * App.jsx muss nur noch den Kontext übergeben.
    */
   const handleSend = (text, options = {}) => {
+    if (activeView !== 'chat') {
+      setActiveView('chat');
+    }
+
     // @Plusi intercept — route to Plusi Direct instead of main AI
     if (text.trim().startsWith('@Plusi')) {
       const plusiText = text.trim().slice(6).trim();
@@ -1698,6 +1703,18 @@ function AppInner() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [freeChatOpen, animPhase]);
+
+  // ⌘. — toggle between chat and agentStudio
+  useEffect(() => {
+    const handleGlobalShortcut = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === '.') {
+        e.preventDefault();
+        setActiveView(prev => prev === 'chat' ? 'agentStudio' : 'chat');
+      }
+    };
+    window.addEventListener('keydown', handleGlobalShortcut);
+    return () => window.removeEventListener('keydown', handleGlobalShortcut);
+  }, []);
 
   // Settings öffnen
   const handleOpenSettings = () => {
@@ -2053,7 +2070,15 @@ function AppInner() {
                 className="h-full overflow-y-auto px-4 pt-20 pb-40 max-w-3xl mx-auto w-full scrollbar-thin relative z-10"
               >
 
-                {(chatHook.messages.length === 0 || showInsightsDashboard) && !chatHook.isLoading && !chatHook.streamingMessage ? (
+                {activeView === 'agentStudio' ? (
+                  <div style={{ padding: 40, textAlign: 'center', color: 'rgba(232,232,232,0.3)' }}>
+                    Agent Studio (placeholder)
+                  </div>
+                ) : activeView === 'plusiMenu' ? (
+                  <div style={{ padding: 40, textAlign: 'center', color: 'rgba(232,232,232,0.3)' }}>
+                    Plusi Menu (placeholder)
+                  </div>
+                ) : (chatHook.messages.length === 0 || showInsightsDashboard) && !chatHook.isLoading && !chatHook.streamingMessage ? (
             <InsightsDashboard
               insights={insightsHook.insights}
               cardStats={cardContextHook.cardContext?.stats || {}}
@@ -2358,8 +2383,9 @@ function AppInner() {
             label: 'Weiter',
             shortcut: 'SPACE',
             onClick: () => {
-              // Replicate original handleAdvance: try bridge.advanceCard, fall back to close
-              if (bridge?.advanceCard) {
+              if (activeView !== 'chat') {
+                setActiveView('chat');
+              } else if (bridge?.advanceCard) {
                 bridge.advanceCard();
               } else {
                 handleClose();
@@ -2367,14 +2393,21 @@ function AppInner() {
             },
           }}
           actionSecondary={{
-            label: showInsightsDashboard ? 'Chat' : 'Erkenntnisse',
+            label: 'Agent Studio',
             shortcut: '↵',
             onClick: () => {
-              if (chatHook.messages.length > 0) {
-                setShowInsightsDashboard(prev => !prev);
+              switch (activeView) {
+                case 'chat':
+                  setActiveView('agentStudio');
+                  break;
+                case 'agentStudio':
+                  setActiveView('plusiMenu');
+                  break;
+                case 'plusiMenu':
+                  setActiveView('agentStudio');
+                  break;
               }
             },
-            disabled: chatHook.messages.length === 0,
           }}
         />
           </div>
