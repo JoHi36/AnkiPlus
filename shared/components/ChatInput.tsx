@@ -274,7 +274,7 @@ export default function ChatInput({
             style={actionSecondary.pulse ? { color: 'var(--ds-accent)' } : undefined}
           >
             {actionSecondary.label}
-            {actionSecondary.shortcut && (
+            {!isFocused && actionSecondary.shortcut && (
               <span className="ds-kbd">{actionSecondary.shortcut}</span>
             )}
           </button>
