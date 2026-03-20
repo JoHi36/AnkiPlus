@@ -689,9 +689,7 @@ class ChatbotWidget(QWidget):
         self._send_to_frontend("themeLoaded", {"theme": stored, "resolvedTheme": resolved})
 
     def _apply_theme_to_webview(self):
-        """Push the current theme to the React app via JS."""
-        if not self.web_view:
-            return
+        """Push the current theme to ALL active webviews and refresh Qt stylesheet."""
         try:
             from .theme import get_resolved_theme
         except ImportError:
@@ -699,7 +697,12 @@ class ChatbotWidget(QWidget):
         config = get_config(force_reload=True)
         stored_theme = config.get("theme", "dark")
         resolved = get_resolved_theme()
-        js = f"""
+
+        # JS to set data-theme attribute on any webview
+        set_theme_js = f"document.documentElement.setAttribute('data-theme', '{resolved}');"
+
+        # JS for the chat panel (also notifies React)
+        chat_js = f"""
         (function() {{
             document.documentElement.setAttribute('data-theme', '{resolved}');
             if (typeof window.ankiReceive === 'function') {{
@@ -710,7 +713,52 @@ class ChatbotWidget(QWidget):
             }}
         }})();
         """
-        self.web_view.page().runJavaScript(js)
+
+        # 1. Chat panel webview
+        if self.web_view:
+            self.web_view.page().runJavaScript(chat_js)
+
+        # 2. Reviewer webview (uses Anki's .eval method on AnkiWebView)
+        try:
+            from aqt import mw as _mw
+            if _mw and _mw.reviewer and hasattr(_mw.reviewer, 'web') and _mw.reviewer.web:
+                _mw.reviewer.web.page().runJavaScript(set_theme_js)
+        except Exception:
+            pass
+
+        # 3. Deck browser webview
+        try:
+            from aqt import mw as _mw
+            if _mw and hasattr(_mw, 'deckBrowser') and _mw.deckBrowser and hasattr(_mw.deckBrowser, 'web') and _mw.deckBrowser.web:
+                _mw.deckBrowser.web.page().runJavaScript(set_theme_js)
+        except Exception:
+            pass
+
+        # 4. Overview webview
+        try:
+            from aqt import mw as _mw
+            if _mw and hasattr(_mw, 'overview') and _mw.overview and hasattr(_mw.overview, 'web') and _mw.overview.web:
+                _mw.overview.web.page().runJavaScript(set_theme_js)
+        except Exception:
+            pass
+
+        # 5. Plusi panel webview
+        try:
+            from ..plusi import panel as plusi_panel
+            if hasattr(plusi_panel, '_panel_widget') and plusi_panel._panel_widget:
+                pw = plusi_panel._panel_widget
+                if hasattr(pw, 'web_view') and pw.web_view:
+                    pw.web_view.page().runJavaScript(set_theme_js)
+        except Exception:
+            pass
+
+        # 6. Re-apply Qt global theme stylesheet with new token colors
+        try:
+            from .global_theme import apply_global_dark_theme, _app_initialized
+            if _app_initialized:
+                apply_global_dark_theme()
+        except Exception:
+            pass
 
     def _msg_authenticate(self, data):
         if isinstance(data, dict):

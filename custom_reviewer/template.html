@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de" data-theme="dark">
+<html lang="de" data-theme="{{THEME}}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,14 +7,13 @@
     <style>
 {{CSS}}
 
-/* ═══ Force dark page background ═══
+/* ═══ Force page background from design tokens ═══
    reviewer.css (Tailwind+DaisyUI) doesn't set html/body background.
-   Anki's page body defaults to light/white, which bleeds through the
-   dock's semi-transparent background and makes the border visible.
-   Match React panel context: fully dark page. */
+   Anki's page body defaults can bleed through the dock's semi-transparent
+   background and make the border visible. Use token-based background. */
 html, body {
     background: var(--ds-bg-canvas) !important;
-    color-scheme: dark;
+    color-scheme: {{COLOR_SCHEME}};
 }
 
 /* ═══ Anki Native UI: Nuclear Hide ═══ */

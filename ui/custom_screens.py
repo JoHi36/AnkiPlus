@@ -527,7 +527,7 @@ html, body {
     content: '';
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
-    background-image: radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px);
+    background-image: radial-gradient(circle, var(--ds-hover-tint) 1px, transparent 1px);
     background-size: 24px 24px;
     -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 0%, transparent 100%);
     mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 0%, transparent 100%);
@@ -907,14 +907,21 @@ window._apAction = null;
 
 def _wrap_page(top_bar_html, content_html, extra_js='', show_account_widget=True):
     """Wrap content in the shared page layout with DaisyUI theme — same as reviewer."""
+    try:
+        from .theme import get_resolved_theme
+    except ImportError:
+        from ui.theme import get_resolved_theme
+    resolved_theme = get_resolved_theme()
     reviewer_css = _load_reviewer_css()
     design_tokens = _get_design_tokens_css()
     return (
         f'<!DOCTYPE html>'
-        f'<html lang="de" data-theme="dark">'
+        f'<html lang="de" data-theme="{resolved_theme}">'
         f'<head><meta charset="utf-8">'
         f'<meta name="viewport" content="width=device-width, initial-scale=1.0">'
-        f'<style>{design_tokens}\n{reviewer_css}\n{_PAGE_CSS}</style>'
+        f'<style>{design_tokens}\n{reviewer_css}\n{_PAGE_CSS}\n'
+        f'html {{ color-scheme: {resolved_theme}; }}'
+        f'</style>'
         f'</head>'
         f'<body class="bg-base-100 text-base-content overflow-hidden m-0 p-0">'
         f'<div id="ap-page" class="h-screen flex flex-col overflow-hidden">'

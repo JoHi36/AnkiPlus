@@ -1367,14 +1367,13 @@ class CustomReviewer:
         css = design_tokens + '\n' + self._load_css()
         js = self._load_js()
 
-        # Detect if Anki is in dark mode
-        is_dark_mode = False
+        # Resolve current theme (dark/light)
         try:
-            if mw and mw.pm:
-                is_dark_mode = mw.pm.night_mode()  # Returns True if dark mode active
-        except Exception as e:
-            logger.error(f"CustomReviewer: Could not detect dark mode: {e}")
-            is_dark_mode = False  # Default to light mode if detection fails
+            from ..ui.theme import get_resolved_theme
+        except ImportError:
+            from ui.theme import get_resolved_theme
+        resolved_theme = get_resolved_theme()
+        is_dark_mode = resolved_theme == "dark"
 
         # Try to load template, otherwise use inline HTML
         template = self._load_template()
@@ -1383,7 +1382,9 @@ class CustomReviewer:
             # Replace placeholders in template
             html = template
             html = html.replace('{{CSS}}', css)
-            html = html.replace('{{IS_DARK_MODE}}', 'nightMode' if is_dark_mode else '')  # NEW
+            html = html.replace('{{THEME}}', resolved_theme)
+            html = html.replace('{{COLOR_SCHEME}}', resolved_theme)
+            html = html.replace('{{IS_DARK_MODE}}', 'nightMode' if is_dark_mode else '')
             html = html.replace('{{QUESTION}}', question_html)
             html = html.replace('{{ANSWER}}', answer_html)
             html = html.replace('{{BUTTONS}}', button_html)
@@ -1539,8 +1540,9 @@ setTimeout(function() {
     def _build_inline_html(self, css, question, answer, buttons, button_count, progress, card_info, js, is_dark_mode=False) -> str:
         """Build inline HTML when template is not available - Jony Ive inspired"""
         dark_mode_class = 'nightMode' if is_dark_mode else ''
+        _inline_theme = 'dark' if is_dark_mode else 'light'
         return f'''<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="{_inline_theme}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">

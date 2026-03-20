@@ -287,7 +287,34 @@ def apply_global_dark_theme():
     except Exception:
         pass
     
-    _t = get_tokens(get_resolved_theme())
+    _resolved = get_resolved_theme()
+    _t = get_tokens(_resolved)
+    _is_light = _resolved == "light"
+    # Adaptive text/border colors for light vs dark
+    _text_primary = "rgba(0, 0, 0, 0.85)" if _is_light else "rgba(255, 255, 255, 0.9)"
+    _text_secondary = "rgba(60, 60, 67, 0.60)" if _is_light else "rgba(255, 255, 255, 0.7)"
+    _text_dim = "rgba(60, 60, 67, 0.30)" if _is_light else "rgba(255, 255, 255, 0.5)"
+    _hover_bg = "rgba(0, 0, 0, 0.03)" if _is_light else "rgba(255, 255, 255, 0.05)"
+    _active_bg = "rgba(0, 0, 0, 0.06)" if _is_light else "rgba(255, 255, 255, 0.08)"
+    _pressed_bg = "rgba(0, 0, 0, 0.04)" if _is_light else "rgba(255, 255, 255, 0.03)"
+    _border_subtle = "rgba(0, 0, 0, 0.04)" if _is_light else "rgba(255, 255, 255, 0.04)"
+    _border_medium = "rgba(0, 0, 0, 0.10)" if _is_light else "rgba(255, 255, 255, 0.08)"
+    _border_input = "rgba(0, 0, 0, 0.10)" if _is_light else "rgba(255, 255, 255, 0.1)"
+    _input_bg = "rgba(0, 0, 0, 0.03)" if _is_light else "rgba(255, 255, 255, 0.05)"
+    _input_focus_bg = "rgba(0, 0, 0, 0.05)" if _is_light else "rgba(255, 255, 255, 0.08)"
+    _scrollbar_handle = "rgba(0, 0, 0, 0.15)" if _is_light else "rgba(255, 255, 255, 0.15)"
+    _scrollbar_handle_hover = "rgba(0, 0, 0, 0.25)" if _is_light else "rgba(255, 255, 255, 0.25)"
+    _tab_bg = "rgba(0, 0, 0, 0.02)" if _is_light else "rgba(255, 255, 255, 0.03)"
+    _tab_selected_bg = "rgba(0, 0, 0, 0.06)" if _is_light else "rgba(255, 255, 255, 0.08)"
+    _tab_hover_bg = "rgba(0, 0, 0, 0.04)" if _is_light else "rgba(255, 255, 255, 0.06)"
+    _dock_title_bg = "rgba(0, 0, 0, 0.02)" if _is_light else "rgba(255, 255, 255, 0.03)"
+    _alt_bg = "rgba(0, 0, 0, 0.02)" if _is_light else "rgba(255, 255, 255, 0.02)"
+    _btn_bg = "rgba(0, 0, 0, 0.06)" if _is_light else "rgba(255, 255, 255, 0.08)"
+    _btn_hover_bg = "rgba(0, 0, 0, 0.10)" if _is_light else "rgba(255, 255, 255, 0.12)"
+    _btn_border = "rgba(0, 0, 0, 0.10)" if _is_light else "rgba(255, 255, 255, 0.12)"
+    _btn_hover_border = "rgba(0, 0, 0, 0.15)" if _is_light else "rgba(255, 255, 255, 0.18)"
+    _menu_hover = "rgba(0, 0, 0, 0.06)" if _is_light else "rgba(255, 255, 255, 0.1)"
+    _menu_border = "rgba(0, 0, 0, 0.08)" if _is_light else "rgba(255, 255, 255, 0.1)"
     global_stylesheet = f"""
     /* ============================================
        GLOBAL: Alle Widgets
@@ -295,7 +322,7 @@ def apply_global_dark_theme():
 
     QWidget {{
         background-color: {_t['bg_canvas']};
-        color: rgba(255, 255, 255, 0.9);
+        color: {_text_primary};
     }}
 
     QMainWindow {{
@@ -336,12 +363,12 @@ def apply_global_dark_theme():
 
     QToolButton:hover,
     QToolBar QToolButton:hover {{
-        background: rgba(255, 255, 255, 0.05) !important;
-        color: #ffffff !important;
+        background: {_hover_bg} !important;
+        color: {_t['text_primary']} !important;
     }}
 
     QToolButton:pressed {{
-        background: rgba(255, 255, 255, 0.03) !important;
+        background: {_pressed_bg} !important;
     }}
 
     /* Icon-ähnliche Buttons - kompakter */
@@ -380,7 +407,7 @@ def apply_global_dark_theme():
 
     QMenuBar {{
         background-color: {_t['bg_canvas']};
-        color: rgba(255, 255, 255, 0.9);
+        color: {_text_primary};
         border: none;
     }}
 
@@ -390,17 +417,17 @@ def apply_global_dark_theme():
     }}
 
     QMenuBar::item:selected {{
-        background-color: rgba(255, 255, 255, 0.1);
+        background-color: {_menu_hover};
     }}
 
     QMenu {{
         background-color: {_t['bg_canvas']};
-        color: rgba(255, 255, 255, 0.9);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: {_text_primary};
+        border: 1px solid {_menu_border};
     }}
 
     QMenu::item:selected {{
-        background-color: rgba(255, 255, 255, 0.1);
+        background-color: {_menu_hover};
     }}
 
     /* ============================================
@@ -409,7 +436,7 @@ def apply_global_dark_theme():
 
     QStatusBar {{
         background-color: {_t['bg_canvas']};
-        color: rgba(255, 255, 255, 0.7);
+        color: {_text_secondary};
         border: none;
     }}
 
@@ -418,21 +445,21 @@ def apply_global_dark_theme():
        ============================================ */
 
     QPushButton {{
-        background-color: rgba(255, 255, 255, 0.08);
-        border: 1px solid rgba(255, 255, 255, 0.12);
+        background-color: {_btn_bg};
+        border: 1px solid {_btn_border};
         border-radius: 6px;
         padding: 6px 16px;
-        color: rgba(255, 255, 255, 0.95);
+        color: {_text_primary};
         font-weight: 500;
     }}
 
     QPushButton:hover {{
-        background-color: rgba(255, 255, 255, 0.12);
-        border-color: rgba(255, 255, 255, 0.18);
+        background-color: {_btn_hover_bg};
+        border-color: {_btn_hover_border};
     }}
 
     QPushButton:pressed {{
-        background-color: rgba(255, 255, 255, 0.06);
+        background-color: {_pressed_bg};
     }}
 
     /* ============================================
@@ -440,7 +467,7 @@ def apply_global_dark_theme():
        ============================================ */
 
     QSplitter::handle {{
-        background: rgba(255, 255, 255, 0.04);
+        background: {_border_subtle};
         width: 1px;
         border: none;
         margin: 0px;
@@ -448,12 +475,12 @@ def apply_global_dark_theme():
     }}
 
     QSplitter::handle:hover {{
-        background: rgba(255, 255, 255, 0.08);
+        background: {_active_bg};
         width: 1px;
     }}
 
     QMainWindow::separator {{
-        background: rgba(255, 255, 255, 0.04);
+        background: {_border_subtle};
         width: 1px;
         border: none;
         margin: 0px;
@@ -461,7 +488,7 @@ def apply_global_dark_theme():
     }}
 
     QMainWindow::separator:hover {{
-        background: rgba(255, 255, 255, 0.08);
+        background: {_active_bg};
         width: 1px;
     }}
 
@@ -471,13 +498,13 @@ def apply_global_dark_theme():
 
     QDockWidget {{
         background-color: {_t['bg_canvas']};
-        color: rgba(255, 255, 255, 0.9);
+        color: {_text_primary};
         titlebar-close-icon: none;
         titlebar-normal-icon: none;
     }}
 
     QDockWidget::title {{
-        background-color: rgba(255, 255, 255, 0.03);
+        background-color: {_dock_title_bg};
         padding: 8px;
     }}
 
@@ -492,13 +519,13 @@ def apply_global_dark_theme():
     }}
 
     QScrollBar::handle:vertical {{
-        background: rgba(255, 255, 255, 0.15);
+        background: {_scrollbar_handle};
         border-radius: 4px;
         min-height: 20px;
     }}
 
     QScrollBar::handle:vertical:hover {{
-        background: rgba(255, 255, 255, 0.25);
+        background: {_scrollbar_handle_hover};
     }}
 
     QScrollBar::add-line:vertical,
@@ -513,13 +540,13 @@ def apply_global_dark_theme():
     }}
 
     QScrollBar::handle:horizontal {{
-        background: rgba(255, 255, 255, 0.15);
+        background: {_scrollbar_handle};
         border-radius: 4px;
         min-width: 20px;
     }}
 
     QScrollBar::handle:horizontal:hover {{
-        background: rgba(255, 255, 255, 0.25);
+        background: {_scrollbar_handle_hover};
     }}
 
     /* ============================================
@@ -527,16 +554,16 @@ def apply_global_dark_theme():
        ============================================ */
 
     QLineEdit, QTextEdit, QPlainTextEdit {{
-        background-color: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        background-color: {_input_bg};
+        border: 1px solid {_border_input};
         border-radius: 4px;
         padding: 6px;
-        color: rgba(255, 255, 255, 0.95);
+        color: {_text_primary};
     }}
 
     QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {{
         border-color: rgba(20, 184, 166, 0.5);
-        background-color: rgba(255, 255, 255, 0.08);
+        background-color: {_input_focus_bg};
     }}
 
     /* ============================================
@@ -545,17 +572,17 @@ def apply_global_dark_theme():
 
     QTableWidget, QListWidget, QTreeWidget {{
         background-color: {_t['bg_canvas']};
-        alternate-background-color: rgba(255, 255, 255, 0.02);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        color: rgba(255, 255, 255, 0.9);
+        alternate-background-color: {_alt_bg};
+        border: 1px solid {_border_medium};
+        color: {_text_primary};
     }}
 
     QHeaderView::section {{
-        background-color: rgba(255, 255, 255, 0.05);
+        background-color: {_input_bg};
         border: none;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        border-bottom: 1px solid {_border_input};
         padding: 6px;
-        color: rgba(255, 255, 255, 0.9);
+        color: {_text_primary};
     }}
 
     /* ============================================
@@ -564,23 +591,23 @@ def apply_global_dark_theme():
 
     QTabWidget::pane {{
         background-color: {_t['bg_canvas']};
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        border: 1px solid {_border_medium};
     }}
 
     QTabBar::tab {{
-        background-color: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        background-color: {_tab_bg};
+        border: 1px solid {_border_medium};
         padding: 6px 12px;
-        color: rgba(255, 255, 255, 0.7);
+        color: {_text_secondary};
     }}
 
     QTabBar::tab:selected {{
-        background-color: rgba(255, 255, 255, 0.08);
-        color: rgba(255, 255, 255, 0.95);
+        background-color: {_tab_selected_bg};
+        color: {_text_primary};
     }}
 
     QTabBar::tab:hover {{
-        background-color: rgba(255, 255, 255, 0.06);
+        background-color: {_tab_hover_bg};
     }}
     """
     
@@ -639,6 +666,7 @@ def apply_global_dark_theme():
         from aqt.qt import QToolBar, QMenuBar, QStatusBar, QWidget, QPalette, QColor
 
         _bg = QColor(_t['bg_canvas'])
+        _fg = QColor(_t['text_primary'])
 
         try:
             for toolbar in mw.findChildren(QToolBar):
@@ -649,7 +677,7 @@ def apply_global_dark_theme():
                     palette.setColor(QPalette.ColorRole.Window, _bg)
                     palette.setColor(QPalette.ColorRole.Button, _bg)
                     palette.setColor(QPalette.ColorRole.Base, _bg)
-                    palette.setColor(QPalette.ColorRole.WindowText, QColor(255, 255, 255, 230))
+                    palette.setColor(QPalette.ColorRole.WindowText, _fg)
                     toolbar.setPalette(palette)
                     toolbar.setAutoFillBackground(True)
                 except (RuntimeError, AttributeError):
@@ -664,7 +692,7 @@ def apply_global_dark_theme():
                     menubar.setStyleSheet(global_stylesheet)
                     palette = menubar.palette()
                     palette.setColor(QPalette.ColorRole.Window, _bg)
-                    palette.setColor(QPalette.ColorRole.WindowText, QColor(255, 255, 255, 230))
+                    palette.setColor(QPalette.ColorRole.WindowText, _fg)
                     menubar.setPalette(palette)
                     menubar.setAutoFillBackground(True)
                 except (RuntimeError, AttributeError):
@@ -737,15 +765,16 @@ def on_webview_will_set_content(web_content, context):
             html = _RE_AMBOSS_IMGS.sub('', html)
             html = _RE_AMBOSS_ELEMENTS.sub('', html)
 
+            _btn_text_color = "rgba(0, 0, 0, 0.7)" if get_resolved_theme() == "light" else "rgba(255, 255, 255, 0.7)"
             def style_button(match):
                 button = match.group(0)
                 if 'style=' in button:
                     button = _RE_STYLE_ATTR.sub(
-                        lambda m: f'style="{m.group(1)} background: transparent !important; border: none !important; color: rgba(255, 255, 255, 0.7) !important;"',
+                        lambda m: f'style="{m.group(1)} background: transparent !important; border: none !important; color: {_btn_text_color} !important;"',
                         button
                     )
                 else:
-                    button = button.replace('>', ' style="background: transparent !important; border: none !important; color: rgba(255, 255, 255, 0.7) !important;">', 1)
+                    button = button.replace('>', f' style="background: transparent !important; border: none !important; color: {_btn_text_color} !important;">', 1)
                 return button
 
             html = _RE_BUTTON.sub(style_button, html)
@@ -797,11 +826,13 @@ def on_webview_will_set_content(web_content, context):
                 }
                 
                 function styleButtons() {
+                    var isLight = document.documentElement.getAttribute('data-theme') === 'light';
+                    var btnColor = isLight ? 'rgba(0, 0, 0, 0.7)' : 'rgba(255, 255, 255, 0.7)';
                     document.querySelectorAll('#bottom button, #bottom input[type="button"]').forEach(btn => {
                         btn.style.background = 'transparent';
                         btn.style.backgroundColor = 'transparent';
                         btn.style.border = 'none';
-                        btn.style.color = 'rgba(255, 255, 255, 0.7)';
+                        btn.style.color = btnColor;
                         btn.style.padding = '10px 20px';
                         btn.style.borderRadius = '8px';
                     });
