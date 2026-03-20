@@ -260,6 +260,97 @@ def persist_internal_state(internal):
         for key, value in opinions.items():
             set_memory('self', key, value)
 
+    # Personality computation
+    if 'energy' in internal:
+        _append_energy_log(internal['energy'])
+    position = compute_personality_position()
+    if position['confident']:
+        _save_personality_snapshot(position)
+        set_memory('self', 'personality_tendency', position['quadrant_label'])
+
+
+# ── Personality computation ─────────────────────────────────────────────
+
+ENERGY_LOG_MAX = 100
+PERSONALITY_SNAPSHOT_MAX = 50
+CONFIDENCE_THRESHOLD = 5  # min interactions AND energy entries
+
+
+def _append_energy_log(energy):
+    """Append an energy reading to the rolling energy log."""
+    log = get_memory('state', 'energy_log', [])
+    log.append({'energy': energy, 'ts': datetime.now().isoformat()})
+    if len(log) > ENERGY_LOG_MAX:
+        log = log[-ENERGY_LOG_MAX:]
+    set_memory('state', 'energy_log', log)
+
+
+def compute_personality_position():
+    """Compute Plusi's personality position on two axes.
+
+    X-axis: ratio of 'chat' interactions vs 'reflect'/'silent' (0=introvert, 1=social)
+    Y-axis: average energy normalized to 0-1 range (energy 1-10 → (avg-1)/9)
+
+    Returns dict with x, y, quadrant_label, confident.
+    """
+    db = _get_db()
+
+    # Count interactions by type
+    cursor = db.execute(
+        "SELECT history_type, COUNT(*) FROM plusi_history GROUP BY history_type"
+    )
+    counts = dict(cursor.fetchall())
+    total_interactions = sum(counts.values())
+
+    # Get energy log
+    energy_log = get_memory('state', 'energy_log', [])
+
+    # Check confidence
+    confident = (total_interactions >= CONFIDENCE_THRESHOLD
+                 and len(energy_log) >= CONFIDENCE_THRESHOLD)
+
+    if not confident:
+        return {'x': 0.5, 'y': 0.5, 'quadrant_label': 'Unknown', 'confident': False}
+
+    # X-axis: chat ratio
+    chat_count = counts.get('chat', 0)
+    x = chat_count / total_interactions if total_interactions > 0 else 0.5
+
+    # Y-axis: normalized average energy (1-10 → 0-1)
+    energies = [entry['energy'] for entry in energy_log]
+    avg_energy = sum(energies) / len(energies)
+    y = (avg_energy - 1) / 9.0
+
+    # Clamp to [0, 1]
+    x = max(0.0, min(1.0, x))
+    y = max(0.0, min(1.0, y))
+
+    # Determine quadrant
+    if x >= 0.5 and y >= 0.5:
+        quadrant = 'Entertainer'
+    elif x < 0.5 and y >= 0.5:
+        quadrant = 'Mystic'
+    elif x >= 0.5 and y < 0.5:
+        quadrant = 'Companion'
+    else:
+        quadrant = 'Philosopher'
+
+    return {'x': x, 'y': y, 'quadrant_label': quadrant, 'confident': confident}
+
+
+def _save_personality_snapshot(position):
+    """Save a timestamped personality snapshot to the rolling log."""
+    snapshots = get_memory('self', 'personality_snapshots', [])
+    snapshots.append({
+        'x': position['x'],
+        'y': position['y'],
+        'quadrant_label': position['quadrant_label'],
+        'ts': datetime.now().isoformat(),
+    })
+    if len(snapshots) > PERSONALITY_SNAPSHOT_MAX:
+        snapshots = snapshots[-PERSONALITY_SNAPSHOT_MAX:]
+    set_memory('self', 'personality_snapshots', snapshots)
+
 
 def build_relationship_context():
     """Build relationship context with behavioral guidance per level."""
