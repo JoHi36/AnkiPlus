@@ -131,7 +131,8 @@ def _do_refresh_auth_token():
 # get_google_response  (was AIHandler._get_google_response)
 # ---------------------------------------------------------------------------
 def get_google_response(user_message, model, api_key, context=None, history=None,
-                        mode='compact', rag_context=None, system_prompt_override=None):
+                        mode='compact', rag_context=None, system_prompt_override=None,
+                        config=None):
     """Google Gemini API-Integration mit optionalem Kontext und Chat-Historie"""
     # CRITICAL: Hardcode to gemini-3-flash-preview for maximum reasoning capability
     # Fallback handled in get_response_with_rag
@@ -150,7 +151,8 @@ def get_google_response(user_message, model, api_key, context=None, history=None
 
     logger.debug("get_google_response: Model: %s, thinking_level: %s", model_normalized, thinking_level)
 
-    config = get_config()
+    if config is None:
+        config = get_config() or {}
 
     # Prüfe ob Backend-Modus aktiv ist
     use_backend = is_backend_mode() and get_auth_token()
@@ -641,13 +643,15 @@ ZITIER-REGELN (PFLICHT):
 # ---------------------------------------------------------------------------
 def get_google_response_streaming(user_message, model, api_key, context=None, history=None,
                                   mode='compact', callback=None, rag_context=None,
-                                  suppress_error_callback=False, system_prompt_override=None):
+                                  suppress_error_callback=False, system_prompt_override=None,
+                                  config=None):
     """
     Google Gemini API mit Streaming-Support und Tool Call Handling
 
     Args:
         callback: Funktion(chunk, done, is_function_call, steps=None, citations=None)
         suppress_error_callback: Wenn True, wird bei Fehlern keine Fehlermeldung an den Callback gesendet (für Retries)
+        config: Config dict (thread-safe, passed from AIHandler)
     """
     # CRITICAL: Hardcode to gemini-3-flash-preview for maximum reasoning capability
     # Fallback handled in get_response_with_rag
@@ -656,7 +660,8 @@ def get_google_response_streaming(user_message, model, api_key, context=None, hi
 
     model_normalized = model
 
-    config = get_config()
+    if config is None:
+        config = get_config() or {}
 
     # Prüfe ob Backend-Modus aktiv ist
     # Prefer direct API key over Cloud Function when both are available

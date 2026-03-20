@@ -109,6 +109,7 @@ class AIHandler:
             context=context, history=history, mode=mode,
             rag_context=rag_context,
             system_prompt_override=system_prompt_override,
+            config=self.config,
         )
 
     def _get_google_response_streaming(self, user_message, model, api_key,
@@ -122,6 +123,7 @@ class AIHandler:
             callback=callback, rag_context=rag_context,
             suppress_error_callback=suppress_error_callback,
             system_prompt_override=system_prompt_override,
+            config=self.config,
         )
 
     def _stream_response(self, urls, data, callback=None, use_backend=False,
