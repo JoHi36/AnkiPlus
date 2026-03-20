@@ -88,8 +88,9 @@ def _setup_root_logger():
     root = logging.getLogger("ankiplus")
     root.setLevel(logging.DEBUG)  # Allow everything; handler filters
 
-    # Console handler — stderr (Anki's default output)
-    handler = logging.StreamHandler(sys.stderr)
+    # Console handler — stdout (NOT stderr! Anki monitors stderr for addon errors
+    # and shows error popups when it detects output there)
+    handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(logging.DEBUG)  # Show everything in dev; change to INFO for production
     handler.setFormatter(AnkiPlusFormatter())
 
