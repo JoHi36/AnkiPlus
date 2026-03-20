@@ -407,7 +407,7 @@ class ChatbotWidget(QWidget):
             # Utilities
             'openUrl': lambda d: self.bridge.openUrl(d) if isinstance(d, str) else None,
             'debugLog': self._msg_debug_log,
-            'plusiPanel': lambda d: __import__('importlib').import_module('.plusi_panel', __package__).toggle_panel(),
+            'plusiPanel': self._msg_plusi_panel,
             'plusiDirect': self._msg_plusi_direct,
         }
         return handlers.get(msg_type)
@@ -683,6 +683,13 @@ class ChatbotWidget(QWidget):
                 f.write(data + '\n')
         except Exception:
             pass
+
+    def _msg_plusi_panel(self, data):
+        try:
+            from ..plusi.panel import toggle_panel
+        except ImportError:
+            from plusi.panel import toggle_panel
+        toggle_panel()
 
     def _msg_plusi_direct(self, data):
         msg_data = data if isinstance(data, dict) else json.loads(data) if isinstance(data, str) else {}
