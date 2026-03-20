@@ -34,46 +34,7 @@
   /* ── Layout ── */
   .container { padding: 24px 32px 32px; }
 
-  /* ── Header Pill Tabs ── */
-  .tab-bar {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 24px;
-  }
-  .tab-pill-group {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    padding: 3px;
-    background: rgba(255,255,255,0.04);
-    border-radius: 8px;
-  }
-  .tab-pill {
-    padding: 5px 16px;
-    font-size: 12px;
-    font-weight: 500;
-    font-family: var(--font);
-    color: rgba(255,255,255,0.35);
-    background: transparent;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: color 0.15s, background 0.15s;
-    white-space: nowrap;
-  }
-  .tab-pill:hover {
-    color: rgba(255,255,255,0.55);
-  }
-  .tab-pill.active {
-    color: var(--text);
-    font-weight: 600;
-    background: rgba(255,255,255,0.08);
-  }
-
   /* ── Sections ── */
-  .tab-content { display: none; animation: fadeIn 0.15s ease; }
-  .tab-content.active { display: block; }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
   .section { margin-bottom: 24px; }
@@ -290,16 +251,8 @@
 </div>
 
 <div class="container">
-  <!-- Header Pill Tabs — 2 tabs -->
-  <div class="tab-bar">
-    <div class="tab-pill-group">
-      <button class="tab-pill active" data-tab="konto" onclick="switchTab('konto')">Konto</button>
-      <button class="tab-pill" data-tab="agent" onclick="switchTab('agent')">Agent</button>
-    </div>
-  </div>
-
-  <!-- ═══ KONTO TAB ═══ -->
-  <div class="tab-content active" id="tab-konto">
+  <!-- ═══ KONTO ═══ -->
+  <div id="tab-konto">
     <div id="profile-loading" class="auth-center">
       <div style="color:var(--text-tertiary);font-size:13px;">Lade...</div>
     </div>
@@ -416,53 +369,6 @@
     </div>
   </div>
 
-  <!-- ═══ AGENT TAB ═══ -->
-  <div class="tab-content" id="tab-agent">
-    <!-- Karten-Embeddings -->
-    <div class="section">
-      <div class="section-title">Semantische Suche</div>
-      <div class="card">
-        <div class="row" style="flex-direction:column;align-items:stretch;gap:8px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;">
-            <div class="row-label">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <span>Karten-Embeddings</span>
-              <span id="embed-status-badge" class="badge" style="display:none;"></span>
-            </div>
-            <span id="embed-count" style="font-size:12px;color:var(--text-secondary);font-variant-numeric:tabular-nums;"></span>
-          </div>
-          <div class="quota-bar" style="height:3px;">
-            <div id="embed-bar" class="quota-fill" style="width:0%;background:var(--accent);transition:width 0.6s ease;"></div>
-          </div>
-          <div style="font-size:11px;color:var(--text-tertiary);line-height:1.5;">
-            Karten werden im Hintergrund indiziert, um semantisch ähnliche Inhalte zu finden.
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Agent Tools -->
-    <div class="section">
-      <div class="section-title">Agent Tools</div>
-      <div class="card" id="tools-card"></div>
-    </div>
-
-    <!-- Plusi -->
-    <div class="section">
-      <div class="section-title">Plusi</div>
-      <div class="card" id="subagents-card"></div>
-      <!-- Tagebuch ansehen -->
-      <div class="action-item" id="diary-btn" onclick="openDiary()" style="margin-top:8px;">
-        <div class="item-left">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-          <span class="item-label">Tagebuch ansehen</span>
-        </div>
-        <div class="item-right">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
-      </div>
-    </div>
-  </div>
 </div>
 
 <script>
@@ -485,14 +391,6 @@ function loadConfig() {
 function renderAll() {
   renderProfile();
   renderTheme();
-  renderTools();
-  renderEmbeddingStatus();
-}
-
-// ── Tabs ──
-function switchTab(tab) {
-  document.querySelectorAll('.tab-pill').forEach(function(t) { t.classList.toggle('active', t.dataset.tab === tab); });
-  document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.toggle('active', c.id === 'tab-' + tab); });
 }
 
 // ── Profile ──
@@ -708,104 +606,6 @@ function setTheme(key) {
   config.theme = key;
   bridge.saveTheme(key);
   renderTheme();
-}
-
-// ── Agent Tools + Plusi ──
-var SUB_AGENTS = [
-  { key: 'plusi', label: 'Plusi', desc: 'Lern-Begleiter mit Pers\u00F6nlichkeit, Tagebuch & Stimmungen', emoji: '\uD83E\uDDE0', badge: 'Beta' },
-];
-
-var AGENT_TOOLS = [
-  { key: 'cards', label: 'Kartensuche', desc: 'Karten aus dem Deck suchen und anzeigen', emoji: '\uD83D\uDD0D' },
-  { key: 'images', label: 'Bilder', desc: 'Bilder aus Karten und Internet anzeigen', emoji: '\uD83D\uDDBC' },
-  { key: 'diagrams', label: 'Diagramme', desc: 'Mermaid-Diagramme f\u00FCr Visualisierungen', emoji: '\uD83D\uDCCA' },
-  { key: 'stats', label: 'Statistiken', desc: 'Streak, Heatmap, Deck-\u00DCberblick', emoji: '\uD83D\uDCC8' },
-  { key: 'molecules', label: 'Molek\u00FCle', desc: 'Molek\u00FClstrukturen darstellen', emoji: '\u2697\uFE0F', badge: 'Beta' },
-];
-
-function renderToolRow(t, accentBg) {
-  var tools = config.aiTools || {};
-  var on = tools[t.key] !== false;
-  var bg = accentBg || 'rgba(10,132,255,0.08)';
-  var badgeHtml = t.badge ? ' <span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px;background:rgba(251,191,36,0.08);color:rgba(251,191,36,0.5);">' + t.badge + '</span>' : '';
-  var toggleFn = "toggleTool('" + t.key + "')";
-  return '<div class="row" onclick="' + toggleFn + '" style="gap:12px;justify-content:flex-start;">' +
-    '<div style="width:32px;height:32px;border-radius:8px;background:' + bg + ';display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">' + t.emoji + '</div>' +
-    '<div style="flex:1;min-width:0;">' +
-      '<div style="font-size:13px;font-weight:500;color:var(--text);">' + t.label + badgeHtml + '</div>' +
-      '<div style="font-size:11px;color:var(--text-tertiary);margin-top:1px;">' + t.desc + '</div>' +
-    '</div>' +
-    '<button class="toggle ' + (on ? 'on' : '') + '" onclick="event.stopPropagation();' + toggleFn + '" style="flex-shrink:0;"><div class="knob"></div></button>' +
-  '</div>';
-}
-
-function renderTools() {
-  var tools = config.aiTools || {};
-
-  // Agent Tools (blue accent)
-  var toolsEl = document.getElementById('tools-card');
-  if (toolsEl) {
-    toolsEl.innerHTML = AGENT_TOOLS.map(function(t) { return renderToolRow(t); }).join('');
-  }
-
-  // Sub-Agents (purple accent)
-  var saEl = document.getElementById('subagents-card');
-  if (saEl) {
-    saEl.innerHTML = SUB_AGENTS.map(function(t) { return renderToolRow(t, 'rgba(167,139,250,0.08)'); }).join('');
-  }
-
-}
-
-function toggleTool(key) {
-  if (!config.aiTools) config.aiTools = {};
-  config.aiTools[key] = !config.aiTools[key];
-  bridge.saveAITools(JSON.stringify(config.aiTools));
-  renderTools();
-}
-
-// ── Open Diary ──
-function openDiary() {
-  if (bridge && bridge.openDiary) {
-    bridge.openDiary();
-  }
-}
-
-// ── Embedding Status ──
-var _embedPollTimer = null;
-
-function renderEmbeddingStatus() {
-  if (!bridge || !bridge.getEmbeddingStatus) return;
-  bridge.getEmbeddingStatus(function(json) {
-    var s = JSON.parse(json);
-    var countEl = document.getElementById('embed-count');
-    var barEl = document.getElementById('embed-bar');
-    var badgeEl = document.getElementById('embed-status-badge');
-    if (!countEl) return;
-
-    var pct = s.totalCards > 0 ? Math.round((s.embeddedCards / s.totalCards) * 100) : 0;
-    countEl.textContent = s.embeddedCards + ' / ' + s.totalCards;
-    barEl.style.width = pct + '%';
-
-    if (s.isRunning) {
-      badgeEl.style.display = 'inline';
-      badgeEl.style.background = 'rgba(10,132,255,0.12)';
-      badgeEl.style.color = 'rgba(10,132,255,0.7)';
-      badgeEl.textContent = 'L\u00E4uft...';
-      if (!_embedPollTimer) {
-        _embedPollTimer = setInterval(function() { renderEmbeddingStatus(); }, 3000);
-      }
-    } else if (pct >= 100) {
-      badgeEl.style.display = 'inline';
-      badgeEl.style.background = 'rgba(34,197,94,0.12)';
-      badgeEl.style.color = 'rgba(34,197,94,0.7)';
-      badgeEl.textContent = 'Fertig';
-      barEl.style.background = '#22c55e';
-      if (_embedPollTimer) { clearInterval(_embedPollTimer); _embedPollTimer = null; }
-    } else {
-      badgeEl.style.display = 'none';
-      if (_embedPollTimer) { clearInterval(_embedPollTimer); _embedPollTimer = null; }
-    }
-  });
 }
 
 // ── Copy Logs ──
