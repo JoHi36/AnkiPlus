@@ -148,8 +148,8 @@ export default function ChatInput({
         className="relative backdrop-blur-xl rounded-2xl overflow-visible transition-all duration-300"
         style={{
           backgroundColor: 'rgba(21,21,21,0.75)',
-          border: hasPlusiTag ? '1px solid rgba(10,132,255,0.4)' : '1px solid rgba(255,255,255,0.08)',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
+          border: hasPlusiTag ? '1px solid rgba(10,132,255,0.4)' : '1px solid var(--ds-active-tint)',
+          boxShadow: 'var(--ds-shadow-md)',
         }}
       >
         {/* Animated snake border — blue on focus or @Plusi tag */}
@@ -195,7 +195,7 @@ export default function ChatInput({
                 {before && <span>{before}</span>}
                 <span style={{
                   background: 'rgba(10,132,255,.18)',
-                  color: '#0a84ff',
+                  color: 'var(--ds-accent)',
                   borderRadius: '3px',
                 }}>@Plusi</span>
                 {after && <span>{after}</span>}
@@ -258,7 +258,7 @@ export default function ChatInput({
         {/* Action row — configurable via actionPrimary/actionSecondary props */}
         <div
           className="flex items-center"
-          style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
+          style={{ borderTop: '1px solid var(--ds-border-subtle)' }}
         >
           {/* Primary action (left) */}
           <button
@@ -270,7 +270,7 @@ export default function ChatInput({
               fontFamily: 'inherit',
               fontSize: '13px',
               fontWeight: '600',
-              color: 'rgba(255,255,255,0.88)',
+              color: 'var(--ds-text-primary)',
               borderRadius: '0',
               borderBottomLeftRadius: '16px',
             }}
@@ -280,14 +280,14 @@ export default function ChatInput({
               <span style={{
                 fontFamily: 'ui-monospace, monospace',
                 fontSize: '10px',
-                color: 'rgba(255,255,255,0.18)',
+                color: 'var(--ds-text-muted)',
                 marginLeft: '4px',
               }}>{actionPrimary.shortcut}</span>
             )}
           </button>
 
           {/* Divider */}
-          <div style={{ width: '1px', height: '16px', background: 'rgba(255,255,255,0.06)', flexShrink: 0 }} />
+          <div style={{ width: '1px', height: '16px', background: 'var(--ds-border-subtle)', flexShrink: 0 }} />
 
           {/* Secondary action (right) */}
           <button
@@ -301,7 +301,7 @@ export default function ChatInput({
               fontFamily: 'inherit',
               fontSize: '13px',
               fontWeight: '500',
-              color: actionSecondary.pulse ? 'rgba(10,132,255,0.8)' : 'rgba(255,255,255,0.35)',
+              color: actionSecondary.pulse ? 'var(--ds-accent)' : 'var(--ds-text-tertiary)',
               borderRadius: '0',
               borderBottomRightRadius: '16px',
             }}
@@ -311,7 +311,7 @@ export default function ChatInput({
               <span style={{
                 fontFamily: 'ui-monospace, monospace',
                 fontSize: '10px',
-                color: 'rgba(255,255,255,0.18)',
+                color: 'var(--ds-text-muted)',
                 marginLeft: '4px',
               }}>{actionSecondary.shortcut}</span>
             )}

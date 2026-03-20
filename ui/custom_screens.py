@@ -40,6 +40,24 @@ except ImportError:
 # NOTE: Legacy sessions_storage (JSON) removed — per-card SQLite is now used instead.
 
 
+# ─── Design-system token loader ──────────────────────────────────────────────
+
+_design_tokens_css = None
+
+def _get_design_tokens_css():
+    """Load shared/styles/design-system.css and cache it."""
+    global _design_tokens_css
+    if _design_tokens_css is None:
+        css_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'shared', 'styles', 'design-system.css')
+        try:
+            with open(css_path, 'r', encoding='utf-8') as f:
+                _design_tokens_css = f.read()
+        except Exception as e:
+            logger.error("CustomScreens: Could not load design-system.css: %s", e)
+            _design_tokens_css = ''
+    return _design_tokens_css
+
+
 # ─── Plusi dock injection ────────────────────────────────────────────────────
 
 def _get_plusi_dock_html():
@@ -178,9 +196,9 @@ def _study_action(did):
 def _stats_inline(node):
     """Just the colored due-count numbers, no box, no button."""
     parts = []
-    if node['due_new']:    parts.append(f'<span style="font-family:ui-monospace,monospace;font-size:11px;font-weight:600;color:rgba(10,132,255,0.75);font-variant-numeric:tabular-nums;">{node["due_new"]}</span>')
-    if node['due_learn']:  parts.append(f'<span style="font-family:ui-monospace,monospace;font-size:11px;font-weight:600;color:rgba(255,159,10,0.75);font-variant-numeric:tabular-nums;">{node["due_learn"]}</span>')
-    if node['due_review']: parts.append(f'<span style="font-family:ui-monospace,monospace;font-size:11px;font-weight:600;color:rgba(48,209,88,0.75);font-variant-numeric:tabular-nums;">{node["due_review"]}</span>')
+    if node['due_new']:    parts.append(f'<span style="font-family:ui-monospace,monospace;font-size:11px;font-weight:600;color:var(--ds-stat-new);font-variant-numeric:tabular-nums;">{node["due_new"]}</span>')
+    if node['due_learn']:  parts.append(f'<span style="font-family:ui-monospace,monospace;font-size:11px;font-weight:600;color:var(--ds-stat-learning);font-variant-numeric:tabular-nums;">{node["due_learn"]}</span>')
+    if node['due_review']: parts.append(f'<span style="font-family:ui-monospace,monospace;font-size:11px;font-weight:600;color:var(--ds-stat-review);font-variant-numeric:tabular-nums;">{node["due_review"]}</span>')
     if not parts:
         return ''
     return f'<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">{"".join(parts)}</div>'
@@ -189,7 +207,7 @@ def _stats_inline(node):
 def _session_dot(sessions):
     if not sessions:
         return ''
-    return '<span style="width:6px;height:6px;border-radius:50%;flex-shrink:0;background:#0a84ff;box-shadow:0 0 4px rgba(10,132,255,0.5);"></span>'
+    return '<span style="width:6px;height:6px;border-radius:50%;flex-shrink:0;background:var(--ds-accent);box-shadow:0 0 4px rgba(10,132,255,0.5);"></span>'
 
 
 _CHEV_SVG = (
@@ -214,13 +232,13 @@ def _child_row(node, depth=0):
     sdot   = _session_dot(node['sessions'])
 
     pl = 14 + depth * 18
-    text_color = 'rgba(255,255,255,0.50)' if depth == 0 else 'rgba(255,255,255,0.35)'
+    text_color = 'var(--ds-text-secondary)' if depth == 0 else 'var(--ds-text-tertiary)'
     text_size  = '13px' if depth == 0 else '12px'
     text_weight = '500' if depth == 0 else '400'
 
     if has_ch:
         chev = (f'<span class="ap-chev" style="flex-shrink:0;width:16px;display:flex;align-items:center;'
-                f'justify-content:center;color:rgba(255,255,255,0.18);transition:transform 0.18s;">{_CHEV_SVG}</span>')
+                f'justify-content:center;color:var(--ds-text-muted);transition:transform 0.18s;">{_CHEV_SVG}</span>')
         sub_rows  = ''.join(_child_row(c, depth + 1) for c in node['children'])
         sub_block = f'<div class="ap-sub ap-hidden">{sub_rows}</div>'
         row_click = 'apToggle(this)'
@@ -228,7 +246,7 @@ def _child_row(node, depth=0):
             f'<span class="ap-name" style="flex:1;font-size:{text_size};font-weight:{text_weight};color:{text_color};'
             f'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;cursor:pointer;'
             f'transition:color 0.12s;"'
-            f' onmouseover="this.style.color=\'rgba(255,255,255,0.95)\'"'
+            f' onmouseover="this.style.color=\'var(--ds-text-primary)\'"'
             f' onmouseout="this.style.color=\'{text_color}\'"'
             f' onclick="event.stopPropagation();{_study_action(did)}">'
             f'{name}</span>'
@@ -241,7 +259,7 @@ def _child_row(node, depth=0):
             f'<span style="flex:1;font-size:{text_size};font-weight:{text_weight};color:{text_color};'
             f'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;'
             f'cursor:pointer;transition:color 0.12s;"'
-            f' onmouseover="this.style.color=\'rgba(255,255,255,0.95)\'"'
+            f' onmouseover="this.style.color=\'var(--ds-text-primary)\'"'
             f' onmouseout="this.style.color=\'{text_color}\'">'
             f'{name}</span>'
         )
@@ -250,8 +268,8 @@ def _child_row(node, depth=0):
         f'<div class="ap-cwrap" data-did="{did}">'
         f'<div class="ap-row" style="display:flex;align-items:center;gap:8px;padding-left:{pl}px;padding-right:12px;'
         f'cursor:pointer;user-select:none;min-height:36px;'
-        f'border-bottom:1px solid rgba(255,255,255,0.035);"'
-        f' onmouseover="this.style.background=\'rgba(255,255,255,0.03)\'"'
+        f'border-bottom:1px solid var(--ds-border-subtle);"'
+        f' onmouseover="this.style.background=\'var(--ds-hover-tint)\'"'
         f' onmouseout="this.style.background=\'transparent\'"'
         f' onclick="{row_click}">'
         f'{chev}'
@@ -279,7 +297,7 @@ def _deck_card(node, idx):
     children_html = ''
     if has_ch:
         rows = ''.join(_child_row(c, depth=0) for c in node['children'])
-        children_html = f'<div class="ap-sub ap-hidden" style="border-top:1px solid rgba(255,255,255,0.05);">{rows}</div>'
+        children_html = f'<div class="ap-sub ap-hidden" style="border-top:1px solid var(--ds-border-subtle);">{rows}</div>'
 
     delay = f'animation-delay:{idx * 0.04}s'
 
@@ -287,14 +305,14 @@ def _deck_card(node, idx):
     if has_ch:
         header_click = 'apToggle(this)'
         chev = (f'<span class="ap-chev" style="flex-shrink:0;width:16px;display:flex;align-items:center;'
-                f'justify-content:center;color:rgba(255,255,255,0.22);transition:transform 0.18s;">{_CHEV_SVG}</span>')
+                f'justify-content:center;color:var(--ds-text-muted);transition:transform 0.18s;">{_CHEV_SVG}</span>')
         # Name hover → white, click → study
         name_el = (
             f'<span class="ap-name" style="flex:1;font-size:14px;font-weight:600;letter-spacing:-0.15px;'
-            f'color:rgba(255,255,255,0.88);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;'
+            f'color:var(--ds-text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;'
             f'cursor:pointer;transition:color 0.12s;"'
             f' onmouseover="this.style.color=\'#fff\'"'
-            f' onmouseout="this.style.color=\'rgba(255,255,255,0.88)\'"'
+            f' onmouseout="this.style.color=\'var(--ds-text-primary)\'"'
             f' onclick="event.stopPropagation();{_study_action(did)}">'
             f'{name}</span>'
         )
@@ -303,18 +321,18 @@ def _deck_card(node, idx):
         chev = ''
         name_el = (
             f'<span style="flex:1;font-size:14px;font-weight:600;letter-spacing:-0.15px;'
-            f'color:rgba(255,255,255,0.88);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;'
+            f'color:var(--ds-text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;'
             f'cursor:pointer;transition:color 0.12s;"'
             f' onmouseover="this.style.color=\'#fff\'"'
-            f' onmouseout="this.style.color=\'rgba(255,255,255,0.88)\'">'
+            f' onmouseout="this.style.color=\'var(--ds-text-primary)\'">'
             f'{name}</span>'
         )
 
     return (
         f'<div class="ap-card ap-cwrap" data-did="{did}" style="margin-bottom:6px;border-radius:14px;overflow:hidden;'
-        f'background:#1f1f21;border:1px solid rgba(255,255,255,0.06);{delay}">'
+        f'background:var(--ds-bg-canvas);border:1px solid var(--ds-border-subtle);{delay}">'
         f'<div class="ap-row" style="display:flex;align-items:center;gap:8px;padding:11px 14px;cursor:pointer;user-select:none;"'
-        f' onmouseover="this.style.background=\'rgba(255,255,255,0.03)\'"'
+        f' onmouseover="this.style.background=\'var(--ds-hover-tint)\'"'
         f' onmouseout="this.style.background=\'transparent\'"'
         f' onclick="{header_click}">'
         f'{chev}'
@@ -355,7 +373,7 @@ def _top_bar(active_tab='stapel', deck_name='', due_new=0, due_learn=0, due_revi
     statistik_onclick = " onclick=\"window._apAction={type:'cmd',cmd:'stats'}\""
 
     # Unified text style for left-side info (same across all views)
-    left_text_style = 'font-size:11px;font-weight:600;color:rgba(255,255,255,0.35);'
+    left_text_style = 'font-size:11px;font-weight:600;color:var(--ds-text-tertiary);'
 
     total_due = due_new + due_learn + due_review
     deck_display = _esc(deck_name.split('::')[-1]) if deck_name else ''
@@ -370,23 +388,23 @@ def _top_bar(active_tab='stapel', deck_name='', due_new=0, due_learn=0, due_revi
         # Right side: colored dot + label legend
         legend_items = []
         legend_items.append(f'<span style="display:flex;align-items:center;gap:4px;">'
-                           f'<span style="width:6px;height:6px;border-radius:50%;background:rgba(10,132,255,0.85);"></span>'
-                           f'<span style="font-size:10px;font-weight:500;color:rgba(10,132,255,0.5);">Neu</span></span>')
+                           f'<span style="width:6px;height:6px;border-radius:50%;background:var(--ds-stat-new);"></span>'
+                           f'<span style="font-size:10px;font-weight:500;color:var(--ds-stat-new);">Neu</span></span>')
         legend_items.append(f'<span style="display:flex;align-items:center;gap:4px;">'
-                           f'<span style="width:6px;height:6px;border-radius:50%;background:rgba(255,159,10,0.85);"></span>'
-                           f'<span style="font-size:10px;font-weight:500;color:rgba(255,159,10,0.5);">Fällig</span></span>')
+                           f'<span style="width:6px;height:6px;border-radius:50%;background:var(--ds-stat-learning);"></span>'
+                           f'<span style="font-size:10px;font-weight:500;color:var(--ds-stat-learning);">Fällig</span></span>')
         legend_items.append(f'<span style="display:flex;align-items:center;gap:4px;">'
-                           f'<span style="width:6px;height:6px;border-radius:50%;background:rgba(48,209,88,0.85);"></span>'
-                           f'<span style="font-size:10px;font-weight:500;color:rgba(48,209,88,0.5);">Wieder</span></span>')
+                           f'<span style="width:6px;height:6px;border-radius:50%;background:var(--ds-stat-review);"></span>'
+                           f'<span style="font-size:10px;font-weight:500;color:var(--ds-stat-review);">Wieder</span></span>')
         right_html = f'<div style="display:flex;align-items:center;gap:10px;">{"".join(legend_items)}</div>'
     else:
         # Session/other views: deck name on left (same unified style), numbers on right
         left_html = f'<span style="{left_text_style}max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{deck_display}</span>' if deck_display else ''
         right_html = (
             f'<div style="display:flex;align-items:baseline;gap:8px;">'
-            f'<span style="font-family:ui-monospace,monospace;font-size:11px;font-weight:600;color:rgba(10,132,255,0.85);font-variant-numeric:tabular-nums;">{due_new}</span>'
-            f'<span style="font-family:ui-monospace,monospace;font-size:11px;font-weight:600;color:rgba(255,159,10,0.85);font-variant-numeric:tabular-nums;">{due_learn}</span>'
-            f'<span style="font-family:ui-monospace,monospace;font-size:11px;font-weight:600;color:rgba(48,209,88,0.85);font-variant-numeric:tabular-nums;">{due_review}</span>'
+            f'<span style="font-family:ui-monospace,monospace;font-size:11px;font-weight:600;color:var(--ds-stat-new);font-variant-numeric:tabular-nums;">{due_new}</span>'
+            f'<span style="font-family:ui-monospace,monospace;font-size:11px;font-weight:600;color:var(--ds-stat-learning);font-variant-numeric:tabular-nums;">{due_learn}</span>'
+            f'<span style="font-family:ui-monospace,monospace;font-size:11px;font-weight:600;color:var(--ds-stat-review);font-variant-numeric:tabular-nums;">{due_review}</span>'
             f'</div>'
         )
 
@@ -424,26 +442,26 @@ def _account_widget():
     else:
         badge_html = (
             '<span style="font-size:9px;font-weight:600;letter-spacing:0.5px;padding:2px 7px;'
-            'border-radius:4px;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.2);">Free</span>'
+            'border-radius:4px;background:var(--ds-hover-tint);color:var(--ds-text-muted);">Free</span>'
         )
 
     return (
         f'<style>'
         f'.ap-settings-btn{{'
         f'  display:flex;align-items:center;gap:7px;padding:6px 11px;border-radius:6px;'
-        f'  background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);'
+        f'  background:var(--ds-hover-tint);border:1px solid var(--ds-border-subtle);'
         f'  cursor:pointer;font-family:inherit;transition:all 0.15s ease;'
         f'}}'
         f'.ap-settings-btn:hover{{'
-        f'  background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.08);'
+        f'  background:var(--ds-active-tint);border-color:var(--ds-active-tint);'
         f'}}'
-        f'.ap-settings-btn:hover .ap-uname{{color:rgba(255,255,255,0.5)!important}}'
+        f'.ap-settings-btn:hover .ap-uname{{color:var(--ds-text-secondary)!important}}'
         f'.ap-settings-btn:active{{transform:scale(0.97)}}'
         f'</style>'
         f'<div style="position:fixed;bottom:0;right:0;padding:12px 18px;z-index:9998;">'
         f'<button class="ap-settings-btn"'
         f' onclick="window._apAction={{type:\'cmd\',cmd:\'settings\'}}">'
-        f'<span class="ap-uname" style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.3);'
+        f'<span class="ap-uname" style="font-size:11px;font-weight:500;color:var(--ds-text-placeholder);'
         f'white-space:nowrap;transition:color 0.15s;">AnkiPlus</span>'
         f'{badge_html}'
         f'</button>'
@@ -474,7 +492,7 @@ div[id^="bottom"]:not(#ap-page *) {
 
 html, body {
     background: var(--ds-bg-canvas);
-    color: #e8e8e8 !important;
+    color: var(--ds-text-primary) !important;
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif !important;
     -webkit-font-smoothing: antialiased !important;
     margin: 0 !important;
@@ -574,7 +592,7 @@ html, body {
     gap: 4px; height: 44px; background: none; border: none; cursor: pointer;
     font-family: inherit; font-size: 13px; transition: background 0.1s; padding: 0 12px;
 }
-.ap-dock-action:hover { background: rgba(255,255,255,0.04); }
+.ap-dock-action:hover { background: var(--ds-hover-tint); }
 #ap-chat-input, #ap-chat-input:focus, #ap-chat-input:hover, #ap-chat-input:active {
     outline: none !important; border: none !important;
     background: transparent !important; resize: none !important;
@@ -595,7 +613,7 @@ html, body {
     font-size: 46px;
     font-weight: 700;
     letter-spacing: -1.8px;
-    color: rgba(255,255,255,0.92);
+    color: var(--ds-text-primary);
     line-height: 1;
 }
 .ap-wm-tld {
@@ -603,7 +621,7 @@ html, body {
     font-size: 46px;
     font-weight: 300;
     letter-spacing: -1px;
-    color: rgba(255,255,255,0.22);
+    color: var(--ds-text-muted);
     line-height: 1;
 }
 .ap-wm-badge {
@@ -618,9 +636,9 @@ html, body {
     white-space: nowrap;
 }
 .ap-wm-badge--free {
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.09);
-    color: rgba(255,255,255,0.28);
+    background: var(--ds-hover-tint);
+    border: 1px solid var(--ds-border-medium);
+    color: var(--ds-text-placeholder);
 }
 .ap-wm-badge--pro {
     background: rgba(10,132,255,0.1);
@@ -642,8 +660,8 @@ html, body {
     display: flex;
     align-items: center;
     gap: 8px;
-    background: #1c1c1e;
-    border: 1px solid rgba(255,255,255,0.08);
+    background: var(--ds-bg-canvas);
+    border: 1px solid var(--ds-active-tint);
     position: relative;
     transition: border-color 0.2s;
 }
@@ -663,7 +681,7 @@ html, body {
     border: none !important;
     outline: none !important;
     box-shadow: none !important;
-    color: rgba(255,255,255,0.85);
+    color: var(--ds-text-primary);
     font-size: 14px;
     font-family: inherit;
     min-width: 0;
@@ -677,7 +695,7 @@ html, body {
     width: 30px;
     height: 30px;
     border-radius: 50%;
-    background: #0a84ff;
+    background: var(--ds-accent);
     border: none;
     cursor: pointer;
     display: flex;
@@ -697,8 +715,8 @@ html, body {
     font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     font-size: 10px;
     font-weight: 500;
-    color: rgba(255,255,255,0.22);
-    background: rgba(255,255,255,0.06);
+    color: var(--ds-text-muted);
+    background: var(--ds-border-subtle);
     border: none;
     border-radius: 5px;
     padding: 2px 6px;
@@ -754,7 +772,7 @@ html, body {
 }
 .ap-ph {
     font-size: 14px;
-    color: rgba(255,255,255,0.22);
+    color: var(--ds-text-muted);
     position: absolute;
     white-space: nowrap;
     transition: opacity 0.4s ease;
@@ -771,20 +789,20 @@ html, body {
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: rgba(255,255,255,0.3);
+    color: var(--ds-text-placeholder);
     margin-bottom: 6px;
 }
 .ap-user-q {
     font-size: 19px;
     font-weight: 600;
-    color: rgba(255,255,255,0.88);
+    color: var(--ds-text-primary);
     line-height: 1.35;
     margin-bottom: 20px;
 }
 .ap-ai-prose {
     font-size: 15px;
     font-weight: 400;
-    color: rgba(255,255,255,0.75);
+    color: var(--ds-text-secondary);
     line-height: 1.7;
 }
 /* Streaming cursor */
@@ -792,7 +810,7 @@ html, body {
     display: inline-block;
     width: 2px;
     height: 1em;
-    background: rgba(255,255,255,0.5);
+    background: var(--ds-text-secondary);
     margin-left: 2px;
     vertical-align: text-bottom;
     animation: apCursorBlink 0.9s step-start infinite;
@@ -806,7 +824,7 @@ html, body {
 /* ─── Exchange separator ─── */
 .ap-exchange-sep {
     height: 1px;
-    background: rgba(255,255,255,0.06);
+    background: var(--ds-border-subtle);
     margin: 16px 0 20px;
     border: none;
 }
@@ -887,12 +905,13 @@ window._apAction = null;
 def _wrap_page(top_bar_html, content_html, extra_js='', show_account_widget=True):
     """Wrap content in the shared page layout with DaisyUI theme — same as reviewer."""
     reviewer_css = _load_reviewer_css()
+    design_tokens = _get_design_tokens_css()
     return (
         f'<!DOCTYPE html>'
         f'<html lang="de" data-theme="dark">'
         f'<head><meta charset="utf-8">'
         f'<meta name="viewport" content="width=device-width, initial-scale=1.0">'
-        f'<style>{reviewer_css}\n{_PAGE_CSS}</style>'
+        f'<style>{design_tokens}\n{reviewer_css}\n{_PAGE_CSS}</style>'
         f'</head>'
         f'<body class="bg-base-100 text-base-content overflow-hidden m-0 p-0">'
         f'<div id="ap-page" class="h-screen flex flex-col overflow-hidden">'
@@ -1079,45 +1098,45 @@ def _overview_html(deck_name, new_c, lrn_c, rev_c):
     path_esc = _esc(path)
     lbl      = 'Jetzt lernen' if total > 0 else 'Keine Karten fällig'
     disabled = '' if total > 0 else 'disabled'
-    path_html = f'<div style="font-size:10px;font-weight:700;letter-spacing:0.09em;text-transform:uppercase;color:rgba(255,255,255,0.2);margin-bottom:10px;text-align:center;">{path_esc}</div>' if path else ''
+    path_html = f'<div style="font-size:10px;font-weight:700;letter-spacing:0.09em;text-transform:uppercase;color:var(--ds-text-muted);margin-bottom:10px;text-align:center;">{path_esc}</div>' if path else ''
 
-    pill_style = 'display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 22px;border-radius:16px;background:var(--ds-bg-overlay);border:1px solid rgba(255,255,255,0.05);min-width:80px;'
+    pill_style = 'display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 22px;border-radius:16px;background:var(--ds-bg-overlay);border:1px solid var(--ds-border-subtle);min-width:80px;'
     btn_style = ('padding:14px 52px;border-radius:12px;font-size:16px;font-weight:600;border:none;cursor:pointer;'
                  'font-family:inherit;margin-bottom:20px;letter-spacing:-0.1px;transition:opacity 0.12s,transform 0.08s;')
     if total > 0:
-        btn_style += 'background:#0a84ff;color:#fff;'
+        btn_style += 'background:var(--ds-accent);color:#fff;'
     else:
-        btn_style += 'background:#282828;color:rgba(255,255,255,0.2);cursor:default;border:1px solid rgba(255,255,255,0.06);'
+        btn_style += 'background:var(--ds-bg-overlay);color:var(--ds-text-muted);cursor:default;border:1px solid var(--ds-border-subtle);'
 
-    act_style = 'background:none;border:none;color:rgba(255,255,255,0.22);font-size:13px;cursor:pointer;font-family:inherit;padding:4px 2px;transition:color 0.1s;'
+    act_style = 'background:none;border:none;color:var(--ds-text-muted);font-size:13px;cursor:pointer;font-family:inherit;padding:4px 2px;transition:color 0.1s;'
 
     content = (
         f'<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100%;padding:48px 28px;">'
         f'{path_html}'
-        f'<div style="font-size:30px;font-weight:700;color:rgba(255,255,255,0.9);margin-bottom:28px;text-align:center;letter-spacing:-0.6px;">{display}</div>'
+        f'<div style="font-size:30px;font-weight:700;color:var(--ds-text-primary);margin-bottom:28px;text-align:center;letter-spacing:-0.6px;">{display}</div>'
         f'<div style="display:flex;gap:10px;margin-bottom:36px;">'
         f'<div style="{pill_style}">'
-        f'<span style="font-size:26px;font-weight:700;letter-spacing:-0.5px;font-variant-numeric:tabular-nums;color:#0a84ff;">{new_c}</span>'
-        f'<span style="font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:rgba(10,132,255,0.45);">Neu</span>'
+        f'<span style="font-size:26px;font-weight:700;letter-spacing:-0.5px;font-variant-numeric:tabular-nums;color:var(--ds-accent);">{new_c}</span>'
+        f'<span style="font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--ds-stat-new);">Neu</span>'
         f'</div>'
         f'<div style="{pill_style}">'
-        f'<span style="font-size:26px;font-weight:700;letter-spacing:-0.5px;font-variant-numeric:tabular-nums;color:#ffd60a;">{lrn_c}</span>'
-        f'<span style="font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:rgba(255,214,10,0.45);">Lernen</span>'
+        f'<span style="font-size:26px;font-weight:700;letter-spacing:-0.5px;font-variant-numeric:tabular-nums;color:var(--ds-yellow);">{lrn_c}</span>'
+        f'<span style="font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--ds-stat-learning);">Lernen</span>'
         f'</div>'
         f'<div style="{pill_style}">'
-        f'<span style="font-size:26px;font-weight:700;letter-spacing:-0.5px;font-variant-numeric:tabular-nums;color:#30d158;">{rev_c}</span>'
-        f'<span style="font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:rgba(48,209,88,0.45);">Wieder</span>'
+        f'<span style="font-size:26px;font-weight:700;letter-spacing:-0.5px;font-variant-numeric:tabular-nums;color:var(--ds-green);">{rev_c}</span>'
+        f'<span style="font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--ds-stat-review);">Wieder</span>'
         f'</div>'
         f'</div>'
         f'<button style="{btn_style}" onclick="window._apAction={{type:\'cmd\',cmd:\'study\'}}" {disabled}>{lbl}</button>'
         f'<div style="display:flex;gap:20px;">'
         f'<button style="{act_style}"'
-        f' onmouseover="this.style.color=\'rgba(255,255,255,0.5)\'"'
-        f' onmouseout="this.style.color=\'rgba(255,255,255,0.22)\'"'
+        f' onmouseover="this.style.color=\'var(--ds-text-secondary)\'"'
+        f' onmouseout="this.style.color=\'var(--ds-text-muted)\'"'
         f' onclick="window._apAction={{type:\'cmd\',cmd:\'decks\'}}">← Zurück</button>'
         f'<button style="{act_style}"'
-        f' onmouseover="this.style.color=\'rgba(255,255,255,0.5)\'"'
-        f' onmouseout="this.style.color=\'rgba(255,255,255,0.22)\'"'
+        f' onmouseover="this.style.color=\'var(--ds-text-secondary)\'"'
+        f' onmouseout="this.style.color=\'var(--ds-text-muted)\'"'
         f' onclick="window._apAction={{type:\'cmd\',cmd:\'opts\'}}">Optionen</button>'
         f'</div>'
         f'</div>'

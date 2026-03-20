@@ -42,15 +42,15 @@ def get_dock_widget_style():
     return f"""
     QDockWidget {{
         background-color: {tokens['bg_canvas']};
-        color: #e6e6e6;
+        color: {tokens['text_primary']};
     }}
     /* Minimal separator - nearly invisible, matches unified background */
     QDockWidget::separator {{
-        background: #1E1E1E;
+        background: {tokens['bg_canvas']};
         width: 1px;
     }}
     QDockWidget::separator:hover {{
-        background: #252525;
+        background: {tokens['bg_canvas']};
         width: 1px;
     }}
     """

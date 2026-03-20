@@ -104,7 +104,7 @@ export function QuizCard({ question, options, onSelect, className = '', customWr
                   w-full text-left relative flex items-start group rounded-lg overflow-hidden transition-all duration-200
                   border border-transparent
                   ${state === 'idle' 
-                    ? 'bg-[#151515] hover:bg-[#1a1a1a] border-white/5 hover:border-white/10' 
+                    ? 'bg-[var(--ds-bg-frosted)] hover:bg-[var(--ds-bg-canvas)] border-white/5 hover:border-white/10' 
                     : ''}
                   ${state === 'selected-correct' 
                     ? 'bg-teal-500/10 border-teal-500/50 shadow-[0_0_15px_-5px_rgba(20,184,166,0.3)]' 
@@ -116,7 +116,7 @@ export function QuizCard({ question, options, onSelect, className = '', customWr
                     ? 'bg-teal-500/5 border-teal-500/30 border-dashed' 
                     : ''}
                   ${state === 'dim' 
-                    ? 'bg-[#151515] border-transparent opacity-50 grayscale' 
+                    ? 'bg-[var(--ds-bg-frosted)] border-transparent opacity-50 grayscale' 
                     : ''}
                 `}
               >

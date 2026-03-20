@@ -448,67 +448,75 @@ const ProxyImage = React.memo(({ src, alt }) => {
 ProxyImage.displayName = 'ProxyImage';
 
 // Mermaid Initialisierung
+// NOTE: Mermaid requires hex color strings — CSS var() cannot be used here.
+// These constants centralise the palette so they can be updated in one place.
+const MERMAID_NODE_BG    = '#1C1C1E';   // --ds-bg-canvas
+const MERMAID_NODE_ALT_A = '#1C1C1E';   // subtle variation A (same as canvas)
+const MERMAID_NODE_ALT_B = '#1C1C1E';   // subtle variation B
+const MERMAID_DEEP_BG    = '#141416';   // --ds-bg-deep
+const MERMAID_ACCENT     = '#14b8a6';   // teal accent (unchanged)
+const MERMAID_ACCENT2    = '#2dd4bf';   // teal lighter
+const MERMAID_TEXT       = '#e8e8e8';
+
 let mermaidInitialized = false;
 const initMermaid = () => {
   if (!mermaidInitialized) {
-    mermaid.initialize({ 
+    mermaid.initialize({
       startOnLoad: false,
       theme: 'dark',
       securityLevel: 'loose',
       flowchart: { useMaxWidth: true, htmlLabels: true },
       themeVariables: {
-        // Hauptfarben - konsistente Grautöne mit Teal-Akzent
-        primaryColor: '#252525',      // Hauptfarbe für Knoten (Mittelgrau)
-        primaryTextColor: '#e8e8e8',
-        primaryBorderColor: '#14b8a6', // Teal für Borders
-        lineColor: '#14b8a6',          // Teal für Linien
-        secondaryColor: '#1a1a1a',     // Dunkelgrau
-        tertiaryColor: '#2a2a2a',      // Hellgrau
-        background: '#1a1a1a',
-        mainBkg: '#252525',            // Haupt-Hintergrund für Knoten
-        secondBkg: '#2a2a2a',          // Sekundär-Hintergrund
-        textColor: '#e8e8e8',
+        primaryColor: MERMAID_NODE_BG,
+        primaryTextColor: MERMAID_TEXT,
+        primaryBorderColor: MERMAID_ACCENT,
+        lineColor: MERMAID_ACCENT,
+        secondaryColor: MERMAID_DEEP_BG,
+        tertiaryColor: MERMAID_NODE_ALT_A,
+        background: MERMAID_DEEP_BG,
+        mainBkg: MERMAID_NODE_BG,
+        secondBkg: MERMAID_NODE_ALT_A,
+        textColor: MERMAID_TEXT,
         secondaryTextColor: '#9a9a9a',
         tertiaryTextColor: '#6a6a6a',
-        border1: '#14b8a6',
-        border2: '#2dd4bf',
-        noteBkgColor: '#252525',
-        noteTextColor: '#e8e8e8',
-        noteBorderColor: '#14b8a6',
-        activationBorderColor: '#14b8a6',
-        activationBkgColor: '#252525',
-        sequenceNumberColor: '#e8e8e8',
-        labelBoxBkgColor: '#252525',
-        labelBoxBorderColor: '#14b8a6',
-        labelTextColor: '#e8e8e8',
-        loopTextColor: '#e8e8e8',
-        actorBorder: '#14b8a6',
-        actorBkg: '#252525',
-        actorTextColor: '#e8e8e8',
-        actorLineColor: '#14b8a6',
-        signalColor: '#e8e8e8',
-        signalTextColor: '#e8e8e8',
-        labelBoxColor: '#252525',
-        boxTextColor: '#e8e8e8',
-        messageTextColor: '#e8e8e8',
-        messageLineColor: '#14b8a6',
-        labelColor: '#e8e8e8',
+        border1: MERMAID_ACCENT,
+        border2: MERMAID_ACCENT2,
+        noteBkgColor: MERMAID_NODE_BG,
+        noteTextColor: MERMAID_TEXT,
+        noteBorderColor: MERMAID_ACCENT,
+        activationBorderColor: MERMAID_ACCENT,
+        activationBkgColor: MERMAID_NODE_BG,
+        sequenceNumberColor: MERMAID_TEXT,
+        labelBoxBkgColor: MERMAID_NODE_BG,
+        labelBoxBorderColor: MERMAID_ACCENT,
+        labelTextColor: MERMAID_TEXT,
+        loopTextColor: MERMAID_TEXT,
+        actorBorder: MERMAID_ACCENT,
+        actorBkg: MERMAID_NODE_BG,
+        actorTextColor: MERMAID_TEXT,
+        actorLineColor: MERMAID_ACCENT,
+        signalColor: MERMAID_TEXT,
+        signalTextColor: MERMAID_TEXT,
+        labelBoxColor: MERMAID_NODE_BG,
+        boxTextColor: MERMAID_TEXT,
+        messageTextColor: MERMAID_TEXT,
+        messageLineColor: MERMAID_ACCENT,
+        labelColor: MERMAID_TEXT,
         errorBkgColor: '#ef4444',
         errorTextColor: '#ffffff',
-        // Flowchart node background colors (cScale0-cScale11) - konsistente Grautöne
-        // Mermaid rotiert durch diese Farben für verschiedene Knoten
-        cScale0: '#252525',   // Mittelgrau (Hauptfarbe)
-        cScale1: '#2a2a2a',   // Hellgrau
-        cScale2: '#1f1f1f',   // Dunkelgrau
-        cScale3: '#252525',   // Mittelgrau (wiederholt)
-        cScale4: '#2a2a2a',   // Hellgrau (wiederholt)
-        cScale5: '#1f1f1f',   // Dunkelgrau (wiederholt)
-        cScale6: '#252525',   // Mittelgrau (wiederholt)
-        cScale7: '#2a2a2a',   // Hellgrau (wiederholt)
-        cScale8: '#1f1f1f',   // Dunkelgrau (wiederholt)
-        cScale9: '#252525',   // Mittelgrau (wiederholt)
-        cScale10: '#2a2a2a',  // Hellgrau (wiederholt)
-        cScale11: '#1f1f1f'   // Dunkelgrau (wiederholt)
+        // Flowchart node background colors — all point to the same palette
+        cScale0: MERMAID_NODE_BG,
+        cScale1: MERMAID_NODE_ALT_A,
+        cScale2: MERMAID_NODE_ALT_B,
+        cScale3: MERMAID_NODE_BG,
+        cScale4: MERMAID_NODE_ALT_A,
+        cScale5: MERMAID_NODE_ALT_B,
+        cScale6: MERMAID_NODE_BG,
+        cScale7: MERMAID_NODE_ALT_A,
+        cScale8: MERMAID_NODE_ALT_B,
+        cScale9: MERMAID_NODE_BG,
+        cScale10: MERMAID_NODE_ALT_A,
+        cScale11: MERMAID_NODE_ALT_B
       }
     });
     mermaidInitialized = true;
@@ -724,43 +732,41 @@ const MermaidDiagram = React.memo(({ code, isStreaming = false }) => {
           // Das CSS mit !important überschreibt bereits alles, aber wir bereinigen trotzdem
           let cleanedSvg = svg;
           // Erlaubte Farben (unsere Standard-Farben)
-          const allowedFills = ['none', '#252525', '#2a2a2a', '#1f1f1f', '#1a1a1a', 'transparent'];
-          const allowedStrokes = ['none', '#14b8a6', '#2dd4bf', 'transparent'];
-          
+          const allowedFills = ['none', MERMAID_NODE_BG, MERMAID_NODE_ALT_A, MERMAID_NODE_ALT_B, MERMAID_DEEP_BG, 'transparent'];
+          const allowedStrokes = ['none', MERMAID_ACCENT, MERMAID_ACCENT2, 'transparent'];
+
           // Ersetze fill-Attribute mit nicht-erlaubten Farben
           cleanedSvg = cleanedSvg.replace(/fill="([^"]*)"/gi, (match, color) => {
             if (allowedFills.includes(color.toLowerCase())) {
-              return match; // Behalte erlaubte Farben
+              return match;
             }
-            return 'fill="#252525"'; // Ersetze durch Standard-Farbe
+            return `fill="${MERMAID_NODE_BG}"`;
           });
-          
+
           // Ersetze stroke-Attribute mit nicht-erlaubten Farben
           cleanedSvg = cleanedSvg.replace(/stroke="([^"]*)"/gi, (match, color) => {
             if (allowedStrokes.includes(color.toLowerCase())) {
-              return match; // Behalte erlaubte Farben
+              return match;
             }
-            return 'stroke="#14b8a6"'; // Ersetze durch Standard-Farbe
+            return `stroke="${MERMAID_ACCENT}"`;
           });
-          
+
           // Bereinige style-Attribute mit Farben
           cleanedSvg = cleanedSvg.replace(/style="([^"]*)"/gi, (match, styleContent) => {
             let cleanedStyle = styleContent;
-            // Ersetze fill in style-Attributen
             cleanedStyle = cleanedStyle.replace(/fill:\s*[^;]+/gi, (fillMatch) => {
               const color = fillMatch.replace(/fill:\s*/i, '').trim();
               if (allowedFills.includes(color.toLowerCase())) {
                 return fillMatch;
               }
-              return 'fill:#252525';
+              return `fill:${MERMAID_NODE_BG}`;
             });
-            // Ersetze stroke in style-Attributen
             cleanedStyle = cleanedStyle.replace(/stroke:\s*[^;]+/gi, (strokeMatch) => {
               const color = strokeMatch.replace(/stroke:\s*/i, '').trim();
               if (allowedStrokes.includes(color.toLowerCase())) {
                 return strokeMatch;
               }
-              return 'stroke:#14b8a6';
+              return `stroke:${MERMAID_ACCENT}`;
             });
             return `style="${cleanedStyle}"`;
           });
@@ -792,7 +798,7 @@ const MermaidDiagram = React.memo(({ code, isStreaming = false }) => {
     // Fallback: Wenn Rendering fehlschlägt, zeige einfach den Code an.
     // Das verhindert Layout-Probleme und ist nützlicher als eine Fehlermeldung.
     return (
-      <div className="my-5 rounded-xl overflow-hidden border border-base-300/50 bg-[#1e1e1e] p-4 shadow-sm group">
+      <div className="my-5 rounded-xl overflow-hidden border border-base-300/50 bg-[var(--ds-bg-canvas)] p-4 shadow-sm group">
         <div className="flex items-center justify-between mb-2 pb-2 border-b border-white/10">
            <div className="flex items-center gap-2">
              <span className="text-xs font-medium text-white/40">Diagramm-Quellcode</span>
@@ -832,25 +838,25 @@ const MermaidDiagram = React.memo(({ code, isStreaming = false }) => {
         .mermaid-diagram .node ellipse,
         .mermaid-diagram .node polygon,
         .mermaid-diagram .node path {
-          fill: #252525 !important;
-          stroke: #14b8a6 !important;
+          fill: var(--ds-bg-canvas) !important;
+          stroke: ${MERMAID_ACCENT} !important;
         }
         .mermaid-diagram .cluster rect {
-          fill: #1f1f1f !important;
-          stroke: #14b8a6 !important;
+          fill: var(--ds-bg-deep) !important;
+          stroke: ${MERMAID_ACCENT} !important;
         }
         .mermaid-diagram .edgePath .path {
-          stroke: #14b8a6 !important;
+          stroke: ${MERMAID_ACCENT} !important;
         }
         .mermaid-diagram .arrowheadPath {
-          fill: #14b8a6 !important;
+          fill: ${MERMAID_ACCENT} !important;
         }
         /* Überschreibe alle anderen Farben */
-        .mermaid-diagram [fill]:not([fill="none"]):not([fill="#252525"]):not([fill="#2a2a2a"]):not([fill="#1f1f1f"]):not([fill="#1a1a1a"]) {
-          fill: #252525 !important;
+        .mermaid-diagram [fill]:not([fill="none"]):not([fill="${MERMAID_NODE_BG}"]):not([fill="${MERMAID_NODE_ALT_A}"]):not([fill="${MERMAID_NODE_ALT_B}"]):not([fill="${MERMAID_DEEP_BG}"]) {
+          fill: var(--ds-bg-canvas) !important;
         }
-        .mermaid-diagram [stroke]:not([stroke="none"]):not([stroke="#14b8a6"]):not([stroke="#2dd4bf"]) {
-          stroke: #14b8a6 !important;
+        .mermaid-diagram [stroke]:not([stroke="none"]):not([stroke="${MERMAID_ACCENT}"]):not([stroke="${MERMAID_ACCENT2}"]) {
+          stroke: ${MERMAID_ACCENT} !important;
         }
       `}</style>
       {svgContent ? (
@@ -2072,7 +2078,7 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                                     <pre 
                                         className="my-4 rounded-xl overflow-auto p-4 text-sm leading-relaxed"
                                         style={{ 
-                                            background: '#1e1e1e', 
+                                            background: 'var(--ds-bg-canvas)',
                                             border: '1px solid rgba(255,255,255,0.1)',
                                             maxHeight: '500px'
                                         }}

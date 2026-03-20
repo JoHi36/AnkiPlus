@@ -1084,6 +1084,24 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
     return handled
 
 
+# ─── Design-system token loader ──────────────────────────────────────────────
+
+_design_tokens_css = None
+
+def _get_design_tokens_css():
+    """Load shared/styles/design-system.css and cache it."""
+    global _design_tokens_css
+    if _design_tokens_css is None:
+        css_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'shared', 'styles', 'design-system.css')
+        try:
+            with open(css_path, 'r', encoding='utf-8') as f:
+                _design_tokens_css = f.read()
+        except Exception as e:
+            logger.error("CustomReviewer: Could not load design-system.css: %s", e)
+            _design_tokens_css = ''
+    return _design_tokens_css
+
+
 class CustomReviewer:
     """
     Custom Reviewer that uses webview_will_set_content hook
@@ -1344,8 +1362,9 @@ class CustomReviewer:
         # Build button HTML
         button_html = self._build_rating_buttons(button_labels)
 
-        # Load CSS and JS
-        css = self._load_css()
+        # Load CSS and JS (prepend design system tokens so var(--ds-*) works)
+        design_tokens = _get_design_tokens_css()
+        css = design_tokens + '\n' + self._load_css()
         js = self._load_js()
 
         # Detect if Anki is in dark mode
@@ -1406,7 +1425,7 @@ class CustomReviewer:
             else:
                 html = html.replace('{{ACCOUNT_BADGE_HTML}}',
                     '<span style="font-size:9px;font-weight:600;letter-spacing:0.5px;padding:2px 7px;'
-                    'border-radius:5px;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.2);">Free</span>')
+                    'border-radius:5px;background:var(--ds-hover-tint);color:var(--ds-text-muted);">Free</span>')
             html = html.replace('{{CARD_INFO}}', json.dumps(card_info))
             html = html.replace('{{JS}}', js)
         else:
@@ -1584,12 +1603,12 @@ setTimeout(function() {
         """Default CSS - Jony Ive inspired minimal fallback"""
         return '''
 :root {
-    --surface: #161618;
-    --surface-elevated: #1c1c1e;
-    --text-primary: rgba(255,255,255,0.92);
-    --text-tertiary: rgba(255,255,255,0.35);
-    --border: rgba(255,255,255,0.06);
-    --accent: #0a84ff;
+    --surface: var(--ds-bg-frosted, #161618);
+    --surface-elevated: var(--ds-bg-canvas, #1c1c1e);
+    --text-primary: var(--ds-text-primary, rgba(255,255,255,0.92));
+    --text-tertiary: var(--ds-text-tertiary, rgba(255,255,255,0.35));
+    --border: var(--ds-border-subtle, rgba(255,255,255,0.06));
+    --accent: var(--ds-accent, #0a84ff);
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; background: var(--surface); color: var(--text-primary); font-family: -apple-system, system-ui, sans-serif; }
