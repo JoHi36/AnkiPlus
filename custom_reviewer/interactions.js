@@ -965,6 +965,20 @@
         document.addEventListener('touchstart', onTouchStart, { passive: true });
         document.addEventListener('touchend', onTouchEnd, { passive: true });
 
+        // Report text field focus state to Python for global shortcut routing
+        document.addEventListener('focusin', function(e) {
+            var tag = e.target.tagName.toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) {
+                if (window.ankiBridge) window.ankiBridge.addMessage('textFieldFocus', { focused: true });
+            }
+        });
+        document.addEventListener('focusout', function(e) {
+            var tag = e.target.tagName.toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) {
+                if (window.ankiBridge) window.ankiBridge.addMessage('textFieldFocus', { focused: false });
+            }
+        });
+
         document.body.tabIndex = -1;
         document.body.focus();
         window.focus();
