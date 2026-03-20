@@ -299,6 +299,7 @@ Antworte NUR mit JSON:
 {{
   "search_needed": true/false,
   "retrieval_mode": "sql" | "semantic" | "both",
+  "response_length": "short" | "medium" | "long",
   "embedding_queries": ["semantischer Suchtext 1", "semantischer Suchtext 2"],
   "precise_queries": ["keyword1 AND keyword2", ...],
   "broad_queries": ["keyword1 OR keyword2", ...],
@@ -327,7 +328,8 @@ REGELN:
 - broad_queries: 2-3 OR-Queries für breitere Suche
 - search_scope: "current_deck" als Default, "collection" nur bei fächerübergreifenden Fragen
 - retrieval_mode: "both" als Default, "sql" für exakte Fakten, "semantic" für konzeptuelle Fragen
-- max_sources: "low" (3-5 Quellen, einfache Faktenfragen), "medium" (8-10, Standard-Erklärungen), "high" (bis 15, Vergleiche/Überblicke)"""
+- max_sources: "low" (3-5 Quellen, einfache Faktenfragen), "medium" (8-10, Standard-Erklärungen), "high" (bis 15, Vergleiche/Überblicke)
+- response_length: "short" für einfache Fakten, "medium" für Erklärungen, "long" für detaillierte Vergleiche oder mehrteilige Fragen"""
 
         # Backend-Modus: Router über Cloud Function (API-Key serverseitig)
         if use_backend:
@@ -397,7 +399,8 @@ REGELN:
                     "retrieval_mode": retrieval_mode,
                     "scope": router_result.get("search_scope", "current_deck"),
                     "scope_label": scope_label,
-                    "max_sources": router_result.get("max_sources", "medium")
+                    "max_sources": router_result.get("max_sources", "medium"),
+                    "response_length": router_result.get("response_length", "medium")
                 })
 
             logger.info("Router (Backend): search_needed=%s, retrieval_mode=%s", router_result.get('search_needed'), retrieval_mode)
@@ -673,7 +676,8 @@ REGELN:
                                         "retrieval_mode": retrieval_mode,
                                         "scope": router_result.get("search_scope", "current_deck"),
                                         "scope_label": scope_label,
-                                        "max_sources": router_result.get("max_sources", "medium")
+                                        "max_sources": router_result.get("max_sources", "medium"),
+                                        "response_length": router_result.get("response_length", "medium")
                                     })
 
                                 # Finale Log-Ausgabe
@@ -766,7 +770,8 @@ REGELN:
                 "retrieval_mode": "both",
                 "scope": "current_deck",
                 "scope_label": scope_label,
-                "max_sources": "medium"
+                "max_sources": "medium",
+                "response_length": "medium"
             })
 
         return {
