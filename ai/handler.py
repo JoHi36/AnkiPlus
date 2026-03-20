@@ -501,7 +501,7 @@ ZITIER-REGELN (PFLICHT):
                         try:
                             with open(log_path, 'a', encoding='utf-8') as f:
                                 f.write(json.dumps({"location": "ai_handler.py:624", "message": "Raising QUOTA_EXCEEDED exception", "data": {"error_code": error_code, "error_msg": error_msg, "user_msg": user_msg}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "A"}) + "\n")
-                        except:
+                        except (OSError, ValueError, TypeError):
                             pass
                         # #endregion
                         raise Exception(user_msg)
@@ -547,7 +547,7 @@ ZITIER-REGELN (PFLICHT):
                         print(f"   Message: {error_msg}")
                         print(f"   Details: {error_details}")
                         print(f"   Vollständige Response: {response.text[:1000]}")
-                    except:
+                    except (ValueError, KeyError):
                         print(f"⚠️ 400 Bad Request - Response Text: {response.text[:500]}")
                 
                 # Bei 500-Fehler, logge die Fehlermeldung bevor raise_for_status() aufgerufen wird
@@ -560,7 +560,7 @@ ZITIER-REGELN (PFLICHT):
                         print(f"   Message: {error_msg}")
                         print(f"   Code: {error_code}")
                         print(f"   Response Text: {response.text[:1000]}")
-                    except:
+                    except (ValueError, KeyError):
                         print(f"⚠️ 500 Internal Server Error - Response Text: {response.text[:500]}")
                 
                 response.raise_for_status()
@@ -633,7 +633,7 @@ ZITIER-REGELN (PFLICHT):
                             error_data = e.response.json()
                             error_msg = error_data.get("error", {}).get("message", "Internal Server Error")
                             print(f"⚠️ 500 Internal Server Error Details: {error_msg}")
-                    except:
+                    except (ValueError, KeyError, AttributeError):
                         pass
                     
                     # Versuche Retry ohne Historie, wenn Historie vorhanden
@@ -688,7 +688,7 @@ ZITIER-REGELN (PFLICHT):
                         raise Exception(f"Google API Fehler: {error_msg}")
                     else:
                         raise Exception(f"Google API Fehler: {str(e)}")
-                except:
+                except (ValueError, KeyError, AttributeError):
                     raise Exception(f"Google API Fehler: {str(e)}")
             except Exception as e:
                 if "Google API Fehler" in str(e):
@@ -1043,7 +1043,7 @@ ZITIER-REGELN (PFLICHT):
                         error_data = json.loads(error_text) if error_text.startswith('{') else {}
                         error_msg = error_data.get("error", {}).get("message", "Quota überschritten")
                         raise Exception(f"Quota überschritten: {error_msg}. Bitte upgraden Sie Ihren Plan.")
-                    except:
+                    except (ValueError, KeyError):
                         raise Exception("Quota überschritten. Bitte upgraden Sie Ihren Plan.")
                 
                 response.raise_for_status()
@@ -1631,7 +1631,7 @@ Karteninhalt: {question_clean[:500]}"""
                         error_data = response.json()
                         error_msg = error_data.get("error", {}).get("message", "Unbekannter Fehler")
                         print(f"   Fehlermeldung: {error_msg}")
-                    except:
+                    except (ValueError, KeyError):
                         print(f"   Response Text: {response.text[:500]}")
                 
                 response.raise_for_status()
@@ -1705,7 +1705,7 @@ Karteninhalt: {question_clean[:500]}"""
                 try:
                     error_data = last_error.response.json()
                     error_msg = error_data.get("error", {}).get("message", error_msg)
-                except:
+                except (ValueError, KeyError):
                     pass
             raise Exception(f"Google API Fehler: {error_msg}")
         
