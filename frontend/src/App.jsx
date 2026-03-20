@@ -33,6 +33,7 @@ import { useMascot } from './hooks/useMascot';
 import { usePlusiDirect } from './hooks/usePlusiDirect';
 import InsightsDashboard from './components/InsightsDashboard';
 import AgentStudio from './components/AgentStudio';
+import ExtractInsightsButton from './components/ExtractInsightsButton';
 import useInsights from './hooks/useInsights';
 import PlusiMenu from './components/PlusiMenu';
 
@@ -166,7 +167,6 @@ function AppInner() {
   const cardSessionHook = useCardSession(bridge);
   const reviewTrailHook = useReviewTrail();
   const insightsHook = useInsights();
-  const [showInsightsDashboard, setShowInsightsDashboard] = useState(false);
   const [activeView, setActiveView] = useState('chat'); // 'chat' | 'agentStudio' | 'plusiMenu'
   const lastProcessedCardRef = useRef(null);
   // Create a setSessions wrapper that works with SessionContext
@@ -699,18 +699,8 @@ function AppInner() {
             if (prevCardId && _chat.messages && _chat.messages.length > 0) {
               _cardSession.updateLocalMessages(prevCardId, _chat.messages);
             }
-            // Auto-extract insights from previous card if enough messages
-            // Use _chat.messages directly (prevCardRef is unreliable due to async message loading)
+            // Auto-extraction removed — now manual via ExtractInsightsButton
             const _insights = insightsHookRef.current;
-            const currentCardContext = _cardCtx.cardContext;
-            if (prevCardId && _chat.messages && _chat.messages.length > 0) {
-              const userMsgCount = _chat.messages.filter(m => m.from === 'user').length;
-              console.error('🟡 EXTRACT CHECK: prevCardId=', prevCardId, 'messages=', _chat.messages.length, 'userMsgs=', userMsgCount);
-              if (userMsgCount >= 2 && currentCardContext) {
-                console.error('🟢 EXTRACT: Triggering extraction for card', prevCardId);
-                _insights.extractInsights(prevCardId, currentCardContext, _chat.messages, null);
-              }
-            }
             _session.handleCardShown(newCardId);
             // Clear chat and sections for new card
             _chat.setMessages([]);
@@ -1166,15 +1156,8 @@ function AppInner() {
         if (prevCardId && _chat.messages && _chat.messages.length > 0) {
           _cardSession.updateLocalMessages(prevCardId, _chat.messages);
         }
-        // Auto-extract insights from previous card if enough messages
+        // Auto-extraction removed — now manual via ExtractInsightsButton
         const _insights = insightsHookRef.current;
-        const currentCardContext = _cardCtx.cardContext;
-        if (prevCardId && _chat.messages && _chat.messages.length > 0) {
-          const userMsgCount = _chat.messages.filter(m => m.from === 'user').length;
-          if (userMsgCount >= 2 && currentCardContext) {
-            _insights.extractInsights(prevCardId, currentCardContext, _chat.messages, null);
-          }
-        }
         _session.handleCardShown(newCardId);
         // Clear chat and sections for new card
         _chat.setMessages([]);
@@ -1855,13 +1838,6 @@ function AppInner() {
   }, [chatHook, cardContextHook, insightsHook]);
   
   // Prüfe ob Reset-Button inaktiv sein soll (keine Messages und keine Sections)
-  // Reset insights dashboard toggle when messages are cleared
-  useEffect(() => {
-    if (chatHook.messages.length === 0) {
-      setShowInsightsDashboard(false);
-    }
-  }, [chatHook.messages.length]);
-
   const isResetDisabled = chatHook.messages.length === 0 && cardContextHook.sections.length === 0;
   
   const handleRequestHint = cardContextHook.createHandleRequestHint(handleSend);
@@ -2079,7 +2055,7 @@ function AppInner() {
                   />
                 ) : activeView === 'plusiMenu' ? (
                   <PlusiMenu />
-                ) : (chatHook.messages.length === 0 || showInsightsDashboard) && !chatHook.isLoading && !chatHook.streamingMessage ? (
+                ) : chatHook.messages.length === 0 && !chatHook.isLoading && !chatHook.streamingMessage ? (
             <InsightsDashboard
               insights={insightsHook.insights}
               cardStats={cardContextHook.cardContext?.stats || {}}
@@ -2349,6 +2325,27 @@ function AppInner() {
                       </div>
                     )}
                     
+                    {/* Manual insight extraction button */}
+                    <ExtractInsightsButton
+                      messageCount={chatHook.messages.length}
+                      onExtract={(onDone) => {
+                        if (cardContextHook.cardContext?.cardId) {
+                          insightsHook.extractInsights(
+                            cardContextHook.cardContext.cardId,
+                            cardContextHook.cardContext,
+                            chatHook.messages,
+                            null
+                          );
+                        }
+                        const checkDone = setInterval(() => {
+                          if (!insightsHook.isExtracting) {
+                            clearInterval(checkDone);
+                            onDone?.();
+                          }
+                        }, 500);
+                      }}
+                    />
+
                     {/* Spacer am Ende - sorgt dafür dass der letzte Content vollständig sichtbar ist */}
                     <div className="h-6 w-full" aria-hidden="true" />
                   </>
