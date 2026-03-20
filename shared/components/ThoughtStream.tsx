@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import SourcesCarousel from './SourcesCarousel';
 
 /* ═══════════════════════════════════════════════════
    ThoughtStream v4 — Smart Pipeline + Phase Animations
@@ -880,6 +881,16 @@ export default function ThoughtStream({
                 isActive={activeEntry.status === 'active'}
                 isFirst={chronologicalDone.length === 0}
                 animate={animate}
+              />
+            )}
+
+            {/* Source cards — only after pipeline completes */}
+            {!isProcessing && hasCitations && (
+              <SourcesCarousel
+                citations={citations}
+                citationIndices={citationIndices}
+                bridge={bridge}
+                onPreviewCard={onPreviewCard}
               />
             )}
           </div>

@@ -11,7 +11,6 @@ import ReviewResult from './ReviewResult';
 import MultipleChoiceCard from './MultipleChoiceCard';
 import CitationBadge from './CitationBadge';
 import ThoughtStream from './ThoughtStream';
-import SourcesCarousel from './SourcesCarousel';
 import ToolWidgetRenderer from './ToolWidgetRenderer';
 import mermaid from 'mermaid';
 // SmilesDrawer wird dynamisch importiert, da es CommonJS ist und Vite-Probleme verursachen kann
@@ -1717,14 +1716,6 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                       citations={citations}
                       message={message}
                   />
-                  {Object.keys(citations).length > 0 && (
-                    <SourcesCarousel
-                      citations={citations}
-                      citationIndices={citationIndices || {}}
-                      bridge={bridge}
-                      onPreviewCard={onPreviewCard}
-                    />
-                  )}
                 </>
             ) : (
                 /* Simple divider for saved bot messages without steps — only for pure text replies (no Plusi, no ReviewCard) */
@@ -2028,15 +2019,17 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                             
                             // Hervorhebungen - Textmarker Effekt
                             strong: ({node, ...props}) => (
-                                <span className="font-semibold text-base-content bg-primary/15 px-1 rounded-sm decoration-clone box-decoration-clone pb-0.5" {...props} />
+                                <span className="font-semibold px-1 rounded-sm decoration-clone box-decoration-clone pb-0.5"
+                                      style={{ color: 'var(--ds-text-primary)', background: 'color-mix(in srgb, var(--ds-accent) 15%, transparent)' }} {...props} />
                             ),
-                            em: ({node, ...props}) => <em className="italic text-base-content/75" {...props} />,
+                            em: ({node, ...props}) => <em className="italic" style={{ color: 'var(--ds-text-secondary)' }} {...props} />,
                             
                             // Simplified Blockquote - ONLY brand colors (primary), no yellow/red variants
                             blockquote: ({node, children, ...props}) => {
                                 // Always use primary brand color - no special coloring for keywords
                                 return (
-                                    <blockquote className="border-l-2 border-primary/40 bg-primary/5 text-base-content/90 pl-4 py-3 my-5 rounded-none shadow-sm" {...props}>
+                                    <blockquote className="border-l-2 pl-4 py-3 my-5 rounded-none shadow-sm"
+                                                style={{ borderColor: 'color-mix(in srgb, var(--ds-accent) 40%, transparent)', background: 'color-mix(in srgb, var(--ds-accent) 5%, transparent)', color: 'var(--ds-text-primary)' }} {...props}>
                                         <div className="reset-strong">
                                             {children}
                                         </div>
@@ -2045,18 +2038,18 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                             },
                             
                             // Horizontale Linie - subtiler
-                            hr: ({node, ...props}) => <hr className="my-6 border-0 h-px bg-gradient-to-r from-transparent via-base-content/20 to-transparent" {...props} />,
+                            hr: ({node, ...props}) => <hr className="my-6 border-0 h-px" style={{ background: `linear-gradient(to right, transparent, var(--ds-border-medium), transparent)` }} {...props} />,
                             
                             // Table Styling
                             table: ({node, ...props}) => (
-                                <div className="my-5 overflow-hidden rounded-xl border border-base-300/50 shadow-sm">
-                                    <table className="min-w-full divide-y divide-base-300/50" {...props} />
+                                <div className="my-5 overflow-hidden rounded-xl border shadow-sm" style={{ borderColor: 'var(--ds-border-subtle)' }}>
+                                    <table className="min-w-full" {...props} />
                                 </div>
                             ),
-                            thead: ({node, ...props}) => <thead className="bg-base-200/60" {...props} />,
-                            th: ({node, ...props}) => <th className="px-4 py-3 text-left text-xs font-semibold text-base-content/70 uppercase tracking-wider" {...props} />,
-                            tbody: ({node, ...props}) => <tbody className="divide-y divide-base-300/30 bg-base-100/20" {...props} />,
-                            td: ({node, ...props}) => <td className="px-4 py-3 text-sm text-base-content/80" {...props} />,
+                            thead: ({node, ...props}) => <thead style={{ background: 'var(--ds-hover-tint)' }} {...props} />,
+                            th: ({node, ...props}) => <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--ds-text-secondary)', borderBottom: '1px solid var(--ds-border-subtle)' }} {...props} />,
+                            tbody: ({node, ...props}) => <tbody {...props} />,
+                            td: ({node, ...props}) => <td className="px-4 py-3 text-sm" style={{ color: 'var(--ds-text-primary)', borderBottom: '1px solid var(--ds-border-subtle)' }} {...props} />,
 
                             // Code Blocks & Concept Pills
                             code: ({node, inline, className, children, ...props}) => {

@@ -25,7 +25,6 @@ import ErrorBoundary from './components/ErrorBoundary';
 import PaywallModal from './components/PaywallModal';
 import TokenBar from './components/TokenBar';
 import SectionDivider from './components/SectionDivider';
-import SourcesCarousel from './components/SourcesCarousel';
 import ReviewTrailIndicator from './components/ReviewTrailIndicator';
 import { BookOpen } from 'lucide-react';
 import { useFreeChat } from './hooks/useFreeChat';
@@ -2277,27 +2276,6 @@ function AppInner() {
                               <div className="h-px my-2" style={{ background: 'var(--ds-border-subtle)' }} />
                             )}
 
-                            {/* Sources — always visible, outside ThoughtStream */}
-                            {Object.keys(chatHook.currentCitations || {}).length > 0 && (() => {
-                              // Build citation indices from sorted keys (1-based)
-                              const cits = chatHook.currentCitations || {};
-                              const indices = {};
-                              let counter = 1;
-                              // Sort by sources.length desc (dual-source first)
-                              const sorted = Object.entries(cits).sort(([,a],[,b]) => (b.sources?.length || 0) - (a.sources?.length || 0));
-                              sorted.forEach(([key, cit]) => {
-                                const id = String(cit.noteId || cit.cardId || key);
-                                if (!indices[id]) indices[id] = counter++;
-                              });
-                              return (
-                                <SourcesCarousel
-                                  citations={cits}
-                                  citationIndices={indices}
-                                  bridge={bridge}
-                                  onPreviewCard={handlePreviewCard}
-                                />
-                              );
-                            })()}
                           </div>
                         )}
                         {(chatHook.isLoading || chatHook.streamingMessage) && !(
@@ -2323,38 +2301,35 @@ function AppInner() {
                           </div>
                         )}
                         
+                        {/* Manual insight extraction button */}
+                        <ExtractInsightsButton
+                          messageCount={chatHook.messages.length}
+                          onExtract={(onDone, onError) => {
+                            if (cardContextHook.cardContext?.cardId) {
+                              insightsHook.extractInsights(
+                                cardContextHook.cardContext.cardId,
+                                cardContextHook.cardContext,
+                                chatHook.messages,
+                                null
+                              );
+                            }
+                            // Listen for extraction result
+                            const handler = (e) => {
+                              window.removeEventListener('ankiInsightExtractionComplete', handler);
+                              if (e.detail?.success) {
+                                onDone?.();
+                              } else {
+                                onError?.();
+                              }
+                            };
+                            window.addEventListener('ankiInsightExtractionComplete', handler);
+                          }}
+                        />
+
                         {/* SPACER - Drückt alles nach oben und füllt den Rest des Screens */}
                         <div className="flex-grow w-full min-h-[50px]" />
                       </div>
                     )}
-                    
-                    {/* Manual insight extraction button */}
-                    <ExtractInsightsButton
-                      messageCount={chatHook.messages.length}
-                      onExtract={(onDone, onError) => {
-                        if (cardContextHook.cardContext?.cardId) {
-                          insightsHook.extractInsights(
-                            cardContextHook.cardContext.cardId,
-                            cardContextHook.cardContext,
-                            chatHook.messages,
-                            null
-                          );
-                        }
-                        // Listen for extraction result
-                        const handler = (e) => {
-                          window.removeEventListener('ankiInsightExtractionComplete', handler);
-                          if (e.detail?.success) {
-                            onDone?.();
-                          } else {
-                            onError?.();
-                          }
-                        };
-                        window.addEventListener('ankiInsightExtractionComplete', handler);
-                      }}
-                    />
-
-                    {/* Spacer am Ende - sorgt dafür dass der letzte Content vollständig sichtbar ist */}
-                    <div className="h-6 w-full" aria-hidden="true" />
                   </>
                 );
               })()}
