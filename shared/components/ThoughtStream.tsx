@@ -522,7 +522,7 @@ function MergeBar({ data }: { data: Record<string, any> }) {
    PHASE ROW — Unified renderer for active + done
    ═══════════════════════════════════════════════════ */
 
-function PhaseRow({ step, data, status, isActive }: { step: string; data: Record<string, any>; status: string; isActive: boolean }) {
+function PhaseRow({ step, data, status, isActive, isFirst = false }: { step: string; data: Record<string, any>; status: string; isActive: boolean; isFirst?: boolean }) {
   const isDone = !isActive;
 
   // Title logic
@@ -552,7 +552,7 @@ function PhaseRow({ step, data, status, isActive }: { step: string; data: Record
     <div
       style={{
         padding: '6px 0',
-        borderTop: '1px solid var(--ds-hover-tint)',
+        borderTop: isFirst ? 'none' : '1px solid var(--ds-hover-tint)',
         animation: isActive ? undefined : 'ts-phaseReveal 0.25s ease-out both',
       }}
     >
@@ -787,7 +787,7 @@ export default function ThoughtStream({
   }
 
   return (
-    <div style={{ marginBottom: 8, maxWidth: '100%', userSelect: 'none', borderTop: '1px solid var(--ds-border-subtle)', paddingTop: 4 }}>
+    <div style={{ marginTop: 12, maxWidth: '100%', userSelect: 'none' }}>
       {/* ── Collapsed view ── */}
       {isCollapsed && !isProcessing && !showLoadingBox && (
         <button
@@ -869,27 +869,32 @@ export default function ThoughtStream({
             </div>
           )}
 
-          {/* Chronological done phases */}
-          {chronologicalDone.map((entry) => (
-            <PhaseRow
-              key={entry.step}
-              step={entry.step}
-              data={pipelineSteps.find(s => s.step === entry.step)?.data || {}}
-              status={entry.isError ? 'error' : 'done'}
-              isActive={false}
-            />
-          ))}
+          {/* Step rows — indented under "X Schritte" header */}
+          <div style={{ marginLeft: 16 }}>
+            {/* Chronological done phases */}
+            {chronologicalDone.map((entry, idx) => (
+              <PhaseRow
+                key={entry.step}
+                step={entry.step}
+                data={pipelineSteps.find(s => s.step === entry.step)?.data || {}}
+                status={entry.isError ? 'error' : 'done'}
+                isActive={false}
+                isFirst={idx === 0}
+              />
+            ))}
 
-          {/* Active phase */}
-          {activeEntry && (
-            <PhaseRow
-              key={`active-${activeEntry.step}`}
-              step={activeEntry.step}
-              data={activeEntry.data}
-              status={activeEntry.status}
-              isActive={activeEntry.status === 'active'}
-            />
-          )}
+            {/* Active phase */}
+            {activeEntry && (
+              <PhaseRow
+                key={`active-${activeEntry.step}`}
+                step={activeEntry.step}
+                data={activeEntry.data}
+                status={activeEntry.status}
+                isActive={activeEntry.status === 'active'}
+                isFirst={chronologicalDone.length === 0}
+              />
+            )}
+          </div>
         </div>
       )}
     </div>
