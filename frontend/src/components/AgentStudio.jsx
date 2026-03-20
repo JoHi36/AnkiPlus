@@ -1,0 +1,241 @@
+import React, { useState, useEffect, useCallback } from 'react';
+
+function PlusiIcon({ size = 28 }) {
+  return (
+    <svg viewBox="0 0 120 120" width={size} height={size}>
+      <rect x="40" y="5" width="40" height="110" rx="8" fill="#0a84ff"/>
+      <rect x="5" y="35" width="110" height="40" rx="8" fill="#0a84ff"/>
+      <rect x="40" y="35" width="40" height="40" fill="#0a84ff"/>
+      <ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/>
+      <ellipse cx="49" cy="50" rx="4" ry="4" fill="#1a1a1a"/>
+      <ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/>
+      <ellipse cx="71" cy="50" rx="4" ry="4" fill="#1a1a1a"/>
+      <path d="M 48 68 Q 60 74 72 68" stroke="#1a1a1a" strokeWidth="3" fill="none" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function Toggle({ on, onChange }) {
+  return (
+    <button
+      onClick={onChange}
+      style={{
+        width: 36, height: 20, borderRadius: 10, position: 'relative',
+        cursor: 'pointer', border: 'none', transition: 'background 0.2s',
+        background: on ? 'var(--ds-accent, #0a84ff)' : 'rgba(255,255,255,0.08)',
+      }}
+    >
+      <div style={{
+        position: 'absolute', top: 2, left: on ? 18 : 2,
+        width: 16, height: 16, borderRadius: '50%', background: '#fff',
+        transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+      }} />
+    </button>
+  );
+}
+
+const TOOLS = [
+  { key: 'card_search', emoji: '🔍', label: 'Kartensuche', desc: 'Karten aus dem Deck suchen' },
+  { key: 'images', emoji: '🖼️', label: 'Bilder', desc: 'Bilder aus Karten und Internet' },
+  { key: 'diagrams', emoji: '📊', label: 'Diagramme', desc: 'Mermaid-Diagramme' },
+  { key: 'statistics', emoji: '📈', label: 'Statistiken', desc: 'Streak, Heatmap, Deck-Überblick' },
+  { key: 'molecules', emoji: '🧬', label: 'Moleküle', desc: 'Molekülstrukturen darstellen', badge: 'Beta' },
+];
+
+export default function AgentStudio({ bridge, onNavigateToPlusi }) {
+  const [tools, setTools] = useState({});
+  const [mascotEnabled, setMascotEnabled] = useState(false);
+  const [embedding, setEmbedding] = useState({ embeddedCards: 0, totalCards: 0, isRunning: false });
+
+  useEffect(() => {
+    if (!bridge) return;
+    try {
+      const configStr = bridge.getCurrentConfig?.();
+      if (configStr) {
+        const config = JSON.parse(configStr);
+        setTools(config.ai_tools || config.aiTools || {});
+        setMascotEnabled(config.mascot_enabled || config.mascotEnabled || false);
+      }
+    } catch (e) {
+      console.error('AgentStudio: failed to load config', e);
+    }
+  }, [bridge]);
+
+  useEffect(() => {
+    if (!bridge?.getEmbeddingStatus) return;
+    const fetchStatus = () => {
+      try {
+        const json = bridge.getEmbeddingStatus();
+        if (json) setEmbedding(JSON.parse(json));
+      } catch (e) {}
+    };
+    fetchStatus();
+    const timer = setInterval(fetchStatus, 3000);
+    return () => clearInterval(timer);
+  }, [bridge]);
+
+  const handleToggleTool = useCallback((key) => {
+    setTools(prev => {
+      const updated = { ...prev, [key]: !prev[key] };
+      if (bridge?.saveAITools) {
+        bridge.saveAITools(JSON.stringify(updated));
+      }
+      return updated;
+    });
+  }, [bridge]);
+
+  const handleToggleMascot = useCallback(() => {
+    setMascotEnabled(prev => {
+      const next = !prev;
+      if (bridge?.saveMascotEnabled) {
+        bridge.saveMascotEnabled(next);
+      }
+      return next;
+    });
+  }, [bridge]);
+
+  const embedPct = embedding.totalCards > 0
+    ? Math.round((embedding.embeddedCards / embedding.totalCards) * 100)
+    : 0;
+  const embedDone = embedPct >= 100 && !embedding.isRunning;
+
+  const S = styles;
+
+  return (
+    <div style={S.container}>
+      <div style={S.header}>Agent Studio</div>
+
+      <div style={S.section}>
+        <div style={S.sectionTitle}>Semantische Suche</div>
+        <div style={S.card}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="var(--ds-text-tertiary, rgba(255,255,255,0.22))" strokeWidth={1.8}>
+                <circle cx={11} cy={11} r={8}/><line x1={21} y1={21} x2={16.65} y2={16.65}/>
+              </svg>
+              <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ds-text-secondary, rgba(255,255,255,0.7))' }}>
+                Karten-Embeddings
+              </span>
+              {(embedding.isRunning || embedDone) && (
+                <span style={{
+                  fontSize: 9, fontWeight: 600, padding: '2px 7px', borderRadius: 5,
+                  background: embedDone ? 'rgba(34,197,94,0.12)' : 'rgba(10,132,255,0.12)',
+                  color: embedDone ? 'rgba(34,197,94,0.8)' : 'rgba(10,132,255,0.7)',
+                }}>
+                  {embedDone ? 'Fertig' : 'Läuft...'}
+                </span>
+              )}
+            </div>
+            <span style={{ fontSize: 12, color: 'var(--ds-text-secondary, rgba(255,255,255,0.45))', fontVariantNumeric: 'tabular-nums' }}>
+              {embedding.embeddedCards} / {embedding.totalCards}
+            </span>
+          </div>
+          <div style={{ height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.04)', overflow: 'hidden' }}>
+            <div style={{
+              width: `${embedPct}%`, height: '100%', borderRadius: 2, transition: 'width 0.6s ease',
+              background: embedDone ? '#22c55e' : 'var(--ds-accent, #0a84ff)',
+            }} />
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--ds-text-tertiary, rgba(255,255,255,0.22))', marginTop: 8, lineHeight: 1.5 }}>
+            Karten werden im Hintergrund indiziert, um semantisch ähnliche Inhalte zu finden.
+          </div>
+        </div>
+      </div>
+
+      <div style={S.section}>
+        <div style={S.sectionTitle}>Agent Tools</div>
+        <div style={S.card}>
+          {TOOLS.map((tool, i) => (
+            <div key={tool.key} style={{
+              ...S.toolRow,
+              borderBottom: i < TOOLS.length - 1 ? '1px solid var(--ds-border-subtle, rgba(255,255,255,0.06))' : 'none',
+            }}>
+              <span style={{ fontSize: 16, marginRight: 10 }}>{tool.emoji}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ds-text-secondary, rgba(255,255,255,0.7))' }}>
+                    {tool.label}
+                  </span>
+                  {tool.badge && (
+                    <span style={{
+                      fontSize: 9, fontWeight: 600, padding: '2px 7px', borderRadius: 5,
+                      background: 'rgba(10,132,255,0.12)', color: 'rgba(10,132,255,0.8)',
+                    }}>
+                      {tool.badge}
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))', marginTop: 1 }}>
+                  {tool.desc}
+                </div>
+              </div>
+              <Toggle on={!!tools[tool.key]} onChange={() => handleToggleTool(tool.key)} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={S.section}>
+        <div style={S.sectionTitle}>Subagenten</div>
+        <div style={S.card}>
+          <div style={S.toolRow}>
+            <div style={{ marginRight: 10 }}><PlusiIcon size={28} /></div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ds-text-secondary, rgba(255,255,255,0.7))' }}>Plusi</span>
+                <span style={{ fontSize: 9, fontWeight: 600, padding: '2px 7px', borderRadius: 5, background: 'rgba(10,132,255,0.12)', color: 'rgba(10,132,255,0.8)' }}>Beta</span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))', marginTop: 1 }}>
+                Lern-Begleiter mit Persönlichkeit
+              </div>
+            </div>
+            <Toggle on={mascotEnabled} onChange={handleToggleMascot} />
+          </div>
+          <div style={{ height: 1, background: 'var(--ds-border-subtle, rgba(255,255,255,0.06))' }} />
+          <div
+            onClick={onNavigateToPlusi}
+            style={S.subAgentButton}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <span style={{ fontSize: 12, color: 'var(--ds-text-secondary, rgba(255,255,255,0.45))' }}>Sub-Agent-Menü</span>
+            <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="var(--ds-text-tertiary, rgba(255,255,255,0.18))" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const styles = {
+  container: {
+    flex: 1, display: 'flex', flexDirection: 'column',
+    padding: '0 20px 140px', overflowY: 'auto',
+  },
+  header: {
+    fontSize: 16, fontWeight: 600, textAlign: 'center',
+    color: 'var(--ds-text-primary, rgba(255,255,255,0.88))',
+    padding: '20px 0 16px',
+  },
+  section: { marginBottom: 20 },
+  sectionTitle: {
+    fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
+    letterSpacing: '0.8px', color: 'var(--ds-text-tertiary, rgba(255,255,255,0.22))',
+    marginBottom: 10,
+  },
+  card: {
+    background: 'var(--ds-bg-canvas, rgba(255,255,255,0.03))',
+    border: '1px solid var(--ds-border-subtle, rgba(255,255,255,0.06))',
+    borderRadius: 12, overflow: 'hidden',
+  },
+  toolRow: {
+    display: 'flex', alignItems: 'center', padding: '12px 16px',
+  },
+  subAgentButton: {
+    padding: '14px 16px', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    transition: 'background 0.12s',
+  },
+};

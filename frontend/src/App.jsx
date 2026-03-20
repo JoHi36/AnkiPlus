@@ -32,6 +32,7 @@ import { useFreeChat } from './hooks/useFreeChat';
 import { useMascot } from './hooks/useMascot';
 import { usePlusiDirect } from './hooks/usePlusiDirect';
 import InsightsDashboard from './components/InsightsDashboard';
+import AgentStudio from './components/AgentStudio';
 import useInsights from './hooks/useInsights';
 import PlusiMenu from './components/PlusiMenu';
 
@@ -2072,9 +2073,10 @@ function AppInner() {
               >
 
                 {activeView === 'agentStudio' ? (
-                  <div style={{ padding: 40, textAlign: 'center', color: 'rgba(232,232,232,0.3)' }}>
-                    Agent Studio (placeholder)
-                  </div>
+                  <AgentStudio
+                    bridge={bridge}
+                    onNavigateToPlusi={() => setActiveView('plusiMenu')}
+                  />
                 ) : activeView === 'plusiMenu' ? (
                   <PlusiMenu />
                 ) : (chatHook.messages.length === 0 || showInsightsDashboard) && !chatHook.isLoading && !chatHook.streamingMessage ? (
