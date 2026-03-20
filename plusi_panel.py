@@ -127,32 +127,58 @@ body {
     z-index: 10;
     display: flex;
     align-items: center;
-    gap: 12px;
-    pointer-events: none;
+    gap: 14px;
+}
+.plusi-char {
+    cursor: pointer;
+    flex-shrink: 0;
 }
 .plusi-body {
     width: 40px; height: 40px;
     animation: plusi-float 3s ease-in-out infinite;
+    transition: transform 0.2s, opacity 0.2s;
+}
+.plusi-char:active .plusi-body {
+    transform: scale(0.92);
 }
 @keyframes plusi-float {
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-2px); }
 }
-.mood-dot {
-    width: 5px; height: 5px;
-    border-radius: 50%;
-    animation: mood-pulse 2s ease-in-out infinite;
+.plusi-stats {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
 }
-@keyframes mood-pulse {
-    0%, 100% { opacity: 0.5; }
-    50% { opacity: 1; }
+/* Energy + Mood row */
+.energy-mood {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
-.mood-value {
-    font-size: 11px;
-    color: rgba(255,255,255,0.45);
-    font-family: 'Varela Round', sans-serif;
+.energy-bar {
+    flex: 1;
+    height: 3px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 2px;
+    overflow: hidden;
 }
-.friendship-bar {
+.energy-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s ease, background 0.5s ease;
+}
+.mood-label {
+    font-family: -apple-system, 'Inter', system-ui, sans-serif;
+    font-size: 9px;
+    color: rgba(255,255,255,0.3);
+    font-weight: 500;
+    white-space: nowrap;
+    min-width: 0;
+}
+/* Friendship row */
+.friendship-row {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -198,12 +224,8 @@ PANEL_HTML = """
 
 <div class="btn-settings" onclick="window._panelSettings()">
     <svg viewBox="0 0 24 24">
-        <line x1="4" y1="6" x2="20" y2="6"></line>
-        <circle cx="8" cy="6" r="2"></circle>
-        <line x1="4" y1="12" x2="20" y2="12"></line>
-        <circle cx="16" cy="12" r="2"></circle>
-        <line x1="4" y1="18" x2="20" y2="18"></line>
-        <circle cx="11" cy="18" r="2"></circle>
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
     </svg>
 </div>
 <div class="btn-close" onclick="window._panelClose()">
@@ -219,7 +241,7 @@ PANEL_HTML = """
 </div>
 
 <div class="plusi-bottom">
-    <div style="width:40px;height:40px;flex-shrink:0;">
+    <div class="plusi-char" id="plusi-panel-char" ondblclick="window._panelPlusiChat()">
         <svg class="plusi-body" viewBox="0 0 120 120" width="40" height="40" id="plusi-panel-svg">
             <rect x="40" y="5" width="40" height="110" rx="8" fill="#0a84ff"/>
             <rect x="5" y="35" width="110" height="40" rx="8" fill="#0a84ff"/>
@@ -227,12 +249,14 @@ PANEL_HTML = """
             <g id="plusi-panel-face"></g>
         </svg>
     </div>
-    <div style="flex:1;display:flex;flex-direction:column;gap:5px;">
-        <div style="display:flex;align-items:center;gap:6px;">
-            <div class="mood-dot" id="mood-dot"></div>
-            <span class="mood-value" id="mood-label">neutral</span>
+    <div class="plusi-stats">
+        <div class="energy-mood">
+            <div class="energy-bar">
+                <div class="energy-fill" id="energy-fill" style="width:50%;background:#818cf8;"></div>
+            </div>
+            <span class="mood-label" id="mood-label">neutral</span>
         </div>
-        <div class="friendship-bar">
+        <div class="friendship-row">
             <span class="friendship-label" id="friendship-name">Fremde</span>
             <div class="friendship-track">
                 <div class="friendship-fill" id="friendship-fill" style="width:0%"></div>
@@ -330,13 +354,18 @@ function renderEntries(entries) {
     startCipherAnimations();
 }
 
-function updateMood(mood) {
-    var dot = document.getElementById('mood-dot');
+function updateMood(mood, energy) {
     var label = document.getElementById('mood-label');
-    if (dot) dot.style.background = MOOD_COLORS[mood] || MOOD_COLORS.neutral;
     if (label) label.textContent = mood;
     var face = document.getElementById('plusi-panel-face');
     if (face && FACES[mood]) face.innerHTML = FACES[mood];
+    /* Energy bar — color matches mood */
+    var eFill = document.getElementById('energy-fill');
+    if (eFill) {
+        var e = (typeof energy === 'number') ? energy : 5;
+        eFill.style.width = (e * 10) + '%';
+        eFill.style.background = MOOD_COLORS[mood] || MOOD_COLORS.neutral;
+    }
 }
 
 function updateFriendship(data) {
@@ -351,11 +380,20 @@ function updateFriendship(data) {
 
 window.diaryReceive = function(payload) {
     if (payload.entries) renderEntries(payload.entries);
-    if (payload.mood) updateMood(payload.mood);
+    if (payload.mood) updateMood(payload.mood, payload.energy);
     if (payload.friendship) updateFriendship(payload.friendship);
     if (payload.faces) FACES = payload.faces;
     if (payload.newEntry) {
         window._apAction = {type: 'loadDiary'};
+    }
+};
+
+/* Double-click panel Plusi → open chat */
+window._panelPlusiChat = function() {
+    if (typeof pycmd === 'function') {
+        pycmd('plusi:ask');
+    } else {
+        window._apAction = {type: 'plusiAsk'};
     }
 };
 
@@ -396,6 +434,7 @@ def _get_panel_html():
     from .plusi_dock import get_faces_dict
     faces_json = json.dumps(get_faces_dict())
     mood = _get_current_mood()
+    energy = _get_current_energy()
     friendship = _get_current_friendship()
 
     return f"""<!DOCTYPE html>
@@ -408,7 +447,7 @@ def _get_panel_html():
 {PANEL_JS}
 window.addEventListener('DOMContentLoaded', function() {{
     FACES = {faces_json};
-    updateMood('{mood}');
+    updateMood('{mood}', {energy});
     updateFriendship({json.dumps(friendship)});
 }});
 </script>
@@ -421,6 +460,15 @@ def _get_current_mood():
         return get_memory('state', 'last_mood', 'neutral')
     except Exception:
         return 'neutral'
+
+
+def _get_current_energy():
+    try:
+        from .plusi_storage import get_memory
+        val = get_memory('state', 'energy', 5)
+        return int(val)
+    except (Exception, ValueError, TypeError):
+        return 5
 
 
 def _get_current_friendship():
@@ -450,10 +498,16 @@ def _send_diary_data():
         from .plusi_storage import load_diary, get_friendship_data, get_memory
         entries = load_diary(limit=50)
         mood = get_memory('state', 'last_mood', 'neutral')
+        energy = get_memory('state', 'energy', 5)
+        try:
+            energy = int(energy)
+        except (ValueError, TypeError):
+            energy = 5
         friendship = get_friendship_data()
         payload = {
             'entries': entries,
             'mood': mood,
+            'energy': energy,
             'friendship': friendship
         }
         _panel_webview.page().runJavaScript(
@@ -552,8 +606,10 @@ def toggle_panel():
     if _panel_dock is not None:
         if _panel_dock.isVisible():
             _panel_dock.hide()
+            _set_dock_plusi_visible(True)
         else:
             _panel_dock.show()
+            _set_dock_plusi_visible(False)
             QTimer.singleShot(200, _send_diary_data)
         return
 
@@ -595,6 +651,21 @@ def toggle_panel():
     _poll_timer.start(100)
 
     QTimer.singleShot(500, _send_diary_data)
+    _set_dock_plusi_visible(False)
+
+
+def _set_dock_plusi_visible(visible):
+    """Show/hide the dock Plusi character via JS injection."""
+    try:
+        from .plusi_dock import _get_active_webview
+        web = _get_active_webview()
+        if web:
+            display = 'flex' if visible else 'none'
+            web.page().runJavaScript(
+                f"var d=document.getElementById('plusi-dock'); if(d) d.style.display='{display}';"
+            )
+    except Exception:
+        pass
 
 
 def notify_new_diary_entry():
