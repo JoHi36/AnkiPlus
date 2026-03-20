@@ -188,17 +188,39 @@ class InsightExtractionThread(QThread):
             # Use non-streaming AI request — context=None to avoid doubling the card data
             # (card content is already embedded in the extraction prompt)
             logger.debug("🟢 InsightExtractionThread: Starting extraction for card %s, prompt length=%s", self.card_id, len(prompt))
-            response = self.ai_handler.get_response(
-                user_message=prompt,
-                context=None,
-                history=[],
-                mode='compact',
-            )
+            import threading
+            result_container = [None, None]  # [response, error]
+
+            def _call_api():
+                try:
+                    result_container[0] = self.ai_handler.get_response(
+                        user_message=prompt,
+                        context=None,
+                        history=[],
+                        mode='compact',
+                    )
+                except Exception as e:
+                    result_container[1] = e
+
+            api_thread = threading.Thread(target=_call_api, daemon=True)
+            api_thread.start()
+            api_thread.join(timeout=30)
+
+            if api_thread.is_alive():
+                logger.warning("InsightExtractionThread: API request timed out after 30s")
+                self.error_signal.emit(self.card_id, "Timeout: Extraktion dauerte zu lange")
+                return
+
+            if result_container[1]:
+                raise result_container[1]
+            response = result_container[0]
 
             if self._cancelled:
                 return
 
             logger.debug("🟢 InsightExtractionThread: Response received, length=%s", len(response) if response else 0)
+            if response:
+                logger.debug("🟢 InsightExtractionThread: Response text: %s", response[:200])
             if not response:
                 self.error_signal.emit(self.card_id, "Empty response from AI")
                 return
@@ -207,15 +229,32 @@ class InsightExtractionThread(QThread):
 
             if result is None:
                 logger.debug("🟡 InsightExtractionThread: Parse failed, retrying...")
-                # Retry once
-                response = self.ai_handler.get_response(
-                    user_message=prompt,
-                    context=None,
-                    history=[],
-                    mode='compact',
-                )
-                if self._cancelled:
+                # Retry once with timeout
+                result_container2 = [None, None]
+
+                def _retry_api():
+                    try:
+                        result_container2[0] = self.ai_handler.get_response(
+                            user_message=prompt,
+                            context=None,
+                            history=[],
+                            mode='compact',
+                        )
+                    except Exception as e:
+                        result_container2[1] = e
+
+                retry_thread = threading.Thread(target=_retry_api, daemon=True)
+                retry_thread.start()
+                retry_thread.join(timeout=30)
+
+                if retry_thread.is_alive() or self._cancelled:
+                    self.error_signal.emit(self.card_id, "Retry timed out")
                     return
+                if result_container2[1]:
+                    raise result_container2[1]
+                response = result_container2[0]
+                if response:
+                    logger.debug("🟡 InsightExtractionThread: Retry response: %s", response[:200])
                 result = parse_extraction_response(response) if response else None
 
             if result is None:
@@ -397,6 +436,7 @@ class ChatbotWidget(QWidget):
             'getAITools': self._msg_get_ai_tools,
             'saveAITools': self._msg_save_ai_tools,
             'saveMascotEnabled': self._msg_save_mascot_enabled,
+            'getEmbeddingStatus': self._msg_get_embedding_status,
             'saveTheme': self._msg_save_theme,
             'getTheme': self._msg_get_theme,
             # Auth
@@ -415,6 +455,7 @@ class ChatbotWidget(QWidget):
             'plusiPanel': self._msg_plusi_settings,
             'plusiSettings': self._msg_plusi_settings,
             'plusiDirect': self._msg_plusi_direct,
+            'textFieldFocus': self._msg_text_field_focus,
         }
         return handlers.get(msg_type)
 
@@ -641,14 +682,21 @@ class ChatbotWidget(QWidget):
             from .theme import get_resolved_theme
         except ImportError:
             from ui.theme import get_resolved_theme
-        self._send_to_frontend("configLoaded", {
+        config_data = {
             "api_key": config.get("api_key", "").strip(),
             "provider": "google",
             "model": config.get("model_name", ""),
             "mascot_enabled": config.get("mascot_enabled", False),
+            "ai_tools": config.get("ai_tools", {
+                "images": True, "diagrams": True, "card_search": True,
+                "statistics": True, "molecules": False,
+            }),
             "theme": config.get("theme", "dark"),
             "resolvedTheme": get_resolved_theme(),
-        })
+        }
+        self._send_to_frontend_with_event(
+            "configLoaded", {"type": "configLoaded", "data": config_data},
+            "ankiConfigLoaded")
 
     def _msg_fetch_models(self, data):
         if not isinstance(data, dict):
@@ -669,7 +717,9 @@ class ChatbotWidget(QWidget):
 
     def _msg_get_ai_tools(self, data):
         tools = json.loads(self.bridge.getAITools())
-        self._send_to_frontend("aiToolsLoaded", tools)
+        self._send_to_frontend_with_event(
+            "aiToolsLoaded", {"type": "aiToolsLoaded", "data": tools},
+            "ankiAiToolsLoaded")
         self.web_view.page().runJavaScript(f"window._cachedAITools = {json.dumps(tools)};")
 
     def _msg_save_ai_tools(self, data):
@@ -686,6 +736,57 @@ class ChatbotWidget(QWidget):
         update_config(mascot_enabled=enabled)
         self.config = get_config(force_reload=True)
         self._send_to_frontend("mascotEnabledSaved", {"enabled": enabled})
+        # Dynamically hide/show the native Plusi dock in reviewer/deckBrowser webviews
+        try:
+            try:
+                from ..plusi.dock import hide_dock
+            except ImportError:
+                from plusi.dock import hide_dock
+            if not enabled:
+                hide_dock()
+        except Exception as e:
+            logger.warning("Failed to toggle Plusi dock: %s", e)
+
+    def _msg_get_embedding_status(self, data):
+        """Return embedding indexing progress to frontend."""
+        try:
+            try:
+                from ..storage.card_sessions import count_embeddings
+            except ImportError:
+                from storage.card_sessions import count_embeddings
+
+            embedded = count_embeddings()
+
+            total = 0
+            try:
+                from aqt import mw as _mw
+                if _mw and _mw.col:
+                    total = len(_mw.col.find_cards(""))
+            except Exception:
+                pass
+
+            is_running = False
+            try:
+                try:
+                    from .. import get_embedding_manager
+                except ImportError:
+                    from __init__ import get_embedding_manager
+                mgr = get_embedding_manager()
+                if mgr and mgr._background_thread and mgr._background_thread.isRunning():
+                    is_running = True
+            except Exception:
+                pass
+
+            result = {"totalCards": total, "embeddedCards": embedded, "isRunning": is_running}
+            self._send_to_frontend_with_event(
+                "embeddingStatusLoaded", {"type": "embeddingStatusLoaded", "data": result},
+                "ankiEmbeddingStatusLoaded")
+        except Exception as e:
+            logger.exception("_msg_get_embedding_status error: %s", e)
+            result = {"totalCards": 0, "embeddedCards": 0, "isRunning": False}
+            self._send_to_frontend_with_event(
+                "embeddingStatusLoaded", {"type": "embeddingStatusLoaded", "data": result},
+                "ankiEmbeddingStatusLoaded")
 
     def _msg_save_theme(self, data):
         """Save theme setting and push it back to all web views."""
@@ -723,8 +824,13 @@ class ChatbotWidget(QWidget):
         stored_theme = config.get("theme", "dark")
         resolved = get_resolved_theme()
 
-        # JS to set data-theme attribute on any webview
-        set_theme_js = f"document.documentElement.setAttribute('data-theme', '{resolved}');"
+        # JS to set data-theme attribute on any webview + force CSS repaint
+        set_theme_js = f"""(function() {{
+            document.documentElement.setAttribute('data-theme', '{resolved}');
+            document.documentElement.style.colorScheme = '{resolved}';
+            document.body && (document.body.style.transition = 'none');
+            void document.body?.offsetHeight;
+        }})();"""
 
         # JS for the chat panel (also notifies React)
         chat_js = f"""
@@ -743,27 +849,22 @@ class ChatbotWidget(QWidget):
         if self.web_view:
             self.web_view.page().runJavaScript(chat_js)
 
-        # 2. Reviewer webview (uses Anki's .eval method on AnkiWebView)
+        # 2-4. Push theme to all Anki webviews (reviewer, deck browser, overview)
+        # NOTE: AnkiWebView.eval() is Anki's built-in JS execution method (not Python eval).
         try:
             from aqt import mw as _mw
-            if _mw and _mw.reviewer and hasattr(_mw.reviewer, 'web') and _mw.reviewer.web:
-                _mw.reviewer.web.page().runJavaScript(set_theme_js)
-        except Exception:
-            pass
-
-        # 3. Deck browser webview
-        try:
-            from aqt import mw as _mw
-            if _mw and hasattr(_mw, 'deckBrowser') and _mw.deckBrowser and hasattr(_mw.deckBrowser, 'web') and _mw.deckBrowser.web:
-                _mw.deckBrowser.web.page().runJavaScript(set_theme_js)
-        except Exception:
-            pass
-
-        # 4. Overview webview
-        try:
-            from aqt import mw as _mw
-            if _mw and hasattr(_mw, 'overview') and _mw.overview and hasattr(_mw.overview, 'web') and _mw.overview.web:
-                _mw.overview.web.page().runJavaScript(set_theme_js)
+            if _mw:
+                for wv_source in [
+                    lambda: _mw.reviewer.web if _mw.reviewer else None,
+                    lambda: _mw.deckBrowser.web if hasattr(_mw, 'deckBrowser') and _mw.deckBrowser else None,
+                    lambda: _mw.overview.web if hasattr(_mw, 'overview') and _mw.overview else None,
+                ]:
+                    try:
+                        wv = wv_source()
+                        if wv:
+                            wv.page().runJavaScript(set_theme_js)
+                    except Exception:
+                        pass
         except Exception:
             pass
 
@@ -833,6 +934,9 @@ class ChatbotWidget(QWidget):
         show_settings()
 
     def _msg_plusi_direct(self, data):
+        # Ignore if Plusi is disabled
+        if not self.config.get('mascot_enabled', False):
+            return
         msg_data = data if isinstance(data, dict) else json.loads(data) if isinstance(data, str) else {}
         text = msg_data.get('text', '')
         if text:
@@ -898,6 +1002,17 @@ class ChatbotWidget(QWidget):
             self.web_view.page().runJavaScript(
                 f"window.ankiReceive({json.dumps(payload)});"
             )
+
+    def _msg_text_field_focus(self, data):
+        """Handle text field focus state changes from JavaScript."""
+        try:
+            from .shortcut_filter import get_shortcut_filter
+        except ImportError:
+            from ui.shortcut_filter import get_shortcut_filter
+        filt = get_shortcut_filter()
+        if filt:
+            focused = data.get('focused', False) if isinstance(data, dict) else False
+            filt.set_text_field_focus(focused, self.web_view)
 
     def push_initial_state(self):
         """Sendet Start-Config an die Web-UI"""
