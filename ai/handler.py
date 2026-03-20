@@ -1,9 +1,13 @@
 """
 AI-Handler für das Anki Chatbot Addon
-Implementiert Google Gemini API-Integration
+Orchestriert Google Gemini API-Integration, RAG-Pipeline und Model Management.
+
+Heavy lifting is delegated to:
+  - ai.gemini   (Gemini API requests, streaming, retry logic)
+  - ai.rag      (RAG router, retrieval, keyword helpers)
+  - ai.models   (section titles, model fetching)
 """
 
-import requests
 import json
 import time
 from ..config import (
@@ -25,81 +29,20 @@ except ImportError:
     from utils.logging import get_logger
 logger = get_logger(__name__)
 
-# User-friendly error messages
-ERROR_MESSAGES = {
-    'QUOTA_EXCEEDED': 'Tageslimit erreicht. Upgrade für mehr Requests?',
-    'TOKEN_EXPIRED': 'Sitzung abgelaufen. Bitte erneut verbinden.',
-    'TOKEN_INVALID': 'Authentifizierung fehlgeschlagen. Bitte erneut verbinden.',
-    'NETWORK_ERROR': 'Verbindungsfehler. Bitte erneut versuchen.',
-    'RATE_LIMIT_EXCEEDED': 'Zu viele Anfragen. Bitte versuchen Sie es später erneut.',
-    'BACKEND_ERROR': 'Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.',
-    'GEMINI_API_ERROR': 'Der Service ist vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut.',
-    'VALIDATION_ERROR': 'Ungültige Anfrage. Bitte überprüfen Sie Ihre Eingabe.',
-    'TIMEOUT_ERROR': 'Anfrage dauerte zu lange. Bitte versuchen Sie es erneut.',
-}
-
-def get_user_friendly_error(error_code, default_message=None):
-    """Get user-friendly error message for error code"""
-    return ERROR_MESSAGES.get(error_code, default_message or 'Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.')
-
-def retry_with_backoff(func, max_retries=3, initial_delay=1.0, max_delay=8.0, multiplier=2.0, retryable_status_codes=None):
-    """
-    Retry function with exponential backoff
-    @param func: Function to retry (should return response object)
-    @param max_retries: Maximum number of retries
-    @param initial_delay: Initial delay in seconds
-    @param max_delay: Maximum delay in seconds
-    @param multiplier: Backoff multiplier
-    @param retryable_status_codes: List of status codes that should be retried (default: [429, 500, 502, 503])
-    @returns Response object
-    """
-    if retryable_status_codes is None:
-        retryable_status_codes = [429, 500, 502, 503]
-    
-    last_error = None
-    delay = initial_delay
-    
-    for attempt in range(max_retries + 1):
-        try:
-            response = func()
-            
-            # Check if status code is retryable
-            if response.status_code in retryable_status_codes:
-                if attempt < max_retries:
-                    logger.warning("⚠️ Retry %s/%s nach %.1fs für Status %s", attempt + 1, max_retries, delay, response.status_code)
-                    time.sleep(delay)
-                    delay = min(delay * multiplier, max_delay)
-                    continue
-                else:
-                    # Last attempt failed
-                    response.raise_for_status()
-            
-            # Success or non-retryable error
-            return response
-            
-        except requests.exceptions.RequestException as e:
-            last_error = e
-            
-            # Check if it's a retryable error
-            if hasattr(e, 'response') and e.response:
-                status_code = e.response.status_code
-                if status_code not in retryable_status_codes:
-                    # Non-retryable error, raise immediately
-                    raise
-            
-            # Network errors are retryable
-            if attempt < max_retries:
-                logger.warning("⚠️ Retry %s/%s nach %.1fs für Netzwerkfehler: %s", attempt + 1, max_retries, delay, str(e)[:100])
-                time.sleep(delay)
-                delay = min(delay * multiplier, max_delay)
-            else:
-                # All retries failed
-                raise
-    
-    # Should not reach here, but just in case
-    if last_error:
-        raise last_error
-    raise Exception("Retry failed without error")
+# --- Re-exports from extracted modules -------------------------------------------
+from .gemini import (
+    get_google_response, get_google_response_streaming, stream_response,
+    retry_with_backoff, get_user_friendly_error, ERROR_MESSAGES
+)
+from .rag import (
+    rag_router, rag_retrieve_cards, fix_router_queries,
+    is_standalone_question, extract_card_keywords,
+    PHASE_SEARCH, PHASE_RETRIEVAL
+)
+from .models import (
+    get_section_title as _get_section_title,
+    fetch_available_models as _fetch_available_models,
+)
 
 # Import Anki's main window for thread-safe UI access
 try:
@@ -109,14 +52,14 @@ except ImportError:
 
 class AIHandler:
     """Handler für AI-Anfragen (nur Google Gemini)"""
-    
+
     # Phase-Konstanten für strukturierte Status-Updates
     PHASE_INTENT = "intent"
-    PHASE_SEARCH = "search"
-    PHASE_RETRIEVAL = "retrieval"
+    PHASE_SEARCH = PHASE_SEARCH
+    PHASE_RETRIEVAL = PHASE_RETRIEVAL
     PHASE_GENERATING = "generating"
     PHASE_FINISHED = "finished"
-    
+
     def __init__(self, widget=None):
         self.config = get_config()
         self.widget = widget  # Widget reference for UI state emission
@@ -124,11 +67,11 @@ class AIHandler:
         self._current_request_id = None
         self._pipeline_signal_callback = None
         self._current_step_labels = []
-    
+
     def _refresh_config(self):
         """Lädt die Config neu, um sicherzustellen dass API-Key aktuell ist"""
         self.config = get_config(force_reload=True)
-    
+
     def _get_auth_headers(self):
         """Delegiert an auth_manager Modul."""
         try:
@@ -147,7 +90,7 @@ class AIHandler:
         if result:
             self._refresh_config()
         return result
-    
+
     def _ensure_valid_token(self):
         """Delegiert an auth_manager Modul."""
         try:
@@ -155,31 +98,85 @@ class AIHandler:
         except ImportError:
             from auth import ensure_valid_token
         return ensure_valid_token()
-    
-    def get_response(self, user_message, context=None, history=None, mode='compact', callback=None, system_prompt_override=None, model_override=None):
-        """
-        Generiert eine Antwort auf eine Benutzer-Nachricht mit optionalem Streaming
 
-        Args:
-            user_message: Die Nachricht des Benutzers
-            context: Optionaler Kontext (z.B. aktuelle Karte)
-            history: Optional - Liste von vorherigen Nachrichten [{role: 'user'|'assistant', content: 'text'}]
-            mode: Optional - 'compact' oder 'detailed' (Standard: 'compact')
-            callback: Optional - Funktion(chunk, done, is_function_call=False)
-                      - chunk: Text-Chunk oder None
-                      - done: True wenn fertig
-                      - is_function_call: True wenn Function Call erkannt
-            system_prompt_override: Optional - Wenn gesetzt, wird dieser System-Prompt anstatt
-                                    get_system_prompt() verwendet (z.B. für Companion/Plusi)
+    # ---- Thin delegation wrappers for extracted modules -------------------------
 
-        Returns:
-            Die generierte Antwort
+    def _get_google_response(self, user_message, model, api_key, context=None,
+                             history=None, mode='compact', rag_context=None,
+                             system_prompt_override=None):
+        return get_google_response(
+            user_message, model, api_key,
+            context=context, history=history, mode=mode,
+            rag_context=rag_context,
+            system_prompt_override=system_prompt_override,
+        )
+
+    def _get_google_response_streaming(self, user_message, model, api_key,
+                                       context=None, history=None, mode='compact',
+                                       callback=None, rag_context=None,
+                                       suppress_error_callback=False,
+                                       system_prompt_override=None):
+        return get_google_response_streaming(
+            user_message, model, api_key,
+            context=context, history=history, mode=mode,
+            callback=callback, rag_context=rag_context,
+            suppress_error_callback=suppress_error_callback,
+            system_prompt_override=system_prompt_override,
+        )
+
+    def _stream_response(self, urls, data, callback=None, use_backend=False,
+                         backend_data=None):
+        return stream_response(
+            urls, data,
+            callback=callback, use_backend=use_backend,
+            backend_data=backend_data,
+        )
+
+    def get_section_title(self, question, answer=""):
+        return _get_section_title(question, answer, config=self.config)
+
+    def fetch_available_models(self, provider, api_key):
+        return _fetch_available_models(provider, api_key)
+
+    def _rag_router(self, user_message, context=None):
+        return rag_router(
+            user_message, context=context,
+            config=self.config,
+            emit_step=self._emit_pipeline_step,
+        )
+
+    def _rag_retrieve_cards(self, precise_queries=None, broad_queries=None,
+                            search_scope="current_deck", context=None,
+                            max_notes=10):
+        return rag_retrieve_cards(
+            precise_queries=precise_queries,
+            broad_queries=broad_queries,
+            search_scope=search_scope,
+            context=context,
+            max_notes=max_notes,
+            emit_state=self._emit_ai_state,
+            emit_event=self._emit_ai_event,
+        )
+
+    def _fix_router_queries(self, router_result, user_message, context):
+        return fix_router_queries(router_result, user_message, context)
+
+    def _is_standalone_question(self, user_message, context):
+        return is_standalone_question(user_message, context)
+
+    def _extract_card_keywords(self, context):
+        return extract_card_keywords(context)
+
+    # ---- Core orchestration methods (kept in handler.py) ------------------------
+
+    def get_response(self, user_message, context=None, history=None, mode='compact',
+                     callback=None, system_prompt_override=None, model_override=None):
         """
-        # Lade Config neu um sicherzustellen, dass API-Key aktuell ist
+        Generiert eine Antwort auf eine Benutzer-Nachricht mit optionalem Streaming.
+        """
         self._refresh_config()
 
         if not self.is_configured():
-            # Unterschiedliche Fehlermeldungen je nach Modus
             if is_backend_mode():
                 error_msg = "Bitte verbinden Sie sich zuerst mit Ihrem Account in den Einstellungen."
             else:
@@ -192,7 +189,6 @@ class AIHandler:
         api_key = self.config.get("api_key", "")
 
         try:
-            # Wenn callback vorhanden, verwende Streaming
             if callback:
                 return self._get_google_response_streaming(
                     user_message, model, api_key,
@@ -200,1110 +196,24 @@ class AIHandler:
                     system_prompt_override=system_prompt_override,
                 )
             else:
-                # Fallback auf non-streaming für Backward-Kompatibilität
-                return self._get_google_response(user_message, model, api_key, context=context, history=history, mode=mode,
-                                                  system_prompt_override=system_prompt_override)
+                return self._get_google_response(
+                    user_message, model, api_key,
+                    context=context, history=history, mode=mode,
+                    system_prompt_override=system_prompt_override,
+                )
         except Exception as e:
             error_msg = f"Fehler bei der API-Anfrage: {str(e)}"
             if callback:
                 callback(error_msg, True, False)
             return error_msg
-    
-    def _get_google_response(self, user_message, model, api_key, context=None, history=None, mode='compact', rag_context=None, system_prompt_override=None):
-        """Google Gemini API-Integration mit optionalem Kontext und Chat-Historie"""
-        # CRITICAL: Hardcode to gemini-3-flash-preview for maximum reasoning capability
-        # Fallback handled in get_response_with_rag
-        if not model:
-            model = "gemini-3-flash-preview"
-        
-        # Gemini 3 Flash Modell (nur noch Flash wird verwendet)
-        # Für Chat verwenden wir Gemini 3 Flash direkt
-        model_normalized = model
-        
-        # Bestimme thinking_level basierend auf Modell
-        # Flash: minimal (schnellste Antworten)
-        thinking_level = None
-        if "gemini-3" in model.lower() and "flash" in model.lower():
-            thinking_level = "minimal"  # Minimale Latenz für Flash
-        
-        logger.debug("_get_google_response: Model: %s, thinking_level: %s", model_normalized, thinking_level)
-        
-        # Prüfe ob Backend-Modus aktiv ist
-        use_backend = is_backend_mode() and get_auth_token()
-        
-        if use_backend:
-            # Backend-Modus: Verwende Backend-URL
-            backend_url = get_backend_url()
-            # Backend-URL ist die Cloud Function Base-URL, Express-Routen haben kein /api/ Präfix
-            urls = [f"{backend_url}/chat"]
-            logger.debug("_get_google_response: Verwende Backend-Modus: %s", urls[0])
-        else:
-            # Fallback: Direkte Gemini API (API-Key-Modus)
-            urls = [
-                f"https://generativelanguage.googleapis.com/v1beta/models/{model_normalized}:generateContent?key={api_key}",
-                f"https://generativelanguage.googleapis.com/v1/models/{model_normalized}:generateContent?key={api_key}",
-            ]
-            logger.debug("_get_google_response: Verwende API-Key-Modus (Fallback)")
-        
-        # Lade Tool-Einstellungen aus Config
-        ai_tools = self.config.get("ai_tools", {
-            "images": True,
-            "diagrams": True,
-            "molecules": False
-        })
-        
-        # System Prompt hinzufügen (mit Modus und Tools, oder Override falls angegeben)
-        if system_prompt_override is not None:
-            system_instruction = system_prompt_override
-        else:
-            system_instruction = get_system_prompt(mode=mode, tools=ai_tools)
 
-        # Erweitere System Prompt mit RAG-Anweisungen falls RAG-Kontext vorhanden
-        if rag_context and rag_context.get("cards"):
-            rag_instruction = """\n\nQUELLEN-SYSTEM (KRITISCH — MUSS BEFOLGT WERDEN):
-Du erhältst Quellen-Karten aus dem Lernmaterial des Nutzers. Diese Karten sind dein PRIMÄRES Wissen.
-
-ANTWORTSTRATEGIE:
-1. Beantworte die Frage KONKRET und DIREKT — gib dem Nutzer genau die Information die er braucht
-2. Nutze dabei die Fakten aus den Quellen-Karten als Grundlage — der Nutzer lernt diese Karten, also verwende deren Terminologie und Fakten
-3. Ergänze mit deinem eigenen Wissen nur wo die Karten nicht ausreichen, um die Frage vollständig zu beantworten
-4. Die aktuelle Karte (die der Nutzer gerade lernt) ist die WICHTIGSTE Quelle — beziehe dich darauf
-
-ZITIER-REGELN (PFLICHT):
-- Setze [[NoteID]] DIREKT nach jedem Fakt der aus einer Karte stammt (z.B. [[1735567472099]])
-- JEDE Aussage die auf einer Karte basiert MUSS eine Citation haben — ohne Citation ist die Aussage wertlos
-- Die Note-IDs findest du im Kontext als "Note XXXXX" — verwende genau diese Zahlen
-- Auch wenn du nur EINE Karte als Quelle hast, zitiere sie trotzdem
-- Die Nummern erscheinen dem Nutzer als klickbare [1], [2], [3] Badges"""
-            system_instruction = system_instruction + rag_instruction
-
-        # Erstelle Tools Array für Function Calling (nur wenn aktiviert)
-        declarations = tool_registry.get_function_declarations(agent='tutor', ai_tools_config=ai_tools, mode=mode)
-        tools_array = [{"functionDeclarations": declarations}] if declarations else []
-        
-        # Erweitere Nachricht mit Kontext, falls vorhanden
-        enhanced_message = user_message
-        
-        # IMMER Kontext senden, wenn verfügbar (wichtig für konsistente Antworten)
-        # Bei längerer Historie senden wir einen kompakteren Kontext
-        has_long_history = history and len(history) > 2
-        
-        if context:
-            from ..utils.text import clean_html
-
-            # Erstelle Kontext-String mit BEGRENZTER Länge
-            # Bei langer Historie, verwende kürzeren Kontext
-            context_parts = []
-            is_question = context.get('isQuestion', True)
-            
-            # Kartenfrage: Verwende frontField (bereinigt) oder question (bereinigt)
-            question_text = context.get('frontField') or context.get('question', '')
-            max_question_len = 500 if has_long_history else 1000
-            if question_text:
-                clean_question = clean_html(question_text, max_question_len)
-                if clean_question:
-                    context_parts.append(f"Kartenfrage: {clean_question}")
-            
-            # Wenn Antwort bereits angezeigt wurde, füge sie hinzu (begrenzt)
-            max_answer_len = 400 if has_long_history else 800
-            if not is_question and context.get('answer'):
-                clean_answer = clean_html(context['answer'], max_answer_len)
-                if clean_answer:
-                    context_parts.append(f"Kartenantwort: {clean_answer}")
-            
-            # Kartenfelder: NICHT hinzufügen (zu groß und redundant)
-            
-            # Füge Statistiken hinzu (nur bei erstem Request ohne lange Historie)
-            if context.get('stats') and not has_long_history:
-                stats = context['stats']
-                knowledge_score = stats.get('knowledgeScore', 0)
-                reps = stats.get('reps', 0)
-                lapses = stats.get('lapses', 0)
-                ivl = stats.get('interval', 0)
-                
-                stats_text = f"\nKartenstatistiken: Kenntnisscore {knowledge_score}% (0=neu, 100=sehr gut bekannt), {reps} Wiederholungen, {lapses} Fehler, Intervall {ivl} Tage. "
-                stats_text += "Passe die Schwierigkeit deiner Erklärung und Fragen entsprechend an: "
-                if knowledge_score >= 70:
-                    stats_text += "Karte ist gut bekannt - verwende fortgeschrittene Konzepte und vertiefende Fragen."
-                elif knowledge_score >= 40:
-                    stats_text += "Karte ist mäßig bekannt - verwende mittlere Schwierigkeit mit klaren Erklärungen."
-                else:
-                    stats_text += "Karte ist neu oder wenig bekannt - verwende einfache Sprache und grundlegende Erklärungen."
-                
-                context_parts.append(stats_text)
-            
-            if context_parts:
-                context_text = "\n".join(context_parts)
-                
-                # Workflow-Anweisungen je nach Phase
-                workflow_instruction = ""
-                if is_question:
-                    # Frage noch nicht aufgedeckt
-                    workflow_instruction = "\n\nWICHTIG: Die Kartenantwort ist noch NICHT aufgedeckt. "
-                    workflow_instruction += "Wenn der Benutzer eine Antwort gibt, prüfe sie gegen die korrekte Antwort (die du kennst, aber noch nicht verraten hast). "
-                    workflow_instruction += "Wenn nach einem Hinweis gefragt wird, gib einen hilfreichen Hinweis OHNE die Antwort zu verraten. "
-                    workflow_instruction += "Wenn nach Multiple Choice gefragt wird, erstelle 4 Optionen (nur eine richtig) und formatiere sie klar als A), B), C), D)."
-                else:
-                    # Antwort bereits angezeigt
-                    workflow_instruction = "\n\nWICHTIG: Die Kartenantwort ist bereits aufgedeckt. "
-                    workflow_instruction += "Beantworte Fragen zur Karte, erkläre Konzepte, stelle vertiefende Fragen oder biete weitere Lernhilfen an."
-                
-                enhanced_message = f"Kontext der aktuellen Anki-Karte:\n{context_text}{workflow_instruction}\n\nBenutzerfrage: {user_message}"
-            else:
-                # Kein Karten-Kontext, aber möglicherweise RAG-Kontext
-                enhanced_message = user_message
-            
-            # Füge RAG-Kontext hinzu falls vorhanden
-            if rag_context and rag_context.get("cards"):
-                cards_text = "\n".join(rag_context["cards"])
-                enhanced_message = f"{enhanced_message}\n\n--- QUELLEN-KARTEN (aus dem Lernmaterial des Nutzers) ---\n{cards_text}\n--- ENDE QUELLEN ---\n\nDu MUSST diese Karten als Hauptquelle nutzen. Zitiere JEDEN Fakt mit [[NoteID]] (die Zahl nach 'Note'). Antworte konkret auf die Frage, baue die Fakten aus den Karten ein."
-        
-        # WICHTIG: Erstelle Contents-Array mit Chat-Historie für besseren Kontext
-        contents = []
-        
-        # Füge Chat-Historie hinzu (letzte Nachrichten, ohne die aktuelle)
-        if history and len(history) > 1:
-            # WICHTIG: Begrenze Historie auf letzte 4 Nachrichten (nicht alle)
-            # und bereinige Content (entferne sehr lange Texte)
-            history_to_use = history[:-1][-4:]  # Letzte 4, ohne aktuelle
-            
-            for hist_msg in history_to_use:
-                role = hist_msg.get('role', 'user')
-                content = hist_msg.get('content', '')
-                
-                if content:
-                    # Bereinige Content: Entferne sehr lange Texte
-                    # Begrenze auf max 1500 Zeichen pro Nachricht
-                    if len(content) > 1500:
-                        content = content[:1497] + "..."
-                    
-                    contents.append({
-                        "role": role,
-                        "parts": [{"text": content}]
-                    })
-            logger.debug("_get_google_response: %s Nachrichten aus Historie hinzugefügt", len(contents))
-        
-        # Füge aktuelle Nachricht hinzu (mit Kontext falls vorhanden)
-        contents.append({
-            "role": "user",
-            "parts": [{"text": enhanced_message}]
-        })
-        
-        # Erstelle Request-Daten für Gemini 3 Preview Modelle
-        # Preview-Modelle verwenden systemInstruction im neuen Format
-        # CRITICAL: Set max_output_tokens to 8192 to prevent cut-off answers
-        max_tokens = 8192 if "gemini-3-flash-preview" in model.lower() else 4096
-        data = {
-            "contents": contents,
-            "generationConfig": {
-                "temperature": 0.7,
-                "maxOutputTokens": max_tokens
-            }
-        }
-        
-        # HINWEIS: thinkingConfig wird vorerst nicht verwendet
-        # Gemini 3 Preview verwendet standardmäßig dynamisches Denken
-        # Der Parameter kann später aktiviert werden, wenn die API stabil ist
-        if thinking_level:
-            logger.debug("_get_google_response: thinking_level=%s (nicht gesendet, API-Stabilität)", thinking_level)
-        
-        # Füge systemInstruction hinzu (nur wenn vorhanden)
-        # Für Preview-Modelle: systemInstruction als Objekt mit parts
-        if system_instruction and system_instruction.strip():
-            data["systemInstruction"] = {
-                "parts": [{
-                    "text": system_instruction
-                }]
-            }
-        
-        # Füge Tools hinzu (nur wenn vorhanden - hardcoded Aktivierung)
-        if tools_array:
-            data["tools"] = tools_array
-        
-        # Validiere Request-Größe (Google API Limit: ~30k Tokens ≈ 20k Zeichen)
-        total_chars = sum(len(msg.get('parts', [{}])[0].get('text', '')) for msg in contents)
-        total_chars += len(system_instruction)
-        
-        # Wenn Request zu groß, reduziere Historie weiter
-        if total_chars > 18000:
-            logger.warning("⚠️ Request zu groß (%s Zeichen), reduziere Historie", total_chars)
-            # Behalte nur letzte 2 Nachrichten aus Historie
-            if len(contents) > 3:  # system + 2 history + current
-                contents = contents[-3:]  # Letzte 2 History + Current
-                data["contents"] = contents
-        
-        # Prüfe ob Backend-Modus aktiv ist
-        use_backend = is_backend_mode() and get_auth_token()
-        
-        last_error = None
-        retry_count = 0
-        max_retries = 1  # Max 1 Retry bei Token-Refresh
-        
-        for url in urls:
-            try:
-                logger.debug("_get_google_response: Versuche URL: %s...", url.split('?')[0])
-                if use_backend:
-                    logger.debug("_get_google_response: Backend-Modus aktiv")
-                    headers = self._get_auth_headers()
-                    # Backend erwartet anderes Format: {message, history, context, mode, model}
-                    backend_data = {
-                        "message": enhanced_message,
-                        "history": history if history else None,
-                        "context": context,
-                        "mode": mode,
-                        "model": model_normalized
-                    }
-                    request_data = backend_data
-                else:
-                    logger.debug("_get_google_response: Modell: %s, API-Key Länge: %s", model_normalized, len(api_key))
-                    headers = {"Content-Type": "application/json"}
-                    request_data = data
-                
-                logger.debug("_get_google_response: Request-Größe: %s Zeichen", len(str(request_data)))
-                
-                # Retry-Logic mit Exponential Backoff für retryable Errors
-                def make_request():
-                    return requests.post(url, json=request_data, headers=headers, timeout=30)
-                
-                # Bei 401: Versuche Token-Refresh oder wechsle zu anonymem Modus
-                if use_backend:
-                    response = make_request()
-                    if response.status_code == 401:
-                        if retry_count < max_retries:
-                            logger.debug("_get_google_response: 401 Unauthorized - Versuche Token-Refresh")
-                            if self._refresh_auth_token():
-                                retry_count += 1
-                                headers = self._get_auth_headers()
-                                response = make_request()
-                                logger.debug("_get_google_response: Retry nach Token-Refresh - Status: %s", response.status_code)
-                            else:
-                                # Kein Refresh-Token vorhanden - wechsle zu anonymem Modus
-                                logger.debug("_get_google_response: Kein Refresh-Token - wechsle zu anonymem Modus")
-                                update_config(auth_token="")  # Token löschen
-                                self._refresh_config()
-                                headers = self._get_auth_headers()  # Jetzt mit Device-ID
-                                retry_count += 1
-                                response = make_request()
-                                logger.debug("_get_google_response: Retry als anonymer User - Status: %s", response.status_code)
-                        else:
-                            # Max Retries erreicht - versuche als anonymer User
-                            logger.debug("_get_google_response: Max Retries erreicht - versuche als anonymer User")
-                            update_config(auth_token="")  # Token löschen
-                            self._refresh_config()
-                            headers = self._get_auth_headers()  # Jetzt mit Device-ID
-                            response = make_request()
-                            logger.debug("_get_google_response: Request als anonymer User - Status: %s", response.status_code)
-                    else:
-                        response = make_request()
-                
-                # Bei 403 (Forbidden): Quota-Fehler (kein Retry)
-                if response.status_code == 403:
-                    try:
-                        error_data = response.json()
-                        error_code = error_data.get("error", {}).get("code", "QUOTA_EXCEEDED")
-                        error_msg = error_data.get("error", {}).get("message", "Quota überschritten")
-                        user_msg = get_user_friendly_error(error_code, error_msg)
-                        # #region agent log
-                        try:
-                            with open(log_path, 'a', encoding='utf-8') as f:
-                                f.write(json.dumps({"location": "ai_handler.py:624", "message": "Raising QUOTA_EXCEEDED exception", "data": {"error_code": error_code, "error_msg": error_msg, "user_msg": user_msg}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "A"}) + "\n")
-                        except (OSError, ValueError, TypeError):
-                            pass
-                        # #endregion
-                        raise Exception(user_msg)
-                    except Exception as e:
-                        if "Quota" in str(e) or "quota" in str(e).lower():
-                            raise
-                        raise Exception(get_user_friendly_error('QUOTA_EXCEEDED'))
-                
-                # Bei 400: Client-Fehler (kein Retry)
-                if response.status_code == 400:
-                    try:
-                        error_data = response.json()
-                        error_code = error_data.get("error", {}).get("code", "VALIDATION_ERROR")
-                        error_msg = error_data.get("error", {}).get("message", "Ungültige Anfrage")
-                        user_msg = get_user_friendly_error(error_code, error_msg)
-                        raise Exception(user_msg)
-                    except Exception as e:
-                        if "Exception" in str(type(e)):
-                            raise
-                        raise Exception(get_user_friendly_error('VALIDATION_ERROR'))
-                
-                # Für retryable Errors (429, 500, 502, 503): Verwende Retry mit Backoff
-                if response.status_code in [429, 500, 502, 503]:
-                    logger.warning("_get_google_response: Retryable Error %s - Verwende Retry mit Backoff", response.status_code)
-                    response = retry_with_backoff(
-                        make_request,
-                        max_retries=3,
-                        initial_delay=1.0,
-                        max_delay=8.0,
-                        retryable_status_codes=[429, 500, 502, 503]
-                    )
-                
-                # Logge Status-Code
-                logger.debug("_get_google_response: Response Status: %s", response.status_code)
-                
-                # Bei 400-Fehler, logge die vollständige Fehlermeldung
-                if response.status_code == 400:
-                    try:
-                        error_data = response.json()
-                        error_msg = error_data.get("error", {}).get("message", "Unbekannter 400 Fehler")
-                        error_details = error_data.get("error", {})
-                        logger.warning("⚠️ 400 Bad Request Fehler:")
-                        logger.debug("   Message: %s", error_msg)
-                        logger.debug("   Details: %s", error_details)
-                        logger.debug("   Vollständige Response: %s", response.text[:1000])
-                    except (ValueError, KeyError):
-                        logger.warning("⚠️ 400 Bad Request - Response Text: %s", response.text[:500])
-                
-                # Bei 500-Fehler, logge die Fehlermeldung bevor raise_for_status() aufgerufen wird
-                if response.status_code == 500:
-                    try:
-                        error_data = response.json()
-                        error_msg = error_data.get("error", {}).get("message", "Unbekannter 500 Fehler")
-                        error_code = error_data.get("error", {}).get("code", 500)
-                        logger.warning("⚠️ 500 Internal Server Error:")
-                        logger.debug("   Message: %s", error_msg)
-                        logger.debug("   Code: %s", error_code)
-                        logger.debug("   Response Text: %s", response.text[:1000])
-                    except (ValueError, KeyError):
-                        logger.warning("⚠️ 500 Internal Server Error - Response Text: %s", response.text[:500])
-                
-                response.raise_for_status()
-                result = response.json()
-                
-                # Prüfe auf Fehler in der Antwort
-                if "error" in result:
-                    error_msg = result["error"].get("message", "Unbekannter Fehler")
-                    error_code = result["error"].get("code", "BACKEND_ERROR")
-                    user_msg = get_user_friendly_error(error_code, error_msg)
-                    raise Exception(user_msg)
-                
-                # Backend-Modus: Antwort-Format ist anders
-                if use_backend:
-                    # Backend sendet direkt Text oder Streaming-Format
-                    # Für non-streaming: Backend sollte direkt Text zurückgeben
-                    # Aber aktuell unterstützt Backend nur Streaming
-                    # Daher: Diese Funktion wird im Backend-Modus nicht verwendet
-                    # Streaming wird in _get_google_response_streaming behandelt
-                    raise Exception("Backend-Modus unterstützt nur Streaming. Bitte verwenden Sie get_response() mit callback.")
-                
-                # Prüfe auf Function Call in der Antwort (nur für API-Key-Modus)
-                if "candidates" in result and len(result["candidates"]) > 0:
-                    candidate = result["candidates"][0]
-                    
-                    # Prüfe ob Function Call vorhanden ist
-                    if "content" in candidate and "parts" in candidate["content"]:
-                        parts = candidate["content"]["parts"]
-                        
-                        # Tool calls are handled by run_agent_loop() in the
-                        # streaming path. Non-streaming path returns text only.
-
-                        # Normale Text-Antwort
-                        if len(parts) > 0:
-                            text_part = parts[0].get("text", "")
-                            if text_part:
-                                logger.info("✅ _get_google_response: Erfolgreich, Antwort-Länge: %s", len(text_part))
-                                return text_part
-                
-                raise Exception("Ungültige Antwort von Google API")
-            except requests.exceptions.HTTPError as e:
-                last_error = e
-                status_code = e.response.status_code if hasattr(e, 'response') and e.response else None
-                
-                # Bei 400-Fehler, extrahiere detaillierte Fehlermeldung
-                if status_code == 400:
-                    try:
-                        if hasattr(e, 'response') and e.response:
-                            error_data = e.response.json()
-                            error_msg = error_data.get("error", {}).get("message", "Bad Request")
-                            error_code = error_data.get("error", {}).get("code", 400)
-                            logger.warning("⚠️ HTTP 400 Fehler: %s (Code: %s)", error_msg, error_code)
-                            # Versuche nächste URL wenn Modell-Problem
-                            if "model" in error_msg.lower() or "not found" in error_msg.lower():
-                                logger.debug("   → Versuche nächste URL/Modell...")
-                                continue
-                            else:
-                                raise Exception(f"Google API Fehler 400: {error_msg}")
-                    except Exception as parse_error:
-                        logger.warning("⚠️ Konnte 400-Fehler nicht parsen: %s", parse_error)
-                        if hasattr(e, 'response') and e.response:
-                            logger.debug("   Response Text: %s", e.response.text[:500])
-                        raise Exception(f"Google API Fehler 400: {str(e)}")
-                
-                # Bei 500: Versuche Request ohne Historie (Fallback)
-                if status_code == 500:
-                    # Logge Fehlermeldung wenn verfügbar
-                    try:
-                        if hasattr(e, 'response') and e.response:
-                            error_data = e.response.json()
-                            error_msg = error_data.get("error", {}).get("message", "Internal Server Error")
-                            logger.warning("⚠️ 500 Internal Server Error Details: %s", error_msg)
-                    except (ValueError, KeyError, AttributeError):
-                        pass
-                    
-                    # Versuche Retry ohne Historie, wenn Historie vorhanden
-                    if history and len(history) > 1:
-                        logger.warning("⚠️ 500 Fehler - versuche Request ohne Historie als Fallback")
-                        # Retry ohne Historie, nur mit aktueller Nachricht
-                        contents_retry = [{
-                            "role": "user",
-                            "parts": [{"text": enhanced_message}]
-                        }]
-                        data_retry = {
-                            "contents": contents_retry,
-                            "systemInstruction": {
-                                "parts": [{"text": system_instruction}]
-                            },
-                            "generationConfig": {
-                                "temperature": 0.7,
-                                "maxOutputTokens": 2000
-                            }
-                        }
-                        
-                        # Füge Tools auch zum Retry-Request hinzu
-                        if tools_array:
-                            data_retry["tools"] = tools_array
-                        try:
-                            response_retry = requests.post(url, json=data_retry, timeout=30)
-                            response_retry.raise_for_status()
-                            result_retry = response_retry.json()
-                            if "candidates" in result_retry and len(result_retry["candidates"]) > 0:
-                                candidate = result_retry["candidates"][0]
-                                if "content" in candidate and "parts" in candidate["content"]:
-                                    if len(candidate["content"]["parts"]) > 0:
-                                        logger.info("✅ Retry ohne Historie erfolgreich")
-                                        return candidate["content"]["parts"][0].get("text", "")
-                        except Exception as retry_error:
-                            logger.warning("⚠️ Retry ohne Historie fehlgeschlagen: %s", retry_error)
-                            # Versuche nächste URL wenn Retry fehlschlägt
-                            continue
-                    else:
-                        # Keine Historie vorhanden, versuche nächste URL
-                        logger.warning("⚠️ 500 Fehler ohne Historie - versuche nächste URL")
-                        continue
-                
-                # Bei 404, versuche nächste URL
-                if status_code == 404:
-                    continue
-                # Bei anderen Fehlern, versuche Fehlermeldung zu extrahieren
-                try:
-                    if hasattr(e, 'response') and e.response:
-                        error_data = e.response.json()
-                        error_msg = error_data.get("error", {}).get("message", str(e))
-                        raise Exception(f"Google API Fehler: {error_msg}")
-                    else:
-                        raise Exception(f"Google API Fehler: {str(e)}")
-                except (ValueError, KeyError, AttributeError):
-                    raise Exception(f"Google API Fehler: {str(e)}")
-            except Exception as e:
-                if "Google API Fehler" in str(e):
-                    raise
-                last_error = e
-                continue
-        
-        # Wenn alle URLs fehlgeschlagen sind
-        if last_error:
-            raise Exception(f"Google API Fehler: {str(last_error)}")
-        
-        raise Exception("Konnte keine Antwort von Google API erhalten")
-    
-    def _get_google_response_streaming(self, user_message, model, api_key, context=None, history=None, mode='compact', callback=None, rag_context=None, suppress_error_callback=False, system_prompt_override=None):
-        """
-        Google Gemini API mit Streaming-Support und Tool Call Handling
-        
-        Args:
-            callback: Funktion(chunk, done, is_function_call, steps=None, citations=None)
-            suppress_error_callback: Wenn True, wird bei Fehlern keine Fehlermeldung an den Callback gesendet (für Retries)
-        """
-        # CRITICAL: Hardcode to gemini-3-flash-preview for maximum reasoning capability
-        # Fallback handled in get_response_with_rag
-        if not model:
-            model = "gemini-3-flash-preview"
-        
-        model_normalized = model
-        
-        # Prüfe ob Backend-Modus aktiv ist
-        # Prefer direct API key over Cloud Function when both are available
-        use_backend = is_backend_mode() and get_auth_token() and not api_key
-
-        if use_backend:
-            # Backend-Modus: Verwende Backend-URL
-            backend_url = get_backend_url()
-            stream_urls = [f"{backend_url}/chat"]
-            normal_urls = [f"{backend_url}/chat"]
-            logger.debug("_get_google_response_streaming: Verwende Backend-Modus: %s", stream_urls[0])
-        else:
-            # Fallback: Direkte Gemini API (API-Key-Modus)
-            stream_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_normalized}:streamGenerateContent?key={api_key}"
-            normal_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_normalized}:generateContent?key={api_key}"
-            
-            # Fallback URLs
-            stream_urls = [
-                stream_url,
-                f"https://generativelanguage.googleapis.com/v1/models/{model_normalized}:streamGenerateContent?key={api_key}",
-            ]
-            normal_urls = [
-                normal_url,
-                f"https://generativelanguage.googleapis.com/v1/models/{model_normalized}:generateContent?key={api_key}",
-            ]
-            logger.debug("_get_google_response_streaming: Verwende API-Key-Modus (Fallback)")
-        
-        # Lade Tool-Einstellungen
-        ai_tools = self.config.get("ai_tools", {
-            "images": True,
-            "diagrams": True,
-            "molecules": False
-        })
-        
-        # System Prompt (Override falls angegeben, z.B. für Companion/Plusi)
-        if system_prompt_override is not None:
-            system_instruction = system_prompt_override
-        else:
-            system_instruction = get_system_prompt(mode=mode, tools=ai_tools)
-
-        # Erweitere System Prompt mit RAG-Anweisungen falls RAG-Kontext vorhanden
-        if rag_context and rag_context.get("cards"):
-            rag_instruction = """\n\nQUELLEN-SYSTEM (KRITISCH — MUSS BEFOLGT WERDEN):
-Du erhältst Quellen-Karten aus dem Lernmaterial des Nutzers. Diese Karten sind dein PRIMÄRES Wissen.
-
-ANTWORTSTRATEGIE:
-1. Beantworte die Frage KONKRET und DIREKT — gib dem Nutzer genau die Information die er braucht
-2. Nutze dabei die Fakten aus den Quellen-Karten als Grundlage — der Nutzer lernt diese Karten, also verwende deren Terminologie und Fakten
-3. Ergänze mit deinem eigenen Wissen nur wo die Karten nicht ausreichen, um die Frage vollständig zu beantworten
-4. Die aktuelle Karte (die der Nutzer gerade lernt) ist die WICHTIGSTE Quelle — beziehe dich darauf
-
-ZITIER-REGELN (PFLICHT):
-- Setze [[NoteID]] DIREKT nach jedem Fakt der aus einer Karte stammt (z.B. [[1735567472099]])
-- JEDE Aussage die auf einer Karte basiert MUSS eine Citation haben — ohne Citation ist die Aussage wertlos
-- Die Note-IDs findest du im Kontext als "Note XXXXX" — verwende genau diese Zahlen
-- Auch wenn du nur EINE Karte als Quelle hast, zitiere sie trotzdem
-- Die Nummern erscheinen dem Nutzer als klickbare [1], [2], [3] Badges"""
-            system_instruction = system_instruction + rag_instruction
-        
-        # Tools Array — built from central registry
-        declarations = tool_registry.get_function_declarations(
-            agent='tutor',
-            ai_tools_config=ai_tools,
-            mode=mode,
-        )
-        tools_array = []
-        if declarations:
-            tools_array.append({"functionDeclarations": declarations})
-            logger.debug("_get_google_response_streaming: %s Tool(s) aktiviert (mode: %s)", len(declarations), mode)
-        
-        # Erweitere Nachricht mit Kontext (gleiche Logik wie _get_google_response)
-        enhanced_message = user_message
-        has_long_history = history and len(history) > 2
-        
-        if context:
-            from ..utils.text import clean_html
-
-            context_parts = []
-            is_question = context.get('isQuestion', True)
-            
-            question_text = context.get('frontField') or context.get('question', '')
-            max_question_len = 500 if has_long_history else 1000
-            if question_text:
-                clean_question = clean_html(question_text, max_question_len)
-                if clean_question:
-                    context_parts.append(f"Kartenfrage: {clean_question}")
-            
-            max_answer_len = 400 if has_long_history else 800
-            if not is_question and context.get('answer'):
-                clean_answer = clean_html(context['answer'], max_answer_len)
-                if clean_answer:
-                    context_parts.append(f"Kartenantwort: {clean_answer}")
-            
-            if context.get('stats') and not has_long_history:
-                stats = context['stats']
-                knowledge_score = stats.get('knowledgeScore', 0)
-                reps = stats.get('reps', 0)
-                lapses = stats.get('lapses', 0)
-                ivl = stats.get('interval', 0)
-                
-                stats_text = f"\nKartenstatistiken: Kenntnisscore {knowledge_score}% (0=neu, 100=sehr gut bekannt), {reps} Wiederholungen, {lapses} Fehler, Intervall {ivl} Tage. "
-                stats_text += "Passe die Schwierigkeit deiner Erklärung und Fragen entsprechend an: "
-                if knowledge_score >= 70:
-                    stats_text += "Karte ist gut bekannt - verwende fortgeschrittene Konzepte und vertiefende Fragen."
-                elif knowledge_score >= 40:
-                    stats_text += "Karte ist mäßig bekannt - verwende mittlere Schwierigkeit mit klaren Erklärungen."
-                else:
-                    stats_text += "Karte ist neu oder wenig bekannt - verwende einfache Sprache und grundlegende Erklärungen."
-                
-                context_parts.append(stats_text)
-            
-            if context_parts:
-                context_text = "\n".join(context_parts)
-                
-                workflow_instruction = ""
-                if is_question:
-                    workflow_instruction = "\n\nWICHTIG: Die Kartenantwort ist noch NICHT aufgedeckt. "
-                    workflow_instruction += "Wenn der Benutzer eine Antwort gibt, prüfe sie gegen die korrekte Antwort (die du kennst, aber noch nicht verraten hast). "
-                    workflow_instruction += "Wenn nach einem Hinweis gefragt wird, gib einen hilfreichen Hinweis OHNE die Antwort zu verraten. "
-                    workflow_instruction += "Wenn nach Multiple Choice gefragt wird, erstelle 4 Optionen (nur eine richtig) und formatiere sie klar als A), B), C), D)."
-                else:
-                    workflow_instruction = "\n\nWICHTIG: Die Kartenantwort ist bereits aufgedeckt. "
-                    workflow_instruction += "Beantworte Fragen zur Karte, erkläre Konzepte, stelle vertiefende Fragen oder biete weitere Lernhilfen an."
-                
-                enhanced_message = f"Kontext der aktuellen Anki-Karte:\n{context_text}{workflow_instruction}\n\nBenutzerfrage: {user_message}"
-            else:
-                # Kein Karten-Kontext, aber möglicherweise RAG-Kontext
-                enhanced_message = user_message
-            
-            # Füge RAG-Kontext hinzu falls vorhanden
-            if rag_context and rag_context.get("cards"):
-                cards_text = "\n".join(rag_context["cards"])
-                enhanced_message = f"{enhanced_message}\n\n--- QUELLEN-KARTEN (aus dem Lernmaterial des Nutzers) ---\n{cards_text}\n--- ENDE QUELLEN ---\n\nDu MUSST diese Karten als Hauptquelle nutzen. Zitiere JEDEN Fakt mit [[NoteID]] (die Zahl nach 'Note'). Antworte konkret auf die Frage, baue die Fakten aus den Karten ein."
-        
-        # Erstelle Contents-Array mit Chat-Historie
-        contents = []
-        
-        if history and len(history) > 1:
-            history_to_use = history[:-1][-4:]
-            
-            for hist_msg in history_to_use:
-                role = hist_msg.get('role', 'user')
-                content = hist_msg.get('content', '')
-                
-                if content:
-                    if len(content) > 1500:
-                        content = content[:1497] + "..."
-                    
-                    contents.append({
-                        "role": role,
-                        "parts": [{"text": content}]
-                    })
-            logger.debug("_get_google_response_streaming: %s Nachrichten aus Historie hinzugefügt", len(contents))
-        
-        contents.append({
-            "role": "user",
-            "parts": [{"text": enhanced_message}]
-        })
-        
-        # Request-Daten
-        # CRITICAL: Set max_output_tokens to 8192 to prevent cut-off answers
-        max_tokens = 8192 if "gemini-3-flash-preview" in model.lower() else 4096
-        data = {
-            "contents": contents,
-            "generationConfig": {
-                "temperature": 0.7,
-                "maxOutputTokens": max_tokens
-            }
-        }
-        
-        if system_instruction and system_instruction.strip():
-            data["systemInstruction"] = {
-                "parts": [{"text": system_instruction}]
-            }
-        
-        if tools_array:
-            data["tools"] = tools_array
-        
-        # Validiere Request-Größe
-        total_chars = sum(len(msg.get('parts', [{}])[0].get('text', '')) for msg in contents)
-        total_chars += len(system_instruction)
-        
-        if total_chars > 18000:
-            logger.warning("⚠️ Request zu groß (%s Zeichen), reduziere Historie", total_chars)
-            if len(contents) > 3:
-                contents = contents[-3:]
-                data["contents"] = contents
-        
-        # Prüfe ob Tools aktiv sind
-        has_tools = bool(tools_array)
-        
-        # Erstelle Backend-Daten falls Backend-Modus aktiv
-        backend_data = None
-        if use_backend:
-            backend_data = {
-                "message": enhanced_message,
-                "history": history if history else None,
-                "context": context,
-                "mode": mode,
-                "model": model_normalized
-            }
-        
-        try:
-            # Run agent loop (handles multi-turn tool calling)
-            system_instruction_dict = None
-            if system_instruction and system_instruction.strip():
-                system_instruction_dict = {"parts": [{"text": system_instruction}]}
-
-            text_result = run_agent_loop(
-                stream_fn=self._stream_response,
-                stream_urls=stream_urls,
-                data=data,
-                callback=callback,
-                use_backend=use_backend,
-                backend_data=backend_data,
-                tools_array=tools_array if tools_array else None,
-                system_instruction=system_instruction_dict,
-                model=model,
-            )
-            return text_result
-            
-        except Exception as e:
-            error_msg = f"Fehler bei Streaming-Request: {str(e)}"
-            logger.exception("⚠️ Streaming-Fehler: %s", error_msg)
-            
-            # FALLBACK: Versuche non-streaming
-            logger.info("🔄 Fallback auf non-streaming...")
-            try:
-                for url in normal_urls:
-                    try:
-                        logger.info("🔄 Fallback: Versuche URL: %s...", url.split('?')[0])
-                        response = requests.post(url, json=data, timeout=30)
-                        response.raise_for_status()
-                        result = response.json()
-                        
-                        if "candidates" in result and len(result["candidates"]) > 0:
-                            candidate = result["candidates"][0]
-                            if "content" in candidate and "parts" in candidate["content"]:
-                                parts = candidate["content"]["parts"]
-                                if len(parts) > 0:
-                                    text = parts[0].get("text", "")
-                                    logger.info("✅ Fallback erfolgreich: %s Zeichen erhalten", len(text))
-                                    if callback:
-                                        # Sende als einzelne Nachricht (simuliere Streaming für UX)
-                                        callback(text, True, False)
-                                    return text
-                    except Exception as fallback_e:
-                        logger.warning("⚠️ Fallback-URL fehlgeschlagen: %s", fallback_e)
-                        continue
-            except Exception as fallback_error:
-                logger.warning("⚠️ Fallback komplett fehlgeschlagen: %s", fallback_error)
-            
-            # Wenn Fallback auch fehlschlägt, Fehler nur über Exception-Pfad melden.
-            # NICHT zusätzlich über callback senden – das führt zu doppelten
-            # Fehlermeldungen, weil die Exception in widget.py nochmal per
-            # error_signal an das Frontend gesendet wird.
-            raise Exception(error_msg)
-    
-    def _stream_response(self, urls, data, callback=None, use_backend=False, backend_data=None):
-        """
-        Streamt eine Antwort von der Gemini API oder Backend
-        
-        Args:
-            urls: Liste von Streaming-URLs (mit Fallback)
-            data: Request-Daten (Gemini-Format)
-            callback: Optional - Funktion(chunk, done, is_function_call=False)
-            use_backend: Ob Backend-Modus aktiv ist
-            backend_data: Request-Daten im Backend-Format (falls use_backend=True)
-        
-        Returns:
-            Tuple (full_text, function_call_data)
-        """
-        full_text = ""
-        last_error = None
-        retry_count = 0
-        max_retries = 1
-        
-        for url in urls:
-            try:
-                logger.debug("_stream_response: Versuche URL: %s...", url.split('?')[0])
-                
-                # Bestimme Request-Daten und Headers
-                if use_backend:
-                    headers = self._get_auth_headers()
-                    request_data = backend_data if backend_data else data
-                else:
-                    headers = {"Content-Type": "application/json"}
-                    request_data = data
-                
-                response = requests.post(url, json=request_data, headers=headers, stream=True, timeout=60)
-                
-                # Bei 401: Versuche Token-Refresh oder wechsle zu anonymem Modus
-                if response.status_code == 401 and use_backend:
-                    if retry_count < max_retries:
-                        logger.debug("_stream_response: 401 Unauthorized - Versuche Token-Refresh")
-                        if self._refresh_auth_token():
-                            retry_count += 1
-                            headers = self._get_auth_headers()
-                            response = requests.post(url, json=request_data, headers=headers, stream=True, timeout=60)
-                            logger.debug("_stream_response: Retry nach Token-Refresh - Status: %s", response.status_code)
-                        else:
-                            # Kein Refresh-Token vorhanden - wechsle zu anonymem Modus
-                            logger.debug("_stream_response: Kein Refresh-Token - wechsle zu anonymem Modus")
-                            update_config(auth_token="")  # Token löschen
-                            self._refresh_config()
-                            headers = self._get_auth_headers()  # Jetzt mit Device-ID
-                            retry_count += 1
-                            response = requests.post(url, json=request_data, headers=headers, stream=True, timeout=60)
-                            logger.debug("_stream_response: Retry als anonymer User - Status: %s", response.status_code)
-                    else:
-                        # Max Retries erreicht - versuche als anonymer User
-                        logger.debug("_stream_response: Max Retries erreicht - versuche als anonymer User")
-                        update_config(auth_token="")  # Token löschen
-                        self._refresh_config()
-                        headers = self._get_auth_headers()  # Jetzt mit Device-ID
-                        response = requests.post(url, json=request_data, headers=headers, stream=True, timeout=60)
-                        logger.debug("_stream_response: Request als anonymer User - Status: %s", response.status_code)
-                
-                # Bei 403: Quota-Fehler
-                if response.status_code == 403:
-                    try:
-                        error_text = response.text[:500]
-                        error_data = json.loads(error_text) if error_text.startswith('{') else {}
-                        error_msg = error_data.get("error", {}).get("message", "Quota überschritten")
-                        raise Exception(f"Quota überschritten: {error_msg}. Bitte upgraden Sie Ihren Plan.")
-                    except (ValueError, KeyError):
-                        raise Exception("Quota überschritten. Bitte upgraden Sie Ihren Plan.")
-                
-                response.raise_for_status()
-                
-                # Prüfe Content-Type und erzwinge UTF-8
-                content_type = response.headers.get('Content-Type', '')
-                logger.debug("_stream_response: Content-Type: %s", content_type)
-                response.encoding = 'utf-8'
-                
-                # Verarbeite Stream - ECHTES STREAMING
-                stream_finished = False
-                chunk_count = 0
-                accumulated_text = ""
-                
-                # Backend sendet SSE-Format: data: {"text": "..."}
-                # Gemini sendet JSON-Array-Stream
-                if use_backend:
-                    # Backend SSE-Format parsen
-                    logger.debug("📡 Starte Backend-Stream-Verarbeitung...")
-                    chunk_received = False
-                    try:
-                        # Verwende iter_lines für bessere SSE-Verarbeitung
-                        for line in response.iter_lines(decode_unicode=True):
-                            if line is None:
-                                continue
-                            
-                            chunk_received = True
-                            line = line.strip()
-                            if not line:
-                                continue
-                            
-                            logger.debug("📝 Verarbeite Zeile: %s...", line[:100])
-                            
-                            # SSE-Format: data: {...}
-                            if line.startswith('data: '):
-                                data_str = line[6:]  # Entferne "data: " Präfix
-                                
-                                # Prüfe auf [DONE]
-                                if data_str == '[DONE]':
-                                    logger.info("✅ Stream beendet mit [DONE]")
-                                    stream_finished = True
-                                    if callback:
-                                        callback("", True, False)
-                                    return (full_text, None)
-                                
-                                try:
-                                    chunk_data = json.loads(data_str)
-                                    logger.debug("📦 Chunk-Daten geparst: %s", list(chunk_data.keys()))
-                                    
-                                    # Backend-Format: {"text": "..."}
-                                    if "text" in chunk_data:
-                                        chunk_text = chunk_data["text"]
-                                        if chunk_text:
-                                            logger.info("✅ Text-Chunk erhalten (Länge: %s)", len(chunk_text))
-                                            accumulated_text += chunk_text
-                                            full_text = accumulated_text
-                                            chunk_count += 1
-                                            if callback:
-                                                callback(chunk_text, False, False)
-                                    
-                                    # Backend-Format: {"error": "..."}
-                                    if "error" in chunk_data:
-                                        error_msg = chunk_data["error"].get("message", "Unbekannter Fehler")
-                                        error_code = chunk_data["error"].get("code", "UNKNOWN")
-                                        if error_code == "QUOTA_EXCEEDED":
-                                            raise Exception(f"Quota überschritten: {error_msg}. Bitte upgraden Sie Ihren Plan.")
-                                        raise Exception(f"Backend Fehler: {error_msg}")
-                                
-                                except json.JSONDecodeError as e:
-                                    # Ignoriere JSON-Parse-Fehler für unvollständige Chunks
-                                    logger.warning("⚠️ JSON-Parse-Fehler (ignoriert): %s, Zeile: %s...", e, line[:50])
-                                    continue
-                                except Exception as e:
-                                    if "Quota" in str(e) or "Token" in str(e):
-                                        raise
-                                    logger.warning("⚠️ Fehler beim Verarbeiten von Backend-Chunk: %s", e)
-                    except Exception as stream_error:
-                        logger.warning("⚠️ Stream-Fehler: %s", stream_error)
-                        raise
-                    
-                    if not chunk_received:
-                        logger.warning("⚠️ Keine Chunks vom Backend empfangen!")
-                    
-                    # Stream beendet
-                    logger.debug("📊 Stream beendet - Chunks: %s, Text-Länge: %s", chunk_count, len(full_text))
-                    if full_text:
-                        if callback:
-                            callback("", True, False)
-                        return (full_text, None)
-                    else:
-                        if callback:
-                            callback("", True, False)
-                        raise Exception("Backend-Streaming lieferte keine Antwort")
-                
-                # Gemini-Format (Fallback)
-                buffer = ""
-                brace_count = 0
-                bracket_count = 0
-                in_string = False
-                escape_next = False
-                array_started = False
-                
-                for chunk in response.iter_content(chunk_size=1024, decode_unicode=True):
-                    if chunk is None:
-                        continue
-                    
-                    if not chunk:
-                        continue
-                    
-                    # Entferne SSE-Präfix falls vorhanden
-                    chunk_str = chunk
-                    if chunk_str.startswith("data: "):
-                        chunk_str = chunk_str[6:]
-                    elif chunk_str.startswith(":"):
-                        continue
-                    
-                    # Erkenne Array-Start
-                    if not array_started and "[" in chunk_str:
-                        array_started = True
-                        bracket_pos = chunk_str.find("[")
-                        if bracket_pos >= 0:
-                            chunk_str = chunk_str[bracket_pos + 1:]
-                    
-                    buffer += chunk_str
-                    
-                    # Zähle Klammern
-                    for char in chunk_str:
-                        if escape_next:
-                            escape_next = False
-                            continue
-                        
-                        if char == '\\':
-                            escape_next = True
-                            continue
-                        
-                        if char == '"' and not escape_next:
-                            in_string = not in_string
-                            continue
-                        
-                        if not in_string:
-                            if char == '{':
-                                brace_count += 1
-                            elif char == '}':
-                                brace_count -= 1
-                            elif char == '[':
-                                bracket_count += 1
-                            elif char == ']':
-                                bracket_count -= 1
-                    
-                    # Wenn vollständiges Objekt vorhanden
-                    if brace_count == 0 and bracket_count == 0 and buffer.strip():
-                        buffer_clean = buffer.strip()
-                        while buffer_clean.startswith(','):
-                            buffer_clean = buffer_clean[1:].strip()
-                        
-                        if not buffer_clean.startswith('{'):
-                            buffer = buffer_clean
-                            continue
-                        
-                        try:
-                            chunk_data = json.loads(buffer_clean)
-                            buffer = ""
-                            chunk_count += 1
-                            
-                            if "candidates" in chunk_data and len(chunk_data["candidates"]) > 0:
-                                candidate = chunk_data["candidates"][0]
-                                finish_reason = candidate.get("finishReason", None)
-                                
-                                if "content" in candidate and "parts" in candidate["content"]:
-                                    parts = candidate["content"]["parts"]
-                                    for part in parts:
-                                        # Check for Function Call
-                                        if "functionCall" in part:
-                                            function_call = part["functionCall"]
-                                            logger.debug("🔧 _stream_response: Function Call im Stream erkannt: %s", function_call.get('name'))
-                                            
-                                            # Notify callback about tool usage
-                                            if callback:
-                                                callback(None, False, is_function_call=True)
-                                            
-                                            # Return immediately to handle tool
-                                            return (accumulated_text, function_call)
-
-                                        if "text" in part:
-                                            chunk_text = part["text"]
-                                            if chunk_text:
-                                                accumulated_text += chunk_text
-                                                full_text = accumulated_text
-                                                if callback:
-                                                    callback(chunk_text, False, False)
-                                
-                                if finish_reason:
-                                    stream_finished = True
-                                    if finish_reason == "STOP":
-                                        logger.info("✅ Stream normal beendet (STOP) nach %s Chunks", chunk_count)
-                                    else:
-                                        logger.warning("⚠️ Stream beendet mit Reason: %s", finish_reason)
-                                    
-                                    if callback:
-                                        callback("", True, False)
-                                    return (full_text, None)
-                        
-                        except json.JSONDecodeError:
-                            if len(buffer) > 500000:
-                                buffer = ""
-                                brace_count = 0
-                                bracket_count = 0
-                            continue
-                        except Exception as e:
-                            logger.warning("⚠️ Fehler beim Verarbeiten von Stream-Chunk: %s", e)
-                            buffer = ""
-                            brace_count = 0
-                            bracket_count = 0
-                            continue
-                
-                if not stream_finished:
-                    if full_text:
-                        if callback:
-                            callback("", True, False)
-                        return (full_text, None)
-                    else:
-                        if callback:
-                            callback("", True, False)
-                        raise Exception("Streaming lieferte keine Antwort")
-                
-                if callback:
-                    callback("", True, False)
-                return (full_text, None)
-                
-            except Exception as e:
-                if "Google API Fehler" in str(e):
-                    raise
-                last_error = e
-                continue
-        
-        if last_error:
-            if callback:
-                callback("", True, False)
-            raise Exception(f"Fehler beim Streaming: {str(last_error)}")
-        
-        if callback:
-            callback("", True, False)
-        return (full_text, None)
-    
     def is_configured(self):
         """Prüft, ob die AI-Konfiguration vollständig ist"""
-        # Prüfe Backend-Modus
         if is_backend_mode():
-            # Im Backend-Modus: Anonyme User sind erlaubt (Device-ID wird verwendet)
-            # Backend-URL wird standardmäßig gesetzt (DEFAULT_BACKEND_URL)
-            # Daher ist Backend-Modus immer "konfiguriert", auch ohne Auth-Token
             return True  # Backend-Modus = immer konfiguriert (unterstützt anonyme User)
-        # Fallback: API-Key-Modus (benötigt API-Key)
         api_key = self.config.get("api_key", "")
         return bool(api_key.strip())
-    
+
     def get_model_info(self):
         """Gibt Informationen über das konfigurierte Modell zurück"""
         return {
@@ -1311,515 +221,99 @@ ZITIER-REGELN (PFLICHT):
             "model": self.config.get("model_name", "gemini-3-flash-preview"),
             "style": self.config.get("response_style", "balanced")
         }
-    
-    def get_section_title(self, question, answer=""):
-        """
-        Generiert einen kurzen Titel (max 5 Wörter) für eine Lernkarte
-        
-        Args:
-            question: Die Frage der Lernkarte (kann HTML enthalten)
-            answer: Optional - Die Antwort der Lernkarte
-        
-        Returns:
-            Ein kurzer, aussagekräftiger Titel
-        """
-        import re
-        
-        logger.debug("=" * 60)
-        logger.debug("get_section_title: START")
-        logger.debug("=" * 60)
-        
-        # Entferne HTML-Tags aus question und answer
-        def strip_html(text):
-            if not text:
-                return ""
-            # Entferne HTML-Tags
-            clean = re.sub(r'<[^>]+>', ' ', text)
-            # Entferne mehrfache Leerzeichen
-            clean = re.sub(r'\s+', ' ', clean)
-            # Entferne HTML-Entities
-            clean = re.sub(r'&[a-zA-Z]+;', ' ', clean)
-            return clean.strip()
-        
-        logger.debug("get_section_title: Schritt 1 - HTML-Bereinigung")
-        logger.debug("  Original Frage Länge: %s", len(question) if question else 0)
-        question_clean = strip_html(question)
-        answer_clean = strip_html(answer)
-        logger.debug("  Bereinigte Frage Länge: %s", len(question_clean) if question_clean else 0)
-        logger.debug("  Bereinigte Antwort Länge: %s", len(answer_clean) if answer_clean else 0)
-        
-        # Lade Config neu
-        logger.debug("get_section_title: Schritt 2 - Config laden")
-        self._refresh_config()
-        logger.debug("  Config neu geladen")
-        
-        if not self.is_configured():
-            logger.warning("❌ get_section_title: Kein API-Key konfiguriert")
-            return "Lernkarte"
-        
-        # Wenn nach Bereinigung keine Frage übrig bleibt, Fallback
-        if not question_clean or len(question_clean) < 5:
-            logger.warning("❌ get_section_title: Frage zu kurz (%s Zeichen)", len(question_clean) if question_clean else 0)
-            return "Lernkarte"
-        
-        logger.debug("get_section_title: Schritt 3 - API-Key validieren")
-        api_key = self.config.get("api_key", "").strip()  # WICHTIG: Trimme API-Key
-        logger.debug("  API-Key Länge nach Trimmen: %s", len(api_key))
-        
-        # Warnung wenn API-Key zu lang ist
-        if len(api_key) > 50:
-            logger.warning("⚠️ get_section_title: API-Key ist sehr lang (%s Zeichen)!", len(api_key))
-            logger.debug("   Erste 30 Zeichen: %s...", api_key[:30])
-        
-        # Prüfe ob Backend-Modus aktiv ist
-        use_backend = is_backend_mode() and get_auth_token()
-        
-        if not use_backend and not api_key:
-            logger.warning("❌ get_section_title: API-Key ist leer nach Trimmen")
-            return "Lernkarte"
-        
-        # IMMER Gemini 2.0 Flash für Titel (schneller, günstiger, stabiler als Preview)
-        # Gemini 3 Preview ist für Chat, aber für einfache Titel ist 2.0 besser
-        model = "gemini-2.5-flash"
-        logger.debug("  Verwende für Titel-Generierung: %s (immer 2.0 Flash für Stabilität)", model)
-        
-        logger.debug("get_section_title: Schritt 4 - Request vorbereiten")
-        logger.debug("  Modell: %s", model)
-        if not use_backend:
-            logger.debug("  API-Key Länge: %s", len(api_key))
-        logger.debug("  Frage-Länge: %s", len(question_clean))
-        logger.debug("  Frage-Inhalt (erste 100 Zeichen): %s...", question_clean[:100])
-        
-        # Erstelle Prompt für kurzen Titel - EINFACHER
-        prompt = f"""Erstelle einen Kurztitel (2-4 Wörter) für diese Lernkarte. Nur den Titel, nichts anderes.
 
-Karteninhalt: {question_clean[:500]}"""
-        
-        if use_backend:
-            # Backend-Modus: Verwende Backend-URL
-            backend_url = get_backend_url()
-            url = f"{backend_url}/chat"
-            logger.debug("  URL: %s", url)
-            
-            # Backend-Format: message, model, mode, stream=false für non-streaming
-            backend_data = {
-                "message": prompt,
-                "model": model,
-                "mode": "compact",
-                "history": [],
-                "stream": False  # Non-streaming für Titel-Generierung
-            }
-            headers = self._get_auth_headers()
-        else:
-            # Fallback: Direkte Gemini API (API-Key-Modus)
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-            logger.debug("  URL (ohne Key): %s...", url.split('?')[0])
-            
-            data = {
-                "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                "generationConfig": {
-                    "temperature": 0.1,
-                    "maxOutputTokens": 20
-                }
-            }
-            backend_data = None
-            headers = {"Content-Type": "application/json"}
-        
-        logger.debug("  Request-Daten Größe: %s Zeichen", len(str(backend_data if use_backend else data)))
-        logger.debug("  Prompt Länge: %s Zeichen", len(prompt))
-        
-        try:
-            logger.debug("get_section_title: Schritt 5 - API-Request senden")
-            logger.debug("  Sende Request an %s...", model)
-            if use_backend:
-                response = requests.post(url, json=backend_data, headers=headers, timeout=15)
-            else:
-                response = requests.post(url, json=data, headers=headers, timeout=15)
-            logger.debug("  Response Status: %s", response.status_code)
-            logger.debug("  Response Headers: %s", dict(response.headers))
-            
-            if response.status_code != 200:
-                logger.warning("❌ get_section_title: Fehler Status %s", response.status_code)
-                logger.debug("  Vollständige Response:")
-                logger.debug("  %s", response.text)
-                try:
-                    error_data = response.json()
-                    logger.warning("  Parsed Error Data: %s", error_data)
-                    error_msg = error_data.get("error", {}).get("message", "Unbekannter Fehler")
-                    error_code = error_data.get("error", {}).get("code", response.status_code)
-                    logger.warning("  Fehlercode: %s", error_code)
-                    logger.warning("  Fehlermeldung: %s", error_msg)
-                except Exception as parse_error:
-                    logger.debug("  Konnte Response nicht als JSON parsen: %s", parse_error)
-                    logger.debug("  Response Text (erste 1000 Zeichen): %s", response.text[:1000])
-                return "Lernkarte"
-            
-            logger.debug("get_section_title: Schritt 6 - Response parsen")
-            try:
-                result = response.json()
-                logger.debug("  Response JSON Keys: %s", list(result.keys()))
-            except Exception as json_error:
-                logger.error("❌ get_section_title: Konnte Response nicht als JSON parsen: %s", json_error)
-                logger.debug("  Response Text: %s", response.text[:1000])
-                return "Lernkarte"
-            
-            logger.debug("get_section_title: Schritt 7 - Response validieren")
-            
-            # Extrahiere Titel aus Response (Backend oder direkte API)
-            title = ""
-            if use_backend:
-                # Backend-Format: Prüfe verschiedene mögliche Formate
-                if "text" in result:
-                    title = result["text"].strip()
-                elif "message" in result:
-                    title = result["message"].strip()
-                elif "candidates" in result and len(result["candidates"]) > 0:
-                    candidate = result["candidates"][0]
-                    if "content" in candidate and "parts" in candidate["content"]:
-                        parts = candidate["content"]["parts"]
-                        if len(parts) > 0:
-                            title = parts[0].get("text", "").strip()
-                
-                if not title:
-                    logger.warning("❌ get_section_title: Konnte Titel nicht aus Backend-Response extrahieren")
-                    logger.debug("  Response Struktur: %s", list(result.keys()))
-                    logger.debug("  Vollständige Response: %s", result)
-                    return "Lernkarte"
-            else:
-                # Direkte Gemini API
-                if "candidates" not in result:
-                    logger.warning("❌ get_section_title: Kein 'candidates' Feld in Response")
-                    logger.debug("  Response Struktur: %s", list(result.keys()))
-                    logger.debug("  Vollständige Response: %s", result)
-                    return "Lernkarte"
-                
-                if len(result["candidates"]) == 0:
-                    logger.warning("❌ get_section_title: 'candidates' Array ist leer")
-                    logger.debug("  Response: %s", result)
-                    return "Lernkarte"
-                
-                candidate = result["candidates"][0]
-                logger.debug("  Candidate Keys: %s", list(candidate.keys()) if isinstance(candidate, dict) else 'Nicht ein Dict')
-                
-                if "content" not in candidate:
-                    logger.warning("❌ get_section_title: Kein 'content' Feld in Candidate")
-                    logger.debug("  Candidate: %s", candidate)
-                    return "Lernkarte"
-                
-                if "parts" not in candidate["content"]:
-                    logger.warning("❌ get_section_title: Kein 'parts' Feld in Content")
-                    logger.debug("  Content: %s", candidate['content'])
-                    return "Lernkarte"
-                
-                if len(candidate["content"]["parts"]) == 0:
-                    logger.warning("❌ get_section_title: 'parts' Array ist leer")
-                    logger.debug("  Content: %s", candidate['content'])
-                    return "Lernkarte"
-                
-                title = candidate["content"]["parts"][0].get("text", "").strip()
-            
-            logger.debug("get_section_title: Schritt 8 - Titel extrahieren")
-            logger.debug("  Roher Titel: '%s' (Länge: %s)", title, len(title))
-            
-            if not title:
-                logger.warning("❌ get_section_title: Titel ist leer nach Extraktion")
-                return "Lernkarte"
-            
-            # Entferne Anführungszeichen falls vorhanden
-            title = title.strip('"\'')
-            # Entferne Zeilenumbrüche
-            title = title.replace('\n', ' ').strip()
-            # Begrenze auf max 50 Zeichen
-            if len(title) > 50:
-                title = title[:47] + "..."
-            
-            logger.info("✅ get_section_title: Titel erfolgreich generiert: '%s'", title)
-            logger.debug("=" * 60)
-            return title if title else "Lernkarte"
-            
-        except requests.exceptions.RequestException as e:
-            logger.exception("❌ get_section_title: Request Exception (%s): %s", type(e).__name__, e)
-            return "Lernkarte"
-        except Exception as e:
-            logger.exception("❌ get_section_title: Unerwartete Exception (%s): %s", type(e).__name__, e)
-            return "Lernkarte"
-    
-    def fetch_available_models(self, provider, api_key):
-        """
-        Ruft verfügbare Modelle von der Google API ab
-        
-        Args:
-            provider: Der Provider (sollte "google" sein)
-            api_key: Der API-Schlüssel
-        
-        Returns:
-            Liste von Modellen mit name und label, oder leere Liste bei Fehler
-        """
-        # Trimme API-Key
-        api_key = api_key.strip() if api_key else ""
-        
-        if not api_key:
-            logger.warning("fetch_available_models: Kein API-Key vorhanden")
-            return []
-        
-        # Warnung wenn API-Key zu lang ist
-        if len(api_key) > 50:
-            logger.warning("⚠️ WARNUNG: API-Key ist sehr lang (%s Zeichen). Erste 20 Zeichen: %s...", len(api_key), api_key[:20])
-            # Versuche nur die ersten 50 Zeichen (falls versehentlich mehr eingegeben wurde)
-            if len(api_key) > 100:
-                logger.warning("⚠️ API-Key scheint falsch zu sein. Versuche nur ersten Teil...")
-                api_key = api_key[:50].strip()
-        
-        try:
-            return self._fetch_google_models(api_key)
-        except Exception as e:
-            logger.exception("Fehler beim Abrufen der Modelle: %s", e)
-            # Gib leere Liste zurück, damit Frontend Fallback verwenden kann
-            return []
-    
-    def _fetch_google_models(self, api_key):
-        """Ruft Google-Modelle ab"""
-        # Prüfe ob Backend-Modus aktiv ist
-        use_backend = is_backend_mode() and get_auth_token()
-        
-        if use_backend:
-            # Backend-Modus: Verwende Backend-URL
-            backend_url = get_backend_url()
-            urls = [f"{backend_url}/models"]
-            logger.debug("_fetch_google_models: Verwende Backend-Modus: %s", urls[0])
-            headers = self._get_auth_headers()
-        else:
-            # Fallback: Direkte Gemini API (API-Key-Modus)
-            api_key = api_key.strip()
-            logger.debug("_fetch_google_models: API-Key Länge: %s", len(api_key))
-            if len(api_key) > 50:
-                logger.warning("⚠️ WARNUNG: API-Key ist sehr lang! Erste 30 Zeichen: %s...", api_key[:30])
-                logger.warning("⚠️ Normalerweise sind Google API-Keys ~39 Zeichen lang")
-            
-            # Versuche zuerst v1beta, dann v1 als Fallback
-            urls = [
-                f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}",
-                f"https://generativelanguage.googleapis.com/v1/models?key={api_key}"
-            ]
-            headers = {"Content-Type": "application/json"}
-        
-        # Gewünschte Modelle mit Labels
-        # NUR Gemini 3 Flash für Chat (2.0 wird nur intern für Titel verwendet)
-        desired_models = {
-            "gemini-3-flash-preview": "Gemini 3 Flash",
-        }
-        
-        last_error = None
-        for url in urls:
-            try:
-                logger.debug("_fetch_google_models: Versuche URL: %s...", url.split('?')[0])
-                if use_backend:
-                    response = requests.get(url, headers=headers, timeout=10)
-                else:
-                    response = requests.get(url, timeout=10)
-                logger.debug("_fetch_google_models: Response Status: %s", response.status_code)
-                
-                # Bei Fehler, logge Details
-                if response.status_code != 200:
-                    logger.warning("⚠️ _fetch_google_models: Status %s", response.status_code)
-                    try:
-                        error_data = response.json()
-                        error_msg = error_data.get("error", {}).get("message", "Unbekannter Fehler")
-                        logger.warning("   Fehlermeldung: %s", error_msg)
-                    except (ValueError, KeyError):
-                        logger.debug("   Response Text: %s", response.text[:500])
-                
-                response.raise_for_status()
-                data = response.json()
-                
-                # Backend gibt möglicherweise direkt models-Array zurück
-                if use_backend and "models" in data:
-                    models_list = data["models"]
-                elif "models" in data:
-                    models_list = data["models"]
-                else:
-                    models_list = []
-                
-                models = []
-                found_models = set()
-                
-                for model in models_list:
-                    model_name = model.get("name", "")
-                    # Entferne "models/" Präfix falls vorhanden
-                    if model_name.startswith("models/"):
-                        model_name = model_name.replace("models/", "")
-                    
-                    # Prüfe ob Modell für generateContent verfügbar ist
-                    supported_methods = model.get("supportedGenerationMethods", [])
-                    if "generateContent" not in supported_methods:
-                        continue
-                    
-                    # Prüfe ob dieses Modell in unserer gewünschten Liste ist
-                    for desired_name, label in desired_models.items():
-                        if desired_name in model_name.lower() and desired_name not in found_models:
-                            models.append({"name": model_name, "label": label})
-                            found_models.add(desired_name)
-                            logger.info("  ✓ Modell gefunden: %s -> %s", model_name, label)
-                            break
-                
-                logger.debug("_fetch_google_models: %s Modelle gefunden", len(models))
-                
-                # Falls keine Modelle gefunden, verwende Fallback-Liste (nur Gemini 3 Flash)
-                if not models:
-                    logger.debug("_fetch_google_models: Keine Modelle gefunden, verwende Fallback")
-                    return [
-                        {"name": "gemini-3-flash-preview", "label": "Gemini 3 Flash"},
-                    ]
-                
-                # Sortiere nach Priorität (nur Flash)
-                def sort_key(m):
-                    name = m["name"].lower()
-                    if "gemini-3-flash" in name:
-                        return 0
-                    else:
-                        return 10
-                
-                models.sort(key=sort_key)
-                return models[:1]  # Nur ein Modell (Flash)
-                
-            except requests.exceptions.HTTPError as e:
-                last_error = e
-                # Wenn 404 oder 403, versuche nächste URL
-                if e.response.status_code in [404, 403]:
-                    continue
-                # Bei anderen HTTP-Fehlern, werfe weiter
-                raise
-            except Exception as e:
-                last_error = e
-                continue
-        
-        # Wenn alle URLs fehlgeschlagen sind, werfe letzten Fehler
-        if last_error:
-            error_msg = str(last_error)
-            if hasattr(last_error, 'response') and last_error.response is not None:
-                try:
-                    error_data = last_error.response.json()
-                    error_msg = error_data.get("error", {}).get("message", error_msg)
-                except (ValueError, KeyError):
-                    pass
-            raise Exception(f"Google API Fehler: {error_msg}")
-        
-        # Fallback: Statische Liste mit nur Gemini 3 Flash
-        return [
-            {"name": "gemini-3-flash-preview", "label": "Gemini 3 Flash"},
-        ]
-    
+    # ---- Emit helpers (access self.widget, must stay here) ----------------------
+
     def _emit_ai_state(self, message, phase=None, metadata=None):
         """
-        Sendet AI-State-Updates an das Frontend und speichert sie für die Historie
-        
-        Thread-safe: Verwendet mw.taskman.run_on_main() um sicherzustellen,
-        dass JavaScript-Aufrufe auf dem Hauptthread ausgeführt werden.
-        
-        Args:
-            message: Die State-Nachricht (z.B. "Analysiere Anfrage...")
-            phase: Optional - Phase-Konstante (PHASE_INTENT, PHASE_SEARCH, etc.)
-            metadata: Optional - Dict mit Metadaten (mode, sourceCount, intent, scope)
+        Sendet AI-State-Updates an das Frontend und speichert sie für die Historie.
+        Thread-safe via mw.taskman.run_on_main().
         """
-        # Track step for persistence (always — needed for query data parsing)
-        import time
         step = {
             "state": message,
-            "timestamp": time.time() * 1000,  # milliseconds
+            "timestamp": time.time() * 1000,
             "phase": phase,
             "metadata": metadata or {}
         }
         self._current_request_steps.append(step)
 
-        # When new pipeline is active, don't send ai_state to frontend
-        # (pipeline_step events handle the UI now; ai_state only logs internally)
         req_id = getattr(self, '_current_request_id', None)
         if req_id:
-            logger.debug("🔇 _emit_ai_state SUPPRESSED (pipeline active, reqId=%s): %s", req_id[:8], message[:50])
+            logger.debug("_emit_ai_state SUPPRESSED (pipeline active, reqId=%s): %s",
+                         req_id[:8], message[:50])
             return
         else:
-            logger.debug("📡 _emit_ai_state SENDING (no pipeline): %s", message[:50])
+            logger.debug("_emit_ai_state SENDING (no pipeline): %s", message[:50])
 
         if not self.widget or not self.widget.web_view:
             return
 
-        # Thread-safe: Führe JavaScript-Aufruf auf dem Hauptthread aus
+        payload = {
+            "type": "ai_state",
+            "message": message,
+            "phase": phase,
+            "metadata": metadata or {}
+        }
+        js_payload = json.dumps(payload)
+
         if mw and mw.taskman:
             def emit_on_main():
                 try:
-                    payload = {
-                        "type": "ai_state", 
-                        "message": message,
-                        "phase": phase,
-                        "metadata": metadata or {}
-                    }
-                    js_code = f"window.ankiReceive({json.dumps(payload)});"
-                    self.widget.web_view.page().runJavaScript(js_code)
-                    logger.debug("📡 RAG State: %s (phase: %s)", message, phase)
-                    # Process events immediately to ensure UI updates
+                    self.widget.web_view.page().runJavaScript(
+                        "window.ankiReceive(" + js_payload + ");"
+                    )
+                    logger.debug("RAG State: %s (phase: %s)", message, phase)
                     from aqt.qt import QApplication
                     app = QApplication.instance()
                     if app:
                         app.processEvents()
                 except Exception as e:
-                    logger.warning("⚠️ Fehler beim Senden von AI-State: %s", e)
-            
+                    logger.warning("Fehler beim Senden von AI-State: %s", e)
             mw.taskman.run_on_main(emit_on_main)
         else:
-            # Fallback: Direkter Aufruf (nur wenn mw nicht verfügbar ist)
-            # Dies sollte nur in Tests oder wenn nicht in Anki-Umgebung passieren
             try:
-                payload = {
-                    "type": "ai_state", 
-                    "message": message,
-                    "phase": phase,
-                    "metadata": metadata or {}
-                }
-                js_code = f"window.ankiReceive({json.dumps(payload)});"
-                self.widget.web_view.page().runJavaScript(js_code)
-                logger.debug("📡 RAG State: %s (phase: %s)", message, phase)
+                self.widget.web_view.page().runJavaScript(
+                    "window.ankiReceive(" + js_payload + ");"
+                )
+                logger.debug("RAG State: %s (phase: %s)", message, phase)
             except Exception as e:
-                logger.warning("⚠️ Fehler beim Senden von AI-State: %s", e)
+                logger.warning("Fehler beim Senden von AI-State: %s", e)
 
     def _emit_pipeline_step(self, step, status, data=None):
-        """Emit a pipeline_step event to the frontend via Qt signal.
-
-        Uses _pipeline_signal_callback (set by AIRequestThread) for real-time
-        event delivery instead of mw.taskman.run_on_main which batches events.
-        """
-        # Always record done labels (even during fallback) for persistence
+        """Emit a pipeline_step event to the frontend via Qt signal."""
         if status == 'done':
             label = self._step_done_label(step, data)
             self._current_step_labels.append(label)
 
-        # During scope fallback, skip re-emission of non-router steps to frontend
         if getattr(self, '_fallback_in_progress', False) and step != 'router':
             return
 
-        # Emit via Qt signal callback (set by AIRequestThread)
         callback = getattr(self, '_pipeline_signal_callback', None)
         if callback:
             try:
                 callback(step, status, data)
             except Exception as e:
-                logger.warning("⚠️ _emit_pipeline_step error: %s", e)
+                logger.warning("_emit_pipeline_step error: %s", e)
 
     def _step_done_label(self, step, data):
         """Generate a human-readable label for a completed step."""
         data = data or {}
-        mode_labels = {'both': 'Hybrid-Suche', 'sql': 'Keyword-Suche', 'semantic': 'Semantische Suche'}
+        mode_labels = {
+            'both': 'Hybrid-Suche',
+            'sql': 'Keyword-Suche',
+            'semantic': 'Semantische Suche',
+        }
         if step == 'router':
-            mode = mode_labels.get(data.get('retrieval_mode', ''), data.get('retrieval_mode', ''))
+            mode = mode_labels.get(data.get('retrieval_mode', ''),
+                                   data.get('retrieval_mode', ''))
             scope = data.get('scope_label', '')
             if not data.get('search_needed', True):
                 return 'Keine Suche nötig'
-            return f"{mode} · {scope}" if scope else mode or 'Anfrage analysiert'
+            return f"{mode} \u00b7 {scope}" if scope else mode or 'Anfrage analysiert'
         elif step == 'sql_search':
-            hits = data.get('total_hits', 0)
-            return f"{hits} Keyword-Treffer"
+            return f"{data.get('total_hits', 0)} Keyword-Treffer"
         elif step == 'semantic_search':
-            hits = data.get('total_hits', 0)
-            return f"{hits} semantische Treffer"
+            return f"{data.get('total_hits', 0)} semantische Treffer"
         elif step == 'merge':
             t = data.get('total', 0)
             return f"{t} Quelle{'n' if t != 1 else ''} kombiniert"
@@ -1827,1283 +321,55 @@ Karteninhalt: {question_clean[:500]}"""
             return "Antwort generiert"
         return step
 
-    def _is_standalone_question(self, user_message, context):
-        """Detect if a question is about a DIFFERENT topic than the current card.
-
-        Logic is inverted: assume context-dependent by default when a card is open.
-        Only return True (standalone) if the question contains domain-specific words
-        that don't appear on the current card.
-        """
-        if not context:
-            return True  # No card context — must be standalone
-
-        msg = user_message.lower().strip()
-
-        # Very short messages are always about the card
-        if len(msg) < 40:
-            return False
-
-        # Extract words from user message (>3 chars, alpha)
-        import re
-        user_words = set(w.lower() for w in re.findall(r'[A-Za-zÄÖÜäöüß]{4,}', msg))
-
-        # Common non-domain words that don't indicate a topic change
-        generic = {'kannst', 'könntest', 'würdest', 'bitte', 'einmal', 'nochmal',
-                   'genauer', 'ausführlich', 'kurz', 'einfach', 'erkläre', 'erklär',
-                   'beschreibe', 'vergleiche', 'zeige', 'hilf', 'sagen', 'machen',
-                   'wissen', 'verstehe', 'verstehen', 'kapiere', 'check', 'lerne',
-                   'lernen', 'merken', 'einprägen', 'behalten', 'wiederholen',
-                   'zusammenfassen', 'überblick', 'übersicht', 'übung', 'beispiel',
-                   'wichtig', 'relevant', 'warum', 'wieso', 'weshalb', 'wofür',
-                   'denkst', 'meinst', 'findest', 'glaubst', 'gibt', 'gibt',
-                   'dieses', 'diese', 'dieser', 'damit', 'davon', 'darüber',
-                   'what', 'explain', 'describe', 'compare', 'help', 'think'}
-
-        # Domain words = user words minus generic
-        domain_words = user_words - generic
-
-        if not domain_words:
-            return False  # Only generic words — must be about the card
-
-        # Check if any domain word appears in the card content
-        card_keywords = set(kw.lower() for kw in self._extract_card_keywords(context))
-
-        overlap = domain_words & card_keywords
-        if overlap:
-            return False  # Domain words overlap with card — context-dependent
-
-        # Domain words present but DON'T overlap with card — likely standalone
-        # But only if there are enough domain words to be confident
-        if len(domain_words) >= 2:
-            logger.debug("🔍 _is_standalone: domain_words=%s, card_keywords=%s → STANDALONE", domain_words, list(card_keywords)[:5])
-            return True
-
-        # Single domain word — ambiguous, default to context-dependent
-        return False
-
-    def _extract_card_keywords(self, context):
-        """Extract meaningful keywords from the current card for query building."""
-        import re
-        keywords = []
-        if not context:
-            return keywords
-
-        for field in ['frontField', 'question', 'answer']:
-            text = context.get(field, '')
-            if text:
-                # Strip HTML tags AND their content for style/script blocks
-                clean = re.sub(r'<style[^>]*>.*?</style>', ' ', text, flags=re.DOTALL | re.IGNORECASE)
-                clean = re.sub(r'<script[^>]*>.*?</script>', ' ', clean, flags=re.DOTALL | re.IGNORECASE)
-                # Strip remaining HTML tags
-                clean = re.sub(r'<[^>]+>', ' ', clean)
-                # Strip Anki cloze markers, keep content
-                clean = re.sub(r'\{\{c\d+::(.*?)(?:::.*?)?\}\}', r'\1', clean)
-                clean = re.sub(r'\s+', ' ', clean).strip()
-                # Filter: skip CSS/HTML artifacts and common stop words
-                css_words = {'color', 'important', 'button', 'border', 'background', 'font',
-                             'cursor', 'display', 'margin', 'padding', 'width', 'height',
-                             'style', 'class', 'nightmode', 'none', 'solid', 'rgba', 'auto',
-                             'text', 'align', 'left', 'right', 'center', 'bold', 'italic',
-                             'pointer', 'block', 'inline', 'relative', 'absolute', 'hidden',
-                             'overflow', 'transform', 'transition', 'opacity', 'inherit'}
-                stop_words = {'und', 'oder', 'der', 'die', 'das', 'ein', 'eine', 'ist',
-                              'sind', 'hat', 'haben', 'wird', 'werden', 'kann', 'können',
-                              'bei', 'von', 'mit', 'auf', 'für', 'aus', 'nach', 'über',
-                              'sich', 'dem', 'den', 'des', 'einer', 'einem', 'eines',
-                              'nicht', 'auch', 'noch', 'aber', 'wenn', 'dass', 'wie',
-                              'the', 'and', 'for', 'with', 'from', 'this', 'that', 'which'}
-                skip = css_words | stop_words
-                words = [w for w in clean.split()
-                         if len(w) > 3 and w[0].isalpha()
-                         and w.lower() not in skip
-                         and not w.startswith('#')  # hex colors
-                         and not re.match(r'^\d+[a-f]+$', w.lower())  # hex values like 363638
-                         ]
-                keywords.extend(words[:10])
-
-        # Deduplicate while preserving order
-        seen = set()
-        unique = []
-        for w in keywords:
-            wl = w.lower()
-            if wl not in seen:
-                seen.add(wl)
-                unique.append(w)
-        return unique[:15]
-
-    def _fix_router_queries(self, router_result, user_message, context):
-        """Post-process router result: if question is context-dependent but queries don't contain card keywords, fix them."""
-        logger.debug("🔧 _fix_router_queries: router_result=%s, context=%s, search_needed=%s", bool(router_result), bool(context), router_result.get('search_needed') if router_result else None)
-        if not router_result or not context:
-            logger.debug("🔧 _fix_router_queries: Skipping (no router_result or no context)")
-            return router_result
-        if not router_result.get('search_needed', False):
-            return router_result
-
-        is_standalone = self._is_standalone_question(user_message, context)
-        logger.debug("🔧 _fix_router_queries: is_standalone=%s for '%s'", is_standalone, user_message[:50])
-        if is_standalone:
-            return router_result  # Standalone question about a different topic — trust the router
-
-        card_keywords = self._extract_card_keywords(context)
-        logger.debug("🔧 _fix_router_queries: card_keywords=%s", card_keywords[:5])
-        if not card_keywords:
-            return router_result
-
-        # Check if any card keyword appears in the queries
-        all_queries = ' '.join(router_result.get('precise_queries', []) + router_result.get('broad_queries', []))
-        card_kw_lower = {kw.lower() for kw in card_keywords}
-        query_words = set(all_queries.lower().split())
-
-        has_card_keywords = bool(card_kw_lower & query_words)
-        if has_card_keywords:
-            return router_result  # Router did its job correctly
-
-        # Router failed — override queries with card keywords
-        logger.warning("⚠️ Router-Fix: Kontextbezogene Frage erkannt aber Router nutzt keine Karten-Keywords. Korrigiere Queries.")
-        top_kw = card_keywords[:6]
-
-        # Build AND queries from top keywords
-        precise = []
-        for i in range(0, min(len(top_kw), 6), 2):
-            pair = top_kw[i:i+2]
-            if len(pair) == 2:
-                precise.append(f"{pair[0]} AND {pair[1]}")
-            else:
-                precise.append(pair[0])
-
-        # Build OR queries
-        broad = [' OR '.join(top_kw[:4])]
-        if len(top_kw) > 4:
-            broad.append(' OR '.join(top_kw[2:6]))
-
-        router_result['precise_queries'] = precise[:3]
-        router_result['broad_queries'] = broad[:3]
-        # Build 2 embedding queries from different keyword subsets
-        if len(top_kw) >= 4:
-            router_result['embedding_queries'] = [' '.join(top_kw[:3]), ' '.join(top_kw[2:5])]
-        else:
-            router_result['embedding_queries'] = [' '.join(top_kw)]
-        router_result['search_scope'] = 'current_deck'
-
-        logger.info("✅ Router-Fix: precise=%s, broad=%s, embedding_queries=%s", precise, broad, router_result['embedding_queries'])
-        return router_result
-
-    def _rag_router(self, user_message, context=None):
-        """
-        Stage 1: Router - Analysiert die Anfrage und entscheidet ob und wie gesucht werden soll.
-
-        Args:
-            user_message: Die Benutzer-Nachricht
-            context: Optionaler Kontext (z.B. aktuelle Karte)
-
-        Returns:
-            Dict mit search_needed, retrieval_mode, embedding_query, precise_queries, broad_queries, search_scope
-            Oder None bei Fehler (dann wird search_needed=False angenommen)
-        """
-        try:
-            self._refresh_config()
-
-            # Prüfe ob Backend-Modus aktiv ist
-            # Prefer direct API key when available
-            api_key = self.config.get("api_key", "")
-            use_backend = is_backend_mode() and get_auth_token() and not api_key
-            if not use_backend and not api_key:
-                return None
-
-            # Router-Modell: gemini-2.5-flash (schnell, direkte API ~1s)
-            # Fallback: gemini-3-flash-preview
-            router_model = "gemini-2.5-flash"
-            fallback_model = "gemini-3-flash-preview"
-
-            # Emit pipeline step
-            self._emit_pipeline_step("router", "active")
-
-            # Fetch lastAssistantMessage from session storage
-            last_assistant_message = ""
-            try:
-                try:
-                    from ..storage import card_sessions as card_sessions_storage
-                except ImportError:
-                    from storage import card_sessions as card_sessions_storage
-                if context and context.get('cardId'):
-                    session_data = card_sessions_storage.load_card_session(context['cardId'])
-                    messages = session_data.get('messages', [])
-                    for msg in reversed(messages):
-                        if msg.get('sender') == 'bot':
-                            last_assistant_message = (msg.get('text', '') or '')[:300]
-                            break
-            except Exception:
-                pass
-
-            # Extrahiere Karteninhalt
-            import re
-            card_question = ""
-            card_answer = ""
-            deck_name = ""
-            extra_fields = ""
-
-            if context:
-                question_raw = context.get('question') or context.get('frontField') or ""
-                answer_raw = context.get('answer') or ""
-                deck_name = context.get('deckName') or ""
-                fields = context.get('fields', {})
-
-                if question_raw:
-                    card_question = re.sub(r'<[^>]+>', ' ', question_raw)
-                    card_question = re.sub(r'\s+', ' ', card_question).strip()[:500]
-                if answer_raw:
-                    card_answer = re.sub(r'<[^>]+>', ' ', answer_raw)
-                    card_answer = re.sub(r'\s+', ' ', card_answer).strip()[:500]
-
-                # Wichtige Felder hinzufügen (falls vorhanden)
-                if fields:
-                    extra_lines = []
-                    for field_name, field_value in list(fields.items())[:3]:
-                        if field_value and field_name not in ['question', 'answer', 'Front', 'Back']:
-                            field_clean = re.sub(r'<[^>]+>', ' ', str(field_value))
-                            field_clean = re.sub(r'\s+', ' ', field_clean).strip()
-                            if field_clean and len(field_clean) > 10:
-                                extra_lines.append(f"- {field_name}: {field_clean[:200]}")
-                    if extra_lines:
-                        extra_fields = "\n".join(extra_lines)
-
-            # Extract card tags
-            card_tags = []
-            if context and context.get('tags'):
-                card_tags = context['tags']
-            elif context and context.get('cardId'):
-                try:
-                    from aqt import mw
-                    card = mw.col.get_card(context['cardId'])
-                    note = card.note()
-                    card_tags = list(note.tags)
-                except Exception:
-                    pass
-
-            # Debug-Logging
-            logger.debug("🔍 Router: user_message='%s', has_context=%s, deck=%s", user_message[:100], bool(context), deck_name)
-            logger.debug("🔍 Router: card_question='%s', card_answer='%s'", card_question[:100] if card_question else 'LEER', card_answer[:80] if card_answer else 'LEER')
-            logger.debug("🔍 Router: context keys=%s", list(context.keys()) if context else 'None')
-
-            router_prompt = f"""Du bist ein Such-Router für eine Lernkarten-App. Entscheide ob und wie gesucht werden soll.
-
-Benutzer-Nachricht: "{user_message}"
-{f'Letzte Antwort: "{last_assistant_message[:200]}"' if last_assistant_message else ''}
-
-Aktuelle Karte (die der Nutzer gerade lernt):
-- Frage: {card_question}
-- Antwort: {card_answer}
-- Deck: {deck_name}
-- Tags: {', '.join(card_tags) if card_tags else 'keine'}
-{extra_fields}
-
-Antworte NUR mit JSON:
-{{
-  "search_needed": true/false,
-  "retrieval_mode": "sql" | "semantic" | "both",
-  "embedding_queries": ["semantischer Suchtext 1", "semantischer Suchtext 2"],
-  "precise_queries": ["keyword1 AND keyword2", ...],
-  "broad_queries": ["keyword1 OR keyword2", ...],
-  "search_scope": "current_deck" | "collection",
-  "max_sources": "low" | "medium" | "high"
-}}
-
-KONTEXT-ERKENNUNG (KRITISCH):
-Bestimme zuerst, ob die Frage sich auf die aktuelle Karte/Gesprächskontext bezieht oder ein eigenständiges Thema ist.
-
-Kontextbezogene Fragen erkennen: "was ist damit gemeint", "erkläre das genauer", "ich verstehe das nicht", "was bedeutet das", "kannst du das erklären", "erzähl mir mehr darüber", Pronomen wie "das", "es", "dieser".
-→ Bei kontextbezogenen Fragen: Nutze Karten-Kontext + letzte Antwort um spezifische Queries zu erstellen.
-  embedding_queries MÜSSEN die Schlüsselbegriffe der Karte enthalten, aus verschiedenen Perspektiven.
-  Beispiel: Karte="K-Zellen GIP", Frage="ich verstehe das nicht"
-  → embedding_queries=["K-Zellen GIP Dünndarm endokrine Zellen Lokalisation", "GIP Insulinsekretion Magensäure gastrointestinale Hormone Wirkung"]
-
-Eigenständige Fragen erkennen: Enthält eigene Fachbegriffe die NICHT auf der Karte stehen.
-→ Bei eigenständigen Fragen: Ignoriere Kartenkontext, erstelle Queries aus der Frage selbst.
-  Beispiel: Karte="Nucleotid", Frage="wie viel Volumen hat das Herz?"
-  → embedding_queries=["Herzvolumen Herzgröße Schlagvolumen", "Pumpleistung Herzzeitvolumen Ejektionsfraktion"]
-
-REGELN:
-- search_needed=false NUR bei Smalltalk, Danke, Meta-Fragen über die App
-- embedding_queries: 2-3 semantische Suchtexte aus VERSCHIEDENEN Perspektiven/Aspekten des Themas. NIEMALS die Benutzerfrage wörtlich verwenden. Immer zu fachlichen Suchbegriffen expandieren.
-- precise_queries: 2-3 AND-Queries aus den relevanten Keywords (Karte ODER Frage, je nach Kontext)
-- broad_queries: 2-3 OR-Queries für breitere Suche
-- search_scope: "current_deck" als Default, "collection" nur bei fächerübergreifenden Fragen
-- retrieval_mode: "both" als Default, "sql" für exakte Fakten, "semantic" für konzeptuelle Fragen
-- max_sources: "low" (3-5 Quellen, einfache Faktenfragen), "medium" (8-10, Standard-Erklärungen), "high" (bis 15, Vergleiche/Überblicke)"""
-
-            # Backend-Modus: Router über Cloud Function (API-Key serverseitig)
-            if use_backend:
-                try:
-                    backend_url = get_backend_url()
-                    auth_token = get_auth_token()
-                    router_url = f"{backend_url}/router"
-                    router_headers = {
-                        "Content-Type": "application/json",
-                        "Authorization": f"Bearer {auth_token}"
-                    }
-                    card_context = None
-                    if context:
-                        card_context = {
-                            "question": context.get('question') or context.get('frontField') or "",
-                            "answer": context.get('answer') or "",
-                            "deckName": context.get('deckName') or "",
-                            "tags": card_tags
-                        }
-                    router_payload = {
-                        "message": user_message,
-                        "lastAssistantMessage": last_assistant_message
-                    }
-                    if card_context:
-                        router_payload["cardContext"] = card_context
-
-                    logger.debug("🔍 Router: Backend-Aufruf an %s", router_url)
-                    response = requests.post(router_url, json=router_payload, headers=router_headers, timeout=15)
-                    response.raise_for_status()
-                    router_result = response.json()
-
-                    if router_result.get("search_needed") is not None:
-                        logger.info("✅ Router (Backend): search_needed=%s", router_result.get('search_needed'))
-                        # Weiter zur Validierung unten (gleicher Code wie bei direkter API)
-                except Exception as be:
-                    logger.warning("⚠️ Router: Backend-Fehler: %s, Fallback auf direkte API", be)
-                    use_backend = False
-
-            # Wenn Backend erfolgreich war, überspringe direkte API
-            if use_backend and 'router_result' in locals() and router_result and router_result.get("search_needed") is not None:
-                # Validierung des Backend-Ergebnisses
-                retrieval_mode = router_result.get('retrieval_mode', 'both')
-                if retrieval_mode not in ('sql', 'semantic', 'both'):
-                    retrieval_mode = 'both'
-                router_result['retrieval_mode'] = retrieval_mode
-
-                precise_queries = router_result.get("precise_queries", [])
-                broad_queries = router_result.get("broad_queries", [])
-                if not isinstance(precise_queries, list):
-                    precise_queries = []
-                if not isinstance(broad_queries, list):
-                    broad_queries = []
-                while len(precise_queries) < 3:
-                    precise_queries.append("")
-                while len(broad_queries) < 3:
-                    broad_queries.append("")
-                router_result["precise_queries"] = precise_queries[:3]
-                router_result["broad_queries"] = broad_queries[:3]
-
-                # Emit pipeline done
-                scope_label = ""
-                if deck_name:
-                    scope_label = deck_name.split("::")[-1]
-                self._emit_pipeline_step("router", "done", {
-                    "search_needed": router_result.get("search_needed", True),
-                    "retrieval_mode": retrieval_mode,
-                    "scope": router_result.get("search_scope", "current_deck"),
-                    "scope_label": scope_label,
-                    "max_sources": router_result.get("max_sources", "medium")
-                })
-
-                logger.info("✅ Router (Backend): search_needed=%s, retrieval_mode=%s", router_result.get('search_needed'), retrieval_mode)
-                return self._fix_router_queries(router_result, user_message, context)
-
-            # Direkter Gemini API Modus (Fallback oder wenn kein Backend)
-            router_api_key = api_key or self.config.get("api_key", "")
-            if not router_api_key:
-                logger.warning("⚠️ Router: Kein API-Key verfügbar, überspringe direkte API")
-                return None
-
-            url_model_pairs = [
-                (f"https://generativelanguage.googleapis.com/v1beta/models/{router_model}:generateContent?key={router_api_key}", router_model),
-                (f"https://generativelanguage.googleapis.com/v1beta/models/{fallback_model}:generateContent?key={router_api_key}", fallback_model),
-            ]
-            headers = {"Content-Type": "application/json"}
-            logger.debug("🔍 Router: Direkter Gemini API Aufruf, Models: [%s, %s]", router_model, fallback_model)
-            data = {
-                "contents": [{"role": "user", "parts": [{"text": router_prompt}]}],
-                "generationConfig": {
-                    "temperature": 0.1,
-                    "maxOutputTokens": 1024,
-                    "responseMimeType": "application/json"
-                }
-            }
-
-            last_error = None
-            for url, current_model in url_model_pairs:
-                try:
-                    # Direkte Gemini API
-                    logger.debug("🔍 Router: Direkter API-Aufruf an %s", current_model)
-                    response = requests.post(url, json=data, headers=headers, timeout=10)
-                    response.raise_for_status()
-                    result = response.json()
-
-                    if "error" in result:
-                        continue
-
-                    if "candidates" in result and len(result["candidates"]) > 0:
-                        candidate = result["candidates"][0]
-                        if "content" in candidate and "parts" in candidate["content"]:
-                            parts = candidate["content"]["parts"]
-                            if len(parts) > 0:
-                                text = parts[0].get("text", "")
-
-                                # Parse JSON (kann in Code-Block sein)
-                                import re
-                                # Entferne Markdown-Code-Blöcke falls vorhanden
-                                text = re.sub(r'```json\s*', '', text)
-                                text = re.sub(r'```\s*', '', text)
-                                # Erweitertes Pattern für strategies Array
-                                json_match = re.search(r'\{.*?"search_needed".*?\}', text, re.DOTALL)
-                                if json_match:
-                                    text = json_match.group(0)
-
-                                # Bereinige JSON: Entferne trailing commas
-                                # Pattern: Komma gefolgt von } oder ]
-                                text = re.sub(r',(\s*[}\]])', r'\1', text)
-
-                                try:
-                                    router_result = json.loads(text)
-                                except json.JSONDecodeError as json_err:
-                                    logger.warning("⚠️ Router: JSON-Parse-Fehler nach Bereinigung: %s, Text: %s", json_err, text[:300])
-                                    # Versuche nochmal mit strikterer Bereinigung
-                                    # Entferne alle Kommentare (nicht standard JSON)
-                                    text = re.sub(r'//.*?$', '', text, flags=re.MULTILINE)
-                                    text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
-                                    # Entferne trailing commas nochmal
-                                    text = re.sub(r',(\s*[}\]])', r'\1', text)
-
-                                    # Versuche unvollständiges JSON zu reparieren
-                                    try:
-                                        router_result = json.loads(text)
-                                    except json.JSONDecodeError as json_err2:
-                                        # Zähle öffnende und schließende Klammern
-                                        open_braces = text.count('{')
-                                        close_braces = text.count('}')
-                                        open_brackets = text.count('[')
-                                        close_brackets = text.count(']')
-
-                                        # Füge fehlende schließende Klammern hinzu
-                                        if open_braces > close_braces:
-                                            text += '\n' + '}' * (open_braces - close_braces)
-                                        if open_brackets > close_brackets:
-                                            text += '\n' + ']' * (open_brackets - close_brackets)
-
-                                        try:
-                                            router_result = json.loads(text)
-                                            logger.info("✅ Router: Unvollständiges JSON repariert")
-                                        except json.JSONDecodeError:
-                                            # Letzter Versuch: Extrahiere precise_queries und broad_queries falls vorhanden
-                                            precise_match = re.search(r'"precise_queries"\s*:\s*\[(.*?)\]', text, re.DOTALL)
-                                            broad_match = re.search(r'"broad_queries"\s*:\s*\[(.*?)\]', text, re.DOTALL)
-                                            if precise_match or broad_match:
-                                                # Extrahiere Queries aus Arrays
-                                                precise_queries = []
-                                                broad_queries = []
-
-                                                if precise_match:
-                                                    precise_text = precise_match.group(1)
-                                                    precise_items = re.findall(r'"([^"]+)"', precise_text)
-                                                    precise_queries = precise_items[:3]
-
-                                                if broad_match:
-                                                    broad_text = broad_match.group(1)
-                                                    broad_items = re.findall(r'"([^"]+)"', broad_text)
-                                                    broad_queries = broad_items[:3]
-
-                                                if precise_queries or broad_queries:
-                                                    router_result = {
-                                                        "search_needed": True,
-                                                        "retrieval_mode": "both",
-                                                        "embedding_queries": [],
-                                                        "precise_queries": precise_queries if precise_queries else [],
-                                                        "broad_queries": broad_queries if broad_queries else [],
-                                                        "search_scope": "current_deck"
-                                                    }
-                                                    logger.info("✅ Router: Queries aus unvollständigem JSON extrahiert: %s precise, %s broad", len(precise_queries), len(broad_queries))
-                                                else:
-                                                    raise json_err
-                                            else:
-                                                raise json_err
-
-                                # Validiere Struktur
-                                if "search_needed" in router_result:
-                                    # Extract and validate retrieval_mode
-                                    retrieval_mode = router_result.get('retrieval_mode', 'both')
-                                    if retrieval_mode not in ('sql', 'semantic', 'both'):
-                                        retrieval_mode = 'both'
-                                    router_result['retrieval_mode'] = retrieval_mode
-
-                                    # Extract embedding_queries (array) with backward compat for embedding_query (string)
-                                    embedding_queries = router_result.get("embedding_queries", [])
-                                    if not isinstance(embedding_queries, list) or not embedding_queries:
-                                        legacy = router_result.get("embedding_query", "")
-                                        embedding_queries = [legacy] if legacy else []
-                                    embedding_queries = [q for q in embedding_queries if q and q.strip()][:3]
-
-                                    # Validiere precise_queries und broad_queries
-                                    precise_queries = router_result.get("precise_queries", [])
-                                    broad_queries = router_result.get("broad_queries", [])
-
-                                    if not isinstance(precise_queries, list):
-                                        precise_queries = []
-                                    if not isinstance(broad_queries, list):
-                                        broad_queries = []
-
-                                    # Stelle sicher dass wir mindestens 3 Queries haben
-                                    while len(precise_queries) < 3:
-                                        precise_queries.append("")
-                                    while len(broad_queries) < 3:
-                                        broad_queries.append("")
-
-                                    precise_queries = precise_queries[:3]
-                                    broad_queries = broad_queries[:3]
-
-                                    router_result["precise_queries"] = precise_queries
-                                    router_result["broad_queries"] = broad_queries
-                                    router_result["embedding_queries"] = embedding_queries
-
-                                    # Remove legacy intent field if present
-                                    router_result.pop("intent", None)
-                                    router_result.pop("reasoning", None)
-
-                                    # KRITISCHE VALIDIERUNG: Prüfe ob Queries die Nutzeranfrage wörtlich enthalten
-                                    if precise_queries or broad_queries:
-                                        logger.debug("🔍 Router: Validiere %s precise_queries und %s broad_queries", len(precise_queries), len(broad_queries))
-                                        user_message_clean = user_message.lower().strip()
-                                        user_words = set(user_message_clean.split())
-                                        corrected_precise = []
-                                        corrected_broad = []
-
-                                        # Validiere precise_queries
-                                        for i, query in enumerate(precise_queries):
-                                            if not query or not query.strip():
-                                                continue
-                                            logger.debug("🔍 Router: Precise Query %s: '%s'", i+1, query[:80])
-                                            query_lower = query.lower().strip()
-                                            query_clean = query_lower.rstrip('.').rstrip('\u2026').rstrip('...')
-
-                                            contains_user_message = user_message_clean in query_clean or query_clean in user_message_clean
-                                            query_words = set(query_clean.split())
-                                            overlap = user_words.intersection(query_words)
-
-                                            if contains_user_message or (len(overlap) >= 3 and len(user_words) <= 15):
-                                                logger.warning("⚠️ Router: Precise Query enthält Nutzeranfrage wörtlich: '%s'", query[:100])
-                                                if context:
-                                                    question = context.get('question') or context.get('frontField') or ""
-                                                    answer = context.get('answer') or ""
-
-                                                    import re
-                                                    card_text = f"{question} {answer}".lower()
-                                                    card_text = re.sub(r'<[^>]+>', ' ', card_text)
-                                                    card_text = re.sub(r'[^\w\s]', ' ', card_text)
-                                                    card_words = card_text.split()
-
-                                                    stopwords = {'der', 'die', 'das', 'und', 'oder', 'ist', 'sind', 'wird', 'werden', 'auf', 'in', 'zu', 'für', 'mit', 'von', 'ein', 'eine', 'einer', 'einem', 'einen', 'mir', 'dir', 'uns', 'ihr', 'ihm', 'sie', 'er', 'es', 'diese', 'dieser', 'dieses', 'diesen', 'dem', 'den', 'des'}
-                                                    important_words = [w for w in card_words if len(w) > 3 and w not in stopwords]
-
-                                                    from collections import Counter
-                                                    word_freq = Counter(important_words)
-                                                    top_words = [word for word, count in word_freq.most_common(3)]
-
-                                                    if top_words:
-                                                        new_query = " AND ".join(top_words)
-                                                        logger.info("✅ Router: Korrigiere Precise Query zu: '%s'", new_query)
-                                                        corrected_precise.append(new_query)
-                                                    else:
-                                                        corrected_precise.append(query)
-                                                else:
-                                                    corrected_precise.append(query)
-                                            else:
-                                                corrected_precise.append(query)
-
-                                        # Validiere broad_queries
-                                        for i, query in enumerate(broad_queries):
-                                            if not query or not query.strip():
-                                                continue
-                                            logger.debug("🔍 Router: Broad Query %s: '%s'", i+1, query[:80])
-                                            query_lower = query.lower().strip()
-                                            query_clean = query_lower.rstrip('.').rstrip('\u2026').rstrip('...')
-
-                                            contains_user_message = user_message_clean in query_clean or query_clean in user_message_clean
-                                            query_words = set(query_clean.split())
-                                            overlap = user_words.intersection(query_words)
-                                            is_or_expansion = all(word in user_words or word == 'or' for word in query_words) and 'or' in query_clean
-
-                                            if contains_user_message or (len(overlap) >= 3 and len(user_words) <= 15) or is_or_expansion:
-                                                logger.warning("⚠️ Router: Broad Query enthält Nutzeranfrage wörtlich: '%s'", query[:100])
-                                                if context:
-                                                    question = context.get('question') or context.get('frontField') or ""
-                                                    answer = context.get('answer') or ""
-
-                                                    import re
-                                                    card_text = f"{question} {answer}".lower()
-                                                    card_text = re.sub(r'<[^>]+>', ' ', card_text)
-                                                    card_text = re.sub(r'[^\w\s]', ' ', card_text)
-                                                    card_words = card_text.split()
-
-                                                    stopwords = {'der', 'die', 'das', 'und', 'oder', 'ist', 'sind', 'wird', 'werden', 'auf', 'in', 'zu', 'für', 'mit', 'von', 'ein', 'eine', 'einer', 'einem', 'einen', 'mir', 'dir', 'uns', 'ihr', 'ihm', 'sie', 'er', 'es', 'diese', 'dieser', 'dieses', 'diesen', 'dem', 'den', 'des'}
-                                                    important_words = [w for w in card_words if len(w) > 3 and w not in stopwords]
-
-                                                    from collections import Counter
-                                                    word_freq = Counter(important_words)
-                                                    top_words = [word for word, count in word_freq.most_common(5)]
-
-                                                    if top_words:
-                                                        new_query = " OR ".join(top_words)
-                                                        logger.info("✅ Router: Korrigiere Broad Query zu: '%s'", new_query)
-                                                        corrected_broad.append(new_query)
-                                                    else:
-                                                        corrected_broad.append(query)
-                                                else:
-                                                    corrected_broad.append(query)
-                                            else:
-                                                corrected_broad.append(query)
-
-                                        # Stelle sicher dass wir 3 Queries haben
-                                        while len(corrected_precise) < 3:
-                                            corrected_precise.append("")
-                                        while len(corrected_broad) < 3:
-                                            corrected_broad.append("")
-
-                                        router_result["precise_queries"] = corrected_precise[:3]
-                                        router_result["broad_queries"] = corrected_broad[:3]
-
-                                        logger.info("✅ Router: Validierung abgeschlossen: %s precise, %s broad", len([q for q in corrected_precise if q]), len([q for q in corrected_broad if q]))
-
-                                    # Emit pipeline done
-                                    scope_label = ""
-                                    if deck_name:
-                                        scope_label = deck_name.split("::")[-1]
-                                    self._emit_pipeline_step("router", "done", {
-                                        "search_needed": router_result.get("search_needed", True),
-                                        "retrieval_mode": retrieval_mode,
-                                        "scope": router_result.get("search_scope", "current_deck"),
-                                        "scope_label": scope_label,
-                                        "max_sources": router_result.get("max_sources", "medium")
-                                    })
-
-                                    # Finale Log-Ausgabe
-                                    logger.info("✅ Router: search_needed=%s, retrieval_mode=%s, embedding_queries=%s, precise_queries=%s, broad_queries=%s, scope=%s", router_result.get('search_needed'), retrieval_mode, [q[:40] for q in embedding_queries], len([q for q in precise_queries if q]), len([q for q in broad_queries if q]), router_result.get('search_scope'))
-                                    for i, q in enumerate(precise_queries):
-                                        if q:
-                                            logger.debug("   Precise Query %s: '%s'", i+1, q[:100])
-                                    for i, q in enumerate(broad_queries):
-                                        if q:
-                                            logger.debug("   Broad Query %s: '%s'", i+1, q[:100])
-                                    return self._fix_router_queries(router_result, user_message, context)
-
-                except requests.exceptions.HTTPError as e:
-                    last_error = e
-                    logger.warning("⚠️ Router: HTTP-Fehler %s: %s", e.response.status_code, e.response.text[:300])
-                    continue
-                except json.JSONDecodeError as e:
-                    logger.warning("⚠️ Router: JSON-Parse-Fehler: %s, Text: %s", e, text[:200])
-                    continue
-                except Exception as e:
-                    last_error = e
-                    logger.warning("⚠️ Router: Unerwarteter Fehler: %s: %s", type(e).__name__, e)
-                    continue
-
-            logger.warning("⚠️ Router: Alle URLs fehlgeschlagen, verwende Fallback")
-
-            # Fallback: Use _extract_card_keywords (properly filters CSS/HTML artifacts)
-            fallback_precise = []
-            fallback_broad = []
-            fallback_embedding = ""
-            if context:
-                top_words = self._extract_card_keywords(context)
-                if top_words:
-                    fallback_embedding = " ".join(top_words[:7])
-                    # Build precise queries (AND pairs)
-                    for i in range(0, min(len(top_words), 9), 3):
-                        chunk = top_words[i:i+3]
-                        if chunk:
-                            fallback_precise.append(" AND ".join(chunk))
-                    # Build broad queries (OR groups)
-                    fallback_broad = [" OR ".join(top_words[:5])]
-                    if len(top_words) > 3:
-                        fallback_broad.append(" OR ".join(top_words[2:7]))
-                    logger.info("✅ Router Fallback: Keywords aus Karte extrahiert: %s", top_words[:9])
-
-            # Wenn keine Keywords extrahiert werden konnten, verwende minimale Queries
-            if not fallback_precise or not fallback_broad:
-                import re
-                user_words = [w for w in user_message.lower().split() if len(w) > 3 and w not in {'hint', 'hinweis', 'antwort', 'verraten', 'verrate', 'gib', 'gibt', 'geben', 'mir', 'dir', 'uns', 'einen', 'eine', 'ohne', 'die', 'der', 'das'}]
-                if user_words:
-                    fallback_embedding = " ".join(user_words[:7])
-                    fallback_precise = [
-                        " AND ".join(user_words[:3]) if len(user_words) >= 3 else " AND ".join(user_words),
-                        " AND ".join(user_words[1:4]) if len(user_words) >= 4 else " AND ".join(user_words[:3]),
-                        " AND ".join(user_words[2:5]) if len(user_words) >= 5 else " AND ".join(user_words[:3])
-                    ]
-                    fallback_broad = [
-                        " OR ".join(user_words[:5]) if len(user_words) >= 5 else " OR ".join(user_words),
-                        " OR ".join(user_words[1:6]) if len(user_words) >= 6 else " OR ".join(user_words[:5]),
-                        " OR ".join(user_words[2:7]) if len(user_words) >= 7 else " OR ".join(user_words[:5])
-                    ]
-                    logger.warning("⚠️ Router Fallback: Verwende minimale Keywords aus Nutzeranfrage: %s", user_words[:7])
-                else:
-                    # Letzter Fallback: Verwende erste Wörter der Nutzeranfrage
-                    words = user_message.split()[:9]
-                    fallback_embedding = " ".join(words[:7])
-                    if len(words) >= 3:
-                        fallback_precise = [
-                            " AND ".join(words[0:3]),
-                            " AND ".join(words[1:4]) if len(words) >= 4 else " AND ".join(words[:3]),
-                            " AND ".join(words[2:5]) if len(words) >= 5 else " AND ".join(words[:3])
-                        ]
-                        fallback_broad = [
-                            " OR ".join(words[0:5]) if len(words) >= 5 else " OR ".join(words),
-                            " OR ".join(words[1:6]) if len(words) >= 6 else " OR ".join(words[:5]),
-                            " OR ".join(words[2:7]) if len(words) >= 7 else " OR ".join(words[:5])
-                        ]
-                    else:
-                        # Minimale Fallback
-                        fallback_precise = [" AND ".join(words)] * 3
-                        fallback_broad = [" OR ".join(words)] * 3
-                    logger.warning("⚠️ Router Fallback: Letzter Fallback mit ersten Wörtern: %s", words)
-
-            # Emit pipeline done for fallback
-            scope_label = ""
-            if deck_name:
-                scope_label = deck_name.split("::")[-1]
-            self._emit_pipeline_step("router", "done", {
-                "search_needed": True,
-                "retrieval_mode": "both",
-                "scope": "current_deck",
-                "scope_label": scope_label,
-                "max_sources": "medium"
-            })
-
-            return {
-                "search_needed": True,
-                "retrieval_mode": "both",
-                "embedding_queries": [fallback_embedding] if fallback_embedding else [],
-                "precise_queries": fallback_precise[:3] if fallback_precise else ["", "", ""],
-                "broad_queries": fallback_broad[:3] if fallback_broad else ["", "", ""],
-                "search_scope": "current_deck"
-            }
-
-        except Exception as e:
-            logger.exception("⚠️ Router Fehler: %s", e)
-
-            # Emit pipeline error
-            self._emit_pipeline_step("router", "error")
-
-            # Fallback: Versuche Keywords aus Karteninhalt zu extrahieren
-            fallback_precise = []
-            fallback_broad = []
-            fallback_embedding = ""
-            if context:
-                question = context.get('question') or context.get('frontField') or ""
-                answer = context.get('answer') or ""
-
-                if question or answer:
-                    import re
-                    from collections import Counter
-
-                    card_text = f"{question} {answer}".lower()
-                    card_text = re.sub(r'<[^>]+>', ' ', card_text)
-                    card_text = re.sub(r'[^\w\s]', ' ', card_text)
-                    card_words = card_text.split()
-
-                    stopwords = {'der', 'die', 'das', 'und', 'oder', 'ist', 'sind', 'wird', 'werden', 'auf', 'in', 'zu', 'für', 'mit', 'von', 'ein', 'eine', 'einer', 'einem', 'einen', 'mir', 'dir', 'uns', 'ihr', 'ihm', 'sie', 'er', 'es', 'diese', 'dieser', 'dieses', 'diesen', 'dem', 'den', 'des', 'wo', 'was', 'wie', 'wenn', 'dass', 'sich', 'nicht', 'kein', 'keine', 'keinen', 'gib', 'gibt', 'geben', 'hint', 'hinweis', 'antwort', 'verraten', 'verrate'}
-                    important_words = [w for w in card_words if len(w) > 3 and w not in stopwords]
-
-                    if important_words:
-                        word_freq = Counter(important_words)
-                        top_words = [word for word, count in word_freq.most_common(5)]
-
-                        if top_words:
-                            fallback_embedding = " ".join(top_words[:5])
-                            fallback_precise = [
-                                " AND ".join(top_words[:3]),
-                                " AND ".join(top_words[1:4]) if len(top_words) >= 4 else " AND ".join(top_words[:3]),
-                                " AND ".join(top_words[2:5]) if len(top_words) >= 5 else " AND ".join(top_words[:3])
-                            ]
-                            fallback_broad = [
-                                " OR ".join(top_words[:5]),
-                                " OR ".join(top_words[1:]) if len(top_words) >= 2 else " OR ".join(top_words),
-                                " OR ".join(top_words)
-                            ]
-                            logger.info("✅ Router Exception-Fallback: Keywords aus Karte extrahiert: %s", top_words[:5])
-
-            if not fallback_precise:
-                import re
-                user_words = [w for w in user_message.lower().split() if len(w) > 3 and w not in {'hint', 'hinweis', 'antwort', 'verraten', 'verrate', 'gib', 'gibt', 'geben', 'mir', 'dir', 'uns', 'einen', 'eine', 'ohne', 'die', 'der', 'das'}]
-                if user_words:
-                    fallback_embedding = " ".join(user_words[:5])
-                    fallback_precise = [
-                        " AND ".join(user_words[:3]),
-                        " AND ".join(user_words[1:4]) if len(user_words) >= 4 else " AND ".join(user_words[:3]),
-                        " AND ".join(user_words[2:5]) if len(user_words) >= 5 else " AND ".join(user_words[:3])
-                    ]
-                    fallback_broad = [
-                        " OR ".join(user_words[:5]),
-                        " OR ".join(user_words[1:]) if len(user_words) >= 2 else " OR ".join(user_words),
-                        " OR ".join(user_words)
-                    ]
-                    logger.warning("⚠️ Router Exception-Fallback: Verwende minimale Keywords aus Nutzeranfrage: %s", user_words[:5])
-                else:
-                    words = user_message.split()[:3]
-                    fallback_embedding = " ".join(words)
-                    fallback_precise = [" AND ".join(words)] * 3
-                    fallback_broad = [" OR ".join(words)] * 3
-                    logger.warning("⚠️ Router Exception-Fallback: Letzter Fallback mit ersten Wörtern: %s", words)
-
-            return {
-                "search_needed": True,
-                "retrieval_mode": "both",
-                "embedding_queries": [fallback_embedding] if fallback_embedding else [],
-                "precise_queries": fallback_precise[:3] if fallback_precise else ["", "", ""],
-                "broad_queries": fallback_broad[:3] if fallback_broad else ["", "", ""],
-                "search_scope": "current_deck"
-            }
-    
     def _emit_ai_event(self, event_type, data):
-        """
-        Sendet ein strukturiertes Event an das Frontend
-        
-        Args:
-            event_type: Typ des Events (z.B. "rag_sources")
-            data: Daten-Payload (Dict oder List)
-        """
+        """Sendet ein strukturiertes Event an das Frontend."""
         if not self.widget or not self.widget.web_view:
             return
-            
+
+        payload_str = json.dumps({"type": event_type, "data": data})
+
         if mw and mw.taskman:
             def emit_on_main():
                 try:
-                    payload = {"type": event_type, "data": data}
-                    js_code = f"window.ankiReceive({json.dumps(payload)});"
-                    self.widget.web_view.page().runJavaScript(js_code)
-                    logger.debug("📡 AI Event (%s) sent", event_type)
+                    self.widget.web_view.page().runJavaScript(
+                        "window.ankiReceive(" + payload_str + ");"
+                    )
+                    logger.debug("AI Event (%s) sent", event_type)
                 except Exception as e:
-                    logger.warning("⚠️ Fehler beim Senden von AI-Event: %s", e)
+                    logger.warning("Fehler beim Senden von AI-Event: %s", e)
             mw.taskman.run_on_main(emit_on_main)
 
-    def _rag_retrieve_cards(self, precise_queries=None, broad_queries=None, search_scope="current_deck", context=None, max_notes=10):
-        """
-        Stage 2: Multi-Query Cascade Retrieval Engine - Führt präzise und breite Queries in Cascade aus
-        
-        Args:
-            precise_queries: Liste von 3 präzisen Suchanfragen (AND-Verknüpfung)
-            broad_queries: Liste von 3 breiten Suchanfragen (OR-Verknüpfung)
-            search_scope: "current_deck" oder "collection"
-            context: Optionaler Kontext (für Deck-Name und aktuelle Karte)
-            max_notes: Maximale Anzahl Notizen (default: 10)
-        
-        Returns:
-            Dict mit strukturierten Daten:
-            {
-                "context_string": "Note 123 (found in 2 queries): Field Front: ... Field Back: ...",
-                "citations": {
-                    "12345": {
-                        "noteId": 12345,
-                        "fields": {"Front": "...", "Back": "..."},
-                        "deckName": "Biologie::Pflanzen",
-                        "isCurrentCard": False
-                    }
-                }
-            }
-        """
-        try:
-            from aqt import mw
-            if not mw or not mw.col:
-                logger.warning("⚠️ RAG Retrieval: Keine Anki-Collection verfügbar")
-                return {"context_string": "", "citations": {}}
-            
-            # Normalize inputs
-            precise_queries = precise_queries or []
-            broad_queries = broad_queries or []
-            # Filter out empty queries
-            precise_queries = [q for q in precise_queries if q and q.strip()]
-            broad_queries = [q for q in broad_queries if q and q.strip()]
-            
-            if not precise_queries and not broad_queries:
-                logger.warning("⚠️ RAG Retrieval: Keine Queries vorhanden")
-                return {"context_string": "", "citations": {}}
-            
-            from ..utils.text import clean_html_with_images as clean_html
+    # ---- RAG orchestrator (stays here -- uses self.widget, self._emit_*) --------
 
-            # Extrahiere Deck-Name für Citations
-            deck_name = None
-            if context and context.get('deckName'):
-                deck_name = context.get('deckName')
-            elif search_scope == "current_deck" and context:
-                deck_name = context.get('deckName', "Collection")
-            else:
-                deck_name = "Collection"
-            
-            # Dictionary für Note-Aggregation: note_id -> {note_data, query_count, queries_found_in}
-            note_results = {}
-            
-            # Helper function to build Anki query with deck restriction
-            def build_anki_query(query, search_scope, context):
-                """Konstruiere Anki-Suchquery mit korrekter Deck-Name-Quote-Behandlung"""
-                if search_scope == "current_deck" and context and context.get('deckName'):
-                    deck_name_query = context.get('deckName')
-                    if 'deck:' in query.lower():
-                        import re
-                        pattern = r'deck:(["\']?)([^"\'\s\)]+(?:\s+[^"\'\s\)]+)*)\1'
-                        def replace_deck(match):
-                            deck_val = match.group(2)
-                            deck_val = deck_val.strip('"\'')
-                            return f'deck:"{deck_val}"'
-                        return re.sub(pattern, replace_deck, query, flags=re.IGNORECASE)
-                    else:
-                        return f'deck:"{deck_name_query}" ({query})'
-                else:
-                    return query
-            
-            # Helper function to execute query and aggregate results
-            def execute_query(query, query_type, note_results):
-                """Führt eine Query aus und aggregiert Ergebnisse in note_results"""
-                anki_query = build_anki_query(query, search_scope, context)
-                logger.debug("🔍 RAG Retrieval: %s Query: %s", query_type, anki_query)
-                
-                try:
-                    card_ids = mw.col.find_cards(anki_query)
-                    
-                    if card_ids:
-                        logger.info("✅ %s Query: %s Karten gefunden", query_type, len(card_ids))
-                        self._emit_ai_state(f"Ergebnis: {len(card_ids)} Treffer für '{query[:50]}...'", phase=self.PHASE_SEARCH)
-                        
-                        for card_id in card_ids:
-                            try:
-                                card = mw.col.get_card(card_id)
-                                if not card:
-                                    continue
-                                
-                                note = card.note()
-                                note_id = note.id
-                                
-                                if note_id not in note_results:
-                                    note_results[note_id] = {
-                                        'note': note,
-                                        'card_ids': [],
-                                        'query_count': 0,
-                                        'queries_found_in': []
-                                    }
-                                
-                                if query_type not in note_results[note_id]['queries_found_in']:
-                                    note_results[note_id]['queries_found_in'].append(query_type)
-                                    note_results[note_id]['query_count'] += 1
-                                
-                                if card_id not in note_results[note_id]['card_ids']:
-                                    note_results[note_id]['card_ids'].append(card_id)
-                                    
-                            except Exception as e:
-                                logger.warning("⚠️ RAG Retrieval: Fehler bei Karte %s: %s", card_id, e)
-                                continue
-                        return len(card_ids)
-                    else:
-                        logger.warning("⚠️ %s Query: Keine Karten gefunden", query_type)
-                        self._emit_ai_state(f"Ergebnis: 0 Treffer für '{query[:50]}...'", phase=self.PHASE_SEARCH)
-                        return 0
-                        
-                except Exception as e:
-                    logger.warning("⚠️ RAG Retrieval: Fehler bei %s Query: %s", query_type, e)
-                    return 0
-            
-            # CASCADE LOGIC: Phase 1 - Precise Queries
-            # CRITICAL: Deduplicate queries before processing
-            normalized_precise = [q.strip().lower() for q in precise_queries if q and q.strip()]
-            unique_precise = list(dict.fromkeys(normalized_precise))  # Preserves order, removes duplicates
-            # Map back to original queries (case-sensitive) but deduplicated
-            seen_normalized = set()
-            deduplicated_precise = []
-            for q in precise_queries:
-                if not q or not q.strip():
-                    continue
-                normalized = q.strip().lower()
-                if normalized not in seen_normalized:
-                    seen_normalized.add(normalized)
-                    deduplicated_precise.append(q)
-            
-            self._emit_ai_state("Präzise Suche...", phase=self.PHASE_SEARCH)
-            precise_results_count = 0
-            for i, query in enumerate(deduplicated_precise):
-                self._emit_ai_state(f"Suche: {query[:50]}...", phase=self.PHASE_SEARCH)
-                count = execute_query(query, f"precise_{i+1}", note_results)
-                precise_results_count += count
-            
-            # Count unique notes after precise queries
-            unique_notes = len(note_results)
-            logger.debug("🔍 RAG Retrieval: Präzise Suche abgeschlossen: %s eindeutige Notizen gefunden", unique_notes)
-            
-            # Check if we have enough results (>= 5)
-            if unique_notes >= 5:
-                self._emit_ai_state(f"Präzise Suche: {unique_notes} Treffer (ausreichend)", phase=self.PHASE_SEARCH)
-                logger.info("✅ RAG Retrieval: Genug Ergebnisse (%s), stoppe Suche", unique_notes)
-            else:
-                # CASCADE LOGIC: Phase 2 - Broad Queries (wenn nicht genug Ergebnisse)
-                self._emit_ai_state(f"Präzise Suche: {unique_notes} Treffer (zu wenig, erweitere Suche...)", phase=self.PHASE_SEARCH)
-                
-                if broad_queries:
-                    # CRITICAL: Deduplicate broad queries before processing
-                    seen_normalized_broad = set()
-                    deduplicated_broad = []
-                    for q in broad_queries:
-                        if not q or not q.strip():
-                            continue
-                        normalized = q.strip().lower()
-                        if normalized not in seen_normalized_broad:
-                            seen_normalized_broad.add(normalized)
-                            deduplicated_broad.append(q)
-                    
-                    self._emit_ai_state("Erweiterte Suche...", phase=self.PHASE_SEARCH)
-                    broad_results_count = 0
-                    for i, query in enumerate(deduplicated_broad):
-                        self._emit_ai_state(f"Suche: {query[:50]}...", phase=self.PHASE_SEARCH)
-                        count = execute_query(query, f"broad_{i+1}", note_results)
-                        broad_results_count += count
-                    
-                    # Update unique count after broad queries
-                    unique_notes = len(note_results)
-                    logger.debug("🔍 RAG Retrieval: Erweiterte Suche abgeschlossen: %s eindeutige Notizen gefunden (Gesamt)", unique_notes)
-                    # Count how many new notes were added by broad queries
-                    broad_notes_count = len([n for n in note_results.values() if any('broad' in str(q) for q in n.get('queries_found_in', []))])
-                    precise_notes_count = unique_notes - broad_notes_count
-                    self._emit_ai_state(f"Erweiterte Suche: +{broad_notes_count} Treffer (Gesamt: {unique_notes})", phase=self.PHASE_SEARCH)
-                else:
-                    logger.warning("⚠️ RAG Retrieval: Keine broad_queries verfügbar für Erweiterung")
-            
-            # Ranking: Sortiere nach query_count (absteigend), dann nach note_id
-            ranked_notes = sorted(
-                note_results.items(),
-                key=lambda x: (x[1]['query_count'], x[0]),
-                reverse=True
-            )
-            
-            # Limit auf top max_notes
-            ranked_notes = ranked_notes[:max_notes]
-            
-            # Fallback: Pure Keyword Search (ohne Deck-Restriction) wenn keine Ergebnisse
-            if len(ranked_notes) == 0:
-                logger.warning("⚠️ RAG Retrieval: Keine Notizen gefunden, versuche Fallback: Pure Keyword Search")
-                self._emit_ai_state("🔍 Fallback: Reine Keyword-Suche...", phase=self.PHASE_SEARCH)
-                
-                # Extrahiere Haupt-Keywords aus der ersten precise query
-                fallback_query = ""
-                if precise_queries and len(precise_queries) > 0:
-                    fallback_query = precise_queries[0]
-                elif broad_queries and len(broad_queries) > 0:
-                    fallback_query = broad_queries[0]
-                
-                # Entferne deck: und tag: Restrictions, behalte nur Keywords
-                import re
-                # Entferne deck: und tag: Präfixe
-                fallback_query = re.sub(r'(deck|tag):["\']?[^"\'\s\)]+["\']?\s*', '', fallback_query, flags=re.IGNORECASE)
-                # Entferne überflüssige Klammern und Whitespace
-                fallback_query = re.sub(r'[\(\)]', ' ', fallback_query)
-                fallback_query = ' '.join(fallback_query.split())
-                
-                if fallback_query:
-                    try:
-                        logger.debug("🔍 RAG Retrieval: Fallback-Query (ohne Deck-Restriction): %s", fallback_query)
-                        card_ids = mw.col.find_cards(fallback_query)
-                        
-                        if card_ids:
-                            logger.info("✅ Fallback: %s Karten gefunden", len(card_ids))
-                            
-                            # Aggregiere Notizen
-                            for card_id in card_ids[:max_notes * 2]:  # Mehr Karten für Fallback
-                                try:
-                                    card = mw.col.get_card(card_id)
-                                    if not card:
-                                        continue
-                                    
-                                    note = card.note()
-                                    note_id = note.id
-                                    
-                                    if note_id not in note_results:
-                                        note_results[note_id] = {
-                                            'note': note,
-                                            'card_ids': [card_id],
-                                            'query_count': 1,
-                                            'queries_found_in': ['fallback']
-                                        }
-                                        
-                                except Exception as e:
-                                    logger.warning("⚠️ RAG Retrieval: Fehler bei Fallback-Karte %s: %s", card_id, e)
-                                    continue
-                                        
-                        # Neu sortieren nach Fallback-Ergebnissen (nach der Schleife)
-                        ranked_notes = sorted(
-                            note_results.items(),
-                            key=lambda x: (x[1]['query_count'], x[0]),
-                            reverse=True
-                        )[:max_notes]
-                            
-                    except Exception as e:
-                        logger.warning("⚠️ RAG Retrieval: Fallback-Fehler: %s", e)
-            
-            if len(ranked_notes) == 0:
-                logger.warning("⚠️ RAG Retrieval: Keine Notizen gefunden (auch nicht im Fallback)")
-                return {"context_string": "", "citations": {}}
-            
-            logger.info("✅ RAG Retrieval: %s Notizen nach Ranking (Top %s)", len(ranked_notes), max_notes)
-            
-            # Note Expansion: Iteriere über alle Felder für jede Note
-            formatted_notes = []
-            citations = {}
-            
-            for note_id, note_data in ranked_notes:
-                try:
-                    note = note_data['note']
-                    query_count = note_data['query_count']
-                    queries_found = note_data['queries_found_in']
-                    first_card_id = note_data['card_ids'][0] if note_data.get('card_ids') else note_id
-
-                    # Iteriere über ALLE Felder der Note
-                    note_fields = {}
-                    all_images = []
-                    
-                    for field_name, field_value in note.items():
-                        if field_value and field_value.strip():
-                            # Bereinige HTML und extrahiere Bilder
-                            field_clean, field_images = clean_html(field_value, max_len=1000)
-                            note_fields[field_name] = field_clean
-                            all_images.extend(field_images)
-                    
-                    # Entferne Duplikate bei Bildern
-                    seen_images = set()
-                    unique_images = []
-                    for img in all_images:
-                        if img not in seen_images:
-                            seen_images.add(img)
-                            unique_images.append(img)
-                    
-                    # Formatiere Note für Context-String
-                    note_parts = [f"Note {note_id} (found in {query_count} queries: {', '.join(queries_found)}):"]
-                    
-                    for field_name, field_clean in note_fields.items():
-                        note_parts.append(f"Field {field_name}: {field_clean}")
-                    
-                    if unique_images:
-                        images_str = ", ".join(unique_images)
-                        note_parts.append(f"Available Images: {images_str}")
-                    
-                    note_str = "\n".join(note_parts)
-                    formatted_notes.append(note_str)
-                    
-                    # Erstelle Citation-Objekt mit allen Feldern
-                    citation_fields = {}
-                    for field_name, field_clean in note_fields.items():
-                        # Erste 100 Zeichen pro Feld für Citation
-                        citation_fields[field_name] = field_clean[:100] if field_clean else ""
-                    
-                    citations[str(note_id)] = {
-                        "noteId": note_id,
-                        "cardId": first_card_id,  # Erste Card-ID
-                        "fields": citation_fields,
-                        "deckName": deck_name,
-                        "isCurrentCard": False  # Will be set to True for current card below
-                    }
-                    
-                except Exception as e:
-                    logger.warning("⚠️ RAG Retrieval: Fehler bei Note %s: %s", note_id, e)
-                    continue
-            
-            # BEREICH 2: Füge aktuelle Karte zu Citations hinzu
-            if context and context.get('noteId'):
-                current_note_id = context.get('noteId')
-                current_card_id = context.get('cardId')
-                current_fields = context.get('fields', {})
-                current_deck_name = context.get('deckName', deck_name)
-                
-                # Erstelle Citation für aktuelle Karte
-                citation_fields = {}
-                for field_name, field_value in current_fields.items():
-                    if field_value:
-                        # Bereinige HTML
-                        import re
-                        field_clean = re.sub(r'<[^>]+>', ' ', str(field_value))
-                        field_clean = re.sub(r'\s+', ' ', field_clean).strip()
-                        citation_fields[field_name] = field_clean[:100] if field_clean else ""
-                
-                # Füge aktuelle Karte hinzu (überschreibt falls bereits vorhanden)
-                citations[str(current_note_id)] = {
-                    "noteId": current_note_id,
-                    "cardId": current_card_id,
-                    "fields": citation_fields,
-                    "deckName": current_deck_name,
-                    "isCurrentCard": True  # WICHTIG: Flag für Frontend
-                }
-                logger.info("✅ RAG Retrieval: Aktuelle Karte (Note %s) zu Citations hinzugefügt", current_note_id)
-            
-            # Erstelle Context-String aus formatierten Notizen
-            context_string = "\n\n".join(formatted_notes)
-            
-            # Emit sources count to frontend
-            if len(citations) > 0:
-                self._emit_ai_state(f"Gefunden: {len(citations)} Module", phase=self.PHASE_RETRIEVAL, metadata={"sourceCount": len(citations)})
-                # CRITICAL: Emit full citation data to frontend for live display
-                self._emit_ai_event("rag_sources", citations)
-            
-            logger.info("✅ RAG Retrieval: %s Notizen formatiert, %s Citations erstellt", len(formatted_notes), len(citations))
-            return {
-                "context_string": context_string,
-                "citations": citations
-            }
-            
-        except Exception as e:
-            logger.exception("⚠️ RAG Retrieval Fehler: %s", e)
-            return {"context_string": "", "citations": {}}
-    
-    def get_response_with_rag(self, user_message, context=None, history=None, mode='compact', callback=None, insights=None):
+    def get_response_with_rag(self, user_message, context=None, history=None,
+                              mode='compact', callback=None, insights=None):
         """
-        Hauptmethode für RAG-Pipeline: Orchestriert Router → Retrieval → Generator
-
-        Args:
-            user_message: Die Benutzer-Nachricht
-            context: Optionaler Kontext (z.B. aktuelle Karte)
-            history: Optional - Liste von vorherigen Nachrichten
-            mode: Optional - 'compact' oder 'detailed'
-            callback: Optional - Streaming-Callback mit erweitertem Format:
-                      callback(chunk, done, is_function_call, steps=None, citations=None)
-            insights: Optional — Dict mit {'insights': [...]} für karten-spezifische Erkenntnisse
-
-        Returns:
-            Die generierte Antwort
+        Hauptmethode für RAG-Pipeline: Orchestriert Router -> Retrieval -> Generator.
         """
-        import time
-        
-        # Reset Request State
         self._current_request_steps = []
         self._current_step_labels = []
         self._fallback_in_progress = False
         citations = {}
-        
+
         try:
-            # Stage 1: Router (pipeline_step emitted inside _rag_router)
+            # Stage 1: Router
             router_result = self._rag_router(user_message, context=context)
-            
+
             rag_context = None
             if router_result and router_result.get("search_needed"):
                 # Stage 2: Retrieval
                 search_scope = router_result.get("search_scope", "current_deck")
-
-                # Determine max_notes from router's max_sources decision
                 max_sources_level = router_result.get("max_sources", "medium")
                 max_notes = {"low": 5, "medium": 10, "high": 15}.get(max_sources_level, 10)
-                logger.debug("📊 RAG: max_sources=%s → max_notes=%s", max_sources_level, max_notes)
+                logger.debug("RAG: max_sources=%s -> max_notes=%s", max_sources_level, max_notes)
 
-                # Extract new format: precise_queries and broad_queries
-                precise_queries = router_result.get("precise_queries", [])
-                broad_queries = router_result.get("broad_queries", [])
-
-                # Filter out empty queries
-                precise_queries = [q for q in precise_queries if q and q.strip()]
-                broad_queries = [q for q in broad_queries if q and q.strip()]
+                precise_queries = [q for q in router_result.get("precise_queries", []) if q and q.strip()]
+                broad_queries = [q for q in router_result.get("broad_queries", []) if q and q.strip()]
 
                 if precise_queries or broad_queries:
-                    # Check if hybrid retrieval (semantic search) is available
                     _emb_mgr = None
                     try:
-                        try:
-                            from .. import get_embedding_manager
-                        except ImportError:
-                            from .. import get_embedding_manager
+                        from .. import get_embedding_manager
                         _emb_mgr = get_embedding_manager()
                     except Exception:
                         pass
@@ -3111,14 +377,14 @@ REGELN:
                     retrieval_mode = router_result.get('retrieval_mode', 'both')
 
                     if _emb_mgr and retrieval_mode in ('semantic', 'both'):
-                        # Use hybrid retrieval (SQL + semantic)
                         try:
                             try:
                                 from .retrieval import HybridRetrieval
                             except ImportError:
                                 from retrieval import HybridRetrieval
                             hybrid = HybridRetrieval(_emb_mgr, self)
-                            retrieval_result = hybrid.retrieve(user_message, router_result, context, max_notes=max_notes)
+                            retrieval_result = hybrid.retrieve(
+                                user_message, router_result, context, max_notes=max_notes)
                         except Exception as e:
                             logger.debug("Hybrid retrieval failed, falling back to SQL: %s", e)
                             retrieval_result = self._rag_retrieve_cards(
@@ -3126,25 +392,21 @@ REGELN:
                                 broad_queries=broad_queries,
                                 search_scope=search_scope,
                                 context=context,
-                                max_notes=max_notes
+                                max_notes=max_notes,
                             )
                     else:
-                        # Fallback to SQL-only (existing path)
                         retrieval_result = self._rag_retrieve_cards(
                             precise_queries=precise_queries,
                             broad_queries=broad_queries,
                             search_scope=search_scope,
                             context=context,
-                            max_notes=max_notes
+                            max_notes=max_notes,
                         )
 
-                    # Handle new structured return format
                     if retrieval_result and retrieval_result.get("context_string"):
-                        context_string = retrieval_result.get("context_string", "")
+                        context_string = retrieval_result["context_string"]
                         citations = retrieval_result.get("citations", {})
 
-                        # Inject current card as primary source if not already in citations
-                        # Use noteId as key (consistent with SQL citations from _rag_retrieve_cards)
                         if context and context.get('cardId'):
                             current_note_id = str(context.get('noteId', context['cardId']))
                             if current_note_id not in citations:
@@ -3163,19 +425,20 @@ REGELN:
                                     'isCurrentCard': True,
                                     'sources': ['current'],
                                 }
-                                # Prepend current card context to the RAG context string
-                                # Use Note ID so the AI generates [[noteId]] which matches the citations key
-                                context_string = f"Note {current_note_id} (aktuelle Karte):\n  Frage: {_q_clean}\n  Antwort: {_a_clean}\n{context_string}"
+                                context_string = (
+                                    f"Note {current_note_id} (aktuelle Karte):\n"
+                                    f"  Frage: {_q_clean}\n  Antwort: {_a_clean}\n"
+                                    f"{context_string}"
+                                )
 
-                        # Convert context_string to list format for backward compatibility
                         formatted_cards = [line for line in context_string.split("\n") if line.strip()]
-
                         rag_context = {
                             "cards": formatted_cards,
                             "reasoning": router_result.get("reasoning", ""),
-                            "citations": citations  # Include citations with current card
+                            "citations": citations,
                         }
-                        logger.debug("RAG: %s Karten fuer Kontext verwendet, %s Citations", len(formatted_cards), len(citations))
+                        logger.debug("RAG: %s Karten fuer Kontext verwendet, %s Citations",
+                                     len(formatted_cards), len(citations))
                     else:
                         logger.debug("RAG: Keine Karten gefunden")
 
@@ -3189,7 +452,10 @@ REGELN:
                 _a_clean = _re.sub(r'<[^>]+>', ' ', _a).strip()[:200]
                 if _q_clean or _a_clean:
                     rag_context = {
-                        "cards": [f"Note {current_note_id} (aktuelle Karte):\n  Frage: {_q_clean}\n  Antwort: {_a_clean}"],
+                        "cards": [
+                            f"Note {current_note_id} (aktuelle Karte):\n"
+                            f"  Frage: {_q_clean}\n  Antwort: {_a_clean}"
+                        ],
                         "citations": {
                             current_note_id: {
                                 'noteId': context.get('noteId', context['cardId']),
@@ -3205,7 +471,7 @@ REGELN:
                     }
                     citations = rag_context["citations"]
 
-            # Stage 3: Generator (mit RAG-Kontext falls vorhanden)
+            # Stage 3: Generator
             self._refresh_config()
 
             if not self.is_configured():
@@ -3214,26 +480,20 @@ REGELN:
                     callback(error_msg, True, False)
                 return error_msg
 
-            # CRITICAL: Split-Brain Architecture
-            # Generator: Use gemini-3-flash-preview for maximum reasoning capability
-            # Fallback to gemini-2.5-flash (gemini-2.5-flash has quota 0)
             model = "gemini-3-flash-preview"
             fallback_model = "gemini-2.5-flash"
             api_key = self.config.get("api_key", "")
 
-            # Build system prompt with optional insights injection
-            ai_tools = self.config.get("ai_tools", {"images": True, "diagrams": True, "molecules": False})
-            insights_system_prompt = get_system_prompt(mode=mode, tools=ai_tools, insights=insights)
+            ai_tools = self.config.get("ai_tools", {
+                "images": True, "diagrams": True, "molecules": False})
+            insights_system_prompt = get_system_prompt(
+                mode=mode, tools=ai_tools, insights=insights)
 
-            # Emit generating pipeline step (covers both search and no-search paths)
             self._emit_pipeline_step("generating", "active")
 
-            # (Old ai_state emission removed — replaced by _emit_pipeline_step above)
-            
-            # Wrapper für Callback um Steps und Citations zu übergeben
             _generating_done_emitted = False
+
             def enhanced_callback(chunk, done, is_function_call=False):
-                """Enhanced callback that includes steps and citations via kwargs"""
                 nonlocal _generating_done_emitted
                 if done:
                     if not _generating_done_emitted:
@@ -3247,102 +507,90 @@ REGELN:
                 else:
                     if callback:
                         callback(chunk, done, is_function_call)
-            
-            # Verwende bestehende Streaming-Methode mit RAG-Kontext
-            # Try gemini-3-flash-preview first, fallback to gemini-2.5-flash on error
+
             try:
-                # Use suppress_error_callback=True to handle errors here instead of sending them to UI immediately
                 if callback:
                     result = self._get_google_response_streaming(
                         user_message, model, api_key,
-                        context=context, history=history, mode=mode, callback=enhanced_callback,
+                        context=context, history=history, mode=mode,
+                        callback=enhanced_callback,
                         rag_context=rag_context,
-                        suppress_error_callback=True, # CRITICAL: Suppress error reporting for first attempt
-                        system_prompt_override=insights_system_prompt
+                        suppress_error_callback=True,
+                        system_prompt_override=insights_system_prompt,
                     )
                 else:
                     result = self._get_google_response(
-                    user_message, model, api_key,
-                    context=context, history=history, mode=mode,
-                    rag_context=rag_context,
-                    system_prompt_override=insights_system_prompt
-                )
+                        user_message, model, api_key,
+                        context=context, history=history, mode=mode,
+                        rag_context=rag_context,
+                        system_prompt_override=insights_system_prompt,
+                    )
                 return result
+
             except Exception as e:
-                # CRITICAL: Fallback logic with RAG preservation
                 error_str = str(e).lower()
                 status_code = None
                 if hasattr(e, 'response') and e.response:
                     status_code = e.response.status_code
-                
-                logger.warning("⚠️ Primary model error (%s): %s...", status_code or 'unknown', str(e)[:100])
-                
-                # Wenn wir hier sind, hat der erste Versuch fehlgeschlagen
-                # (Old ai_state "Wechsle zu Fallback-Modell..." removed)
-                
-                # Strategie für Fallback:
-                # 1. Wenn 400 (Bad Request/Size) -> Sofort massiv kürzen
-                # 2. Wenn 500/Timeout -> Gleicher Context mit anderem Modell
-                
+
+                logger.warning("Primary model error (%s): %s...",
+                               status_code or 'unknown', str(e)[:100])
+
                 fallback_rag_context = rag_context
                 fallback_history = history
-                
+
                 if status_code == 400 or "400" in error_str or "too large" in error_str:
-                    logger.warning("⚠️ 400/Size Error erkannt -> Massives Kürzen für Fallback")
-                    # History komplett entfernen für maximalen Platz
-                    fallback_history = [] 
-                    # RAG Context auf Top 3 beschränken
+                    logger.warning("400/Size Error -> Massives Kuerzen fuer Fallback")
+                    fallback_history = []
                     if rag_context and rag_context.get("cards"):
                         fallback_rag_context = dict(rag_context)
                         fallback_rag_context["cards"] = rag_context["cards"][:3]
-                        logger.debug("✂️ RAG-Kontext gekürzt auf 3 Karten, History entfernt")
-                
-                # Versuche Fallback mit gemini-2.5-flash (mit RAG)
-                logger.info("🔄 Versuche Fallback mit gemini-2.5-flash (mit RAG)...")
+
+                logger.info("Versuche Fallback mit gemini-2.5-flash (mit RAG)...")
                 try:
                     if callback:
                         return self._get_google_response_streaming(
                             user_message, fallback_model, api_key,
-                            context=context, history=fallback_history, mode=mode, callback=enhanced_callback,
+                            context=context, history=fallback_history, mode=mode,
+                            callback=enhanced_callback,
                             rag_context=fallback_rag_context,
-                            suppress_error_callback=True, # Auch hier Fehler unterdrücken für letzten Rettungsversuch
-                            system_prompt_override=insights_system_prompt
+                            suppress_error_callback=True,
+                            system_prompt_override=insights_system_prompt,
                         )
                     else:
                         return self._get_google_response(
                             user_message, fallback_model, api_key,
                             context=context, history=fallback_history, mode=mode,
                             rag_context=fallback_rag_context,
-                            system_prompt_override=insights_system_prompt
+                            system_prompt_override=insights_system_prompt,
                         )
                 except Exception as fallback_e:
-                    logger.warning("⚠️ Fallback mit RAG gescheitert: %s", fallback_e)
-                    
-                    # Letzter Versuch: Fallback OHNE RAG aber MIT Metadaten
-                    # Wir nutzen enhanced_callback, damit die bisherigen Steps/Citations erhalten bleiben
-                    logger.info("🔄 Letzter Versuch: Fallback OHNE RAG (aber mit Metadaten)...")
+                    logger.warning("Fallback mit RAG gescheitert: %s", fallback_e)
+                    logger.info("Letzter Versuch: Fallback OHNE RAG...")
                     if callback:
                         return self._get_google_response_streaming(
                             user_message, fallback_model, api_key,
-                            context=context, history=None, mode=mode, callback=enhanced_callback,
+                            context=context, history=None, mode=mode,
+                            callback=enhanced_callback,
                             rag_context=None,
                             suppress_error_callback=False,
-                            system_prompt_override=insights_system_prompt
+                            system_prompt_override=insights_system_prompt,
                         )
                     else:
                         raise fallback_e
-                
+
         except Exception as e:
             error_msg = f"Fehler in RAG-Pipeline: {str(e)}"
-            logger.exception("⚠️ %s", error_msg)
-            
-            # Fallback: Normale Antwort ohne RAG - ABER mit enhanced_callback für Metadaten!
-            logger.info("🔄 Fallback auf normale Antwort ohne RAG (Endgültig)...")
-            # WICHTIG: enhanced_callback verwenden, damit Steps/Citations gerettet werden
-            return self.get_response(user_message, context=context, history=history, mode=mode, callback=enhanced_callback or callback)
+            logger.exception("%s", error_msg)
+            logger.info("Fallback auf normale Antwort ohne RAG (Endgueltig)...")
+            return self.get_response(
+                user_message, context=context, history=history, mode=mode,
+                callback=enhanced_callback or callback)
+
 
 # Globale Instanz
 _ai_handler = None
+
 
 def get_ai_handler(widget=None):
     """Gibt die globale AI-Handler-Instanz zurück"""
@@ -3350,6 +598,5 @@ def get_ai_handler(widget=None):
     if _ai_handler is None:
         _ai_handler = AIHandler(widget=widget)
     elif widget and not _ai_handler.widget:
-        # Update widget reference if provided and not already set
         _ai_handler.widget = widget
     return _ai_handler
