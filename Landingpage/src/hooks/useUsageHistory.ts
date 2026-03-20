@@ -86,7 +86,8 @@ export function useUsageHistory() {
 
   useEffect(() => {
     fetchUsageHistory();
-  }, [user, getAuthToken]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid]);
 
   return {
     history,

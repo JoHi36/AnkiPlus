@@ -64,7 +64,8 @@ export function useQuota() {
     // Refresh every 5 minutes
     const interval = setInterval(fetchQuota, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [user, getAuthToken]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid]);
 
   return {
     quota,
