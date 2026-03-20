@@ -449,78 +449,93 @@ ProxyImage.displayName = 'ProxyImage';
 
 // Mermaid Initialisierung
 // NOTE: Mermaid requires hex color strings — CSS var() cannot be used here.
-// These constants centralise the palette so they can be updated in one place.
-const MERMAID_NODE_BG    = '#1C1C1E';   // --ds-bg-canvas
-const MERMAID_NODE_ALT_A = '#1C1C1E';   // subtle variation A (same as canvas)
-const MERMAID_NODE_ALT_B = '#1C1C1E';   // subtle variation B
-const MERMAID_DEEP_BG    = '#141416';   // --ds-bg-deep
+// We read the resolved theme from data-theme and pick the right palette.
 const MERMAID_ACCENT     = '#14b8a6';   // teal accent (unchanged)
 const MERMAID_ACCENT2    = '#2dd4bf';   // teal lighter
-const MERMAID_TEXT       = '#e8e8e8';
 
-let mermaidInitialized = false;
+function getMermaidPalette() {
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  return isLight ? {
+    nodeBg:   '#E4E3DF',   // --ds-bg-canvas (light)
+    deepBg:   '#D5D4D0',   // --ds-bg-deep (light)
+    text:     '#1a1a1a',
+    textSec:  '#666666',
+    textTer:  '#888888',
+    theme:    'default',
+  } : {
+    nodeBg:   '#1C1C1E',   // --ds-bg-canvas (dark)
+    deepBg:   '#141416',   // --ds-bg-deep (dark)
+    text:     '#e8e8e8',
+    textSec:  '#9a9a9a',
+    textTer:  '#6a6a6a',
+    theme:    'dark',
+  };
+}
+
+let mermaidInitializedTheme = null;
 const initMermaid = () => {
-  if (!mermaidInitialized) {
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: 'dark',
-      securityLevel: 'loose',
-      flowchart: { useMaxWidth: true, htmlLabels: true },
-      themeVariables: {
-        primaryColor: MERMAID_NODE_BG,
-        primaryTextColor: MERMAID_TEXT,
-        primaryBorderColor: MERMAID_ACCENT,
-        lineColor: MERMAID_ACCENT,
-        secondaryColor: MERMAID_DEEP_BG,
-        tertiaryColor: MERMAID_NODE_ALT_A,
-        background: MERMAID_DEEP_BG,
-        mainBkg: MERMAID_NODE_BG,
-        secondBkg: MERMAID_NODE_ALT_A,
-        textColor: MERMAID_TEXT,
-        secondaryTextColor: '#9a9a9a',
-        tertiaryTextColor: '#6a6a6a',
-        border1: MERMAID_ACCENT,
-        border2: MERMAID_ACCENT2,
-        noteBkgColor: MERMAID_NODE_BG,
-        noteTextColor: MERMAID_TEXT,
-        noteBorderColor: MERMAID_ACCENT,
-        activationBorderColor: MERMAID_ACCENT,
-        activationBkgColor: MERMAID_NODE_BG,
-        sequenceNumberColor: MERMAID_TEXT,
-        labelBoxBkgColor: MERMAID_NODE_BG,
-        labelBoxBorderColor: MERMAID_ACCENT,
-        labelTextColor: MERMAID_TEXT,
-        loopTextColor: MERMAID_TEXT,
-        actorBorder: MERMAID_ACCENT,
-        actorBkg: MERMAID_NODE_BG,
-        actorTextColor: MERMAID_TEXT,
-        actorLineColor: MERMAID_ACCENT,
-        signalColor: MERMAID_TEXT,
-        signalTextColor: MERMAID_TEXT,
-        labelBoxColor: MERMAID_NODE_BG,
-        boxTextColor: MERMAID_TEXT,
-        messageTextColor: MERMAID_TEXT,
-        messageLineColor: MERMAID_ACCENT,
-        labelColor: MERMAID_TEXT,
-        errorBkgColor: '#ef4444',
-        errorTextColor: '#ffffff',
-        // Flowchart node background colors — all point to the same palette
-        cScale0: MERMAID_NODE_BG,
-        cScale1: MERMAID_NODE_ALT_A,
-        cScale2: MERMAID_NODE_ALT_B,
-        cScale3: MERMAID_NODE_BG,
-        cScale4: MERMAID_NODE_ALT_A,
-        cScale5: MERMAID_NODE_ALT_B,
-        cScale6: MERMAID_NODE_BG,
-        cScale7: MERMAID_NODE_ALT_A,
-        cScale8: MERMAID_NODE_ALT_B,
-        cScale9: MERMAID_NODE_BG,
-        cScale10: MERMAID_NODE_ALT_A,
-        cScale11: MERMAID_NODE_ALT_B
-      }
-    });
-    mermaidInitialized = true;
-  }
+  const p = getMermaidPalette();
+  // Re-initialize if theme changed
+  if (mermaidInitializedTheme === p.theme) return;
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: p.theme,
+    securityLevel: 'loose',
+    flowchart: { useMaxWidth: true, htmlLabels: true },
+    themeVariables: {
+      primaryColor: p.nodeBg,
+      primaryTextColor: p.text,
+      primaryBorderColor: MERMAID_ACCENT,
+      lineColor: MERMAID_ACCENT,
+      secondaryColor: p.deepBg,
+      tertiaryColor: p.nodeBg,
+      background: p.deepBg,
+      mainBkg: p.nodeBg,
+      secondBkg: p.nodeBg,
+      textColor: p.text,
+      secondaryTextColor: p.textSec,
+      tertiaryTextColor: p.textTer,
+      border1: MERMAID_ACCENT,
+      border2: MERMAID_ACCENT2,
+      noteBkgColor: p.nodeBg,
+      noteTextColor: p.text,
+      noteBorderColor: MERMAID_ACCENT,
+      activationBorderColor: MERMAID_ACCENT,
+      activationBkgColor: p.nodeBg,
+      sequenceNumberColor: p.text,
+      labelBoxBkgColor: p.nodeBg,
+      labelBoxBorderColor: MERMAID_ACCENT,
+      labelTextColor: p.text,
+      loopTextColor: p.text,
+      actorBorder: MERMAID_ACCENT,
+      actorBkg: p.nodeBg,
+      actorTextColor: p.text,
+      actorLineColor: MERMAID_ACCENT,
+      signalColor: p.text,
+      signalTextColor: p.text,
+      labelBoxColor: p.nodeBg,
+      boxTextColor: p.text,
+      messageTextColor: p.text,
+      messageLineColor: MERMAID_ACCENT,
+      labelColor: p.text,
+      errorBkgColor: '#ef4444',
+      errorTextColor: '#ffffff',
+      // Flowchart node background colors — all point to the same palette
+      cScale0: p.nodeBg,
+      cScale1: p.nodeBg,
+      cScale2: p.nodeBg,
+      cScale3: p.nodeBg,
+      cScale4: p.nodeBg,
+      cScale5: p.nodeBg,
+      cScale6: p.nodeBg,
+      cScale7: p.nodeBg,
+      cScale8: p.nodeBg,
+      cScale9: p.nodeBg,
+      cScale10: p.nodeBg,
+      cScale11: p.nodeBg
+    }
+  });
+  mermaidInitializedTheme = p.theme;
 };
 
 // Cache für Mermaid-Diagramme (verhindert wiederholte Render-Versuche)
@@ -799,9 +814,9 @@ const MermaidDiagram = React.memo(({ code, isStreaming = false }) => {
     // Das verhindert Layout-Probleme und ist nützlicher als eine Fehlermeldung.
     return (
       <div className="my-5 rounded-xl overflow-hidden border border-base-300/50 bg-[var(--ds-bg-canvas)] p-4 shadow-sm group">
-        <div className="flex items-center justify-between mb-2 pb-2 border-b border-white/10">
+        <div className="flex items-center justify-between mb-2 pb-2 border-b border-base-content/10">
            <div className="flex items-center gap-2">
-             <span className="text-xs font-medium text-white/40">Diagramm-Quellcode</span>
+             <span className="text-xs font-medium text-base-content/40">Diagramm-Quellcode</span>
              <span className="px-1.5 py-0.5 rounded bg-warning/10 text-warning/60 text-[10px] font-medium border border-warning/10">
                Render-Fehler
              </span>
@@ -1454,7 +1469,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
       <div className="pt-4">
         <div
           className="text-[14.5px] font-medium leading-[1.45]"
-          style={{ color: 'rgba(255,255,255,0.85)' }}
+          style={{ color: 'var(--ds-text-primary)' }}
         >
           {displayText}
         </div>
@@ -1714,7 +1729,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
             ) : (
                 /* Simple divider for saved bot messages without steps — only for pure text replies (no Plusi, no ReviewCard) */
                 !isUser && toolWidgets.length === 0 && !reviewData && message && message.trim().length > 0 && (
-                  <div className="h-px my-2" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                  <div className="h-px my-2" style={{ background: 'var(--ds-border-subtle)' }} />
                 )
             )}
             
@@ -2079,7 +2094,7 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                                         className="my-4 rounded-xl overflow-auto p-4 text-sm leading-relaxed"
                                         style={{ 
                                             background: 'var(--ds-bg-canvas)',
-                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            border: '1px solid var(--ds-border-medium)',
                                             maxHeight: '500px'
                                         }}
                                     >

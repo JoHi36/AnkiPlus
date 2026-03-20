@@ -22,7 +22,7 @@ export default function QuotaLimitDialog({ isOpen, onClose, onEnterCode, onOpenW
           
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center">
-              <Zap className="w-6 h-6 text-white" />
+              <Zap className="w-6 h-6 text-base-content" />
             </div>
             <div>
               <h2 className="text-xl font-semibold text-base-content">
@@ -63,7 +63,7 @@ export default function QuotaLimitDialog({ isOpen, onClose, onEnterCode, onOpenW
           <div className="flex flex-col gap-3 pt-2">
             <button
               onClick={onEnterCode}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white font-medium rounded-xl transition-all shadow-lg shadow-teal-500/20 hover:shadow-teal-500/30"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-base-content font-medium rounded-xl transition-all shadow-lg shadow-teal-500/20 hover:shadow-teal-500/30"
             >
               <Key size={18} />
               <span>Code eingeben</span>

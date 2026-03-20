@@ -60,7 +60,7 @@ export function QuizCard({ question, options, onSelect, className = '', customWr
       </div>
 
       {/* Question */}
-      <h3 className="text-xl sm:text-2xl font-medium text-white/95 mb-10 leading-snug px-1">
+      <h3 className="text-xl sm:text-2xl font-medium text-base-content/95 mb-10 leading-snug px-1">
         {question}
       </h3>
 
@@ -104,7 +104,7 @@ export function QuizCard({ question, options, onSelect, className = '', customWr
                   w-full text-left relative flex items-start group rounded-lg overflow-hidden transition-all duration-200
                   border border-transparent
                   ${state === 'idle' 
-                    ? 'bg-[var(--ds-bg-frosted)] hover:bg-[var(--ds-bg-canvas)] border-white/5 hover:border-white/10' 
+                    ? 'bg-[var(--ds-bg-frosted)] hover:bg-[var(--ds-bg-canvas)] border-base-content/5 hover:border-base-content/10' 
                     : ''}
                   ${state === 'selected-correct' 
                     ? 'bg-teal-500/10 border-teal-500/50 shadow-[0_0_15px_-5px_rgba(20,184,166,0.3)]' 
@@ -122,7 +122,7 @@ export function QuizCard({ question, options, onSelect, className = '', customWr
               >
                 {/* Active Indicator Bar (Left) */}
                 <div className={`absolute left-0 top-0 bottom-0 w-1 transition-colors duration-200
-                  ${state === 'idle' ? 'bg-transparent group-hover:bg-white/20' : ''}
+                  ${state === 'idle' ? 'bg-transparent group-hover:bg-base-content/20' : ''}
                   ${state === 'selected-correct' ? 'bg-teal-500' : ''}
                   ${state === 'selected-wrong' ? 'bg-red-500' : ''}
                   ${state === 'missed-correct' ? 'bg-teal-500/50' : ''}
@@ -132,11 +132,11 @@ export function QuizCard({ question, options, onSelect, className = '', customWr
                   {/* Index Box (A, B, C...) */}
                   <div className={`
                     flex-shrink-0 w-8 h-8 mr-4 rounded flex items-center justify-center font-mono text-sm font-bold border transition-colors
-                    ${state === 'idle' ? 'bg-black/20 border-white/10 text-neutral-500 group-hover:text-neutral-300' : ''}
+                    ${state === 'idle' ? 'bg-base-300/40 border-base-content/10 text-neutral-500 group-hover:text-neutral-300' : ''}
                     ${state === 'selected-correct' ? 'bg-teal-500 text-black border-teal-500' : ''}
-                    ${state === 'selected-wrong' ? 'bg-red-500 text-white border-red-500' : ''}
+                    ${state === 'selected-wrong' ? 'bg-red-500 text-base-content border-red-500' : ''}
                     ${state === 'missed-correct' ? 'bg-teal-500/20 text-teal-500 border-teal-500/30' : ''}
-                    ${state === 'dim' ? 'bg-black/20 border-white/5 text-neutral-600' : ''}
+                    ${state === 'dim' ? 'bg-base-300/40 border-base-content/5 text-neutral-600' : ''}
                   `}>
                     {option.id}
                   </div>
@@ -206,7 +206,7 @@ export function QuizCard({ question, options, onSelect, className = '', customWr
               customWrongAction ? (
                 <button 
                   onClick={customWrongAction.onClick}
-                  className="flex items-center gap-2 px-6 py-3 rounded-full bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 transition-all text-sm font-medium"
+                  className="flex items-center gap-2 px-6 py-3 rounded-full bg-base-content/5 border border-base-content/10 text-base-content/70 hover:bg-base-content/10 transition-all text-sm font-medium"
                 >
                   {customWrongAction.icon || <RotateCcw size={14} />}
                   {customWrongAction.label}
@@ -214,7 +214,7 @@ export function QuizCard({ question, options, onSelect, className = '', customWr
               ) : (
                 <button 
                   onClick={handleReset}
-                  className="flex items-center gap-2 px-6 py-3 rounded-full bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 transition-all text-sm font-medium"
+                  className="flex items-center gap-2 px-6 py-3 rounded-full bg-base-content/5 border border-base-content/10 text-base-content/70 hover:bg-base-content/10 transition-all text-sm font-medium"
                 >
                   <RotateCcw size={14} />
                   Zurücksetzen

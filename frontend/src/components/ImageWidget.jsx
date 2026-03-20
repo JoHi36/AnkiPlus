@@ -15,11 +15,11 @@ export default function ImageWidget({ data, toolName }) {
       return (
         <div style={{
           background: 'var(--ds-bg-overlay)',
-          border: '1px solid rgba(255,255,255,0.06)',
+          border: '1px solid var(--ds-border-subtle)',
           borderRadius: 16,
           padding: '16px 20px',
           fontSize: 13,
-          color: 'rgba(255,255,255,0.35)',
+          color: 'var(--ds-text-tertiary)',
           textAlign: 'center',
         }}>
           {data.error}
@@ -32,7 +32,7 @@ export default function ImageWidget({ data, toolName }) {
     return (
       <div style={{
         background: 'var(--ds-bg-overlay)',
-        border: '1px solid rgba(255,255,255,0.06)',
+        border: '1px solid var(--ds-border-subtle)',
         borderRadius: 16,
         overflow: 'hidden',
       }}>
@@ -40,16 +40,16 @@ export default function ImageWidget({ data, toolName }) {
         {data.front && (
           <div style={{
             padding: '12px 20px',
-            borderBottom: '1px solid rgba(255,255,255,0.04)',
+            borderBottom: '1px solid var(--ds-hover-tint)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
           }}>
-            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', fontWeight: 500 }}>
+            <span style={{ fontSize: 12, color: 'var(--ds-text-secondary)', fontWeight: 500 }}>
               {data.front}
             </span>
             {data.deck_name && (
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)' }}>
+              <span style={{ fontSize: 11, color: 'var(--ds-text-tertiary)' }}>
                 {data.deck_name}
               </span>
             )}
@@ -78,10 +78,10 @@ export default function ImageWidget({ data, toolName }) {
         {/* Footer */}
         <div style={{
           padding: '8px 20px',
-          borderTop: '1px solid rgba(255,255,255,0.04)',
-          background: 'rgba(255,255,255,0.02)',
+          borderTop: '1px solid var(--ds-hover-tint)',
+          background: 'var(--ds-hover-tint)',
         }}>
-          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.20)' }}>
+          <span style={{ fontSize: 10, color: 'var(--ds-text-muted)' }}>
             {images.length} {images.length === 1 ? 'Bild' : 'Bilder'} aus Karte
           </span>
         </div>
@@ -95,11 +95,11 @@ export default function ImageWidget({ data, toolName }) {
       return (
         <div style={{
           background: 'var(--ds-bg-overlay)',
-          border: '1px solid rgba(255,255,255,0.06)',
+          border: '1px solid var(--ds-border-subtle)',
           borderRadius: 16,
           padding: '16px 20px',
           fontSize: 13,
-          color: 'rgba(255,255,255,0.35)',
+          color: 'var(--ds-text-tertiary)',
           textAlign: 'center',
         }}>
           {data.error}
@@ -110,7 +110,7 @@ export default function ImageWidget({ data, toolName }) {
     return (
       <div style={{
         background: 'var(--ds-bg-overlay)',
-        border: '1px solid rgba(255,255,255,0.06)',
+        border: '1px solid var(--ds-border-subtle)',
         borderRadius: 16,
         overflow: 'hidden',
       }}>
@@ -129,7 +129,7 @@ export default function ImageWidget({ data, toolName }) {
             }}
           />
         ) : (
-          <div style={{ padding: '20px', textAlign: 'center', color: 'rgba(255,69,58,0.6)', fontSize: 12 }}>
+          <div style={{ padding: '20px', textAlign: 'center', color: 'var(--ds-red)', fontSize: 12 }}>
             Bild konnte nicht geladen werden
           </div>
         )}
@@ -137,16 +137,16 @@ export default function ImageWidget({ data, toolName }) {
         {/* Source attribution */}
         <div style={{
           padding: '8px 20px',
-          borderTop: '1px solid rgba(255,255,255,0.04)',
-          background: 'rgba(255,255,255,0.02)',
+          borderTop: '1px solid var(--ds-hover-tint)',
+          background: 'var(--ds-hover-tint)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
         }}>
-          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.50)' }}>
+          <span style={{ fontSize: 11, color: 'var(--ds-text-secondary)' }}>
             {data.description}
           </span>
-          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.20)' }}>
+          <span style={{ fontSize: 10, color: 'var(--ds-text-muted)' }}>
             {data.source === 'pubchem' ? 'PubChem' : data.source === 'wikimedia' ? 'Wikimedia' : data.source}
           </span>
         </div>

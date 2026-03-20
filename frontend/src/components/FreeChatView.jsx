@@ -101,7 +101,7 @@ export default function FreeChatView({
         )}
 
         {isLoading && !streamingMessage && (
-          <div style={{ color: '#3a3a55', fontSize: 12, padding: '8px 0' }}>
+          <div style={{ color: 'var(--ds-text-tertiary)', fontSize: 12, padding: '8px 0' }}>
             Denkt nach…
           </div>
         )}

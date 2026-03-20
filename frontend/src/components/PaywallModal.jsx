@@ -42,7 +42,7 @@ export default function PaywallModal({ isOpen, onClose, onUnlock }) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="absolute inset-0 bg-[#09090b] backdrop-blur-md"
+          className="absolute inset-0 bg-[var(--ds-bg-deep)] backdrop-blur-md"
           onClick={onClose}
         >
           {/* Subtiler radialer Teal-Glow im Hintergrund */}
@@ -60,13 +60,13 @@ export default function PaywallModal({ isOpen, onClose, onUnlock }) {
             stiffness: 300,
             duration: 0.3 
           }}
-          className="relative w-full max-w-lg mx-4 bg-[#09090b]/95 backdrop-blur-xl border border-teal-500/20 rounded-xl shadow-2xl overflow-hidden"
+          className="relative w-full max-w-lg mx-4 bg-[var(--ds-bg-deep)]/95 backdrop-blur-xl border border-teal-500/20 rounded-xl shadow-2xl overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Close Button */}
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-gray-400 hover:text-gray-300"
+            className="absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center rounded-lg bg-base-content/5 hover:bg-base-content/10 border border-base-content/10 transition-all text-gray-400 hover:text-gray-300"
           >
             <X size={16} />
           </button>
@@ -75,7 +75,7 @@ export default function PaywallModal({ isOpen, onClose, onUnlock }) {
           <div className="p-8">
             {/* Header */}
             <div className="text-center mb-8">
-              <h2 className="text-2xl font-semibold mb-2 text-white tracking-tight">
+              <h2 className="text-2xl font-semibold mb-2 text-base-content tracking-tight">
                 Unlock ANKI+ DEEP
               </h2>
               <p className="text-gray-400 text-sm">
@@ -111,9 +111,9 @@ export default function PaywallModal({ isOpen, onClose, onUnlock }) {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
-              className="text-center mb-6 pb-6 border-b border-white/5"
+              className="text-center mb-6 pb-6 border-b border-base-content/5"
             >
-              <div className="text-4xl font-bold text-white mb-1 tracking-tight">
+              <div className="text-4xl font-bold text-base-content mb-1 tracking-tight">
                 9,99€
               </div>
               <div className="text-sm text-gray-400">/ Monat</div>
@@ -124,7 +124,7 @@ export default function PaywallModal({ isOpen, onClose, onUnlock }) {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
-              className="w-full py-3.5 px-6 rounded-lg bg-gradient-to-r from-teal-600 to-emerald-600 text-white font-semibold text-base relative overflow-hidden group shadow-[0_0_20px_rgba(20,184,166,0.3)] hover:shadow-[0_0_25px_rgba(20,184,166,0.4)] transition-all duration-300"
+              className="w-full py-3.5 px-6 rounded-lg bg-gradient-to-r from-teal-600 to-emerald-600 text-base-content font-semibold text-base relative overflow-hidden group shadow-[0_0_20px_rgba(20,184,166,0.3)] hover:shadow-[0_0_25px_rgba(20,184,166,0.4)] transition-all duration-300"
             >
               {/* Shimmer Effect - läuft kontinuierlich alle 3 Sekunden */}
               <span 
@@ -144,7 +144,7 @@ export default function PaywallModal({ isOpen, onClose, onUnlock }) {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.5 }}
-              className="mt-6 pt-6 border-t border-white/5"
+              className="mt-6 pt-6 border-t border-base-content/5"
             >
               <div className="flex items-center gap-2 mb-3">
                 <Gift size={14} className="text-gray-500" />
@@ -180,7 +180,7 @@ export default function PaywallModal({ isOpen, onClose, onUnlock }) {
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
-                  className="absolute inset-0 bg-[#09090b]/95 backdrop-blur-sm flex items-center justify-center rounded-xl"
+                  className="absolute inset-0 bg-[var(--ds-bg-deep)]/95 backdrop-blur-sm flex items-center justify-center rounded-xl"
                 >
                   <motion.div
                     initial={{ scale: 0 }}
@@ -199,9 +199,9 @@ export default function PaywallModal({ isOpen, onClose, onUnlock }) {
                       }}
                       className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center shadow-[0_0_30px_rgba(20,184,166,0.5)]"
                     >
-                      <CheckCircle2 size={32} className="text-white" strokeWidth={2.5} />
+                      <CheckCircle2 size={32} className="text-base-content" strokeWidth={2.5} />
                     </motion.div>
-                    <p className="text-xl font-semibold text-white mb-1">
+                    <p className="text-xl font-semibold text-base-content mb-1">
                       Deep Mode freigeschaltet
                     </p>
                     <p className="text-sm text-gray-400">

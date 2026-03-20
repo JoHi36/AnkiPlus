@@ -36,12 +36,12 @@ export default function MiniChart({
     return (
       <div>
         {label && (
-          <div style={{ fontSize: 8, color: 'rgba(232,232,232,0.1)', letterSpacing: '0.3px', marginBottom: 4 }}>
+          <div style={{ fontSize: 8, color: 'var(--ds-text-muted)', letterSpacing: '0.3px', marginBottom: 4 }}>
             {label}
           </div>
         )}
         <div style={{ position: 'relative', height }}>
-          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 1, background: 'rgba(255,255,255,0.025)' }} />
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 1, background: 'var(--ds-border-subtle)' }} />
         </div>
       </div>
     );
@@ -50,18 +50,18 @@ export default function MiniChart({
   return (
     <div>
       {label && (
-        <div style={{ fontSize: 8, color: 'rgba(232,232,232,0.1)', letterSpacing: '0.3px', marginBottom: 4 }}>
+        <div style={{ fontSize: 8, color: 'var(--ds-text-muted)', letterSpacing: '0.3px', marginBottom: 4 }}>
           {label}
         </div>
       )}
       <div style={{ position: 'relative', height }}>
         {showGrid && (
           <>
-            <div style={{ position: 'absolute', top: '33%', left: 0, right: 0, height: 1, background: 'rgba(255,255,255,0.02)' }} />
-            <div style={{ position: 'absolute', top: '66%', left: 0, right: 0, height: 1, background: 'rgba(255,255,255,0.02)' }} />
+            <div style={{ position: 'absolute', top: '33%', left: 0, right: 0, height: 1, background: 'var(--ds-border-subtle)' }} />
+            <div style={{ position: 'absolute', top: '66%', left: 0, right: 0, height: 1, background: 'var(--ds-border-subtle)' }} />
           </>
         )}
-        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 1, background: 'rgba(255,255,255,0.025)' }} />
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 1, background: 'var(--ds-border-subtle)' }} />
         <svg
           viewBox={`0 0 ${viewWidth} ${viewHeight}`}
           preserveAspectRatio="none"

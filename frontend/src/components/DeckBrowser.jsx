@@ -11,10 +11,10 @@ const EMPTY_CITATIONS = {};
 
 /* ── tokens ── */
 const T = {
-  blue:   '#0a84ff',
-  green:  '#30d158',
-  yellow: '#ffd60a',
-  red:    '#ff453a',
+  blue:   'var(--ds-accent)',
+  green:  'var(--ds-green)',
+  yellow: 'var(--ds-yellow)',
+  red:    'var(--ds-red)',
 };
 
 /* ── helpers ── */
@@ -63,7 +63,7 @@ function SegmentedBar({ stats, loading }) {
     return (
       <div style={{
         height: 2, borderRadius: 2, marginTop: 4,
-        background: 'rgba(255,255,255,0.06)',
+        background: 'var(--ds-border-subtle)',
         overflow: 'hidden',
         position: 'relative',
       }} />
@@ -77,7 +77,7 @@ function SegmentedBar({ stats, loading }) {
   return (
     <div style={{
       height: 2, borderRadius: 2, marginTop: 4,
-      background: 'rgba(255,255,255,0.06)',
+      background: 'var(--ds-border-subtle)',
       overflow: 'hidden',
       display: 'flex',
     }}>
@@ -129,7 +129,7 @@ function DeckRow({ deck, deckStatsMap, deckSessionCountMap, onOpenDeck, depth = 
           textAlign: 'left',
           borderRadius: 0,
         }}
-        whileHover={{ backgroundColor: 'rgba(255,255,255,0.04)' }}
+        whileHover={{ backgroundColor: 'var(--ds-hover-tint)' }}
         whileTap={{ scale: 0.99 }}
       >
         {/* Chevron / dot */}
@@ -140,12 +140,12 @@ function DeckRow({ deck, deckStatsMap, deckSessionCountMap, onOpenDeck, depth = 
               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               style={{ display: 'flex' }}
             >
-              <ChevronRight size={12} style={{ color: 'rgba(255,255,255,0.28)' }} />
+              <ChevronRight size={12} style={{ color: 'var(--ds-text-tertiary)' }} />
             </motion.div>
           ) : (
             <div style={{
               width: 4, height: 4, borderRadius: '50%',
-              background: 'rgba(255,255,255,0.15)',
+              background: 'var(--ds-text-muted)',
               flexShrink: 0,
             }} />
           )}
@@ -158,7 +158,7 @@ function DeckRow({ deck, deckStatsMap, deckSessionCountMap, onOpenDeck, depth = 
             <span style={{
               fontSize: depth === 0 ? 13 : 12,
               fontWeight: depth === 0 ? 600 : 400,
-              color: depth === 0 ? 'rgba(255,255,255,0.72)' : 'rgba(255,255,255,0.48)',
+              color: depth === 0 ? 'var(--ds-text-primary)' : 'var(--ds-text-secondary)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
@@ -185,7 +185,7 @@ function DeckRow({ deck, deckStatsMap, deckSessionCountMap, onOpenDeck, depth = 
             {stats && (
               <span style={{
                 fontSize: 10,
-                color: 'rgba(255,255,255,0.2)',
+                color: 'var(--ds-text-muted)',
                 flexShrink: 0,
                 fontVariantNumeric: 'tabular-nums',
               }}>
@@ -256,13 +256,13 @@ function SessionRow({ session, index, onClick }) {
       initial={{ opacity: 0, x: -4 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: index * 0.03, type: 'spring', stiffness: 400, damping: 30 }}
-      whileHover={{ backgroundColor: 'rgba(255,255,255,0.04)' }}
+      whileHover={{ backgroundColor: 'var(--ds-hover-tint)' }}
       whileTap={{ scale: 0.99 }}
     >
       {/* dot */}
       <div style={{
         width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
-        background: 'rgba(255,255,255,0.14)',
+        background: 'var(--ds-text-muted)',
       }} />
 
       {/* title */}
@@ -270,7 +270,7 @@ function SessionRow({ session, index, onClick }) {
         {path && (
           <div style={{
             fontSize: 9, fontWeight: 700, letterSpacing: '0.07em',
-            color: 'rgba(255,255,255,0.2)', textTransform: 'uppercase',
+            color: 'var(--ds-text-muted)', textTransform: 'uppercase',
             marginBottom: 1,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
@@ -279,7 +279,7 @@ function SessionRow({ session, index, onClick }) {
         )}
         <div style={{
           fontSize: 12, fontWeight: 400,
-          color: 'rgba(255,255,255,0.5)',
+          color: 'var(--ds-text-secondary)',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
           {title}
@@ -289,16 +289,16 @@ function SessionRow({ session, index, onClick }) {
       {/* meta */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         {sectionCount > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 3, color: 'rgba(255,255,255,0.22)', fontSize: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 3, color: 'var(--ds-text-tertiary)', fontSize: 10 }}>
             <Layers size={9} />
             <span>{sectionCount}</span>
           </div>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 3, color: 'rgba(255,255,255,0.22)', fontSize: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 3, color: 'var(--ds-text-tertiary)', fontSize: 10 }}>
           <MessageSquare size={9} />
           <span>{msgCount}</span>
         </div>
-        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', fontVariantNumeric: 'tabular-nums' }}>
+        <span style={{ fontSize: 10, color: 'var(--ds-text-muted)', fontVariantNumeric: 'tabular-nums' }}>
           {date}
         </span>
       </div>
@@ -315,14 +315,14 @@ function SectionLabel({ children, count }) {
     }}>
       <span style={{
         fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
-        textTransform: 'uppercase', color: 'rgba(255,255,255,0.25)',
+        textTransform: 'uppercase', color: 'var(--ds-text-tertiary)',
       }}>
         {children}
       </span>
       {count != null && (
         <span style={{
-          fontSize: 9, color: 'rgba(255,255,255,0.15)',
-          background: 'rgba(255,255,255,0.05)',
+          fontSize: 9, color: 'var(--ds-text-muted)',
+          background: 'var(--ds-hover-tint)',
           borderRadius: 4, padding: '0 4px',
           fontVariantNumeric: 'tabular-nums',
         }}>
@@ -350,12 +350,12 @@ function DeckActions({ bridge }) {
           onClick={action}
           style={{
             background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-            fontSize: 11, color: 'rgba(255,255,255,0.22)',
+            fontSize: 11, color: 'var(--ds-text-tertiary)',
             fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
             transition: 'color 0.15s',
           }}
-          onMouseEnter={e => e.target.style.color = 'rgba(255,255,255,0.45)'}
-          onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.22)'}
+          onMouseEnter={e => e.target.style.color = 'var(--ds-text-secondary)'}
+          onMouseLeave={e => e.target.style.color = 'var(--ds-text-tertiary)'}
         >
           {label}
         </button>
@@ -480,7 +480,7 @@ export default function DeckBrowser({
           <SectionLabel count={decks.length}>Decks</SectionLabel>
 
           {decks.length === 0 && (
-            <div style={{ padding: '12px 16px', fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>
+            <div style={{ padding: '12px 16px', fontSize: 12, color: 'var(--ds-text-muted)' }}>
               Keine Decks gefunden
             </div>
           )}
@@ -508,7 +508,7 @@ export default function DeckBrowser({
 
         {/* ── Divider ── */}
         {recentSessions.length > 0 && (
-          <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', margin: '8px 16px' }} />
+          <div style={{ height: 1, background: 'var(--ds-border-subtle)', margin: '8px 16px' }} />
         )}
 
         {/* ── Sessions ── */}
@@ -530,7 +530,7 @@ export default function DeckBrowser({
         {/* ── Chat History (all messages across decks) ── */}
         {!freeChatOpen && freeChatHook && freeChatHook.messages && freeChatHook.messages.length > 0 && (
           <div>
-            <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', margin: '8px 16px' }} />
+            <div style={{ height: 1, background: 'var(--ds-border-subtle)', margin: '8px 16px' }} />
             <SectionLabel count={freeChatHook.messages.length}>Chat-Verlauf</SectionLabel>
             <div style={{ padding: '0 8px' }}>
               {freeChatHook.messages.map((msg, idx) => {

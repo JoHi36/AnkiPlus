@@ -97,7 +97,7 @@ export default function SectionDropdown({
       ref={dropdownRef}
       className="absolute top-full right-0 mt-2 w-72 bg-base-200/95 backdrop-blur-xl border border-base-300/50 rounded-xl shadow-2xl overflow-hidden z-[9999] animate-in fade-in slide-in-from-top-2 duration-200 pointer-events-auto"
       style={{
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05)'
+        boxShadow: 'var(--ds-shadow-lg), 0 0 0 1px var(--ds-border-subtle)'
       }}
       onClick={(e) => {
         // Debug: Log wenn Dropdown geklickt wird

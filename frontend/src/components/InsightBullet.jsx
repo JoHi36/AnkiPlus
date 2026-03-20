@@ -18,7 +18,7 @@ export default function InsightBullet({ text, type = 'learned', citations = [], 
           marginTop: 6,
         }}
       />
-      <div style={{ fontSize: 15, color: 'rgba(232,232,232,0.8)', lineHeight: 1.55, letterSpacing: '-0.2px' }}>
+      <div style={{ fontSize: 15, color: 'var(--ds-text-primary)', lineHeight: 1.55, letterSpacing: '-0.2px' }}>
         {text}
         {citations.map((c) => (
           <sup

@@ -8,8 +8,8 @@ import { useSessionContext } from '../contexts/SessionContext';
 
 /* ── tokens ── */
 const T = {
-  blue:   '#0a84ff',
-  green:  '#30d158',
+  blue:   'var(--ds-accent)',
+  green:  'var(--ds-green)',
 };
 
 /* ══════════════════════════════════════════════════════════
@@ -31,15 +31,15 @@ function OverviewPill({ sessions, onOpenSettings, bridge }) {
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '10px 16px',
     }}>
-      <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.72)', letterSpacing: '-0.01em' }}>
+      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ds-text-primary)', letterSpacing: '-0.01em' }}>
         AnkiPlus
       </span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {sessions.length > 0 && (
           <span style={{
             fontSize: 10, fontWeight: 600,
-            color: 'rgba(255,255,255,0.28)',
-            background: 'rgba(255,255,255,0.06)', borderRadius: 6,
+            color: 'var(--ds-text-tertiary)',
+            background: 'var(--ds-border-subtle)', borderRadius: 6,
             padding: '2px 7px',
           }}>
             {sessions.length} Sessions
@@ -52,15 +52,15 @@ function OverviewPill({ sessions, onOpenSettings, bridge }) {
             style={{
               display: 'flex', alignItems: 'center', gap: 4,
               padding: '3px 8px', borderRadius: 8, cursor: 'pointer',
-              background: authStatus.authenticated ? 'rgba(48,209,88,0.1)' : 'rgba(255,255,255,0.05)',
-              border: `1px solid ${authStatus.authenticated ? 'rgba(48,209,88,0.2)' : 'rgba(255,255,255,0.07)'}`,
+              background: authStatus.authenticated ? 'var(--ds-green-tint)' : 'var(--ds-hover-tint)',
+              border: `1px solid ${authStatus.authenticated ? 'rgba(48,209,88,0.2)' : 'var(--ds-border-subtle)'}`,
             }}
           >
-            <User size={12} style={{ color: authStatus.authenticated ? '#30d158' : 'rgba(255,255,255,0.4)' }} />
-            <span style={{ fontSize: 11, fontWeight: 500, color: authStatus.authenticated ? '#30d158' : 'rgba(255,255,255,0.4)' }}>
+            <User size={12} style={{ color: authStatus.authenticated ? 'var(--ds-green)' : 'var(--ds-text-secondary)' }} />
+            <span style={{ fontSize: 11, fontWeight: 500, color: authStatus.authenticated ? 'var(--ds-green)' : 'var(--ds-text-secondary)' }}>
               Profil
             </span>
-            {authStatus.authenticated && <CheckCircle size={9} style={{ color: '#30d158' }} />}
+            {authStatus.authenticated && <CheckCircle size={9} style={{ color: 'var(--ds-green)' }} />}
           </motion.button>
         )}
       </div>
@@ -120,11 +120,11 @@ function FloatingSectionPill({ sectionTitle, sections, onScrollToSection, onSect
           display: 'inline-flex', alignItems: 'center', gap: 6,
           padding: '5px 14px',
           borderRadius: 20,
-          background: 'rgba(30, 30, 30, 0.85)',
+          background: 'var(--ds-bg-frosted)',
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          boxShadow: '0 2px 12px rgba(0,0,0,0.3)',
+          border: '1px solid var(--ds-border-medium)',
+          boxShadow: 'var(--ds-shadow-md)',
           cursor: 'pointer',
           maxWidth: '70%',
         }}
@@ -136,13 +136,13 @@ function FloatingSectionPill({ sectionTitle, sections, onScrollToSection, onSect
         }} />
         <span style={{
           fontSize: 11, fontWeight: 500,
-          color: 'rgba(255,255,255,0.6)',
+          color: 'var(--ds-text-secondary)',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
           {displayTitle}
         </span>
         {hasSections && (
-          <BookOpen size={11} style={{ color: 'rgba(255,255,255,0.25)', flexShrink: 0 }} />
+          <BookOpen size={11} style={{ color: 'var(--ds-text-tertiary)', flexShrink: 0 }} />
         )}
       </motion.button>
 
@@ -166,12 +166,12 @@ function FloatingSectionPill({ sectionTitle, sections, onScrollToSection, onSect
             exit={{ opacity: 0, y: -4, scale: 0.95 }}
             transition={{ type: 'spring', stiffness: 400, damping: 30 }}
             style={{
-              background: 'rgba(22, 22, 24, 0.95)',
+              background: 'var(--ds-bg-frosted)',
               backdropFilter: 'blur(20px)',
               WebkitBackdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255,255,255,0.08)',
+              border: '1px solid var(--ds-border-medium)',
               borderRadius: 14,
-              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+              boxShadow: 'var(--ds-shadow-lg)',
               overflow: 'hidden',
             }}
           >
@@ -191,18 +191,18 @@ function FloatingSectionPill({ sectionTitle, sections, onScrollToSection, onSect
                     initial={{ opacity: 0, x: -4 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: i * 0.03, type: 'spring', stiffness: 400, damping: 28 }}
-                    whileHover={{ backgroundColor: 'rgba(255,255,255,0.05)' }}
+                    whileHover={{ backgroundColor: 'var(--ds-hover-tint)' }}
                     whileTap={{ scale: 0.98 }}
                   >
                     <div style={{
                       width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
-                      background: active ? T.blue : 'rgba(255,255,255,0.15)',
+                      background: active ? T.blue : 'var(--ds-text-muted)',
                       boxShadow: active ? '0 0 6px rgba(10,132,255,0.55)' : 'none',
                     }} />
                     <span style={{
                       fontSize: 12,
                       fontWeight: active ? 600 : 400,
-                      color: active ? 'rgba(255,255,255,0.88)' : 'rgba(255,255,255,0.38)',
+                      color: active ? 'var(--ds-text-primary)' : 'var(--ds-text-tertiary)',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                       textAlign: 'left',
                     }}>
@@ -214,7 +214,7 @@ function FloatingSectionPill({ sectionTitle, sections, onScrollToSection, onSect
             </div>
 
             {/* Divider */}
-            <div style={{ height: 1, margin: '0 10px', background: 'rgba(255,255,255,0.06)' }} />
+            <div style={{ height: 1, margin: '0 10px', background: 'var(--ds-border-subtle)' }} />
 
             {/* Chat zurücksetzen */}
             <div style={{ padding: '4px 4px 6px' }}>
@@ -227,13 +227,13 @@ function FloatingSectionPill({ sectionTitle, sections, onScrollToSection, onSect
                   borderRadius: 8,
                   opacity: isResetDisabled ? 0.2 : 0.55,
                 }}
-                whileHover={!isResetDisabled ? { backgroundColor: 'rgba(255,69,58,0.06)' } : {}}
+                whileHover={!isResetDisabled ? { backgroundColor: 'var(--ds-red-tint)' } : {}}
                 whileTap={!isResetDisabled ? { scale: 0.98 } : {}}
               >
-                <RotateCcw size={11} style={{ color: isResetDisabled ? 'rgba(255,255,255,0.3)' : 'rgba(255,69,58,0.7)' }} />
+                <RotateCcw size={11} style={{ color: isResetDisabled ? 'var(--ds-text-placeholder)' : 'var(--ds-red)' }} />
                 <span style={{
                   fontSize: 12, fontWeight: 400,
-                  color: isResetDisabled ? 'rgba(255,255,255,0.2)' : 'rgba(255,69,58,0.7)',
+                  color: isResetDisabled ? 'var(--ds-text-muted)' : 'var(--ds-red)',
                 }}>
                   Chat zurücksetzen
                 </span>

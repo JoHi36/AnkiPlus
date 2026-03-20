@@ -170,25 +170,25 @@ const DOCK_CSS = `
     cursor: pointer;
     transition: background 0.15s;
     font-size: 12.5px;
-    color: rgba(232,232,232,.7);
+    color: var(--ds-text-primary);
     font-family: -apple-system, sans-serif;
   }
   .plusi-menu-item:hover { background: rgba(10,132,255,.08); }
   .plusi-menu-item svg { opacity: 0.4; flex-shrink: 0; }
-  .plusi-menu-accent { color: rgba(10,132,255,.8); font-weight: 500; }
-  .plusi-menu-accent svg { opacity: 0.65; color: #0a84ff; }
+  .plusi-menu-accent { color: var(--ds-accent); font-weight: 500; }
+  .plusi-menu-accent svg { opacity: 0.65; color: var(--ds-accent); }
 
   .plusi-menu-sep {
     height: 1px;
     margin: 2px 6px;
-    background: radial-gradient(ellipse at center, rgba(255,255,255,.05) 0%, transparent 75%);
+    background: radial-gradient(ellipse at center, var(--ds-hover-tint) 0%, transparent 75%);
   }
 
   .plusi-dock-bubble {
     padding: 6px 11px;
     font-family: 'Space Grotesk', sans-serif;
     font-size: 12.5px;
-    color: rgba(232,232,232,.72);
+    color: var(--ds-text-primary);
     line-height: 1.45;
     background: rgba(10,132,255,.05);
   }

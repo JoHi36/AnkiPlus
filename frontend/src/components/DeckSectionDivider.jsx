@@ -14,12 +14,12 @@ export default function DeckSectionDivider({ deckName }) {
       <div style={{
         flex: 1,
         height: 1,
-        background: 'rgba(255,255,255,0.06)',
+        background: 'var(--ds-border-subtle)',
       }} />
       <span style={{
         fontSize: 10,
         fontWeight: 600,
-        color: 'rgba(255,255,255,0.25)',
+        color: 'var(--ds-text-tertiary)',
         letterSpacing: '0.5px',
         textTransform: 'uppercase',
         whiteSpace: 'nowrap',
@@ -29,7 +29,7 @@ export default function DeckSectionDivider({ deckName }) {
       <div style={{
         flex: 1,
         height: 1,
-        background: 'rgba(255,255,255,0.06)',
+        background: 'var(--ds-border-subtle)',
       }} />
     </div>
   );

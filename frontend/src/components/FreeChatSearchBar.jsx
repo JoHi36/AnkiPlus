@@ -7,7 +7,7 @@ import { ArrowUp } from 'lucide-react';
  *
  * Visual: animated blue/purple conic-gradient snake border around a dark input.
  * Behavior: on Enter with non-empty text, calls onOpen(text).
- * ⌘K focuses the input from anywhere; blue send arrow appears when typing.
+ * Command+K focuses the input from anywhere; blue send arrow appears when typing.
  *
  * Props:
  *   onOpen(text: string) — called when user presses Enter with text
@@ -30,7 +30,7 @@ export default function FreeChatSearchBar({ onOpen }) {
     }
   };
 
-  /* ⌘K / Ctrl+K → focus the input */
+  /* Command+K / Ctrl+K -> focus the input */
   useEffect(() => {
     const handler = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -51,11 +51,11 @@ export default function FreeChatSearchBar({ onOpen }) {
         textAlign: 'center',
         fontSize: 18,
         fontWeight: 700,
-        color: '#fff',
+        color: 'var(--ds-text-primary)',
         letterSpacing: '-0.3px',
         marginBottom: 10,
       }}>
-        Anki<span style={{ color: '#6b8cff' }}>Plus</span>
+        Anki<span style={{ color: 'var(--ds-accent)' }}>Plus</span>
       </div>
 
       {/* Snake-border wrapper */}
@@ -65,7 +65,7 @@ export default function FreeChatSearchBar({ onOpen }) {
           position: 'absolute',
           inset: -1,
           borderRadius: 25,
-          background: 'conic-gradient(from 0deg, transparent 0deg, transparent 55%, #6b8cff 60%, #a78bfa 72%, #38bdf8 81%, #6b8cff 86%, transparent 92%)',
+          background: 'conic-gradient(from 0deg, transparent 0deg, transparent 55%, var(--ds-accent) 60%, var(--ds-purple) 72%, #38bdf8 81%, var(--ds-accent) 86%, transparent 92%)',
           WebkitMask: 'radial-gradient(circle, transparent calc(100% - 2px), white calc(100% - 2px))',
           mask: 'radial-gradient(circle, transparent calc(100% - 2px), white calc(100% - 2px))',
           animation: 'freechat-snake-rotate 2.5s linear infinite',
@@ -74,7 +74,7 @@ export default function FreeChatSearchBar({ onOpen }) {
         {/* Input */}
         <div style={{
           position: 'relative',
-          background: '#22222f',
+          background: 'var(--ds-bg-frosted)',
           borderRadius: 22,
           display: 'flex',
           alignItems: 'center',
@@ -85,7 +85,7 @@ export default function FreeChatSearchBar({ onOpen }) {
           <span style={{
             position: 'absolute',
             left: 13,
-            color: '#6b8cff',
+            color: 'var(--ds-accent)',
             fontSize: 14,
             lineHeight: 1,
           }}>✦</span>
@@ -101,33 +101,33 @@ export default function FreeChatSearchBar({ onOpen }) {
               background: 'transparent',
               border: 'none',
               outline: 'none',
-              color: '#ccc',
+              color: 'var(--ds-text-primary)',
               fontSize: 13,
             }}
           />
 
-          {/* Right side: ⌘K badge when empty, blue send arrow when typing */}
+          {/* Right side: Command+K badge when empty, blue send arrow when typing */}
           {hasText ? (
             <button
               onClick={handleSend}
               style={{
                 width: 24, height: 24, borderRadius: '50%',
-                background: '#6b8cff',
+                background: 'var(--ds-accent)',
                 border: 'none', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 flexShrink: 0, padding: 0,
-                transition: 'background 0.15s',
+                transition: 'opacity 0.15s',
               }}
-              onMouseEnter={e => e.currentTarget.style.background = '#8aa4ff'}
-              onMouseLeave={e => e.currentTarget.style.background = '#6b8cff'}
+              onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
             >
               <ArrowUp size={14} color="#fff" strokeWidth={2.5} />
             </button>
           ) : (
             <kbd style={{
               fontSize: 10, fontWeight: 500,
-              color: 'rgba(255,255,255,0.22)',
-              background: 'rgba(255,255,255,0.06)',
+              color: 'var(--ds-text-tertiary)',
+              background: 'var(--ds-border-subtle)',
               borderRadius: 5,
               padding: '2px 6px',
               fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',

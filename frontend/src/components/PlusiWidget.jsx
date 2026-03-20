@@ -238,7 +238,7 @@ const PLUSI_CSS = `
   }
 
   .plusi-markdown {
-    color: rgba(232,232,232,0.72);
+    color: var(--ds-text-primary);
   }
   .plusi-markdown p {
     font-size: 14px;
@@ -246,7 +246,7 @@ const PLUSI_CSS = `
     margin: 0 0 0.5em;
   }
   .plusi-markdown p:last-child { margin-bottom: 0; }
-  .plusi-markdown strong { color: rgba(232,232,232,0.9); font-weight: 600; }
+  .plusi-markdown strong { color: var(--ds-text-primary); font-weight: 600; }
   .plusi-markdown em { color: rgba(180,210,255,0.7); }
   .plusi-markdown code {
     background: rgba(0,0,0,0.25);
@@ -276,7 +276,7 @@ const PLUSI_CSS = `
   .plusi-footer {
     padding: 6px 11px 7px;
     background: rgba(0,0,0,0.15);
-    border-top: 1px solid rgba(255,255,255,0.04);
+    border-top: 1px solid var(--ds-hover-tint);
   }
 
   .plusi-footer-row {
@@ -305,12 +305,12 @@ const PLUSI_CSS = `
 
   .plusi-points {
     font-size: 8px;
-    color: rgba(255,255,255,0.15);
+    color: var(--ds-text-muted);
   }
 
   .plusi-bar-bg {
     height: 2px;
-    background: rgba(255,255,255,0.06);
+    background: var(--ds-border-subtle);
     border-radius: 1px;
     overflow: hidden;
   }

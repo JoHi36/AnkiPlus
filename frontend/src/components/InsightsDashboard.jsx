@@ -31,7 +31,7 @@ export default function InsightsDashboard({
           style={{
             position: 'absolute',
             inset: 0,
-            background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.02), transparent)',
+            background: 'linear-gradient(90deg, transparent, var(--ds-hover-tint), transparent)',
             animation: 'shimmer 2s infinite',
             pointerEvents: 'none',
           }}
@@ -41,7 +41,7 @@ export default function InsightsDashboard({
       <div style={{ marginBottom: 36 }}>
         {hasInsights ? (
           <>
-            <div style={{ fontSize: 11, color: 'rgba(232,232,232,0.12)', letterSpacing: '0.3px', marginBottom: 20 }}>
+            <div style={{ fontSize: 11, color: 'var(--ds-text-muted)', letterSpacing: '0.3px', marginBottom: 20 }}>
               {insights.insights.length} Erkenntnisse gesammelt
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -57,7 +57,7 @@ export default function InsightsDashboard({
             </div>
           </>
         ) : (
-          <div style={{ fontSize: 13, color: 'rgba(232,232,232,0.15)', lineHeight: 1.5 }}>
+          <div style={{ fontSize: 13, color: 'var(--ds-text-muted)', lineHeight: 1.5 }}>
             Noch keine Erkenntnisse — starte einen Chat, um Lernpunkte zu sammeln
           </div>
         )}
@@ -67,7 +67,7 @@ export default function InsightsDashboard({
         <div
           style={{
             height: 1,
-            background: 'linear-gradient(90deg, rgba(232,232,232,0.03), rgba(232,232,232,0.06), rgba(232,232,232,0.03))',
+            background: 'var(--ds-border-subtle)',
             marginBottom: 14,
           }}
         />
@@ -75,22 +75,22 @@ export default function InsightsDashboard({
         <div style={{ display: 'flex', alignItems: 'end', gap: 14, marginBottom: 12 }}>
           <div style={{ display: 'flex', gap: 14 }}>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 15, fontWeight: 500, color: 'rgba(232,232,232,0.3)' }}>
+              <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--ds-text-placeholder)' }}>
                 {hasStats ? cardStats.reps : '0'}
               </div>
-              <div style={{ fontSize: 8, color: 'rgba(232,232,232,0.1)', marginTop: 2 }}>REV</div>
+              <div style={{ fontSize: 8, color: 'var(--ds-text-muted)', marginTop: 2 }}>REV</div>
             </div>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 15, fontWeight: 500, color: 'rgba(232,232,232,0.3)' }}>
+              <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--ds-text-placeholder)' }}>
                 {hasStats ? `${successRate}%` : '—'}
               </div>
-              <div style={{ fontSize: 8, color: 'rgba(232,232,232,0.1)', marginTop: 2 }}>OK</div>
+              <div style={{ fontSize: 8, color: 'var(--ds-text-muted)', marginTop: 2 }}>OK</div>
             </div>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 15, fontWeight: 500, color: 'rgba(232,232,232,0.3)' }}>
+              <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--ds-text-placeholder)' }}>
                 {hasStats ? `${cardStats.interval || 0}d` : '—'}
               </div>
-              <div style={{ fontSize: 8, color: 'rgba(232,232,232,0.1)', marginTop: 2 }}>IVL</div>
+              <div style={{ fontSize: 8, color: 'var(--ds-text-muted)', marginTop: 2 }}>IVL</div>
             </div>
           </div>
 

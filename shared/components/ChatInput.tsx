@@ -250,7 +250,7 @@ export default function ChatInput({
                   : 'opacity-0 scale-75 pointer-events-none bg-primary'
               }`}
             >
-              <ArrowUp size={14} strokeWidth={2.5} className="text-white" />
+              <ArrowUp size={14} strokeWidth={2.5} className="text-base-100" />
             </button>
           )}
         </div>

@@ -256,8 +256,8 @@ export default function SessionHeader({
                   showSectionDropdown
                     ? 'text-primary bg-primary/10 border-primary/20'
                     : hasSections
-                      ? 'bg-base-200/30 hover:bg-base-300/50 text-base-content/70 hover:text-primary border-white/5'
-                      : 'bg-base-200/30 hover:bg-base-300/50 text-base-content/60 hover:text-base-content border-white/5'
+                      ? 'bg-base-200/30 hover:bg-base-300/50 text-base-content/70 hover:text-primary border-base-content/5'
+                      : 'bg-base-200/30 hover:bg-base-300/50 text-base-content/60 hover:text-base-content border-base-content/5'
                 }`}
                 title={hasSections ? 'Inhaltsverzeichnis' : 'Zur Übersicht'}
               >

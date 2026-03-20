@@ -2269,7 +2269,7 @@ function AppInner() {
                               />
                             ) : (
                               /* Simple divider for no-search messages */
-                              <div className="h-px my-2" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                              <div className="h-px my-2" style={{ background: 'var(--ds-border-subtle)' }} />
                             )}
 
                             {/* Sources — always visible, outside ThoughtStream */}

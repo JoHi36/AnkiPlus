@@ -115,7 +115,7 @@ export default function SourceCard({ citation, index, onClick }: SourceCardProps
         {/* Dual-source star badge */}
         {citation.sources && citation.sources.length > 1 && (
           <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center"
-               style={{ background: '#121212' }}>
+               style={{ background: 'var(--ds-bg-deep)' }}>
             <svg viewBox="0 0 12 12" fill="none" className="w-2.5 h-2.5">
               <path d="M6 1l1.5 3 3.5.5-2.5 2.4.6 3.5L6 8.9 2.9 10.4l.6-3.5L1 4.5 4.5 4z"
                     fill="rgba(255,180,50,0.7)"/>
@@ -137,7 +137,7 @@ export default function SourceCard({ citation, index, onClick }: SourceCardProps
       {/* Dual-source star badge */}
       {citation.sources && citation.sources.length > 1 && (
         <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center"
-             style={{ background: '#121212' }}>
+             style={{ background: 'var(--ds-bg-deep)' }}>
           <svg viewBox="0 0 12 12" fill="none" className="w-2.5 h-2.5">
             <path d="M6 1l1.5 3 3.5.5-2.5 2.4.6 3.5L6 8.9 2.9 10.4l.6-3.5L1 4.5 4.5 4z"
                   fill="rgba(255,180,50,0.7)"/>

@@ -15,7 +15,7 @@ export default function ToolLoadingPlaceholder({ toolName }) {
   return (
     <div style={{
       background: 'var(--ds-bg-overlay)',
-      border: '1px solid rgba(255,255,255,0.06)',
+      border: '1px solid var(--ds-border-subtle)',
       borderRadius: 16,
       padding: '18px 20px',
       display: 'flex',
@@ -27,19 +27,19 @@ export default function ToolLoadingPlaceholder({ toolName }) {
       <div style={{
         position: 'absolute',
         inset: 0,
-        background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent)',
+        background: 'linear-gradient(90deg, transparent, var(--ds-hover-tint), transparent)',
         animation: 'toolShimmer 2.5s infinite',
       }} />
       <div style={{
         width: 8,
         height: 8,
         borderRadius: '50%',
-        background: '#0a84ff',
+        background: 'var(--ds-accent)',
         animation: 'toolPulse 1.5s ease-in-out infinite',
       }} />
       <span style={{
         fontSize: 13,
-        color: 'rgba(255,255,255,0.35)',
+        color: 'var(--ds-text-tertiary)',
         fontWeight: 500,
       }}>{label}</span>
       <style>{`

@@ -14,12 +14,12 @@ export const Card: React.FC<CardProps> = ({
   hover = false,
   glass = true,
 }) => {
-  const baseClasses = 'rounded-2xl border border-white/10 p-4 md:p-6 lg:p-8';
-  const glassClasses = glass ? 'bg-[#0A0A0A] backdrop-blur-sm' : 'bg-[#0A0A0A]';
-  const hoverClasses = hover ? 'hover:border-white/20 hover:bg-[#111] transition-all duration-300' : '';
-  
+  const baseClasses = 'rounded-2xl border border-base-content/10 p-4 md:p-6 lg:p-8';
+  const glassClasses = glass ? 'bg-[var(--ds-bg-deep)] backdrop-blur-sm' : 'bg-[var(--ds-bg-deep)]';
+  const hoverClasses = hover ? 'hover:border-base-content/20 hover:bg-[var(--ds-bg-canvas)] transition-all duration-300' : '';
+
   const classes = `${baseClasses} ${glassClasses} ${hoverClasses} ${className}`;
-  
+
   return (
     <motion.div
       className={classes}
@@ -32,5 +32,3 @@ export const Card: React.FC<CardProps> = ({
     </motion.div>
   );
 };
-
-

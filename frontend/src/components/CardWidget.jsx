@@ -10,20 +10,20 @@ export default function CardWidget({ cardId, front, back, deckName, onCardClick 
       onClick={handleClick}
       style={{
         background: 'var(--ds-bg-overlay)',
-        border: '1px solid rgba(255,255,255,0.06)',
+        border: '1px solid var(--ds-border-subtle)',
         borderRadius: 16,
         overflow: 'hidden',
         cursor: 'pointer',
         transition: 'border-color 0.2s ease',
       }}
-      onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(10,132,255,0.3)'}
-      onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'}
+      onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--ds-accent)'}
+      onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--ds-border-subtle)'}
     >
-      <div style={{ padding: '16px 20px', fontSize: 14, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5 }}>
+      <div style={{ padding: '16px 20px', fontSize: 14, color: 'var(--ds-text-primary)', lineHeight: 1.5 }}>
         {front}
       </div>
-      <div style={{ height: 1, background: 'rgba(255,255,255,0.04)', margin: '0 20px' }} />
-      <div style={{ padding: '16px 20px', fontSize: 13, color: 'rgba(255,255,255,0.50)', lineHeight: 1.5 }}>
+      <div style={{ height: 1, background: 'var(--ds-hover-tint)', margin: '0 20px' }} />
+      <div style={{ padding: '16px 20px', fontSize: 13, color: 'var(--ds-text-secondary)', lineHeight: 1.5 }}>
         {back}
       </div>
       <div style={{
@@ -31,11 +31,11 @@ export default function CardWidget({ cardId, front, back, deckName, onCardClick 
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        background: 'rgba(255,255,255,0.02)',
-        borderTop: '1px solid rgba(255,255,255,0.04)',
+        background: 'var(--ds-hover-tint)',
+        borderTop: '1px solid var(--ds-hover-tint)',
       }}>
-        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)' }}>{deckName}</span>
-        <span style={{ fontSize: 11, color: '#0a84ff', fontWeight: 500 }}>Karte öffnen →</span>
+        <span style={{ fontSize: 11, color: 'var(--ds-text-tertiary)' }}>{deckName}</span>
+        <span style={{ fontSize: 11, color: 'var(--ds-accent)', fontWeight: 500 }}>Karte öffnen →</span>
       </div>
     </div>
   );

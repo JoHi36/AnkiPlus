@@ -6,12 +6,12 @@ export default function CardListWidget({ query, cards, totalFound, showing, onCa
     return (
       <div style={{
         background: 'var(--ds-bg-overlay)',
-        border: '1px solid rgba(255,255,255,0.06)',
+        border: '1px solid var(--ds-border-subtle)',
         borderRadius: 16,
         padding: '24px 20px',
         textAlign: 'center',
       }}>
-        <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)' }}>
+        <span style={{ fontSize: 13, color: 'var(--ds-text-tertiary)' }}>
           Keine Karten gefunden für „{query}"
         </span>
       </div>
@@ -26,7 +26,7 @@ export default function CardListWidget({ query, cards, totalFound, showing, onCa
   return (
     <div style={{
       background: 'var(--ds-bg-overlay)',
-      border: '1px solid rgba(255,255,255,0.06)',
+      border: '1px solid var(--ds-border-subtle)',
       borderRadius: 16,
       overflow: 'hidden',
     }}>
@@ -35,10 +35,10 @@ export default function CardListWidget({ query, cards, totalFound, showing, onCa
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        borderBottom: '1px solid rgba(255,255,255,0.04)',
+        borderBottom: '1px solid var(--ds-hover-tint)',
       }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>{query}</span>
-        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.30)' }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ds-text-primary)' }}>{query}</span>
+        <span style={{ fontSize: 12, color: 'var(--ds-text-placeholder)' }}>
           {showing} von {totalFound}
         </span>
       </div>
@@ -54,15 +54,15 @@ export default function CardListWidget({ query, cards, totalFound, showing, onCa
               display: 'flex',
               alignItems: 'center',
               gap: 12,
-              borderTop: i > 0 ? '1px solid rgba(255,255,255,0.03)' : 'none',
+              borderTop: i > 0 ? '1px solid var(--ds-hover-tint)' : 'none',
               transition: 'background 0.15s ease',
             }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--ds-hover-tint)'}
             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
           >
             <span style={{
               fontSize: 11,
-              color: 'rgba(255,255,255,0.20)',
+              color: 'var(--ds-text-muted)',
               fontWeight: 500,
               minWidth: 16,
               fontVariantNumeric: 'tabular-nums',
@@ -70,7 +70,7 @@ export default function CardListWidget({ query, cards, totalFound, showing, onCa
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{
                 fontSize: 13,
-                color: 'rgba(255,255,255,0.80)',
+                color: 'var(--ds-text-primary)',
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -78,14 +78,14 @@ export default function CardListWidget({ query, cards, totalFound, showing, onCa
               }}>{card.front}</div>
               <div style={{
                 fontSize: 11,
-                color: 'rgba(255,255,255,0.30)',
+                color: 'var(--ds-text-placeholder)',
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 marginTop: 2,
               }}>{card.back}</div>
             </div>
-            <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: 14, flexShrink: 0 }}>›</span>
+            <span style={{ color: 'var(--ds-text-muted)', fontSize: 14, flexShrink: 0 }}>›</span>
           </div>
         ))}
       </div>
@@ -93,14 +93,14 @@ export default function CardListWidget({ query, cards, totalFound, showing, onCa
       <div style={{
         padding: '10px 20px',
         textAlign: 'center',
-        borderTop: '1px solid rgba(255,255,255,0.04)',
-        background: 'rgba(255,255,255,0.02)',
+        borderTop: '1px solid var(--ds-hover-tint)',
+        background: 'var(--ds-hover-tint)',
       }}>
         <button
           disabled
           style={{
             fontSize: 12,
-            color: 'rgba(255,255,255,0.35)',
+            color: 'var(--ds-text-tertiary)',
             fontWeight: 500,
             background: 'none',
             border: 'none',

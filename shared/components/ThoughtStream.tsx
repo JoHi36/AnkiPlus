@@ -273,7 +273,7 @@ function useSmartPipeline(pipelineSteps: PipelineStep[]) {
 function RouterDetails({ data }: { data: Record<string, any> }) {
   if (!data.search_needed) {
     return (
-      <div style={{ marginTop: 4, fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>
+      <div style={{ marginTop: 4, fontSize: 11, color: 'var(--ds-text-placeholder)' }}>
         Keine Suche nötig — direkte Antwort
       </div>
     );
@@ -315,14 +315,14 @@ function RouterDetails({ data }: { data: Record<string, any> }) {
             fontSize: 11,
             padding: '3px 8px',
             borderRadius: 5,
-            background: 'rgba(255,255,255,0.03)',
+            background: 'var(--ds-hover-tint)',
           }}
         >
           <svg width={10} height={10} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" style={{ opacity: 0.2 }}>
             <path d={tag.icon} />
           </svg>
-          <span style={{ color: 'rgba(255,255,255,0.13)' }}>{tag.label}</span>
-          <span style={{ color: 'rgba(255,255,255,0.35)', fontWeight: 500 }}>{tag.value}</span>
+          <span style={{ color: 'var(--ds-text-muted)' }}>{tag.label}</span>
+          <span style={{ color: 'var(--ds-text-tertiary)', fontWeight: 500 }}>{tag.value}</span>
         </div>
       ))}
     </div>
@@ -378,8 +378,8 @@ function SqlTags({ data, isDone }: { data: Record<string, any>; isDone: boolean 
             fontSize: 11,
             padding: '3px 8px',
             borderRadius: 5,
-            background: 'rgba(255,255,255,0.05)',
-            color: 'rgba(232,232,232,0.5)',
+            background: 'var(--ds-hover-tint)',
+            color: 'var(--ds-text-secondary)',
             animation: `ts-pulseIn 0.3s ease-out ${i * 0.15}s both`,
           }}
         >
@@ -393,7 +393,7 @@ function SqlTags({ data, isDone }: { data: Record<string, any>; isDone: boolean 
               style={{
                 fontFamily: 'monospace',
                 fontSize: 10,
-                color: q.hits > 0 ? 'rgba(20,184,166,0.6)' : 'rgba(232,232,232,0.2)',
+                color: q.hits > 0 ? 'rgba(20,184,166,0.6)' : 'var(--ds-text-muted)',
               }}
             >
               {q.hits}
@@ -420,7 +420,7 @@ function SemanticChunks({ data, isDone }: { data: Record<string, any>; isDone: b
             gap: 8,
             padding: '5px 8px',
             borderRadius: 6,
-            background: 'rgba(255,255,255,0.02)',
+            background: 'var(--ds-hover-tint)',
             position: 'relative',
             overflow: 'hidden',
           }}
@@ -444,7 +444,7 @@ function SemanticChunks({ data, isDone }: { data: Record<string, any>; isDone: b
             style={{
               fontSize: 11,
               fontFamily: 'monospace',
-              color: '#0a84ff',
+              color: 'var(--ds-accent)',
               opacity: 0.7,
               minWidth: 36,
               flexShrink: 0,
@@ -455,7 +455,7 @@ function SemanticChunks({ data, isDone }: { data: Record<string, any>; isDone: b
           <span
             style={{
               fontSize: 11,
-              color: 'rgba(232,232,232,0.5)',
+              color: 'var(--ds-text-secondary)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
@@ -506,7 +506,7 @@ function MergeBar({ data }: { data: Record<string, any> }) {
             width: 6,
             height: 6,
             borderRadius: '50%',
-            background: '#0a84ff',
+            background: 'var(--ds-accent)',
             boxShadow: '0 0 6px rgba(10,132,255,0.4)',
           }}
         />
@@ -542,7 +542,7 @@ function PhaseRow({ step, data, status, isActive }: { step: string; data: Record
   const titleParts = title.split(/(\d+)/);
   const renderedTitle = titleParts.map((part, i) =>
     /^\d+$/.test(part) ? (
-      <span key={i} style={{ color: 'rgba(255,255,255,0.55)', fontWeight: 600, fontFamily: 'monospace' }}>{part}</span>
+      <span key={i} style={{ color: 'var(--ds-text-secondary)', fontWeight: 600, fontFamily: 'monospace' }}>{part}</span>
     ) : (
       <span key={i}>{part}</span>
     )
@@ -552,7 +552,7 @@ function PhaseRow({ step, data, status, isActive }: { step: string; data: Record
     <div
       style={{
         padding: '6px 0',
-        borderTop: '1px solid rgba(255,255,255,0.04)',
+        borderTop: '1px solid var(--ds-hover-tint)',
         animation: isActive ? undefined : 'ts-phaseReveal 0.25s ease-out both',
       }}
     >
@@ -567,14 +567,14 @@ function PhaseRow({ step, data, status, isActive }: { step: string; data: Record
               width: 6,
               height: 6,
               borderRadius: '50%',
-              background: '#0a84ff',
+              background: 'var(--ds-accent)',
               flexShrink: 0,
               animation: 'ts-dotPulse 1.5s ease-in-out infinite',
             }}
           />
         )}
         {/* Title */}
-        <span style={{ fontSize: 12, fontWeight: 500, color: isDone ? 'rgba(232,232,232,0.45)' : 'rgba(232,232,232,0.55)', flex: 1 }}>
+        <span style={{ fontSize: 12, fontWeight: 500, color: isDone ? 'var(--ds-text-tertiary)' : 'var(--ds-text-secondary)', flex: 1 }}>
           {renderedTitle}
         </span>
         {/* Checkmark */}
@@ -615,7 +615,7 @@ function ExtendingLine() {
         flex: 1,
         height: 1,
         marginLeft: 8,
-        background: 'linear-gradient(90deg, rgba(255,255,255,0.06), transparent)',
+        background: 'linear-gradient(90deg, var(--ds-border-subtle), transparent)',
       }}
     />
   );
@@ -641,12 +641,12 @@ function ChevronDownIcon() {
 
 function LegacyDoneStep({ label, isError }: { label: string; isError: boolean }) {
   return (
-    <div className="flex items-center gap-2 py-[5px]" style={{ borderTop: '1px solid rgba(255,255,255,0.03)' }}>
+    <div className="flex items-center gap-2 py-[5px]" style={{ borderTop: '1px solid var(--ds-hover-tint)' }}>
       <div className={`w-[5px] h-[5px] rounded-full flex-shrink-0 ${isError ? 'bg-error/40' : ''}`}
-        style={isError ? {} : { background: 'rgba(232,232,232,0.15)' }}
+        style={isError ? {} : { background: 'var(--ds-text-muted)' }}
       />
       <span className={`text-[11px] flex-1 ${isError ? 'text-error/50' : ''}`}
-        style={isError ? {} : { color: 'rgba(232,232,232,0.3)' }}
+        style={isError ? {} : { color: 'var(--ds-text-placeholder)' }}
       >
         {label}
       </span>
@@ -783,11 +783,11 @@ export default function ThoughtStream({
     doneStack.every(d => d.step === 'router') &&
     pipelineSteps.some(s => s.step === 'router' && s.data?.search_needed === false);
   if (isNoSearch) {
-    return <div style={{ height: 1, margin: '8px 0', background: 'rgba(255,255,255,0.06)' }} />;
+    return <div style={{ height: 1, margin: '8px 0', background: 'var(--ds-border-subtle)' }} />;
   }
 
   return (
-    <div style={{ marginBottom: 8, maxWidth: '100%', userSelect: 'none', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 4 }}>
+    <div style={{ marginBottom: 8, maxWidth: '100%', userSelect: 'none', borderTop: '1px solid var(--ds-border-subtle)', paddingTop: 4 }}>
       {/* ── Collapsed view ── */}
       {isCollapsed && !isProcessing && !showLoadingBox && (
         <button
@@ -810,7 +810,7 @@ export default function ThoughtStream({
           onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.4'; }}
         >
           <ChevronRight />
-          <span style={{ fontSize: 11, color: 'rgba(232,232,232,0.35)' }}>
+          <span style={{ fontSize: 11, color: 'var(--ds-text-tertiary)' }}>
             {totalSteps} Schritt{totalSteps !== 1 ? 'e' : ''}
             {hasCitations ? ` · ${citationCount} Quellen` : ''}
           </span>
@@ -844,7 +844,7 @@ export default function ThoughtStream({
               onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.5'; }}
             >
               <ChevronDownIcon />
-              <span style={{ fontSize: 11, color: 'rgba(232,232,232,0.4)' }}>
+              <span style={{ fontSize: 11, color: 'var(--ds-text-tertiary)' }}>
                 {totalSteps} Schritt{totalSteps !== 1 ? 'e' : ''}
               </span>
               <ExtendingLine />
@@ -859,12 +859,12 @@ export default function ThoughtStream({
                   width: 6,
                   height: 6,
                   borderRadius: '50%',
-                  background: '#0a84ff',
+                  background: 'var(--ds-accent)',
                   flexShrink: 0,
                   animation: 'ts-dotPulse 1.5s ease-in-out infinite',
                 }}
               />
-              <span style={{ fontSize: 12, color: 'rgba(232,232,232,0.45)' }}>Analysiere...</span>
+              <span style={{ fontSize: 12, color: 'var(--ds-text-tertiary)' }}>Analysiere...</span>
               <ExtendingLine />
             </div>
           )}

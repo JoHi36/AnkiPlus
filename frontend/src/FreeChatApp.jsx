@@ -142,30 +142,30 @@ export default function FreeChatApp() {
       {/* Header */}
       <div style={{
         padding: '16px 20px 12px',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        borderBottom: '1px solid var(--ds-border-subtle)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         flexShrink: 0,
       }}>
-        <div style={{ fontSize: 15, fontWeight: 600, color: '#fff', letterSpacing: '-0.3px' }}>
-          Anki<span style={{ color: '#6b8cff' }}>Plus</span>
-          <span style={{ color: 'rgba(255,255,255,0.3)', fontWeight: 400, marginLeft: 8, fontSize: 12 }}>Chat</span>
+        <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--ds-text-primary)', letterSpacing: '-0.3px' }}>
+          Anki<span style={{ color: 'var(--ds-accent)' }}>Plus</span>
+          <span style={{ color: 'var(--ds-text-placeholder)', fontWeight: 400, marginLeft: 8, fontSize: 12 }}>Chat</span>
         </div>
         <button
           onClick={handleClose}
           style={{
-            background: 'rgba(255,255,255,0.06)',
+            background: 'var(--ds-border-subtle)',
             border: 'none',
             borderRadius: 8,
-            color: 'rgba(255,255,255,0.4)',
+            color: 'var(--ds-text-secondary)',
             fontSize: 11,
             padding: '4px 12px',
             cursor: 'pointer',
             transition: 'all 0.15s',
           }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'rgba(255,255,255,0.6)'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(255,255,255,0.4)'; }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'var(--ds-border-medium)'; e.currentTarget.style.color = 'var(--ds-text-primary)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'var(--ds-border-subtle)'; e.currentTarget.style.color = 'var(--ds-text-secondary)'; }}
         >
           ESC
         </button>
@@ -189,7 +189,7 @@ export default function FreeChatApp() {
             alignItems: 'center',
             justifyContent: 'center',
             height: '100%',
-            color: 'rgba(255,255,255,0.15)',
+            color: 'var(--ds-text-muted)',
             fontSize: 13,
           }}>
             Stelle eine Frage...

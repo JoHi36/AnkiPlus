@@ -149,7 +149,7 @@ export default function Header({
               className={`w-9 h-9 flex items-center justify-center rounded-lg backdrop-blur-sm border transition-all ${
                 isResetDisabled
                   ? 'bg-base-200/20 text-base-content/30 cursor-not-allowed border-base-content/5'
-                  : 'bg-base-200/30 hover:bg-base-300/50 text-base-content/60 hover:text-base-content border-white/5'
+                  : 'bg-base-200/30 hover:bg-base-300/50 text-base-content/60 hover:text-base-content border-base-content/5'
               }`}
               title={isResetDisabled ? "Chat bereits zurückgesetzt" : "Chat zurücksetzen"}
             >
