@@ -183,7 +183,7 @@ class WebBridge(QObject):
                         "deckName": deck_name,
                         "isInDeck": is_in_reviewer
                     })
-                except:
+                except (KeyError, AttributeError, TypeError):
                     # Deck-ID existiert nicht mehr - ignoriere
                     pass
             
@@ -202,9 +202,9 @@ class WebBridge(QObject):
                         "deckName": deck_name,
                         "isInDeck": False  # Deck ausgewählt, aber Reviewer nicht aktiv
                     })
-                except:
+                except (KeyError, AttributeError, TypeError):
                     pass
-            
+
             return json.dumps({"deckId": None, "deckName": None, "isInDeck": False})
         except Exception as e:
             import traceback
@@ -328,7 +328,7 @@ class WebBridge(QObject):
                 deck = mw.col.decks.get(card.odid or card.did)
                 if deck:
                     deck_name = deck['name']
-            except:
+            except (KeyError, AttributeError, TypeError):
                 pass
 
             # Get model name
@@ -337,7 +337,7 @@ class WebBridge(QObject):
                 note = card.note()
                 model = note.model()
                 model_name = model['name']
-            except:
+            except (KeyError, AttributeError, TypeError):
                 pass
 
             result = {
@@ -496,11 +496,11 @@ class WebBridge(QObject):
             # Hole Karten-IDs für dieses Deck (inkl. Sub-Decks)
             try:
                 card_ids = mw.col.decks.cids(deck_id, children=True)
-            except:
+            except (TypeError, AttributeError):
                 # Fallback: Versuche ohne children
                 try:
                     card_ids = mw.col.decks.cids(deck_id, children=False)
-                except:
+                except (TypeError, AttributeError, KeyError):
                     return None
             
             total_cards = len(card_ids)
@@ -530,17 +530,17 @@ class WebBridge(QObject):
                 deck = mw.col.decks.get(deck_id)
                 if not deck:
                     return json.dumps({"error": "Deck not found"})
-            except:
+            except (KeyError, AttributeError, TypeError):
                 return json.dumps({"error": "Deck not found"})
             
             # Hole Karten-IDs für dieses Deck (inkl. Sub-Decks)
             try:
                 card_ids = mw.col.decks.cids(deck_id, children=True)
-            except:
+            except (TypeError, AttributeError):
                 # Fallback: Versuche ohne children
                 try:
                     card_ids = mw.col.decks.cids(deck_id, children=False)
-                except:
+                except (TypeError, AttributeError, KeyError):
                     return json.dumps({"error": "Could not get cards"})
             
             total_cards = len(card_ids)
@@ -571,7 +571,7 @@ class WebBridge(QObject):
                             cards_2x += 1
                         if reps >= 3:
                             cards_3x += 1
-                except:
+                except (KeyError, AttributeError, TypeError):
                     # Ignoriere einzelne Karten-Fehler
                     continue
             
@@ -852,7 +852,7 @@ class WebBridge(QObject):
         try:
             config = get_config(force_reload=True)
             return config.get("response_style", "balanced")
-        except Exception:
+        except (ValueError, KeyError, AttributeError):
             return "balanced"
 
     @pyqtSlot(str)
@@ -869,7 +869,7 @@ class WebBridge(QObject):
         try:
             config = get_config(force_reload=True)
             return config.get("theme", "auto")
-        except Exception:
+        except (ValueError, KeyError, AttributeError):
             return "auto"
 
     @pyqtSlot(str)
