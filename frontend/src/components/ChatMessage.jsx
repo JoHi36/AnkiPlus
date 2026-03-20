@@ -1768,8 +1768,8 @@ const MemoizedChatMessage = React.memo(ChatMessage, (prevProps, nextProps) => {
          prevProps.isStreaming === nextProps.isStreaming &&
          prevProps.isLastMessage === nextProps.isLastMessage &&
          prevProps.cardContext === nextProps.cardContext &&
-         JSON.stringify(prevProps.steps) === JSON.stringify(nextProps.steps) &&
-         JSON.stringify(prevProps.citations) === JSON.stringify(nextProps.citations);
+         prevProps.steps === nextProps.steps &&
+         prevProps.citations === nextProps.citations;
 });
 
 MemoizedChatMessage.displayName = 'ChatMessage';

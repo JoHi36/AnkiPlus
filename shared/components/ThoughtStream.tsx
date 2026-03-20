@@ -279,10 +279,10 @@ function RouterDetails({ data }: { data: Record<string, any> }) {
     );
   }
 
-  const RESPONSE_LENGTH_LABELS: Record<string, string> = {
-    short: 'Kurz',
-    medium: 'Mittel',
-    long: 'Ausführlich',
+  const MAX_SOURCES_LABELS: Record<string, string> = {
+    low: 'Wenig (5)',
+    medium: 'Mittel (10)',
+    high: 'Viel (15)',
   };
 
   const tags = [
@@ -297,8 +297,8 @@ function RouterDetails({ data }: { data: Record<string, any> }) {
       icon: 'M2 3h12v10H2zM2 6h12',
     },
     {
-      label: 'Antwort',
-      value: RESPONSE_LENGTH_LABELS[data.response_length] || 'Mittel',
+      label: 'Quellen',
+      value: MAX_SOURCES_LABELS[data.max_sources] || 'Mittel (10)',
       icon: 'M3 13V5h3v8M7 13V3h3v10M11 13V7h3v6',
     },
   ];
@@ -408,7 +408,6 @@ function SqlTags({ data, isDone }: { data: Record<string, any>; isDone: boolean 
 /* ── Semantic Chunks ── */
 function SemanticChunks({ data, isDone }: { data: Record<string, any>; isDone: boolean }) {
   const chunks = data.chunks || [];
-  if (chunks.length === 0) return null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>

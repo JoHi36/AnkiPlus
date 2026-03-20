@@ -23,7 +23,7 @@ except Exception:
 try:
     from .widget import ChatbotWidget
 except ImportError:
-    from widget import ChatbotWidget
+    from ui.widget import ChatbotWidget
 
 # Style-Funktionen
 def get_dock_widget_style():

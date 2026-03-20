@@ -62,8 +62,8 @@ const StreamingChatMessage = React.memo(({ message, isStreaming = true, cardCont
   return prevProps.message === nextProps.message && 
          prevProps.isStreaming === nextProps.isStreaming &&
          prevProps.cardContext === nextProps.cardContext &&
-         JSON.stringify(prevProps.steps) === JSON.stringify(nextProps.steps) &&
-         JSON.stringify(prevProps.citations) === JSON.stringify(nextProps.citations);
+         prevProps.steps === nextProps.steps &&
+         prevProps.citations === nextProps.citations;
 });
 
 StreamingChatMessage.displayName = 'StreamingChatMessage';

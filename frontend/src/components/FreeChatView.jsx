@@ -2,7 +2,11 @@
 import React, { useEffect, useRef } from 'react';
 import ChatMessage from './ChatMessage';
 import StreamingChatMessage from './StreamingChatMessage';
+import CardRefChip from './CardRefChip';
+import DeckSectionDivider from './DeckSectionDivider';
 import ChatInput from '@shared/components/ChatInput';
+
+const EMPTY_CITATIONS = {};
 
 /**
  * FreeChatView — inline chat view rendered inside DeckBrowser.
@@ -64,16 +68,33 @@ export default function FreeChatView({
           scrollbarWidth: 'none',
         }}
       >
-        {messages.map((msg) => (
-          <ChatMessage
-            key={msg.id}
-            message={msg.text}
-            from={msg.from}
-            cardContext={null}
-            citations={msg.citations || {}}
-            bridge={bridge}
-          />
-        ))}
+        {messages.map((msg, idx) => {
+          const prevMsg = idx > 0 ? messages[idx - 1] : null;
+          const deckChanged = msg.deckName && (!prevMsg || prevMsg.deckName !== msg.deckName);
+          const showDivider = deckChanged || (idx === 0 && msg.deckName);
+
+          return (
+            <React.Fragment key={msg.id}>
+              {showDivider && <DeckSectionDivider deckName={msg.deckName} />}
+              <ChatMessage
+                message={msg.text}
+                from={msg.from}
+                cardContext={null}
+                citations={msg.citations || EMPTY_CITATIONS}
+                bridge={bridge}
+              />
+              {msg.cardId && (
+                <div style={{ padding: '0 16px' }}>
+                  <CardRefChip
+                    cardId={msg.cardId}
+                    cardFront={msg.cardFront}
+                    bridge={bridge}
+                  />
+                </div>
+              )}
+            </React.Fragment>
+          );
+        })}
 
         {isLoading && streamingMessage && (
           <StreamingChatMessage message={streamingMessage} isStreaming={true} />

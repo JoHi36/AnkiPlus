@@ -4,6 +4,10 @@ import { ChevronRight, MessageSquare, Layers } from 'lucide-react';
 import FreeChatSearchBar from './FreeChatSearchBar';
 import FreeChatView from './FreeChatView';
 import ChatMessage from './ChatMessage';
+import CardRefChip from './CardRefChip';
+import DeckSectionDivider from './DeckSectionDivider';
+
+const EMPTY_CITATIONS = {};
 
 /* ── tokens ── */
 const T = {
@@ -529,16 +533,33 @@ export default function DeckBrowser({
             <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', margin: '8px 16px' }} />
             <SectionLabel count={freeChatHook.messages.length}>Chat-Verlauf</SectionLabel>
             <div style={{ padding: '0 8px' }}>
-              {freeChatHook.messages.map((msg) => (
-                <ChatMessage
-                  key={msg.id}
-                  message={msg.text}
-                  from={msg.from}
-                  cardContext={null}
-                  citations={msg.citations || {}}
-                  bridge={bridge}
-                />
-              ))}
+              {freeChatHook.messages.map((msg, idx) => {
+                const prevMsg = idx > 0 ? freeChatHook.messages[idx - 1] : null;
+                const deckChanged = msg.deckName && (!prevMsg || prevMsg.deckName !== msg.deckName);
+                const showDivider = deckChanged || (idx === 0 && msg.deckName);
+
+                return (
+                  <React.Fragment key={msg.id}>
+                    {showDivider && <DeckSectionDivider deckName={msg.deckName} />}
+                    <ChatMessage
+                      message={msg.text}
+                      from={msg.from}
+                      cardContext={null}
+                      citations={msg.citations || EMPTY_CITATIONS}
+                      bridge={bridge}
+                    />
+                    {msg.cardId && (
+                      <div style={{ padding: '0 8px' }}>
+                        <CardRefChip
+                          cardId={msg.cardId}
+                          cardFront={msg.cardFront}
+                          bridge={bridge}
+                        />
+                      </div>
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </div>
           </div>
         )}

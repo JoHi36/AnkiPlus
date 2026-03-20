@@ -32,9 +32,13 @@ export default function SourcesCarousel({ citations = {}, citationIndices = {}, 
         ...citation
       }));
 
-    const sortedCitations = [...entries].sort((a: any, b: any) =>
-      (b.sources?.length || 0) - (a.sources?.length || 0)
-    );
+    // Sort: dual-source (gold) first, then by index ascending
+    const sortedCitations = [...entries].sort((a: any, b: any) => {
+      const aBoth = (a.sources?.length || 0) > 1 ? 0 : 1;
+      const bBoth = (b.sources?.length || 0) > 1 ? 0 : 1;
+      if (aBoth !== bBoth) return aBoth - bBoth;
+      return (a.index || 999) - (b.index || 999);
+    });
 
     return sortedCitations;
   }, [citations, citationIndices]);

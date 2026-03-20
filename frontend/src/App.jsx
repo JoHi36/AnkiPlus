@@ -34,6 +34,33 @@ import { usePlusiDirect } from './hooks/usePlusiDirect';
 import InsightsDashboard from './components/InsightsDashboard';
 import useInsights from './hooks/useInsights';
 
+// Stable empty references — prevent new object creation on every render
+const EMPTY_STEPS = [];
+const EMPTY_CITATIONS = {};
+
+function normalizeMessages(messages) {
+  return messages.map(m => ({
+    ...m,
+    from: m.sender || m.from || 'user',
+    sectionId: m.section_id || m.sectionId,
+    createdAt: m.created_at || m.createdAt,
+    steps: typeof m.steps === 'string' ? JSON.parse(m.steps || '[]') : (m.steps || EMPTY_STEPS),
+    citations: typeof m.citations === 'string' ? JSON.parse(m.citations || '{}') : (m.citations || EMPTY_CITATIONS),
+  }));
+}
+
+function normalizeSections(sections) {
+  return sections.map(s => ({
+    ...s,
+    cardId: s.card_id || s.cardId,
+    createdAt: s.created_at || s.createdAt,
+    performanceType: s.performance_type || s.performanceType,
+    performanceData: typeof s.performance_data === 'string'
+      ? JSON.parse(s.performance_data || 'null')
+      : (s.performance_data || s.performanceData || null),
+  }));
+}
+
 /**
  * Inner App Component - wrapped by SessionContextProvider
  */
@@ -334,21 +361,23 @@ function AppInner() {
 
   // Idle timer — set mascot to sleepy after 10 minutes of inactivity
   const idleTimerRef = useRef(null);
-  const resetIdleTimer = useCallback(() => {
-    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    idleTimerRef.current = setTimeout(() => setEventMood('sleepy'), 10 * 60 * 1000);
-  }, [setEventMood]);
+  const setEventMoodRef = useRef(setEventMood);
+  useEffect(() => { setEventMoodRef.current = setEventMood; }, [setEventMood]);
 
   useEffect(() => {
-    window.addEventListener('mousedown', resetIdleTimer);
-    window.addEventListener('keydown', resetIdleTimer);
-    resetIdleTimer();
+    const resetIdle = () => {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = setTimeout(() => setEventMoodRef.current('sleepy'), 10 * 60 * 1000);
+    };
+    window.addEventListener('mousedown', resetIdle);
+    window.addEventListener('keydown', resetIdle);
+    resetIdle();
     return () => {
-      window.removeEventListener('mousedown', resetIdleTimer);
-      window.removeEventListener('keydown', resetIdleTimer);
+      window.removeEventListener('mousedown', resetIdle);
+      window.removeEventListener('keydown', resetIdle);
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     };
-  }, [resetIdleTimer]);
+  }, []);
 
   // Load mascot_enabled from config on bridge ready
   useEffect(() => {
@@ -687,32 +716,15 @@ function AppInner() {
           // Sync loaded card session data to chat and sections
           const data = payload.data || payload;
           if (data && data.messages && data.messages.length > 0) {
-            const normalizedMessages = data.messages.map(m => ({
-              ...m,
-              from: m.sender || m.from || 'user',
-              sectionId: m.section_id || m.sectionId,
-              createdAt: m.created_at || m.createdAt,
-              steps: typeof m.steps === 'string' ? JSON.parse(m.steps || '[]') : (m.steps || []),
-              citations: typeof m.citations === 'string' ? JSON.parse(m.citations || '{}') : (m.citations || {}),
-            }));
-            _chat.setMessages(normalizedMessages);
+            _chat.setMessages(normalizeMessages(data.messages));
           } else if (data && (!data.messages || data.messages.length === 0)) {
             _chat.setMessages([]);
           }
           if (data && data.sections) {
-            const normalizedSections = data.sections.map(s => ({
-              ...s,
-              cardId: s.card_id || s.cardId,
-              createdAt: s.created_at || s.createdAt,
-              performanceType: s.performance_type || s.performanceType,
-              performanceData: typeof s.performance_data === 'string'
-                ? JSON.parse(s.performance_data || 'null')
-                : (s.performance_data || s.performanceData || null),
-            }));
-            _cardCtx.setSections(normalizedSections);
-            if (normalizedSections.length > 0) {
-              const lastSection = normalizedSections[normalizedSections.length - 1];
-              _cardCtx.setCurrentSectionId(lastSection.id);
+            const normalized = normalizeSections(data.sections);
+            _cardCtx.setSections(normalized);
+            if (normalized.length > 0) {
+              _cardCtx.setCurrentSectionId(normalized[normalized.length - 1].id);
             } else {
               _cardCtx.setCurrentSectionId(null);
             }
@@ -1153,31 +1165,15 @@ function AppInner() {
 
       const data = payload.data || payload;
       if (data && data.messages && data.messages.length > 0) {
-        const normalizedMessages = data.messages.map(m => ({
-          ...m,
-          from: m.sender || m.from || 'user',
-          sectionId: m.section_id || m.sectionId,
-          createdAt: m.created_at || m.createdAt,
-          steps: typeof m.steps === 'string' ? JSON.parse(m.steps || '[]') : (m.steps || []),
-          citations: typeof m.citations === 'string' ? JSON.parse(m.citations || '{}') : (m.citations || {}),
-        }));
-        _chat.setMessages(normalizedMessages);
+        _chat.setMessages(normalizeMessages(data.messages));
       } else if (data && (!data.messages || data.messages.length === 0)) {
         _chat.setMessages([]);
       }
       if (data && data.sections) {
-        const normalizedSections = data.sections.map(s => ({
-          ...s,
-          cardId: s.card_id || s.cardId,
-          createdAt: s.created_at || s.createdAt,
-          performanceType: s.performance_type || s.performanceType,
-          performanceData: typeof s.performance_data === 'string'
-            ? JSON.parse(s.performance_data || 'null')
-            : (s.performance_data || s.performanceData || null),
-        }));
-        _cardCtx.setSections(normalizedSections);
-        if (normalizedSections.length > 0) {
-          _cardCtx.setCurrentSectionId(normalizedSections[normalizedSections.length - 1].id);
+        const normalized = normalizeSections(data.sections);
+        _cardCtx.setSections(normalized);
+        if (normalized.length > 0) {
+          _cardCtx.setCurrentSectionId(normalized[normalized.length - 1].id);
         } else {
           _cardCtx.setCurrentSectionId(null);
         }
@@ -1891,12 +1887,15 @@ function AppInner() {
     if (!messagesContainerRef.current || !loadMoreTriggerRef.current) return;
     if (chatHook.messages.length <= visibleMessageCount) return; // All messages already visible
 
+    let debounceTimer = null;
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            // Load 20 more messages
-            setVisibleMessageCount((prev) => Math.min(prev + 20, chatHook.messages.length));
+            if (debounceTimer) clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+              setVisibleMessageCount((prev) => Math.min(prev + 20, chatHook.messages.length));
+            }, 150);
           }
         });
       },
@@ -1906,6 +1905,7 @@ function AppInner() {
     observer.observe(loadMoreTriggerRef.current);
 
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
       observer.disconnect();
     };
   }, [visibleMessageCount, chatHook.messages.length]);
@@ -2100,8 +2100,8 @@ function AppInner() {
                                   message={msg.text}
                                   from={msg.from || 'bot'}
                                   cardContext={cardContextHook.cardContext}
-                                  steps={msg.steps || []}
-                                  citations={msg.citations || {}}
+                                  steps={msg.steps || EMPTY_STEPS}
+                                  citations={msg.citations || EMPTY_CITATIONS}
                                   pipelineSteps={msg.pipeline_data || []}
                                   bridge={bridge}
                                   isLastMessage={false}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, AlertCircle, Loader2, Eye, EyeOff, Zap, GraduationCap, Crown, CreditCard, Sparkles, Key, LogOut, ExternalLink } from 'lucide-react';
+import { X, AlertCircle, Loader2, Eye, EyeOff, Zap, GraduationCap, Crown, CreditCard, Sparkles, LogOut, ExternalLink } from 'lucide-react';
 
 /**
  * Profile Dialog Komponente
@@ -7,13 +7,11 @@ import { X, Save, AlertCircle, Loader2, Eye, EyeOff, Zap, GraduationCap, Crown, 
  * 1. Nicht authentifiziert: Nur Token-Eingabe (zentriert, im Mittelpunkt)
  * 2. Authentifiziert: Abo-Status + "Abo verwalten" Button
  */
-export default function ProfileDialog({ isOpen, onClose, bridge, isReady, showCodeInput = false, onCodeInputClose }) {
+export default function ProfileDialog({ isOpen, onClose, bridge, isReady }) {
   const [authToken, setAuthToken] = useState('');
-  const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showToken, setShowToken] = useState(false);
-  const [migrationLoading, setMigrationLoading] = useState(false);
   const [authStatus, setAuthStatus] = useState({
     authenticated: false,
     hasToken: false,
@@ -251,59 +249,6 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady, showCo
     }
   };
 
-  const handleCodeSubmit = async () => {
-    if (!code.trim()) {
-      setError('Bitte gib einen Code ein');
-      return;
-    }
-
-    setError('');
-    setMigrationLoading(true);
-
-    try {
-      // Code wird als Token behandelt (später durch echte Code-Verifizierung ersetzen)
-      if (bridge && bridge.saveAuthToken) {
-        bridge.saveAuthToken(code.trim(), ''); // Code als Token (temporär)
-        
-        // Migration durchführen
-        if (bridge && bridge.getDeviceId) {
-          const deviceId = bridge.getDeviceId();
-          if (deviceId && authStatus.backendUrl) {
-            try {
-              const migrationResponse = await fetch(`${authStatus.backendUrl}/migrate-anonymous`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${code.trim()}`,
-                },
-                body: JSON.stringify({ deviceId }),
-              });
-
-              if (migrationResponse.ok) {
-                console.log('Migration erfolgreich');
-              }
-            } catch (migrationError) {
-              console.error('Migration error:', migrationError);
-              // Migration-Fehler nicht kritisch - User ist trotzdem verbunden
-            }
-          }
-        }
-        
-        // Status aktualisieren
-        setTimeout(() => {
-          checkAuthStatus();
-          loadAuthToken();
-          setCode('');
-          if (onCodeInputClose) onCodeInputClose();
-        }, 500);
-      }
-    } catch (err) {
-      setError('Fehler beim Verbinden: ' + err.message);
-    } finally {
-      setMigrationLoading(false);
-    }
-  };
-
   const getTierInfo = (tier) => {
     switch (tier) {
       case 'tier2':
@@ -383,69 +328,7 @@ export default function ProfileDialog({ isOpen, onClose, bridge, isReady, showCo
         </div>
 
         <div className="overflow-y-auto p-5">
-          {showCodeInput ? (
-            /* MODUS 1.5: Code-Eingabe für Migration */
-            <div className="flex flex-col items-center justify-center py-8 space-y-6">
-              <div className="text-center space-y-2">
-                <div className="w-16 h-16 bg-teal-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Key className="w-8 h-8 text-teal-400" />
-                </div>
-                <h3 className="text-xl font-bold text-base-content">Code eingeben</h3>
-                <p className="text-sm text-base-content/60 max-w-sm">
-                  Gib den Code ein, den du auf der Website erhalten hast, um dein Konto zu verbinden
-                </p>
-              </div>
-
-              <div className="w-full space-y-4">
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value)}
-                    placeholder="Code eingeben..."
-                    className="w-full pl-4 pr-4 py-4 bg-base-200/50 border-2 border-base-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 transition-all placeholder:text-base-content/30 text-center font-mono tracking-wider"
-                    autoFocus
-                  />
-                </div>
-
-                {error && (
-                  <div className="flex items-center gap-2 text-sm text-error bg-error/5 p-3 rounded-lg border border-error/10">
-                    <AlertCircle size={16} />
-                    <span>{error}</span>
-                  </div>
-                )}
-
-                <button
-                  onClick={handleCodeSubmit}
-                  disabled={migrationLoading || !code.trim()}
-                  className="w-full btn btn-primary btn-lg gap-2 font-semibold rounded-xl shadow-lg shadow-primary/20 disabled:opacity-50"
-                >
-                  {migrationLoading ? (
-                    <>
-                      <Loader2 size={18} className="animate-spin" />
-                      Verbinde...
-                    </>
-                  ) : (
-                    <>
-                      <Key size={18} />
-                      Verbinden
-                    </>
-                  )}
-                </button>
-                
-                <button
-                  onClick={() => {
-                    setCode('');
-                    setError('');
-                    if (onCodeInputClose) onCodeInputClose();
-                  }}
-                  className="w-full btn btn-ghost btn-sm text-base-content/60 hover:text-base-content"
-                >
-                  Abbrechen
-                </button>
-              </div>
-            </div>
-          ) : !isAuthenticated ? (
+          {!isAuthenticated ? (
             /* MODUS 1: Nicht authentifiziert */
             <div className="flex flex-col items-center justify-center py-8 space-y-6">
               <div className="text-center space-y-2">

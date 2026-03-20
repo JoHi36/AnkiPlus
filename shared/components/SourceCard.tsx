@@ -62,28 +62,33 @@ export default function SourceCard({ citation, index, onClick }: SourceCardProps
 
   const parsedContent = parseContent(frontText);
 
+  // Badge color based on source type
+  const sources = citation.sources || [];
+  const isBoth = sources.length > 1;
+  const isKeyword = !isBoth && sources.includes('keyword');
+  const isSemantic = !isBoth && sources.includes('semantic');
+  const badgeStyle: React.CSSProperties = isBoth
+    ? { background: 'rgba(255,180,50,0.25)', color: 'rgba(255,200,80,0.9)' }
+    : isKeyword
+      ? { background: 'rgba(10,132,255,0.2)', color: 'rgba(80,170,255,0.9)' }
+      : isSemantic
+        ? { background: 'rgba(20,184,166,0.2)', color: 'rgba(80,220,200,0.9)' }
+        : { background: 'var(--fallback-b3,oklch(var(--b3)/1))' };
+
   const CardContent = (
     <>
       {/* Top Bar / Deck Info */}
       <div className="px-3 py-1.5 border-b border-base-300 flex items-center gap-2">
-        {/* Number Badge */}
-        <div className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0 bg-base-300 text-[10px] font-bold text-base-content/70">
+        {/* Number Badge — colored by source type */}
+        <div
+          className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0 text-[10px] font-bold"
+          style={badgeStyle}
+        >
           {index !== undefined && index !== 999 ? index : '#'}
         </div>
         <span className="text-[10px] font-medium text-base-content/50 truncate" title={deckName}>
           {shortDeck}
         </span>
-        {citation.sources && citation.sources.length === 1 && (
-          <span style={{
-            fontSize: '8px',
-            marginLeft: '4px',
-            color: citation.sources[0] === 'keyword'
-              ? 'rgba(10,132,255,0.35)'
-              : 'rgba(100,210,180,0.35)'
-          }}>
-            {citation.sources[0]}
-          </span>
-        )}
       </div>
 
       {/* Content Snippet */}

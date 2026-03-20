@@ -52,7 +52,7 @@ except ImportError:
 try:
     from .bridge import WebBridge
 except ImportError:
-    from bridge import WebBridge
+    from ui.bridge import WebBridge
 
 # Card-Tracker-Import
 try:
