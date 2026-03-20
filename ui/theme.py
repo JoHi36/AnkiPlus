@@ -2,7 +2,7 @@
 Theme-Management für das Anki Chatbot Addon
 """
 
-from .config import get_config
+from ..config import get_config
 
 def get_theme_styles():
     """Gibt die Styles basierend auf dem aktuellen Theme zurück"""

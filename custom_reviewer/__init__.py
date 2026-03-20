@@ -137,7 +137,7 @@ def close_preview(notify_frontend=True):
 def _notify_frontend_preview(stage, card_id):
     """Send previewMode event to frontend."""
     import json
-    from .. import ui_setup
+    from ..ui import setup as ui_setup
 
     widget = getattr(ui_setup, '_chatbot_widget', None)
     if widget and widget.web_view:
@@ -182,7 +182,7 @@ def _evaluate_answer_async(data):
                     except ImportError:
                         _self_mod = None
                     try:
-                        from .. import ui_setup
+                        from ..ui import setup as ui_setup
                         chat_widget = getattr(ui_setup, '_chatbot_widget', None)
                         if chat_widget and hasattr(chat_widget, 'web_view'):
                             score = result.get('score', 0)
@@ -322,7 +322,7 @@ def _generate_mc_async(data, deck_answers=None):
 
         # Step 1: Check cache
         _inject_ai_step('cache', 'Prüfe gespeicherte Optionen…')
-        from ..mc_cache import get_cached_mc, save_mc_cache
+        from ..storage.mc_cache import get_cached_mc, save_mc_cache
         cached = get_cached_mc(card_id, question, correct_answer) if card_id else None
         if cached:
             print(f"CustomReviewer: MC cache hit for card {card_id}")
@@ -389,7 +389,7 @@ def _generate_mc_async(data, deck_answers=None):
 def _ai_get_response_sync(prompt):
     """Get a synchronous AI response, works in both API-key and backend mode.
     Backend mode only supports streaming, so we collect chunks via a blocking callback."""
-    from ..ai_handler import get_ai_handler
+    from ..ai.handler import get_ai_handler
     ai = get_ai_handler()
 
     print(f"CustomReviewer: _ai_get_response_sync called, is_configured={ai.is_configured()}")
@@ -621,10 +621,8 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                             mw.reviewer.web.eval('document.body.focus(); window.focus();')
                     except Exception:
                         pass
-                # Multiple refocus attempts — Qt can steal focus at different times
-                QTimer.singleShot(30, _refocus)
-                QTimer.singleShot(100, _refocus)
-                QTimer.singleShot(250, _refocus)
+                # Single refocus after Qt layout stabilizes
+                QTimer.singleShot(150, _refocus)
 
                 print("CustomReviewer: ✅ ans intercepted (internal state updated, no DOM change)")
         except Exception as e:
@@ -683,7 +681,7 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
 
                 # Send review result to chat panel for SectionDivider performance data
                 try:
-                    from .. import ui_setup
+                    from ..ui import setup as ui_setup
                     chat_widget = getattr(ui_setup, '_chatbot_widget', None)
                     if chat_widget and hasattr(chat_widget, 'web_view'):
                         ease_labels = {1: 'Again', 2: 'Hard', 3: 'Good', 4: 'Easy'}
@@ -739,7 +737,7 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                             rev.web.stdHtml("", context=rev)
                         # Send cardContext to chat panel
                         try:
-                            from .. import ui_setup
+                            from ..ui import setup as ui_setup
                             chat_widget = getattr(ui_setup, '_chatbot_widget', None)
                             if chat_widget and hasattr(chat_widget, 'card_tracker'):
                                 chat_widget.card_tracker.send_card_context(card, is_question=True)
@@ -763,7 +761,7 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
     elif message == "settings":
         # Open settings/profile
         try:
-            from .. import ui_setup
+            from ..ui import setup as ui_setup
             if hasattr(ui_setup, 'show_settings'):
                 ui_setup.show_settings()
             elif hasattr(mw, 'onPrefs'):
@@ -786,7 +784,7 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
     elif message == "plusi:ask":
         # Open chat panel with @Plusi prefix
         try:
-            from .. import ui_setup
+            from ..ui import setup as ui_setup
             if not (hasattr(ui_setup, '_chatbot_dock') and ui_setup._chatbot_dock and ui_setup._chatbot_dock.isVisible()):
                 if hasattr(ui_setup, 'toggle_chatbot'):
                     ui_setup.toggle_chatbot()
@@ -803,7 +801,7 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
 
     elif message == "plusi:settings":
         try:
-            from .. import ui_setup
+            from ..ui import setup as ui_setup
             if not (hasattr(ui_setup, '_chatbot_dock') and ui_setup._chatbot_dock and ui_setup._chatbot_dock.isVisible()):
                 if hasattr(ui_setup, 'toggle_chatbot'):
                     ui_setup.toggle_chatbot()
@@ -817,18 +815,18 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
         return (True, None)
 
     elif message == "plusi:panel":
-        from ..plusi_panel import toggle_panel
+        from ..plusi.panel import toggle_panel
         toggle_panel()
         return (True, None)
 
     elif message == "plusi:panelClose":
-        from ..plusi_panel import toggle_panel
+        from ..plusi.panel import toggle_panel
         toggle_panel()
         return (True, None)
 
     elif message == "chat:open":
         try:
-            from .. import ui_setup
+            from ..ui import setup as ui_setup
             was_already_open = hasattr(ui_setup, '_chatbot_dock') and ui_setup._chatbot_dock and ui_setup._chatbot_dock.isVisible()
 
             if not was_already_open:
@@ -857,10 +855,8 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                         print("CustomReviewer: ✅ Chat textarea focused")
                 except Exception as e:
                     print(f"CustomReviewer: focus chat error: {e}")
-            # Multiple attempts with increasing delays
-            QTimer.singleShot(200, _focus_chat_textarea)
-            QTimer.singleShot(500, _focus_chat_textarea)
-            QTimer.singleShot(1000, _focus_chat_textarea)
+            # Single delay after webview content is ready
+            QTimer.singleShot(400, _focus_chat_textarea)
         except Exception as e:
             print(f"CustomReviewer: Error opening chat: {e}")
 
@@ -895,7 +891,7 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
 
     elif message == "chat:close":
         try:
-            from .. import ui_setup
+            from ..ui import setup as ui_setup
             is_open = hasattr(ui_setup, '_chatbot_dock') and ui_setup._chatbot_dock and ui_setup._chatbot_dock.isVisible()
             if is_open:
                 if hasattr(ui_setup, 'toggle_chatbot'):
@@ -1047,7 +1043,7 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                         # Send cardContext to chat panel after webview is ready
                         is_q = not show_answer
                         try:
-                            from .. import ui_setup
+                            from ..ui import setup as ui_setup
                             chat_widget = getattr(ui_setup, '_chatbot_widget', None)
                             if chat_widget and hasattr(chat_widget, 'card_tracker'):
                                 chat_widget.card_tracker.send_card_context(card, is_question=is_q)
@@ -1058,7 +1054,7 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                         # For history cards: load and inject stored performance result
                         if show_answer:
                             try:
-                                from .card_sessions_storage import load_card_session
+                                from ..storage.card_sessions import load_card_session
                                 session_data = load_card_session(target_id)
                                 if session_data:
                                     sections = session_data.get('sections', [])
@@ -1409,7 +1405,7 @@ class CustomReviewer:
             # Account badge — frosted glass style
             is_premium_user = False
             try:
-                from .. import auth
+                from ..ai import auth
                 status = auth.get_auth_status()
                 is_premium_user = status.get('is_premium') or status.get('isPremium')
             except Exception:
@@ -1501,14 +1497,14 @@ setTimeout(function() {
 
         # Inject Plusi dock into reviewer
         try:
-            from ..plusi_dock import get_plusi_dock_injection
+            from ..plusi.dock import get_plusi_dock_injection
         except (ImportError, ValueError):
             try:
                 import importlib, os, sys
                 _addon_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
                 if _addon_dir not in sys.path:
                     sys.path.insert(0, _addon_dir)
-                from plusi_dock import get_plusi_dock_injection
+                from plusi.dock import get_plusi_dock_injection
             except ImportError:
                 get_plusi_dock_injection = lambda: ''
         plusi_html = get_plusi_dock_injection()

@@ -12,6 +12,30 @@ import re
 import time
 import json
 
+# Pre-compiled regex patterns for HTML processing (hot path)
+_RE_HR = re.compile(r'<hr[^>]*/?>',  re.IGNORECASE)
+_RE_BOTTOM_TABLE = re.compile(
+    r'<div[^>]*id=["\']bottom["\'][^>]*>.*?<table[^>]*>.*?</table>.*?</div>',
+    re.DOTALL | re.IGNORECASE
+)
+_RE_TABLE_INNER = re.compile(r'<table[^>]*>.*?</table>', re.DOTALL | re.IGNORECASE)
+_RE_AMBOSS_LINKS = re.compile(
+    r'<a[^>]*(?:href|title|class|id)=[^>]*(?:amboss|meditricks)[^>]*>.*?</a>',
+    re.IGNORECASE | re.DOTALL
+)
+_RE_AMBOSS_IMGS = re.compile(
+    r'<img[^>]*(?:src|alt|title|class|id)=[^>]*(?:amboss|meditricks)[^>]*/?>',
+    re.IGNORECASE
+)
+_RE_AMBOSS_ELEMENTS = re.compile(
+    r'<[^>]*(?:class|id|title)=[^>]*(?:amboss|meditricks)[^>]*>.*?</[^>]+>',
+    re.IGNORECASE | re.DOTALL
+)
+_RE_BUTTON = re.compile(r'<button[^>]*>', re.IGNORECASE)
+_RE_BUTTON_FIND = re.compile(r'<button[^>]*>.*?</button>', re.DOTALL | re.IGNORECASE)
+_RE_INPUT_BUTTON = re.compile(r'<input[^>]*type=["\']button["\'][^>]*>', re.IGNORECASE)
+_RE_STYLE_ATTR = re.compile(r'style=["\']([^"\']*)["\']')
+
 # Debug-Start-Zeit für Crash-Analyse
 _startup_time = time.time()
 
@@ -679,55 +703,36 @@ def on_webview_will_set_content(web_content, context):
             else:
                 html = ''
             
-            html = re.sub(r'<hr[^>]*>', '', html, flags=re.IGNORECASE)
-            html = re.sub(r'<hr[^>]*/>', '', html, flags=re.IGNORECASE)
-            
+            html = _RE_HR.sub('', html)
+
             def remove_table_keep_buttons(match):
                 table_content = match.group(0)
-                buttons = re.findall(r'<button[^>]*>.*?</button>', table_content, re.DOTALL | re.IGNORECASE)
-                buttons += re.findall(r'<input[^>]*type=["\']button["\'][^>]*>', table_content, re.IGNORECASE)
+                buttons = _RE_BUTTON_FIND.findall(table_content)
+                buttons += _RE_INPUT_BUTTON.findall(table_content)
                 return ''.join(buttons) if buttons else ''
-            
-            html = re.sub(
-                r'<div[^>]*id=["\']bottom["\'][^>]*>.*?<table[^>]*>.*?</table>.*?</div>',
-                lambda m: re.sub(r'<table[^>]*>.*?</table>', remove_table_keep_buttons, m.group(0), flags=re.DOTALL | re.IGNORECASE),
-                html,
-                flags=re.DOTALL | re.IGNORECASE
+
+            html = _RE_BOTTOM_TABLE.sub(
+                lambda m: _RE_TABLE_INNER.sub(remove_table_keep_buttons, m.group(0)),
+                html
             )
-            
-            html = re.sub(
-                r'<a[^>]*(?:href|title|class|id)=[^>]*(?:amboss|meditricks)[^>]*>.*?</a>',
-                '',
-                html,
-                flags=re.IGNORECASE | re.DOTALL
-            )
-            html = re.sub(
-                r'<img[^>]*(?:src|alt|title|class|id)=[^>]*(?:amboss|meditricks)[^>]*/?>',
-                '',
-                html,
-                flags=re.IGNORECASE
-            )
-            html = re.sub(
-                r'<[^>]*(?:class|id|title)=[^>]*(?:amboss|meditricks)[^>]*>.*?</[^>]+>',
-                '',
-                html,
-                flags=re.IGNORECASE | re.DOTALL
-            )
-            
+
+            html = _RE_AMBOSS_LINKS.sub('', html)
+            html = _RE_AMBOSS_IMGS.sub('', html)
+            html = _RE_AMBOSS_ELEMENTS.sub('', html)
+
             def style_button(match):
                 button = match.group(0)
                 if 'style=' in button:
-                    button = re.sub(
-                        r'style=["\']([^"\']*)["\']',
+                    button = _RE_STYLE_ATTR.sub(
                         lambda m: f'style="{m.group(1)} background: transparent !important; border: none !important; color: rgba(255, 255, 255, 0.7) !important;"',
                         button
                     )
                 else:
                     button = button.replace('>', ' style="background: transparent !important; border: none !important; color: rgba(255, 255, 255, 0.7) !important;">', 1)
                 return button
-            
-            html = re.sub(r'<button[^>]*>', style_button, html, flags=re.IGNORECASE)
-            html = re.sub(r'<input[^>]*type=["\']button["\'][^>]*>', style_button, html, flags=re.IGNORECASE)
+
+            html = _RE_BUTTON.sub(style_button, html)
+            html = _RE_INPUT_BUTTON.sub(style_button, html)
             
             if has_body:
                 web_content.body = html
@@ -878,13 +883,13 @@ def start_continuous_restyle():
             apply_global_dark_theme()
             
             if _app_running and _app_initialized:
-                _continuous_restyle_timer = create_safe_timer(5000, continuous_restyle)
+                _continuous_restyle_timer = create_safe_timer(15000, continuous_restyle)
         except Exception as e:
             _app_running = False
             _debug_log(f"❌ Continuous restyle stopped: {e}")
     
     _debug_log("🎨 Starte kontinuierliches Restyling...")
-    _continuous_restyle_timer = create_safe_timer(5000, continuous_restyle)
+    _continuous_restyle_timer = create_safe_timer(15000, continuous_restyle)
 
 
 def setup_global_theme():

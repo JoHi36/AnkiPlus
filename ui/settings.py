@@ -24,7 +24,7 @@ except ImportError:
         QWebChannel = None
 
 try:
-    from .config import get_config, update_config
+    from ..config import get_config, update_config
 except ImportError:
     from config import get_config, update_config
 
@@ -109,9 +109,9 @@ class SettingsBridge(QObject):
         """Return embedding progress: {total_cards, embedded_cards, is_running}"""
         try:
             try:
-                from .card_sessions_storage import count_embeddings
+                from ..storage.card_sessions import count_embeddings
             except ImportError:
-                from card_sessions_storage import count_embeddings
+                from storage.card_sessions import count_embeddings
 
             embedded = count_embeddings()
 
@@ -125,7 +125,7 @@ class SettingsBridge(QObject):
             is_running = False
             try:
                 try:
-                    from . import get_embedding_manager
+                    from .. import get_embedding_manager
                 except ImportError:
                     from __init__ import get_embedding_manager
                 mgr = get_embedding_manager()
@@ -174,7 +174,7 @@ class SettingsBridge(QObject):
             backend_url = config.get('backend_url', '').strip()
             if not backend_url:
                 try:
-                    from .config import DEFAULT_BACKEND_URL
+                    from ..config import DEFAULT_BACKEND_URL
                 except ImportError:
                     from config import DEFAULT_BACKEND_URL
                 backend_url = DEFAULT_BACKEND_URL
@@ -259,7 +259,7 @@ class SettingsBridge(QObject):
                 backend_url = config.get('backend_url', '').strip()
                 if not backend_url:
                     try:
-                        from .config import DEFAULT_BACKEND_URL
+                        from ..config import DEFAULT_BACKEND_URL
                     except ImportError:
                         from config import DEFAULT_BACKEND_URL
                     backend_url = DEFAULT_BACKEND_URL
@@ -310,7 +310,7 @@ class SettingsBridge(QObject):
             backend_url = config.get('backend_url', '').strip()
             if not backend_url:
                 try:
-                    from .config import DEFAULT_BACKEND_URL
+                    from ..config import DEFAULT_BACKEND_URL
                 except ImportError:
                     from config import DEFAULT_BACKEND_URL
                 backend_url = DEFAULT_BACKEND_URL
@@ -398,7 +398,7 @@ class SettingsWindow(QDialog):
         layout.addWidget(self.web_view)
 
         # Load HTML
-        html_path = os.path.join(os.path.dirname(__file__), "settings.html")
+        html_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "settings.html")
         self.web_view.setUrl(QUrl.fromLocalFile(html_path))
 
     def keyPressEvent(self, event):

@@ -5,10 +5,9 @@ Verwaltet die Kommunikation über QWebChannel
 
 import json
 import base64
+import time
 import requests
-import hashlib
 import webbrowser
-from urllib.parse import unquote
 
 # Stelle sicher, dass QObject und pyqtSlot verfügbar sind
 try:
@@ -25,7 +24,7 @@ except ImportError:
 
 # Config-Import
 try:
-    from .config import get_config, update_config, is_backend_mode, get_backend_url, get_auth_token, get_refresh_token, DEFAULT_BACKEND_URL
+    from ..config import get_config, update_config, is_backend_mode, get_backend_url, get_auth_token, get_refresh_token, DEFAULT_BACKEND_URL
 except ImportError:
     from config import get_config, update_config, is_backend_mode, get_backend_url, get_auth_token, get_refresh_token, DEFAULT_BACKEND_URL
 
@@ -39,6 +38,7 @@ class WebBridge(QObject):
         super().__init__()
         self.widget = widget
         self.current_request = None  # Speichere aktuelle Anfrage für Abbrechen
+        self._card_details_cache = {}  # {card_id: (timestamp, result_json)}
 
     @pyqtSlot(str)
     def sendMessage(self, message):
@@ -120,9 +120,9 @@ class WebBridge(QObject):
     def fetchModels(self, provider, api_key):
         """Ruft verfügbare Modelle von der API ab"""
         try:
-            from .ai_handler import get_ai_handler
+            from ..ai.handler import get_ai_handler
         except ImportError:
-            from ai_handler import get_ai_handler
+            from ai.handler import get_ai_handler
         
         try:
             print(f"fetchModels aufgerufen: provider={provider}, api_key_length={len(api_key) if api_key else 0}")
@@ -271,14 +271,18 @@ class WebBridge(QObject):
             print(f"Fehler in goToCard: {e}")
             print(traceback.format_exc())
     
+    _CARD_CACHE_TTL = 10  # seconds
+    _CARD_CACHE_MAX = 50
+
     @pyqtSlot(str, result=str)
     def getCardDetails(self, card_id):
         """
         Lädt die Details einer Karte (Vorderseite/Rückseite) für die Anzeige im Frontend-Modal.
-        
+        Ergebnisse werden 10 Sekunden gecacht (max 50 Einträge).
+
         Args:
             card_id: Die Karten-ID
-            
+
         Returns:
             JSON mit front, back, deckName, etc.
         """
@@ -286,8 +290,17 @@ class WebBridge(QObject):
             from aqt import mw
             if mw is None or mw.col is None:
                 return json.dumps({"error": "No collection"})
-            
+
             card_id_int = int(card_id)
+
+            # Cache lookup
+            now = time.time()
+            cached = self._card_details_cache.get(card_id_int)
+            if cached:
+                ts, result_json = cached
+                if now - ts < self._CARD_CACHE_TTL:
+                    return result_json
+
             try:
                 card = mw.col.get_card(card_id_int)
             except Exception as e:
@@ -301,15 +314,14 @@ class WebBridge(QObject):
                         return json.dumps({"error": "No cards for note"})
                 except Exception as e2:
                     return json.dumps({"error": "Card or Note not found"})
-            
+
             if not card:
                 return json.dumps({"error": "Card not found"})
-            
+
             # Render content using Anki's template engine
-            # card.q() returns the question, card.a() the answer
             front = card.q()
             back = card.a()
-            
+
             # Get deck name
             deck_name = "Unbekannt"
             try:
@@ -318,7 +330,7 @@ class WebBridge(QObject):
                     deck_name = deck['name']
             except:
                 pass
-                
+
             # Get model name
             model_name = "Unbekannt"
             try:
@@ -335,8 +347,16 @@ class WebBridge(QObject):
                 "deckName": deck_name,
                 "modelName": model_name
             }
-            return json.dumps(result)
-            
+            result_json = json.dumps(result)
+
+            # Evict oldest entries if cache is full
+            if len(self._card_details_cache) >= self._CARD_CACHE_MAX:
+                oldest_key = min(self._card_details_cache, key=lambda k: self._card_details_cache[k][0])
+                del self._card_details_cache[oldest_key]
+
+            self._card_details_cache[card_id_int] = (now, result_json)
+            return result_json
+
         except Exception as e:
             import traceback
             print(f"Fehler in getCardDetails: {e}")
@@ -390,7 +410,7 @@ class WebBridge(QObject):
         """Open card in two-stage preview mode. Works from any Anki state."""
         try:
             card_id = int(card_id_str)
-            from .custom_reviewer import open_preview
+            from ..custom_reviewer import open_preview
             result = open_preview(card_id)
             return json.dumps(result)
         except Exception as e:
@@ -639,9 +659,9 @@ class WebBridge(QObject):
         print(f"  Frage (erste 100 Zeichen): {question[:100] if question else 'None'}...")
         
         try:
-            from .ai_handler import get_ai_handler
+            from ..ai.handler import get_ai_handler
         except ImportError:
-            from ai_handler import get_ai_handler
+            from ai.handler import get_ai_handler
         
         try:
             print(f"bridge.generateSectionTitle: Rufe get_ai_handler() auf...")
@@ -690,7 +710,7 @@ class WebBridge(QObject):
     def loadCardSession(self, card_id_str):
         """Load a card's session (session + sections + messages) from SQLite."""
         try:
-            from .card_sessions_storage import load_card_session
+            from ..storage.card_sessions import load_card_session
             card_id = int(card_id_str)
             data = load_card_session(card_id)
             print(f"loadCardSession: card {card_id} — session={'yes' if data['session'] else 'no'}, "
@@ -706,7 +726,7 @@ class WebBridge(QObject):
     def saveCardSession(self, data_json):
         """Save/update a card's full session to SQLite."""
         try:
-            from .card_sessions_storage import save_card_session
+            from ..storage.card_sessions import save_card_session
             data = json.loads(data_json)
             card_id = data.get('cardId') or data.get('card_id')
             if not card_id:
@@ -724,7 +744,7 @@ class WebBridge(QObject):
     def saveCardMessage(self, data_json):
         """Append a single message to a card's session."""
         try:
-            from .card_sessions_storage import save_message
+            from ..storage.card_sessions import save_message
             data = json.loads(data_json)
             card_id = data.get('cardId') or data.get('card_id')
             message = data.get('message', data)
@@ -740,7 +760,7 @@ class WebBridge(QObject):
     def saveCardSection(self, data_json):
         """Create or update a review section for a card."""
         try:
-            from .card_sessions_storage import save_section
+            from ..storage.card_sessions import save_section
             data = json.loads(data_json)
             card_id = data.get('cardId') or data.get('card_id')
             section = data.get('section', data)
@@ -756,9 +776,9 @@ class WebBridge(QObject):
     def loadDeckMessages(self, deck_id_str):
         """Load chronological messages for a deck (all cards + deck-level)."""
         try:
-            from .card_sessions_storage import load_deck_messages
+            from ..storage.card_sessions import load_deck_messages
         except ImportError:
-            from card_sessions_storage import load_deck_messages
+            from storage.card_sessions import load_deck_messages
         try:
             deck_id = int(deck_id_str)
             messages = load_deck_messages(deck_id, limit=50)
@@ -771,9 +791,9 @@ class WebBridge(QObject):
     def saveDeckMessage(self, data_json):
         """Save a deck-level message (no card association)."""
         try:
-            from .card_sessions_storage import save_deck_message
+            from ..storage.card_sessions import save_deck_message
         except ImportError:
-            from card_sessions_storage import save_deck_message
+            from storage.card_sessions import save_deck_message
         try:
             data = json.loads(data_json)
             deck_id = data.get('deckId')
@@ -786,146 +806,22 @@ class WebBridge(QObject):
 
     @pyqtSlot(str, str, result=str)
     def searchImage(self, query, image_type="general"):
-        """
-        Sucht gezielt nach Bildern basierend auf Query und Typ.
-        Unterstützt Wikimedia Commons, PubChem und Fallback zu Pexels.
-        
-        Args:
-            query: Suchbegriff (z.B. "ATP molecule", "human heart anatomy", "mitochondria")
-            image_type: "molecule", "anatomy", "general" (optional, Standard: "general")
-            
-        Returns:
-            JSON mit imageUrl, source, description oder Fehler
-        """
+        """Delegiert an image_search Modul."""
         try:
-            print(f"searchImage: Suche nach '{query}' (Typ: {image_type})")
-            
-            # 1. PubChem für Moleküle
-            if image_type == "molecule" or "molecule" in query.lower() or "molecular" in query.lower():
-                pubchem_url = self._search_pubchem(query)
-                if pubchem_url:
-                    print(f"searchImage: ✓ PubChem Bild gefunden: {pubchem_url[:80]}...")
-                    return json.dumps({
-                        "success": True,
-                        "imageUrl": pubchem_url,
-                        "source": "pubchem",
-                        "description": f"Molekülstruktur: {query}",
-                        "error": None
-                    })
-            
-            # 2. Wikimedia Commons für wissenschaftliche Bilder
-            commons_url = self._search_wikimedia_commons(query)
-            if commons_url:
-                print(f"searchImage: ✓ Wikimedia Commons Bild gefunden: {commons_url[:80]}...")
-                return json.dumps({
-                    "success": True,
-                    "imageUrl": commons_url,
-                    "source": "wikimedia",
-                    "description": f"Wissenschaftliches Bild: {query}",
-                    "error": None
-                })
-            
-            # 3. Fallback: Pexels (nur wenn nichts anderes gefunden)
-            print(f"searchImage: ⚠ Keine wissenschaftliche Quelle gefunden, verwende Fallback")
-            return json.dumps({
-                "success": False,
-                "imageUrl": None,
-                "source": None,
-                "description": None,
-                "error": f"Kein passendes Bild für '{query}' gefunden. Verwende stattdessen direkte URLs zu Wikimedia Commons oder PubChem."
-            })
-            
-        except Exception as e:
-            import traceback
-            error_msg = f"Fehler bei Bildsuche: {str(e)[:100]}"
-            print(f"searchImage: ✗ Fehler: {e}")
-            print(traceback.format_exc())
-            return json.dumps({
-                "success": False,
-                "imageUrl": None,
-                "source": None,
-                "description": None,
-                "error": error_msg
-            })
-    
-    def _search_pubchem(self, query):
-        """
-        Sucht nach Molekülbildern in PubChem.
-        Gibt direkte Bild-URL zurück oder None.
-        """
+            from ..utils.image_search import search_image
+        except ImportError:
+            from utils.image_search import search_image
+        return search_image(query, image_type)
+
+    @pyqtSlot(str, result=str)
+    def fetchImage(self, url):
+        """Delegiert an image_search Modul."""
         try:
-            # PubChem REST API: Suche nach Compound
-            search_url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{}/JSON"
-            query_encoded = requests.utils.quote(query)
-            
-            response = requests.get(
-                search_url.format(query_encoded),
-                timeout=5,
-                headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                # Extrahiere CID (Compound ID)
-                if 'PC_Compounds' in data and len(data['PC_Compounds']) > 0:
-                    cid = data['PC_Compounds'][0].get('id', {}).get('id', {}).get('cid', [None])[0]
-                    if cid:
-                        # Generiere Bild-URL
-                        image_url = f"https://pubchem.ncbi.nlm.nih.gov/image/imgsrv.fcgi?cid={cid}&t=l"
-                        return image_url
-        except Exception as e:
-            print(f"_search_pubchem: Fehler bei PubChem-Suche: {e}")
-        
-        return None
-    
-    def _search_wikimedia_commons(self, query):
-        """
-        Sucht nach Bildern in Wikimedia Commons.
-        Gibt direkte Bild-URL zurück oder None.
-        """
-        try:
-            # Wikimedia Commons API: Suche nach Dateien
-            # API-Dokumentation: https://www.mediawiki.org/wiki/API:Search
-            api_url = "https://commons.wikimedia.org/w/api.php"
-            
-            params = {
-                'action': 'query',
-                'format': 'json',
-                'list': 'search',
-                'srsearch': query,
-                'srnamespace': 6,  # File namespace
-                'srlimit': 5,
-                'srprop': 'size|wordcount|timestamp',
-                'origin': '*'
-            }
-            
-            response = requests.get(
-                api_url,
-                params=params,
-                timeout=5,
-                headers={'User-Agent': 'Anki-Chatbot-Addon/1.0 (Educational Tool)'}
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                if 'query' in data and 'search' in data['query']:
-                    results = data['query']['search']
-                    if results:
-                        # Nimm erstes Ergebnis und hole Bild-URL
-                        filename = results[0]['title'].replace('File:', '')
-                        # URL-encode den Dateinamen
-                        filename_encoded = requests.utils.quote(filename.replace(' ', '_'))
-                        
-                        # Generiere direkte Bild-URL
-                        # Format: https://upload.wikimedia.org/wikipedia/commons/[hash]/[filename]
-                        # Für einfachere URLs nutzen wir die Thumbnail-API
-                        image_url = f"https://commons.wikimedia.org/wiki/Special:FilePath/{filename_encoded}?width=800"
-                        return image_url
-        except Exception as e:
-            print(f"_search_wikimedia_commons: Fehler bei Wikimedia-Suche: {e}")
-        
-        return None
-    
+            from ..utils.image_search import fetch_image
+        except ImportError:
+            from utils.image_search import fetch_image
+        return fetch_image(url)
+
     @pyqtSlot(result=str)
     def getAITools(self):
         """Gibt aktuelle AI-Tool-Einstellungen als JSON zurück"""
@@ -936,39 +832,20 @@ class WebBridge(QObject):
                 "diagrams": True,
                 "molecules": False
             })
-            print(f"getAITools: Tools geladen - Bilder: {ai_tools.get('images')}, Diagramme: {ai_tools.get('diagrams')}, Moleküle: {ai_tools.get('molecules')}")
             return json.dumps(ai_tools)
         except Exception as e:
-            import traceback
-            print(f"Fehler in getAITools: {e}")
-            print(traceback.format_exc())
-            # Fallback: Standardwerte
-            default_tools = {
-                "images": True,
-                "diagrams": True,
-                "molecules": False
-            }
-            return json.dumps(default_tools)
-    
+            return json.dumps({"images": True, "diagrams": True, "molecules": False})
+
     @pyqtSlot(str)
     def saveAITools(self, tools_json):
         """Speichert AI-Tool-Einstellungen"""
         try:
             tools = json.loads(tools_json)
-            print(f"saveAITools: Speichere Tools - Bilder: {tools.get('images')}, Diagramme: {tools.get('diagrams')}, Moleküle: {tools.get('molecules')}")
             success = update_config(ai_tools=tools)
-            if success:
-                print(f"saveAITools: ✓ Tools erfolgreich gespeichert")
-            else:
-                print(f"saveAITools: ✗ FEHLER beim Speichern der Tools!")
             return json.dumps({"success": success, "error": None})
         except Exception as e:
-            import traceback
-            error_msg = str(e)
-            print(f"Fehler in saveAITools: {error_msg}")
-            print(traceback.format_exc())
-            return json.dumps({"success": False, "error": error_msg})
-    
+            return json.dumps({"success": False, "error": str(e)})
+
     @pyqtSlot(result=str)
     def getResponseStyle(self):
         """Gibt den aktuellen Antwortstil zurück"""
@@ -983,7 +860,6 @@ class WebBridge(QObject):
         """Speichert den Antwortstil"""
         try:
             update_config(response_style=style)
-            print(f"saveResponseStyle: ✓ Stil auf '{style}' gesetzt")
         except Exception as e:
             print(f"saveResponseStyle: Fehler: {e}")
 
@@ -1001,7 +877,6 @@ class WebBridge(QObject):
         """Speichert das Theme"""
         try:
             update_config(theme=theme)
-            print(f"saveTheme: ✓ Theme auf '{theme}' gesetzt")
         except Exception as e:
             print(f"saveTheme: Fehler: {e}")
 
@@ -1015,254 +890,6 @@ class WebBridge(QObject):
         except Exception as e:
             print(f"openAnkiPreferences: Fehler: {e}")
 
-    def _normalize_wikimedia_url(self, url):
-        """
-        Konvertiert Wikimedia Commons Special:FilePath URLs in direkte upload.wikimedia.org URLs.
-        Die Pfadstruktur basiert auf dem MD5-Hash des Dateinamens.
-        
-        Format: https://upload.wikimedia.org/wikipedia/commons/[a]/[ab]/[Filename]
-        wobei [a] = erstes Zeichen des MD5-Hash, [ab] = erste zwei Zeichen des MD5-Hash
-        
-        Args:
-            url: Die zu normalisierende URL
-            
-        Returns:
-            Normalisierte URL oder Original-URL falls keine Normalisierung nötig
-        """
-        # Prüfe ob es eine Wikimedia Commons Special:FilePath URL ist
-        if 'commons.wikimedia.org' not in url or 'Special:FilePath' not in url:
-            return url  # Keine Normalisierung nötig
-        
-        try:
-            # Extrahiere Dateinamen aus URL
-            filename_part = url.split('Special:FilePath/')[-1].split('?')[0]
-            
-            # Dekodiere URL-Encoding (%20 etc.)
-            filename = unquote(filename_part)
-            
-            # Ersetze Leerzeichen durch Unterstriche (Wikimedia-Konvention)
-            filename = filename.replace(' ', '_')
-            
-            # Berechne MD5-Hash des Dateinamens
-            md5_hash = hashlib.md5(filename.encode('utf-8')).hexdigest()
-            
-            # Extrahiere erste Zeichen für Pfadstruktur
-            first_char = md5_hash[0]
-            first_two_chars = md5_hash[:2]
-            
-            # Konstruiere direkte URL
-            normalized_url = f"https://upload.wikimedia.org/wikipedia/commons/{first_char}/{first_two_chars}/{filename}"
-            
-            print(f"fetchImage: URL normalisiert: {url[:60]}... → {normalized_url[:60]}...")
-            return normalized_url
-            
-        except Exception as e:
-            print(f"fetchImage: Fehler bei URL-Normalisierung: {e}, verwende Original-URL")
-            return url  # Fallback: Original-URL
-    
-    @pyqtSlot(str, result=str)
-    def fetchImage(self, url):
-        """
-        Lädt ein Bild von einer externen URL und gibt es als Base64-Data-URL zurück.
-        Dies umgeht die QWebEngine-Einschränkung für externe Ressourcen.
-        
-        Args:
-            url: Die URL des Bildes
-            
-        Returns:
-            JSON mit dataUrl (Base64) oder Fehler
-        """
-        try:
-            # URL-Validierung - FRÜH ABFANGEN
-            if not url or not isinstance(url, str) or len(url.strip()) == 0:
-                return json.dumps({
-                    "success": False,
-                    "dataUrl": None,
-                    "error": "Ungültige URL: Leere oder ungültige URL"
-                })
-            
-            url = url.strip()
-            
-            # Prüfe auf gültige HTTP/HTTPS URL
-            if not url.startswith(('http://', 'https://')):
-                return json.dumps({
-                    "success": False,
-                    "dataUrl": None,
-                    "error": "Ungültige URL: Nur HTTP/HTTPS URLs erlaubt"
-                })
-            
-            # Prüfe auf verdächtige Zeichen (Security)
-            if any(char in url for char in ['<', '>', '"', "'", '\n', '\r', '\t']):
-                return json.dumps({
-                    "success": False,
-                    "dataUrl": None,
-                    "error": "Ungültige URL: Enthält unerlaubte Zeichen"
-                })
-            
-            # Validiere URL-Struktur
-            try:
-                from urllib.parse import urlparse
-                parsed = urlparse(url)
-                
-                # Prüfe auf gültige Domain
-                if not parsed.hostname or len(parsed.hostname) < 4:
-                    return json.dumps({
-                        "success": False,
-                        "dataUrl": None,
-                        "error": "Ungültige URL: Keine gültige Domain"
-                    })
-                
-                # Prüfe auf lokale/private IPs (Security)
-                if parsed.hostname in ['localhost', '127.0.0.1', '0.0.0.0']:
-                    return json.dumps({
-                        "success": False,
-                        "dataUrl": None,
-                        "error": "Ungültige URL: Lokale Adressen nicht erlaubt"
-                    })
-            except Exception as parse_error:
-                return json.dumps({
-                    "success": False,
-                    "dataUrl": None,
-                    "error": f"Ungültige URL: {str(parse_error)[:50]}"
-                })
-            
-            # URL-Normalisierung für Wikimedia Commons
-            original_url = url
-            url = self._normalize_wikimedia_url(url)
-            
-            # Versuche normalisierte URL zu laden
-            try:
-                print(f"fetchImage: Lade Bild von {url[:100]}...")
-                response = requests.get(url, timeout=10, headers={
-                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-                })
-                response.raise_for_status()
-            except requests.exceptions.HTTPError as e:
-                # Bei 404: Falls URL normalisiert wurde, versuche Original-URL
-                if url != original_url and e.response.status_code == 404:
-                    print(f"fetchImage: Normalisierte URL fehlgeschlagen (404), versuche Original-URL...")
-                    try:
-                        response = requests.get(original_url, timeout=10, headers={
-                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-                        })
-                        response.raise_for_status()
-                        url = original_url  # Verwende Original-URL für weitere Verarbeitung
-                    except:
-                        # Beide URLs fehlgeschlagen
-                        status_code = e.response.status_code if hasattr(e, 'response') else 'Unknown'
-                        error_msg = f"Bild nicht verfügbar (HTTP {status_code})"
-                        print(f"fetchImage: ✗ HTTP-Fehler {status_code}")
-                        return json.dumps({
-                            "success": False,
-                            "dataUrl": None,
-                            "error": error_msg
-                        })
-                else:
-                    # Andere HTTP-Fehler oder URL nicht normalisiert
-                    status_code = e.response.status_code if hasattr(e, 'response') else 'Unknown'
-                    error_msg = f"Bild nicht verfügbar (HTTP {status_code})"
-                    print(f"fetchImage: ✗ HTTP-Fehler {status_code}")
-                    return json.dumps({
-                        "success": False,
-                        "dataUrl": None,
-                        "error": error_msg
-                    })
-            except requests.exceptions.Timeout:
-                error_msg = "Das Bild konnte nicht rechtzeitig geladen werden (Timeout)"
-                print(f"fetchImage: ✗ Timeout")
-                return json.dumps({
-                    "success": False,
-                    "dataUrl": None,
-                    "error": error_msg
-                })
-            except requests.exceptions.RequestException as e:
-                error_msg = "Bild konnte nicht geladen werden (Netzwerkfehler)"
-                print(f"fetchImage: ✗ Netzwerkfehler: {e}")
-                return json.dumps({
-                    "success": False,
-                    "dataUrl": None,
-                    "error": error_msg
-                })
-            
-            # Prüfe Content-Length (verhindert zu große Downloads)
-            content_length = response.headers.get('content-length')
-            if content_length:
-                max_size = 10 * 1024 * 1024  # 10 MB Limit
-                if int(content_length) > max_size:
-                    return json.dumps({
-                        "success": False,
-                        "dataUrl": None,
-                        "error": "Bild zu groß: Maximale Größe 10 MB"
-                    })
-            
-            # Bestimme Content-Type
-            content_type = response.headers.get('content-type', 'image/jpeg')
-            # Bereinige Content-Type (entferne charset etc.)
-            if ';' in content_type:
-                content_type = content_type.split(';')[0].strip()
-            
-            # Prüfe tatsächliche Dateigröße (nach Download)
-            if len(response.content) > 10 * 1024 * 1024:  # 10 MB Limit
-                return json.dumps({
-                    "success": False,
-                    "dataUrl": None,
-                    "error": "Bild zu groß: Maximale Größe 10 MB"
-                })
-            
-            # Validiere Content-Type
-            valid_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml']
-            if not any(content_type.startswith(t) for t in valid_types):
-                # Versuche aus URL zu erkennen
-                if '.jpg' in url.lower() or '.jpeg' in url.lower():
-                    content_type = 'image/jpeg'
-                elif '.png' in url.lower():
-                    content_type = 'image/png'
-                elif '.gif' in url.lower():
-                    content_type = 'image/gif'
-                elif '.webp' in url.lower():
-                    content_type = 'image/webp'
-                elif '.svg' in url.lower():
-                    content_type = 'image/svg+xml'
-                else:
-                    # Prüfe Magic Bytes (erste Bytes der Datei)
-                    magic_bytes = response.content[:4]
-                    if magic_bytes.startswith(b'\xff\xd8\xff'):
-                        content_type = 'image/jpeg'
-                    elif magic_bytes.startswith(b'\x89PNG'):
-                        content_type = 'image/png'
-                    elif magic_bytes.startswith(b'GIF8'):
-                        content_type = 'image/gif'
-                    elif magic_bytes.startswith(b'RIFF') and b'WEBP' in response.content[:12]:
-                        content_type = 'image/webp'
-                    else:
-                        return json.dumps({
-                            "success": False,
-                            "dataUrl": None,
-                            "error": "Ungültiger Dateityp: Kein unterstütztes Bildformat"
-                        })
-            
-            # Konvertiere zu Base64
-            base64_data = base64.b64encode(response.content).decode('utf-8')
-            data_url = f"data:{content_type};base64,{base64_data}"
-            
-            print(f"fetchImage: ✓ Erfolgreich geladen ({len(response.content)} Bytes, {content_type})")
-            
-            return json.dumps({
-                "success": True,
-                "dataUrl": data_url,
-                "error": None
-            })
-        except Exception as e:
-            error_msg = f"Fehler beim Laden des Bildes: {str(e)[:100]}"
-            import traceback
-            print(f"fetchImage: ✗ Fehler beim Laden von {url}: {e}")
-            print(traceback.format_exc())
-            return json.dumps({
-                "success": False,
-                "dataUrl": None,
-                "error": error_msg
-            })
-    
     @pyqtSlot(str, str, result=str)
     def authenticate(self, token, refresh_token=""):
         """
@@ -1424,9 +1051,9 @@ class WebBridge(QObject):
     def refreshAuth(self):
         """Ruft Token-Refresh auf"""
         try:
-            from .ai_handler import get_ai_handler
+            from ..ai.handler import get_ai_handler
         except ImportError:
-            from ai_handler import get_ai_handler
+            from ai.handler import get_ai_handler
         
         try:
             ai = get_ai_handler()
