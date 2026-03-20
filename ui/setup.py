@@ -31,22 +31,28 @@ except ImportError:
     from utils.logging import get_logger
 logger = get_logger(__name__)
 
+try:
+    from .tokens_qt import get_tokens
+except ImportError:
+    from tokens_qt import get_tokens
+
 # Style-Funktionen
 def get_dock_widget_style():
-    return """
-    QDockWidget {
-        background-color: #1A1A1A;
+    tokens = get_tokens("dark")
+    return f"""
+    QDockWidget {{
+        background-color: {tokens['bg_canvas']};
         color: #e6e6e6;
-    }
+    }}
     /* Minimal separator - nearly invisible, matches unified background */
-    QDockWidget::separator {
+    QDockWidget::separator {{
         background: #1E1E1E;
         width: 1px;
-    }
-    QDockWidget::separator:hover {
+    }}
+    QDockWidget::separator:hover {{
         background: #252525;
         width: 1px;
-    }
+    }}
     """
 
 def show_qwebengine_warning():

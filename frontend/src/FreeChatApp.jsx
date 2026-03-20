@@ -132,7 +132,7 @@ export default function FreeChatApp() {
     <div style={{
       position: 'fixed',
       inset: 0,
-      background: '#161616',
+      background: 'var(--ds-bg-deep)',
       display: 'flex',
       flexDirection: 'column',
       opacity: isVisible ? 1 : 0,

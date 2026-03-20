@@ -29,6 +29,11 @@ except ImportError:
     from config import get_config, update_config
 
 try:
+    from .tokens_qt import get_tokens
+except ImportError:
+    from tokens_qt import get_tokens
+
+try:
     from ..utils.logging import get_logger
 except ImportError:
     from utils.logging import get_logger
@@ -450,12 +455,13 @@ class SettingsWindow(QDialog):
             self.move(x, y)
 
         # Dark background (matches card bg)
-        self.setStyleSheet("""
-            QDialog {
-                background: #1A1A1A;
+        _tokens = get_tokens("dark")
+        self.setStyleSheet(f"""
+            QDialog {{
+                background: {_tokens['bg_canvas']};
                 border: 1px solid rgba(255,255,255,0.06);
                 border-radius: 16px;
-            }
+            }}
         """)
 
         layout = QVBoxLayout(self)
@@ -465,7 +471,7 @@ class SettingsWindow(QDialog):
         self.web_view = QWebEngineView()
         self.web_view.setStyleSheet("background: transparent;")
         # Make page background transparent
-        self.web_view.page().setBackgroundColor(QColor(26, 26, 26))
+        self.web_view.page().setBackgroundColor(QColor(_tokens['bg_canvas']))
 
         # Bridge
         self.bridge = SettingsBridge()

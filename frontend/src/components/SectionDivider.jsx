@@ -261,7 +261,7 @@ export default function SectionDivider({ section, isFirst = false, onGoToCard, l
       id={section.id}
       data-section-id={section.id}
       className={`group/section backdrop-blur-sm ${isFirst ? 'pt-2 pb-4' : 'pt-6 pb-4 mt-6'} ${isPast ? 'opacity-60' : ''}`}
-      style={{ backgroundColor: '#161616' }}
+      style={{ backgroundColor: 'var(--ds-bg-deep)' }}
     >
       {/* Row 1: Title badge + date + gradient line */}
       <div className="flex items-center gap-3">

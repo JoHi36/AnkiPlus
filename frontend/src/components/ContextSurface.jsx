@@ -263,7 +263,7 @@ export default function ContextSurface({
   const mode = showSessionOverview ? 'sessions' : hasCard ? 'card' : 'idle';
 
   return (
-    <div style={{ padding: 0, background: '#161616' }}>
+    <div style={{ padding: 0, background: 'var(--ds-bg-deep)' }}>
       <AnimatePresence mode="wait" initial={false}>
 
         {mode === 'sessions' && (

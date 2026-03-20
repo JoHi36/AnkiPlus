@@ -473,7 +473,7 @@ div[id^="bottom"]:not(#ap-page *) {
 }
 
 html, body {
-    background: #1A1A1A;
+    background: var(--ds-bg-canvas);
     color: #e8e8e8 !important;
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif !important;
     -webkit-font-smoothing: antialiased !important;
@@ -1081,7 +1081,7 @@ def _overview_html(deck_name, new_c, lrn_c, rev_c):
     disabled = '' if total > 0 else 'disabled'
     path_html = f'<div style="font-size:10px;font-weight:700;letter-spacing:0.09em;text-transform:uppercase;color:rgba(255,255,255,0.2);margin-bottom:10px;text-align:center;">{path_esc}</div>' if path else ''
 
-    pill_style = 'display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 22px;border-radius:16px;background:#222224;border:1px solid rgba(255,255,255,0.05);min-width:80px;'
+    pill_style = 'display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 22px;border-radius:16px;background:var(--ds-bg-overlay);border:1px solid rgba(255,255,255,0.05);min-width:80px;'
     btn_style = ('padding:14px 52px;border-radius:12px;font-size:16px;font-weight:600;border:none;cursor:pointer;'
                  'font-family:inherit;margin-bottom:20px;letter-spacing:-0.1px;transition:opacity 0.12s,transform 0.08s;')
     if total > 0:

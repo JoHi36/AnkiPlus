@@ -1948,7 +1948,7 @@ function AppInner() {
         to   { transform: translateX(0);    opacity: 1; }
       }
     `}</style>
-    <div id="chat-root" className="flex flex-col h-screen text-base-content overflow-hidden" style={{ backgroundColor: '#161616' }}>
+    <div id="chat-root" className="flex flex-col h-screen text-base-content overflow-hidden" style={{ backgroundColor: 'var(--ds-bg-deep)' }}>
       {/* Header — ContextSurface (fixiert oben) */}
       <div ref={headerRef} className="fixed top-0 left-0 right-0 z-40" style={{ overflow: 'visible' }}>
         <ContextSurface
@@ -1968,7 +1968,7 @@ function AppInner() {
           style={{
             position: 'absolute', bottom: -56, left: 0, right: 0,
             height: 56, pointerEvents: 'none', zIndex: 10,
-            background: 'linear-gradient(to bottom, #161616 0%, rgba(22,22,22,0.85) 30%, rgba(22,22,22,0.4) 65%, transparent 100%)',
+            background: 'linear-gradient(to bottom, var(--ds-bg-deep) 0%, rgba(22,22,22,0.85) 30%, rgba(22,22,22,0.4) 65%, transparent 100%)',
           }}
         />
       </div>

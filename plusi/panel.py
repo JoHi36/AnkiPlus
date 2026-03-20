@@ -9,6 +9,17 @@ except ImportError:
     from utils.logging import get_logger
 logger = get_logger(__name__)
 
+try:
+    from ..ui.tokens_qt import get_tokens as _get_qt_tokens
+except ImportError:
+    try:
+        from ui.tokens_qt import get_tokens as _get_qt_tokens
+    except ImportError:
+        def _get_qt_tokens(theme="dark"):
+            return {"bg_canvas": "#1C1C1E"}
+
+_QT_TOKENS = _get_qt_tokens("dark")
+
 from aqt import mw
 from PyQt6.QtWidgets import QDockWidget, QWidget, QVBoxLayout
 from PyQt6.QtWebEngineWidgets import QWebEngineView
@@ -684,14 +695,14 @@ def toggle_panel():
         QDockWidget.DockWidgetFeature.DockWidgetClosable
     )
 
-    _panel_dock.setStyleSheet("""
-        QDockWidget {
-            background: #1A1A1A;
+    _panel_dock.setStyleSheet(f"""
+        QDockWidget {{
+            background: {_QT_TOKENS['bg_canvas']};
             border: none;
-        }
-        QDockWidget > QWidget {
-            background: #1A1A1A;
-        }
+        }}
+        QDockWidget > QWidget {{
+            background: {_QT_TOKENS['bg_canvas']};
+        }}
     """)
 
     container = QWidget()
@@ -699,8 +710,8 @@ def toggle_panel():
     layout.setContentsMargins(0, 0, 0, 0)
 
     _panel_webview = QWebEngineView()
-    _panel_webview.setStyleSheet("background: #1A1A1A;")
-    _panel_webview.page().setBackgroundColor(QColor('#1A1A1A'))
+    _panel_webview.setStyleSheet(f"background: {_QT_TOKENS['bg_canvas']};")
+    _panel_webview.page().setBackgroundColor(QColor(_QT_TOKENS['bg_canvas']))
     _panel_webview.setHtml(_get_panel_html(), QUrl("file:///"))
     layout.addWidget(_panel_webview)
 
