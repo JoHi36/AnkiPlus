@@ -134,10 +134,10 @@
 [data-theme="light"] {
   color-scheme: light;
 
-  --ds-bg-deep:     #E5E5E9;
-  --ds-bg-canvas:   #F0F0F2;
-  --ds-bg-frosted:  #E8E8EC;
-  --ds-bg-overlay:  #DCDCE0;
+  --ds-bg-deep:     #D8D8DC;   /* Sidebar — noticeably darker than canvas */
+  --ds-bg-canvas:   #E8E7E3;   /* Main surface — warm beige-gray */
+  --ds-bg-frosted:  #F5F4F2;   /* Frosted glass — near-white, the light accent */
+  --ds-bg-overlay:  #CFCFD3;   /* Tooltips */
 
   --ds-text-primary:     rgba(0, 0, 0, 0.85);
   --ds-text-secondary:   rgba(60, 60, 67, 0.60);

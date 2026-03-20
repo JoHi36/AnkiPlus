@@ -38,19 +38,24 @@ except ImportError:
 
 # Style-Funktionen
 def get_dock_widget_style():
-    tokens = get_tokens("dark")
+    try:
+        from .theme import get_resolved_theme
+    except ImportError:
+        from ui.theme import get_resolved_theme
+    resolved = get_resolved_theme()
+    tokens = get_tokens(resolved)
     return f"""
     QDockWidget {{
-        background-color: {tokens['bg_canvas']};
+        background-color: {tokens['bg_deep']};
         color: {tokens['text_primary']};
     }}
     /* Minimal separator - nearly invisible, matches unified background */
     QDockWidget::separator {{
-        background: {tokens['bg_canvas']};
+        background: {tokens['border_subtle']};
         width: 1px;
     }}
     QDockWidget::separator:hover {{
-        background: {tokens['bg_canvas']};
+        background: {tokens['border_medium']};
         width: 1px;
     }}
     """
@@ -119,27 +124,34 @@ def toggle_chatbot():
         
         # Style für Main Window Splitter (zwischen Dock und Reviewer)
         # 1px dezenter Trenner — kein padding, kein margin, !important überschreibt alles
-        mw.setStyleSheet(mw.styleSheet() + """
-            QMainWindow::separator {
-                background: rgba(255, 255, 255, 0.04);
+        # Use token colors so it works in both light and dark mode
+        try:
+            from .theme import get_resolved_theme
+        except ImportError:
+            from ui.theme import get_resolved_theme
+        _resolved = get_resolved_theme()
+        _sep_tokens = get_tokens(_resolved)
+        mw.setStyleSheet(mw.styleSheet() + f"""
+            QMainWindow::separator {{
+                background: {_sep_tokens['border_subtle']};
                 width: 1px !important;
                 margin: 0px;
                 padding: 0px;
-            }
-            QMainWindow::separator:hover {
-                background: rgba(255, 255, 255, 0.08);
+            }}
+            QMainWindow::separator:hover {{
+                background: {_sep_tokens['border_medium']};
                 width: 1px !important;
-            }
-            QSplitter::handle {
-                background: rgba(255, 255, 255, 0.04);
+            }}
+            QSplitter::handle {{
+                background: {_sep_tokens['border_subtle']};
                 width: 1px !important;
                 margin: 0px;
                 padding: 0px;
-            }
-            QSplitter::handle:hover {
-                background: rgba(255, 255, 255, 0.08);
+            }}
+            QSplitter::handle:hover {{
+                background: {_sep_tokens['border_medium']};
                 width: 1px !important;
-            }
+            }}
         """)
         
         # Erlauben, dass das Panel geschlossen, bewegt und in der Größe geändert werden kann

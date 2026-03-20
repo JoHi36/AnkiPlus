@@ -80,6 +80,17 @@ div[id^="bottom"]:not(#reviewer *) {
     background: var(--ds-active-tint);
 }
 
+/* ═══ Nuclear outline removal for dock buttons ═══ */
+#unified-dock *,
+#unified-dock *:focus,
+#unified-dock *:focus-visible,
+#unified-dock *:active {
+    outline: none !important;
+}
+button:focus, button:focus-visible {
+    outline: none !important;
+}
+
 /* ═══ Unified Dock ═══ */
 #unified-dock {
     transition: opacity 0.2s ease, transform 0.2s ease;

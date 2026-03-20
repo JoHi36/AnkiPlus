@@ -147,8 +147,8 @@ export default function ChatInput({
       <div
         className="relative backdrop-blur-xl rounded-2xl overflow-visible transition-all duration-300"
         style={{
-          backgroundColor: 'rgba(21,21,21,0.75)',
-          border: hasPlusiTag ? '1px solid rgba(10,132,255,0.4)' : '1px solid var(--ds-active-tint)',
+          backgroundColor: 'var(--ds-bg-frosted)',
+          border: hasPlusiTag ? '1px solid rgba(10,132,255,0.4)' : '1px solid var(--ds-border-medium)',
           boxShadow: 'var(--ds-shadow-md)',
         }}
       >
@@ -186,7 +186,7 @@ export default function ChatInput({
                   lineHeight: '1.625',
                   fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif',
                   overflow: 'hidden',
-                  color: 'rgba(232,232,232,0.9)',
+                  color: 'var(--ds-text-primary)',
                   paddingRight: '40px',
                   pointerEvents: 'none',
                   minHeight: '24px',
@@ -225,8 +225,8 @@ export default function ChatInput({
               resize: 'none',
               outline: 'none',
               border: 'none',
-              color: hasPlusiTag ? 'transparent' : 'rgba(232,232,232,0.9)',
-              caretColor: 'white',
+              color: hasPlusiTag ? 'transparent' : 'var(--ds-text-primary)',
+              caretColor: 'var(--ds-text-primary)',
               WebkitTextFillColor: hasPlusiTag ? 'transparent' : undefined,
             }}
           />
@@ -265,7 +265,7 @@ export default function ChatInput({
             type="button"
             onClick={actionPrimary.onClick}
             disabled={actionPrimary.disabled}
-            className="flex-1 flex items-center justify-center gap-1 h-[44px] bg-transparent border-none cursor-pointer transition-colors duration-100 hover:bg-white/[0.04] disabled:opacity-30 disabled:cursor-not-allowed"
+            className="flex-1 flex items-center justify-center gap-1 h-[44px] bg-transparent border-none cursor-pointer transition-colors duration-100 hover:bg-black/[0.04] disabled:opacity-30 disabled:cursor-not-allowed"
             style={{
               fontFamily: 'inherit',
               fontSize: '13px',
@@ -294,7 +294,7 @@ export default function ChatInput({
             type="button"
             onClick={actionSecondary.onClick}
             disabled={actionSecondary.disabled}
-            className={`flex-1 flex items-center justify-center gap-1.5 h-[44px] bg-transparent border-none cursor-pointer transition-all duration-200 hover:bg-white/[0.04] disabled:opacity-30 disabled:cursor-not-allowed ${
+            className={`flex-1 flex items-center justify-center gap-1.5 h-[44px] bg-transparent border-none cursor-pointer transition-all duration-200 hover:bg-black/[0.04] disabled:opacity-30 disabled:cursor-not-allowed ${
               actionSecondary.pulse ? 'animate-pulse' : ''
             }`}
             style={{

@@ -469,8 +469,13 @@ class ChatbotWidget(QWidget):
 
     def _msg_open_preview(self, data):
         card_id = data.get('cardId') if isinstance(data, dict) else data
+        try:
+            card_id = int(card_id)
+        except (ValueError, TypeError):
+            logger.warning("_msg_open_preview: Ungültige card_id: %s", card_id)
+            return
         from ..custom_reviewer import open_preview
-        open_preview(int(card_id))
+        open_preview(card_id)
 
     def _msg_navigate_to_card(self, data):
         if isinstance(data, str) and data in ('prev', 'next'):
@@ -598,19 +603,33 @@ class ChatbotWidget(QWidget):
     def _msg_load_deck_messages(self, data):
         deck_id = data if isinstance(data, (int, str)) else data.get('deckId')
         try:
+            deck_id = int(deck_id)
+        except (ValueError, TypeError):
+            logger.warning("_msg_load_deck_messages: Ungültige deckId: %s", deck_id)
+            return
+        try:
             from ..storage.card_sessions import load_deck_messages
         except ImportError:
             from storage.card_sessions import load_deck_messages
-        messages = load_deck_messages(int(deck_id), limit=50)
-        self._send_to_frontend("deckMessagesLoaded", None, {"type": "deckMessagesLoaded", "deckId": int(deck_id), "messages": messages})
+        messages = load_deck_messages(deck_id, limit=50)
+        self._send_to_frontend("deckMessagesLoaded", None, {"type": "deckMessagesLoaded", "deckId": deck_id, "messages": messages})
 
     def _msg_save_deck_message(self, data):
         msg_data = json.loads(data) if isinstance(data, str) else data
+        deck_id = msg_data.get('deckId')
+        if deck_id is None:
+            logger.warning("_msg_save_deck_message: Missing deckId")
+            return
+        try:
+            deck_id = int(deck_id)
+        except (ValueError, TypeError):
+            logger.warning("_msg_save_deck_message: Ungültige deckId: %s", deck_id)
+            return
         try:
             from ..storage.card_sessions import save_deck_message
         except ImportError:
             from storage.card_sessions import save_deck_message
-        save_deck_message(int(msg_data.get('deckId')), msg_data.get('message', {}))
+        save_deck_message(deck_id, msg_data.get('message', {}))
 
     def _msg_save_settings(self, data):
         if isinstance(data, dict):
@@ -757,6 +776,14 @@ class ChatbotWidget(QWidget):
             from .global_theme import apply_global_dark_theme, _app_initialized
             if _app_initialized:
                 apply_global_dark_theme()
+        except Exception:
+            pass
+
+        # 7. Re-apply QDockWidget stylesheet for sidebar
+        try:
+            from .setup import _chatbot_dock, get_dock_widget_style
+            if _chatbot_dock:
+                _chatbot_dock.setStyleSheet(get_dock_widget_style())
         except Exception:
             pass
 
