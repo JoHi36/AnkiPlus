@@ -19,6 +19,12 @@ except ImportError:
     from tools import registry as tool_registry
     from agent_loop import run_agent_loop
 
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+
 # User-friendly error messages
 ERROR_MESSAGES = {
     'QUOTA_EXCEEDED': 'Tageslimit erreicht. Upgrade für mehr Requests?',
@@ -60,7 +66,7 @@ def retry_with_backoff(func, max_retries=3, initial_delay=1.0, max_delay=8.0, mu
             # Check if status code is retryable
             if response.status_code in retryable_status_codes:
                 if attempt < max_retries:
-                    print(f"⚠️ Retry {attempt + 1}/{max_retries} nach {delay:.1f}s für Status {response.status_code}")
+                    logger.warning("⚠️ Retry %s/%s nach %.1fs für Status %s", attempt + 1, max_retries, delay, response.status_code)
                     time.sleep(delay)
                     delay = min(delay * multiplier, max_delay)
                     continue
@@ -83,7 +89,7 @@ def retry_with_backoff(func, max_retries=3, initial_delay=1.0, max_delay=8.0, mu
             
             # Network errors are retryable
             if attempt < max_retries:
-                print(f"⚠️ Retry {attempt + 1}/{max_retries} nach {delay:.1f}s für Netzwerkfehler: {str(e)[:100]}")
+                logger.warning("⚠️ Retry %s/%s nach %.1fs für Netzwerkfehler: %s", attempt + 1, max_retries, delay, str(e)[:100])
                 time.sleep(delay)
                 delay = min(delay * multiplier, max_delay)
             else:
@@ -220,7 +226,7 @@ class AIHandler:
         if "gemini-3" in model.lower() and "flash" in model.lower():
             thinking_level = "minimal"  # Minimale Latenz für Flash
         
-        print(f"_get_google_response: Model: {model_normalized}, thinking_level: {thinking_level}")
+        logger.debug("_get_google_response: Model: %s, thinking_level: %s", model_normalized, thinking_level)
         
         # Prüfe ob Backend-Modus aktiv ist
         use_backend = is_backend_mode() and get_auth_token()
@@ -230,14 +236,14 @@ class AIHandler:
             backend_url = get_backend_url()
             # Backend-URL ist die Cloud Function Base-URL, Express-Routen haben kein /api/ Präfix
             urls = [f"{backend_url}/chat"]
-            print(f"_get_google_response: Verwende Backend-Modus: {urls[0]}")
+            logger.debug("_get_google_response: Verwende Backend-Modus: %s", urls[0])
         else:
             # Fallback: Direkte Gemini API (API-Key-Modus)
             urls = [
                 f"https://generativelanguage.googleapis.com/v1beta/models/{model_normalized}:generateContent?key={api_key}",
                 f"https://generativelanguage.googleapis.com/v1/models/{model_normalized}:generateContent?key={api_key}",
             ]
-            print(f"_get_google_response: Verwende API-Key-Modus (Fallback)")
+            logger.debug("_get_google_response: Verwende API-Key-Modus (Fallback)")
         
         # Lade Tool-Einstellungen aus Config
         ai_tools = self.config.get("ai_tools", {
@@ -375,7 +381,7 @@ ZITIER-REGELN (PFLICHT):
                         "role": role,
                         "parts": [{"text": content}]
                     })
-            print(f"_get_google_response: {len(contents)} Nachrichten aus Historie hinzugefügt")
+            logger.debug("_get_google_response: %s Nachrichten aus Historie hinzugefügt", len(contents))
         
         # Füge aktuelle Nachricht hinzu (mit Kontext falls vorhanden)
         contents.append({
@@ -399,7 +405,7 @@ ZITIER-REGELN (PFLICHT):
         # Gemini 3 Preview verwendet standardmäßig dynamisches Denken
         # Der Parameter kann später aktiviert werden, wenn die API stabil ist
         if thinking_level:
-            print(f"_get_google_response: thinking_level={thinking_level} (nicht gesendet, API-Stabilität)")
+            logger.debug("_get_google_response: thinking_level=%s (nicht gesendet, API-Stabilität)", thinking_level)
         
         # Füge systemInstruction hinzu (nur wenn vorhanden)
         # Für Preview-Modelle: systemInstruction als Objekt mit parts
@@ -420,7 +426,7 @@ ZITIER-REGELN (PFLICHT):
         
         # Wenn Request zu groß, reduziere Historie weiter
         if total_chars > 18000:
-            print(f"⚠️ Request zu groß ({total_chars} Zeichen), reduziere Historie")
+            logger.warning("⚠️ Request zu groß (%s Zeichen), reduziere Historie", total_chars)
             # Behalte nur letzte 2 Nachrichten aus Historie
             if len(contents) > 3:  # system + 2 history + current
                 contents = contents[-3:]  # Letzte 2 History + Current
@@ -435,9 +441,9 @@ ZITIER-REGELN (PFLICHT):
         
         for url in urls:
             try:
-                print(f"_get_google_response: Versuche URL: {url.split('?')[0]}...")
+                logger.debug("_get_google_response: Versuche URL: %s...", url.split('?')[0])
                 if use_backend:
-                    print(f"_get_google_response: Backend-Modus aktiv")
+                    logger.debug("_get_google_response: Backend-Modus aktiv")
                     headers = self._get_auth_headers()
                     # Backend erwartet anderes Format: {message, history, context, mode, model}
                     backend_data = {
@@ -449,11 +455,11 @@ ZITIER-REGELN (PFLICHT):
                     }
                     request_data = backend_data
                 else:
-                    print(f"_get_google_response: Modell: {model_normalized}, API-Key Länge: {len(api_key)}")
+                    logger.debug("_get_google_response: Modell: %s, API-Key Länge: %s", model_normalized, len(api_key))
                     headers = {"Content-Type": "application/json"}
                     request_data = data
                 
-                print(f"_get_google_response: Request-Größe: {len(str(request_data))} Zeichen")
+                logger.debug("_get_google_response: Request-Größe: %s Zeichen", len(str(request_data)))
                 
                 # Retry-Logic mit Exponential Backoff für retryable Errors
                 def make_request():
@@ -464,29 +470,29 @@ ZITIER-REGELN (PFLICHT):
                     response = make_request()
                     if response.status_code == 401:
                         if retry_count < max_retries:
-                            print("_get_google_response: 401 Unauthorized - Versuche Token-Refresh")
+                            logger.debug("_get_google_response: 401 Unauthorized - Versuche Token-Refresh")
                             if self._refresh_auth_token():
                                 retry_count += 1
                                 headers = self._get_auth_headers()
                                 response = make_request()
-                                print(f"_get_google_response: Retry nach Token-Refresh - Status: {response.status_code}")
+                                logger.debug("_get_google_response: Retry nach Token-Refresh - Status: %s", response.status_code)
                             else:
                                 # Kein Refresh-Token vorhanden - wechsle zu anonymem Modus
-                                print("_get_google_response: Kein Refresh-Token - wechsle zu anonymem Modus")
+                                logger.debug("_get_google_response: Kein Refresh-Token - wechsle zu anonymem Modus")
                                 update_config(auth_token="")  # Token löschen
                                 self._refresh_config()
                                 headers = self._get_auth_headers()  # Jetzt mit Device-ID
                                 retry_count += 1
                                 response = make_request()
-                                print(f"_get_google_response: Retry als anonymer User - Status: {response.status_code}")
+                                logger.debug("_get_google_response: Retry als anonymer User - Status: %s", response.status_code)
                         else:
                             # Max Retries erreicht - versuche als anonymer User
-                            print("_get_google_response: Max Retries erreicht - versuche als anonymer User")
+                            logger.debug("_get_google_response: Max Retries erreicht - versuche als anonymer User")
                             update_config(auth_token="")  # Token löschen
                             self._refresh_config()
                             headers = self._get_auth_headers()  # Jetzt mit Device-ID
                             response = make_request()
-                            print(f"_get_google_response: Request als anonymer User - Status: {response.status_code}")
+                            logger.debug("_get_google_response: Request als anonymer User - Status: %s", response.status_code)
                     else:
                         response = make_request()
                 
@@ -525,7 +531,7 @@ ZITIER-REGELN (PFLICHT):
                 
                 # Für retryable Errors (429, 500, 502, 503): Verwende Retry mit Backoff
                 if response.status_code in [429, 500, 502, 503]:
-                    print(f"_get_google_response: Retryable Error {response.status_code} - Verwende Retry mit Backoff")
+                    logger.warning("_get_google_response: Retryable Error %s - Verwende Retry mit Backoff", response.status_code)
                     response = retry_with_backoff(
                         make_request,
                         max_retries=3,
@@ -535,7 +541,7 @@ ZITIER-REGELN (PFLICHT):
                     )
                 
                 # Logge Status-Code
-                print(f"_get_google_response: Response Status: {response.status_code}")
+                logger.debug("_get_google_response: Response Status: %s", response.status_code)
                 
                 # Bei 400-Fehler, logge die vollständige Fehlermeldung
                 if response.status_code == 400:
@@ -543,12 +549,12 @@ ZITIER-REGELN (PFLICHT):
                         error_data = response.json()
                         error_msg = error_data.get("error", {}).get("message", "Unbekannter 400 Fehler")
                         error_details = error_data.get("error", {})
-                        print(f"⚠️ 400 Bad Request Fehler:")
-                        print(f"   Message: {error_msg}")
-                        print(f"   Details: {error_details}")
-                        print(f"   Vollständige Response: {response.text[:1000]}")
+                        logger.warning("⚠️ 400 Bad Request Fehler:")
+                        logger.debug("   Message: %s", error_msg)
+                        logger.debug("   Details: %s", error_details)
+                        logger.debug("   Vollständige Response: %s", response.text[:1000])
                     except (ValueError, KeyError):
-                        print(f"⚠️ 400 Bad Request - Response Text: {response.text[:500]}")
+                        logger.warning("⚠️ 400 Bad Request - Response Text: %s", response.text[:500])
                 
                 # Bei 500-Fehler, logge die Fehlermeldung bevor raise_for_status() aufgerufen wird
                 if response.status_code == 500:
@@ -556,12 +562,12 @@ ZITIER-REGELN (PFLICHT):
                         error_data = response.json()
                         error_msg = error_data.get("error", {}).get("message", "Unbekannter 500 Fehler")
                         error_code = error_data.get("error", {}).get("code", 500)
-                        print(f"⚠️ 500 Internal Server Error:")
-                        print(f"   Message: {error_msg}")
-                        print(f"   Code: {error_code}")
-                        print(f"   Response Text: {response.text[:1000]}")
+                        logger.warning("⚠️ 500 Internal Server Error:")
+                        logger.debug("   Message: %s", error_msg)
+                        logger.debug("   Code: %s", error_code)
+                        logger.debug("   Response Text: %s", response.text[:1000])
                     except (ValueError, KeyError):
-                        print(f"⚠️ 500 Internal Server Error - Response Text: {response.text[:500]}")
+                        logger.warning("⚠️ 500 Internal Server Error - Response Text: %s", response.text[:500])
                 
                 response.raise_for_status()
                 result = response.json()
@@ -597,7 +603,7 @@ ZITIER-REGELN (PFLICHT):
                         if len(parts) > 0:
                             text_part = parts[0].get("text", "")
                             if text_part:
-                                print(f"✅ _get_google_response: Erfolgreich, Antwort-Länge: {len(text_part)}")
+                                logger.info("✅ _get_google_response: Erfolgreich, Antwort-Länge: %s", len(text_part))
                                 return text_part
                 
                 raise Exception("Ungültige Antwort von Google API")
@@ -612,17 +618,17 @@ ZITIER-REGELN (PFLICHT):
                             error_data = e.response.json()
                             error_msg = error_data.get("error", {}).get("message", "Bad Request")
                             error_code = error_data.get("error", {}).get("code", 400)
-                            print(f"⚠️ HTTP 400 Fehler: {error_msg} (Code: {error_code})")
+                            logger.warning("⚠️ HTTP 400 Fehler: %s (Code: %s)", error_msg, error_code)
                             # Versuche nächste URL wenn Modell-Problem
                             if "model" in error_msg.lower() or "not found" in error_msg.lower():
-                                print(f"   → Versuche nächste URL/Modell...")
+                                logger.debug("   → Versuche nächste URL/Modell...")
                                 continue
                             else:
                                 raise Exception(f"Google API Fehler 400: {error_msg}")
                     except Exception as parse_error:
-                        print(f"⚠️ Konnte 400-Fehler nicht parsen: {parse_error}")
+                        logger.warning("⚠️ Konnte 400-Fehler nicht parsen: %s", parse_error)
                         if hasattr(e, 'response') and e.response:
-                            print(f"   Response Text: {e.response.text[:500]}")
+                            logger.debug("   Response Text: %s", e.response.text[:500])
                         raise Exception(f"Google API Fehler 400: {str(e)}")
                 
                 # Bei 500: Versuche Request ohne Historie (Fallback)
@@ -632,13 +638,13 @@ ZITIER-REGELN (PFLICHT):
                         if hasattr(e, 'response') and e.response:
                             error_data = e.response.json()
                             error_msg = error_data.get("error", {}).get("message", "Internal Server Error")
-                            print(f"⚠️ 500 Internal Server Error Details: {error_msg}")
+                            logger.warning("⚠️ 500 Internal Server Error Details: %s", error_msg)
                     except (ValueError, KeyError, AttributeError):
                         pass
                     
                     # Versuche Retry ohne Historie, wenn Historie vorhanden
                     if history and len(history) > 1:
-                        print("⚠️ 500 Fehler - versuche Request ohne Historie als Fallback")
+                        logger.warning("⚠️ 500 Fehler - versuche Request ohne Historie als Fallback")
                         # Retry ohne Historie, nur mit aktueller Nachricht
                         contents_retry = [{
                             "role": "user",
@@ -666,15 +672,15 @@ ZITIER-REGELN (PFLICHT):
                                 candidate = result_retry["candidates"][0]
                                 if "content" in candidate and "parts" in candidate["content"]:
                                     if len(candidate["content"]["parts"]) > 0:
-                                        print("✅ Retry ohne Historie erfolgreich")
+                                        logger.info("✅ Retry ohne Historie erfolgreich")
                                         return candidate["content"]["parts"][0].get("text", "")
                         except Exception as retry_error:
-                            print(f"⚠️ Retry ohne Historie fehlgeschlagen: {retry_error}")
+                            logger.warning("⚠️ Retry ohne Historie fehlgeschlagen: %s", retry_error)
                             # Versuche nächste URL wenn Retry fehlschlägt
                             continue
                     else:
                         # Keine Historie vorhanden, versuche nächste URL
-                        print("⚠️ 500 Fehler ohne Historie - versuche nächste URL")
+                        logger.warning("⚠️ 500 Fehler ohne Historie - versuche nächste URL")
                         continue
                 
                 # Bei 404, versuche nächste URL
@@ -726,7 +732,7 @@ ZITIER-REGELN (PFLICHT):
             backend_url = get_backend_url()
             stream_urls = [f"{backend_url}/chat"]
             normal_urls = [f"{backend_url}/chat"]
-            print(f"_get_google_response_streaming: Verwende Backend-Modus: {stream_urls[0]}")
+            logger.debug("_get_google_response_streaming: Verwende Backend-Modus: %s", stream_urls[0])
         else:
             # Fallback: Direkte Gemini API (API-Key-Modus)
             stream_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_normalized}:streamGenerateContent?key={api_key}"
@@ -741,7 +747,7 @@ ZITIER-REGELN (PFLICHT):
                 normal_url,
                 f"https://generativelanguage.googleapis.com/v1/models/{model_normalized}:generateContent?key={api_key}",
             ]
-            print(f"_get_google_response_streaming: Verwende API-Key-Modus (Fallback)")
+            logger.debug("_get_google_response_streaming: Verwende API-Key-Modus (Fallback)")
         
         # Lade Tool-Einstellungen
         ai_tools = self.config.get("ai_tools", {
@@ -784,7 +790,7 @@ ZITIER-REGELN (PFLICHT):
         tools_array = []
         if declarations:
             tools_array.append({"functionDeclarations": declarations})
-            print(f"_get_google_response_streaming: {len(declarations)} Tool(s) aktiviert (mode: {mode})")
+            logger.debug("_get_google_response_streaming: %s Tool(s) aktiviert (mode: %s)", len(declarations), mode)
         
         # Erweitere Nachricht mit Kontext (gleiche Logik wie _get_google_response)
         enhanced_message = user_message
@@ -868,7 +874,7 @@ ZITIER-REGELN (PFLICHT):
                         "role": role,
                         "parts": [{"text": content}]
                     })
-            print(f"_get_google_response_streaming: {len(contents)} Nachrichten aus Historie hinzugefügt")
+            logger.debug("_get_google_response_streaming: %s Nachrichten aus Historie hinzugefügt", len(contents))
         
         contents.append({
             "role": "user",
@@ -899,7 +905,7 @@ ZITIER-REGELN (PFLICHT):
         total_chars += len(system_instruction)
         
         if total_chars > 18000:
-            print(f"⚠️ Request zu groß ({total_chars} Zeichen), reduziere Historie")
+            logger.warning("⚠️ Request zu groß (%s Zeichen), reduziere Historie", total_chars)
             if len(contents) > 3:
                 contents = contents[-3:]
                 data["contents"] = contents
@@ -938,17 +944,15 @@ ZITIER-REGELN (PFLICHT):
             return text_result
             
         except Exception as e:
-            import traceback
             error_msg = f"Fehler bei Streaming-Request: {str(e)}"
-            print(f"⚠️ Streaming-Fehler: {error_msg}")
-            print(traceback.format_exc())
+            logger.exception("⚠️ Streaming-Fehler: %s", error_msg)
             
             # FALLBACK: Versuche non-streaming
-            print(f"🔄 Fallback auf non-streaming...")
+            logger.info("🔄 Fallback auf non-streaming...")
             try:
                 for url in normal_urls:
                     try:
-                        print(f"🔄 Fallback: Versuche URL: {url.split('?')[0]}...")
+                        logger.info("🔄 Fallback: Versuche URL: %s...", url.split('?')[0])
                         response = requests.post(url, json=data, timeout=30)
                         response.raise_for_status()
                         result = response.json()
@@ -959,16 +963,16 @@ ZITIER-REGELN (PFLICHT):
                                 parts = candidate["content"]["parts"]
                                 if len(parts) > 0:
                                     text = parts[0].get("text", "")
-                                    print(f"✅ Fallback erfolgreich: {len(text)} Zeichen erhalten")
+                                    logger.info("✅ Fallback erfolgreich: %s Zeichen erhalten", len(text))
                                     if callback:
                                         # Sende als einzelne Nachricht (simuliere Streaming für UX)
                                         callback(text, True, False)
                                     return text
                     except Exception as fallback_e:
-                        print(f"⚠️ Fallback-URL fehlgeschlagen: {fallback_e}")
+                        logger.warning("⚠️ Fallback-URL fehlgeschlagen: %s", fallback_e)
                         continue
             except Exception as fallback_error:
-                print(f"⚠️ Fallback komplett fehlgeschlagen: {fallback_error}")
+                logger.warning("⚠️ Fallback komplett fehlgeschlagen: %s", fallback_error)
             
             # Wenn Fallback auch fehlschlägt, Fehler nur über Exception-Pfad melden.
             # NICHT zusätzlich über callback senden – das führt zu doppelten
@@ -997,7 +1001,7 @@ ZITIER-REGELN (PFLICHT):
         
         for url in urls:
             try:
-                print(f"_stream_response: Versuche URL: {url.split('?')[0]}...")
+                logger.debug("_stream_response: Versuche URL: %s...", url.split('?')[0])
                 
                 # Bestimme Request-Daten und Headers
                 if use_backend:
@@ -1012,29 +1016,29 @@ ZITIER-REGELN (PFLICHT):
                 # Bei 401: Versuche Token-Refresh oder wechsle zu anonymem Modus
                 if response.status_code == 401 and use_backend:
                     if retry_count < max_retries:
-                        print("_stream_response: 401 Unauthorized - Versuche Token-Refresh")
+                        logger.debug("_stream_response: 401 Unauthorized - Versuche Token-Refresh")
                         if self._refresh_auth_token():
                             retry_count += 1
                             headers = self._get_auth_headers()
                             response = requests.post(url, json=request_data, headers=headers, stream=True, timeout=60)
-                            print(f"_stream_response: Retry nach Token-Refresh - Status: {response.status_code}")
+                            logger.debug("_stream_response: Retry nach Token-Refresh - Status: %s", response.status_code)
                         else:
                             # Kein Refresh-Token vorhanden - wechsle zu anonymem Modus
-                            print("_stream_response: Kein Refresh-Token - wechsle zu anonymem Modus")
+                            logger.debug("_stream_response: Kein Refresh-Token - wechsle zu anonymem Modus")
                             update_config(auth_token="")  # Token löschen
                             self._refresh_config()
                             headers = self._get_auth_headers()  # Jetzt mit Device-ID
                             retry_count += 1
                             response = requests.post(url, json=request_data, headers=headers, stream=True, timeout=60)
-                            print(f"_stream_response: Retry als anonymer User - Status: {response.status_code}")
+                            logger.debug("_stream_response: Retry als anonymer User - Status: %s", response.status_code)
                     else:
                         # Max Retries erreicht - versuche als anonymer User
-                        print("_stream_response: Max Retries erreicht - versuche als anonymer User")
+                        logger.debug("_stream_response: Max Retries erreicht - versuche als anonymer User")
                         update_config(auth_token="")  # Token löschen
                         self._refresh_config()
                         headers = self._get_auth_headers()  # Jetzt mit Device-ID
                         response = requests.post(url, json=request_data, headers=headers, stream=True, timeout=60)
-                        print(f"_stream_response: Request als anonymer User - Status: {response.status_code}")
+                        logger.debug("_stream_response: Request als anonymer User - Status: %s", response.status_code)
                 
                 # Bei 403: Quota-Fehler
                 if response.status_code == 403:
@@ -1050,7 +1054,7 @@ ZITIER-REGELN (PFLICHT):
                 
                 # Prüfe Content-Type und erzwinge UTF-8
                 content_type = response.headers.get('Content-Type', '')
-                print(f"_stream_response: Content-Type: {content_type}")
+                logger.debug("_stream_response: Content-Type: %s", content_type)
                 response.encoding = 'utf-8'
                 
                 # Verarbeite Stream - ECHTES STREAMING
@@ -1062,7 +1066,7 @@ ZITIER-REGELN (PFLICHT):
                 # Gemini sendet JSON-Array-Stream
                 if use_backend:
                     # Backend SSE-Format parsen
-                    print("📡 Starte Backend-Stream-Verarbeitung...")
+                    logger.debug("📡 Starte Backend-Stream-Verarbeitung...")
                     chunk_received = False
                     try:
                         # Verwende iter_lines für bessere SSE-Verarbeitung
@@ -1075,7 +1079,7 @@ ZITIER-REGELN (PFLICHT):
                             if not line:
                                 continue
                             
-                            print(f"📝 Verarbeite Zeile: {line[:100]}...")
+                            logger.debug("📝 Verarbeite Zeile: %s...", line[:100])
                             
                             # SSE-Format: data: {...}
                             if line.startswith('data: '):
@@ -1083,7 +1087,7 @@ ZITIER-REGELN (PFLICHT):
                                 
                                 # Prüfe auf [DONE]
                                 if data_str == '[DONE]':
-                                    print("✅ Stream beendet mit [DONE]")
+                                    logger.info("✅ Stream beendet mit [DONE]")
                                     stream_finished = True
                                     if callback:
                                         callback("", True, False)
@@ -1091,13 +1095,13 @@ ZITIER-REGELN (PFLICHT):
                                 
                                 try:
                                     chunk_data = json.loads(data_str)
-                                    print(f"📦 Chunk-Daten geparst: {list(chunk_data.keys())}")
+                                    logger.debug("📦 Chunk-Daten geparst: %s", list(chunk_data.keys()))
                                     
                                     # Backend-Format: {"text": "..."}
                                     if "text" in chunk_data:
                                         chunk_text = chunk_data["text"]
                                         if chunk_text:
-                                            print(f"✅ Text-Chunk erhalten (Länge: {len(chunk_text)})")
+                                            logger.info("✅ Text-Chunk erhalten (Länge: %s)", len(chunk_text))
                                             accumulated_text += chunk_text
                                             full_text = accumulated_text
                                             chunk_count += 1
@@ -1114,21 +1118,21 @@ ZITIER-REGELN (PFLICHT):
                                 
                                 except json.JSONDecodeError as e:
                                     # Ignoriere JSON-Parse-Fehler für unvollständige Chunks
-                                    print(f"⚠️ JSON-Parse-Fehler (ignoriert): {e}, Zeile: {line[:50]}...")
+                                    logger.warning("⚠️ JSON-Parse-Fehler (ignoriert): %s, Zeile: %s...", e, line[:50])
                                     continue
                                 except Exception as e:
                                     if "Quota" in str(e) or "Token" in str(e):
                                         raise
-                                    print(f"⚠️ Fehler beim Verarbeiten von Backend-Chunk: {e}")
+                                    logger.warning("⚠️ Fehler beim Verarbeiten von Backend-Chunk: %s", e)
                     except Exception as stream_error:
-                        print(f"⚠️ Stream-Fehler: {stream_error}")
+                        logger.warning("⚠️ Stream-Fehler: %s", stream_error)
                         raise
                     
                     if not chunk_received:
-                        print("⚠️ Keine Chunks vom Backend empfangen!")
+                        logger.warning("⚠️ Keine Chunks vom Backend empfangen!")
                     
                     # Stream beendet
-                    print(f"📊 Stream beendet - Chunks: {chunk_count}, Text-Länge: {len(full_text)}")
+                    logger.debug("📊 Stream beendet - Chunks: %s, Text-Länge: %s", chunk_count, len(full_text))
                     if full_text:
                         if callback:
                             callback("", True, False)
@@ -1218,7 +1222,7 @@ ZITIER-REGELN (PFLICHT):
                                         # Check for Function Call
                                         if "functionCall" in part:
                                             function_call = part["functionCall"]
-                                            print(f"🔧 _stream_response: Function Call im Stream erkannt: {function_call.get('name')}")
+                                            logger.debug("🔧 _stream_response: Function Call im Stream erkannt: %s", function_call.get('name'))
                                             
                                             # Notify callback about tool usage
                                             if callback:
@@ -1238,9 +1242,9 @@ ZITIER-REGELN (PFLICHT):
                                 if finish_reason:
                                     stream_finished = True
                                     if finish_reason == "STOP":
-                                        print(f"✅ Stream normal beendet (STOP) nach {chunk_count} Chunks")
+                                        logger.info("✅ Stream normal beendet (STOP) nach %s Chunks", chunk_count)
                                     else:
-                                        print(f"⚠️ Stream beendet mit Reason: {finish_reason}")
+                                        logger.warning("⚠️ Stream beendet mit Reason: %s", finish_reason)
                                     
                                     if callback:
                                         callback("", True, False)
@@ -1253,7 +1257,7 @@ ZITIER-REGELN (PFLICHT):
                                 bracket_count = 0
                             continue
                         except Exception as e:
-                            print(f"⚠️ Fehler beim Verarbeiten von Stream-Chunk: {e}")
+                            logger.warning("⚠️ Fehler beim Verarbeiten von Stream-Chunk: %s", e)
                             buffer = ""
                             brace_count = 0
                             bracket_count = 0
@@ -1321,9 +1325,9 @@ ZITIER-REGELN (PFLICHT):
         """
         import re
         
-        print("=" * 60)
-        print("get_section_title: START")
-        print("=" * 60)
+        logger.debug("=" * 60)
+        logger.debug("get_section_title: START")
+        logger.debug("=" * 60)
         
         # Entferne HTML-Tags aus question und answer
         def strip_html(text):
@@ -1337,54 +1341,54 @@ ZITIER-REGELN (PFLICHT):
             clean = re.sub(r'&[a-zA-Z]+;', ' ', clean)
             return clean.strip()
         
-        print(f"get_section_title: Schritt 1 - HTML-Bereinigung")
-        print(f"  Original Frage Länge: {len(question) if question else 0}")
+        logger.debug("get_section_title: Schritt 1 - HTML-Bereinigung")
+        logger.debug("  Original Frage Länge: %s", len(question) if question else 0)
         question_clean = strip_html(question)
         answer_clean = strip_html(answer)
-        print(f"  Bereinigte Frage Länge: {len(question_clean) if question_clean else 0}")
-        print(f"  Bereinigte Antwort Länge: {len(answer_clean) if answer_clean else 0}")
+        logger.debug("  Bereinigte Frage Länge: %s", len(question_clean) if question_clean else 0)
+        logger.debug("  Bereinigte Antwort Länge: %s", len(answer_clean) if answer_clean else 0)
         
         # Lade Config neu
-        print(f"get_section_title: Schritt 2 - Config laden")
+        logger.debug("get_section_title: Schritt 2 - Config laden")
         self._refresh_config()
-        print(f"  Config neu geladen")
+        logger.debug("  Config neu geladen")
         
         if not self.is_configured():
-            print("❌ get_section_title: Kein API-Key konfiguriert")
+            logger.warning("❌ get_section_title: Kein API-Key konfiguriert")
             return "Lernkarte"
         
         # Wenn nach Bereinigung keine Frage übrig bleibt, Fallback
         if not question_clean or len(question_clean) < 5:
-            print(f"❌ get_section_title: Frage zu kurz ({len(question_clean) if question_clean else 0} Zeichen)")
+            logger.warning("❌ get_section_title: Frage zu kurz (%s Zeichen)", len(question_clean) if question_clean else 0)
             return "Lernkarte"
         
-        print(f"get_section_title: Schritt 3 - API-Key validieren")
+        logger.debug("get_section_title: Schritt 3 - API-Key validieren")
         api_key = self.config.get("api_key", "").strip()  # WICHTIG: Trimme API-Key
-        print(f"  API-Key Länge nach Trimmen: {len(api_key)}")
+        logger.debug("  API-Key Länge nach Trimmen: %s", len(api_key))
         
         # Warnung wenn API-Key zu lang ist
         if len(api_key) > 50:
-            print(f"⚠️ get_section_title: API-Key ist sehr lang ({len(api_key)} Zeichen)!")
-            print(f"   Erste 30 Zeichen: {api_key[:30]}...")
+            logger.warning("⚠️ get_section_title: API-Key ist sehr lang (%s Zeichen)!", len(api_key))
+            logger.debug("   Erste 30 Zeichen: %s...", api_key[:30])
         
         # Prüfe ob Backend-Modus aktiv ist
         use_backend = is_backend_mode() and get_auth_token()
         
         if not use_backend and not api_key:
-            print("❌ get_section_title: API-Key ist leer nach Trimmen")
+            logger.warning("❌ get_section_title: API-Key ist leer nach Trimmen")
             return "Lernkarte"
         
         # IMMER Gemini 2.0 Flash für Titel (schneller, günstiger, stabiler als Preview)
         # Gemini 3 Preview ist für Chat, aber für einfache Titel ist 2.0 besser
         model = "gemini-2.5-flash"
-        print(f"  Verwende für Titel-Generierung: {model} (immer 2.0 Flash für Stabilität)")
+        logger.debug("  Verwende für Titel-Generierung: %s (immer 2.0 Flash für Stabilität)", model)
         
-        print(f"get_section_title: Schritt 4 - Request vorbereiten")
-        print(f"  Modell: {model}")
+        logger.debug("get_section_title: Schritt 4 - Request vorbereiten")
+        logger.debug("  Modell: %s", model)
         if not use_backend:
-            print(f"  API-Key Länge: {len(api_key)}")
-        print(f"  Frage-Länge: {len(question_clean)}")
-        print(f"  Frage-Inhalt (erste 100 Zeichen): {question_clean[:100]}...")
+            logger.debug("  API-Key Länge: %s", len(api_key))
+        logger.debug("  Frage-Länge: %s", len(question_clean))
+        logger.debug("  Frage-Inhalt (erste 100 Zeichen): %s...", question_clean[:100])
         
         # Erstelle Prompt für kurzen Titel - EINFACHER
         prompt = f"""Erstelle einen Kurztitel (2-4 Wörter) für diese Lernkarte. Nur den Titel, nichts anderes.
@@ -1395,7 +1399,7 @@ Karteninhalt: {question_clean[:500]}"""
             # Backend-Modus: Verwende Backend-URL
             backend_url = get_backend_url()
             url = f"{backend_url}/chat"
-            print(f"  URL: {url}")
+            logger.debug("  URL: %s", url)
             
             # Backend-Format: message, model, mode, stream=false für non-streaming
             backend_data = {
@@ -1409,7 +1413,7 @@ Karteninhalt: {question_clean[:500]}"""
         else:
             # Fallback: Direkte Gemini API (API-Key-Modus)
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-            print(f"  URL (ohne Key): {url.split('?')[0]}...")
+            logger.debug("  URL (ohne Key): %s...", url.split('?')[0])
             
             data = {
                 "contents": [{"role": "user", "parts": [{"text": prompt}]}],
@@ -1421,45 +1425,45 @@ Karteninhalt: {question_clean[:500]}"""
             backend_data = None
             headers = {"Content-Type": "application/json"}
         
-        print(f"  Request-Daten Größe: {len(str(backend_data if use_backend else data))} Zeichen")
-        print(f"  Prompt Länge: {len(prompt)} Zeichen")
+        logger.debug("  Request-Daten Größe: %s Zeichen", len(str(backend_data if use_backend else data)))
+        logger.debug("  Prompt Länge: %s Zeichen", len(prompt))
         
         try:
-            print(f"get_section_title: Schritt 5 - API-Request senden")
-            print(f"  Sende Request an {model}...")
+            logger.debug("get_section_title: Schritt 5 - API-Request senden")
+            logger.debug("  Sende Request an %s...", model)
             if use_backend:
                 response = requests.post(url, json=backend_data, headers=headers, timeout=15)
             else:
                 response = requests.post(url, json=data, headers=headers, timeout=15)
-            print(f"  Response Status: {response.status_code}")
-            print(f"  Response Headers: {dict(response.headers)}")
+            logger.debug("  Response Status: %s", response.status_code)
+            logger.debug("  Response Headers: %s", dict(response.headers))
             
             if response.status_code != 200:
-                print(f"❌ get_section_title: Fehler Status {response.status_code}")
-                print(f"  Vollständige Response:")
-                print(f"  {response.text}")
+                logger.warning("❌ get_section_title: Fehler Status %s", response.status_code)
+                logger.debug("  Vollständige Response:")
+                logger.debug("  %s", response.text)
                 try:
                     error_data = response.json()
-                    print(f"  Parsed Error Data: {error_data}")
+                    logger.warning("  Parsed Error Data: %s", error_data)
                     error_msg = error_data.get("error", {}).get("message", "Unbekannter Fehler")
                     error_code = error_data.get("error", {}).get("code", response.status_code)
-                    print(f"  Fehlercode: {error_code}")
-                    print(f"  Fehlermeldung: {error_msg}")
+                    logger.warning("  Fehlercode: %s", error_code)
+                    logger.warning("  Fehlermeldung: %s", error_msg)
                 except Exception as parse_error:
-                    print(f"  Konnte Response nicht als JSON parsen: {parse_error}")
-                    print(f"  Response Text (erste 1000 Zeichen): {response.text[:1000]}")
+                    logger.debug("  Konnte Response nicht als JSON parsen: %s", parse_error)
+                    logger.debug("  Response Text (erste 1000 Zeichen): %s", response.text[:1000])
                 return "Lernkarte"
             
-            print(f"get_section_title: Schritt 6 - Response parsen")
+            logger.debug("get_section_title: Schritt 6 - Response parsen")
             try:
                 result = response.json()
-                print(f"  Response JSON Keys: {list(result.keys())}")
+                logger.debug("  Response JSON Keys: %s", list(result.keys()))
             except Exception as json_error:
-                print(f"❌ get_section_title: Konnte Response nicht als JSON parsen: {json_error}")
-                print(f"  Response Text: {response.text[:1000]}")
+                logger.error("❌ get_section_title: Konnte Response nicht als JSON parsen: %s", json_error)
+                logger.debug("  Response Text: %s", response.text[:1000])
                 return "Lernkarte"
             
-            print(f"get_section_title: Schritt 7 - Response validieren")
+            logger.debug("get_section_title: Schritt 7 - Response validieren")
             
             # Extrahiere Titel aus Response (Backend oder direkte API)
             title = ""
@@ -1477,48 +1481,48 @@ Karteninhalt: {question_clean[:500]}"""
                             title = parts[0].get("text", "").strip()
                 
                 if not title:
-                    print(f"❌ get_section_title: Konnte Titel nicht aus Backend-Response extrahieren")
-                    print(f"  Response Struktur: {list(result.keys())}")
-                    print(f"  Vollständige Response: {result}")
+                    logger.warning("❌ get_section_title: Konnte Titel nicht aus Backend-Response extrahieren")
+                    logger.debug("  Response Struktur: %s", list(result.keys()))
+                    logger.debug("  Vollständige Response: %s", result)
                     return "Lernkarte"
             else:
                 # Direkte Gemini API
                 if "candidates" not in result:
-                    print(f"❌ get_section_title: Kein 'candidates' Feld in Response")
-                    print(f"  Response Struktur: {list(result.keys())}")
-                    print(f"  Vollständige Response: {result}")
+                    logger.warning("❌ get_section_title: Kein 'candidates' Feld in Response")
+                    logger.debug("  Response Struktur: %s", list(result.keys()))
+                    logger.debug("  Vollständige Response: %s", result)
                     return "Lernkarte"
                 
                 if len(result["candidates"]) == 0:
-                    print(f"❌ get_section_title: 'candidates' Array ist leer")
-                    print(f"  Response: {result}")
+                    logger.warning("❌ get_section_title: 'candidates' Array ist leer")
+                    logger.debug("  Response: %s", result)
                     return "Lernkarte"
                 
                 candidate = result["candidates"][0]
-                print(f"  Candidate Keys: {list(candidate.keys()) if isinstance(candidate, dict) else 'Nicht ein Dict'}")
+                logger.debug("  Candidate Keys: %s", list(candidate.keys()) if isinstance(candidate, dict) else 'Nicht ein Dict')
                 
                 if "content" not in candidate:
-                    print(f"❌ get_section_title: Kein 'content' Feld in Candidate")
-                    print(f"  Candidate: {candidate}")
+                    logger.warning("❌ get_section_title: Kein 'content' Feld in Candidate")
+                    logger.debug("  Candidate: %s", candidate)
                     return "Lernkarte"
                 
                 if "parts" not in candidate["content"]:
-                    print(f"❌ get_section_title: Kein 'parts' Feld in Content")
-                    print(f"  Content: {candidate['content']}")
+                    logger.warning("❌ get_section_title: Kein 'parts' Feld in Content")
+                    logger.debug("  Content: %s", candidate['content'])
                     return "Lernkarte"
                 
                 if len(candidate["content"]["parts"]) == 0:
-                    print(f"❌ get_section_title: 'parts' Array ist leer")
-                    print(f"  Content: {candidate['content']}")
+                    logger.warning("❌ get_section_title: 'parts' Array ist leer")
+                    logger.debug("  Content: %s", candidate['content'])
                     return "Lernkarte"
                 
                 title = candidate["content"]["parts"][0].get("text", "").strip()
             
-            print(f"get_section_title: Schritt 8 - Titel extrahieren")
-            print(f"  Roher Titel: '{title}' (Länge: {len(title)})")
+            logger.debug("get_section_title: Schritt 8 - Titel extrahieren")
+            logger.debug("  Roher Titel: '%s' (Länge: %s)", title, len(title))
             
             if not title:
-                print(f"❌ get_section_title: Titel ist leer nach Extraktion")
+                logger.warning("❌ get_section_title: Titel ist leer nach Extraktion")
                 return "Lernkarte"
             
             # Entferne Anführungszeichen falls vorhanden
@@ -1529,21 +1533,15 @@ Karteninhalt: {question_clean[:500]}"""
             if len(title) > 50:
                 title = title[:47] + "..."
             
-            print(f"✅ get_section_title: Titel erfolgreich generiert: '{title}'")
-            print("=" * 60)
+            logger.info("✅ get_section_title: Titel erfolgreich generiert: '%s'", title)
+            logger.debug("=" * 60)
             return title if title else "Lernkarte"
             
         except requests.exceptions.RequestException as e:
-            import traceback
-            print(f"❌ get_section_title: Request Exception: {e}")
-            print(f"  Exception Type: {type(e).__name__}")
-            print(traceback.format_exc())
+            logger.exception("❌ get_section_title: Request Exception (%s): %s", type(e).__name__, e)
             return "Lernkarte"
         except Exception as e:
-            import traceback
-            print(f"❌ get_section_title: Unerwartete Exception: {e}")
-            print(f"  Exception Type: {type(e).__name__}")
-            print(traceback.format_exc())
+            logger.exception("❌ get_section_title: Unerwartete Exception (%s): %s", type(e).__name__, e)
             return "Lernkarte"
     
     def fetch_available_models(self, provider, api_key):
@@ -1561,24 +1559,21 @@ Karteninhalt: {question_clean[:500]}"""
         api_key = api_key.strip() if api_key else ""
         
         if not api_key:
-            print("fetch_available_models: Kein API-Key vorhanden")
+            logger.warning("fetch_available_models: Kein API-Key vorhanden")
             return []
         
         # Warnung wenn API-Key zu lang ist
         if len(api_key) > 50:
-            print(f"⚠️ WARNUNG: API-Key ist sehr lang ({len(api_key)} Zeichen). Erste 20 Zeichen: {api_key[:20]}...")
+            logger.warning("⚠️ WARNUNG: API-Key ist sehr lang (%s Zeichen). Erste 20 Zeichen: %s...", len(api_key), api_key[:20])
             # Versuche nur die ersten 50 Zeichen (falls versehentlich mehr eingegeben wurde)
             if len(api_key) > 100:
-                print(f"⚠️ API-Key scheint falsch zu sein. Versuche nur ersten Teil...")
+                logger.warning("⚠️ API-Key scheint falsch zu sein. Versuche nur ersten Teil...")
                 api_key = api_key[:50].strip()
         
         try:
             return self._fetch_google_models(api_key)
         except Exception as e:
-            import traceback
-            error_msg = str(e)
-            print(f"Fehler beim Abrufen der Modelle: {error_msg}")
-            print(traceback.format_exc())
+            logger.exception("Fehler beim Abrufen der Modelle: %s", e)
             # Gib leere Liste zurück, damit Frontend Fallback verwenden kann
             return []
     
@@ -1591,15 +1586,15 @@ Karteninhalt: {question_clean[:500]}"""
             # Backend-Modus: Verwende Backend-URL
             backend_url = get_backend_url()
             urls = [f"{backend_url}/models"]
-            print(f"_fetch_google_models: Verwende Backend-Modus: {urls[0]}")
+            logger.debug("_fetch_google_models: Verwende Backend-Modus: %s", urls[0])
             headers = self._get_auth_headers()
         else:
             # Fallback: Direkte Gemini API (API-Key-Modus)
             api_key = api_key.strip()
-            print(f"_fetch_google_models: API-Key Länge: {len(api_key)}")
+            logger.debug("_fetch_google_models: API-Key Länge: %s", len(api_key))
             if len(api_key) > 50:
-                print(f"⚠️ WARNUNG: API-Key ist sehr lang! Erste 30 Zeichen: {api_key[:30]}...")
-                print(f"⚠️ Normalerweise sind Google API-Keys ~39 Zeichen lang")
+                logger.warning("⚠️ WARNUNG: API-Key ist sehr lang! Erste 30 Zeichen: %s...", api_key[:30])
+                logger.warning("⚠️ Normalerweise sind Google API-Keys ~39 Zeichen lang")
             
             # Versuche zuerst v1beta, dann v1 als Fallback
             urls = [
@@ -1617,22 +1612,22 @@ Karteninhalt: {question_clean[:500]}"""
         last_error = None
         for url in urls:
             try:
-                print(f"_fetch_google_models: Versuche URL: {url.split('?')[0]}...")
+                logger.debug("_fetch_google_models: Versuche URL: %s...", url.split('?')[0])
                 if use_backend:
                     response = requests.get(url, headers=headers, timeout=10)
                 else:
                     response = requests.get(url, timeout=10)
-                print(f"_fetch_google_models: Response Status: {response.status_code}")
+                logger.debug("_fetch_google_models: Response Status: %s", response.status_code)
                 
                 # Bei Fehler, logge Details
                 if response.status_code != 200:
-                    print(f"⚠️ _fetch_google_models: Status {response.status_code}")
+                    logger.warning("⚠️ _fetch_google_models: Status %s", response.status_code)
                     try:
                         error_data = response.json()
                         error_msg = error_data.get("error", {}).get("message", "Unbekannter Fehler")
-                        print(f"   Fehlermeldung: {error_msg}")
+                        logger.warning("   Fehlermeldung: %s", error_msg)
                     except (ValueError, KeyError):
-                        print(f"   Response Text: {response.text[:500]}")
+                        logger.debug("   Response Text: %s", response.text[:500])
                 
                 response.raise_for_status()
                 data = response.json()
@@ -1664,14 +1659,14 @@ Karteninhalt: {question_clean[:500]}"""
                         if desired_name in model_name.lower() and desired_name not in found_models:
                             models.append({"name": model_name, "label": label})
                             found_models.add(desired_name)
-                            print(f"  ✓ Modell gefunden: {model_name} -> {label}")
+                            logger.info("  ✓ Modell gefunden: %s -> %s", model_name, label)
                             break
                 
-                print(f"_fetch_google_models: {len(models)} Modelle gefunden")
+                logger.debug("_fetch_google_models: %s Modelle gefunden", len(models))
                 
                 # Falls keine Modelle gefunden, verwende Fallback-Liste (nur Gemini 3 Flash)
                 if not models:
-                    print("_fetch_google_models: Keine Modelle gefunden, verwende Fallback")
+                    logger.debug("_fetch_google_models: Keine Modelle gefunden, verwende Fallback")
                     return [
                         {"name": "gemini-3-flash-preview", "label": "Gemini 3 Flash"},
                     ]
@@ -1740,10 +1735,10 @@ Karteninhalt: {question_clean[:500]}"""
         # (pipeline_step events handle the UI now; ai_state only logs internally)
         req_id = getattr(self, '_current_request_id', None)
         if req_id:
-            print(f"🔇 _emit_ai_state SUPPRESSED (pipeline active, reqId={req_id[:8]}): {message[:50]}")
+            logger.debug("🔇 _emit_ai_state SUPPRESSED (pipeline active, reqId=%s): %s", req_id[:8], message[:50])
             return
         else:
-            print(f"📡 _emit_ai_state SENDING (no pipeline): {message[:50]}")
+            logger.debug("📡 _emit_ai_state SENDING (no pipeline): %s", message[:50])
 
         if not self.widget or not self.widget.web_view:
             return
@@ -1760,14 +1755,14 @@ Karteninhalt: {question_clean[:500]}"""
                     }
                     js_code = f"window.ankiReceive({json.dumps(payload)});"
                     self.widget.web_view.page().runJavaScript(js_code)
-                    print(f"📡 RAG State: {message} (phase: {phase})")
+                    logger.debug("📡 RAG State: %s (phase: %s)", message, phase)
                     # Process events immediately to ensure UI updates
                     from aqt.qt import QApplication
                     app = QApplication.instance()
                     if app:
                         app.processEvents()
                 except Exception as e:
-                    print(f"⚠️ Fehler beim Senden von AI-State: {e}")
+                    logger.warning("⚠️ Fehler beim Senden von AI-State: %s", e)
             
             mw.taskman.run_on_main(emit_on_main)
         else:
@@ -1782,9 +1777,9 @@ Karteninhalt: {question_clean[:500]}"""
                 }
                 js_code = f"window.ankiReceive({json.dumps(payload)});"
                 self.widget.web_view.page().runJavaScript(js_code)
-                print(f"📡 RAG State: {message} (phase: {phase})")
+                logger.debug("📡 RAG State: %s (phase: %s)", message, phase)
             except Exception as e:
-                print(f"⚠️ Fehler beim Senden von AI-State: {e}")
+                logger.warning("⚠️ Fehler beim Senden von AI-State: %s", e)
 
     def _emit_pipeline_step(self, step, status, data=None):
         """Emit a pipeline_step event to the frontend via Qt signal.
@@ -1807,7 +1802,7 @@ Karteninhalt: {question_clean[:500]}"""
             try:
                 callback(step, status, data)
             except Exception as e:
-                print(f"⚠️ _emit_pipeline_step error: {e}")
+                logger.warning("⚠️ _emit_pipeline_step error: %s", e)
 
     def _step_done_label(self, step, data):
         """Generate a human-readable label for a completed step."""
@@ -1880,7 +1875,7 @@ Karteninhalt: {question_clean[:500]}"""
         # Domain words present but DON'T overlap with card — likely standalone
         # But only if there are enough domain words to be confident
         if len(domain_words) >= 2:
-            print(f"🔍 _is_standalone: domain_words={domain_words}, card_keywords={list(card_keywords)[:5]} → STANDALONE")
+            logger.debug("🔍 _is_standalone: domain_words=%s, card_keywords=%s → STANDALONE", domain_words, list(card_keywords)[:5])
             return True
 
         # Single domain word — ambiguous, default to context-dependent
@@ -1938,20 +1933,20 @@ Karteninhalt: {question_clean[:500]}"""
 
     def _fix_router_queries(self, router_result, user_message, context):
         """Post-process router result: if question is context-dependent but queries don't contain card keywords, fix them."""
-        print(f"🔧 _fix_router_queries: router_result={bool(router_result)}, context={bool(context)}, search_needed={router_result.get('search_needed') if router_result else None}")
+        logger.debug("🔧 _fix_router_queries: router_result=%s, context=%s, search_needed=%s", bool(router_result), bool(context), router_result.get('search_needed') if router_result else None)
         if not router_result or not context:
-            print(f"🔧 _fix_router_queries: Skipping (no router_result or no context)")
+            logger.debug("🔧 _fix_router_queries: Skipping (no router_result or no context)")
             return router_result
         if not router_result.get('search_needed', False):
             return router_result
 
         is_standalone = self._is_standalone_question(user_message, context)
-        print(f"🔧 _fix_router_queries: is_standalone={is_standalone} for '{user_message[:50]}'")
+        logger.debug("🔧 _fix_router_queries: is_standalone=%s for '%s'", is_standalone, user_message[:50])
         if is_standalone:
             return router_result  # Standalone question about a different topic — trust the router
 
         card_keywords = self._extract_card_keywords(context)
-        print(f"🔧 _fix_router_queries: card_keywords={card_keywords[:5]}")
+        logger.debug("🔧 _fix_router_queries: card_keywords=%s", card_keywords[:5])
         if not card_keywords:
             return router_result
 
@@ -1965,7 +1960,7 @@ Karteninhalt: {question_clean[:500]}"""
             return router_result  # Router did its job correctly
 
         # Router failed — override queries with card keywords
-        print(f"⚠️ Router-Fix: Kontextbezogene Frage erkannt aber Router nutzt keine Karten-Keywords. Korrigiere Queries.")
+        logger.warning("⚠️ Router-Fix: Kontextbezogene Frage erkannt aber Router nutzt keine Karten-Keywords. Korrigiere Queries.")
         top_kw = card_keywords[:6]
 
         # Build AND queries from top keywords
@@ -1991,7 +1986,7 @@ Karteninhalt: {question_clean[:500]}"""
             router_result['embedding_queries'] = [' '.join(top_kw)]
         router_result['search_scope'] = 'current_deck'
 
-        print(f"✅ Router-Fix: precise={precise}, broad={broad}, embedding_queries={router_result['embedding_queries']}")
+        logger.info("✅ Router-Fix: precise=%s, broad=%s, embedding_queries=%s", precise, broad, router_result['embedding_queries'])
         return router_result
 
     def _rag_router(self, user_message, context=None):
@@ -2087,9 +2082,9 @@ Karteninhalt: {question_clean[:500]}"""
                     pass
 
             # Debug-Logging
-            print(f"🔍 Router: user_message='{user_message[:100]}', has_context={bool(context)}, deck={deck_name}")
-            print(f"🔍 Router: card_question='{card_question[:100] if card_question else 'LEER'}', card_answer='{card_answer[:80] if card_answer else 'LEER'}'")
-            print(f"🔍 Router: context keys={list(context.keys()) if context else 'None'}")
+            logger.debug("🔍 Router: user_message='%s', has_context=%s, deck=%s", user_message[:100], bool(context), deck_name)
+            logger.debug("🔍 Router: card_question='%s', card_answer='%s'", card_question[:100] if card_question else 'LEER', card_answer[:80] if card_answer else 'LEER')
+            logger.debug("🔍 Router: context keys=%s", list(context.keys()) if context else 'None')
 
             router_prompt = f"""Du bist ein Such-Router für eine Lernkarten-App. Entscheide ob und wie gesucht werden soll.
 
@@ -2162,16 +2157,16 @@ REGELN:
                     if card_context:
                         router_payload["cardContext"] = card_context
 
-                    print(f"🔍 Router: Backend-Aufruf an {router_url}")
+                    logger.debug("🔍 Router: Backend-Aufruf an %s", router_url)
                     response = requests.post(router_url, json=router_payload, headers=router_headers, timeout=15)
                     response.raise_for_status()
                     router_result = response.json()
 
                     if router_result.get("search_needed") is not None:
-                        print(f"✅ Router (Backend): search_needed={router_result.get('search_needed')}")
+                        logger.info("✅ Router (Backend): search_needed=%s", router_result.get('search_needed'))
                         # Weiter zur Validierung unten (gleicher Code wie bei direkter API)
                 except Exception as be:
-                    print(f"⚠️ Router: Backend-Fehler: {be}, Fallback auf direkte API")
+                    logger.warning("⚠️ Router: Backend-Fehler: %s, Fallback auf direkte API", be)
                     use_backend = False
 
             # Wenn Backend erfolgreich war, überspringe direkte API
@@ -2207,13 +2202,13 @@ REGELN:
                     "max_sources": router_result.get("max_sources", "medium")
                 })
 
-                print(f"✅ Router (Backend): search_needed={router_result.get('search_needed')}, retrieval_mode={retrieval_mode}")
+                logger.info("✅ Router (Backend): search_needed=%s, retrieval_mode=%s", router_result.get('search_needed'), retrieval_mode)
                 return self._fix_router_queries(router_result, user_message, context)
 
             # Direkter Gemini API Modus (Fallback oder wenn kein Backend)
             router_api_key = api_key or self.config.get("api_key", "")
             if not router_api_key:
-                print("⚠️ Router: Kein API-Key verfügbar, überspringe direkte API")
+                logger.warning("⚠️ Router: Kein API-Key verfügbar, überspringe direkte API")
                 return None
 
             url_model_pairs = [
@@ -2221,7 +2216,7 @@ REGELN:
                 (f"https://generativelanguage.googleapis.com/v1beta/models/{fallback_model}:generateContent?key={router_api_key}", fallback_model),
             ]
             headers = {"Content-Type": "application/json"}
-            print(f"🔍 Router: Direkter Gemini API Aufruf, Models: [{router_model}, {fallback_model}]")
+            logger.debug("🔍 Router: Direkter Gemini API Aufruf, Models: [%s, %s]", router_model, fallback_model)
             data = {
                 "contents": [{"role": "user", "parts": [{"text": router_prompt}]}],
                 "generationConfig": {
@@ -2235,7 +2230,7 @@ REGELN:
             for url, current_model in url_model_pairs:
                 try:
                     # Direkte Gemini API
-                    print(f"🔍 Router: Direkter API-Aufruf an {current_model}")
+                    logger.debug("🔍 Router: Direkter API-Aufruf an %s", current_model)
                     response = requests.post(url, json=data, headers=headers, timeout=10)
                     response.raise_for_status()
                     result = response.json()
@@ -2267,7 +2262,7 @@ REGELN:
                                 try:
                                     router_result = json.loads(text)
                                 except json.JSONDecodeError as json_err:
-                                    print(f"⚠️ Router: JSON-Parse-Fehler nach Bereinigung: {json_err}, Text: {text[:300]}")
+                                    logger.warning("⚠️ Router: JSON-Parse-Fehler nach Bereinigung: %s, Text: %s", json_err, text[:300])
                                     # Versuche nochmal mit strikterer Bereinigung
                                     # Entferne alle Kommentare (nicht standard JSON)
                                     text = re.sub(r'//.*?$', '', text, flags=re.MULTILINE)
@@ -2293,7 +2288,7 @@ REGELN:
 
                                         try:
                                             router_result = json.loads(text)
-                                            print(f"✅ Router: Unvollständiges JSON repariert")
+                                            logger.info("✅ Router: Unvollständiges JSON repariert")
                                         except json.JSONDecodeError:
                                             # Letzter Versuch: Extrahiere precise_queries und broad_queries falls vorhanden
                                             precise_match = re.search(r'"precise_queries"\s*:\s*\[(.*?)\]', text, re.DOTALL)
@@ -2322,7 +2317,7 @@ REGELN:
                                                         "broad_queries": broad_queries if broad_queries else [],
                                                         "search_scope": "current_deck"
                                                     }
-                                                    print(f"✅ Router: Queries aus unvollständigem JSON extrahiert: {len(precise_queries)} precise, {len(broad_queries)} broad")
+                                                    logger.info("✅ Router: Queries aus unvollständigem JSON extrahiert: %s precise, %s broad", len(precise_queries), len(broad_queries))
                                                 else:
                                                     raise json_err
                                             else:
@@ -2371,7 +2366,7 @@ REGELN:
 
                                     # KRITISCHE VALIDIERUNG: Prüfe ob Queries die Nutzeranfrage wörtlich enthalten
                                     if precise_queries or broad_queries:
-                                        print(f"🔍 Router: Validiere {len(precise_queries)} precise_queries und {len(broad_queries)} broad_queries")
+                                        logger.debug("🔍 Router: Validiere %s precise_queries und %s broad_queries", len(precise_queries), len(broad_queries))
                                         user_message_clean = user_message.lower().strip()
                                         user_words = set(user_message_clean.split())
                                         corrected_precise = []
@@ -2381,7 +2376,7 @@ REGELN:
                                         for i, query in enumerate(precise_queries):
                                             if not query or not query.strip():
                                                 continue
-                                            print(f"🔍 Router: Precise Query {i+1}: '{query[:80]}'")
+                                            logger.debug("🔍 Router: Precise Query %s: '%s'", i+1, query[:80])
                                             query_lower = query.lower().strip()
                                             query_clean = query_lower.rstrip('.').rstrip('\u2026').rstrip('...')
 
@@ -2390,7 +2385,7 @@ REGELN:
                                             overlap = user_words.intersection(query_words)
 
                                             if contains_user_message or (len(overlap) >= 3 and len(user_words) <= 15):
-                                                print(f"⚠️ Router: Precise Query enthält Nutzeranfrage wörtlich: '{query[:100]}'")
+                                                logger.warning("⚠️ Router: Precise Query enthält Nutzeranfrage wörtlich: '%s'", query[:100])
                                                 if context:
                                                     question = context.get('question') or context.get('frontField') or ""
                                                     answer = context.get('answer') or ""
@@ -2410,7 +2405,7 @@ REGELN:
 
                                                     if top_words:
                                                         new_query = " AND ".join(top_words)
-                                                        print(f"✅ Router: Korrigiere Precise Query zu: '{new_query}'")
+                                                        logger.info("✅ Router: Korrigiere Precise Query zu: '%s'", new_query)
                                                         corrected_precise.append(new_query)
                                                     else:
                                                         corrected_precise.append(query)
@@ -2423,7 +2418,7 @@ REGELN:
                                         for i, query in enumerate(broad_queries):
                                             if not query or not query.strip():
                                                 continue
-                                            print(f"🔍 Router: Broad Query {i+1}: '{query[:80]}'")
+                                            logger.debug("🔍 Router: Broad Query %s: '%s'", i+1, query[:80])
                                             query_lower = query.lower().strip()
                                             query_clean = query_lower.rstrip('.').rstrip('\u2026').rstrip('...')
 
@@ -2433,7 +2428,7 @@ REGELN:
                                             is_or_expansion = all(word in user_words or word == 'or' for word in query_words) and 'or' in query_clean
 
                                             if contains_user_message or (len(overlap) >= 3 and len(user_words) <= 15) or is_or_expansion:
-                                                print(f"⚠️ Router: Broad Query enthält Nutzeranfrage wörtlich: '{query[:100]}'")
+                                                logger.warning("⚠️ Router: Broad Query enthält Nutzeranfrage wörtlich: '%s'", query[:100])
                                                 if context:
                                                     question = context.get('question') or context.get('frontField') or ""
                                                     answer = context.get('answer') or ""
@@ -2453,7 +2448,7 @@ REGELN:
 
                                                     if top_words:
                                                         new_query = " OR ".join(top_words)
-                                                        print(f"✅ Router: Korrigiere Broad Query zu: '{new_query}'")
+                                                        logger.info("✅ Router: Korrigiere Broad Query zu: '%s'", new_query)
                                                         corrected_broad.append(new_query)
                                                     else:
                                                         corrected_broad.append(query)
@@ -2471,7 +2466,7 @@ REGELN:
                                         router_result["precise_queries"] = corrected_precise[:3]
                                         router_result["broad_queries"] = corrected_broad[:3]
 
-                                        print(f"✅ Router: Validierung abgeschlossen: {len([q for q in corrected_precise if q])} precise, {len([q for q in corrected_broad if q])} broad")
+                                        logger.info("✅ Router: Validierung abgeschlossen: %s precise, %s broad", len([q for q in corrected_precise if q]), len([q for q in corrected_broad if q]))
 
                                     # Emit pipeline done
                                     scope_label = ""
@@ -2486,28 +2481,28 @@ REGELN:
                                     })
 
                                     # Finale Log-Ausgabe
-                                    print(f"✅ Router: search_needed={router_result.get('search_needed')}, retrieval_mode={retrieval_mode}, embedding_queries={[q[:40] for q in embedding_queries]}, precise_queries={len([q for q in precise_queries if q])}, broad_queries={len([q for q in broad_queries if q])}, scope={router_result.get('search_scope')}")
+                                    logger.info("✅ Router: search_needed=%s, retrieval_mode=%s, embedding_queries=%s, precise_queries=%s, broad_queries=%s, scope=%s", router_result.get('search_needed'), retrieval_mode, [q[:40] for q in embedding_queries], len([q for q in precise_queries if q]), len([q for q in broad_queries if q]), router_result.get('search_scope'))
                                     for i, q in enumerate(precise_queries):
                                         if q:
-                                            print(f"   Precise Query {i+1}: '{q[:100]}'")
+                                            logger.debug("   Precise Query %s: '%s'", i+1, q[:100])
                                     for i, q in enumerate(broad_queries):
                                         if q:
-                                            print(f"   Broad Query {i+1}: '{q[:100]}'")
+                                            logger.debug("   Broad Query %s: '%s'", i+1, q[:100])
                                     return self._fix_router_queries(router_result, user_message, context)
 
                 except requests.exceptions.HTTPError as e:
                     last_error = e
-                    print(f"⚠️ Router: HTTP-Fehler {e.response.status_code}: {e.response.text[:300]}")
+                    logger.warning("⚠️ Router: HTTP-Fehler %s: %s", e.response.status_code, e.response.text[:300])
                     continue
                 except json.JSONDecodeError as e:
-                    print(f"⚠️ Router: JSON-Parse-Fehler: {e}, Text: {text[:200]}")
+                    logger.warning("⚠️ Router: JSON-Parse-Fehler: %s, Text: %s", e, text[:200])
                     continue
                 except Exception as e:
                     last_error = e
-                    print(f"⚠️ Router: Unerwarteter Fehler: {type(e).__name__}: {e}")
+                    logger.warning("⚠️ Router: Unerwarteter Fehler: %s: %s", type(e).__name__, e)
                     continue
 
-            print(f"⚠️ Router: Alle URLs fehlgeschlagen, verwende Fallback")
+            logger.warning("⚠️ Router: Alle URLs fehlgeschlagen, verwende Fallback")
 
             # Fallback: Use _extract_card_keywords (properly filters CSS/HTML artifacts)
             fallback_precise = []
@@ -2526,7 +2521,7 @@ REGELN:
                     fallback_broad = [" OR ".join(top_words[:5])]
                     if len(top_words) > 3:
                         fallback_broad.append(" OR ".join(top_words[2:7]))
-                    print(f"✅ Router Fallback: Keywords aus Karte extrahiert: {top_words[:9]}")
+                    logger.info("✅ Router Fallback: Keywords aus Karte extrahiert: %s", top_words[:9])
 
             # Wenn keine Keywords extrahiert werden konnten, verwende minimale Queries
             if not fallback_precise or not fallback_broad:
@@ -2544,7 +2539,7 @@ REGELN:
                         " OR ".join(user_words[1:6]) if len(user_words) >= 6 else " OR ".join(user_words[:5]),
                         " OR ".join(user_words[2:7]) if len(user_words) >= 7 else " OR ".join(user_words[:5])
                     ]
-                    print(f"⚠️ Router Fallback: Verwende minimale Keywords aus Nutzeranfrage: {user_words[:7]}")
+                    logger.warning("⚠️ Router Fallback: Verwende minimale Keywords aus Nutzeranfrage: %s", user_words[:7])
                 else:
                     # Letzter Fallback: Verwende erste Wörter der Nutzeranfrage
                     words = user_message.split()[:9]
@@ -2564,7 +2559,7 @@ REGELN:
                         # Minimale Fallback
                         fallback_precise = [" AND ".join(words)] * 3
                         fallback_broad = [" OR ".join(words)] * 3
-                    print(f"⚠️ Router Fallback: Letzter Fallback mit ersten Wörtern: {words}")
+                    logger.warning("⚠️ Router Fallback: Letzter Fallback mit ersten Wörtern: %s", words)
 
             # Emit pipeline done for fallback
             scope_label = ""
@@ -2588,9 +2583,7 @@ REGELN:
             }
 
         except Exception as e:
-            import traceback
-            print(f"⚠️ Router Fehler: {e}")
-            print(traceback.format_exc())
+            logger.exception("⚠️ Router Fehler: %s", e)
 
             # Emit pipeline error
             self._emit_pipeline_step("router", "error")
@@ -2631,7 +2624,7 @@ REGELN:
                                 " OR ".join(top_words[1:]) if len(top_words) >= 2 else " OR ".join(top_words),
                                 " OR ".join(top_words)
                             ]
-                            print(f"✅ Router Exception-Fallback: Keywords aus Karte extrahiert: {top_words[:5]}")
+                            logger.info("✅ Router Exception-Fallback: Keywords aus Karte extrahiert: %s", top_words[:5])
 
             if not fallback_precise:
                 import re
@@ -2648,13 +2641,13 @@ REGELN:
                         " OR ".join(user_words[1:]) if len(user_words) >= 2 else " OR ".join(user_words),
                         " OR ".join(user_words)
                     ]
-                    print(f"⚠️ Router Exception-Fallback: Verwende minimale Keywords aus Nutzeranfrage: {user_words[:5]}")
+                    logger.warning("⚠️ Router Exception-Fallback: Verwende minimale Keywords aus Nutzeranfrage: %s", user_words[:5])
                 else:
                     words = user_message.split()[:3]
                     fallback_embedding = " ".join(words)
                     fallback_precise = [" AND ".join(words)] * 3
                     fallback_broad = [" OR ".join(words)] * 3
-                    print(f"⚠️ Router Exception-Fallback: Letzter Fallback mit ersten Wörtern: {words}")
+                    logger.warning("⚠️ Router Exception-Fallback: Letzter Fallback mit ersten Wörtern: %s", words)
 
             return {
                 "search_needed": True,
@@ -2682,9 +2675,9 @@ REGELN:
                     payload = {"type": event_type, "data": data}
                     js_code = f"window.ankiReceive({json.dumps(payload)});"
                     self.widget.web_view.page().runJavaScript(js_code)
-                    print(f"📡 AI Event ({event_type}) sent")
+                    logger.debug("📡 AI Event (%s) sent", event_type)
                 except Exception as e:
-                    print(f"⚠️ Fehler beim Senden von AI-Event: {e}")
+                    logger.warning("⚠️ Fehler beim Senden von AI-Event: %s", e)
             mw.taskman.run_on_main(emit_on_main)
 
     def _rag_retrieve_cards(self, precise_queries=None, broad_queries=None, search_scope="current_deck", context=None, max_notes=10):
@@ -2715,7 +2708,7 @@ REGELN:
         try:
             from aqt import mw
             if not mw or not mw.col:
-                print("⚠️ RAG Retrieval: Keine Anki-Collection verfügbar")
+                logger.warning("⚠️ RAG Retrieval: Keine Anki-Collection verfügbar")
                 return {"context_string": "", "citations": {}}
             
             # Normalize inputs
@@ -2726,7 +2719,7 @@ REGELN:
             broad_queries = [q for q in broad_queries if q and q.strip()]
             
             if not precise_queries and not broad_queries:
-                print("⚠️ RAG Retrieval: Keine Queries vorhanden")
+                logger.warning("⚠️ RAG Retrieval: Keine Queries vorhanden")
                 return {"context_string": "", "citations": {}}
             
             from ..utils.text import clean_html_with_images as clean_html
@@ -2765,13 +2758,13 @@ REGELN:
             def execute_query(query, query_type, note_results):
                 """Führt eine Query aus und aggregiert Ergebnisse in note_results"""
                 anki_query = build_anki_query(query, search_scope, context)
-                print(f"🔍 RAG Retrieval: {query_type} Query: {anki_query}")
+                logger.debug("🔍 RAG Retrieval: %s Query: %s", query_type, anki_query)
                 
                 try:
                     card_ids = mw.col.find_cards(anki_query)
                     
                     if card_ids:
-                        print(f"✅ {query_type} Query: {len(card_ids)} Karten gefunden")
+                        logger.info("✅ %s Query: %s Karten gefunden", query_type, len(card_ids))
                         self._emit_ai_state(f"Ergebnis: {len(card_ids)} Treffer für '{query[:50]}...'", phase=self.PHASE_SEARCH)
                         
                         for card_id in card_ids:
@@ -2799,16 +2792,16 @@ REGELN:
                                     note_results[note_id]['card_ids'].append(card_id)
                                     
                             except Exception as e:
-                                print(f"⚠️ RAG Retrieval: Fehler bei Karte {card_id}: {e}")
+                                logger.warning("⚠️ RAG Retrieval: Fehler bei Karte %s: %s", card_id, e)
                                 continue
                         return len(card_ids)
                     else:
-                        print(f"⚠️ {query_type} Query: Keine Karten gefunden")
+                        logger.warning("⚠️ %s Query: Keine Karten gefunden", query_type)
                         self._emit_ai_state(f"Ergebnis: 0 Treffer für '{query[:50]}...'", phase=self.PHASE_SEARCH)
                         return 0
                         
                 except Exception as e:
-                    print(f"⚠️ RAG Retrieval: Fehler bei {query_type} Query: {e}")
+                    logger.warning("⚠️ RAG Retrieval: Fehler bei %s Query: %s", query_type, e)
                     return 0
             
             # CASCADE LOGIC: Phase 1 - Precise Queries
@@ -2835,12 +2828,12 @@ REGELN:
             
             # Count unique notes after precise queries
             unique_notes = len(note_results)
-            print(f"🔍 RAG Retrieval: Präzise Suche abgeschlossen: {unique_notes} eindeutige Notizen gefunden")
+            logger.debug("🔍 RAG Retrieval: Präzise Suche abgeschlossen: %s eindeutige Notizen gefunden", unique_notes)
             
             # Check if we have enough results (>= 5)
             if unique_notes >= 5:
                 self._emit_ai_state(f"Präzise Suche: {unique_notes} Treffer (ausreichend)", phase=self.PHASE_SEARCH)
-                print(f"✅ RAG Retrieval: Genug Ergebnisse ({unique_notes}), stoppe Suche")
+                logger.info("✅ RAG Retrieval: Genug Ergebnisse (%s), stoppe Suche", unique_notes)
             else:
                 # CASCADE LOGIC: Phase 2 - Broad Queries (wenn nicht genug Ergebnisse)
                 self._emit_ai_state(f"Präzise Suche: {unique_notes} Treffer (zu wenig, erweitere Suche...)", phase=self.PHASE_SEARCH)
@@ -2866,13 +2859,13 @@ REGELN:
                     
                     # Update unique count after broad queries
                     unique_notes = len(note_results)
-                    print(f"🔍 RAG Retrieval: Erweiterte Suche abgeschlossen: {unique_notes} eindeutige Notizen gefunden (Gesamt)")
+                    logger.debug("🔍 RAG Retrieval: Erweiterte Suche abgeschlossen: %s eindeutige Notizen gefunden (Gesamt)", unique_notes)
                     # Count how many new notes were added by broad queries
                     broad_notes_count = len([n for n in note_results.values() if any('broad' in str(q) for q in n.get('queries_found_in', []))])
                     precise_notes_count = unique_notes - broad_notes_count
                     self._emit_ai_state(f"Erweiterte Suche: +{broad_notes_count} Treffer (Gesamt: {unique_notes})", phase=self.PHASE_SEARCH)
                 else:
-                    print(f"⚠️ RAG Retrieval: Keine broad_queries verfügbar für Erweiterung")
+                    logger.warning("⚠️ RAG Retrieval: Keine broad_queries verfügbar für Erweiterung")
             
             # Ranking: Sortiere nach query_count (absteigend), dann nach note_id
             ranked_notes = sorted(
@@ -2886,7 +2879,7 @@ REGELN:
             
             # Fallback: Pure Keyword Search (ohne Deck-Restriction) wenn keine Ergebnisse
             if len(ranked_notes) == 0:
-                print(f"⚠️ RAG Retrieval: Keine Notizen gefunden, versuche Fallback: Pure Keyword Search")
+                logger.warning("⚠️ RAG Retrieval: Keine Notizen gefunden, versuche Fallback: Pure Keyword Search")
                 self._emit_ai_state("🔍 Fallback: Reine Keyword-Suche...", phase=self.PHASE_SEARCH)
                 
                 # Extrahiere Haupt-Keywords aus der ersten precise query
@@ -2906,11 +2899,11 @@ REGELN:
                 
                 if fallback_query:
                     try:
-                        print(f"🔍 RAG Retrieval: Fallback-Query (ohne Deck-Restriction): {fallback_query}")
+                        logger.debug("🔍 RAG Retrieval: Fallback-Query (ohne Deck-Restriction): %s", fallback_query)
                         card_ids = mw.col.find_cards(fallback_query)
                         
                         if card_ids:
-                            print(f"✅ Fallback: {len(card_ids)} Karten gefunden")
+                            logger.info("✅ Fallback: %s Karten gefunden", len(card_ids))
                             
                             # Aggregiere Notizen
                             for card_id in card_ids[:max_notes * 2]:  # Mehr Karten für Fallback
@@ -2931,7 +2924,7 @@ REGELN:
                                         }
                                         
                                 except Exception as e:
-                                    print(f"⚠️ RAG Retrieval: Fehler bei Fallback-Karte {card_id}: {e}")
+                                    logger.warning("⚠️ RAG Retrieval: Fehler bei Fallback-Karte %s: %s", card_id, e)
                                     continue
                                         
                         # Neu sortieren nach Fallback-Ergebnissen (nach der Schleife)
@@ -2942,13 +2935,13 @@ REGELN:
                         )[:max_notes]
                             
                     except Exception as e:
-                        print(f"⚠️ RAG Retrieval: Fallback-Fehler: {e}")
+                        logger.warning("⚠️ RAG Retrieval: Fallback-Fehler: %s", e)
             
             if len(ranked_notes) == 0:
-                print(f"⚠️ RAG Retrieval: Keine Notizen gefunden (auch nicht im Fallback)")
+                logger.warning("⚠️ RAG Retrieval: Keine Notizen gefunden (auch nicht im Fallback)")
                 return {"context_string": "", "citations": {}}
             
-            print(f"✅ RAG Retrieval: {len(ranked_notes)} Notizen nach Ranking (Top {max_notes})")
+            logger.info("✅ RAG Retrieval: %s Notizen nach Ranking (Top %s)", len(ranked_notes), max_notes)
             
             # Note Expansion: Iteriere über alle Felder für jede Note
             formatted_notes = []
@@ -3008,7 +3001,7 @@ REGELN:
                     }
                     
                 except Exception as e:
-                    print(f"⚠️ RAG Retrieval: Fehler bei Note {note_id}: {e}")
+                    logger.warning("⚠️ RAG Retrieval: Fehler bei Note %s: %s", note_id, e)
                     continue
             
             # BEREICH 2: Füge aktuelle Karte zu Citations hinzu
@@ -3036,7 +3029,7 @@ REGELN:
                     "deckName": current_deck_name,
                     "isCurrentCard": True  # WICHTIG: Flag für Frontend
                 }
-                print(f"✅ RAG Retrieval: Aktuelle Karte (Note {current_note_id}) zu Citations hinzugefügt")
+                logger.info("✅ RAG Retrieval: Aktuelle Karte (Note %s) zu Citations hinzugefügt", current_note_id)
             
             # Erstelle Context-String aus formatierten Notizen
             context_string = "\n\n".join(formatted_notes)
@@ -3047,16 +3040,14 @@ REGELN:
                 # CRITICAL: Emit full citation data to frontend for live display
                 self._emit_ai_event("rag_sources", citations)
             
-            print(f"✅ RAG Retrieval: {len(formatted_notes)} Notizen formatiert, {len(citations)} Citations erstellt")
+            logger.info("✅ RAG Retrieval: %s Notizen formatiert, %s Citations erstellt", len(formatted_notes), len(citations))
             return {
                 "context_string": context_string,
                 "citations": citations
             }
             
         except Exception as e:
-            import traceback
-            print(f"⚠️ RAG Retrieval Fehler: {e}")
-            print(traceback.format_exc())
+            logger.exception("⚠️ RAG Retrieval Fehler: %s", e)
             return {"context_string": "", "citations": {}}
     
     def get_response_with_rag(self, user_message, context=None, history=None, mode='compact', callback=None, insights=None):
@@ -3095,7 +3086,7 @@ REGELN:
                 # Determine max_notes from router's max_sources decision
                 max_sources_level = router_result.get("max_sources", "medium")
                 max_notes = {"low": 5, "medium": 10, "high": 15}.get(max_sources_level, 10)
-                print(f"📊 RAG: max_sources={max_sources_level} → max_notes={max_notes}")
+                logger.debug("📊 RAG: max_sources=%s → max_notes=%s", max_sources_level, max_notes)
 
                 # Extract new format: precise_queries and broad_queries
                 precise_queries = router_result.get("precise_queries", [])
@@ -3129,7 +3120,7 @@ REGELN:
                             hybrid = HybridRetrieval(_emb_mgr, self)
                             retrieval_result = hybrid.retrieve(user_message, router_result, context, max_notes=max_notes)
                         except Exception as e:
-                            print(f"Hybrid retrieval failed, falling back to SQL: {e}")
+                            logger.debug("Hybrid retrieval failed, falling back to SQL: %s", e)
                             retrieval_result = self._rag_retrieve_cards(
                                 precise_queries=precise_queries,
                                 broad_queries=broad_queries,
@@ -3184,9 +3175,9 @@ REGELN:
                             "reasoning": router_result.get("reasoning", ""),
                             "citations": citations  # Include citations with current card
                         }
-                        print(f"RAG: {len(formatted_cards)} Karten fuer Kontext verwendet, {len(citations)} Citations")
+                        logger.debug("RAG: %s Karten fuer Kontext verwendet, %s Citations", len(formatted_cards), len(citations))
                     else:
-                        print(f"RAG: Keine Karten gefunden")
+                        logger.debug("RAG: Keine Karten gefunden")
 
             # Even without search, include current card as context for the AI
             if not rag_context and context and context.get('cardId'):
@@ -3284,7 +3275,7 @@ REGELN:
                 if hasattr(e, 'response') and e.response:
                     status_code = e.response.status_code
                 
-                print(f"⚠️ Primary model error ({status_code or 'unknown'}): {str(e)[:100]}...")
+                logger.warning("⚠️ Primary model error (%s): %s...", status_code or 'unknown', str(e)[:100])
                 
                 # Wenn wir hier sind, hat der erste Versuch fehlgeschlagen
                 # (Old ai_state "Wechsle zu Fallback-Modell..." removed)
@@ -3297,17 +3288,17 @@ REGELN:
                 fallback_history = history
                 
                 if status_code == 400 or "400" in error_str or "too large" in error_str:
-                    print("⚠️ 400/Size Error erkannt -> Massives Kürzen für Fallback")
+                    logger.warning("⚠️ 400/Size Error erkannt -> Massives Kürzen für Fallback")
                     # History komplett entfernen für maximalen Platz
                     fallback_history = [] 
                     # RAG Context auf Top 3 beschränken
                     if rag_context and rag_context.get("cards"):
                         fallback_rag_context = dict(rag_context)
                         fallback_rag_context["cards"] = rag_context["cards"][:3]
-                        print(f"✂️ RAG-Kontext gekürzt auf 3 Karten, History entfernt")
+                        logger.debug("✂️ RAG-Kontext gekürzt auf 3 Karten, History entfernt")
                 
                 # Versuche Fallback mit gemini-2.5-flash (mit RAG)
-                print(f"🔄 Versuche Fallback mit gemini-2.5-flash (mit RAG)...")
+                logger.info("🔄 Versuche Fallback mit gemini-2.5-flash (mit RAG)...")
                 try:
                     if callback:
                         return self._get_google_response_streaming(
@@ -3325,11 +3316,11 @@ REGELN:
                             system_prompt_override=insights_system_prompt
                         )
                 except Exception as fallback_e:
-                    print(f"⚠️ Fallback mit RAG gescheitert: {fallback_e}")
+                    logger.warning("⚠️ Fallback mit RAG gescheitert: %s", fallback_e)
                     
                     # Letzter Versuch: Fallback OHNE RAG aber MIT Metadaten
                     # Wir nutzen enhanced_callback, damit die bisherigen Steps/Citations erhalten bleiben
-                    print("🔄 Letzter Versuch: Fallback OHNE RAG (aber mit Metadaten)...")
+                    logger.info("🔄 Letzter Versuch: Fallback OHNE RAG (aber mit Metadaten)...")
                     if callback:
                         return self._get_google_response_streaming(
                             user_message, fallback_model, api_key,
@@ -3342,13 +3333,11 @@ REGELN:
                         raise fallback_e
                 
         except Exception as e:
-            import traceback
             error_msg = f"Fehler in RAG-Pipeline: {str(e)}"
-            print(f"⚠️ {error_msg}")
-            print(traceback.format_exc())
+            logger.exception("⚠️ %s", error_msg)
             
             # Fallback: Normale Antwort ohne RAG - ABER mit enhanced_callback für Metadaten!
-            print("🔄 Fallback auf normale Antwort ohne RAG (Endgültig)...")
+            logger.info("🔄 Fallback auf normale Antwort ohne RAG (Endgültig)...")
             # WICHTIG: enhanced_callback verwenden, damit Steps/Citations gerettet werden
             return self.get_response(user_message, context=context, history=history, mode=mode, callback=enhanced_callback or callback)
 

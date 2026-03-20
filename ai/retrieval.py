@@ -4,6 +4,12 @@ Merges results from both retrieval paths, prioritizing cards found by both.
 """
 import re
 
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+
 
 class HybridRetrieval:
     def __init__(self, embedding_manager, ai_handler):
@@ -64,7 +70,7 @@ class HybridRetrieval:
                     "total_hits": query_hits_sum or sql_total
                 })
             except Exception as e:
-                print(f"⚠️ HybridRetrieval: SQL retrieval failed: {e}")
+                logger.warning("⚠️ HybridRetrieval: SQL retrieval failed: %s", e)
                 self.ai._emit_pipeline_step("sql_search", "error", {"message": str(e)})
 
         # Semantic retrieval — use embedding_queries (multi-query) from router
@@ -119,7 +125,7 @@ class HybridRetrieval:
                     "embedding_queries": embedding_queries
                 })
             except Exception as e:
-                print(f"⚠️ HybridRetrieval: Semantic retrieval failed: {e}")
+                logger.warning("⚠️ HybridRetrieval: Semantic retrieval failed: %s", e)
                 self.ai._emit_pipeline_step("semantic_search", "error", {"message": str(e)})
 
         # Merge results
@@ -252,7 +258,7 @@ class HybridRetrieval:
                 'deckName': deck_name
             }
         except Exception as e:
-            print(f"⚠️ HybridRetrieval: Failed to load card {card_id}: {e}")
+            logger.warning("⚠️ HybridRetrieval: Failed to load card %s: %s", card_id, e)
             return None
 
     def _build_context_string(self, merged):

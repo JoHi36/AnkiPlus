@@ -12,6 +12,12 @@ try:
 except ImportError:
     from tools import registry
 
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+
 # Global frontend callback — allows tools to push events to the UI
 _frontend_callback = None
 
@@ -72,7 +78,7 @@ def execute_tool(tool_name: str, args: Dict[str, Any]) -> ToolResponse:
     Returns:
         ToolResponse with status, result, display_type, and optional error.
     """
-    print(f"[tool_executor] Executing tool: {tool_name}, args: {args}")
+    logger.debug("Executing tool: %s, args: %s", tool_name, args)
 
     tool = registry.get(tool_name)
     if tool is None:
@@ -84,14 +90,14 @@ def execute_tool(tool_name: str, args: Dict[str, Any]) -> ToolResponse:
 
     try:
         result = _run_with_timeout(tool.execute_fn, args, tool.timeout_seconds)
-        print(f"[tool_executor] Tool '{tool_name}' returned successfully")
+        logger.info("Tool '%s' returned successfully", tool_name)
         return ToolResponse(
             status="success", result=result,
             display_type=tool.display_type
         )
     except TimeoutError:
         msg = f"{tool.name}: Timeout nach {tool.timeout_seconds}s"
-        print(f"[tool_executor] {msg}")
+        logger.warning("%s", msg)
         return ToolResponse(
             status="error", result="",
             display_type=tool.display_type,
@@ -99,7 +105,7 @@ def execute_tool(tool_name: str, args: Dict[str, Any]) -> ToolResponse:
         )
     except Exception as e:
         msg = f"Error executing tool '{tool_name}': {e}"
-        print(f"[tool_executor] {msg}")
+        logger.error("%s", msg)
         return ToolResponse(
             status="error", result="",
             display_type=tool.display_type,

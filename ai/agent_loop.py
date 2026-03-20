@@ -14,6 +14,12 @@ except ImportError:
     from tool_executor import execute_tool
     from tools import registry
 
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+
 MAX_ITERATIONS = 5
 MAX_CONTEXT_CHARS = 100_000  # ~25k tokens
 
@@ -136,7 +142,7 @@ def run_agent_loop(
 
     while iteration < MAX_ITERATIONS:
         iteration += 1
-        print(f"agent_loop: Iteration {iteration}/{MAX_ITERATIONS}")
+        logger.debug("agent_loop: Iteration %d/%d", iteration, MAX_ITERATIONS)
 
         # Stream from Gemini
         text_result, function_call = stream_fn(
@@ -146,13 +152,13 @@ def run_agent_loop(
 
         # No tool call → done
         if not function_call:
-            print(f"agent_loop: Fertig nach {iteration} Iteration(en)")
+            logger.info("agent_loop: Fertig nach %d Iteration(en)", iteration)
             return text_result
 
         # Tool call detected
         function_name = function_call.get("name", "")
         function_args = function_call.get("args", {})
-        print(f"agent_loop: Tool-Call erkannt: {function_name}")
+        logger.info("agent_loop: Tool-Call erkannt: %s", function_name)
 
         # Pre-execution: loading placeholder for widget tools
         tool_def = registry.get(function_name)
@@ -199,7 +205,7 @@ def run_agent_loop(
         backend_data = None
 
     # Max iterations reached
-    print(f"agent_loop: Maximale Iterationen ({MAX_ITERATIONS}) erreicht")
+    logger.warning("agent_loop: Maximale Iterationen (%d) erreicht", MAX_ITERATIONS)
     if callback:
         callback("", True, False)
     return text_result or ""

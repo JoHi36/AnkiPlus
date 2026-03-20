@@ -19,6 +19,12 @@ except ImportError:
         get_backend_url, get_or_create_device_id
     )
 
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+
 
 def get_auth_headers():
     """Gibt Authorization Headers zurück für Backend-Requests."""
@@ -42,7 +48,7 @@ def refresh_auth_token():
     try:
         refresh_token = get_refresh_token()
         if not refresh_token:
-            print("_refresh_auth_token: Kein Refresh-Token vorhanden")
+            logger.warning("_refresh_auth_token: Kein Refresh-Token vorhanden")
             return False
 
         backend_url = get_backend_url()
@@ -67,20 +73,20 @@ def refresh_auth_token():
                 if new_refresh:
                     update_kwargs["refresh_token"] = new_refresh
                 update_config(**update_kwargs)
-                print("_refresh_auth_token: Token erfolgreich erneuert")
+                logger.info("✅ _refresh_auth_token: Token erfolgreich erneuert")
                 return True
             else:
-                print("_refresh_auth_token: Kein neues Token in Response")
+                logger.warning("_refresh_auth_token: Kein neues Token in Response")
                 return False
         elif response.status_code == 401:
-            print("_refresh_auth_token: Refresh-Token ungültig (401)")
+            logger.warning("_refresh_auth_token: Refresh-Token ungültig (401)")
             update_config(auth_validated=False)
             return False
         else:
-            print(f"_refresh_auth_token: Refresh fehlgeschlagen (Status: {response.status_code})")
+            logger.warning("_refresh_auth_token: Refresh fehlgeschlagen (Status: %s)", response.status_code)
             return False
     except Exception as e:
-        print(f"_refresh_auth_token: Fehler beim Token-Refresh: {e}")
+        logger.error("_refresh_auth_token: Fehler beim Token-Refresh: %s", e)
         return False
 
 
@@ -106,7 +112,7 @@ def ensure_valid_token():
 
         # Token läuft in weniger als 5 Minuten ab → proaktiv refreshen
         if exp - now < 300:
-            print(f"🔄 Token läuft in {int(exp - now)}s ab, proaktiver Refresh")
+            logger.info("🔄 Token läuft in %ds ab, proaktiver Refresh", int(exp - now))
             if refresh_auth_token():
                 return True
             if exp < now:

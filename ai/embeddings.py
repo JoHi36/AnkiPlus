@@ -13,6 +13,12 @@ import time
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+
 
 def _dot(a, b):
     """Dot product of two float lists."""
@@ -86,7 +92,7 @@ class EmbeddingManager:
                 data = response.json()
                 return data.get("embeddings", [])
             except Exception as e:
-                print(f"EmbeddingManager: Backend-Fehler: {e}, Fallback auf direkte API (Backend wird übersprungen)")
+                logger.warning("EmbeddingManager: Backend-Fehler: %s, Fallback auf direkte API (Backend wird übersprungen)", e)
                 self._backend_failed = True
 
         # Direkter Gemini API Modus (Fallback)
@@ -96,7 +102,7 @@ class EmbeddingManager:
             url += f"?key={self._api_key}"
             headers = {"Content-Type": "application/json"}
         else:
-            print("EmbeddingManager: No credentials configured")
+            logger.warning("EmbeddingManager: No credentials configured")
             return []
 
         body = {
@@ -164,7 +170,7 @@ class EmbeddingManager:
             self._card_ids = card_ids
             self._index = vectors
 
-        print(f"EmbeddingManager: Loaded {len(self._card_ids)} embeddings into index")
+        logger.info("EmbeddingManager: Loaded %d embeddings into index", len(self._card_ids))
 
     def search(self, query_embedding, top_k=10, exclude_card_ids=None):
         with self._lock:
@@ -236,10 +242,10 @@ class EmbeddingManager:
 
         self._background_thread = BackgroundEmbeddingThread(self, get_all_cards_fn)
         self._background_thread.progress_signal.connect(
-            lambda cur, tot: print(f"Embedding progress: {cur}/{tot}")
+            lambda cur, tot: logger.debug("Embedding progress: %d/%d", cur, tot)
         )
         self._background_thread.finished_signal.connect(
-            lambda n: print(f"Background embedding complete: {n} cards embedded")
+            lambda n: logger.info("Background embedding complete: %d cards embedded", n)
         )
         self._background_thread.start()
 
@@ -272,7 +278,7 @@ class BackgroundEmbeddingThread(QThread):
         try:
             all_cards = self.get_all_cards_fn()
         except Exception as e:
-            print(f"BackgroundEmbedding: Failed to get cards: {e}")
+            logger.error("BackgroundEmbedding: Failed to get cards: %s", e)
             self.finished_signal.emit(0)
             return
 
@@ -312,7 +318,7 @@ class BackgroundEmbeddingThread(QThread):
             try:
                 embeddings = self.manager.embed_texts(texts)
                 if not embeddings:
-                    print(f"BackgroundEmbedding: No embeddings returned, stopping (credentials issue?)")
+                    logger.warning("BackgroundEmbedding: No embeddings returned, stopping (credentials issue?)")
                     break
                 for j, emb in enumerate(embeddings):
                     item = batch[j]
@@ -321,7 +327,7 @@ class BackgroundEmbeddingThread(QThread):
                 embedded += len(embeddings)
                 self.progress_signal.emit(embedded, total)
             except Exception as e:
-                print(f"BackgroundEmbedding batch error: {e}, stopping background embedding")
+                logger.error("BackgroundEmbedding batch error: %s, stopping background embedding", e)
                 break  # Stop on error instead of continuing to spam API
 
             time.sleep(0.5)
