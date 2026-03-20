@@ -4,8 +4,9 @@ import * as functions from 'firebase-functions';
 import { ChatRequest } from '../types';
 import { createErrorResponse, ErrorCode } from '../utils/errors';
 import { createLogger } from '../utils/logging';
-import { getOrCreateUser } from '../utils/firestore';
-import { checkQuota, incrementUsage, checkAnonymousQuota, incrementAnonymousUsage } from '../utils/quota';
+import { getOrCreateUser, debitTokens, getCurrentDateString, getCurrentWeekString } from '../utils/firestore';
+import { checkTokenQuota, checkAnonymousTokenQuota } from '../utils/tokenQuota';
+import { calculateNormalizedTokens, calculateCostMicrodollars } from '../utils/tokenPricing';
 import { retryHttpRequest } from '../utils/retry';
 import { logQuotaExceeded, logChatRequest, logChatError } from '../utils/analytics';
 
@@ -52,16 +53,27 @@ export async function chatHandler(
     const model = body.model || 'gemini-3-flash-preview';
     const mode = body.mode || 'compact';
 
-    let quotaCheck;
+    // Token-based quota check
+    let tokenQuota: {
+      allowed: boolean;
+      daily: { used: number; limit: number; remaining: number };
+      weekly: { used: number; limit: number; remaining: number };
+      tier: 'free' | 'tier1' | 'tier2';
+    };
 
-    // Check quota based on authentication status
     if (isAuthenticated && userId) {
       // Authenticated user
       await getOrCreateUser(userId, (req as any).userEmail);
-      quotaCheck = await checkQuota(userId, mode);
+      tokenQuota = await checkTokenQuota(userId);
     } else if (anonymousId && ipAddress) {
-      // Anonymous user
-      quotaCheck = await checkAnonymousQuota(anonymousId, ipAddress, mode);
+      // Anonymous user — wrap flat result into unified shape
+      const anonResult = await checkAnonymousTokenQuota(anonymousId, ipAddress);
+      tokenQuota = {
+        allowed: anonResult.allowed,
+        daily: { used: anonResult.used, limit: anonResult.limit, remaining: anonResult.remaining },
+        weekly: { used: 0, limit: 0, remaining: 0 },
+        tier: 'free',
+      };
     } else {
       res.status(400).json(
         createErrorResponse(ErrorCode.VALIDATION_ERROR, 'Invalid authentication state', undefined, requestId)
@@ -69,28 +81,28 @@ export async function chatHandler(
       return;
     }
 
-    if (!quotaCheck.allowed) {
-      logger.warn('Quota exceeded', { userId, anonymousId, mode, quotaCheck });
-      
+    if (!tokenQuota.allowed) {
+      logger.warn('Token quota exceeded', { userId, anonymousId, mode, tokenQuota });
+
       // Log analytics event
       if (isAuthenticated && userId) {
         const user = await getOrCreateUser(userId, (req as any).userEmail);
-        await logQuotaExceeded(userId, user.tier, quotaCheck.type);
+        await logQuotaExceeded(userId, user.tier, 'tokens');
       }
-      
+
       // Get upgrade/register URL from environment or use default
       const upgradeUrl = process.env.UPGRADE_URL || functions.config().app?.upgrade_url || 'https://anki-plus.vercel.app/register';
-      
+
       res.status(403).json(
         createErrorResponse(
           ErrorCode.QUOTA_EXCEEDED,
-          isAuthenticated 
-            ? 'Tageslimit erreicht. Upgrade für mehr Requests?' 
-            : 'Du hast dein Tageslimit erreicht. Kostenlos registrieren für unbegrenzt Flash Mode?',
+          isAuthenticated
+            ? 'Token-Limit erreicht. Upgrade für mehr Tokens?'
+            : 'Du hast dein Token-Limit erreicht. Kostenlos registrieren für mehr Tokens?',
           {
-            remaining: quotaCheck.remaining,
-            limit: quotaCheck.limit,
-            type: quotaCheck.type,
+            daily: tokenQuota.daily,
+            weekly: tokenQuota.weekly,
+            tier: tokenQuota.tier,
             upgradeUrl: upgradeUrl,
             requiresAuth: !isAuthenticated,
           },
@@ -100,7 +112,7 @@ export async function chatHandler(
       return;
     }
 
-    logger.info('Quota check passed', { userId, anonymousId, mode, quotaCheck });
+    logger.info('Token quota check passed', { userId, anonymousId, mode, tokenQuota });
 
     // Get API key from environment
     const apiKey = process.env.GOOGLE_AI_API_KEY || functions.config().google?.ai_api_key;
@@ -162,7 +174,7 @@ export async function chatHandler(
         const ivl = stats.interval || 0;
 
         let statsText = `\nKartenstatistiken: Kenntnisscore ${knowledgeScore}% (0=neu, 100=sehr gut bekannt), ${reps} Wiederholungen, ${lapses} Fehler, Intervall ${ivl} Tage. `;
-        
+
         if (knowledgeScore >= 70) {
           statsText += 'Karte ist gut bekannt - verwende fortgeschrittene Konzepte und vertiefende Fragen.';
         } else if (knowledgeScore >= 40) {
@@ -210,16 +222,18 @@ export async function chatHandler(
 
     // Check if streaming is requested (default: true)
     const shouldStream = body.stream !== false;
-    
+
     logger.info('Proxying to Gemini API', { userId, anonymousId, model, messageLength: body.message.length, streaming: shouldStream });
-    
+
     // Log analytics event
     if (isAuthenticated && userId) {
       await logChatRequest(userId, model, mode, body.message.length);
     }
 
-    // Determine request type for usage tracking
-    const requestType: 'flash' | 'deep' = mode === 'detailed' ? 'deep' : 'flash';
+    // Effective userId for token debit
+    const effectiveUserId = isAuthenticated && userId ? userId : (anonymousId ? `anon_${anonymousId}` : null);
+    const date = getCurrentDateString();
+    const week = getCurrentWeekString();
 
     // Handle non-streaming requests
     if (!shouldStream) {
@@ -240,21 +254,10 @@ export async function chatHandler(
           }
         );
 
-        // Increment usage counter
-        if (isAuthenticated && userId) {
-          incrementUsage(userId, requestType).catch((error) => {
-            logger.error('Failed to increment usage', error, { userId, requestType });
-          });
-        } else if (anonymousId && ipAddress) {
-          incrementAnonymousUsage(anonymousId, ipAddress, requestType).catch((error) => {
-            logger.error('Failed to increment anonymous usage', error, { anonymousId, requestType });
-          });
-        }
-
         // Extract text from response
         const result = response.data;
         let text = '';
-        
+
         if (result.candidates && result.candidates[0]) {
           const candidate = result.candidates[0];
           if (candidate.content && candidate.content.parts) {
@@ -266,29 +269,48 @@ export async function chatHandler(
           }
         }
 
-        res.json({ text });
-        logger.info('Chat request completed (non-streaming)', { userId });
+        // Debit tokens based on usageMetadata
+        let tokenInfo: { used: number; dailyRemaining: number; weeklyRemaining: number } | undefined;
+        if (result.usageMetadata && effectiveUserId) {
+          const inputTokens = result.usageMetadata.promptTokenCount || 0;
+          const outputTokens = result.usageMetadata.candidatesTokenCount || 0;
+          const normalized = calculateNormalizedTokens(model, inputTokens, outputTokens);
+          const cost = calculateCostMicrodollars(model, inputTokens, outputTokens);
+
+          debitTokens(effectiveUserId, date, week, normalized, inputTokens, outputTokens, cost).catch((error) => {
+            logger.error('Failed to debit tokens', error, { effectiveUserId, normalized });
+          });
+
+          tokenInfo = {
+            used: normalized,
+            dailyRemaining: Math.max(0, tokenQuota.daily.remaining - normalized),
+            weeklyRemaining: tokenQuota.weekly.limit > 0 ? Math.max(0, tokenQuota.weekly.remaining - normalized) : 0,
+          };
+        }
+
+        res.json({ text, tokens: tokenInfo });
+        logger.info('Chat request completed (non-streaming)', { userId, tokenInfo });
         return;
       } catch (error: any) {
         logger.error('Non-streaming request failed', error, { userId, model });
-        
+
         if (error.response) {
           const status = error.response.status;
           const errorData = error.response.data;
-          
+
           if (status === 429) {
             res.status(429).json(
               createErrorResponse(ErrorCode.RATE_LIMIT_EXCEEDED, 'Rate limit exceeded. Please try again later.', errorData, requestId)
             );
             return;
           }
-          
+
           res.status(status).json(
             createErrorResponse(ErrorCode.GEMINI_API_ERROR, 'Gemini API error', errorData, requestId)
           );
           return;
         }
-        
+
         res.status(500).json(
           createErrorResponse(ErrorCode.BACKEND_ERROR, 'Failed to process chat request', error.message, requestId)
         );
@@ -318,7 +340,7 @@ export async function chatHandler(
     } catch (error: any) {
       // Handle retry failures
       logger.error('Gemini API request failed after retries', error, { userId, model });
-      
+
       // Log analytics event
       const user = await getOrCreateUser(userId, (req as any).userEmail);
       await logChatError(
@@ -380,67 +402,56 @@ export async function chatHandler(
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
 
-    // Increment usage counter AFTER successful API request starts
-    // Do this asynchronously to not block streaming
-    if (isAuthenticated && userId) {
-      incrementUsage(userId, requestType).catch((error) => {
-        logger.error('Failed to increment usage', error, { userId, requestType });
-        // Don't fail the request if usage increment fails
-      });
-    } else if (anonymousId && ipAddress) {
-      incrementAnonymousUsage(anonymousId, ipAddress, requestType).catch((error) => {
-        logger.error('Failed to increment anonymous usage', error, { anonymousId, requestType });
-        // Don't fail the request if usage increment fails
-      });
-    }
+    // Track usageMetadata from Gemini stream for post-stream token debit
+    let lastUsageMetadata: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } | null = null;
 
     // Stream response from Gemini to client
     let buffer = '';
     let chunkCount = 0;
     let textChunkCount = 0;
-    
+
     response.data.on('data', (chunk: Buffer) => {
       const chunkStr = chunk.toString();
       buffer += chunkStr;
       chunkCount++;
-      
-      logger.debug('Received chunk from Gemini', { 
-        chunkSize: chunkStr.length, 
+
+      logger.debug('Received chunk from Gemini', {
+        chunkSize: chunkStr.length,
         chunkCount,
         preview: chunkStr.substring(0, 100)
       });
-      
+
       // Extract complete JSON objects from buffer
       // Gemini sends JSON array stream: [{...}, {...}, ...]
       // We need to extract complete objects as they arrive
       let processedLength = 0;
-      
+
       // Find complete JSON objects in buffer by counting braces
       let depth = 0;
       let start = -1;
       let inString = false;
       let escapeNext = false;
-      
+
       for (let i = 0; i < buffer.length; i++) {
         const char = buffer[i];
-        
+
         if (escapeNext) {
           escapeNext = false;
           continue;
         }
-        
+
         if (char === '\\') {
           escapeNext = true;
           continue;
         }
-        
+
         if (char === '"' && !escapeNext) {
           inString = !inString;
           continue;
         }
-        
+
         if (inString) continue;
-        
+
         if (char === '{') {
           if (depth === 0) start = i;
           depth++;
@@ -451,21 +462,21 @@ export async function chatHandler(
             try {
               const objStr = buffer.substring(start, i + 1);
               const jsonData = JSON.parse(objStr);
-              
-              logger.debug('Extracted JSON object', { 
+
+              logger.debug('Extracted JSON object', {
                 hasCandidates: !!jsonData.candidates,
                 candidateCount: jsonData.candidates?.length || 0
               });
-              
+
               // Extract text from Gemini response
               if (jsonData.candidates && jsonData.candidates[0]) {
                 const candidate = jsonData.candidates[0];
-                
+
                 if (candidate.content && candidate.content.parts) {
                   for (const part of candidate.content.parts) {
                     if (part.text) {
                       textChunkCount++;
-                      logger.info('Forwarding text chunk', { 
+                      logger.info('Forwarding text chunk', {
                         textLength: part.text.length,
                         textChunkCount,
                         preview: part.text.substring(0, 50)
@@ -475,23 +486,26 @@ export async function chatHandler(
                     }
                   }
                 }
-                
+
                 // Check for finish reason
                 if (candidate.finishReason) {
-                  logger.info('Gemini stream finished', { 
+                  logger.info('Gemini stream finished', {
                     finishReason: candidate.finishReason,
                     textChunkCount,
-                    chunkCount 
+                    chunkCount
                   });
-                  res.write('data: [DONE]\n\n');
-                  res.end();
-                  return;
+                  // Don't send [DONE] here — let the 'end' handler do token debit first
                 }
               }
-              
+
+              // Capture usageMetadata for post-stream token debit
+              if (jsonData.usageMetadata) {
+                lastUsageMetadata = jsonData.usageMetadata;
+              }
+
               processedLength = i + 1;
             } catch (error) {
-              logger.debug('Failed to parse JSON object', { 
+              logger.debug('Failed to parse JSON object', {
                 error: (error as Error).message,
                 preview: buffer.substring(start, Math.min(i + 1, start + 100))
               });
@@ -500,7 +514,7 @@ export async function chatHandler(
           }
         }
       }
-      
+
       // Remove processed JSON objects from buffer
       if (processedLength > 0) {
         // Also remove leading commas, whitespace, and array brackets
@@ -514,9 +528,10 @@ export async function chatHandler(
       // Send final chunk if buffer has content
       if (buffer.trim()) {
         try {
-          if (buffer.startsWith('data: ')) {
-            const data = buffer.substring(6);
-            const jsonData = JSON.parse(data);
+          // Try to parse remaining buffer as JSON
+          const cleanBuffer = buffer.replace(/^[\s,\[\]]+/, '').replace(/[\s,\[\]]+$/, '');
+          if (cleanBuffer.startsWith('{')) {
+            const jsonData = JSON.parse(cleanBuffer);
             if (jsonData.candidates && jsonData.candidates[0]) {
               const candidate = jsonData.candidates[0];
               if (candidate.content && candidate.content.parts) {
@@ -527,15 +542,40 @@ export async function chatHandler(
                 }
               }
             }
+            // Capture usageMetadata from remaining buffer
+            if (jsonData.usageMetadata) {
+              lastUsageMetadata = jsonData.usageMetadata;
+            }
           }
         } catch (error) {
           // Ignore parse errors
         }
       }
-      
-      res.write('data: [DONE]\n\n');
+
+      // Debit tokens and send [DONE] with token info
+      if (lastUsageMetadata && effectiveUserId) {
+        const inputTokens = lastUsageMetadata.promptTokenCount || 0;
+        const outputTokens = lastUsageMetadata.candidatesTokenCount || 0;
+        const normalized = calculateNormalizedTokens(model, inputTokens, outputTokens);
+        const cost = calculateCostMicrodollars(model, inputTokens, outputTokens);
+
+        debitTokens(effectiveUserId, date, week, normalized, inputTokens, outputTokens, cost).catch((error) => {
+          logger.error('Failed to debit tokens', error, { effectiveUserId, normalized });
+        });
+
+        const tokenInfo = {
+          used: normalized,
+          dailyRemaining: Math.max(0, tokenQuota.daily.remaining - normalized),
+          weeklyRemaining: tokenQuota.weekly.limit > 0 ? Math.max(0, tokenQuota.weekly.remaining - normalized) : 0,
+        };
+
+        res.write(`data: ${JSON.stringify({ done: true, tokens: tokenInfo })}\n\n`);
+      } else {
+        res.write('data: [DONE]\n\n');
+      }
+
       res.end();
-      logger.info('Chat request completed', { userId });
+      logger.info('Chat request completed', { userId, lastUsageMetadata });
     });
 
     response.data.on('error', (error: Error) => {
@@ -585,4 +625,3 @@ export async function chatHandler(
     );
   }
 }
-
