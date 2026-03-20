@@ -57,18 +57,72 @@ This addon bridges three major technologies:
 2. Calls `web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")`
 3. React's `useAnki` hook receives and processes the message
 
+## Package Structure
+
+```
+AnkiPlus_main/
+├── __init__.py              # Entry point (Anki loads this)
+├── config.py                # Global configuration
+├── ai/                      # AI engine
+│   ├── handler.py           # Google Gemini API integration (main AI handler)
+│   ├── auth.py              # Token management, JWT validation
+│   ├── system_prompt.py     # System prompt construction
+│   ├── agent_loop.py        # Agent loop for tool use
+│   ├── tools.py             # Tool definitions (registry)
+│   ├── tool_executor.py     # Tool execution
+│   ├── retrieval.py         # RAG/hybrid retrieval
+│   └── embeddings.py        # Embedding management
+├── plusi/                   # Plusi companion subsystem
+│   ├── agent.py             # Plusi personality agent
+│   ├── dock.py              # Dock widget (mood display)
+│   ├── panel.py             # Side panel (diary, chat)
+│   └── storage.py           # Plusi data persistence
+├── storage/                 # Data persistence layer
+│   ├── card_sessions.py     # Per-card session SQLite storage
+│   ├── sessions.py          # Legacy session storage
+│   ├── mc_cache.py          # Multiple-choice cache
+│   └── insights.py          # Card insight extraction
+├── ui/                      # Qt UI components & communication
+│   ├── widget.py            # ChatbotWidget (QWebEngineView)
+│   ├── bridge.py            # WebBridge (JS ↔ Python communication)
+│   ├── setup.py             # DockWidget creation, keyboard shortcuts
+│   ├── manager.py           # Toolbar/bottom bar hide/show
+│   ├── settings.py          # Settings dialog
+│   ├── theme.py             # Theme utilities
+│   ├── global_theme.py      # Application-wide dark theme
+│   ├── overlay_chat.py      # Free chat overlay
+│   └── custom_screens.py    # DeckBrowser + Overview replacement
+├── utils/                   # Shared utilities
+│   ├── text.py              # HTML cleaning, image extraction
+│   ├── anki.py              # Thread-safe Anki API helpers
+│   ├── card_tracker.py      # Card tracking + JS injection
+│   └── image_search.py      # PubChem/Wikimedia image search
+├── custom_reviewer/         # Custom reviewer (HTML/CSS/JS replacement)
+├── frontend/                # React source code
+├── web/                     # Built frontend (loaded by QWebEngineView)
+├── docs/                    # Documentation + specs + plans
+├── scripts/                 # Shell scripts (build, deploy, cache)
+└── firebase/                # Firebase configuration
+```
+
 ## Critical File Locations
 
 ### Python Backend
 
-- `__init__.py` (460 lines): Main entry point, hook registration, addon initialization, toolbar/UI hiding logic
-- `bridge.py`: WebBridge class with 35+ `@pyqtSlot` methods for JS communication
-- `widget.py`: ChatbotWidget class, QWebEngineView setup, message queue polling, AI request handling
-- `ui_setup.py`: QDockWidget creation, keyboard shortcuts (Cmd/Ctrl+I), toolbar button, menu items
-- `anki_global_theme.py` (747 lines): Application-wide dark theme styling, continuous re-application logic
-- `ai_handler.py`: API integration for OpenAI, Anthropic (Claude), and Google (Gemini)
+- `__init__.py`: Main entry point, hook registration, addon initialization
+- `ui/bridge.py`: WebBridge class with 35+ `@pyqtSlot` methods for JS communication
+- `ui/widget.py`: ChatbotWidget class, QWebEngineView setup, message queue polling, AI request handling
+- `ui/setup.py`: QDockWidget creation, keyboard shortcuts (Cmd/Ctrl+I), toolbar button, menu items
+- `ui/global_theme.py`: Application-wide dark theme styling, continuous re-application logic
+- `ai/handler.py`: API integration for Google (Gemini)
+- `ai/auth.py`: Token management, JWT validation
+- `ai/system_prompt.py`: System prompt construction
+- `ai/agent_loop.py`: Agent loop for tool use
+- `ai/retrieval.py`: RAG/hybrid retrieval
 - `config.py`: Configuration management (API keys, model preferences, stored in config.json)
-- `custom_reviewer/__init__.py` (430 lines): Custom reviewer HTML/CSS/JS replacement
+- `custom_reviewer/__init__.py`: Custom reviewer HTML/CSS/JS replacement
+- `plusi/agent.py`: Plusi personality agent
+- `storage/card_sessions.py`: Per-card session SQLite storage
 
 ### React Frontend
 
@@ -85,7 +139,7 @@ This addon bridges three major technologies:
 
 ## Python ↔ JavaScript Bridge Methods
 
-The WebBridge exposes these methods to JavaScript (all defined in `bridge.py`):
+The WebBridge exposes these methods to JavaScript (all defined in `ui/bridge.py`):
 
 **AI & Messaging**: `sendMessage()`, `cancelRequest()`, `setModel()`, `generateSectionTitle()`
 
@@ -139,7 +193,7 @@ mw (Anki Main Window)
 
 ### Global Theme System
 
-The addon applies a comprehensive dark theme to ALL Anki UI elements (not just the chatbot panel). This is done via `anki_global_theme.py` which:
+The addon applies a comprehensive dark theme to ALL Anki UI elements (not just the chatbot panel). This is done via `ui/global_theme.py` which:
 
 - Sets global stylesheet on QApplication
 - Re-applies on every state change (Anki frequently resets styles)
@@ -167,7 +221,7 @@ The addon supports three AI providers with live model fetching:
 2. **Anthropic**: Static model list (Claude 3.5 Sonnet, Claude 3 Opus/Sonnet/Haiku) - API doesn't provide model list endpoint
 3. **Google Gemini**: Models fetched from API (Gemini 1.5 Pro/Flash, Gemini Pro)
 
-API calls are handled in `ai_handler.py` with streaming support and proper error handling.
+API calls are handled in `ai/handler.py` with streaming support and proper error handling.
 
 ## Frontend Technology Stack
 
@@ -185,7 +239,7 @@ API calls are handled in `ai_handler.py` with streaming support and proper error
 
 ### Adding a New Bridge Method
 
-1. Add `@pyqtSlot` method in `bridge.py`:
+1. Add `@pyqtSlot` method in `ui/bridge.py`:
    ```python
    @pyqtSlot(str, result=str)
    def myNewMethod(self, param):
@@ -200,11 +254,11 @@ API calls are handled in `ai_handler.py` with streaming support and proper error
    }
    ```
 
-3. Handle response in `widget.py`'s `_handle_js_message()` if needed
+3. Handle response in `ui/widget.py`'s `_handle_js_message()` if needed
 
 ### Styling Anki Components
 
-Global theme styles are in `anki_global_theme.py`. Add new component styles in the `apply_global_dark_theme()` function's stylesheet string. The theme auto-reapplies, so changes take effect within 2 seconds.
+Global theme styles are in `ui/global_theme.py`. Add new component styles in the `apply_global_dark_theme()` function's stylesheet string. The theme auto-reapplies, so changes take effect within 2 seconds.
 
 ### Building for Production
 
