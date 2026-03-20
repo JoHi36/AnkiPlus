@@ -38,6 +38,13 @@ DEFAULT_CONFIG = {
         "service_account_path": "",  # Pfad zur Service Account JSON (optional, kann auch über Umgebungsvariable gesetzt werden)
         "storage_bucket": ""  # Firebase Storage Bucket (optional, kann auch über Umgebungsvariable gesetzt werden)
     },
+    "plusi_autonomy": {
+        "token_budget_per_hour": 500,
+        "can_reflect": True,
+        "can_explore_cards": True,
+        "can_write_diary": True,
+        "can_comment_events": False,
+    },
     "mascot_enabled": False
 }
 
@@ -106,6 +113,11 @@ def load_config():
                         for firebase_key, firebase_value in default_firebase.items():
                             if firebase_key not in config[key]:
                                 config[key][firebase_key] = firebase_value
+                    elif key == "plusi_autonomy" and isinstance(value, dict):
+                        default_autonomy = DEFAULT_CONFIG["plusi_autonomy"]
+                        for k, v in default_autonomy.items():
+                            if k not in config[key]:
+                                config[key][k] = v
                 # Migration: Wenn ai_tools fehlt, füge Standardwerte hinzu
                 if "ai_tools" not in config:
                     config["ai_tools"] = DEFAULT_CONFIG["ai_tools"].copy()
