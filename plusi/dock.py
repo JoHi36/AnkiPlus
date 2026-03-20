@@ -105,7 +105,7 @@ PLUSI_CSS = """
 
 /* ── Event Bubble ── */
 .plusi-dock-bubble {
-  background: rgba(18,18,18,.94);
+  background: var(--ds-bg-frosted);
   border: none;
   border-radius: 10px;
   backdrop-filter: blur(20px);
@@ -113,14 +113,14 @@ PLUSI_CSS = """
   box-shadow:
     -4px 0 12px rgba(10,132,255,.06),
     0 4px 16px rgba(0,0,0,.35),
-    0 0 0 0.5px rgba(255,255,255,.04) inset;
+    0 0 0 0.5px var(--ds-border-subtle) inset;
   animation: pd-card-in 0.25s cubic-bezier(0.34,1.1,0.64,1);
   align-self: center;
   display: none;
   padding: 6px 11px;
   font-family: 'Space Grotesk', -apple-system, sans-serif;
   font-size: 12.5px;
-  color: rgba(232,232,232,.72);
+  color: var(--ds-text-secondary);
   line-height: 1.45;
 }
 .plusi-dock-bubble.visible { display: block; }
