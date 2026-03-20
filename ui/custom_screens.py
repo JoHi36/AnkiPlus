@@ -364,9 +364,8 @@ def _top_bar(active_tab='stapel', deck_name='', due_new=0, due_learn=0, due_revi
     """
     def tab_cls(tab_name):
         if tab_name == active_tab:
-            return 'tab-btn tab-active px-4 py-[5px] text-xs font-semibold text-base-content bg-base-content/[0.08] rounded-md cursor-default'
-        return ('tab-btn px-4 py-[5px] text-xs font-medium text-base-content/[0.35] bg-transparent rounded-md'
-                ' cursor-pointer hover:text-base-content/[0.55] hover:bg-base-content/[0.04] transition-colors')
+            return 'tab-btn tab-active px-4 py-[5px] text-xs font-semibold rounded-md cursor-default'
+        return 'tab-btn px-4 py-[5px] text-xs font-medium rounded-md cursor-pointer transition-colors'
 
     stapel_onclick = '' if active_tab == 'stapel' else " onclick=\"window._apAction={type:'cmd',cmd:'decks'}\""
     session_onclick = '' if active_tab == 'session' else " onclick=\"window._apAction={type:'cmd',cmd:'study'}\""
@@ -411,7 +410,7 @@ def _top_bar(active_tab='stapel', deck_name='', due_new=0, due_learn=0, due_revi
     return (
         f'<div class="flex items-center justify-between px-5 h-12 z-50 flex-shrink-0" style="background:transparent;">'
         f'<div class="flex-1 flex items-center">{left_html}</div>'
-        f'<div class="flex items-center gap-0.5 p-[3px] bg-base-content/[0.04] rounded-lg">'
+        f'<div class="flex items-center gap-0.5 p-[3px] rounded-lg" style="background:var(--ds-hover-tint);">'
         f'<button class="{tab_cls("stapel")}"{stapel_onclick}>Stapel</button>'
         f'<button class="{tab_cls("session")}"{session_onclick}>Session</button>'
         f'<button class="{tab_cls("statistik")}"{statistik_onclick}>Statistik</button>'
@@ -509,14 +508,20 @@ html, body {
     box-shadow: none !important;
     outline: none !important;
     border: none !important;
+    color: var(--ds-text-tertiary);
+    background: transparent;
 }
 .tab-btn:hover {
     box-shadow: none !important;
     outline: none !important;
     border: none !important;
+    color: var(--ds-text-secondary);
+    background: var(--ds-hover-tint);
 }
 .tab-btn.tab-active {
     box-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
+    color: var(--ds-text-primary);
+    background: var(--ds-active-tint);
 }
 
 /* Canvas background: dot grid fading out radially — same as reviewer */

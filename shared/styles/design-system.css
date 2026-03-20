@@ -132,9 +132,11 @@
    2. LIGHT MODE OVERRIDES
    ───────────────────────────────────────────────────────── */
 [data-theme="light"] {
-  --ds-bg-deep:     #ECECF0;
-  --ds-bg-canvas:   #FFFFFF;
-  --ds-bg-frosted:  #F9F9FB;
+  color-scheme: light;
+
+  --ds-bg-deep:     #E8E8ED;
+  --ds-bg-canvas:   #F5F5F7;
+  --ds-bg-frosted:  #EEEEF0;
   --ds-bg-overlay:  #E5E5EA;
 
   --ds-text-primary:     rgba(0, 0, 0, 0.85);
@@ -254,7 +256,7 @@
   border-radius: 50%;
   background: var(--ds-accent);
   border: none;
-  color: #ffffff;
+  color: white;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -64,14 +64,20 @@ div[id^="bottom"]:not(#reviewer *) {
     box-shadow: none !important;
     outline: none !important;
     border: none !important;
+    color: var(--ds-text-tertiary);
+    background: transparent;
 }
 .tab-btn:hover {
     box-shadow: none !important;
     outline: none !important;
     border: none !important;
+    color: var(--ds-text-secondary);
+    background: var(--ds-hover-tint);
 }
 .tab-btn.tab-active {
     box-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
+    color: var(--ds-text-primary);
+    background: var(--ds-active-tint);
 }
 
 /* ═══ Unified Dock ═══ */
@@ -182,17 +188,24 @@ div[id^="bottom"]:not(#reviewer *) {
     <div id="reviewer" data-state="question" data-button-count="{{BUTTON_COUNT}}" class="h-screen flex flex-col overflow-hidden">
 
         <!-- ═══ TOP BAR ═══ -->
-        <div class="flex items-center justify-between px-5 h-12 z-50 flex-shrink-0" style="background: var(--ds-bg-canvas); border-bottom: 1px solid var(--ds-border-subtle);">
+        <div class="flex items-center justify-between px-5 h-12 z-50 flex-shrink-0" style="background: var(--ds-bg-canvas);">
             <!-- Left: Deck Name (unified style) -->
             <div class="flex-1 flex items-center">
                 <span style="font-size:11px;font-weight:600;color:var(--ds-text-tertiary);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{DECK_NAME}}</span>
             </div>
             <!-- Center: Tabs -->
-            <div class="flex items-center gap-0.5 p-[3px] bg-base-content/[0.04] rounded-lg">
-                <button class="tab-btn px-4 py-[5px] text-xs font-medium text-base-content/[0.35] bg-transparent rounded-md cursor-pointer hover:text-base-content/[0.55] hover:bg-base-content/[0.04] transition-colors"
+            <div class="flex items-center gap-0.5 p-[3px] rounded-lg" style="background:var(--ds-hover-tint);">
+                <button class="tab-btn px-4 py-[5px] text-xs font-medium rounded-md cursor-pointer transition-colors"
+                        style="color:var(--ds-text-tertiary);background:transparent;"
+                        onmouseenter="this.style.color='var(--ds-text-secondary)';this.style.background='var(--ds-hover-tint)'"
+                        onmouseleave="this.style.color='var(--ds-text-tertiary)';this.style.background='transparent'"
                         onclick="try{sessionStorage.removeItem('ap_session_active')}catch(e){};pycmd('deck:home')">Stapel</button>
-                <button class="tab-btn tab-active px-4 py-[5px] text-xs font-semibold text-base-content bg-base-content/[0.08] rounded-md cursor-pointer">Session</button>
-                <button class="tab-btn px-4 py-[5px] text-xs font-medium text-base-content/[0.35] bg-transparent rounded-md cursor-pointer hover:text-base-content/[0.55] hover:bg-base-content/[0.04] transition-colors"
+                <button class="tab-btn tab-active px-4 py-[5px] text-xs font-semibold rounded-md cursor-default"
+                        style="color:var(--ds-text-primary);background:var(--ds-active-tint);">Session</button>
+                <button class="tab-btn px-4 py-[5px] text-xs font-medium rounded-md cursor-pointer transition-colors"
+                        style="color:var(--ds-text-tertiary);background:transparent;"
+                        onmouseenter="this.style.color='var(--ds-text-secondary)';this.style.background='var(--ds-hover-tint)'"
+                        onmouseleave="this.style.color='var(--ds-text-tertiary)';this.style.background='transparent'"
                         onclick="try{sessionStorage.removeItem('ap_session_active')}catch(e){};pycmd('deck:stats')">Statistik</button>
             </div>
             <!-- Right: Stats (numbers only) -->
