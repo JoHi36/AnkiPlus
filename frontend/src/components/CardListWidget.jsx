@@ -5,7 +5,7 @@ export default function CardListWidget({ query, cards, totalFound, showing, onCa
   if (!cards || cards.length === 0) {
     return (
       <div style={{
-        background: '#222224',
+        background: 'var(--ds-bg-overlay)',
         border: '1px solid rgba(255,255,255,0.06)',
         borderRadius: 16,
         padding: '24px 20px',
@@ -25,7 +25,7 @@ export default function CardListWidget({ query, cards, totalFound, showing, onCa
 
   return (
     <div style={{
-      background: '#222224',
+      background: 'var(--ds-bg-overlay)',
       border: '1px solid rgba(255,255,255,0.06)',
       borderRadius: 16,
       overflow: 'hidden',

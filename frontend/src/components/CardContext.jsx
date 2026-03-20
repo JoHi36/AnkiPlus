@@ -39,7 +39,7 @@ export default function CardContext({
   const knowledge = getKnowledge(knowledgeScore);
 
   return (
-    <div className="backdrop-blur-xl rounded-t-2xl rounded-b-none px-5 pt-3 pb-8 pointer-events-auto w-full" style={{ backgroundColor: '#1A1A1A' }}>
+    <div className="backdrop-blur-xl rounded-t-2xl rounded-b-none px-5 pt-3 pb-8 pointer-events-auto w-full" style={{ backgroundColor: 'var(--ds-bg-canvas)' }}>
       <div className="flex items-center justify-between w-full gap-4">
         
         {/* Left: ID or Title */}

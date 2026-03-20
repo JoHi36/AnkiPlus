@@ -154,12 +154,12 @@ export default function SessionHeader({
   };
   
   return (
-    <header className="w-full flex items-center px-4 py-3 pointer-events-none relative" style={{ backgroundColor: '#1A1A1A', background: '#1A1A1A' }}>
-      <div 
+    <header className="w-full flex items-center px-4 py-3 pointer-events-none relative" style={{ backgroundColor: 'var(--ds-bg-canvas)', background: 'var(--ds-bg-canvas)' }}>
+      <div
         className="absolute inset-0 pointer-events-none z-0"
         style={{
-          background: '#1A1A1A',
-          backgroundColor: '#1A1A1A'
+          background: 'var(--ds-bg-canvas)',
+          backgroundColor: 'var(--ds-bg-canvas)'
         }}
       />
       

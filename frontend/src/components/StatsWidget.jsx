@@ -119,7 +119,7 @@ export default function StatsWidget({ modules }) {
         const isLast = i === modules.length - 1;
         return (
           <div key={i} style={{
-            background: '#222224',
+            background: 'var(--ds-bg-overlay)',
             border: '1px solid rgba(255,255,255,0.06)',
             borderBottom: !isLast && !single ? 'none' : '1px solid rgba(255,255,255,0.06)',
             borderRadius: single ? 16 : isFirst ? '16px 16px 0 0' : isLast ? '0 0 16px 16px' : 0,

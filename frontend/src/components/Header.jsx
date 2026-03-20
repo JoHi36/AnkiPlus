@@ -75,13 +75,13 @@ export default function Header({
   console.log('📋 Header: activeSectionTitle:', activeSectionTitle);
 
   return (
-    <header className="w-full flex items-center justify-between px-4 py-3 pointer-events-none relative" style={{ backgroundColor: '#1A1A1A', background: '#1A1A1A' }}>
+    <header className="w-full flex items-center justify-between px-4 py-3 pointer-events-none relative" style={{ backgroundColor: 'var(--ds-bg-canvas)', background: 'var(--ds-bg-canvas)' }}>
       {/* Nebel-Effekt nur innerhalb des Headers - vollständig opak */}
-      <div 
+      <div
         className="absolute inset-0 pointer-events-none z-0"
         style={{
-          background: '#1A1A1A',
-          backgroundColor: '#1A1A1A'
+          background: 'var(--ds-bg-canvas)',
+          backgroundColor: 'var(--ds-bg-canvas)'
         }}
       />
       

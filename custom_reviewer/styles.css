@@ -269,7 +269,7 @@ div[id^="bottom"]:not(.dock):not(.dock-wrapper) {
    FLOATING INPUT DOCK
    Spec: CONTAINER from design-system.css
    Matches ChatInput.jsx exactly:
-     bg: #151515, border: 1px --ds-border-medium, radius: 16px
+     bg: var(--ds-bg-frosted), border: 1px --ds-border-medium, radius: 16px
    ═══════════════════════════════════════════════ */
 .dock-wrapper {
     position: fixed;

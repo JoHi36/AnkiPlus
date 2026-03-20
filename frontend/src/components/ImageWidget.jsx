@@ -14,7 +14,7 @@ export default function ImageWidget({ data, toolName }) {
     if (data.error) {
       return (
         <div style={{
-          background: '#222224',
+          background: 'var(--ds-bg-overlay)',
           border: '1px solid rgba(255,255,255,0.06)',
           borderRadius: 16,
           padding: '16px 20px',
@@ -31,7 +31,7 @@ export default function ImageWidget({ data, toolName }) {
 
     return (
       <div style={{
-        background: '#222224',
+        background: 'var(--ds-bg-overlay)',
         border: '1px solid rgba(255,255,255,0.06)',
         borderRadius: 16,
         overflow: 'hidden',
@@ -94,7 +94,7 @@ export default function ImageWidget({ data, toolName }) {
     if (data.error) {
       return (
         <div style={{
-          background: '#222224',
+          background: 'var(--ds-bg-overlay)',
           border: '1px solid rgba(255,255,255,0.06)',
           borderRadius: 16,
           padding: '16px 20px',
@@ -109,7 +109,7 @@ export default function ImageWidget({ data, toolName }) {
 
     return (
       <div style={{
-        background: '#222224',
+        background: 'var(--ds-bg-overlay)',
         border: '1px solid rgba(255,255,255,0.06)',
         borderRadius: 16,
         overflow: 'hidden',

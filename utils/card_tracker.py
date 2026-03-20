@@ -267,9 +267,9 @@ class CardTracker:
                         }});
                     }}
                     
-                    // Body und HTML auf #1A1A1A
-                    document.documentElement.style.setProperty('background', '#1A1A1A', 'important');
-                    document.body.style.setProperty('background', '#1A1A1A', 'important');
+                    // Body und HTML auf canvas background
+                    document.documentElement.style.setProperty('background', 'var(--ds-bg-canvas)', 'important');
+                    document.body.style.setProperty('background', 'var(--ds-bg-canvas)', 'important');
                     
                     // Alle Tables transparent
                     document.querySelectorAll('table, tbody, tr, td').forEach(el => {{

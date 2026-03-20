@@ -14,7 +14,7 @@ export default function ToolLoadingPlaceholder({ toolName }) {
 
   return (
     <div style={{
-      background: '#222224',
+      background: 'var(--ds-bg-overlay)',
       border: '1px solid rgba(255,255,255,0.06)',
       borderRadius: 16,
       padding: '18px 20px',

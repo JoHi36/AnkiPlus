@@ -9,7 +9,7 @@ export default function CardWidget({ cardId, front, back, deckName, onCardClick 
     <div
       onClick={handleClick}
       style={{
-        background: '#222224',
+        background: 'var(--ds-bg-overlay)',
         border: '1px solid rgba(255,255,255,0.06)',
         borderRadius: 16,
         overflow: 'hidden',
