@@ -13,6 +13,12 @@ Features:
 
 import json
 
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+
 
 def get_faces_dict():
     """Return the FACES dict with SVG inner HTML strings for each mood.
@@ -379,7 +385,7 @@ def show_bubble(web_view_or_none=None, text='', mood='happy'):
 def sync_mood(mood):
     """Convenience: sync mood to whatever webview is currently active.
     Also persists the mood so it survives page reloads and app restarts."""
-    print(f"plusi_dock.sync_mood: {mood}")
+    logger.debug(f"plusi_dock.sync_mood: {mood}")
     # Persist to storage
     try:
         try:

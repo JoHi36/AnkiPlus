@@ -9,6 +9,12 @@ from concurrent.futures import ThreadPoolExecutor
 from aqt import gui_hooks
 from aqt.qt import QTimer
 
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+
 _embed_executor = ThreadPoolExecutor(max_workers=1)
 
 _css_cache = None  # Cached CSS content
@@ -113,7 +119,7 @@ class CardTracker:
                 # Entferne HTML-Entities
                 clean_front = re.sub(r'&[a-zA-Z]+;', ' ', clean_front)
                 front_field = clean_front.strip()
-                print(f"card_tracker: frontField bereinigt: {front_field[:100] if front_field else 'leer'}...")
+                logger.debug(f"card_tracker: frontField bereinigt: {front_field[:100] if front_field else 'leer'}...")
             
             # Hole Deck-Name
             deck_name = None
@@ -174,7 +180,7 @@ class CardTracker:
             }
             
             payload_json = json.dumps(payload)
-            print(f"card_tracker: 🔴 SENDING cardContext to chat panel for cardId={context.get('cardId')}")
+            logger.debug(f"card_tracker: 🔴 SENDING cardContext to chat panel for cardId={context.get('cardId')}")
             # Use BOTH window.ankiReceive AND CustomEvent for reliability
             js = f"""(function() {{
                 var payload = {payload_json};
@@ -203,19 +209,17 @@ class CardTracker:
                 pass  # Don't block card display
 
         except Exception as e:
-            import traceback
-            print(f"Fehler beim Senden des Karten-Kontexts: {e}")
-            print(traceback.format_exc())
+            logger.error(f"Fehler beim Senden des Karten-Kontexts: {e}")
     
     def _inject_card_styles(self, card):
         """Injiziert CSS für modernes Card-Design"""
         try:
             from aqt import mw
             if not mw or not mw.reviewer:
-                print("❌ card_tracker: mw oder mw.reviewer nicht verfügbar")
+                logger.error("❌ card_tracker: mw oder mw.reviewer nicht verfügbar")
                 return
             
-            print(f"🎨 card_tracker: _inject_card_styles aufgerufen für Karte {card.id}")
+            logger.debug(f"🎨 card_tracker: _inject_card_styles aufgerufen für Karte {card.id}")
             
             # Lade Minimal CSS-Datei (CSS-Only Styling) — cached after first read
             global _css_cache
@@ -227,13 +231,12 @@ class CardTracker:
                     with open(css_path, 'r', encoding='utf-8') as f:
                         _css_cache = f.read()
                 except FileNotFoundError:
-                    print(f"❌ card_tracker: CSS-Datei nicht gefunden: {css_path}")
+                    logger.error(f"❌ card_tracker: CSS-Datei nicht gefunden: {css_path}")
                     return
 
             css_content = _css_cache
             
-            print(f"✅ card_tracker: CSS geladen - {len(css_content)} Zeichen")
-            print(f"✅ CSS Preview: {css_content[:100]}...")
+            logger.debug(f"card_tracker: CSS geladen - {len(css_content)} Zeichen")
             
             # CSS + Direktes Inline-Styling für Container (höchste Priorität)
             css_js = f"""
@@ -290,12 +293,12 @@ class CardTracker:
             
             # Verwende reviewer.web.eval() für Injection
             has_web = hasattr(mw.reviewer, 'web') and mw.reviewer.web
-            print(f"🔍 card_tracker: has_web = {has_web}")
+            logger.debug(f"🔍 card_tracker: has_web = {has_web}")
             
             if has_web:
-                print(f"📝 card_tracker: Führe JavaScript aus ({len(css_js)} Zeichen)")
+                logger.debug(f"📝 card_tracker: Führe JavaScript aus ({len(css_js)} Zeichen)")
                 mw.reviewer.web.eval(css_js)
-                print("✅ card_tracker: CSS + JavaScript injiziert")
+                logger.debug("card_tracker: CSS + JavaScript injiziert")
                 
                 # Test-Script laden (nach weiteren 200ms)
                 test_script_path = os.path.join(addon_dir, 'test_css_injection.js')
@@ -304,14 +307,12 @@ class CardTracker:
                         test_js = f.read()
                     test_js_wrapped = f"setTimeout(function() {{ {test_js} }}, 300);"
                     mw.reviewer.web.eval(test_js_wrapped)
-                    print("✅ card_tracker: Test-Script injiziert")
+                    logger.debug("card_tracker: Test-Script injiziert")
             else:
-                print("❌ card_tracker: Reviewer web nicht verfügbar")
+                logger.error("❌ card_tracker: Reviewer web nicht verfügbar")
                     
         except Exception as e:
-            import traceback
-            print(f"Fehler beim Injizieren von Card-Styles: {e}")
-            print(traceback.format_exc())
+            logger.error(f"Fehler beim Injizieren von Card-Styles: {e}")
     
     def _inject_mc_script(self, card):
         """Injiziert JavaScript für MC-Integration"""
@@ -332,7 +333,7 @@ class CardTracker:
                     
                     if hasattr(mw.reviewer, 'web') and mw.reviewer.web:
                         mw.reviewer.web.eval(premium_js_content)
-                        print("card_tracker: Premium JS injiziert")
+                        logger.debug("card_tracker: Premium JS injiziert")
                 
                 # Lade MC-Injector JS (für Multiple Choice)
                 mc_js_path = os.path.join(addon_dir, 'card_mc_injector.js')
@@ -342,7 +343,7 @@ class CardTracker:
                     
                     if hasattr(mw.reviewer, 'web') and mw.reviewer.web:
                         mw.reviewer.web.eval(mc_js_content)
-                        print("card_tracker: MC-JS injiziert")
+                        logger.debug("card_tracker: MC-JS injiziert")
                 
                 self.js_injected = True
             
@@ -360,10 +361,8 @@ class CardTracker:
                 """
                 mw.reviewer.web.eval(set_card_id_js)
             else:
-                print("card_tracker: Reviewer web nicht verfügbar")
+                logger.debug("card_tracker: Reviewer web nicht verfügbar")
                     
         except Exception as e:
-            import traceback
-            print(f"Fehler beim Injizieren von MC-Script: {e}")
-            print(traceback.format_exc())
+            logger.error(f"Fehler beim Injizieren von MC-Script: {e}")
 

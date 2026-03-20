@@ -8,6 +8,12 @@ from aqt.qt import QTimer
 from aqt import gui_hooks
 import json
 
+try:
+    from .utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+
 # Global EmbeddingManager instance
 _embedding_manager = None
 
@@ -226,9 +232,9 @@ def _init_embedding_manager():
 
         QTimer.singleShot(10000, lambda: _embedding_manager.start_background_embedding(get_all_cards))
 
-        print(f"EmbeddingManager initialized")
+        logger.info(f"EmbeddingManager initialized")
     except Exception as e:
-        print(f"EmbeddingManager initialization failed: {e}")
+        logger.error(f"EmbeddingManager initialization failed: {e}")
         _embedding_manager = None
 
 
@@ -242,7 +248,7 @@ def init_addon():
         from .storage.card_sessions import migrate_from_json
         migrate_from_json()
     except Exception as e:
-        print(f"Card sessions migration skipped: {e}")
+        logger.error(f"Card sessions migration skipped: {e}")
 
     # Proaktiver Token-Refresh beim Startup + periodischer Refresh
     def _startup_token_refresh():
@@ -258,9 +264,9 @@ def init_addon():
 
         handler = get_ai_handler()
         if handler._ensure_valid_token():
-            print("✅ Startup: Token ist gültig")
+            logger.info("✅ Startup: Token ist gültig")
         else:
-            print("⚠️ Startup: Token abgelaufen, Refresh versucht")
+            logger.warning("⚠️ Startup: Token abgelaufen, Refresh versucht")
 
         # Benachrichtige Frontend über aktuellen Auth-Status
         _notify_frontend_auth_status()
@@ -280,7 +286,7 @@ def init_addon():
                 payload = {"type": "auth_success", "message": "Auto-Login erfolgreich"}
                 js_code = f"if (window.ankiReceive) {{ window.ankiReceive({json.dumps(payload)}); }}"
                 widget.web_view.page().runJavaScript(js_code)
-                print("✅ Startup: Frontend über Auth-Status benachrichtigt")
+                logger.info("✅ Startup: Frontend über Auth-Status benachrichtigt")
 
     def _periodic_token_refresh():
         """Periodischer Token-Refresh alle 30 Minuten"""
@@ -318,7 +324,7 @@ def init_addon():
         # Enable Custom Screens (DeckBrowser + Overview)
         custom_screens.enable()
         QTimer.singleShot(80, custom_screens.refresh_if_visible)
-        print("Custom Screens: Enabled on addon init")
+        logger.info("Custom Screens: Enabled on addon init")
 
         # Hide toolbar + bottom bar on Qt level (backup to class-level patches)
         hide_native_toolbar()
@@ -336,7 +342,7 @@ def init_addon():
 
         if use_custom_reviewer:
             custom_reviewer.enable()
-            print("Custom Reviewer: Enabled on addon init")
+            logger.info("Custom Reviewer: Enabled on addon init")
 
             # Patch Reviewer to prevent bottom bar from ever showing
             # This eliminates the flash completely
@@ -364,9 +370,9 @@ def init_addon():
                     return []
                 Reviewer._shortcutKeys = _patched_shortcut_keys
 
-                print("✅ Reviewer bottom bar + shortcuts patched (no flash, JS handles keys)")
+                logger.info("✅ Reviewer bottom bar + shortcuts patched (no flash, JS handles keys)")
             except Exception as e:
-                print(f"⚠️ Could not patch reviewer bottom: {e}")
+                logger.error(f"⚠️ Could not patch reviewer bottom: {e}")
 
             # Class-level patches (DeckBrowser._drawButtons, Toolbar.draw/redraw)
             # are already applied at module import time above.
@@ -377,7 +383,7 @@ def init_addon():
             # NOTE: Toolbar hiding moved to state_did_change hook
             # to only hide in review state, not globally
         else:
-            print("Custom Reviewer: Disabled by config")
+            logger.info("Custom Reviewer: Disabled by config")
             # Ensure native bottom bar is visible if custom reviewer is off
             show_native_bottom_bar()
             show_native_top_separator()
@@ -414,7 +420,7 @@ def on_profile_loaded():
             try:
                 self_reflect()
             except Exception as e:
-                print(f"Plusi self-reflect failed: {e}")
+                logger.error(f"Plusi self-reflect failed: {e}")
             sync_mood('neutral')
             try:
                 from .plusi.panel import notify_new_diary_entry
@@ -422,7 +428,7 @@ def on_profile_loaded():
             except Exception:
                 pass
         except Exception as e:
-            print(f"Plusi reflect error: {e}")
+            logger.error(f"Plusi reflect error: {e}")
 
     def _run_guarded_reflect():
         """Run _plusi_reflect_once with a guard to prevent concurrent executions."""
@@ -437,7 +443,7 @@ def on_profile_loaded():
         """Open the reflection window — next interaction will trigger reflect."""
         global _plusi_reflect_pending
         _plusi_reflect_pending = True
-        print("plusi reflect: window opened, waiting for next interaction")
+        logger.debug("plusi reflect: window opened, waiting for next interaction")
         # Schedule next window
         _schedule_next_window()
 
@@ -445,7 +451,7 @@ def on_profile_loaded():
         """Schedule the next reflection window with random 30-60 min interval."""
         interval_ms = random.randint(30, 60) * 60 * 1000
         interval_min = interval_ms // 60000
-        print(f"plusi reflect: next window in {interval_min} min")
+        logger.debug(f"plusi reflect: next window in {interval_min} min")
         QTimer.singleShot(interval_ms, _open_reflect_window)
 
     def check_and_trigger_reflect():
@@ -453,7 +459,7 @@ def on_profile_loaded():
         global _plusi_reflect_pending
         if _plusi_reflect_pending and not _plusi_reflect_lock.locked():
             _plusi_reflect_pending = False
-            print("plusi reflect: triggered by interaction")
+            logger.debug("plusi reflect: triggered by interaction")
             threading.Thread(target=_run_guarded_reflect, daemon=True).start()
 
     # Initial reflect on startup (always, no window needed)
@@ -504,11 +510,9 @@ def _emit_deck_selected(widget, deck_id, deck_name):
         }})();
         """
         widget.web_view.page().runJavaScript(js_code)
-        print(f"📚 Hook: deckSelected Event gesendet - Deck: {deck_name}, Cards: {total_cards}")
+        logger.info(f"📚 Hook: deckSelected Event gesendet - Deck: {deck_name}, Cards: {total_cards}")
     except Exception as e:
-        print(f"Fehler beim Senden von deckSelected Event: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception(f"Fehler beim Senden von deckSelected Event: {e}")
 
 def on_reviewer_did_show_question(card):
     """Wird aufgerufen, wenn eine Karte im Reviewer angezeigt wird"""
@@ -534,9 +538,7 @@ def on_reviewer_did_show_question(card):
                     deck_data["deckName"]
                 )
         except Exception as e:
-            print(f"Fehler beim Senden von Deck-Event: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"Fehler beim Senden von Deck-Event: {e}")
 
 # Alte Logik entfernt - User fügt Token manuell in Profil-Dialog ein
 
@@ -563,7 +565,7 @@ def on_reviewer_did_answer_card(reviewer, card, ease):
         except Exception:
             pass
     except Exception as e:
-        print(f"cardResult emission error: {e}")
+        logger.error(f"cardResult emission error: {e}")
 
 
 def on_state_will_change(new_state, old_state):
@@ -578,7 +580,7 @@ def on_state_will_change(new_state, old_state):
             close_preview(notify_frontend=True)
             # Don't return — let normal state_will_change logic run
     except Exception as e:
-        print(f"Preview state check error: {e}")
+        logger.error(f"Preview state check error: {e}")
 
     # Smart Toolbar Management: Hide in Review, Show elsewhere
     config = mw.addonManager.getConfig(__name__) or {}
@@ -618,9 +620,9 @@ def on_state_will_change(new_state, old_state):
                 if new_state == "review":
                     hide_native_bottom_bar()
 
-                print(f"🎨 State: {new_state} → Toolbar hidden")
+                logger.debug(f"🎨 State: {new_state} → Toolbar hidden")
             except Exception as e:
-                print(f"⚠️ Error hiding toolbar: {e}")
+                logger.error(f"⚠️ Error hiding toolbar: {e}")
         # Hide chat panel when leaving review state
         if new_state != "review":
             # Skip chat panel close if we're in a preview transition
@@ -653,9 +655,9 @@ def on_state_will_change(new_state, old_state):
                 except (AttributeError, RuntimeError):
                     pass
 
-                print("🎨 State: {} → Toolbar restored".format(new_state))
+                logger.debug("State: %s -> Toolbar restored", new_state)
             except Exception as e:
-                print(f"⚠️ Error restoring toolbar: {e}")
+                logger.error(f"⚠️ Error restoring toolbar: {e}")
     
     # Original deck-event logic
     widget = get_chatbot_widget()
@@ -675,7 +677,7 @@ def on_state_will_change(new_state, old_state):
                                 deck_data["deckName"]
                             )
                     except Exception as e:
-                        print(f"Fehler beim Senden von deckSelected in state_will_change: {e}")
+                        logger.error(f"Fehler beim Senden von deckSelected in state_will_change: {e}")
                 
                 QTimer.singleShot(300, send_deck_selected)
             
@@ -683,11 +685,9 @@ def on_state_will_change(new_state, old_state):
             elif new_state == "deckBrowser":
                 payload = {"type": "deckExited", "data": {}}
                 widget.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
-                print("📚 Hook: State zu deckBrowser gewechselt, deckExited Event gesendet")
+                logger.info("📚 Hook: State zu deckBrowser gewechselt, deckExited Event gesendet")
         except Exception as e:
-            print(f"Fehler beim Senden von State-Change-Event: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"Fehler beim Senden von State-Change-Event: {e}")
 
 def cleanup_addon():
     """Cleanup when addon is disabled or Anki closes"""
@@ -700,9 +700,9 @@ def cleanup_addon():
         show_native_bottom_bar()
         show_native_top_separator()
         show_native_toolbar()
-        print("Addon cleanup: Native UI restored")
+        logger.debug("Addon cleanup: Native UI restored")
     except Exception as e:
-        print(f"Cleanup error: {e}")
+        logger.error(f"Cleanup error: {e}")
 
 # Hook registrieren (mit Fallback falls Hooks nicht verfügbar sind)
 if mw is not None:
@@ -711,21 +711,21 @@ if mw is not None:
     # Register cleanup hook
     if hasattr(gui_hooks, 'profile_will_close'):
         gui_hooks.profile_will_close.append(cleanup_addon)
-        print("✅ Hook: cleanup_addon registriert")
+        logger.info("✅ Hook: cleanup_addon registriert")
     
     # Verwende die korrekten Hook-Namen (wie in card_tracker.py)
     if hasattr(gui_hooks, 'reviewer_did_show_question'):
         gui_hooks.reviewer_did_show_question.append(on_reviewer_did_show_question)
-        print("✅ Hook: reviewer_did_show_question registriert")
+        logger.info("✅ Hook: reviewer_did_show_question registriert")
     else:
-        print("⚠️ WARNUNG: reviewer_did_show_question Hook nicht verfügbar")
+        logger.warning("⚠️ WARNUNG: reviewer_did_show_question Hook nicht verfügbar")
 
     # Emit cardResult event after card is answered (for Plusi dock reactions)
     if hasattr(gui_hooks, 'reviewer_did_answer_card'):
         gui_hooks.reviewer_did_answer_card.append(on_reviewer_did_answer_card)
-        print("✅ Hook: reviewer_did_answer_card registriert (cardResult events)")
+        logger.info("✅ Hook: reviewer_did_answer_card registriert (cardResult events)")
     else:
-        print("⚠️ WARNUNG: reviewer_did_answer_card Hook nicht verfügbar")
+        logger.warning("⚠️ WARNUNG: reviewer_did_answer_card Hook nicht verfügbar")
 
     # Also refocus webview after answer is shown
     if hasattr(gui_hooks, 'reviewer_did_show_answer'):
@@ -734,17 +734,17 @@ if mw is not None:
             if config.get("use_custom_reviewer", True):
                 QTimer.singleShot(50, focus_reviewer_webview)
         gui_hooks.reviewer_did_show_answer.append(on_reviewer_did_show_answer)
-        print("✅ Hook: reviewer_did_show_answer registriert (refocus)")
+        logger.info("✅ Hook: reviewer_did_show_answer registriert (refocus)")
     
     if hasattr(gui_hooks, 'state_will_change'):
         gui_hooks.state_will_change.append(on_state_will_change)
-        print("✅ Hook: state_will_change registriert")
+        logger.info("✅ Hook: state_will_change registriert")
     else:
-        print("⚠️ WARNUNG: state_will_change Hook nicht verfügbar")
+        logger.warning("⚠️ WARNUNG: state_will_change Hook nicht verfügbar")
     
     # Premium UI: CSS-Only Styling (robust & kompatibel mit allen Decks)
     # CSS wird in card_tracker.py injiziert
-    print("✅ Premium UI: CSS-Only Styling aktiv")
+    logger.info("✅ Premium UI: CSS-Only Styling aktiv")
     
     # Falls Profil bereits geladen ist, sofort initialisieren
     if hasattr(mw, 'col') and mw.col is not None:

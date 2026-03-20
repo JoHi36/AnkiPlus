@@ -3,6 +3,12 @@
 import json
 from datetime import datetime
 
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+
 from aqt import mw
 from PyQt6.QtWidgets import QDockWidget, QWidget, QVBoxLayout
 from PyQt6.QtWebEngineWidgets import QWebEngineView
@@ -526,7 +532,7 @@ def _handle_panel_message(msg_type, msg_data=None):
                 browser.search_for(f"cid:{card_id}")
                 browser.show()
             except Exception as e:
-                print(f"plusi panel goToCard error: {e}")
+                logger.error(f"plusi panel goToCard error: {e}")
 
 
 def _send_diary_data():
@@ -553,7 +559,7 @@ def _send_diary_data():
             f"window.diaryReceive({json.dumps(payload)});"
         )
     except Exception as e:
-        print(f"[PlusiPanel] Error loading diary: {e}")
+        logger.error(f"[PlusiPanel] Error loading diary: {e}")
 
 
 def _open_settings():

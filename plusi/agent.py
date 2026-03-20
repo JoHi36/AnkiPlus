@@ -9,6 +9,12 @@ import json
 import requests
 
 try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+
+try:
     from .storage import (save_interaction, load_history, build_memory_context,
                            apply_friendship_delta, get_friendship_data, build_internal_state_context,
                            persist_internal_state, build_relationship_context)
@@ -246,7 +252,7 @@ def _search_cards(query, top_k=10):
                 if query_embeddings:
                     semantic_results = emb.search(query_embeddings[0], top_k=top_k)
             except Exception as e:
-                print(f"plusi search semantic error: {e}")
+                logger.error(f"plusi search semantic error: {e}")
 
         # ── SQL keyword search ──
         sql_card_ids = set()
@@ -261,7 +267,7 @@ def _search_cards(query, top_k=10):
                 except Exception:
                     continue
         except Exception as e:
-            print(f"plusi search sql error: {e}")
+            logger.error(f"plusi search sql error: {e}")
 
         # ── Merge results (semantic score + SQL presence bonus) ──
         card_scores = {}
@@ -303,10 +309,10 @@ def _search_cards(query, top_k=10):
             except Exception:
                 continue
 
-        print(f"plusi search: {len(semantic_results)} semantic + {len(sql_card_ids)} sql → {len(cards)} merged")
+        logger.debug(f"plusi search: {len(semantic_results)} semantic + {len(sql_card_ids)} sql -> {len(cards)} merged")
         return cards
     except Exception as e:
-        print(f"plusi _search_cards error: {e}")
+        logger.error(f"plusi _search_cards error: {e}")
         return []
 
 
@@ -334,7 +340,7 @@ def self_reflect():
     try:
         # Step 1: Generate search query
         raw_step1 = _gemini_call(system_prompt, SELF_REFLECT_STEP1, api_key, max_tokens=64)
-        print(f"plusi reflect step1 raw: {raw_step1[:100]}")
+        logger.debug(f"plusi reflect step1 raw: {raw_step1[:100]}")
 
         query = ""
         try:
@@ -348,14 +354,14 @@ def self_reflect():
                 query = match.group(1)
 
         if not query:
-            print("plusi reflect: no query generated, using obsession fallback")
+            logger.debug("plusi reflect: no query generated, using obsession fallback")
             try:
                 from .storage import get_memory
             except ImportError:
                 from storage import get_memory
             query = get_memory('state', 'obsession', 'Medizin Biologie')
 
-        print(f"plusi reflect: searching cards for '{query}'")
+        logger.debug(f"plusi reflect: searching cards for '{query}'")
 
         # Step 2a: Search cards
         card_tuples = _search_cards(query, top_k=10)
@@ -367,7 +373,7 @@ def self_reflect():
         # Step 2b: Reflect with found cards
         step2_prompt = SELF_REFLECT_STEP2.replace("{cards_context}", cards_context)
         raw_step2 = _gemini_call(system_prompt, step2_prompt, api_key, max_tokens=768)
-        print(f"plusi reflect step2 raw: {raw_step2[:100]}")
+        logger.debug(f"plusi reflect step2 raw: {raw_step2[:100]}")
 
         mood, text, internal, _, diary_raw, discoveries = parse_plusi_response(raw_step2)
         if internal:
@@ -407,13 +413,11 @@ def self_reflect():
             history_type='reflect',
         )
 
-        print(f"plusi reflect done: obsession={internal.get('obsession', '?')}, energy={internal.get('energy', '?')}")
+        logger.debug(f"plusi reflect done: obsession={internal.get('obsession', '?')}, energy={internal.get('energy', '?')}")
         return internal
 
     except Exception as e:
-        print(f"plusi self-reflect error: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception(f"plusi self-reflect error: {e}")
         return None
 
 
@@ -478,7 +482,7 @@ def parse_plusi_response(raw_text):
         text = clean[text_start + 1:].strip() if text_start > 0 else ""
         if not text or text.startswith('"'):
             text = ""
-        print(f"plusi_agent: recovered from truncated JSON: mood={mood}, delta={delta}")
+        logger.debug(f"plusi_agent: recovered from truncated JSON: mood={mood}, delta={delta}")
         return mood, text, {}, delta, None, []
 
     return "neutral", raw_text.strip(), {}, 0, None, []
@@ -537,7 +541,7 @@ def run_plusi(situation, deck_id=None):
     try:
         # Plusi ALWAYS uses direct Gemini API (not backend) — own lightweight model
         if not api_key:
-            print("plusi_agent: No API key configured")
+            logger.debug("plusi_agent: No API key configured")
             return {"mood": "neutral", "text": "", "error": True}
 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{PLUSI_MODEL}:generateContent?key={api_key}"
@@ -598,7 +602,7 @@ def run_plusi(situation, deck_id=None):
         friendship = get_friendship_data()
         friendship['delta'] = friendship_delta
 
-        print(f"plusi_agent: mood={mood}, delta={friendship_delta}, text_len={len(text)}, silent={is_silent}")
+        logger.debug(f"plusi_agent: mood={mood}, delta={friendship_delta}, text_len={len(text)}, silent={is_silent}")
         return {
             "mood": mood,
             "text": text,
@@ -609,7 +613,5 @@ def run_plusi(situation, deck_id=None):
         }
 
     except Exception as e:
-        print(f"plusi_agent: Error: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception(f"plusi_agent: Error: {e}")
         return {"mood": "neutral", "text": "", "error": True}

@@ -10,6 +10,12 @@ import hashlib
 import random
 from datetime import datetime
 
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+
 
 _CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'mc_cache.json')
 _cache = None
@@ -40,7 +46,7 @@ def _save_cache():
         with open(_CACHE_PATH, 'w', encoding='utf-8') as f:
             json.dump(_cache, f, ensure_ascii=False, indent=None)
     except IOError as e:
-        print(f"MC Cache: Fehler beim Speichern: {e}")
+        logger.error(f"MC Cache: Fehler beim Speichern: {e}")
 
 
 def _make_hash(question, answer):

@@ -10,6 +10,12 @@ import sqlite3
 import uuid
 from datetime import datetime
 
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+
 
 _DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'card_sessions.db')
 _db = None
@@ -311,7 +317,7 @@ def save_card_session(card_id, data):
         return True
 
     except (sqlite3.Error, KeyError, ValueError) as e:
-        print(f"CardSessionsDB: Error saving session for card {card_id}: {e}")
+        logger.error(f"CardSessionsDB: Error saving session for card {card_id}: {e}")
         db.rollback()
         return False
 
@@ -387,7 +393,7 @@ def save_message(card_id, message):
         return True
 
     except (sqlite3.Error, KeyError, ValueError) as e:
-        print(f"CardSessionsDB: Error saving message for card {card_id}: {e}")
+        logger.error(f"CardSessionsDB: Error saving message for card {card_id}: {e}")
         db.rollback()
         return False
 
@@ -514,7 +520,7 @@ def save_deck_message(deck_id, message):
         return True
 
     except (sqlite3.Error, KeyError, ValueError) as e:
-        print(f"CardSessionsDB: Error saving deck message for deck {deck_id}: {e}")
+        logger.error(f"CardSessionsDB: Error saving deck message for deck {deck_id}: {e}")
         db.rollback()
         return False
 
@@ -564,7 +570,7 @@ def save_section(card_id, section):
         return True
 
     except (sqlite3.Error, KeyError, ValueError) as e:
-        print(f"CardSessionsDB: Error saving section for card {card_id}: {e}")
+        logger.error(f"CardSessionsDB: Error saving section for card {card_id}: {e}")
         db.rollback()
         return False
 
@@ -580,7 +586,7 @@ def update_summary(card_id, summary):
         db.commit()
         return True
     except (sqlite3.Error, KeyError, ValueError) as e:
-        print(f"CardSessionsDB: Error updating summary for card {card_id}: {e}")
+        logger.error(f"CardSessionsDB: Error updating summary for card {card_id}: {e}")
         return False
 
 
@@ -596,7 +602,7 @@ def load_insights(card_id):
             return json.loads(row['summary'])
         return {"version": 1, "insights": []}
     except (sqlite3.Error, KeyError, ValueError) as e:
-        print(f"[card_sessions_storage] Error loading insights for card {card_id}: {e}")
+        logger.error(f"[card_sessions_storage] Error loading insights for card {card_id}: {e}")
         return {"version": 1, "insights": []}
 
 
@@ -622,7 +628,7 @@ def save_insights(card_id, insights_data):
         db.commit()
         return True
     except (sqlite3.Error, KeyError, ValueError) as e:
-        print(f"[card_sessions_storage] Error saving insights for card {card_id}: {e}")
+        logger.error(f"[card_sessions_storage] Error saving insights for card {card_id}: {e}")
         return False
 
 
@@ -652,7 +658,7 @@ def get_card_revlog(card_id, max_points=50):
             for row in rows
         ]
     except (sqlite3.Error, KeyError, ValueError) as e:
-        print(f"[card_sessions_storage] Error fetching revlog for card {card_id}: {e}")
+        logger.error(f"[card_sessions_storage] Error fetching revlog for card {card_id}: {e}")
         return []
 
 
@@ -664,7 +670,7 @@ def delete_card_session(card_id):
         db.commit()
         return True
     except (sqlite3.Error, KeyError, ValueError) as e:
-        print(f"CardSessionsDB: Error deleting session for card {card_id}: {e}")
+        logger.error(f"CardSessionsDB: Error deleting session for card {card_id}: {e}")
         return False
 
 
@@ -696,14 +702,14 @@ def migrate_from_json(sessions_json_path=None):
         sessions_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sessions.json')
 
     if not os.path.exists(sessions_json_path):
-        print("CardSessionsDB: No sessions.json to migrate")
+        logger.debug("CardSessionsDB: No sessions.json to migrate")
         return False
 
     # Don't migrate if DB already has data
     db = _get_db()
     count = db.execute("SELECT COUNT(*) FROM card_sessions").fetchone()[0]
     if count > 0:
-        print(f"CardSessionsDB: DB already has {count} sessions, skipping migration")
+        logger.info(f"CardSessionsDB: DB already has {count} sessions, skipping migration")
         return False
 
     try:
@@ -711,7 +717,7 @@ def migrate_from_json(sessions_json_path=None):
             sessions = json.load(f)
 
         if not isinstance(sessions, list) or len(sessions) == 0:
-            print("CardSessionsDB: sessions.json is empty, nothing to migrate")
+            logger.debug("CardSessionsDB: sessions.json is empty, nothing to migrate")
             return False
 
         migrated_cards = 0
@@ -802,14 +808,12 @@ def migrate_from_json(sessions_json_path=None):
         backup_path = sessions_json_path + '.bak'
         os.rename(sessions_json_path, backup_path)
 
-        print(f"CardSessionsDB: Migration complete — {migrated_cards} cards, {migrated_sections} sections, {migrated_messages} messages")
-        print(f"CardSessionsDB: sessions.json renamed to {backup_path}")
+        logger.info(f"CardSessionsDB: Migration complete — {migrated_cards} cards, {migrated_sections} sections, {migrated_messages} messages")
+        logger.debug(f"CardSessionsDB: sessions.json renamed to {backup_path}")
         return True
 
     except (sqlite3.Error, KeyError, ValueError, OSError) as e:
-        import traceback
-        print(f"CardSessionsDB: Migration error: {e}")
-        traceback.print_exc()
+        logger.exception(f"CardSessionsDB: Migration error: {e}")
         db.rollback()
         return False
 

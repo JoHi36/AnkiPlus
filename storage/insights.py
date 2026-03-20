@@ -5,6 +5,12 @@ Extracts learning insights incrementally using AI, merges with existing insights
 import json
 import re
 
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+
 
 EXTRACTION_PROMPT = """Extrahiere Lernerkenntnisse aus diesem Chat über eine Anki-Lernkarte.
 
@@ -106,7 +112,7 @@ def parse_extraction_response(response_text):
         return data
 
     except (json.JSONDecodeError, KeyError, IndexError) as e:
-        print(f"[InsightExtractor] Failed to parse response: {e}")
+        logger.error(f"[InsightExtractor] Failed to parse response: {e}")
         return None
 
 
