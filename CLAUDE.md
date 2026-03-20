@@ -250,9 +250,41 @@ The addon uses **Google Gemini** as its AI provider (Gemini 3 Flash). API calls 
 
 3. Handle response in `ui/widget.py`'s `_handle_js_message()` if needed
 
-### Styling Anki Components
+### Design System & Styling
 
-Global theme styles are in `ui/global_theme.py`. Add new component styles in the `apply_global_dark_theme()` function's stylesheet string. The theme auto-reapplies, so changes take effect within 2 seconds.
+**Source of truth:** `shared/styles/design-system.css` — defines ALL colors, typography, spacing, and component classes as CSS custom properties. Never hardcode colors anywhere.
+
+**Core Principle — Material = Function:**
+- **Frosted Glass** (`.ds-frosted`): for action elements (input docks, search fields). Uses `var(--ds-bg-frosted)` + `backdrop-filter: blur(20px)`.
+- **Borderless** (`.ds-borderless`): for content (card display, deck lists). Uses `var(--ds-bg-canvas)` + subtle border. No distinct background.
+
+**Key tokens (dark / light):**
+- `--ds-bg-deep` (#141416 / #ECECF0) — Chat panel, Plusi diary
+- `--ds-bg-canvas` (#1C1C1E / #FFFFFF) — Main working surface
+- `--ds-bg-frosted` (#161618 / #F9F9FB) — Frosted glass material
+- `--ds-bg-overlay` (#3A3A3C / #E5E5EA) — Tooltips, popovers
+- `--ds-accent` (#0A84FF / #007AFF) — Primary actions
+- `--ds-green`, `--ds-yellow`, `--ds-red`, `--ds-purple` — Semantic colors (Apple HIG)
+
+**Theme switching:** `data-theme="light"` on `<html>`. Config: `theme` = "dark" | "light" | "system".
+
+**How tokens reach each context:**
+- **React/Tailwind**: `design-system.css` imported in `index.css`. Tailwind preset (`shared/config/tailwind.preset.js`) maps all utilities to CSS vars.
+- **Custom Reviewer/Deck Browser**: `design-system.css` injected via `_get_design_tokens_css()` at runtime.
+- **Plusi**: CSS vars available in host webviews; panel injects its own `:root` block.
+- **Qt/QSS**: `ui/tokens_qt.py` provides solid-hex approximations (Qt doesn't support CSS vars).
+
+**Component classes** (`.ds-*`): Shared between React and native HTML for duplicated components — `.ds-input-dock`, `.ds-thought-step`, `.ds-mc-option`, `.ds-review-result`, `.ds-tab-bar`, `.ds-kbd`.
+
+**Fonts:** SF Pro (system font) for all UI. Space Grotesk (`--ds-font-brand`) exclusively for Plusi and brand.
+
+**Rules:**
+1. No component may define its own colors — use tokens
+2. Frosted Glass for action, Borderless for content
+3. Chat body text is 15px (`--ds-text-lg`)
+4. Spec: `docs/superpowers/specs/2026-03-20-unified-design-system.md`
+
+Global Qt theme styles are in `ui/global_theme.py` (imports from `ui/tokens_qt.py`).
 
 ### Building for Production
 
