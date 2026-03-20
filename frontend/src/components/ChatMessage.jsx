@@ -1669,10 +1669,12 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
   // Generate fallback steps if citations exist but no steps
   const generateFallbackSteps = React.useMemo(() => {
     if (steps.length > 0) return steps; // Use existing steps if available
-    
+    // If we have v5 pipeline data, don't generate legacy fallback steps
+    if (pipelineSteps && pipelineSteps.length > 0) return [];
+
     const citationCount = Object.keys(citations).length;
     if (citationCount > 0) {
-      // Generate artificial steps to show the retrieval process
+      // Generate artificial steps to show the retrieval process (legacy only)
       return [
         {
           state: 'Intent: Analyse',
@@ -1684,9 +1686,9 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
         }
       ];
     }
-    
+
     return steps; // Return empty array if no citations
-  }, [steps, citations]);
+  }, [steps, citations, pipelineSteps]);
   
   // Determine if ThoughtStream should be rendered
   // NOTE: Live pipelineSteps are rendered directly in App.jsx during loading.

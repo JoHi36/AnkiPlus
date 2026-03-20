@@ -88,31 +88,6 @@ export default function SourcesCarousel({ citations = {}, citationIndices = {}, 
   return (
     <div className="relative group/carousel my-2 max-w-full overflow-hidden">
 
-      {/* Navigation Buttons */}
-      {canScrollLeft && (
-        <button
-          onClick={() => scroll('left')}
-          className="absolute left-0 top-1/2 -translate-y-1/2 z-20
-                     w-7 h-7 rounded-full bg-base-100 shadow-md border border-base-200
-                     flex items-center justify-center text-base-content/70 hover:text-primary
-                     hover:scale-110 transition-all duration-200 -ml-3"
-        >
-          <ChevronLeft className="w-3.5 h-3.5" />
-        </button>
-      )}
-
-      {canScrollRight && (
-        <button
-          onClick={() => scroll('right')}
-          className="absolute right-0 top-1/2 -translate-y-1/2 z-20
-                     w-7 h-7 rounded-full bg-base-100 shadow-md border border-base-200
-                     flex items-center justify-center text-base-content/70 hover:text-primary
-                     hover:scale-110 transition-all duration-200 -mr-3"
-        >
-          <ChevronRight className="w-3.5 h-3.5" />
-        </button>
-      )}
-
       {/* Carousel Container */}
       <div
         ref={scrollContainerRef}

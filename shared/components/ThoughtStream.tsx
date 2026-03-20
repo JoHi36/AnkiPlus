@@ -409,7 +409,7 @@ function SemanticChunks({ data, isDone, animate = true }: { data: Record<string,
   const chunks = data.chunks || [];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, marginTop: 6 }}>
       {chunks.slice(0, 3).map((chunk: any, i: number) => (
         <div
           key={i}
@@ -774,7 +774,7 @@ export default function ThoughtStream({
   if (isLegacy) return <LegacyThoughtStream steps={steps} citations={citations} citationIndices={citationIndices} bridge={bridge} onPreviewCard={onPreviewCard} />;
 
   return (
-    <div style={{ marginTop: 12, maxWidth: '100%', userSelect: 'none' }}>
+    <div style={{ marginTop: 12, marginBottom: 8, maxWidth: '100%', userSelect: 'none' }}>
       {/* ── Collapsed view ── */}
       {isCollapsed && !isProcessing && !showLoadingBox && !(isStreaming && pipelineSteps.length > 0 && !activeEntry) && (
         <button
@@ -838,23 +838,17 @@ export default function ThoughtStream({
             </button>
           )}
 
-          {/* Loading state (before any steps arrive, or during async gap) */}
+          {/* Loading state: show as router step with shimmer (before useSmartPipeline processes) */}
           {((isProcessing || showLoadingBox) && doneStack.length === 0 && !activeEntry || (isStreaming && pipelineSteps.length > 0 && !activeEntry && doneStack.length === 0)) && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
-              <div
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: '50%',
-                  background: 'var(--ds-accent)',
-                  flexShrink: 0,
-                  animation: animate ? 'ts-dotPulse 1.5s ease-in-out infinite' : undefined,
-                  willChange: 'transform, opacity',
-                  contain: 'layout style',
-                }}
+            <div style={{ marginLeft: 16 }}>
+              <PhaseRow
+                step="router"
+                data={{}}
+                status="active"
+                isActive={true}
+                isFirst={true}
+                animate={true}
               />
-              <span style={{ fontSize: 12, color: 'var(--ds-text-tertiary)' }}>Analysiere...</span>
-              <ExtendingLine />
             </div>
           )}
 
