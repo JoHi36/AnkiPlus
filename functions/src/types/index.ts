@@ -58,17 +58,14 @@ export interface ModelsResponse {
  */
 export interface QuotaResponse {
   tier: 'free' | 'tier1' | 'tier2';
-  flash: {
-    used: number;
-    limit: number; // -1 = unlimited
-    remaining: number; // -1 = unlimited
+  tokens: {
+    daily: { used: number; limit: number; remaining: number };
+    weekly: { used: number; limit: number; remaining: number };
   };
-  deep: {
-    used: number;
-    limit: number;
-    remaining: number;
+  resetAt: {
+    daily: string;
+    weekly: string;
   };
-  resetAt: string; // ISO timestamp
 }
 
 
