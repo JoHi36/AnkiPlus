@@ -228,7 +228,61 @@ PLUSI_JS = """
   var _clickTimer = null;
   var _clickCount = 0;
 
+  /* Drag to chat */
+  var _dragStartX = 0;
+  var _dragStartY = 0;
+  var _isDragging = false;
+  var _dragThreshold = 80;
+
+  (function() {
+    var char = document.getElementById('plusi-dock-char');
+    if (!char) return;
+
+    char.addEventListener('mousedown', function(e) {
+      _dragStartX = e.clientX;
+      _dragStartY = e.clientY;
+      _isDragging = false;
+    });
+
+    document.addEventListener('mousemove', function(e) {
+      if (_dragStartX === 0) return;
+      var dx = e.clientX - _dragStartX;
+      if (dx > 30) {
+        _isDragging = true;
+        var mascot = document.getElementById('plusi-mascot');
+        if (mascot) {
+          mascot.style.transform = 'translateX(' + (dx - 30) + 'px) scale(0.9)';
+          mascot.style.opacity = '0.7';
+        }
+      }
+    });
+
+    document.addEventListener('mouseup', function(e) {
+      if (_dragStartX === 0) return;
+      var dx = e.clientX - _dragStartX;
+      var mascot = document.getElementById('plusi-mascot');
+
+      if (_isDragging && dx > _dragThreshold) {
+        /* Drag completed — open chat with @Plusi */
+        if (typeof pycmd === 'function') {
+          pycmd('plusi:ask');
+        } else {
+          window._apAction = {type: 'plusiAsk'};
+        }
+      }
+
+      /* Reset */
+      if (mascot) {
+        mascot.style.transform = '';
+        mascot.style.opacity = '';
+      }
+      _dragStartX = 0;
+      _isDragging = false;
+    });
+  })();
+
   window._plusiClick = function() {
+    if (_isDragging) { _isDragging = false; return; }
     _clickCount++;
     if (_clickCount === 1) {
       _clickTimer = setTimeout(function() {
