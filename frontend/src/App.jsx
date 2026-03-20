@@ -2076,7 +2076,10 @@ function AppInner() {
                     onNavigateToPlusi={() => setActiveView('plusiMenu')}
                   />
                 ) : activeView === 'plusiMenu' ? (
-                  <PlusiMenu />
+                  <PlusiMenu
+                    bridge={bridge}
+                    onNavigateBack={() => setActiveView('agentStudio')}
+                  />
                 ) : chatHook.messages.length === 0 && !chatHook.isLoading && !chatHook.streamingMessage ? (
             <InsightsDashboard
               insights={insightsHook.insights}
