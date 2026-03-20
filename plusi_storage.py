@@ -64,14 +64,25 @@ def _init_tables(db):
     ''')
     db.commit()
 
+    # Migrations — idempotent (SQLite has no ADD COLUMN IF NOT EXISTS)
+    try:
+        db.execute("ALTER TABLE plusi_history ADD COLUMN history_type TEXT DEFAULT 'chat'")
+    except Exception:
+        pass  # column already exists
+    try:
+        db.execute("ALTER TABLE plusi_diary ADD COLUMN discoveries TEXT DEFAULT '[]'")
+    except Exception:
+        pass  # column already exists
+    db.commit()
 
-def save_interaction(context, response, mood='neutral', deck_id=None):
-    """Save a Plusi interaction (tutor context + Plusi response)."""
+
+def save_interaction(context, response, mood='neutral', deck_id=None, history_type='chat'):
+    """Save a Plusi interaction. history_type: 'chat', 'reflect', or 'silent'."""
     db = _get_db()
     db.execute("""
-        INSERT INTO plusi_history (timestamp, context, response, mood, deck_id)
-        VALUES (?, ?, ?, ?, ?)
-    """, (datetime.now().isoformat(), context, response, mood, deck_id))
+        INSERT INTO plusi_history (timestamp, context, response, mood, deck_id, history_type)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (datetime.now().isoformat(), context, response, mood, deck_id, history_type))
     db.commit()
 
 
@@ -319,12 +330,13 @@ def get_friendship_data():
     }
 
 
-def save_diary_entry(entry_text, cipher_parts, category='gemerkt', mood='neutral'):
+def save_diary_entry(entry_text, cipher_parts, category='gemerkt', mood='neutral', discoveries=None):
     """Save a parsed diary entry. cipher_parts is a list of encrypted strings."""
     db = _get_db()
+    disc_json = json.dumps(discoveries or [], ensure_ascii=False)
     db.execute(
-        'INSERT INTO plusi_diary (timestamp, entry_text, cipher_text, category, mood) VALUES (?, ?, ?, ?, ?)',
-        (datetime.now().isoformat(), entry_text, json.dumps(cipher_parts), category, mood)
+        'INSERT INTO plusi_diary (timestamp, entry_text, cipher_text, category, mood, discoveries) VALUES (?, ?, ?, ?, ?, ?)',
+        (datetime.now().isoformat(), entry_text, json.dumps(cipher_parts), category, mood, disc_json)
     )
     db.commit()
 
@@ -333,7 +345,7 @@ def load_diary(limit=50, offset=0):
     """Load diary entries, newest first. Returns list of dicts."""
     db = _get_db()
     rows = db.execute(
-        'SELECT id, timestamp, entry_text, cipher_text, category, mood FROM plusi_diary ORDER BY timestamp DESC LIMIT ? OFFSET ?',
+        'SELECT id, timestamp, entry_text, cipher_text, category, mood, discoveries FROM plusi_diary ORDER BY timestamp DESC LIMIT ? OFFSET ?',
         (limit, offset)
     ).fetchall()
     entries = []
@@ -344,6 +356,7 @@ def load_diary(limit=50, offset=0):
             'entry_text': row[2],
             'cipher_parts': json.loads(row[3]),
             'category': row[4],
-            'mood': row[5]
+            'mood': row[5],
+            'discoveries': json.loads(row[6]) if row[6] else []
         })
     return entries
