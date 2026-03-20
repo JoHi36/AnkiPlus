@@ -654,14 +654,17 @@ html, body {
     padding-top: 64px;
 }
 #ap-search-bar {
-    border-radius: 50px;
+    border-radius: var(--ds-radius-lg);
     height: 46px;
     padding: 0 16px 0 20px;
     display: flex;
     align-items: center;
     gap: 8px;
-    background: var(--ds-bg-canvas);
-    border: 1px solid var(--ds-active-tint);
+    background: var(--ds-bg-frosted);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--ds-border-medium);
+    box-shadow: var(--ds-shadow-md);
     position: relative;
     transition: border-color 0.2s;
 }
