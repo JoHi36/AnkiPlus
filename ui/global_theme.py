@@ -18,6 +18,11 @@ except ImportError:
     from utils.logging import get_logger
 logger = get_logger(__name__)
 
+try:
+    from .tokens_qt import get_tokens
+except ImportError:
+    from tokens_qt import get_tokens
+
 # Pre-compiled regex patterns for HTML processing (hot path)
 _RE_HR = re.compile(r'<hr[^>]*/?>',  re.IGNORECASE)
 _RE_BOTTOM_TABLE = re.compile(
@@ -277,300 +282,301 @@ def apply_global_dark_theme():
     except Exception:
         pass
     
-    global_stylesheet = """
+    _t = get_tokens("dark")
+    global_stylesheet = f"""
     /* ============================================
        GLOBAL: Alle Widgets
        ============================================ */
-    
-    QWidget {
-        background-color: #1A1A1A;
+
+    QWidget {{
+        background-color: {_t['bg_canvas']};
         color: rgba(255, 255, 255, 0.9);
-    }
-    
-    QMainWindow {
-        background-color: #1A1A1A;
-    }
-    
+    }}
+
+    QMainWindow {{
+        background-color: {_t['bg_canvas']};
+    }}
+
     /* ============================================
        TOOLBAR (oben) - ULTRA AGGRESSIV
        ============================================ */
-    
+
     QToolBar,
     QToolBar *,
     QMainWindow QToolBar,
-    QMainWindow QToolBar * {
-        background-color: #1A1A1A !important;
-        background: #1A1A1A !important;
+    QMainWindow QToolBar * {{
+        background-color: {_t['bg_canvas']} !important;
+        background: {_t['bg_canvas']} !important;
         border: none !important;
         border-top: none !important;
         border-bottom: none !important;
         spacing: 3px;
         padding: 4px;
-    }
-    
+    }}
+
     /* Ghost UI: Flache, transparente Buttons */
     QToolButton,
     QToolBar QToolButton,
-    QMainWindow QToolBar QToolButton {
+    QMainWindow QToolBar QToolButton {{
         background: transparent !important;
         border: none !important;
         border-radius: 6px !important;
         padding: 8px 12px !important;
-        color: #888888 !important;
+        color: {_t['text_secondary']} !important;
         font-size: 14px;
         font-weight: 500;
         min-width: 40px;
         min-height: 40px;
-    }
-    
+    }}
+
     QToolButton:hover,
-    QToolBar QToolButton:hover {
+    QToolBar QToolButton:hover {{
         background: rgba(255, 255, 255, 0.05) !important;
         color: #ffffff !important;
-    }
-    
-    QToolButton:pressed {
+    }}
+
+    QToolButton:pressed {{
         background: rgba(255, 255, 255, 0.03) !important;
-    }
-    
+    }}
+
     /* Icon-ähnliche Buttons - kompakter */
     QToolButton[text*="Stapelübersicht"],
     QToolButton[text*="Hinzufügen"],
     QToolButton[text*="Kartenverwaltung"],
     QToolButton[text*="Statistiken"],
-    QToolButton[text*="Synchronisieren"] {
+    QToolButton[text*="Synchronisieren"] {{
         padding: 8px !important;
         min-width: 40px !important;
         min-height: 40px !important;
-    }
-    
+    }}
+
     /* Logos: Dimmed by default */
     QLabel[objectName*="amboss"],
     QLabel[objectName*="AMBOSS"],
     QLabel[objectName*="meditricks"],
     QLabel[objectName*="Meditricks"],
     QToolButton[text*="AMBOSS"],
-    QToolButton[text*="Meditricks"] {
+    QToolButton[text*="Meditricks"] {{
         opacity: 0.5;
-    }
-    
+    }}
+
     QLabel[objectName*="amboss"]:hover,
     QLabel[objectName*="AMBOSS"]:hover,
     QLabel[objectName*="meditricks"]:hover,
     QLabel[objectName*="Meditricks"]:hover,
     QToolButton[text*="AMBOSS"]:hover,
-    QToolButton[text*="Meditricks"]:hover {
+    QToolButton[text*="Meditricks"]:hover {{
         opacity: 1.0;
-    }
-    
+    }}
+
     /* ============================================
        MENUBAR (ganz oben)
        ============================================ */
-    
-    QMenuBar {
-        background-color: #1A1A1A;
+
+    QMenuBar {{
+        background-color: {_t['bg_canvas']};
         color: rgba(255, 255, 255, 0.9);
         border: none;
-    }
-    
-    QMenuBar::item {
+    }}
+
+    QMenuBar::item {{
         background-color: transparent;
         padding: 4px 12px;
-    }
-    
-    QMenuBar::item:selected {
+    }}
+
+    QMenuBar::item:selected {{
         background-color: rgba(255, 255, 255, 0.1);
-    }
-    
-    QMenu {
-        background-color: #1A1A1A;
+    }}
+
+    QMenu {{
+        background-color: {_t['bg_canvas']};
         color: rgba(255, 255, 255, 0.9);
         border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    
-    QMenu::item:selected {
+    }}
+
+    QMenu::item:selected {{
         background-color: rgba(255, 255, 255, 0.1);
-    }
-    
+    }}
+
     /* ============================================
        STATUSBAR (unten)
        ============================================ */
-    
-    QStatusBar {
-        background-color: #1A1A1A;
+
+    QStatusBar {{
+        background-color: {_t['bg_canvas']};
         color: rgba(255, 255, 255, 0.7);
         border: none;
-    }
-    
+    }}
+
     /* ============================================
        BUTTONS (alle)
        ============================================ */
-    
-    QPushButton {
+
+    QPushButton {{
         background-color: rgba(255, 255, 255, 0.08);
         border: 1px solid rgba(255, 255, 255, 0.12);
         border-radius: 6px;
         padding: 6px 16px;
         color: rgba(255, 255, 255, 0.95);
         font-weight: 500;
-    }
-    
-    QPushButton:hover {
+    }}
+
+    QPushButton:hover {{
         background-color: rgba(255, 255, 255, 0.12);
         border-color: rgba(255, 255, 255, 0.18);
-    }
-    
-    QPushButton:pressed {
+    }}
+
+    QPushButton:pressed {{
         background-color: rgba(255, 255, 255, 0.06);
-    }
-    
+    }}
+
     /* ============================================
        SPLITTER (Resize-Handles)
        ============================================ */
-    
-    QSplitter::handle {
+
+    QSplitter::handle {{
         background: rgba(255, 255, 255, 0.04);
         width: 1px;
         border: none;
         margin: 0px;
         padding: 0px;
-    }
+    }}
 
-    QSplitter::handle:hover {
+    QSplitter::handle:hover {{
         background: rgba(255, 255, 255, 0.08);
         width: 1px;
-    }
+    }}
 
-    QMainWindow::separator {
+    QMainWindow::separator {{
         background: rgba(255, 255, 255, 0.04);
         width: 1px;
         border: none;
         margin: 0px;
         padding: 0px;
-    }
+    }}
 
-    QMainWindow::separator:hover {
+    QMainWindow::separator:hover {{
         background: rgba(255, 255, 255, 0.08);
         width: 1px;
-    }
-    
+    }}
+
     /* ============================================
        DOCK WIDGETS
        ============================================ */
-    
-    QDockWidget {
-        background-color: #1A1A1A;
+
+    QDockWidget {{
+        background-color: {_t['bg_canvas']};
         color: rgba(255, 255, 255, 0.9);
         titlebar-close-icon: none;
         titlebar-normal-icon: none;
-    }
-    
-    QDockWidget::title {
+    }}
+
+    QDockWidget::title {{
         background-color: rgba(255, 255, 255, 0.03);
         padding: 8px;
-    }
-    
+    }}
+
     /* ============================================
        SCROLLBARS
        ============================================ */
-    
-    QScrollBar:vertical {
-        background: #1A1A1A;
+
+    QScrollBar:vertical {{
+        background: {_t['bg_canvas']};
         width: 8px;
         margin: 0;
-    }
-    
-    QScrollBar::handle:vertical {
+    }}
+
+    QScrollBar::handle:vertical {{
         background: rgba(255, 255, 255, 0.15);
         border-radius: 4px;
         min-height: 20px;
-    }
-    
-    QScrollBar::handle:vertical:hover {
+    }}
+
+    QScrollBar::handle:vertical:hover {{
         background: rgba(255, 255, 255, 0.25);
-    }
-    
+    }}
+
     QScrollBar::add-line:vertical,
-    QScrollBar::sub-line:vertical {
+    QScrollBar::sub-line:vertical {{
         height: 0px;
-    }
-    
-    QScrollBar:horizontal {
-        background: #1A1A1A;
+    }}
+
+    QScrollBar:horizontal {{
+        background: {_t['bg_canvas']};
         height: 8px;
         margin: 0;
-    }
-    
-    QScrollBar::handle:horizontal {
+    }}
+
+    QScrollBar::handle:horizontal {{
         background: rgba(255, 255, 255, 0.15);
         border-radius: 4px;
         min-width: 20px;
-    }
-    
-    QScrollBar::handle:horizontal:hover {
+    }}
+
+    QScrollBar::handle:horizontal:hover {{
         background: rgba(255, 255, 255, 0.25);
-    }
-    
+    }}
+
     /* ============================================
        INPUT FIELDS
        ============================================ */
-    
-    QLineEdit, QTextEdit, QPlainTextEdit {
+
+    QLineEdit, QTextEdit, QPlainTextEdit {{
         background-color: rgba(255, 255, 255, 0.05);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 4px;
         padding: 6px;
         color: rgba(255, 255, 255, 0.95);
-    }
-    
-    QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
+    }}
+
+    QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {{
         border-color: rgba(20, 184, 166, 0.5);
         background-color: rgba(255, 255, 255, 0.08);
-    }
-    
+    }}
+
     /* ============================================
        TABLES & LISTS
        ============================================ */
-    
-    QTableWidget, QListWidget, QTreeWidget {
-        background-color: #1A1A1A;
+
+    QTableWidget, QListWidget, QTreeWidget {{
+        background-color: {_t['bg_canvas']};
         alternate-background-color: rgba(255, 255, 255, 0.02);
         border: 1px solid rgba(255, 255, 255, 0.08);
         color: rgba(255, 255, 255, 0.9);
-    }
-    
-    QHeaderView::section {
+    }}
+
+    QHeaderView::section {{
         background-color: rgba(255, 255, 255, 0.05);
         border: none;
         border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         padding: 6px;
         color: rgba(255, 255, 255, 0.9);
-    }
-    
+    }}
+
     /* ============================================
        TABS
        ============================================ */
-    
-    QTabWidget::pane {
-        background-color: #1A1A1A;
+
+    QTabWidget::pane {{
+        background-color: {_t['bg_canvas']};
         border: 1px solid rgba(255, 255, 255, 0.08);
-    }
-    
-    QTabBar::tab {
+    }}
+
+    QTabBar::tab {{
         background-color: rgba(255, 255, 255, 0.03);
         border: 1px solid rgba(255, 255, 255, 0.08);
         padding: 6px 12px;
         color: rgba(255, 255, 255, 0.7);
-    }
-    
-    QTabBar::tab:selected {
+    }}
+
+    QTabBar::tab:selected {{
         background-color: rgba(255, 255, 255, 0.08);
         color: rgba(255, 255, 255, 0.95);
-    }
+    }}
 
-    QTabBar::tab:hover {
+    QTabBar::tab:hover {{
         background-color: rgba(255, 255, 255, 0.06);
-    }
+    }}
     """
     
     try:
@@ -626,16 +632,18 @@ def apply_global_dark_theme():
             _debug_log(f"⚠️ mw.setStyleSheet() fehlgeschlagen: {e}")
         
         from aqt.qt import QToolBar, QMenuBar, QStatusBar, QWidget, QPalette, QColor
-        
+
+        _bg = QColor(_t['bg_canvas'])
+
         try:
             for toolbar in mw.findChildren(QToolBar):
                 try:
                     _ = toolbar.isVisible()
                     toolbar.setStyleSheet(global_stylesheet)
                     palette = toolbar.palette()
-                    palette.setColor(QPalette.ColorRole.Window, QColor("#1A1A1A"))
-                    palette.setColor(QPalette.ColorRole.Button, QColor("#1A1A1A"))
-                    palette.setColor(QPalette.ColorRole.Base, QColor("#1A1A1A"))
+                    palette.setColor(QPalette.ColorRole.Window, _bg)
+                    palette.setColor(QPalette.ColorRole.Button, _bg)
+                    palette.setColor(QPalette.ColorRole.Base, _bg)
                     palette.setColor(QPalette.ColorRole.WindowText, QColor(255, 255, 255, 230))
                     toolbar.setPalette(palette)
                     toolbar.setAutoFillBackground(True)
@@ -643,14 +651,14 @@ def apply_global_dark_theme():
                     continue
         except (RuntimeError, AttributeError):
             pass
-        
+
         try:
             for menubar in mw.findChildren(QMenuBar):
                 try:
                     _ = menubar.isVisible()
                     menubar.setStyleSheet(global_stylesheet)
                     palette = menubar.palette()
-                    palette.setColor(QPalette.ColorRole.Window, QColor("#1A1A1A"))
+                    palette.setColor(QPalette.ColorRole.Window, _bg)
                     palette.setColor(QPalette.ColorRole.WindowText, QColor(255, 255, 255, 230))
                     menubar.setPalette(palette)
                     menubar.setAutoFillBackground(True)
@@ -658,26 +666,26 @@ def apply_global_dark_theme():
                     continue
         except (RuntimeError, AttributeError):
             pass
-        
+
         try:
             for statusbar in mw.findChildren(QStatusBar):
                 try:
                     _ = statusbar.isVisible()
                     statusbar.setStyleSheet(global_stylesheet)
                     palette = statusbar.palette()
-                    palette.setColor(QPalette.ColorRole.Window, QColor("#1A1A1A"))
+                    palette.setColor(QPalette.ColorRole.Window, _bg)
                     statusbar.setPalette(palette)
                     statusbar.setAutoFillBackground(True)
                 except (RuntimeError, AttributeError):
                     continue
         except (RuntimeError, AttributeError):
             pass
-        
+
         try:
             main_palette = mw.palette()
-            main_palette.setColor(QPalette.ColorRole.Window, QColor("#1A1A1A"))
-            main_palette.setColor(QPalette.ColorRole.Base, QColor("#1A1A1A"))
-            main_palette.setColor(QPalette.ColorRole.Button, QColor("#1A1A1A"))
+            main_palette.setColor(QPalette.ColorRole.Window, _bg)
+            main_palette.setColor(QPalette.ColorRole.Base, _bg)
+            main_palette.setColor(QPalette.ColorRole.Button, _bg)
             mw.setPalette(main_palette)
             mw.setAutoFillBackground(True)
         except (RuntimeError, AttributeError):
@@ -743,15 +751,16 @@ def on_webview_will_set_content(web_content, context):
             elif has_html:
                 web_content.html = html
         
-        web_content.head += """
+        _wt = get_tokens("dark")
+        web_content.head += f"""
         <style>
-        html, body {
-            background-color: #1A1A1A !important;
+        html, body {{
+            background-color: {_wt['bg_canvas']} !important;
             color: rgba(255, 255, 255, 0.9) !important;
-        }
+        }}
         </style>
         """
-        
+
         web_content.head += """
         <script>
         (function() {
@@ -808,12 +817,13 @@ def on_webview_will_set_content(web_content, context):
         """
     except Exception as e:
         _debug_log(f"⚠️ Fehler bei HTML-Modifikation: {e}")
-        web_content.head += """
+        _wt = get_tokens("dark")
+        web_content.head += f"""
         <style>
-        html, body {
-            background-color: #1A1A1A !important;
+        html, body {{
+            background-color: {_wt['bg_canvas']} !important;
             color: rgba(255, 255, 255, 0.9) !important;
-        }
+        }}
         </style>
         """
 

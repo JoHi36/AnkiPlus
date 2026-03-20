@@ -10,6 +10,11 @@ except ImportError:
     from utils.logging import get_logger
 logger = get_logger(__name__)
 
+try:
+    from .tokens_qt import DARK_TOKENS, LIGHT_TOKENS
+except ImportError:
+    from tokens_qt import DARK_TOKENS, LIGHT_TOKENS
+
 def get_theme_styles():
     """Gibt die Styles basierend auf dem aktuellen Theme zurück"""
     config = get_config()
@@ -27,16 +32,16 @@ def get_theme_styles():
 
 # Dark Theme Styles - Edles Teal/Türkis-Blau
 DARK_THEME = {
-    "background": "#1e1e1e",
-    "background_medium": "#252525",
-    "background_light": "#2d2d2d",
-    "background_input": "#2d2d2d",
-    "text_primary": "#e0e0e0",
-    "text_secondary": "#888888",
+    "background": DARK_TOKENS["bg_canvas"],
+    "background_medium": DARK_TOKENS["bg_overlay"],
+    "background_light": DARK_TOKENS["bg_overlay"],
+    "background_input": DARK_TOKENS["bg_overlay"],
+    "text_primary": DARK_TOKENS["text_primary"],
+    "text_secondary": DARK_TOKENS["text_secondary"],
     "text_accent": "#14b8a6",  # Teal-500
     "text_user": "#2dd4bf",  # Teal-400
-    "border": "#333333",
-    "border_input": "#3a3a3a",
+    "border": DARK_TOKENS["border_medium"],
+    "border_input": DARK_TOKENS["border_medium"],
     "border_focus": "#14b8a6",  # Teal-500
     "button_primary": "#14b8a6",  # Teal-500 - edles Grün-Blau
     "button_hover": "#2dd4bf",  # Teal-400 - heller
@@ -47,16 +52,16 @@ DARK_THEME = {
 
 # Light Theme Styles - Edles Teal/Türkis-Blau
 LIGHT_THEME = {
-    "background": "#ffffff",
-    "background_medium": "#f5f5f5",
-    "background_light": "#fafafa",
-    "background_input": "#ffffff",
-    "text_primary": "#1a1a1a",
-    "text_secondary": "#666666",
+    "background": LIGHT_TOKENS["bg_canvas"],
+    "background_medium": LIGHT_TOKENS["bg_deep"],
+    "background_light": LIGHT_TOKENS["bg_canvas"],
+    "background_input": LIGHT_TOKENS["bg_canvas"],
+    "text_primary": LIGHT_TOKENS["text_primary"],
+    "text_secondary": LIGHT_TOKENS["text_secondary"],
     "text_accent": "#0d9488",  # Teal-600
     "text_user": "#14b8a6",  # Teal-500
-    "border": "#e0e0e0",
-    "border_input": "#d0d0d0",
+    "border": LIGHT_TOKENS["border_subtle"],
+    "border_input": LIGHT_TOKENS["border_medium"],
     "border_focus": "#14b8a6",  # Teal-500
     "button_primary": "#14b8a6",  # Teal-500
     "button_hover": "#2dd4bf",  # Teal-400
