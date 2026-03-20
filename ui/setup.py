@@ -143,6 +143,18 @@ def show_settings():
     except Exception as e:
         logger.exception("Fehler beim Öffnen der Settings: %s", e)
 
+def toggle_chatbot_panel():
+    """Öffnet oder schließt das Chatbot-Panel."""
+    global _chatbot_dock
+    if _chatbot_dock is not None and _chatbot_dock.isVisible():
+        _chatbot_dock.hide()
+        _notify_reviewer_chat_state(False)
+    else:
+        ensure_chatbot_open()
+
+# Alias for backwards compatibility (custom_reviewer, custom_screens use this name)
+toggle_chatbot = toggle_chatbot_panel
+
 def close_chatbot_panel():
     """Schließt das Dock-Panel"""
     global _chatbot_dock
@@ -300,6 +312,14 @@ def setup_ui():
 
 def on_state_did_change(new_state, old_state):
     """Wird aufgerufen, wenn sich der Anki-Status ändert"""
+    global _chatbot_dock
+    # Show chatbot panel only in review state, hide in deck browser/overview
+    if new_state == 'review':
+        ensure_chatbot_open()
+    elif _chatbot_dock is not None and _chatbot_dock.isVisible():
+        _chatbot_dock.hide()
+        _notify_reviewer_chat_state(False)
+
     try:
         widget = get_chatbot_widget()
         if widget and widget.web_view and hasattr(widget, 'bridge') and widget.bridge:
@@ -344,6 +364,11 @@ def toggle_custom_reviewer(checked):
 
 def setup_menu():
     """Fügt die Chatbot-Menüeinträge zum Anki-Hauptmenü hinzu"""
+    # Chatbot panel toggle (no keyboard shortcut)
+    toggle_action = QAction("Chatbot öffnen/schließen", mw)
+    toggle_action.triggered.connect(toggle_chatbot_panel)
+    mw.form.menuTools.addAction(toggle_action)
+
     # Custom Reviewer toggle
     try:
         from ..custom_reviewer import custom_reviewer
@@ -362,4 +387,13 @@ def setup_menu():
 
     # Einstellungen werden nur über das Chat-Fenster zugänglich gemacht
     # (kein separater Menü-Eintrag mehr)
+
+
+def toggle_settings_sidebar():
+    """Toggle the settings sidebar."""
+    try:
+        from .settings_sidebar import toggle_settings_sidebar as _toggle
+    except ImportError:
+        from ui.settings_sidebar import toggle_settings_sidebar as _toggle
+    _toggle()
 

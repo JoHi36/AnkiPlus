@@ -329,7 +329,7 @@ def _deck_card(node, idx):
         )
 
     return (
-        f'<div class="ap-card ap-cwrap" data-did="{did}" style="margin-bottom:6px;border-radius:14px;overflow:hidden;'
+        f'<div class="ap-card ap-cwrap" data-did="{did}" style="margin-bottom:14px;border-radius:14px;overflow:hidden;'
         f'background:var(--ds-bg-canvas);border:1px solid var(--ds-border-subtle);{delay}">'
         f'<div class="ap-row" style="display:flex;align-items:center;gap:8px;padding:11px 14px;cursor:pointer;user-select:none;"'
         f' onmouseover="this.style.background=\'var(--ds-hover-tint)\'"'
@@ -377,12 +377,25 @@ def _top_bar(active_tab='stapel', deck_name='', due_new=0, due_learn=0, due_revi
     total_due = due_new + due_learn + due_review
     deck_display = _esc(deck_name.split('::')[-1]) if deck_name else ''
 
+    # "+" toggle button for settings sidebar
+    plus_btn = (
+        '<button id="ap-sidebar-toggle" '
+        'onclick="window._apAction={type:\'cmd\',cmd:\'toggle-sidebar\'}" '
+        'style="background:none;border:none;cursor:pointer;padding:4px;margin-right:8px;'
+        'transition:transform 0.2s ease;display:flex;align-items:center;">'
+        '<svg width="14" height="14" viewBox="0 0 14 14" fill="none">'
+        '<rect x="5" y="0" width="4" height="14" rx="2" fill="#0a84ff" opacity="0.6"/>'
+        '<rect x="0" y="5" width="14" height="4" rx="2" fill="#0a84ff" opacity="0.6"/>'
+        '</svg>'
+        '</button>'
+    )
+
     if active_tab == 'stapel':
         # Stapel: "Heute: X Karten" on the left
         if total_due > 0:
-            left_html = f'<span style="{left_text_style}">Heute: {total_due} Karten</span>'
+            left_html = f'{plus_btn}<span style="{left_text_style}">Heute: {total_due} Karten</span>'
         else:
-            left_html = ''
+            left_html = plus_btn
 
         # Right side: colored dot + label legend
         legend_items = []
@@ -398,7 +411,8 @@ def _top_bar(active_tab='stapel', deck_name='', due_new=0, due_learn=0, due_revi
         right_html = f'<div style="display:flex;align-items:center;gap:10px;">{"".join(legend_items)}</div>'
     else:
         # Session/other views: deck name on left (same unified style), numbers on right
-        left_html = f'<span style="{left_text_style}max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{deck_display}</span>' if deck_display else ''
+        deck_part = f'<span style="{left_text_style}max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{deck_display}</span>' if deck_display else ''
+        left_html = f'{plus_btn}{deck_part}'
         right_html = (
             f'<div style="display:flex;align-items:baseline;gap:8px;">'
             f'<span style="font-family:ui-monospace,monospace;font-size:11px;font-weight:600;color:var(--ds-stat-new);font-variant-numeric:tabular-nums;">{due_new}</span>'
@@ -408,7 +422,7 @@ def _top_bar(active_tab='stapel', deck_name='', due_new=0, due_learn=0, due_revi
         )
 
     return (
-        f'<div class="flex items-center justify-between px-5 h-12 z-50 flex-shrink-0" style="background:transparent;">'
+        f'<div class="flex items-center justify-between px-5 z-50 flex-shrink-0" style="background:transparent;height:56px;padding-top:4px;">'
         f'<div class="flex-1 flex items-center">{left_html}</div>'
         f'<div class="flex items-center gap-0.5 p-[3px] rounded-lg" style="background:var(--ds-hover-tint);">'
         f'<button class="{tab_cls("stapel")}"{stapel_onclick}>Stapel</button>'
@@ -550,6 +564,14 @@ html, body {
 .ap-card {
     animation: apFadeUp 0.25s ease both;
 }
+/* Remove border-bottom on the last visible row inside a card to avoid doubling with card border */
+.ap-card .ap-cwrap:last-child > .ap-row {
+    border-bottom: none !important;
+}
+/* Also remove when a sub-group is the last and its last child row */
+.ap-card .ap-sub > .ap-cwrap:last-child > .ap-sub > .ap-cwrap:last-child > .ap-row {
+    border-bottom: none !important;
+}
 @keyframes apFadeUp {
     from { opacity: 0; transform: translateY(4px); }
     to   { opacity: 1; transform: translateY(0); }
@@ -610,6 +632,7 @@ html, body {
     align-items: center;
     justify-content: center;
     gap: 10px;
+    padding-top: 64px;
     margin-bottom: 24px;
 }
 .ap-wm-text { display: flex; align-items: baseline; }
@@ -652,11 +675,12 @@ html, body {
 }
 
 /* ─── Pill Search Bar ─── */
-#ap-search-wrap {
-    max-width: 720px;
-    width: 100%;
-    margin: 0 auto;
-    padding-top: 64px;
+#ap-search-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    padding: 0;
+    margin-bottom: 16px;
 }
 #ap-search-bar {
     border-radius: var(--ds-radius-lg);
@@ -665,16 +689,50 @@ html, body {
     display: flex;
     align-items: center;
     gap: 8px;
-    background: var(--ds-bg-frosted);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid var(--ds-border-medium);
-    box-shadow: var(--ds-shadow-md);
+    /* Glass: semi-transparent white gradient, top brighter */
+    background: linear-gradient(
+        165deg,
+        rgba(255,255,255,0.18) 0%,
+        rgba(255,255,255,0.07) 100%
+    );
+    backdrop-filter: blur(40px) saturate(1.8);
+    -webkit-backdrop-filter: blur(40px) saturate(1.8);
+    border: none;
+    /* Glass border only — inset highlights, zero outer shadow */
+    box-shadow:
+        inset 0 1px 0 0 rgba(255,255,255,0.25),
+        inset 1px 0 0 0 rgba(255,255,255,0.12),
+        inset 0 -1px 0 0 rgba(0,0,0,0.06),
+        inset -1px 0 0 0 rgba(0,0,0,0.04);
     position: relative;
-    transition: border-color 0.2s;
 }
 #ap-search-bar:focus-within {
-    border-color: rgba(10,132,255,0.25);
+    box-shadow:
+        inset 0 1px 0 0 rgba(255,255,255,0.30),
+        inset 1px 0 0 0 rgba(255,255,255,0.15),
+        inset 0 -1px 0 0 rgba(0,0,0,0.06),
+        inset -1px 0 0 0 rgba(0,0,0,0.04);
+}
+
+/* ─── Light mode glass ─── */
+[data-theme="light"] #ap-search-bar {
+    background: linear-gradient(
+        165deg,
+        rgba(255,255,255,0.82) 0%,
+        rgba(255,255,255,0.50) 100%
+    );
+    box-shadow:
+        inset 0 1px 0 0 rgba(255,255,255,0.95),
+        inset 1px 0 0 0 rgba(255,255,255,0.50),
+        inset 0 -1px 0 0 rgba(0,0,0,0.06),
+        inset -1px 0 0 0 rgba(0,0,0,0.04);
+}
+[data-theme="light"] #ap-search-bar:focus-within {
+    box-shadow:
+        inset 0 1px 0 0 rgba(255,255,255,0.98),
+        inset 1px 0 0 0 rgba(255,255,255,0.55),
+        inset 0 -1px 0 0 rgba(0,0,0,0.06),
+        inset -1px 0 0 0 rgba(0,0,0,0.04);
 }
 .ap-sb-icon {
     font-size: 14px;
@@ -747,7 +805,7 @@ html, body {
 #ap-sb-snake {
     position: absolute;
     inset: -1px;
-    border-radius: 50px;
+    border-radius: calc(var(--ds-radius-lg) + 1px);
     padding: 1px;
     background: conic-gradient(
         from var(--ap-sb-angle) at 50% 50%,
@@ -947,14 +1005,14 @@ def _wrap_page(top_bar_html, content_html, extra_js='', show_account_widget=True
 # ─── Deck Browser ─────────────────────────────────────────────────────────────
 
 _SEARCHBAR_HTML = """
-<div id="ap-search-wrap">
-  <div id="ap-wordmark">
-    <div class="ap-wm-text">
-      <span class="ap-wm-anki">Anki</span><span class="ap-wm-tld">.plus</span>
-    </div>
-    <span id="ap-wm-badge" class="ap-wm-badge ap-wm-badge--free">Free</span>
+<div id="ap-wordmark">
+  <div class="ap-wm-text">
+    <span class="ap-wm-anki">Anki</span><span class="ap-wm-tld">.plus</span>
   </div>
+  <span id="ap-wm-badge" class="ap-wm-badge ap-wm-badge--free">Free</span>
+</div>
 
+<div id="ap-search-sticky">
   <div id="ap-search-bar">
     <div id="ap-sb-snake"></div>
     <span class="ap-sb-icon">&#10022;</span>
@@ -972,7 +1030,6 @@ _SEARCHBAR_HTML = """
     </button>
   </div>
 </div>
-<div class="ap-search-spacer" style="height:8px;"></div>
 """
 
 
@@ -1257,6 +1314,12 @@ class CustomScreens:
                         mw.handleImport()
                     elif hasattr(mw, 'onImport'):
                         mw.onImport()
+                elif cmd == 'toggle-sidebar':
+                    try:
+                        from .settings_sidebar import toggle_settings_sidebar
+                    except ImportError:
+                        from ui.settings_sidebar import toggle_settings_sidebar
+                    toggle_settings_sidebar()
                 elif cmd == 'settings':
                     # Open addon settings / preferences
                     try:
