@@ -23,6 +23,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
   const [error, setError] = useState(null);  // NEW: Error state
   const [connectionStatus, setConnectionStatus] = useState('connected');  // NEW: Connection status: 'connected', 'connecting', 'error', 'disconnected'
   const [lastFailedMessage, setLastFailedMessage] = useState(null);  // NEW: Store last failed message for retry
+  const [tokenInfo, setTokenInfo] = useState(null);  // Token usage info from backend
   
   // Refs to access latest state inside stable callbacks (handleAnkiReceive)
   const currentStepsRef = useRef([]);
@@ -595,6 +596,10 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       }
       
       if (payload.done) {
+        // Extract token usage info if present
+        if (payload.tokens) {
+          setTokenInfo(payload.tokens);
+        }
         // CRITICAL: Don't set isLoading to false immediately - keep it true until message is saved
         // This ensures StreamingChatMessage continues to render with currentSteps/currentCitations
         // until the saved message is available with the same data
@@ -784,6 +789,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     handleStopRequest,
     handleRetry,  // NEW: Retry function
     clearError,  // NEW: Clear error function
-    handleAnkiReceive
+    handleAnkiReceive,
+    tokenInfo
   };
 }

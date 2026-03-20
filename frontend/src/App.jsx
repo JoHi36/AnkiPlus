@@ -23,6 +23,7 @@ import ContextSurface from './components/ContextSurface';
 import DeckBrowser from './components/DeckBrowser';
 import ErrorBoundary from './components/ErrorBoundary';
 import PaywallModal from './components/PaywallModal';
+import TokenBar from './components/TokenBar';
 import SectionDivider from './components/SectionDivider';
 import SourcesCarousel from './components/SourcesCarousel';
 import ReviewTrailIndicator from './components/ReviewTrailIndicator';
@@ -1976,7 +1977,7 @@ function AppInner() {
         to   { transform: translateX(0);    opacity: 1; }
       }
     `}</style>
-    <div id="chat-root" className="flex flex-col h-screen text-base-content overflow-hidden" style={{ backgroundColor: 'var(--ds-bg-deep)' }}>
+    <div id="chat-root" className="flex flex-col h-screen overflow-hidden" style={{ backgroundColor: 'var(--ds-bg-deep)', color: 'var(--ds-text-primary)' }}>
       {/* Header — ContextSurface (fixiert oben) */}
       <div ref={headerRef} className="fixed top-0 left-0 right-0 z-40" style={{ overflow: 'visible' }}>
         <ContextSurface
@@ -2000,6 +2001,8 @@ function AppInner() {
           }}
         />
       </div>
+
+      <TokenBar tokenInfo={chatHook.tokenInfo} />
 
       <main className="flex-1 overflow-hidden relative flex flex-col min-h-0" style={{ height: '100%' }}>
         {showSessionOverview ? (
@@ -2328,7 +2331,7 @@ function AppInner() {
                     {/* Manual insight extraction button */}
                     <ExtractInsightsButton
                       messageCount={chatHook.messages.length}
-                      onExtract={(onDone) => {
+                      onExtract={(onDone, onError) => {
                         if (cardContextHook.cardContext?.cardId) {
                           insightsHook.extractInsights(
                             cardContextHook.cardContext.cardId,
@@ -2337,12 +2340,16 @@ function AppInner() {
                             null
                           );
                         }
-                        const checkDone = setInterval(() => {
-                          if (!insightsHook.isExtracting) {
-                            clearInterval(checkDone);
+                        // Listen for extraction result
+                        const handler = (e) => {
+                          window.removeEventListener('ankiInsightExtractionComplete', handler);
+                          if (e.detail?.success) {
                             onDone?.();
+                          } else {
+                            onError?.();
                           }
-                        }, 500);
+                        };
+                        window.addEventListener('ankiInsightExtractionComplete', handler);
                       }}
                     />
 
@@ -2378,7 +2385,7 @@ function AppInner() {
           currentAuthToken={currentAuthToken}
           onClose={handleClose}
           actionPrimary={{
-            label: 'Weiter',
+            label: activeView === 'plusiMenu' ? 'Zurück' : 'Weiter',
             shortcut: 'SPACE',
             onClick: () => {
               if (activeView !== 'chat') {
@@ -2391,7 +2398,7 @@ function AppInner() {
             },
           }}
           actionSecondary={{
-            label: 'Agent Studio',
+            label: activeView === 'agentStudio' ? 'Chat' : 'Agent Studio',
             shortcut: '↵',
             onClick: () => {
               switch (activeView) {
@@ -2399,7 +2406,7 @@ function AppInner() {
                   setActiveView('agentStudio');
                   break;
                 case 'agentStudio':
-                  setActiveView('plusiMenu');
+                  setActiveView('chat');
                   break;
                 case 'plusiMenu':
                   setActiveView('agentStudio');
@@ -2427,7 +2434,6 @@ function AppInner() {
       <PaywallModal
         isOpen={showPaywall}
         onClose={() => setShowPaywall(false)}
-        onUnlock={handlePremiumUnlock}
       />
     </div>
     </ErrorBoundary>
