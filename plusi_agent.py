@@ -369,14 +369,44 @@ def self_reflect():
         raw_step2 = _gemini_call(system_prompt, step2_prompt, api_key, max_tokens=768)
         print(f"plusi reflect step2 raw: {raw_step2[:100]}")
 
-        mood, text, internal, _, diary_raw = parse_plusi_response(raw_step2)
+        mood, text, internal, _, diary_raw, discoveries = parse_plusi_response(raw_step2)
         if internal:
             persist_internal_state(internal)
+
+        # Determine if meaningful state changed
+        meaningful_changed = bool(internal.get('self') or internal.get('user') or internal.get('moments'))
+
+        # Diary logic: explicit diary, meaningful change, or discoveries
         if diary_raw:
             from .plusi_storage import save_diary_entry
             visible, cipher_parts = _parse_diary_text(diary_raw)
             if visible:
-                save_diary_entry(visible, cipher_parts, category='reflektiert', mood=mood)
+                save_diary_entry(visible, cipher_parts, category='reflektiert', mood=mood, discoveries=discoveries)
+        elif meaningful_changed:
+            from .plusi_storage import save_diary_entry
+            changes = []
+            if internal.get('self'):
+                changes.append(f"self: {json.dumps(internal['self'], ensure_ascii=False)}")
+            if internal.get('user'):
+                changes.append(f"user: {json.dumps(internal['user'], ensure_ascii=False)}")
+            if internal.get('moments'):
+                changes.append(f"moments: {json.dumps(internal['moments'], ensure_ascii=False)}")
+            auto_text = "Interne Änderung: " + ", ".join(changes)
+            save_diary_entry(auto_text, [], category='reflektiert', mood=mood, discoveries=discoveries)
+        elif discoveries:
+            from .plusi_storage import save_diary_entry
+            why_texts = [d.get('why', '?') for d in discoveries]
+            auto_text = "Gefunden: " + "; ".join(why_texts)
+            save_diary_entry(auto_text, [], category='forscht', mood=mood, discoveries=discoveries)
+
+        # Save as invisible history entry
+        save_interaction(
+            context=f"[self_reflect query: {query}]",
+            response=text if text else "[kein Monolog]",
+            mood=mood,
+            history_type='reflect',
+        )
+
         print(f"plusi reflect done: obsession={internal.get('obsession', '?')}, energy={internal.get('energy', '?')}")
         return internal
 
@@ -405,7 +435,7 @@ def _parse_diary_text(raw):
 
 
 def parse_plusi_response(raw_text):
-    """Parse Plusi response into (mood, text, internal_state, friendship_delta, diary).
+    """Parse Plusi response into (mood, text, internal_state, friendship_delta, diary, discoveries).
 
     Uses json.JSONDecoder().raw_decode() to correctly parse nested JSON
     (regex fails on nested objects like {"mood":"x", "internal":{...}}).
@@ -428,8 +458,11 @@ def parse_plusi_response(raw_text):
         friendship_delta = meta.get("friendship_delta", 0)
         friendship_delta = max(-3, min(3, int(friendship_delta)))
         diary_raw = meta.get("diary", None)
+        discoveries = meta.get("discoveries", [])
+        if not isinstance(discoveries, list):
+            discoveries = []
         text = clean[end_idx:].strip()
-        return mood, text, internal, friendship_delta, diary_raw
+        return mood, text, internal, friendship_delta, diary_raw, discoveries
     except (json.JSONDecodeError, ValueError):
         pass
 
@@ -441,15 +474,14 @@ def parse_plusi_response(raw_text):
         mood = mood_match.group(1) if mood_match.group(1) in VALID_MOODS else "neutral"
         delta = int(delta_match.group(1)) if delta_match else 0
         delta = max(-3, min(3, delta))
-        # Try to find text after the broken JSON — look for last } or end of JSON-like content
         text_start = clean.rfind('}')
         text = clean[text_start + 1:].strip() if text_start > 0 else ""
         if not text or text.startswith('"'):
-            text = ""  # no usable text, JSON consumed everything
+            text = ""
         print(f"plusi_agent: recovered from truncated JSON: mood={mood}, delta={delta}")
-        return mood, text, {}, delta, None
+        return mood, text, {}, delta, None, []
 
-    return "neutral", raw_text.strip(), {}, 0, None
+    return "neutral", raw_text.strip(), {}, 0, None, []
 
 
 def run_plusi(situation, deck_id=None):
@@ -524,31 +556,57 @@ def run_plusi(situation, deck_id=None):
             raw_text = ""
 
         # Parse mood + internal state from response
-        mood, text, internal, friendship_delta, diary_raw = parse_plusi_response(raw_text)
+        mood, text, internal, friendship_delta, diary_raw, discoveries = parse_plusi_response(raw_text)
 
         # Persist internal state updates
         if internal:
             persist_internal_state(internal)
+
+        # Determine if meaningful state changed
+        meaningful_changed = bool(internal.get('self') or internal.get('user') or internal.get('moments'))
 
         if diary_raw:
             from .plusi_storage import save_diary_entry
             visible, cipher_parts = _parse_diary_text(diary_raw)
             if visible:
                 save_diary_entry(visible, cipher_parts, category='gemerkt', mood=mood)
+        elif meaningful_changed:
+            # Auto-generate diary entry for meaningful changes without explicit diary
+            from .plusi_storage import save_diary_entry
+            changes = []
+            if internal.get('self'):
+                changes.append(f"self: {json.dumps(internal['self'], ensure_ascii=False)}")
+            if internal.get('user'):
+                changes.append(f"user: {json.dumps(internal['user'], ensure_ascii=False)}")
+            if internal.get('moments'):
+                changes.append(f"moments: {json.dumps(internal['moments'], ensure_ascii=False)}")
+            auto_text = "Interne Änderung: " + ", ".join(changes)
+            save_diary_entry(auto_text, [], category='gemerkt', mood=mood)
+
+        # Determine if silent (we're in the success path — error handled by except)
+        is_silent = not text
 
         # Save to persistent history + apply friendship delta
         save_interaction(
             context=situation,
-            response=text,
+            response=text if text else "[schweigt]",
             mood=mood,
             deck_id=deck_id,
+            history_type='silent' if is_silent else 'chat',
         )
         apply_friendship_delta(friendship_delta)
         friendship = get_friendship_data()
         friendship['delta'] = friendship_delta
 
-        print(f"plusi_agent: mood={mood}, delta={friendship_delta}, text_len={len(text)}")
-        return {"mood": mood, "text": text, "friendship": friendship, "diary": diary_raw is not None, "error": False}
+        print(f"plusi_agent: mood={mood}, delta={friendship_delta}, text_len={len(text)}, silent={is_silent}")
+        return {
+            "mood": mood,
+            "text": text,
+            "friendship": friendship,
+            "diary": diary_raw is not None or meaningful_changed,
+            "silent": is_silent,
+            "error": False
+        }
 
     except Exception as e:
         print(f"plusi_agent: Error: {e}")
