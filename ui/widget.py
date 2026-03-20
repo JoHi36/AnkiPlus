@@ -95,7 +95,10 @@ class AIRequestThread(QThread):
     def run(self):
         try:
             context = self.widget_ref.current_card_context if self.widget_ref else None
-            logger.debug("🔍 AIRequestThread.run: context=%s, question='%s'" if context else "🔍 AIRequestThread.run: context=None", 'has cardId=' + str(context.get('cardId')) if context else 'None', (context.get('frontField') or context.get('question') or '')[:60])
+            if context:
+                logger.debug("🔍 AIRequestThread.run: context=has cardId=%s, question='%s'", context.get('cardId'), (context.get('frontField') or context.get('question') or '')[:60])
+            else:
+                logger.debug("🔍 AIRequestThread.run: context=None")
 
             # Load card-specific history from SQLite (moved here from main thread)
             card_history = self.history
@@ -147,7 +150,7 @@ class AIRequestThread(QThread):
                 self.finished_signal.emit(self.request_id)
         except Exception as e:
             if not self._cancelled:
-                logger.debug("AIRequestThread: Exception: %s", str(e))
+                logger.exception("AIRequestThread: Exception: %s", str(e))
                 self.error_signal.emit(self.request_id, str(e))
         finally:
             self.ai_handler._pipeline_signal_callback = None
