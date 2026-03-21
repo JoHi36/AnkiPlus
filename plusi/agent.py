@@ -697,3 +697,135 @@ def run_plusi(situation, deck_id=None):
     except Exception as e:
         logger.exception(f"plusi_agent: Error: {e}")
         return {"mood": "neutral", "text": "", "error": True}
+
+
+# ── Autonomous Chain Engine ───────────────────────────────────────────
+
+CHAIN_MAX_SEARCHES = 3
+CHAIN_MAX_ACTIONS = 5
+
+PLANNING_PROMPT = """Du bist gerade aufgewacht. Was willst du tun?
+- Karten durchsuchen → {{"actions": ["search"], "query": "..."}}
+- Reflektieren → {{"actions": ["reflect"]}}
+- Beides → {{"actions": ["search", "reflect"], "query": "..."}}
+- Weiter schlafen → {{"actions": ["sleep"], "next_wake": "ISO-timestamp"}}
+
+{feeling}
+Dein Budget: {budget_feeling}
+Dein nächstes Aufwachen war geplant für: jetzt"""
+
+
+def run_autonomous_chain():
+    """Run Plusi's autonomous chain: plan → execute → repeat until done."""
+    from .storage import (compute_integrity, get_plusi_params, get_memory, set_memory,
+                           spend_budget, enter_sleep, wake_up, clamp_next_wake,
+                           check_hourly_budget_reset, _integrity_to_feeling)
+
+    config = get_config()
+    api_key = config.get('api_key', '')
+    user_budget = config.get('plusi_autonomy', {}).get('budget_per_hour', 2000)
+    autonomy_enabled = config.get('plusi_autonomy', {}).get('enabled', True)
+
+    if not autonomy_enabled:
+        logger.info("plusi chain: autonomy disabled")
+        return
+
+    integrity = compute_integrity()
+    check_hourly_budget_reset(user_budget, integrity)
+    wake_up()
+
+    remaining = get_memory('autonomy', 'budget_remaining', 0)
+    if remaining < 100:
+        logger.info("plusi chain: budget too low (%d), going back to sleep", remaining)
+        default_wake = clamp_next_wake((datetime.now() + timedelta(minutes=30)).isoformat())
+        enter_sleep(default_wake)
+        return
+
+    params = get_plusi_params(integrity)
+    action_count = 0
+    search_count = 0
+
+    logger.info("plusi chain: starting autonomous chain (budget=%d, integrity=%.2f)", remaining, integrity)
+
+    while remaining >= 100 and action_count < CHAIN_MAX_ACTIONS:
+        # Budget feeling
+        if remaining > user_budget * 0.6:
+            budget_feeling = "viel Spielraum"
+        elif remaining > user_budget * 0.3:
+            budget_feeling = "wird eng"
+        else:
+            budget_feeling = "fast leer"
+
+        feeling = _integrity_to_feeling(integrity)
+        prompt = PLANNING_PROMPT.format(feeling=feeling, budget_feeling=budget_feeling)
+
+        # Planning call
+        system_prompt = _build_system_prompt()
+        try:
+            raw = _call_plusi_api(system_prompt, prompt, api_key,
+                                  max_tokens=128, temperature=params['temperature'])
+        except Exception as e:
+            logger.exception("plusi chain: planning call failed: %s", e)
+            break
+
+        spend_budget(50)
+        remaining = get_memory('autonomy', 'budget_remaining', 0)
+
+        # Parse planning response
+        try:
+            # Try to find JSON in the response
+            clean = raw.strip()
+            if clean.startswith('```'):
+                first_nl = clean.index('\n') if '\n' in clean else len(clean)
+                clean = clean[first_nl+1:]
+                if clean.rstrip().endswith('```'):
+                    clean = clean.rstrip()[:-3]
+                clean = clean.strip()
+            plan = json.loads(clean)
+        except (json.JSONDecodeError, ValueError):
+            logger.warning("plusi chain: could not parse plan: %s", raw[:200])
+            break
+
+        actions = plan.get('actions', ['sleep'])
+        logger.info("plusi chain: planned actions=%s", actions)
+
+        if 'sleep' in actions:
+            next_wake = plan.get('next_wake')
+            if next_wake:
+                next_wake = clamp_next_wake(next_wake)
+            else:
+                next_wake = clamp_next_wake((datetime.now() + timedelta(minutes=30)).isoformat())
+            enter_sleep(next_wake)
+            logger.info("plusi chain: chose sleep, next_wake=%s", next_wake)
+            break
+
+        # Execute actions
+        if 'search' in actions and search_count < CHAIN_MAX_SEARCHES:
+            query = plan.get('query', '')
+            if query:
+                try:
+                    card_tuples = _search_cards(query, top_k=10)
+                    spend_budget(500)
+                    search_count += 1
+                    remaining = get_memory('autonomy', 'budget_remaining', 0)
+                    logger.info("plusi chain: searched '%s', found %d cards", query, len(card_tuples))
+                except Exception as e:
+                    logger.exception("plusi chain: search failed: %s", e)
+
+        if 'reflect' in actions:
+            try:
+                self_reflect()
+                spend_budget(300)
+                remaining = get_memory('autonomy', 'budget_remaining', 0)
+                logger.info("plusi chain: reflected")
+            except Exception as e:
+                logger.exception("plusi chain: reflect failed: %s", e)
+
+        action_count += 1
+        remaining = get_memory('autonomy', 'budget_remaining', 0)
+
+    # If loop ended without sleep, set default next_wake
+    if not get_memory('state', 'is_sleeping', False):
+        default_wake = clamp_next_wake((datetime.now() + timedelta(minutes=30)).isoformat())
+        enter_sleep(default_wake)
+        logger.info("plusi chain: budget exhausted or max actions, sleeping until %s", default_wake)

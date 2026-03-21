@@ -9,7 +9,7 @@ Two tables in a separate SQLite database (plusi.db):
 import sqlite3
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 try:
     from ..utils.logging import get_logger
@@ -647,3 +647,67 @@ def load_diary(limit=50, offset=0):
             'discoveries': json.loads(row[6]) if row[6] else []
         })
     return entries
+
+
+# ── Budget management ─────────────────────────────────────────────────
+
+def get_available_budget(user_budget, integrity):
+    """Compute available budget based on user setting and integrity."""
+    return int(user_budget * (0.4 + 0.6 * integrity))
+
+
+def spend_budget(tokens):
+    """Deduct tokens from budget."""
+    remaining = get_memory('autonomy', 'budget_remaining', 0)
+    remaining = max(0, remaining - tokens)
+    set_memory('autonomy', 'budget_remaining', remaining)
+    logger.debug("budget spent %d tokens, remaining: %d", tokens, remaining)
+
+
+def check_hourly_budget_reset(user_budget, integrity):
+    """Reset budget if the hour changed."""
+    current_hour = datetime.now().hour
+    last_hour = get_memory('autonomy', 'budget_hour', -1)
+    if current_hour != last_hour:
+        available = get_available_budget(user_budget, integrity)
+        set_memory('autonomy', 'budget_remaining', available)
+        set_memory('autonomy', 'budget_hour', current_hour)
+        logger.info("budget hourly reset: %d tokens (hour=%d)", available, current_hour)
+
+
+def enter_sleep(next_wake):
+    """Put Plusi to sleep until next_wake."""
+    set_memory('state', 'is_sleeping', True)
+    set_memory('state', 'next_wake', next_wake)
+    logger.info("plusi entering sleep until %s", next_wake)
+
+
+def wake_up():
+    """Wake Plusi up."""
+    set_memory('state', 'is_sleeping', False)
+    logger.info("plusi waking up")
+
+
+def regenerate_budget(user_budget, minutes_slept=10, integrity=0.5):
+    """Regenerate budget during sleep, capped at available_budget."""
+    remaining = get_memory('autonomy', 'budget_remaining', 0)
+    regen = int(user_budget * 0.2 * (minutes_slept / 10))
+    cap = get_available_budget(user_budget, integrity)
+    remaining = min(cap, remaining + regen)
+    set_memory('autonomy', 'budget_remaining', remaining)
+    logger.debug("budget regenerated %d tokens, remaining: %d (cap: %d)", regen, remaining, cap)
+
+
+def clamp_next_wake(next_wake_iso):
+    """Clamp next_wake to 10-120 minutes from now."""
+    try:
+        wake = datetime.fromisoformat(next_wake_iso)
+        now = datetime.now()
+        delta_min = (wake - now).total_seconds() / 60
+        if delta_min < 10:
+            return (now + timedelta(minutes=10)).isoformat()
+        elif delta_min > 120:
+            return (now + timedelta(minutes=120)).isoformat()
+        return next_wake_iso
+    except (ValueError, TypeError):
+        return (datetime.now() + timedelta(minutes=30)).isoformat()

@@ -288,6 +288,11 @@ class ChatbotWidget(QWidget):
         # Card-Tracking wird nach UI-Setup initialisiert
         if self.web_view:
             self.card_tracker = CardTracker(self)
+
+        # Plusi autonomous wake timer — checks every minute
+        self._plusi_wake_timer = QTimer()
+        self._plusi_wake_timer.timeout.connect(self._check_plusi_wake)
+        self._plusi_wake_timer.start(60000)  # check every minute
     def setup_ui(self):
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
@@ -359,6 +364,27 @@ class ChatbotWidget(QWidget):
                 logger.exception("Fehler beim Verarbeiten von Nachrichten: %s", e)
         
         self.web_view.page().runJavaScript(js_code, handle_messages)
+
+    def _check_plusi_wake(self):
+        """Check if Plusi should wake up for autonomous action."""
+        try:
+            from ..plusi.storage import get_memory
+            is_sleeping = get_memory('state', 'is_sleeping', False)
+            next_wake = get_memory('state', 'next_wake', None)
+
+            if not is_sleeping or not next_wake:
+                return
+
+            from datetime import datetime
+            wake_time = datetime.fromisoformat(next_wake)
+            if datetime.now() >= wake_time:
+                logger.info("plusi wake timer: triggering autonomous chain")
+                from ..plusi.agent import run_autonomous_chain
+                import threading
+                t = threading.Thread(target=run_autonomous_chain, daemon=True)
+                t.start()
+        except Exception as e:
+            logger.exception("plusi wake timer error: %s", e)
 
     def _send_to_frontend(self, payload_type, data, extra=None):
         """Helper: Sendet Payload an das React-Frontend via ankiReceive."""
