@@ -2383,7 +2383,9 @@ function AppInner() {
             label: activeView === 'plusiMenu' ? 'Zurück' : 'Weiter',
             shortcut: 'SPACE',
             onClick: () => {
-              if (activeView !== 'chat') {
+              if (activeView === 'plusiMenu') {
+                setActiveView('agentStudio');
+              } else if (activeView !== 'chat') {
                 setActiveView('chat');
               } else if (bridge?.advanceCard) {
                 bridge.advanceCard();
@@ -2393,7 +2395,7 @@ function AppInner() {
             },
           }}
           actionSecondary={{
-            label: activeView === 'agentStudio' ? 'Chat' : 'Agent Studio',
+            label: activeView === 'plusiMenu' ? 'Chat' : (activeView === 'agentStudio' ? 'Chat' : 'Agent Studio'),
             shortcut: '↵',
             onClick: () => {
               switch (activeView) {
@@ -2404,7 +2406,7 @@ function AppInner() {
                   setActiveView('chat');
                   break;
                 case 'plusiMenu':
-                  setActiveView('agentStudio');
+                  setActiveView('chat');
                   break;
               }
             },
