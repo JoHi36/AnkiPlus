@@ -970,6 +970,8 @@ function AppInner() {
           if (!mascotEnabledRef.current) return;
           const _chatForPlusi = chatHookRef.current;
           if (_chatForPlusi) {
+            // End loading state from @Plusi direct mode
+            if (_chatForPlusi.setIsLoading) _chatForPlusi.setIsLoading(false);
             const result = {
               mood: payload.mood || 'neutral',
               text: payload.text || '',
@@ -2277,17 +2279,12 @@ function AppInner() {
                         {chatHook.isLoading && (
                           <div className="w-full flex-none mb-2">
                             {/* ThoughtStream divider — v5 no longer renders sources */}
-                            {(chatHook.pipelineSteps && chatHook.pipelineSteps.length > 0) ? (
-                              <ThoughtStream
-                                pipelineSteps={chatHook.pipelineSteps || []}
-                                isStreaming={true}
-                                message={chatHook.streamingMessage || ''}
-                                steps={[]}
-                              />
-                            ) : (
-                              /* Simple divider for no-search messages */
-                              <div className="h-px my-2" style={{ background: 'var(--ds-border-subtle)' }} />
-                            )}
+                            <ThoughtStream
+                              pipelineSteps={chatHook.pipelineSteps || []}
+                              isStreaming={true}
+                              message={chatHook.streamingMessage || ''}
+                              steps={[]}
+                            />
 
                           </div>
                         )}

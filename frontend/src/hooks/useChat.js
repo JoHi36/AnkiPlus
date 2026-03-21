@@ -810,6 +810,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     messages,
     setMessages,
     isLoading,
+    setIsLoading,
     streamingMessage,
     freeChatPushRef,
     currentSteps,  // NEW: Expose current steps for streaming
