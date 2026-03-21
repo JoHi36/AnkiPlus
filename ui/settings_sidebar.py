@@ -29,7 +29,7 @@ from aqt import mw
 from PyQt6.QtWidgets import QDockWidget, QWidget, QVBoxLayout, QApplication
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebChannel import QWebChannel
-from PyQt6.QtCore import Qt, QUrl, QObject, pyqtSlot, QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import Qt, QUrl, QObject, pyqtSlot
 from PyQt6.QtGui import QColor
 
 
@@ -621,7 +621,6 @@ _sidebar_webview = None
 _sidebar_bridge = None
 _sidebar_channel = None
 _sidebar_open = False
-_animation = None
 
 SIDEBAR_WIDTH = 240
 
@@ -676,8 +675,8 @@ def _create_sidebar():
 
 
 def toggle_settings_sidebar():
-    """Toggle the settings sidebar with smooth width animation."""
-    global _sidebar_dock, _sidebar_webview, _sidebar_open, _animation
+    """Toggle the settings sidebar — instant show/hide, no Qt width animation."""
+    global _sidebar_dock, _sidebar_webview, _sidebar_open
 
     if _sidebar_dock is None:
         _create_sidebar()
@@ -685,18 +684,9 @@ def toggle_settings_sidebar():
     _sidebar_open = not _sidebar_open
 
     if _sidebar_open:
-        _sidebar_dock.setMaximumWidth(0)
-        _sidebar_dock.setMinimumWidth(0)
+        _sidebar_dock.setMinimumWidth(SIDEBAR_WIDTH)
+        _sidebar_dock.setMaximumWidth(SIDEBAR_WIDTH)
         _sidebar_dock.show()
-        _animation = QPropertyAnimation(_sidebar_dock, b"maximumWidth")
-        _animation.setDuration(300)
-        _animation.setStartValue(0)
-        _animation.setEndValue(SIDEBAR_WIDTH)
-        _animation.setEasingCurve(QEasingCurve.Type.OutExpo)
-        _animation.finished.connect(
-            lambda: _sidebar_dock.setMinimumWidth(SIDEBAR_WIDTH)
-        )
-        _animation.start()
         # Refresh status on open
         try:
             if _sidebar_webview:
@@ -706,14 +696,7 @@ def toggle_settings_sidebar():
         except Exception:
             pass
     else:
-        _sidebar_dock.setMinimumWidth(0)
-        _animation = QPropertyAnimation(_sidebar_dock, b"maximumWidth")
-        _animation.setDuration(300)
-        _animation.setStartValue(SIDEBAR_WIDTH)
-        _animation.setEndValue(0)
-        _animation.setEasingCurve(QEasingCurve.Type.InExpo)
-        _animation.finished.connect(lambda: _sidebar_dock.hide())
-        _animation.start()
+        _sidebar_dock.hide()
 
     _rotate_toggle_button(_sidebar_open)
 

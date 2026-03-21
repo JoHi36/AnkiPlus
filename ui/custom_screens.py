@@ -1217,7 +1217,7 @@ def _overview_html(deck_name, new_c, lrn_c, rev_c):
         f'</div>'
     )
 
-    top_bar = _top_bar(active_tab='stapel', deck_name=deck_name, due_new=new_c, due_learn=lrn_c, due_review=rev_c)
+    top_bar = _top_bar(active_tab='session', deck_name=deck_name, due_new=new_c, due_learn=lrn_c, due_review=rev_c)
     return _wrap_page(top_bar, content)
 
 

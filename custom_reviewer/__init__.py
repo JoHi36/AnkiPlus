@@ -759,16 +759,13 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
         return (True, None)
 
     elif message == "settings":
-        # Open settings/profile
+        # Open Anki's native preferences
         try:
-            from ..ui import setup as ui_setup
-            if hasattr(ui_setup, 'show_settings'):
-                ui_setup.show_settings()
-            elif hasattr(mw, 'onPrefs'):
-                mw.onPrefs()
+            from aqt import mw as _mw
+            if _mw and hasattr(_mw, 'onPrefs'):
+                _mw.onPrefs()
         except Exception:
-            if mw and hasattr(mw, 'onPrefs'):
-                mw.onPrefs()
+            pass
         return (True, None)
 
     elif message == "deck:home":
