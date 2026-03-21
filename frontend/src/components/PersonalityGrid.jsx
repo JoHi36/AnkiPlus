@@ -22,7 +22,7 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
   const dotColor = 'currentColor'; // inherits from parent's color
 
   return (
-    <svg viewBox="0 0 360 90" style={{ width: '100%', display: 'block' }}>
+    <svg viewBox="0 0 360 96" style={{ width: '100%', display: 'block' }}>
       <defs>
         <linearGradient id="pgTL" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="#5AC8FA" stopOpacity="0.08" />
@@ -69,7 +69,7 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
       {/* Axis labels */}
       <text x={CX} y={PY - 2} textAnchor="middle" fontSize="5" fill={labelColor}
         letterSpacing="1" fontFamily="-apple-system,system-ui">AKTIV</text>
-      <text x={CX} y={PY + RY + 8} textAnchor="middle" fontSize="5" fill={labelColor}
+      <text x={CX} y={PY + RY + 10} textAnchor="middle" fontSize="5" fill={labelColor}
         letterSpacing="1" fontFamily="-apple-system,system-ui">REFLEKTIV</text>
       <text x={PX - 5} y={CY} textAnchor="middle" fontSize="5" fill={labelColor}
         letterSpacing="1" fontFamily="-apple-system,system-ui"
@@ -97,13 +97,11 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
       <circle cx={sx} cy={sy} r="2.5"
         fill="rgba(128,128,128,0.7)" opacity={confident ? 0.85 : 0.35} />
 
-      {/* Coordinate labels at dot — x value on horizontal axis, y value on vertical */}
-      <text x={sx} y={PY + RY + 8} textAnchor="middle" fontSize="5"
-        fill="rgba(128,128,128,0.35)"
-        fontFamily="-apple-system,system-ui" fontVariantNumeric="tabular-nums">{orient}</text>
-      <text x={PX - 2} y={sy} textAnchor="end" dominantBaseline="middle" fontSize="5"
-        fill="rgba(128,128,128,0.35)"
-        fontFamily="-apple-system,system-ui" fontVariantNumeric="tabular-nums">{energy}</text>
+      {/* Coordinate label at the dot */}
+      <text x={sx + 9} y={sy - 4} fontSize="5.5"
+        fill="rgba(128,128,128,0.4)"
+        fontFamily="-apple-system,system-ui"
+        fontVariantNumeric="tabular-nums">{energy} · {orient}</text>
     </svg>
   );
 }
