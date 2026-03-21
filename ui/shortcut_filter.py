@@ -252,6 +252,16 @@ class GlobalShortcutFilter(QObject):
             self._toggle_text_field_focus()
             return True
 
+        # --- Cmd+M: Toggle settings sidebar ---
+        if (event.key() == Qt.Key.Key_M and
+                event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier)):
+            try:
+                from .settings_sidebar import toggle_settings_sidebar
+                toggle_settings_sidebar()
+            except Exception as e:
+                logger.warning("Could not toggle settings sidebar: %s", e)
+            return True
+
         # --- Cmd+Z: Always forward to reviewer (undo card) ---
         if (event.key() == Qt.Key.Key_Z and
                 event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier)):

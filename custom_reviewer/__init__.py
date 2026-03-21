@@ -787,7 +787,6 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
             # Send @Plusi focus event to React
             chat_widget = getattr(ui_setup, '_chatbot_widget', None)
             if chat_widget and hasattr(chat_widget, 'web_view'):
-                import json
                 chat_widget.web_view.page().runJavaScript(
                     "window.dispatchEvent(new CustomEvent('plusi-ask-focus', {detail: {prefix: '@Plusi '}}));"
                 )
@@ -797,7 +796,6 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
 
     elif message == "plusi:settings":
         try:
-            from aqt import mw
             if mw:
                 mw.onPrefs()
         except Exception as e:
@@ -1439,6 +1437,17 @@ class CustomReviewer:
                 js=js,
                 is_dark_mode=is_dark_mode  # NEW
             )
+
+        # Inject chat panel state so interactions.js knows whether dock should be hidden
+        chat_panel_open = False
+        try:
+            from ..ui.setup import _chatbot_dock
+            if _chatbot_dock is not None and _chatbot_dock.isVisible():
+                chat_panel_open = True
+        except Exception:
+            pass
+        chat_state_js = f'\n<script>window.__chatOpen = {"true" if chat_panel_open else "false"};</script>'
+        html = html.replace('</head>', chat_state_js + '\n</head>')
 
         # CRITICAL FIX: Inject override CSS at the END of body tag
         override_css = """
