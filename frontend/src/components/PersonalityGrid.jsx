@@ -1,6 +1,7 @@
 import React from 'react';
 
-const PX = 24, PY = 8, RX = 312, RY = 72;
+// Grid area: padded inside 360x90 viewBox
+const PX = 28, PY = 10, RX = 304, RY = 68;
 const CX = PX + RX / 2, CY = PY + RY / 2;
 
 function toSVG(x, y) {
@@ -12,6 +13,13 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
   const trailPts = trail.map(t => toSVG(t.x, t.y));
   const energy = (position.y * 9 + 1).toFixed(1);
   const orient = position.x.toFixed(2);
+
+  // Use currentColor trick: set color via CSS var on parent, SVG inherits
+  // Grid lines use explicit colors with fallbacks for both themes
+  const lineColor = 'rgba(128,128,128,0.15)';
+  const lineMinor = 'rgba(128,128,128,0.08)';
+  const labelColor = 'rgba(128,128,128,0.4)';
+  const dotColor = 'currentColor'; // inherits from parent's color
 
   return (
     <svg viewBox="0 0 360 90" style={{ width: '100%', display: 'block' }}>
@@ -25,11 +33,11 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
           <stop offset="100%" stopColor="#30D158" stopOpacity="0" />
         </linearGradient>
         <linearGradient id="pgBL" x1="0" y1="1" x2="1" y2="0">
-          <stop offset="0%" stopColor="#BF5AF2" stopOpacity="0.08" />
+          <stop offset="0%" stopColor="#BF5AF2" stopOpacity="0.06" />
           <stop offset="100%" stopColor="#BF5AF2" stopOpacity="0" />
         </linearGradient>
         <linearGradient id="pgBR" x1="1" y1="1" x2="0" y2="0">
-          <stop offset="0%" stopColor="#FF9F0A" stopOpacity="0.08" />
+          <stop offset="0%" stopColor="#FF9F0A" stopOpacity="0.06" />
           <stop offset="100%" stopColor="#FF9F0A" stopOpacity="0" />
         </linearGradient>
       </defs>
@@ -40,57 +48,59 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
       <rect x={PX} y={CY} width={RX/2} height={RY/2} rx="2" fill="url(#pgBL)" />
       <rect x={CX} y={CY} width={RX/2} height={RY/2} rx="2" fill="url(#pgBR)" />
 
-      {/* Border + center cross */}
+      {/* Border */}
       <rect x={PX} y={PY} width={RX} height={RY} rx="3" fill="none"
-        stroke="var(--ds-border)" strokeWidth="0.5" />
-      <line x1={CX} y1={PY} x2={CX} y2={PY+RY}
-        stroke="var(--ds-border)" strokeWidth="0.5" />
-      <line x1={PX} y1={CY} x2={PX+RX} y2={CY}
-        stroke="var(--ds-border)" strokeWidth="0.5" />
+        stroke={lineColor} strokeWidth="0.5" />
 
-      {/* Minor grid */}
-      {[PX + RX*0.25, PX + RX*0.75].map(v => (
-        <line key={`v${v}`} x1={v} y1={PY} x2={v} y2={PY+RY}
-          stroke="var(--ds-border)" strokeWidth="0.5" opacity="0.4" />
+      {/* Center cross */}
+      <line x1={CX} y1={PY} x2={CX} y2={PY+RY} stroke={lineColor} strokeWidth="0.5" />
+      <line x1={PX} y1={CY} x2={PX+RX} y2={CY} stroke={lineColor} strokeWidth="0.5" />
+
+      {/* Minor grid — 8 vertical, 4 horizontal */}
+      {[0.125, 0.25, 0.375, 0.625, 0.75, 0.875].map(f => (
+        <line key={`v${f}`} x1={PX + RX*f} y1={PY} x2={PX + RX*f} y2={PY+RY}
+          stroke={lineMinor} strokeWidth="0.5" />
       ))}
-      {[PY + RY*0.25, PY + RY*0.75].map(v => (
-        <line key={`h${v}`} x1={PX} y1={v} x2={PX+RX} y2={v}
-          stroke="var(--ds-border)" strokeWidth="0.5" opacity="0.4" />
+      {[0.25, 0.75].map(f => (
+        <line key={`h${f}`} x1={PX} y1={PY + RY*f} x2={PX+RX} y2={PY + RY*f}
+          stroke={lineMinor} strokeWidth="0.5" />
       ))}
 
       {/* Axis labels */}
-      <text x={CX} y={PY-1} textAnchor="middle" fontSize="5" fill="var(--ds-text-quaternary)"
-        letterSpacing="0.8" fontFamily="-apple-system,system-ui">AKTIV</text>
-      <text x={CX} y={PY+RY+7} textAnchor="middle" fontSize="5" fill="var(--ds-text-quaternary)"
-        letterSpacing="0.8" fontFamily="-apple-system,system-ui">REFLEKTIV</text>
-      <text x={PX-4} y={CY} textAnchor="middle" fontSize="5" fill="var(--ds-text-quaternary)"
-        letterSpacing="0.8" fontFamily="-apple-system,system-ui" transform={`rotate(-90,${PX-4},${CY})`}>SACH</text>
-      <text x={PX+RX+4} y={CY} textAnchor="middle" fontSize="5" fill="var(--ds-text-quaternary)"
-        letterSpacing="0.8" fontFamily="-apple-system,system-ui" transform={`rotate(90,${PX+RX+4},${CY})`}>MENSCH</text>
+      <text x={CX} y={PY - 2} textAnchor="middle" fontSize="5" fill={labelColor}
+        letterSpacing="1" fontFamily="-apple-system,system-ui">AKTIV</text>
+      <text x={CX} y={PY + RY + 8} textAnchor="middle" fontSize="5" fill={labelColor}
+        letterSpacing="1" fontFamily="-apple-system,system-ui">REFLEKTIV</text>
+      <text x={PX - 6} y={CY} textAnchor="middle" fontSize="5" fill={labelColor}
+        letterSpacing="1" fontFamily="-apple-system,system-ui"
+        transform={`rotate(-90,${PX - 6},${CY})`}>SACH</text>
+      <text x={PX + RX + 6} y={CY} textAnchor="middle" fontSize="5" fill={labelColor}
+        letterSpacing="1" fontFamily="-apple-system,system-ui"
+        transform={`rotate(90,${PX + RX + 6},${CY})`}>MENSCH</text>
 
       {/* Trail */}
       {trailPts.length > 1 && (
         <polyline
           points={trailPts.map(p => `${p.sx},${p.sy}`).join(' ')}
-          fill="none" stroke="var(--ds-accent, #0A84FF)" strokeWidth="0.7"
-          opacity="0.18" strokeLinecap="round" />
+          fill="none" stroke="#0A84FF" strokeWidth="0.7"
+          opacity="0.2" strokeLinecap="round" />
       )}
       {trailPts.map((p, i) => i > 0 && (
         <circle key={i} cx={p.sx} cy={p.sy} r="1.2"
-          fill="var(--ds-accent, #0A84FF)"
-          opacity={0.08 + (1 - i / trailPts.length) * 0.25} />
+          fill="#0A84FF"
+          opacity={0.1 + (1 - i / trailPts.length) * 0.3} />
       ))}
 
       {/* Current dot */}
       <circle cx={sx} cy={sy} r="5" fill="none"
-        stroke="var(--ds-text-tertiary)" strokeWidth="0.5" />
+        stroke="rgba(128,128,128,0.3)" strokeWidth="0.5" />
       <circle cx={sx} cy={sy} r="2.5"
-        fill="var(--ds-text-primary)" opacity={confident ? 0.85 : 0.35} />
+        fill="rgba(128,128,128,0.7)" opacity={confident ? 0.85 : 0.35} />
 
       {/* Coordinate label */}
       {confident && (
         <text x={sx + 8} y={sy - 1} fontSize="6.5"
-          fill="var(--ds-text-quaternary)"
+          fill={labelColor}
           fontFamily="-apple-system,system-ui">{energy} · {orient}</text>
       )}
     </svg>

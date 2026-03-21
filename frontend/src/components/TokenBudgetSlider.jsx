@@ -47,7 +47,7 @@ export default function TokenBudgetSlider({ value = 500, onChange }) {
 
   return (
     <div style={{
-      padding: '8px 0 4px',
+      padding: '8px 16px 4px',
       display: 'flex',
       flexDirection: 'column',
       gap: 4,
@@ -94,7 +94,7 @@ export default function TokenBudgetSlider({ value = 500, onChange }) {
           position: 'absolute',
           left: 0, right: 0,
           height: 4, borderRadius: 2,
-          background: 'var(--ds-border, rgba(255,255,255,0.08))',
+          background: 'rgba(128,128,128,0.2)',
         }} />
         {/* Filled track — gradient green to blue */}
         <div style={{
