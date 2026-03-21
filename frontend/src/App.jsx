@@ -14,7 +14,6 @@ import ChatMessage from './components/ChatMessage';
 import StreamingChatMessage from './components/StreamingChatMessage';
 import { getOrCreateDeviceId } from './utils/deviceId';
 import ChatInput from './components/ChatInput';
-import ProfileDialog from './components/ProfileDialog';
 import ThoughtStream from './components/ThoughtStream';
 import SessionOverview from './components/SessionOverview';
 // CardPreviewModal removed — replaced by universal Preview Mode (bridge.openPreview)
@@ -75,9 +74,6 @@ function AppInner() {
   useEffect(() => {
     const deviceId = getOrCreateDeviceId();
   }, []);
-  
-  // Settings State
-  const [showProfile, setShowProfile] = useState(false);
   
   // Auth State für Quota-Anzeige
   const [authStatus, setAuthStatus] = useState({
@@ -650,7 +646,7 @@ function AppInner() {
             b.getAuthToken();
           }
         }
-        // Dispatch auth events as CustomEvents for ProfileDialog
+        // Dispatch auth events as CustomEvents
         if (['authTokenLoaded', 'authStatusLoaded', 'auth_success', 'auth_error', 'auth_logout', 'auth_linking', 'auth_link_expired', 'auth_link_timeout'].includes(payload.type)) {
           window.dispatchEvent(new CustomEvent('ankiAuthEvent', { detail: payload }));
         }
@@ -1721,15 +1717,9 @@ function AppInner() {
     };
   }, []);
 
-  // Settings öffnen
-  const handleOpenSettings = () => {
-    setShowProfile(true);
-  };
-
   // Settings speichern
   const handleSaveSettings = (settings) => {
     console.log('💾 App.jsx: Settings gespeichert:', settings);
-    setShowProfile(false);
     modelsHook.handleSaveSettings(settings);
   };
 
@@ -2004,7 +1994,6 @@ function AppInner() {
           showSessionOverview={showSessionOverview}
           onReset={handleResetChat}
           isResetDisabled={isResetDisabled}
-          onOpenSettings={() => setShowProfile(true)}
           cardContext={cardContextHook.cardContext}
           sessions={sessionContext.sessions}
           onSelectSession={handleSelectSession}
@@ -2373,7 +2362,6 @@ function AppInner() {
           <div className="fixed bottom-0 left-0 right-0 z-50 px-4 pb-4">
         <ChatInput
           onSend={handleSend}
-          onOpenSettings={handleOpenSettings}
           isLoading={chatHook.isLoading}
           onStop={chatHook.handleStopRequest}
           cardContext={cardContextHook.cardContext}
@@ -2417,15 +2405,6 @@ function AppInner() {
           </div>
         </>
       )}
-
-      {/* Profile Dialog (in-chat, for session overview access) */}
-      <ProfileDialog
-        isOpen={showProfile}
-        onClose={() => setShowProfile(false)}
-        bridge={bridge}
-        isReady={isReady}
-        currentTheme={theme}
-      />
 
       {/* Card Preview Modal removed — replaced by universal Preview Mode */}
 

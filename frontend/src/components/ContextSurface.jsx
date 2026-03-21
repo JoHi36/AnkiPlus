@@ -1,24 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  User, CheckCircle,
-} from 'lucide-react';
 import { useSessionContext } from '../contexts/SessionContext';
 
 /* ══════════════════════════════════════════════════════════
    OVERVIEW PILL  (shown when showSessionOverview=true)
    ══════════════════════════════════════════════════════════ */
-function OverviewPill({ sessions, onOpenSettings, bridge }) {
-  const [authStatus, setAuthStatus] = useState({ authenticated: false });
-
-  useEffect(() => {
-    if (!bridge?.getAuthStatus) return;
-    try {
-      const raw = bridge.getAuthStatus();
-      if (raw) setAuthStatus(JSON.parse(raw));
-    } catch (_) {}
-  }, [bridge]);
-
+function OverviewPill({ sessions }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -38,24 +25,6 @@ function OverviewPill({ sessions, onOpenSettings, bridge }) {
             {sessions.length} Sessions
           </span>
         )}
-        {onOpenSettings && (
-          <motion.button
-            onClick={onOpenSettings}
-            whileTap={{ scale: 0.9 }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 4,
-              padding: '3px 8px', borderRadius: 8, cursor: 'pointer',
-              background: authStatus.authenticated ? 'var(--ds-green-tint)' : 'var(--ds-hover-tint)',
-              border: `1px solid ${authStatus.authenticated ? 'rgba(48,209,88,0.2)' : 'var(--ds-border-subtle)'}`,
-            }}
-          >
-            <User size={12} style={{ color: authStatus.authenticated ? 'var(--ds-green)' : 'var(--ds-text-secondary)' }} />
-            <span style={{ fontSize: 11, fontWeight: 500, color: authStatus.authenticated ? 'var(--ds-green)' : 'var(--ds-text-secondary)' }}>
-              Profil
-            </span>
-            {authStatus.authenticated && <CheckCircle size={9} style={{ color: 'var(--ds-green)' }} />}
-          </motion.button>
-        )}
       </div>
     </div>
   );
@@ -67,7 +36,6 @@ function OverviewPill({ sessions, onOpenSettings, bridge }) {
    ══════════════════════════════════════════════════════════ */
 export default function ContextSurface({
   onNavigateToOverview, showSessionOverview,
-  onOpenSettings,
   cardContext,
   sessions, onSelectSession,
   bridge,
@@ -87,8 +55,6 @@ export default function ContextSurface({
           >
             <OverviewPill
               sessions={sessions || []}
-              onOpenSettings={onOpenSettings}
-              bridge={bridge}
             />
           </motion.div>
         )}

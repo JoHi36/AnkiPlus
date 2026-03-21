@@ -8,7 +8,7 @@ const EVENT_REACTIONS = {
   streak_10:    { text: '10er streak!! du bist on fire 🔥🔥', mood: 'excited' },
 };
 
-export default function MascotShell({ mood = 'neutral', onPlusiAsk, onOpenSettings, onEvent, enabled = true }) {
+export default function MascotShell({ mood = 'neutral', onPlusiAsk, onEvent, enabled = true }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [eventBubble, setEventBubble] = useState(null);
   const [tapKey, setTapKey] = useState(0);
@@ -60,11 +60,6 @@ export default function MascotShell({ mood = 'neutral', onPlusiAsk, onOpenSettin
     onPlusiAsk?.();
   };
 
-  const handleSettings = () => {
-    setMenuOpen(false);
-    onOpenSettings?.();
-  };
-
   const animClass = mood === 'happy' || mood === 'excited' ? 'plusi-dock-bounce'
     : mood === 'empathy' ? 'plusi-dock-droop'
     : 'plusi-dock-float';
@@ -91,11 +86,6 @@ export default function MascotShell({ mood = 'neutral', onPlusiAsk, onOpenSettin
             <div className="plusi-menu-item plusi-menu-accent" onClick={handlePlusiAsk}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
               <span>Plusi fragen</span>
-            </div>
-            <div className="plusi-menu-sep" />
-            <div className="plusi-menu-item" onClick={handleSettings}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-              <span>Einstellungen</span>
             </div>
           </div>
         )}
@@ -139,15 +129,12 @@ const DOCK_CSS = `
 
   .plusi-dock-menu,
   .plusi-dock-bubble {
-    background: rgba(18,18,18,.94);
-    border: none;
+    background: var(--ds-bg-frosted);
+    border: 1px solid var(--ds-border-medium);
     border-radius: 10px;
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    box-shadow:
-      -4px 0 12px rgba(10,132,255,.06),
-      0 4px 16px rgba(0,0,0,.35),
-      0 0 0 0.5px rgba(255,255,255,.04) inset;
+    box-shadow: var(--ds-shadow-md);
     animation: pd-card-in 0.25s cubic-bezier(0.34,1.1,0.64,1);
     align-self: center;
   }
@@ -173,7 +160,7 @@ const DOCK_CSS = `
     color: var(--ds-text-primary);
     font-family: -apple-system, sans-serif;
   }
-  .plusi-menu-item:hover { background: rgba(10,132,255,.08); }
+  .plusi-menu-item:hover { background: var(--ds-hover-tint); }
   .plusi-menu-item svg { opacity: 0.4; flex-shrink: 0; }
   .plusi-menu-accent { color: var(--ds-accent); font-weight: 500; }
   .plusi-menu-accent svg { opacity: 0.65; color: var(--ds-accent); }
@@ -190,6 +177,6 @@ const DOCK_CSS = `
     font-size: 12.5px;
     color: var(--ds-text-primary);
     line-height: 1.45;
-    background: rgba(10,132,255,.05);
+    background: color-mix(in srgb, var(--ds-accent) 5%, var(--ds-bg-frosted));
   }
 `;
