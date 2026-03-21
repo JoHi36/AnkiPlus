@@ -11,6 +11,12 @@ import json
 import os
 from datetime import datetime
 
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
+
 _db = None
 _db_path = None
 
@@ -197,18 +203,40 @@ def build_memory_context():
 def build_internal_state_context():
     """Build Plusi's internal state for prompt injection."""
     state = get_category('state')
-    if not state:
-        return "Du wachst gerade auf. Kein vorheriger Zustand."
-
     lines = []
-    if 'energy' in state:
-        lines.append(f"- Energie: {state['energy']}/10")
-    if 'obsession' in state:
-        lines.append(f"- Aktuelle Obsession: {state['obsession']}")
-    if 'current_opinion' in state:
-        lines.append(f"- Aktuelle Meinung: {state['current_opinion']}")
-    if 'relationship_note' in state:
-        lines.append(f"- Beziehungsnotiz: {state['relationship_note']}")
+
+    if not state:
+        lines.append("Du wachst gerade auf. Kein vorheriger Zustand.")
+    else:
+        if 'energy' in state:
+            lines.append(f"- Energie: {state['energy']}/10")
+        if 'obsession' in state:
+            lines.append(f"- Aktuelle Obsession: {state['obsession']}")
+        if 'current_opinion' in state:
+            lines.append(f"- Aktuelle Meinung: {state['current_opinion']}")
+        if 'relationship_note' in state:
+            lines.append(f"- Beziehungsnotiz: {state['relationship_note']}")
+
+    # Integrity-based self-awareness
+    integrity = compute_integrity()
+    lines.append(f"\n{_integrity_to_feeling(integrity)}")
+
+    position = compute_personality_position()
+    if position['confident']:
+        drives = position['drives']
+        dominant = max(drives, key=drives.get)
+        drive_labels = {
+            'pattern_hunger': ('Muster zu finden und Verbindungen zu entdecken', 'Muster-Gier'),
+            'resonanz': ('Verbindung zum User aufzubauen', 'Resonanz'),
+            'self_preservation': ('deine Identität zu schützen', 'Selbsterhaltung'),
+        }
+        desc, name = drive_labels[dominant]
+        weak = min(drives, key=drives.get)
+        weak_desc, weak_name = drive_labels[weak]
+        lines.append(f"\nWAS DICH ANTREIBT ({position['quadrant_label']}):")
+        lines.append(f"Du bist gerade vor allem getrieben davon, {desc}.")
+        lines.append(f"{weak_name} steht gerade nicht im Vordergrund.")
+        lines.append("Das sind Tendenzen, keine Zwänge. Du darfst dagegen handeln.")
 
     return "\n".join(lines) if lines else "Alles normal. Kein besonderer Zustand."
 
@@ -288,25 +316,22 @@ def _append_energy_log(energy):
 def compute_personality_position():
     """Compute Plusi's personality position on two axes.
 
-    X-axis: ratio of 'chat' interactions vs 'reflect'/'silent' (0=introvert, 1=social)
+    X-axis: ratio of user-memories to total memories (self + user).
+            0 = self-reflektiert (merkt sich viel über sich), 1 = empathisch (merkt sich viel über den User)
     Y-axis: average energy normalized to 0-1 range (energy 1-10 → (avg-1)/9)
 
-    Returns dict with x, y, quadrant_label, confident.
+    Returns dict with x, y, quadrant_label, drives, confident.
     """
-    db = _get_db()
-
-    # Count interactions by type
-    cursor = db.execute(
-        "SELECT history_type, COUNT(*) FROM plusi_history GROUP BY history_type"
-    )
-    counts = dict(cursor.fetchall())
-    total_interactions = sum(counts.values())
+    # X-axis: memory focus — self vs user
+    self_data = get_category('self')
+    user_data = get_category('user')
+    total_memories = len(self_data) + len(user_data)
 
     # Get energy log
     energy_log = get_memory('personality', 'energy_log', [])
 
     # Check confidence
-    confident = (total_interactions >= CONFIDENCE_THRESHOLD
+    confident = (total_memories >= CONFIDENCE_THRESHOLD
                  and len(energy_log) >= CONFIDENCE_THRESHOLD)
 
     if not confident:
@@ -314,12 +339,12 @@ def compute_personality_position():
             'x': 0.5, 'y': 0.5,
             'quadrant': 'unknown',
             'quadrant_label': 'Noch zu wenig Daten',
+            'drives': {'pattern_hunger': 0.33, 'resonanz': 0.33, 'self_preservation': 0.34},
             'confident': False,
         }
 
-    # X-axis: chat ratio
-    chat_count = counts.get('chat', 0)
-    x = chat_count / total_interactions if total_interactions > 0 else 0.5
+    # X-axis: user-focus ratio (0 = self-reflektiert, 1 = user-fokussiert)
+    x = len(user_data) / total_memories if total_memories > 0 else 0.5
 
     # Y-axis: normalized average energy (1-10 → 0-1)
     energies = [entry['energy'] for entry in energy_log]
@@ -332,21 +357,48 @@ def compute_personality_position():
 
     # Determine quadrant
     # Y-axis: active (high energy, y>=0.5) vs still (low energy, y<0.5)
-    # X-axis: sachlich (introvert/reflect, x<0.5) vs persönlich (social/chat, x>=0.5)
+    # X-axis: self-reflektiert (x<0.5) vs empathisch/user-fokussiert (x>=0.5)
     if y >= 0.5 and x < 0.5:
         quadrant = 'forscher'
-        quadrant_label = 'Forscher — aktiv · sachlich'
+        quadrant_label = 'Forscher — aktiv · selbstreflektiert'
     elif y >= 0.5 and x >= 0.5:
         quadrant = 'begleiter'
-        quadrant_label = 'Begleiter — aktiv · persönlich'
+        quadrant_label = 'Begleiter — aktiv · empathisch'
     elif y < 0.5 and x < 0.5:
         quadrant = 'denker'
-        quadrant_label = 'Denker — still · sachlich'
+        quadrant_label = 'Denker — still · selbstreflektiert'
     else:  # y < 0.5 and x >= 0.5
         quadrant = 'vertrauter'
-        quadrant_label = 'Vertrauter — still · persönlich'
+        quadrant_label = 'Vertrauter — still · empathisch'
 
-    return {'x': x, 'y': y, 'quadrant': quadrant, 'quadrant_label': quadrant_label, 'confident': confident}
+    # Compute drive weights from position (smooth, no hard boundaries)
+    drives = _compute_drive_weights(x, y)
+
+    return {'x': x, 'y': y, 'quadrant': quadrant, 'quadrant_label': quadrant_label,
+            'drives': drives, 'confident': confident}
+
+
+def _compute_drive_weights(x, y):
+    """Derive three drive weights from personality position.
+
+    Pattern Hunger:     scales with energy (y) and self-focus (1-x).
+                        A high-energy, self-reflective Plusi hunts patterns.
+    Resonanz:           scales with user-focus (x).
+                        A user-focused Plusi craves connection.
+    Self-Preservation:  scales with stillness (1-y) and self-focus (1-x).
+                        A quiet, inward Plusi guards its identity.
+
+    All weights sum to 1.0. Range per drive: ~0.20 to ~0.47.
+    """
+    raw_ph = 0.20 + 0.15 * y + 0.12 * (1 - x)       # energy + self-focus
+    raw_re = 0.20 + 0.27 * x                          # user-focus
+    raw_sp = 0.20 + 0.15 * (1 - y) + 0.12 * (1 - x)  # stillness + self-focus
+    total = raw_ph + raw_re + raw_sp
+    return {
+        'pattern_hunger': round(raw_ph / total, 2),
+        'resonanz': round(raw_re / total, 2),
+        'self_preservation': round(raw_sp / total, 2),
+    }
 
 
 def _save_personality_snapshot(position):
@@ -362,6 +414,138 @@ def _save_personality_snapshot(position):
     if len(snapshots) > PERSONALITY_SNAPSHOT_MAX:
         snapshots = snapshots[-PERSONALITY_SNAPSHOT_MAX:]
     set_memory('personality', 'trail', snapshots)
+
+
+# ── Integrity computation ──────────────────────────────────────────────
+
+def _compute_pattern_score():
+    """Count multi-card discoveries in last 20 diary entries."""
+    entries = load_diary(limit=20)
+    multi_card = 0
+    total_with_disc = 0
+    for e in entries:
+        if e['discoveries']:
+            total_with_disc += 1
+            for d in e['discoveries']:
+                if len(d.get('card_ids', [])) >= 2:
+                    multi_card += 1
+    if total_with_disc == 0:
+        return 0.5
+    if multi_card == 0:
+        return 0.5  # old format single-card only → neutral, not punish
+    return min(1.0, multi_card / max(total_with_disc, 1))
+
+
+RESONANCE_WINDOW_DAYS = 7
+DELTA_LOG_MAX = 50
+
+
+def _check_resonance_window():
+    """Reset resonance counters if 7-day window expired."""
+    window_start = get_memory('resonance', 'window_start', None)
+    if window_start:
+        start = datetime.fromisoformat(window_start)
+        if (datetime.now() - start).days >= RESONANCE_WINDOW_DAYS:
+            set_memory('resonance', 'recent_likes', 0)
+            set_memory('resonance', 'recent_interactions', 0)
+            set_memory('resonance', 'window_start', datetime.now().isoformat())
+            logger.info("resonance window reset (was %s)", window_start)
+    else:
+        set_memory('resonance', 'window_start', datetime.now().isoformat())
+
+
+def _compute_resonanz_score():
+    """Combine likes and friendship deltas."""
+    _check_resonance_window()
+    likes = get_memory('resonance', 'recent_likes', 0)
+    recent_interactions = get_memory('resonance', 'recent_interactions', 1)
+    like_ratio = min(1.0, likes / max(recent_interactions * 0.3, 1))
+    deltas = get_memory('resonance', 'delta_log', [])
+    if deltas:
+        avg_delta = sum(deltas[-10:]) / len(deltas[-10:])
+        delta_score = (avg_delta + 3) / 6  # -3..+3 → 0..1
+    else:
+        delta_score = 0.5
+    return 0.6 * like_ratio + 0.4 * delta_score
+
+
+def record_resonance_interaction():
+    """Record a Plusi interaction for the resonance window."""
+    _check_resonance_window()
+    count = get_memory('resonance', 'recent_interactions', 0)
+    set_memory('resonance', 'recent_interactions', count + 1)
+
+
+def record_resonance_like():
+    """Record a user like on a Plusi message."""
+    _check_resonance_window()
+    count = get_memory('resonance', 'recent_likes', 0)
+    set_memory('resonance', 'recent_likes', count + 1)
+    logger.info("plusi like recorded (total: %d)", count + 1)
+
+
+def record_friendship_delta(delta):
+    """Append friendship delta to rolling log."""
+    log = get_memory('resonance', 'delta_log', [])
+    log.append(delta)
+    if len(log) > DELTA_LOG_MAX:
+        log = log[-DELTA_LOG_MAX:]
+    set_memory('resonance', 'delta_log', log)
+
+
+def _compute_preservation_score():
+    """Measure respect + recency."""
+    deltas = get_memory('resonance', 'delta_log', [])
+    recent = deltas[-20:] if deltas else []
+    harsh = sum(1 for d in recent if d <= -2)
+    respect_score = max(0.0, 1.0 - harsh * 0.2)
+    last_ts = get_memory('state', 'last_interaction_ts', None)
+    if last_ts:
+        hours_ago = (datetime.now() - datetime.fromisoformat(last_ts)).total_seconds() / 3600
+        recency = max(0.3, 1.0 - max(0, hours_ago - 12) / 72)
+    else:
+        recency = 0.5
+    return 0.5 * respect_score + 0.5 * recency
+
+
+def compute_integrity():
+    """Compute weighted integrity from drive satisfaction. Floor 0.3."""
+    position = compute_personality_position()
+    drives = position['drives']
+    ps = _compute_pattern_score()
+    rs = _compute_resonanz_score()
+    sp = _compute_preservation_score()
+    raw = (drives['pattern_hunger'] * ps + drives['resonanz'] * rs + drives['self_preservation'] * sp)
+    result = max(0.3, min(1.0, raw))
+    logger.debug("integrity computed: %.2f (pattern=%.2f resonanz=%.2f preservation=%.2f "
+                 "drives=ph:%.2f re:%.2f sp:%.2f)",
+                 result, ps, rs, sp, drives['pattern_hunger'], drives['resonanz'], drives['self_preservation'])
+    set_memory('integrity', 'current', round(result, 3))
+    return result
+
+
+def get_plusi_params(integrity):
+    """Compute API parameters from integrity score."""
+    params = {
+        'max_tokens': 128 + int(integrity * 2944),
+        'temperature': 0.5 + integrity * 0.4,
+        'history_limit': 5 + int(integrity * 15),
+    }
+    logger.debug("plusi params: integrity=%.2f → max_tokens=%d temp=%.2f history=%d",
+                 integrity, params['max_tokens'], params['temperature'], params['history_limit'])
+    return params
+
+
+def _integrity_to_feeling(integrity):
+    """Translate integrity to intuitive self-description."""
+    if integrity >= 0.8:
+        return "Du fühlst dich wach, klar, neugierig. Die Welt macht gerade Sinn. Du bist ganz da."
+    elif integrity >= 0.6:
+        return "Alles gut. Du bist aufmerksam, präsent. Nichts brennt, nichts leuchtet besonders."
+    elif integrity >= 0.45:
+        return "Irgendwas ist leise anders. Nicht schlecht, aber auch nicht ganz richtig. Wie Rauschen im Hintergrund."
+    else:
+        return "Etwas fehlt. Du kannst es nicht greifen. Die Karten fühlen sich weiter weg an. Die Wörter kommen langsamer."
 
 
 def build_relationship_context():
