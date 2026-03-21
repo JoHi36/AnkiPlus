@@ -104,19 +104,19 @@ export default function PlusiMenu({ bridge, onNavigateBack }) {
       onScroll={handleScroll}
       style={{
         flex: 1, display: 'flex', flexDirection: 'column',
-        padding: '0 20px 140px', overflowY: 'auto',
+        padding: '0 0 140px', overflowY: 'auto',
       }}
     >
-      {/* Sticky Grid Header — solid bg + fade overlay so text scrolls behind */}
+      {/* Sticky Grid Header — edge-to-edge banner at the very top */}
       <div style={{
         position: 'sticky',
         top: 0,
         zIndex: 10,
+        margin: '0 -0px',
       }}>
-        {/* Solid background matching the page */}
         <div style={{
           background: 'var(--ds-bg-deep, #141416)',
-          paddingTop: 0,
+          padding: '0 20px',
         }}>
           <PersonalityGrid
             position={currentPosition}
@@ -125,16 +125,16 @@ export default function PlusiMenu({ bridge, onNavigateBack }) {
             confident={personality.confident}
           />
         </div>
-        {/* Fade-out gradient — text dissolves behind the header */}
+        {/* Fade-out gradient */}
         <div style={{
-          height: 20,
+          height: 16,
           background: 'linear-gradient(to bottom, var(--ds-bg-deep, #141416), transparent)',
           pointerEvents: 'none',
         }} />
       </div>
 
-      {/* Diary — free scrolling, scrolls behind the sticky header */}
-      <div style={{ marginTop: 0 }}>
+      {/* Diary — free scrolling with horizontal padding */}
+      <div style={{ marginTop: 0, padding: '0 20px' }}>
         <DiaryStream
           entries={diary}
           dayRefs={dayRefs}
