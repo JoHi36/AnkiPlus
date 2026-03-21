@@ -761,9 +761,8 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
     elif message == "settings":
         # Open Anki's native preferences
         try:
-            from aqt import mw as _mw
-            if _mw and hasattr(_mw, 'onPrefs'):
-                _mw.onPrefs()
+            if mw and hasattr(mw, 'onPrefs'):
+                mw.onPrefs()
         except Exception:
             pass
         return (True, None)
