@@ -1493,15 +1493,34 @@ function AppInner() {
       setActiveView('chat');
     }
 
-    // @Plusi intercept — route to Plusi Direct instead of main AI (only when Plusi enabled)
-    if (mascotEnabled && text.trim().startsWith('@Plusi')) {
-      const plusiText = text.trim().slice(6).trim();
+    // @Plusi intercept — route to Plusi Direct instead of main AI
+    // Uses case-insensitive match, works regardless of mascot toggle
+    if (/^@plusi\b/i.test(text.trim())) {
+      const plusiText = text.trim().replace(/^@plusi\s*/i, '').trim();
       if (plusiText) {
         // Add user message to chat
         chatHook.setMessages(prev => [
           ...prev,
           { id: Date.now(), from: 'user', text }
         ]);
+        // Set loading state and emit synthetic pipeline for ThoughtStream
+        chatHook.setIsLoading(true);
+        // Emit synthetic router-active immediately
+        const now = Date.now();
+        chatHook.updatePipelineSteps
+          ? chatHook.updatePipelineSteps([{ step: 'router', status: 'active', data: {}, timestamp: now }])
+          : null;
+        // After 700ms, emit router-done
+        setTimeout(() => {
+          chatHook.updatePipelineSteps
+            ? chatHook.updatePipelineSteps(prev => prev.map(s => s.step === 'router' ? {
+                ...s,
+                status: 'done',
+                data: { search_needed: false, retrieval_mode: 'none', response_length: 'short', scope: 'none', scope_label: '' },
+                timestamp: Date.now()
+              } : s))
+            : null;
+        }, 700);
         // Send to Plusi directly
         sendPlusiDirect(plusiText);
       }
@@ -2047,7 +2066,8 @@ function AppInner() {
             />
             {/* Chat Container - scrollbar */}
             <div className="flex-1 overflow-hidden relative">
-              {/* Top Fade Gradient */}
+              {/* Top Fade Gradient — hidden in PlusiMenu */}
+              {activeView !== 'plusiMenu' && (
               <div
                 className="fixed left-0 right-0 pointer-events-none z-25 max-w-3xl mx-auto"
                 style={{
@@ -2056,10 +2076,11 @@ function AppInner() {
                   background: 'linear-gradient(to bottom, var(--ds-bg-deep) 0%, var(--ds-bg-deep) 30%, transparent 100%)'
                 }}
               />
+              )}
               <div
                 ref={messagesContainerRef}
                 id="messages-container"
-                className={`h-full overflow-y-auto max-w-3xl mx-auto w-full scrollbar-thin relative z-10 ${activeView === 'plusiMenu' ? 'px-0 pt-2 pb-40' : 'px-4 pt-20 pb-40'}`}
+                className={`h-full max-w-3xl mx-auto w-full scrollbar-thin relative z-10 ${activeView === 'plusiMenu' ? 'overflow-hidden flex flex-col px-0 pt-2 pb-0' : 'overflow-y-auto px-4 pt-20 pb-40'}`}
               >
 
                 {activeView === 'agentStudio' ? (

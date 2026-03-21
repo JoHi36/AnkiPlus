@@ -368,7 +368,9 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
 
     // @Plusi direct mode — skip router, emit synthetic pipeline, route via plusiDirect
     const isPlusiDirect = /^@plusi\b/i.test(text);
+    console.log('🔍 @Plusi check:', { isPlusiDirect, text: text.substring(0, 20), hasBridge: !!bridge, hasPlusiDirect: !!(bridge && bridge.plusiDirect) });
     if (isPlusiDirect) {
+      console.log('✅ @Plusi detected, emitting synthetic pipeline');
       // Emit synthetic router-active immediately
       updatePipelineSteps([{ step: 'router', status: 'active', data: {}, timestamp: Date.now() }]);
 
@@ -392,9 +394,13 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     if (isPlusiDirect) {
       // Strip @Plusi prefix
       const cleanText = text.replace(/^@plusi\s*/i, '').trim() || text;
+      console.log('📤 @Plusi: routing via bridge.plusiDirect, cleanText:', cleanText);
       // Use existing plusiDirect bridge — handles run_plusi(), mood sync, panel notify
       if (bridge && bridge.plusiDirect) {
         bridge.plusiDirect(cleanText, null); // deck_id=null, backend resolves current deck
+        console.log('📤 @Plusi: bridge.plusiDirect called successfully');
+      } else {
+        console.error('❌ @Plusi: bridge.plusiDirect NOT available!', { bridge: !!bridge, keys: bridge ? Object.keys(bridge) : [] });
       }
       return; // Skip normal sendMessage flow — no router, no main model
     }
@@ -815,6 +821,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     currentSteps,  // NEW: Expose current steps for streaming
     currentCitations,  // NEW: Expose current citations for streaming
     pipelineSteps,  // NEW: Expose pipeline steps for ThoughtStream
+    updatePipelineSteps,  // Expose for @Plusi synthetic pipeline in App.jsx
     error,  // NEW: Error state
     connectionStatus,  // NEW: Connection status
     appendMessage,
