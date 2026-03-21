@@ -36,6 +36,7 @@ import ExtractInsightsButton from './components/ExtractInsightsButton';
 import useInsights from './hooks/useInsights';
 import PlusiMenu from './components/PlusiMenu';
 import TokenBudgetSlider from './components/TokenBudgetSlider';
+import SettingsSidebar from './components/SettingsSidebar';
 
 // Stable empty references — prevent new object creation on every render
 const EMPTY_STEPS = [];
@@ -972,6 +973,20 @@ function AppInner() {
           if (_chatForPlusi) {
             // End loading state from @Plusi direct mode
             if (_chatForPlusi.setIsLoading) _chatForPlusi.setIsLoading(false);
+            // Reset pipeline steps (ThoughtStream will use persisted pipeline_data)
+            if (_chatForPlusi.updatePipelineSteps) _chatForPlusi.updatePipelineSteps([]);
+
+            // Plusi-specific pipeline data for ThoughtStream persistence
+            const plusiPipelineData = [
+              { step: 'router', status: 'done', data: {
+                search_needed: false,
+                retrieval_mode: 'plusi',
+                response_length: 'short',
+                scope: 'none',
+                scope_label: ''
+              }, timestamp: Date.now() }
+            ];
+
             const result = {
               mood: payload.mood || 'neutral',
               text: payload.text || '',
@@ -986,14 +1001,13 @@ function AppInner() {
                 displayType: "widget",
                 result: { mood: result.mood, text: result.text, meta: result.meta, friendship: result.friendship }
               })}]]`;
-              // Add as a new bot message containing the Plusi widget
+              // Add as a new bot message with pipeline_data for persistent ThoughtStream
               _chatForPlusi.setMessages(prev => [
                 ...prev,
-                { id: Date.now(), from: 'bot', text: plusiMarker }
+                { id: Date.now(), from: 'bot', text: plusiMarker, pipeline_data: plusiPipelineData }
               ]);
               setAiMood(result.mood);
             } else if (result.silent) {
-              // Silent response — show muted message, still sync mood
               const silentMarker = `[[TOOL:${JSON.stringify({
                 name: "spawn_plusi",
                 displayType: "widget",
@@ -1001,7 +1015,7 @@ function AppInner() {
               })}]]`;
               _chatForPlusi.setMessages(prev => [
                 ...prev,
-                { id: Date.now(), from: 'bot', text: silentMarker }
+                { id: Date.now(), from: 'bot', text: silentMarker, pipeline_data: plusiPipelineData }
               ]);
               setAiMood(result.mood);
             }
@@ -2021,7 +2035,8 @@ function AppInner() {
           onSelectSession={handleSelectSession}
           bridge={bridge}
         />
-        {/* Fade mask — chat content fades out behind the pill */}
+        {/* Fade mask — chat content fades out behind the pill (hidden in PlusiMenu) */}
+        {activeView !== 'plusiMenu' && (
         <div
           aria-hidden="true"
           style={{
@@ -2030,6 +2045,7 @@ function AppInner() {
             background: 'linear-gradient(to bottom, var(--ds-bg-deep) 0%, var(--ds-bg-deep) 30%, transparent 100%)',
           }}
         />
+        )}
       </div>
 
       <TokenBar tokenInfo={chatHook.tokenInfo} />
@@ -2448,10 +2464,18 @@ function AppInner() {
 
 /**
  * Main App Component - wraps AppInner with SessionContextProvider
+ * If ?view=sidebar is set, render SettingsSidebar instead of chat.
  */
 export default function App() {
+  const params = new URLSearchParams(window.location.search);
+  const view = params.get('view');
+
+  if (view === 'sidebar') {
+    return <SettingsSidebar />;
+  }
+
   const { bridge, isReady } = useAnki();
-  
+
   return (
     <SessionContextProvider bridge={bridge} isReady={isReady}>
       <AppInner />

@@ -112,6 +112,7 @@ function getDoneLabel(step: string, data: Record<string, any>, status: string): 
     case 'router': {
       const mode = MODE_LABELS[data.retrieval_mode] || data.retrieval_mode || '';
       const scope = data.scope_label || '';
+      if (data.retrieval_mode === 'plusi') return 'Plusi';
       if (!data.search_needed) return 'Direkte Antwort';
       return scope ? `${mode} · ${scope}` : mode || 'Anfrage analysiert';
     }
@@ -278,12 +279,19 @@ function RouterDetails({ data }: { data: Record<string, any> }) {
     long: 'Ausführlich',
   };
 
+  const isPlusi = data.retrieval_mode === 'plusi';
   const tags = data.search_needed === false
-    ? [
-        { label: 'Strategie', value: 'Direkte Antwort', icon: 'M8 2v12M2 8h12' },
-        { label: 'Kontext', value: 'Nicht benötigt', icon: 'M2 3h12v10H2zM2 6h12' },
-        { label: 'Antwort', value: RESPONSE_LENGTH_LABELS[data.response_length] || 'Mittel', icon: 'M3 13V5h3v8M7 13V3h3v10M11 13V7h3v6' },
-      ]
+    ? (isPlusi
+      ? [
+          { label: 'Modus', value: 'Plusi', icon: 'M8 2v12M2 8h12' },
+          { label: 'Kontext', value: 'Nicht benötigt', icon: 'M2 3h12v10H2zM2 6h12' },
+        ]
+      : [
+          { label: 'Strategie', value: 'Direkte Antwort', icon: 'M8 2v12M2 8h12' },
+          { label: 'Kontext', value: 'Nicht benötigt', icon: 'M2 3h12v10H2zM2 6h12' },
+          { label: 'Antwort', value: RESPONSE_LENGTH_LABELS[data.response_length] || 'Mittel', icon: 'M3 13V5h3v8M7 13V3h3v10M11 13V7h3v6' },
+        ]
+    )
     : [
         {
           label: 'Strategie',
@@ -542,7 +550,9 @@ function PhaseRow({ step, data, status, isActive, isFirst = false, animate = tru
   if (isActive) {
     title = ACTIVE_TITLES[step] || 'Verarbeite...';
   } else if (step === 'router') {
-    if (!data.search_needed) {
+    if (data.retrieval_mode === 'plusi') {
+      title = 'Plusi';
+    } else if (!data.search_needed) {
       title = 'Direkte Antwort';
     } else {
       const mode = MODE_LABELS[data.retrieval_mode] || data.retrieval_mode || '';
