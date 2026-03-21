@@ -136,10 +136,10 @@ def _create_chatbot_dock():
     )
 
 def show_settings():
-    """Öffnet das native AnkiPlus Settings-Popup."""
+    """Opens Anki's native preferences dialog."""
     try:
-        from .settings import show_settings as _show_native_settings
-        _show_native_settings()
+        if mw:
+            mw.onPrefs()
     except Exception as e:
         logger.exception("Fehler beim Öffnen der Settings: %s", e)
 

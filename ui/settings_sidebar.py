@@ -29,7 +29,7 @@ from aqt import mw
 from PyQt6.QtWidgets import QDockWidget, QWidget, QVBoxLayout, QApplication
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebChannel import QWebChannel
-from PyQt6.QtCore import Qt, QUrl, QObject, pyqtSlot
+from PyQt6.QtCore import Qt, QUrl, QObject, pyqtSlot, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QColor
 
 
@@ -81,29 +81,77 @@ class SidebarBridge(QObject):
 
     @pyqtSlot(str)
     def setTheme(self, theme):
-        """Update theme in config and apply global theme."""
+        """Update theme everywhere instantly."""
         try:
-            config = get_config()
-            config["theme"] = theme
-            save_config(config)
-            logger.info("Theme changed to %s", theme)
-            # Apply global theme
-            try:
-                from ..ui.global_theme import apply_global_dark_theme
-                apply_global_dark_theme()
-            except Exception:
-                logger.debug("Could not apply global theme after change")
-        except Exception:
-            logger.exception("SidebarBridge.setTheme failed")
+            from ..config import update_config
+        except ImportError:
+            from config import update_config
+        update_config(theme=theme)
+        logger.info("Theme changed to %s", theme)
+
+        # 1. Apply global Qt theme
+        try:
+            from ..ui.global_theme import apply_global_dark_theme
+            apply_global_dark_theme()
+        except Exception as e:
+            logger.warning("Could not apply global theme: %s", e)
+
+        # 2. Refresh custom screens (deck browser / overview)
+        try:
+            from ..ui.custom_screens import refresh_current_screen
+            refresh_current_screen()
+        except Exception as e:
+            logger.warning("Could not refresh custom screens: %s", e)
+
+        # 3. Update sidebar's own data-theme attribute
+        try:
+            global _sidebar_dock
+            if _sidebar_dock and _sidebar_dock.widget():
+                web = _sidebar_dock.widget().findChild(QWebEngineView)
+                if web:
+                    attr = 'light' if theme == 'light' else 'dark'
+                    web.page().runJavaScript(
+                        f"document.documentElement.setAttribute('data-theme','{attr}');"
+                    )
+        except Exception as e:
+            logger.warning("Could not update sidebar theme: %s", e)
+
+        # 4. Update chat panel theme
+        try:
+            from ..ui.setup import get_chatbot_widget
+            widget = get_chatbot_widget()
+            if widget and widget.web_view:
+                import json as _json
+                payload = _json.dumps({"type": "themeChanged", "data": {"theme": theme}})
+                widget.web_view.page().runJavaScript(
+                    f"window.ankiReceive && window.ankiReceive({payload});"
+                )
+        except Exception as e:
+            logger.warning("Could not update chat theme: %s", e)
+
+        # 5. Update sidebar dock stylesheet for Qt
+        try:
+            from ..ui.theme import get_resolved_theme
+            resolved = 'light' if theme == 'light' else 'dark'
+            tokens = _get_qt_tokens(resolved)
+            if _sidebar_dock:
+                bg = tokens['bg_deep']
+                _sidebar_dock.setStyleSheet(
+                    f"QDockWidget {{ background: {bg}; border: none; }}"
+                    f" QDockWidget > QWidget {{ background: {bg}; }}"
+                )
+        except Exception as e:
+            logger.warning("Could not update sidebar dock stylesheet: %s", e)
 
     @pyqtSlot()
     def openNativeSettings(self):
-        """Open the native Anki settings dialog."""
+        """Open Anki's native preferences dialog."""
         try:
-            from ..ui.settings import show_settings
-            show_settings()
-        except Exception:
-            logger.exception("SidebarBridge.openNativeSettings failed")
+            from aqt import mw
+            if mw:
+                mw.onPrefs()
+        except Exception as e:
+            logger.exception("Error opening Anki preferences: %s", e)
 
     @pyqtSlot()
     def copyLogs(self):
@@ -395,6 +443,48 @@ body::-webkit-scrollbar { width: 0; }
 }
 .logout-btn.visible { display: block; }
 
+/* --- Light Mode --- */
+html[data-theme="light"] {
+  --ds-bg-deep:          #ECECF0;
+  --ds-bg-canvas:        #FFFFFF;
+  --ds-text-primary:     rgba(0,0,0,0.88);
+  --ds-text-secondary:   rgba(0,0,0,0.55);
+  --ds-text-tertiary:    rgba(0,0,0,0.35);
+  --ds-text-muted:       rgba(0,0,0,0.18);
+  --ds-border-subtle:    rgba(0,0,0,0.06);
+  --ds-accent:           #007AFF;
+  --ds-hover-tint:       rgba(0,0,0,0.03);
+  --ds-active-tint:      rgba(0,0,0,0.06);
+}
+
+html[data-theme="light"] .status-card.tier-free {
+  background: linear-gradient(135deg, rgba(0,0,0,0.03), rgba(0,0,0,0.01));
+  border-color: rgba(0,0,0,0.06);
+}
+html[data-theme="light"] .status-card.tier-tier1 {
+  background: linear-gradient(135deg, rgba(0,122,255,0.06), rgba(0,122,255,0.02));
+  border-color: rgba(0,122,255,0.1);
+}
+html[data-theme="light"] .status-card.tier-tier2 {
+  background: linear-gradient(135deg, rgba(168,85,247,0.06), rgba(168,85,247,0.02));
+  border-color: rgba(168,85,247,0.1);
+}
+html[data-theme="light"] .plan-label { color: rgba(0,0,0,0.25); }
+html[data-theme="light"] .plan-name { color: rgba(0,0,0,0.85); }
+html[data-theme="light"] .plan-price { color: rgba(0,0,0,0.35); }
+html[data-theme="light"] .token-bar-track { background: rgba(0,0,0,0.06); }
+html[data-theme="light"] .token-pct { color: rgba(0,0,0,0.3); }
+html[data-theme="light"] .section-label { color: rgba(0,0,0,0.2); }
+html[data-theme="light"] .theme-toggle { background: rgba(0,0,0,0.04); }
+html[data-theme="light"] .theme-btn { color: rgba(0,0,0,0.35); }
+html[data-theme="light"] .theme-btn.active { color: rgba(0,0,0,0.85); background: rgba(0,0,0,0.06); }
+html[data-theme="light"] .action-text { color: rgba(0,0,0,0.55); }
+html[data-theme="light"] .action-icon svg { stroke: rgba(0,0,0,0.35); }
+html[data-theme="light"] .action-sub { color: rgba(0,0,0,0.15); }
+html[data-theme="light"] .action-chevron svg { stroke: rgba(0,0,0,0.15); }
+html[data-theme="light"] .logout-btn { color: rgba(255,59,48,0.7); }
+html[data-theme="light"] .logout-btn:hover { background: rgba(255,59,48,0.06); color: rgba(255,59,48,0.9); }
+
 </style>
 </head>
 <body>
@@ -476,11 +566,12 @@ function loadStatus() {
             var link = document.getElementById('upgrade-link');
             link.textContent = (s.tier === 'free') ? 'Upgrade \\u2192' : 'Abo verwalten \\u2192';
 
-            // Theme buttons
+            // Theme buttons + data-theme attribute
             var btns = document.querySelectorAll('.theme-btn');
             btns.forEach(function(b) {
                 b.classList.toggle('active', b.getAttribute('data-theme') === s.theme);
             });
+            document.documentElement.setAttribute('data-theme', s.theme === 'light' ? 'light' : 'dark');
 
             // Logout visibility
             var logoutBtn = document.getElementById('logout-btn');
@@ -496,6 +587,7 @@ function setTheme(theme) {
     btns.forEach(function(b) {
         b.classList.toggle('active', b.getAttribute('data-theme') === theme);
     });
+    document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
     if (bridge) bridge.setTheme(theme);
 }
 
@@ -528,6 +620,8 @@ _sidebar_dock = None
 _sidebar_webview = None
 _sidebar_bridge = None
 _sidebar_channel = None
+_sidebar_open = False
+_animation = None
 
 SIDEBAR_WIDTH = 240
 
@@ -582,23 +676,46 @@ def _create_sidebar():
 
 
 def toggle_settings_sidebar():
-    """Toggle the settings sidebar. Creates it on first call."""
-    global _sidebar_dock, _sidebar_webview
+    """Toggle the settings sidebar with smooth width animation."""
+    global _sidebar_dock, _sidebar_webview, _sidebar_open, _animation
 
     if _sidebar_dock is None:
         _create_sidebar()
 
-    if _sidebar_dock.isVisible():
-        _sidebar_dock.hide()
-        # Rotate + button back
-        _rotate_toggle_button(False)
-    else:
+    _sidebar_open = not _sidebar_open
+
+    if _sidebar_open:
+        _sidebar_dock.setMaximumWidth(0)
+        _sidebar_dock.setMinimumWidth(0)
         _sidebar_dock.show()
+        _animation = QPropertyAnimation(_sidebar_dock, b"maximumWidth")
+        _animation.setDuration(300)
+        _animation.setStartValue(0)
+        _animation.setEndValue(SIDEBAR_WIDTH)
+        _animation.setEasingCurve(QEasingCurve.Type.OutExpo)
+        _animation.finished.connect(
+            lambda: _sidebar_dock.setMinimumWidth(SIDEBAR_WIDTH)
+        )
+        _animation.start()
         # Refresh status on open
-        if _sidebar_webview:
-            _sidebar_webview.page().runJavaScript("loadStatus();")
-        # Rotate + button to x
-        _rotate_toggle_button(True)
+        try:
+            if _sidebar_webview:
+                _sidebar_webview.page().runJavaScript(
+                    "if(typeof loadStatus==='function') loadStatus();"
+                )
+        except Exception:
+            pass
+    else:
+        _sidebar_dock.setMinimumWidth(0)
+        _animation = QPropertyAnimation(_sidebar_dock, b"maximumWidth")
+        _animation.setDuration(300)
+        _animation.setStartValue(SIDEBAR_WIDTH)
+        _animation.setEndValue(0)
+        _animation.setEasingCurve(QEasingCurve.Type.InExpo)
+        _animation.finished.connect(lambda: _sidebar_dock.hide())
+        _animation.start()
+
+    _rotate_toggle_button(_sidebar_open)
 
 
 def _rotate_toggle_button(is_open):
@@ -617,4 +734,4 @@ def _rotate_toggle_button(is_open):
 
 def is_sidebar_visible():
     """Return True if the settings sidebar is currently visible."""
-    return _sidebar_dock is not None and _sidebar_dock.isVisible()
+    return _sidebar_open

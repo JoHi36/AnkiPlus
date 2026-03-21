@@ -801,8 +801,9 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
 
     elif message == "plusi:settings":
         try:
-            from ..ui.settings import show_settings
-            show_settings()
+            from aqt import mw
+            if mw:
+                mw.onPrefs()
         except Exception as e:
             logger.error("plusi:settings error: %s", e)
         return (True, None)

@@ -1025,10 +1025,11 @@ class ChatbotWidget(QWidget):
 
     def _msg_plusi_settings(self, data):
         try:
-            from ..ui.settings import show_settings
-        except ImportError:
-            from ui.settings import show_settings
-        show_settings()
+            from aqt import mw
+            if mw:
+                mw.onPrefs()
+        except Exception as e:
+            logger.warning("Could not open Anki preferences: %s", e)
 
     def _msg_plusi_direct(self, data):
         # Ignore if Plusi is disabled

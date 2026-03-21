@@ -593,35 +593,17 @@ def _send_diary_data():
 
 
 def _open_settings():
-    """Switch panel webview to settings view."""
-    global _panel_webview, _settings_mode, _settings_bridge, _settings_channel, _poll_timer
-    if not _panel_webview:
-        return
-
-    _settings_mode = True
-
-    # Stop diary polling while in settings
-    if _poll_timer:
-        _poll_timer.stop()
-
-    # Set up QWebChannel for settings bridge
-    from ..settings_window import SettingsBridge
+    """Open Anki's native preferences dialog."""
     try:
-        from PyQt6.QtWebChannel import QWebChannel
-    except ImportError:
-        from PyQt5.QtWebChannel import QWebChannel
-
-    _settings_bridge = SettingsBridge()
-    # Override closeWindow to go back to diary instead of closing popup
-    _settings_bridge._panel_back = _back_to_diary
-    _settings_channel = QWebChannel()
-    _settings_channel.registerObject("bridge", _settings_bridge)
-    _panel_webview.page().setWebChannel(_settings_channel)
-
-    # Load settings.html
-    import os
-    html_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "settings.html")
-    _panel_webview.setUrl(QUrl.fromLocalFile(html_path))
+        from aqt import mw
+        if mw:
+            mw.onPrefs()
+    except Exception as e:
+        try:
+            from ..utils.logging import get_logger
+            get_logger(__name__).error("Could not open Anki preferences: %s", e)
+        except Exception:
+            pass
 
 
 def _back_to_diary():

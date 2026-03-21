@@ -80,7 +80,12 @@ class WebBridge(QObject):
 
     @pyqtSlot()
     def openSettings(self):
-        self.widget.open_settings_dialog()
+        try:
+            from aqt import mw
+            if mw:
+                mw.onPrefs()
+        except Exception:
+            pass
 
     @pyqtSlot()
     def closePanel(self):

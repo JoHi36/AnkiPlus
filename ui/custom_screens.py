@@ -381,8 +381,11 @@ def _top_bar(active_tab='stapel', deck_name='', due_new=0, due_learn=0, due_revi
     plus_btn = (
         '<button id="ap-sidebar-toggle" '
         'onclick="window._apAction={type:\'cmd\',cmd:\'toggle-sidebar\'}" '
+        'onmouseenter="this.style.opacity=\'0.6\'" '
+        'onmouseleave="this.style.opacity=\'1\'" '
         'style="background:none;border:none;cursor:pointer;padding:4px;margin-right:8px;'
-        'transition:transform 0.2s ease;display:flex;align-items:center;">'
+        'transition:transform 0.2s ease, opacity 0.15s ease;display:flex;align-items:center;'
+        'outline:none;box-shadow:none;-webkit-appearance:none;">'
         '<svg width="14" height="14" viewBox="0 0 14 14" fill="none">'
         '<rect x="5" y="0" width="4" height="14" rx="2" fill="#0a84ff" opacity="0.6"/>'
         '<rect x="0" y="5" width="14" height="4" rx="2" fill="#0a84ff" opacity="0.6"/>'
@@ -1299,6 +1302,14 @@ class CustomScreens:
                 show_overlay_chat(initial_text=text if text else '')
             elif action_type == 'cmd':
                 cmd = action.get('cmd', '')
+                # Auto-close sidebar on tab switch
+                if cmd in ('decks', 'study', 'stats'):
+                    try:
+                        from .settings_sidebar import is_sidebar_visible, toggle_settings_sidebar
+                        if is_sidebar_visible():
+                            toggle_settings_sidebar()
+                    except Exception:
+                        pass
                 if cmd == 'study':
                     mw.overview._linkHandler('study')
                 elif cmd == 'decks':
@@ -1432,3 +1443,16 @@ class CustomScreens:
 
 # Global instance
 custom_screens = CustomScreens()
+
+
+def refresh_current_screen():
+    """Re-render the current custom screen to pick up theme changes."""
+    try:
+        if mw:
+            state = getattr(mw, 'state', None)
+            if state == 'deckBrowser' and hasattr(mw, 'deckBrowser'):
+                mw.deckBrowser.refresh()
+            elif state == 'overview' and hasattr(mw, 'overview'):
+                mw.overview.refresh()
+    except Exception:
+        pass
