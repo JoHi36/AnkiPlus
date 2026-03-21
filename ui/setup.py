@@ -67,13 +67,18 @@ _chatbot_dock = None
 _chatbot_widget = None  # Widget-Instanz für Event-Hooks
 
 def _notify_reviewer_chat_state(is_open):
-    """Tell the reviewer webview to show/hide its dock based on chat panel visibility."""
+    """Tell the reviewer webview to show/hide its dock based on chat panel visibility.
+    Uses multiple retries because the reviewer HTML may still be loading when this is called."""
     try:
         if mw and mw.reviewer and mw.reviewer.web:
-            js = f'if(window.setChatOpen) setChatOpen({"true" if is_open else "false"});'
+            # Note: mw.reviewer.web.eval() is Qt's QWebEngineView API for running JS
+            # in the webview — this is NOT Python's eval().
+            val = "true" if is_open else "false"
+            js = f'if(window.setChatOpen) setChatOpen({val});'
             mw.reviewer.web.eval(js)
-            # Retry after short delay for reliability
-            QTimer.singleShot(200, lambda: mw.reviewer.web.eval(js) if mw and mw.reviewer and mw.reviewer.web else None)
+            # Multiple retries to cover page load timing
+            for delay in [200, 500, 1000]:
+                QTimer.singleShot(delay, lambda: mw.reviewer.web.eval(js) if mw and mw.reviewer and mw.reviewer.web else None)
     except Exception:
         pass
 
@@ -160,6 +165,7 @@ def close_chatbot_panel():
     global _chatbot_dock
     if _chatbot_dock:
         _chatbot_dock.hide()
+        _notify_reviewer_chat_state(False)
 
 def get_chatbot_widget():
     """Gibt die Chatbot-Widget-Instanz zurück (für Hooks)"""
@@ -173,44 +179,46 @@ def ensure_chatbot_open():
         _create_chatbot_dock()
     if _chatbot_dock and not _chatbot_dock.isVisible():
         _chatbot_dock.show()
-        _notify_reviewer_chat_state(True)
-        # Trigger slide-in animation in React
+    # Always notify reviewer — even if dock was already visible,
+    # because reviewer HTML may have been re-injected (card navigation)
+    _notify_reviewer_chat_state(True)
+    # Trigger slide-in animation in React
+    try:
+        widget = get_chatbot_widget()
+        if widget and widget.web_view:
+            widget.web_view.page().runJavaScript(
+                "window.ankiReceive && window.ankiReceive({type:'panelOpened'});"
+            )
+    except Exception:
+        pass
+    # Send current deck info after short delay
+    def check_and_send_deck():
         try:
             widget = get_chatbot_widget()
-            if widget and widget.web_view:
-                widget.web_view.page().runJavaScript(
-                    "window.ankiReceive && window.ankiReceive({type:'panelOpened'});"
-                )
-        except Exception:
-            pass
-        # Send current deck info after short delay
-        def check_and_send_deck():
-            try:
-                widget = get_chatbot_widget()
-                if widget and widget.bridge and widget.web_view:
-                    deck_info = widget.bridge.getCurrentDeck()
-                    deck_data = json.loads(deck_info)
-                    if deck_data.get("deckId") and deck_data.get("isInDeck"):
-                        deck_id = deck_data["deckId"]
-                        deck_name = deck_data["deckName"]
-                        stats = widget.bridge._get_deck_stats(deck_id)
-                        total_cards = stats.get("totalCards", 0) if stats else 0
-                        is_sub_deck = "::" in deck_name if deck_name else False
-                        payload = {
-                            "type": "deckSelected",
-                            "data": {
-                                "deckId": deck_id,
-                                "deckName": deck_name,
-                                "totalCards": total_cards,
-                                "isSubDeck": is_sub_deck
-                            }
+            if widget and widget.bridge and widget.web_view:
+                deck_info = widget.bridge.getCurrentDeck()
+                deck_data = json.loads(deck_info)
+                if deck_data.get("deckId") and deck_data.get("isInDeck"):
+                    deck_id = deck_data["deckId"]
+                    deck_name = deck_data["deckName"]
+                    stats = widget.bridge._get_deck_stats(deck_id)
+                    total_cards = stats.get("totalCards", 0) if stats else 0
+                    is_sub_deck = "::" in deck_name if deck_name else False
+                    payload = {
+                        "type": "deckSelected",
+                        "data": {
+                            "deckId": deck_id,
+                            "deckName": deck_name,
+                            "totalCards": total_cards,
+                            "isSubDeck": is_sub_deck
                         }
-                        widget.web_view.page().runJavaScript(
-                            f"window.ankiReceive({json.dumps(payload)});"
-                        )
-            except Exception as e:
-                logger.exception("Fehler beim Senden von deckSelected: %s", e)
-        QTimer.singleShot(100, check_and_send_deck)
+                    }
+                    widget.web_view.page().runJavaScript(
+                        f"window.ankiReceive({json.dumps(payload)});"
+                    )
+        except Exception as e:
+            logger.exception("Fehler beim Senden von deckSelected: %s", e)
+    QTimer.singleShot(100, check_and_send_deck)
     return get_chatbot_widget()
 
 def setup_toolbar_button():
