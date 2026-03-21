@@ -64,9 +64,9 @@ function getTrend(section) {
   if (previousScore == null) return null;
 
   const diff = currentScore - previousScore;
-  if (diff > 5) return { direction: 'up', symbol: '↑', color: '#22c55e' };
-  if (diff < -5) return { direction: 'down', symbol: '↓', color: '#ef4444' };
-  return { direction: 'same', symbol: '→', color: '#94a3b8' };
+  if (diff > 5) return { direction: 'up', symbol: '↑', color: 'var(--ds-green)' };
+  if (diff < -5) return { direction: 'down', symbol: '↓', color: 'var(--ds-red)' };
+  return { direction: 'same', symbol: '→', color: 'var(--ds-text-tertiary)' };
 }
 
 /**

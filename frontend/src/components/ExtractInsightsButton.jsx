@@ -54,7 +54,17 @@ export default function ExtractInsightsButton({ onExtract, messageCount = 0 }) {
   const handleClick = () => {
     if (state === 'extracting') return;
     setState('extracting');
-    onExtract?.(() => setState('done'));
+
+    // Frontend safety timeout — reset if backend never responds
+    const timeout = setTimeout(() => {
+      setState('idle');
+      console.warn('ExtractInsightsButton: timeout after 45s, resetting');
+    }, 45000);
+
+    onExtract?.(
+      () => { clearTimeout(timeout); setState('done'); },
+      () => { clearTimeout(timeout); setState('idle'); }
+    );
   };
 
   const isExtracting = state === 'extracting';
@@ -114,12 +124,17 @@ export default function ExtractInsightsButton({ onExtract, messageCount = 0 }) {
       </div>
 
       {(isHovered || isExtracting) && (
-        <div style={{ position: 'absolute', width: 200, height: 30, top: -5, pointerEvents: 'none' }}>
-          {[18, 38, 58, 75].map((left, i) => (
+        <div style={{ position: 'absolute', width: 200, height: 40, top: -10, left: '50%', transform: 'translateX(-50%)', pointerEvents: 'none' }}>
+          {[
+            { left: 18, top: 5 },
+            { left: 38, top: 20 },
+            { left: 58, top: 2 },
+            { left: 75, top: 18 },
+          ].map(({ left, top }, i) => (
             <div key={i} style={{
               width: 2, height: 2, borderRadius: '50%',
               background: i % 2 === 0 ? 'rgba(10,132,255,0.6)' : 'rgba(255,255,255,0.3)',
-              position: 'absolute', left: `${left}%`,
+              position: 'absolute', left: `${left}%`, top,
               animation: `ei-sparkle-float ${1.4 + i * 0.2}s ease-in-out ${i * 0.3}s infinite`,
             }} />
           ))}

@@ -367,7 +367,8 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     updatePipelineSteps([]);  // Reset pipeline steps for new request
 
     // @Plusi direct mode — skip router, emit synthetic pipeline, route via plusiDirect
-    const isPlusiDirect = /^@plusi\b/i.test(text);
+    // Only active when Plusi is enabled (mascot_enabled config)
+    const isPlusiDirect = window._plusiEnabled !== false && /^@plusi\b/i.test(text);
     if (isPlusiDirect) {
       // Emit synthetic router-active immediately
       updatePipelineSteps([{ step: 'router', status: 'active', data: {}, timestamp: Date.now() }]);

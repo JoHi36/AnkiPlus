@@ -408,6 +408,11 @@ export function useAnki() {
               console.warn('Bridge: Fehler beim Parsen der Tools:', e);
             }
           },
+          saveMascotEnabled: (enabled) => {
+            if (window.ankiBridge) {
+              window.ankiBridge.addMessage('saveMascotEnabled', enabled);
+            }
+          },
           plusiDirect: (text, deckId) => {
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('plusiDirect', JSON.stringify({ text, deck_id: deckId }));
@@ -580,6 +585,12 @@ export function useAnki() {
               localStorage.setItem('ankiChatAITools', toolsJson);
             } catch (e) {
               console.warn('Mock: localStorage nicht verfügbar');
+            }
+          },
+          saveMascotEnabled: (enabled) => {
+            console.log('Mock: saveMascotEnabled', enabled);
+            if (window.ankiReceive) {
+              window.ankiReceive({ type: 'mascotEnabledSaved', data: { enabled } });
             }
           },
           plusiDirect: (text, deckId) => {

@@ -153,12 +153,14 @@ export default function CardPreviewModal({ card, isOpen, onClose, bridge }) {
       <div className="relative w-full max-w-3xl transform transition-all animate-in zoom-in-95 duration-200">
         
         {/* Card Container */}
-        <div className="bg-base-100 rounded-xl shadow-2xl overflow-hidden border border-base-200 flex flex-col max-h-[90vh]">
+        <div className="rounded-xl shadow-2xl overflow-hidden border flex flex-col max-h-[90vh]"
+             style={{ background: 'var(--ds-bg-frosted)', borderColor: 'var(--ds-border-medium)' }}>
           
           {/* Header - Nur Breadcrumbs und Buttons */}
-          <div className="px-6 py-4 border-b border-base-200 bg-base-100 flex items-center justify-between shrink-0">
+          <div className="px-6 py-4 border-b flex items-center justify-between shrink-0"
+               style={{ borderColor: 'var(--ds-border-subtle)', background: 'var(--ds-bg-frosted)' }}>
             <div className="flex-1">
-                <span className="text-xs font-medium text-base-content/50 tracking-wide">
+                <span className="text-xs font-medium tracking-wide" style={{ color: 'var(--ds-text-secondary)' }}>
                     {isLoading ? "Lade..." : (formatDeckPathWithArrows(details?.deckName) || "Vorschau")}
                 </span>
             </div>
@@ -166,14 +168,16 @@ export default function CardPreviewModal({ card, isOpen, onClose, bridge }) {
             <div className="flex gap-2">
                <button 
                 onClick={handleOpenInAnki}
-                className="p-2 rounded-lg hover:bg-base-200 text-base-content/50 hover:text-primary transition-colors"
+                className="p-2 rounded-lg transition-colors"
+                style={{ color: 'var(--ds-text-secondary)' }}
                 title="Im Editor öffnen"
               >
                 <Edit3 size={18} />
               </button>
               <button 
                 onClick={onClose}
-                className="p-2 rounded-lg hover:bg-base-200 text-base-content/50 hover:text-error transition-colors"
+                className="p-2 rounded-lg transition-colors"
+                style={{ color: 'var(--ds-text-secondary)' }}
               >
                 <X size={20} />
               </button>
@@ -181,13 +185,14 @@ export default function CardPreviewModal({ card, isOpen, onClose, bridge }) {
           </div>
 
           {/* Content Area - Nur eine Seite zeigen */}
-          <div className="overflow-y-auto p-8 scrollbar-hide bg-base-100 relative min-h-[400px] flex-1">
+          <div className="overflow-y-auto p-8 scrollbar-hide relative min-h-[400px] flex-1"
+               style={{ background: 'var(--ds-bg-frosted)' }}>
             
             {isLoading ? (
-                <div className="absolute inset-0 flex items-center justify-center bg-base-100 z-10">
+                <div className="absolute inset-0 flex items-center justify-center z-10" style={{ background: 'var(--ds-bg-frosted)' }}>
                     <div className="flex flex-col items-center gap-3">
                         <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                        <span className="text-sm text-base-content/50">Lade Karte...</span>
+                        <span className="text-sm" style={{ color: 'var(--ds-text-secondary)' }}>Lade Karte...</span>
                     </div>
                 </div>
             ) : error ? (
@@ -195,15 +200,16 @@ export default function CardPreviewModal({ card, isOpen, onClose, bridge }) {
                     <div className="w-12 h-12 rounded-full bg-error/10 flex items-center justify-center mb-3">
                         <X className="w-6 h-6 text-error" />
                     </div>
-                    <h3 className="text-sm font-semibold text-base-content">Fehler beim Laden</h3>
-                    <p className="text-xs text-base-content/60 mt-1">{error}</p>
+                    <h3 className="text-sm font-semibold" style={{ color: 'var(--ds-text-primary)' }}>Fehler beim Laden</h3>
+                    <p className="text-xs mt-1" style={{ color: 'var(--ds-text-secondary)' }}>{error}</p>
                 </div>
             ) : (
                 <div className="relative">
                     {/* Bearbeiten-Button unten links im Content */}
                     <button 
                       onClick={handleOpenInAnki}
-                      className="absolute bottom-0 left-0 p-2 rounded-lg hover:bg-base-200 text-base-content/40 hover:text-primary transition-colors z-10"
+                      className="absolute bottom-0 left-0 p-2 rounded-lg transition-colors z-10"
+                      style={{ color: 'var(--ds-text-tertiary)' }}
                       title="Im Editor öffnen"
                     >
                       <Edit3 size={16} />
@@ -214,40 +220,40 @@ export default function CardPreviewModal({ card, isOpen, onClose, bridge }) {
                         <div>
                             {details?.front ? (
                                 <div 
-                                    className="prose prose-lg max-w-none text-lg leading-relaxed text-base-content select-text
-                                               [&_*]:text-base-content [&_*]:font-inherit [&_*]:leading-inherit
+                                    className="prose prose-lg max-w-none text-lg leading-relaxed select-text
+                                               [&_*]:font-inherit [&_*]:leading-inherit
                                                [&_strong]:font-semibold [&_em]:italic [&_u]:underline
-                                               [&_code]:bg-base-200 [&_code]:px-1.5 [&_code]:rounded [&_code]:text-sm
-                                               [&_pre]:bg-base-200 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto
+                                               [&_code]:px-1.5 [&_code]:rounded [&_code]:text-sm
+                                               [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto
                                                [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:space-y-2
                                                [&_ol]:list-decimal [&_ol]:ml-6 [&_ol]:space-y-2
                                                [&_table]:border-collapse [&_table]:w-full [&_table]:my-4
-                                               [&_th]:border [&_th]:border-base-300 [&_th]:p-2 [&_th]:bg-base-200
-                                               [&_td]:border [&_td]:border-base-300 [&_td]:p-2"
+                                               [&_th]:border [&_th]:p-2 [&_td]:border [&_td]:p-2"
+                                    style={{ color: 'var(--ds-text-primary)', '--tw-prose-body': 'var(--ds-text-primary)' }}
                                     dangerouslySetInnerHTML={createMarkup(details.front)}
                                 />
                             ) : (
-                                <div className="text-base-content/50 text-center py-8">Keine Daten verfügbar</div>
+                                <div className="text-center py-8" style={{ color: 'var(--ds-text-secondary)' }}>Keine Daten verfügbar</div>
                             )}
                         </div>
                     ) : (
                         <div>
                             {details?.back ? (
                                 <div 
-                                    className="prose prose-lg max-w-none text-lg leading-relaxed text-base-content select-text
-                                               [&_*]:text-base-content [&_*]:font-inherit [&_*]:leading-inherit
+                                    className="prose prose-lg max-w-none text-lg leading-relaxed select-text
+                                               [&_*]:font-inherit [&_*]:leading-inherit
                                                [&_strong]:font-semibold [&_em]:italic [&_u]:underline
-                                               [&_code]:bg-base-200 [&_code]:px-1.5 [&_code]:rounded [&_code]:text-sm
-                                               [&_pre]:bg-base-200 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto
+                                               [&_code]:px-1.5 [&_code]:rounded [&_code]:text-sm
+                                               [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto
                                                [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:space-y-2
                                                [&_ol]:list-decimal [&_ol]:ml-6 [&_ol]:space-y-2
                                                [&_table]:border-collapse [&_table]:w-full [&_table]:my-4
-                                               [&_th]:border [&_th]:border-base-300 [&_th]:p-2 [&_th]:bg-base-200
-                                               [&_td]:border [&_td]:border-base-300 [&_td]:p-2"
+                                               [&_th]:border [&_th]:p-2 [&_td]:border [&_td]:p-2"
+                                    style={{ color: 'var(--ds-text-primary)', '--tw-prose-body': 'var(--ds-text-primary)' }}
                                     dangerouslySetInnerHTML={createMarkup(details.back)}
                                 />
                             ) : (
-                                <div className="text-base-content/50 text-center py-8">Keine Daten verfügbar</div>
+                                <div className="text-center py-8" style={{ color: 'var(--ds-text-secondary)' }}>Keine Daten verfügbar</div>
                             )}
                         </div>
                     )}
@@ -257,12 +263,13 @@ export default function CardPreviewModal({ card, isOpen, onClose, bridge }) {
           </div>
 
           {/* Footer - Nur dezenter Flip-Button */}
-          <div className="p-4 bg-base-100 border-t border-base-200 shrink-0 flex justify-center">
-            <button 
+          <div className="p-4 border-t shrink-0 flex justify-center"
+               style={{ background: 'var(--ds-bg-frosted)', borderColor: 'var(--ds-border-subtle)' }}>
+            <button
               onClick={handleFlip}
-              className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg border border-base-300 bg-base-200/50
-                         text-sm font-medium text-base-content/60 hover:bg-base-200 hover:border-base-400 
-                         hover:text-base-content transition-all active:scale-[0.98]"
+              className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg border
+                         text-sm font-medium transition-all active:scale-[0.98]"
+              style={{ borderColor: 'var(--ds-border-medium)', background: 'var(--ds-hover-tint)', color: 'var(--ds-text-secondary)' }}
             >
               <RotateCcw size={16} />
               {currentSide === 'front' ? 'Zurückseite zeigen' : 'Vorderseite zeigen'}

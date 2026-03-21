@@ -247,15 +247,15 @@ const PLUSI_CSS = `
   }
   .plusi-markdown p:last-child { margin-bottom: 0; }
   .plusi-markdown strong { color: var(--ds-text-primary); font-weight: 600; }
-  .plusi-markdown em { color: rgba(180,210,255,0.7); }
+  .plusi-markdown em { color: var(--ds-text-secondary); }
   .plusi-markdown code {
-    background: rgba(0,0,0,0.25);
+    background: var(--ds-hover-tint);
     padding: 0.15em 0.4em;
     border-radius: 4px;
     font-size: 0.9em;
     font-family: 'SF Mono', 'Fira Code', monospace;
   }
-  .plusi-markdown a { color: rgba(10,132,255,0.8); text-decoration: none; }
+  .plusi-markdown a { color: var(--ds-accent); opacity: 0.8; text-decoration: none; }
 
   .plusi-fade {
     height: 1px;
@@ -265,7 +265,7 @@ const PLUSI_CSS = `
 
   .plusi-placeholder {
     font-size: 12px;
-    color: rgba(154,154,154,0.35);
+    color: var(--ds-text-placeholder);
     font-style: italic;
     margin: 0;
     position: relative;
@@ -275,7 +275,7 @@ const PLUSI_CSS = `
   /* ── Footer ── */
   .plusi-footer {
     padding: 6px 11px 7px;
-    background: rgba(0,0,0,0.15);
+    background: var(--ds-hover-tint);
     border-top: 1px solid var(--ds-hover-tint);
   }
 

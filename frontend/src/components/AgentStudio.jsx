@@ -47,31 +47,56 @@ export default function AgentStudio({ bridge, onNavigateToPlusi }) {
   const [mascotEnabled, setMascotEnabled] = useState(false);
   const [embedding, setEmbedding] = useState({ embeddedCards: 0, totalCards: 0, isRunning: false });
 
+  // Load config and tools via async message queue
   useEffect(() => {
     if (!bridge) return;
-    try {
-      const configStr = bridge.getCurrentConfig?.();
-      if (configStr) {
-        const config = JSON.parse(configStr);
-        setTools(config.ai_tools || config.aiTools || {});
-        setMascotEnabled(config.mascot_enabled || config.mascotEnabled || false);
+
+    const onConfigLoaded = (e) => {
+      const data = e.detail?.data || e.detail;
+      if (data) {
+        setTools(data.ai_tools || data.aiTools || {});
+        setMascotEnabled(data.mascot_enabled || data.mascotEnabled || false);
       }
-    } catch (e) {
-      console.error('AgentStudio: failed to load config', e);
-    }
+    };
+    const onToolsLoaded = (e) => {
+      const data = e.detail?.data || e.detail;
+      if (data) setTools(data);
+    };
+
+    window.addEventListener('ankiConfigLoaded', onConfigLoaded);
+    window.addEventListener('ankiAiToolsLoaded', onToolsLoaded);
+
+    // Request config (includes ai_tools now)
+    bridge.getCurrentConfig?.();
+    bridge.getAITools?.();
+
+    return () => {
+      window.removeEventListener('ankiConfigLoaded', onConfigLoaded);
+      window.removeEventListener('ankiAiToolsLoaded', onToolsLoaded);
+    };
   }, [bridge]);
 
+  // Poll embedding status via async message queue
   useEffect(() => {
-    if (!bridge?.getEmbeddingStatus) return;
-    const fetchStatus = () => {
-      try {
-        const json = bridge.getEmbeddingStatus();
-        if (json) setEmbedding(JSON.parse(json));
-      } catch (e) {}
+    if (!bridge) return;
+
+    const onEmbeddingStatus = (e) => {
+      const data = e.detail?.data || e.detail;
+      if (data) setEmbedding(data);
     };
-    fetchStatus();
-    const timer = setInterval(fetchStatus, 3000);
-    return () => clearInterval(timer);
+
+    window.addEventListener('ankiEmbeddingStatusLoaded', onEmbeddingStatus);
+
+    // Request immediately and poll every 3s
+    window.ankiBridge?.addMessage('getEmbeddingStatus', null);
+    const timer = setInterval(() => {
+      window.ankiBridge?.addMessage('getEmbeddingStatus', null);
+    }, 3000);
+
+    return () => {
+      window.removeEventListener('ankiEmbeddingStatusLoaded', onEmbeddingStatus);
+      clearInterval(timer);
+    };
   }, [bridge]);
 
   const handleToggleTool = useCallback((key) => {
@@ -107,8 +132,8 @@ export default function AgentStudio({ bridge, onNavigateToPlusi }) {
 
       <div style={S.section}>
         <div style={S.sectionTitle}>Semantische Suche</div>
-        <div style={S.card}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <div style={{ ...S.card, padding: '12px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="var(--ds-text-tertiary, rgba(255,255,255,0.22))" strokeWidth={1.8}>
                 <circle cx={11} cy={11} r={8}/><line x1={21} y1={21} x2={16.65} y2={16.65}/>
@@ -136,7 +161,7 @@ export default function AgentStudio({ bridge, onNavigateToPlusi }) {
               background: embedDone ? '#22c55e' : 'var(--ds-accent, #0a84ff)',
             }} />
           </div>
-          <div style={{ fontSize: 11, color: 'var(--ds-text-tertiary, rgba(255,255,255,0.22))', marginTop: 8, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 11, color: 'var(--ds-text-tertiary, rgba(255,255,255,0.22))', marginTop: 10, lineHeight: 1.5 }}>
             Karten werden im Hintergrund indiziert, um semantisch ähnliche Inhalte zu finden.
           </div>
         </div>
@@ -191,18 +216,22 @@ export default function AgentStudio({ bridge, onNavigateToPlusi }) {
             </div>
             <Toggle on={mascotEnabled} onChange={handleToggleMascot} />
           </div>
-          <div style={{ height: 1, background: 'var(--ds-border-subtle, rgba(255,255,255,0.06))' }} />
-          <div
-            onClick={onNavigateToPlusi}
-            style={S.subAgentButton}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-          >
-            <span style={{ fontSize: 12, color: 'var(--ds-text-secondary, rgba(255,255,255,0.45))' }}>Sub-Agent-Menü</span>
-            <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="var(--ds-text-tertiary, rgba(255,255,255,0.18))" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
-          </div>
+          {mascotEnabled && (
+            <>
+              <div style={{ height: 1, background: 'var(--ds-border-subtle, rgba(255,255,255,0.06))' }} />
+              <div
+                onClick={onNavigateToPlusi}
+                style={S.subAgentButton}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                <span style={{ fontSize: 12, color: 'var(--ds-text-secondary, rgba(255,255,255,0.45))' }}>Sub-Agent-Menü</span>
+                <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="var(--ds-text-tertiary, rgba(255,255,255,0.18))" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
