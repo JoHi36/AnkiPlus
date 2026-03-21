@@ -333,6 +333,222 @@
   };
 
   // ────────────────────────────────────────────────────────────
+  //  Animation CSS keyframes
+  // ────────────────────────────────────────────────────────────
+
+  var ANIMATION_CSS = ''
+    + '@keyframes plusi-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }'
+    + '@keyframes plusi-hop { 0%, 100% { transform: translateY(0) scale(1); } 30% { transform: translateY(-12px) scale(1.05); } 60% { transform: translateY(-2px) scale(1); } }'
+    + '@keyframes plusi-tilt { 0%, 100% { transform: rotate(0) translateX(0); } 50% { transform: rotate(8deg) translateX(3px); } }'
+    + '@keyframes plusi-wiggle { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(6deg); } 40% { transform: rotate(-6deg); } 60% { transform: rotate(6deg); } 80% { transform: rotate(-6deg); } }'
+    + '@keyframes plusi-droop { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(4px) rotate(-3deg); } }'
+    + '@keyframes plusi-bounce { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-8px) scale(1.03); } }'
+    + '@keyframes plusi-spin { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(12deg); } }'
+    + '@keyframes plusi-squish { 0%, 100% { transform: scale(1, 1); } 30% { transform: scale(1.1, 0.9); } 70% { transform: scale(0.95, 1.05); } }'
+    + '@keyframes plusi-pop { 0%, 100% { transform: scale(1); } 40% { transform: scale(1.25); } }'
+    + '@keyframes plusi-sway { 0%, 100% { transform: translateX(0) rotate(0); } 50% { transform: translateX(4px) rotate(3deg); } }'
+    + '@keyframes plusi-puff-up { 0%, 100% { transform: scale(1); } 30% { transform: scale(1.08); } 70% { transform: scale(1.06); } }'
+    + '@keyframes plusi-peek { 0%, 100% { transform: translateX(0) rotate(0); } 50% { transform: translateX(8px) rotate(-5deg); } }';
+
+  var cssInjected = false;
+
+  function ensureCSS() {
+    if (cssInjected) return;
+    var style = document.createElement('style');
+    style.textContent = ANIMATION_CSS;
+    document.head.appendChild(style);
+    cssInjected = true;
+  }
+
+  // ────────────────────────────────────────────────────────────
+  //  Animation engine
+  // ────────────────────────────────────────────────────────────
+
+  function createAnimationEngine(element, moodData, state) {
+    var running = false;
+    var loopTimer = null;
+    var blinkTimer = null;
+    var faceEl = null;
+
+    function randomInRange(min, max) {
+      return min + Math.random() * (max - min);
+    }
+
+    function pickWeightedMove(moves, variety) {
+      var totalWeight = 0;
+      var adjusted = [];
+      for (var i = 0; i < moves.length; i++) {
+        var w = moves[i].weight;
+        // Scale rare moves (low weight) by variety factor
+        if (w < 20) {
+          w = w * variety;
+        }
+        adjusted.push({ move: moves[i], weight: w });
+        totalWeight += w;
+      }
+      var roll = Math.random() * totalWeight;
+      var cumulative = 0;
+      for (var j = 0; j < adjusted.length; j++) {
+        cumulative += adjusted[j].weight;
+        if (roll <= cumulative) return adjusted[j].move;
+      }
+      return adjusted[adjusted.length - 1].move;
+    }
+
+    function syncFaceMicroExpression(moveName) {
+      if (!faceEl) return;
+      var eyes = faceEl.querySelectorAll('ellipse[fill="white"]');
+      var pupils = faceEl.querySelectorAll('ellipse[fill="#1a1a1a"]');
+
+      switch (moveName) {
+        case 'hop':
+          // Eyes widen
+          for (var i = 0; i < eyes.length; i++) {
+            var origRy = eyes[i].getAttribute('ry');
+            eyes[i].setAttribute('ry', String(parseFloat(origRy) + 2));
+            (function(el, val) {
+              setTimeout(function() { el.setAttribute('ry', val); }, 400);
+            })(eyes[i], origRy);
+          }
+          break;
+        case 'peek':
+          // Pupils shift
+          for (var p = 0; p < pupils.length; p++) {
+            var origCx = pupils[p].getAttribute('cx');
+            pupils[p].setAttribute('cx', String(parseFloat(origCx) + 3));
+            (function(el, val) {
+              setTimeout(function() { el.setAttribute('cx', val); }, 1500);
+            })(pupils[p], origCx);
+          }
+          break;
+        case 'squish':
+          // Blink
+          for (var e = 0; e < eyes.length; e++) {
+            eyes[e].style.opacity = '0';
+            (function(el) {
+              setTimeout(function() { el.style.opacity = '1'; }, 150);
+            })(eyes[e]);
+          }
+          break;
+        case 'droop':
+          // Lids heavier — handled by CSS, just darken eyes slightly
+          for (var d = 0; d < eyes.length; d++) {
+            eyes[d].style.opacity = '0.7';
+            (function(el) {
+              setTimeout(function() { el.style.opacity = '1'; }, 2000);
+            })(eyes[d]);
+          }
+          break;
+        case 'spin':
+          // Pupils follow rotation
+          for (var s = 0; s < pupils.length; s++) {
+            var origCxS = pupils[s].getAttribute('cx');
+            pupils[s].setAttribute('cx', String(parseFloat(origCxS) + 2));
+            (function(el, val) {
+              setTimeout(function() { el.setAttribute('cx', val); }, 600);
+            })(pupils[s], origCxS);
+          }
+          break;
+        case 'puff-up':
+          // Mouth grin — scale mouth slightly via transform
+          var mouth = faceEl.querySelector('path, line, ellipse:last-child');
+          if (mouth && mouth.tagName === 'path') {
+            mouth.style.transform = 'scale(1.1)';
+            mouth.style.transformOrigin = 'center';
+            setTimeout(function() { mouth.style.transform = ''; }, 800);
+          }
+          break;
+        case 'pop':
+          // Eyes wide
+          for (var w = 0; w < eyes.length; w++) {
+            var origRyP = eyes[w].getAttribute('ry');
+            eyes[w].setAttribute('ry', String(parseFloat(origRyP) + 3));
+            (function(el, val) {
+              setTimeout(function() { el.setAttribute('ry', val); }, 500);
+            })(eyes[w], origRyP);
+          }
+          break;
+      }
+    }
+
+    function wait(ms) {
+      return {
+        then: function(cb) {
+          loopTimer = setTimeout(cb, ms);
+        }
+      };
+    }
+
+    function loop() {
+      if (!running) return;
+
+      var integrity = state.integrity;
+      var amplitude = 0.5 + integrity * 0.8;
+      var pauseScale = 1.5 - integrity * 0.7;
+      var variety = 0.3 + integrity * 0.7;
+
+      var move = pickWeightedMove(moodData.body.moves, variety);
+      var durationSec = randomInRange(move.duration[0], move.duration[1]);
+
+      // Apply CSS animation
+      element.style.animation = 'plusi-' + move.name + ' ' + durationSec + 's ease-in-out';
+
+      // Sync face
+      syncFaceMicroExpression(move.name);
+
+      // Wait for animation to complete
+      wait(durationSec * 1000).then(function() {
+        if (!running) return;
+        element.style.animation = '';
+
+        // Random pause
+        var pauseMin = moodData.body.pause[0] * pauseScale;
+        var pauseMax = moodData.body.pause[1] * pauseScale;
+        var pauseMs = randomInRange(pauseMin, pauseMax) * 1000;
+
+        wait(pauseMs).then(function() {
+          loop();
+        });
+      });
+    }
+
+    function doBlink() {
+      if (!faceEl) return;
+      var eyes = faceEl.querySelectorAll('ellipse[fill="white"]');
+      for (var i = 0; i < eyes.length; i++) {
+        eyes[i].style.opacity = '0';
+        (function(el) {
+          setTimeout(function() { el.style.opacity = '1'; }, 120);
+        })(eyes[i]);
+      }
+      scheduleBlink();
+    }
+
+    function scheduleBlink() {
+      if (!running) return;
+      var delay = randomInRange(3000, 7000);
+      blinkTimer = setTimeout(doBlink, delay);
+    }
+
+    return {
+      start: function() {
+        running = true;
+        loop();
+      },
+      stop: function() {
+        running = false;
+        if (loopTimer) { clearTimeout(loopTimer); loopTimer = null; }
+        if (blinkTimer) { clearTimeout(blinkTimer); blinkTimer = null; }
+        element.style.animation = '';
+      },
+      startBlinks: function(face) {
+        faceEl = face;
+        scheduleBlink();
+      }
+    };
+  }
+
+  // ────────────────────────────────────────────────────────────
   //  Color utilities
   // ────────────────────────────────────────────────────────────
 
@@ -441,7 +657,7 @@
   }
 
   // ────────────────────────────────────────────────────────────
-  //  createPlusi — static API
+  //  createPlusi — animated + static API
   // ────────────────────────────────────────────────────────────
 
   function createPlusi(container, options) {
@@ -449,6 +665,15 @@
     var currentMood = opts.mood || 'neutral';
     var currentIntegrity = opts.integrity != null ? opts.integrity : 1;
     var size = opts.size || 52;
+    var animated = opts.animated !== false; // default true
+
+    // Shared mutable state for the animation engine
+    var state = { integrity: currentIntegrity };
+    var engine = null;
+
+    if (animated) {
+      ensureCSS();
+    }
 
     // Create wrapper via safe DOM methods
     var wrapper = document.createElement('div');
@@ -472,7 +697,30 @@
       wrapper.appendChild(document.importNode(svgNode, true));
     }
 
+    function startEngine() {
+      if (!animated) return;
+      var moodData = MOODS[currentMood] || MOODS.neutral;
+      engine = createAnimationEngine(wrapper, moodData, state);
+      engine.start();
+      // Start blinks on the face element inside the SVG
+      var svgEl = wrapper.querySelector('svg');
+      if (svgEl) {
+        var faceGroup = svgEl.querySelector('.plusi-face');
+        if (faceGroup) {
+          engine.startBlinks(faceGroup);
+        }
+      }
+    }
+
+    function stopEngine() {
+      if (engine) {
+        engine.stop();
+        engine = null;
+      }
+    }
+
     render();
+    startEngine();
 
     // Public API
     var api = {
@@ -481,16 +729,24 @@
         // Opacity crossfade
         wrapper.style.transition = 'opacity 0.25s ease';
         wrapper.style.opacity = '0';
+        stopEngine();
         setTimeout(function () {
           currentMood = newMood;
           render();
           wrapper.style.opacity = '1';
+          startEngine();
         }, 250);
       },
 
       setIntegrity: function (value) {
         currentIntegrity = Math.max(0, Math.min(1, value));
+        state.integrity = currentIntegrity;
         render();
+        // Restart engine with new render (face elements changed)
+        if (animated && engine) {
+          stopEngine();
+          startEngine();
+        }
       },
 
       getMood: function () {
@@ -498,10 +754,19 @@
       },
 
       tap: function () {
-        // Placeholder — animation will be added in a later task
+        if (!animated) return;
+        var tapMoves = ['plusi-pop', 'plusi-wiggle', 'plusi-squish'];
+        var chosen = tapMoves[Math.floor(Math.random() * tapMoves.length)];
+        wrapper.style.animation = chosen + ' 0.5s ease-in-out';
+        function onEnd() {
+          wrapper.style.animation = '';
+          wrapper.removeEventListener('animationend', onEnd);
+        }
+        wrapper.addEventListener('animationend', onEnd);
       },
 
       destroy: function () {
+        stopEngine();
         if (wrapper.parentNode) {
           wrapper.parentNode.removeChild(wrapper);
         }
