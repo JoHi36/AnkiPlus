@@ -209,8 +209,18 @@ button:focus, button:focus-visible {
 
         <!-- ═══ TOP BAR ═══ -->
         <div class="flex items-center justify-between px-5 h-12 z-50 flex-shrink-0" style="background: var(--ds-bg-canvas);">
-            <!-- Left: Deck Name (unified style) -->
+            <!-- Left: + toggle + Deck Name -->
             <div class="flex-1 flex items-center">
+                <button id="ap-sidebar-toggle"
+                    onclick="pycmd('toggle-sidebar')"
+                    onmouseenter="this.style.opacity='0.6'"
+                    onmouseleave="this.style.opacity='1'"
+                    style="background:none;border:none;cursor:pointer;padding:4px;margin-right:8px;transition:transform 0.2s ease, opacity 0.15s ease;display:flex;align-items:center;outline:none;box-shadow:none;-webkit-appearance:none;">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <rect x="5" y="0" width="4" height="14" rx="2" fill="#0a84ff" opacity="0.6"/>
+                        <rect x="0" y="5" width="14" height="4" rx="2" fill="#0a84ff" opacity="0.6"/>
+                    </svg>
+                </button>
                 <span style="font-size:11px;font-weight:600;color:var(--ds-text-tertiary);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{DECK_NAME}}</span>
             </div>
             <!-- Center: Tabs -->

@@ -758,6 +758,14 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
             logger.exception(f"CustomReviewer: ❌ ease rating error: {e}")
         return (True, None)
 
+    elif message == "toggle-sidebar":
+        try:
+            from ..ui.settings_sidebar import toggle_settings_sidebar
+            toggle_settings_sidebar()
+        except Exception as e:
+            logger.error("toggle-sidebar error: %s", e)
+        return (True, None)
+
     elif message == "settings":
         # Open Anki's native preferences
         try:
