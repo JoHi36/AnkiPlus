@@ -1112,6 +1112,7 @@ class ChatbotWidget(QWidget):
                 sync_mood(mood)
             except Exception as e:
                 logger.error("plusi dock sync error: %s", e)
+            self._sync_plusi_integrity()
             # Notify panel of diary entry and state changes
             try:
                 from ..plusi.panel import notify_new_diary_entry, update_panel_mood, update_panel_friendship
@@ -1139,6 +1140,32 @@ class ChatbotWidget(QWidget):
             self.web_view.page().runJavaScript(
                 f"window.ankiReceive({json.dumps(payload)});"
             )
+
+    def _sync_plusi_integrity(self):
+        """Sync integrity glow and sleep state to dock."""
+        try:
+            try:
+                from ..plusi.storage import compute_integrity, get_memory
+            except ImportError:
+                from plusi.storage import compute_integrity, get_memory
+            try:
+                from ..plusi.dock import _get_active_webview
+            except ImportError:
+                from plusi.dock import _get_active_webview
+            integrity = compute_integrity()
+            is_sleeping = get_memory('state', 'is_sleeping', False)
+
+            web = _get_active_webview()
+            if web:
+                web.page().runJavaScript(
+                    f"if(window._plusiSetIntegrity) window._plusiSetIntegrity({integrity});"
+                )
+                sleeping_str = 'true' if is_sleeping else 'false'
+                web.page().runJavaScript(
+                    f"if(window._plusiSetSleeping) window._plusiSetSleeping({sleeping_str});"
+                )
+        except Exception as e:
+            logger.exception("plusi integrity sync error: %s", e)
 
     def _msg_text_field_focus(self, data):
         """Handle text field focus state changes from JavaScript."""
@@ -1283,6 +1310,7 @@ class ChatbotWidget(QWidget):
                     QTimer.singleShot(0, lambda: sync_mood(mood))
                 except Exception:
                     pass
+                QTimer.singleShot(0, lambda: self._sync_plusi_integrity())
 
         set_frontend_callback(_push_to_frontend)
 

@@ -34,6 +34,28 @@ def get_faces_dict():
 # ═══════════════════════════════════════════════════
 
 PLUSI_CSS = """
+/* ── Integrity Glow ── */
+:root {
+  --plusi-integrity: 0.5;
+}
+
+#plusi-dock .plusi-body {
+  filter: drop-shadow(0 0 calc(var(--plusi-integrity) * 8px) rgba(10, 132, 255, var(--plusi-integrity)));
+  opacity: calc(0.6 + var(--plusi-integrity) * 0.4);
+  transition: filter 0.5s ease, opacity 0.5s ease;
+}
+
+/* ── Sleep Animation ── */
+@keyframes plusi-breathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-1px) scale(1.02); }
+}
+
+#plusi-dock.plusi-sleeping .plusi-body {
+  animation: plusi-breathe 4s ease-in-out infinite !important;
+  filter: saturate(0.4) brightness(0.7) !important;
+}
+
 /* ── Plusi Dock Container ── */
 #plusi-dock {
   position: fixed;
@@ -292,15 +314,46 @@ PLUSI_JS = """
   // API for Python to call
   window._plusiSetMood = setMood;
   window._plusiShowBubble = showBubble;
+
+  window._plusiSetIntegrity = function(val) {
+      var el = document.getElementById('plusi-dock');
+      if (el) el.style.setProperty('--plusi-integrity', val);
+  };
+
+  window._plusiSetSleeping = function(sleeping) {
+      var el = document.getElementById('plusi-dock');
+      if (!el) return;
+      if (sleeping) {
+          el.classList.add('plusi-sleeping');
+      } else {
+          el.classList.remove('plusi-sleeping');
+      }
+  };
 })();
 """
 
 
+def is_plusi_enabled():
+    """Check if Plusi is enabled in config (mascot_enabled)."""
+    try:
+        try:
+            from ..config import get_config
+        except ImportError:
+            from config import get_config
+        config = get_config()
+        return config.get('mascot_enabled', False)
+    except Exception:
+        return False
+
+
 def get_plusi_dock_injection():
     """Return the complete HTML/CSS/JS to inject into a webview.
+    Returns empty string if Plusi is disabled in config.
     Includes initial mood restore from persisted state.
     Faces data is loaded from shared/assets/plusi-faces.json and injected
     as window.__plusi_faces__ before PLUSI_JS runs."""
+    if not is_plusi_enabled():
+        return ''
     mood = get_persisted_mood()
     faces_json = json.dumps(get_faces_dict())
     faces_init = f"window.__plusi_faces__ = {faces_json};"
@@ -329,6 +382,24 @@ def _get_active_webview():
         return None
 
 
+def hide_dock(web_view_or_none=None):
+    """Remove Plusi dock from the given or active webview."""
+    def _do():
+        web = web_view_or_none or _get_active_webview()
+        if web:
+            web.page().runJavaScript(
+                "var d = document.getElementById('plusi-dock'); if(d) d.remove();"
+            )
+
+    import threading
+    if threading.current_thread() is not threading.main_thread():
+        from aqt import mw
+        if mw and mw.taskman:
+            mw.taskman.run_on_main(_do)
+    else:
+        _do()
+
+
 def set_mood(web_view_or_none=None, mood='neutral'):
     """Update Plusi's mood in the given or active webview.
     Thread-safe: dispatches to main thread if called from a background thread."""
@@ -348,7 +419,10 @@ def set_mood(web_view_or_none=None, mood='neutral'):
 
 def show_bubble(web_view_or_none=None, text='', mood='happy'):
     """Show an event bubble next to Plusi.
+    No-op if Plusi is disabled.
     Thread-safe: dispatches to main thread if called from a background thread."""
+    if not is_plusi_enabled():
+        return
     def _do():
         web = web_view_or_none or _get_active_webview()
         if web:
@@ -367,8 +441,11 @@ def show_bubble(web_view_or_none=None, text='', mood='happy'):
 
 def sync_mood(mood):
     """Convenience: sync mood to whatever webview is currently active.
-    Also persists the mood so it survives page reloads and app restarts."""
-    logger.debug(f"plusi_dock.sync_mood: {mood}")
+    Also persists the mood so it survives page reloads and app restarts.
+    No-op if Plusi is disabled."""
+    if not is_plusi_enabled():
+        return
+    logger.debug("plusi_dock.sync_mood: %s", mood)
     # Persist to storage
     try:
         try:

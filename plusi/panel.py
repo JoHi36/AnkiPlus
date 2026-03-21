@@ -418,7 +418,7 @@ function renderEntries(entries) {
     startCipherAnimations();
 }
 
-function updateMood(mood, energy) {
+function updateMood(mood, energy, integrity) {
     var label = document.getElementById('mood-label');
     if (label) label.textContent = mood;
     var face = document.getElementById('plusi-panel-face');
@@ -429,6 +429,12 @@ function updateMood(mood, energy) {
         var e = (typeof energy === 'number') ? energy : 5;
         eFill.style.width = (e * 10) + '%';
         eFill.style.background = MOOD_COLORS[mood] || MOOD_COLORS.neutral;
+    }
+    /* Integrity-based glow on panel SVG */
+    var svg = document.getElementById('plusi-panel-svg');
+    if (svg && typeof integrity === 'number') {
+        svg.style.opacity = (0.6 + integrity * 0.4).toFixed(2);
+        svg.style.filter = 'drop-shadow(0 0 ' + (integrity * 6) + 'px rgba(10,132,255,' + integrity + '))';
     }
 }
 
@@ -444,7 +450,7 @@ function updateFriendship(data) {
 
 window.diaryReceive = function(payload) {
     if (payload.entries) renderEntries(payload.entries);
-    if (payload.mood) updateMood(payload.mood, payload.energy);
+    if (payload.mood) updateMood(payload.mood, payload.energy, payload.integrity);
     if (payload.friendship) updateFriendship(payload.friendship);
     if (payload.faces) FACES = payload.faces;
     if (payload.newEntry) {
@@ -570,7 +576,7 @@ def _send_diary_data():
     if not _panel_webview:
         return
     try:
-        from .storage import load_diary, get_friendship_data, get_memory
+        from .storage import load_diary, get_friendship_data, get_memory, compute_integrity
         entries = load_diary(limit=50)
         mood = get_memory('state', 'last_mood', 'neutral')
         energy = get_memory('state', 'energy', 5)
@@ -579,11 +585,13 @@ def _send_diary_data():
         except (ValueError, TypeError):
             energy = 5
         friendship = get_friendship_data()
+        integrity = compute_integrity()
         payload = {
             'entries': entries,
             'mood': mood,
             'energy': energy,
-            'friendship': friendship
+            'friendship': friendship,
+            'integrity': integrity
         }
         _panel_webview.page().runJavaScript(
             f"window.diaryReceive({json.dumps(payload)});"
