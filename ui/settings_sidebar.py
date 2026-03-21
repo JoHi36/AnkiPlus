@@ -154,26 +154,36 @@ class SidebarBridge(QObject):
             logger.exception("Error opening Anki preferences: %s", e)
 
     @pyqtSlot()
+    def openUpgradePage(self):
+        """Open the landing page pricing section in the default browser."""
+        import webbrowser
+        webbrowser.open('https://anki-plus.vercel.app/#pricing')
+
+    @pyqtSlot()
     def copyLogs(self):
-        """Copy debug info to clipboard."""
+        """Copy recent logs + system info to clipboard."""
+        try:
+            from ..utils.logging import get_recent_logs
+        except ImportError:
+            from utils.logging import get_recent_logs
+
         try:
             config = get_config()
-            debug_info = {
-                "platform": platform.platform(),
-                "python": platform.python_version(),
-                "theme": config.get("theme", "dark"),
-                "model": config.get("model_name", ""),
-                "provider": config.get("model_provider", ""),
-                "auth_validated": config.get("auth_validated", False),
-                "tier": config.get("tier", "free"),
-            }
-            text = "AnkiPlus Debug Info\n" + "\n".join(
-                f"  {k}: {v}" for k, v in debug_info.items()
+            header = (
+                f"AnkiPlus Debug Report\n"
+                f"Platform: {platform.platform()}\n"
+                f"Python: {platform.python_version()}\n"
+                f"Theme: {config.get('theme', 'dark')}\n"
+                f"Tier: {config.get('tier', 'free')}\n"
+                f"Auth: {config.get('auth_validated', False)}\n"
+                f"{'=' * 60}\n"
             )
+            logs = get_recent_logs(max_age_seconds=600)  # Last 10 minutes
+            text = header + "\n".join(logs) if logs else header + "(keine Logs)"
             clipboard = QApplication.clipboard()
             if clipboard:
                 clipboard.setText(text)
-                logger.info("Debug info copied to clipboard")
+                logger.info("Logs copied to clipboard (%d lines)", len(logs))
         except Exception:
             logger.exception("SidebarBridge.copyLogs failed")
 
@@ -600,7 +610,7 @@ function updateTokens(used, limit) {
 }
 
 function handleUpgrade() {
-    if (bridge) bridge.openNativeSettings();
+    if (bridge) bridge.openUpgradePage();
 }
 
 // Init QWebChannel
