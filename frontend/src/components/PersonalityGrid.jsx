@@ -32,20 +32,11 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
   const orientVal = position.x.toFixed(1);
 
   return (
-    <div>
       <svg
         viewBox={`0 0 ${SIZE_W} ${SIZE_H}`}
-        width="100%"
-        style={{ display: 'block' }}
+        style={{ width: '100%', display: 'block' }}
         aria-label="Personality grid"
       >
-        {/* Background */}
-        <rect
-          x="0" y="0"
-          width={SIZE_W} height={SIZE_H}
-          fill="var(--ds-bg-canvas, #1C1C1E)"
-        />
-
         {/* Outer border */}
         <rect
           x={PAD_X} y={PAD_Y}
@@ -134,6 +125,5 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
           </text>
         )}
       </svg>
-    </div>
   );
 }
