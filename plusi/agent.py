@@ -380,7 +380,7 @@ def self_reflect():
             persist_internal_state(internal)
 
         # Determine if meaningful state changed
-        meaningful_changed = bool(internal.get('self') or internal.get('user') or internal.get('moments'))
+        meaningful_changed = bool(internal and (internal.get('self') or internal.get('user') or internal.get('moments')))
 
         # Diary logic: explicit diary, meaningful change, or discoveries
         if diary_raw:
@@ -567,7 +567,7 @@ def run_plusi(situation, deck_id=None):
             persist_internal_state(internal)
 
         # Determine if meaningful state changed
-        meaningful_changed = bool(internal.get('self') or internal.get('user') or internal.get('moments'))
+        meaningful_changed = bool(internal and (internal.get('self') or internal.get('user') or internal.get('moments')))
 
         if diary_raw:
             from .storage import save_diary_entry
