@@ -2057,7 +2057,7 @@ function AppInner() {
               <div
                 ref={messagesContainerRef}
                 id="messages-container"
-                className="h-full overflow-y-auto px-4 pt-20 pb-40 max-w-3xl mx-auto w-full scrollbar-thin relative z-10"
+                className={`h-full overflow-y-auto max-w-3xl mx-auto w-full scrollbar-thin relative z-10 ${activeView === 'plusiMenu' ? 'px-0 pt-2 pb-40' : 'px-4 pt-20 pb-40'}`}
               >
 
                 {activeView === 'agentStudio' ? (
