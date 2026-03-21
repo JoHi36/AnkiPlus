@@ -178,14 +178,17 @@ function BudgetSlider({ min, max, step, value, onChange }) {
 
 // ─── Static Plus Icon ───────────────────────────────────────────────────────
 
-function PlusiIcon({ size = 36 }) {
-  const arm = size * 0.22;
-  const len = size * 0.55;
-  const half = size / 2;
+function PlusiIcon() {
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0 }}>
-      <rect x={half - arm / 2} y={half - len / 2} width={arm} height={len} rx={arm / 2} fill="var(--ds-accent, #0A84FF)" />
-      <rect x={half - len / 2} y={half - arm / 2} width={len} height={arm} rx={arm / 2} fill="var(--ds-accent, #0A84FF)" />
+    <svg viewBox="0 0 120 120" width={28} height={28} style={{ flexShrink: 0 }}>
+      <rect x="40" y="5" width="40" height="110" rx="8" fill="#0a84ff"/>
+      <rect x="5" y="35" width="110" height="40" rx="8" fill="#0a84ff"/>
+      <rect x="40" y="35" width="40" height="40" fill="#0a84ff"/>
+      <ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/>
+      <ellipse cx="49" cy="50" rx="4" ry="4" fill="#1a1a1a"/>
+      <ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/>
+      <ellipse cx="71" cy="50" rx="4" ry="4" fill="#1a1a1a"/>
+      <path d="M 48 68 Q 60 74 72 68" stroke="#1a1a1a" strokeWidth="3" fill="none" strokeLinecap="round"/>
     </svg>
   );
 }
@@ -257,7 +260,7 @@ export default function AutonomyCard({
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14,
       }}>
-        <PlusiIcon size={36} />
+        <PlusiIcon />
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <span style={{

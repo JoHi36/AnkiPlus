@@ -53,47 +53,47 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
           x={PAD_X} y={PAD_Y}
           width={RANGE_X} height={RANGE_Y}
           fill="none"
-          stroke="rgba(255,255,255,0.04)"
+          stroke="var(--ds-border, rgba(255,255,255,0.06))"
           strokeWidth="1"
         />
 
         {/* Fine grid lines — vertical */}
         {GRID_V.map(v => (
-          <line key={`gv-${v}`} x1={v} y1={PAD_Y} x2={v} y2={PAD_Y + RANGE_Y} stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
+          <line key={`gv-${v}`} x1={v} y1={PAD_Y} x2={v} y2={PAD_Y + RANGE_Y} stroke="var(--ds-border, rgba(255,255,255,0.03))" strokeWidth="1" />
         ))}
         {/* Fine grid lines — horizontal */}
         {GRID_H.map(v => (
-          <line key={`gh-${v}`} x1={PAD_X} y1={v} x2={PAD_X + RANGE_X} y2={v} stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
+          <line key={`gh-${v}`} x1={PAD_X} y1={v} x2={PAD_X + RANGE_X} y2={v} stroke="var(--ds-border, rgba(255,255,255,0.03))" strokeWidth="1" />
         ))}
 
         {/* Center cross */}
-        <line x1={CENTER_X} y1={PAD_Y} x2={CENTER_X} y2={PAD_Y + RANGE_Y} stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
-        <line x1={PAD_X} y1={CENTER_Y} x2={PAD_X + RANGE_X} y2={CENTER_Y} stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
+        <line x1={CENTER_X} y1={PAD_Y} x2={CENTER_X} y2={PAD_Y + RANGE_Y} stroke="var(--ds-border, rgba(255,255,255,0.06))" strokeWidth="1" />
+        <line x1={PAD_X} y1={CENTER_Y} x2={PAD_X + RANGE_X} y2={CENTER_Y} stroke="var(--ds-border, rgba(255,255,255,0.06))" strokeWidth="1" />
 
         {/* Y-axis coordinate numbers */}
-        <text x={PAD_X - 8} y={PAD_Y} textAnchor="end" dominantBaseline="middle" fontFamily={svgFont} fontSize="7" fill="rgba(255,255,255,0.2)">10</text>
-        <text x={PAD_X - 8} y={CENTER_Y} textAnchor="end" dominantBaseline="middle" fontFamily={svgFont} fontSize="7" fill="rgba(255,255,255,0.2)">5</text>
-        <text x={PAD_X - 8} y={PAD_Y + RANGE_Y} textAnchor="end" dominantBaseline="middle" fontFamily={svgFont} fontSize="7" fill="rgba(255,255,255,0.2)">0</text>
+        <text x={PAD_X - 8} y={PAD_Y} textAnchor="end" dominantBaseline="middle" fontFamily={svgFont} fontSize="7" fill="var(--ds-text-quaternary, rgba(255,255,255,0.2))">10</text>
+        <text x={PAD_X - 8} y={CENTER_Y} textAnchor="end" dominantBaseline="middle" fontFamily={svgFont} fontSize="7" fill="var(--ds-text-quaternary, rgba(255,255,255,0.2))">5</text>
+        <text x={PAD_X - 8} y={PAD_Y + RANGE_Y} textAnchor="end" dominantBaseline="middle" fontFamily={svgFont} fontSize="7" fill="var(--ds-text-quaternary, rgba(255,255,255,0.2))">0</text>
 
         {/* X-axis coordinate numbers */}
-        <text x={PAD_X} y={PAD_Y + RANGE_Y + 9} textAnchor="middle" dominantBaseline="auto" fontFamily={svgFont} fontSize="7" fill="rgba(255,255,255,0.2)">0.0</text>
-        <text x={PAD_X + RANGE_X} y={PAD_Y + RANGE_Y + 9} textAnchor="middle" dominantBaseline="auto" fontFamily={svgFont} fontSize="7" fill="rgba(255,255,255,0.2)">1.0</text>
+        <text x={PAD_X} y={PAD_Y + RANGE_Y + 9} textAnchor="middle" dominantBaseline="auto" fontFamily={svgFont} fontSize="7" fill="var(--ds-text-quaternary, rgba(255,255,255,0.2))">0.0</text>
+        <text x={PAD_X + RANGE_X} y={PAD_Y + RANGE_Y + 9} textAnchor="middle" dominantBaseline="auto" fontFamily={svgFont} fontSize="7" fill="var(--ds-text-quaternary, rgba(255,255,255,0.2))">1.0</text>
 
         {/* Axis labels */}
-        <text x={CENTER_X} y={PAD_Y - 4} textAnchor="middle" dominantBaseline="auto" fontFamily={svgFont} fontSize="7" fontWeight="500" fill="rgba(255,255,255,0.28)" letterSpacing="1">AKTIV</text>
-        <text x={CENTER_X} y={PAD_Y + RANGE_Y + 10} textAnchor="middle" dominantBaseline="hanging" fontFamily={svgFont} fontSize="7" fontWeight="500" fill="rgba(255,255,255,0.28)" letterSpacing="1">REFLEKTIV</text>
+        <text x={CENTER_X} y={PAD_Y - 4} textAnchor="middle" dominantBaseline="auto" fontFamily={svgFont} fontSize="7" fontWeight="500" fill="var(--ds-text-quaternary, rgba(255,255,255,0.25))" letterSpacing="1">AKTIV</text>
+        <text x={CENTER_X} y={PAD_Y + RANGE_Y + 10} textAnchor="middle" dominantBaseline="hanging" fontFamily={svgFont} fontSize="7" fontWeight="500" fill="var(--ds-text-quaternary, rgba(255,255,255,0.25))" letterSpacing="1">REFLEKTIV</text>
         <text
           x={PAD_X - 14} y={CENTER_Y}
           textAnchor="middle" dominantBaseline="middle"
           fontFamily={svgFont} fontSize="7" fontWeight="500"
-          fill="rgba(255,255,255,0.28)" letterSpacing="1"
+          fill="var(--ds-text-quaternary, rgba(255,255,255,0.25))" letterSpacing="1"
           transform={`rotate(-90, ${PAD_X - 14}, ${CENTER_Y})`}
         >SACH</text>
         <text
           x={PAD_X + RANGE_X + 14} y={CENTER_Y}
           textAnchor="middle" dominantBaseline="middle"
           fontFamily={svgFont} fontSize="7" fontWeight="500"
-          fill="rgba(255,255,255,0.28)" letterSpacing="1"
+          fill="var(--ds-text-quaternary, rgba(255,255,255,0.25))" letterSpacing="1"
           transform={`rotate(90, ${PAD_X + RANGE_X + 14}, ${CENTER_Y})`}
         >MENSCH</text>
 
@@ -102,21 +102,22 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
           <polyline
             points={polylinePoints}
             fill="none"
-            stroke="rgba(255,255,255,0.2)"
+            stroke="var(--ds-accent, #0A84FF)"
             strokeWidth="1.5"
             strokeLinejoin="round"
             strokeLinecap="round"
+            opacity="0.4"
           />
         )}
         {trailPoints.map((p, i) => {
-          const opacity = 0.08 + (i / Math.max(trailPoints.length - 1, 1)) * 0.3;
+          const opacity = 0.15 + (i / Math.max(trailPoints.length - 1, 1)) * 0.5;
           return (
             <circle
               key={`trail-${i}`}
               cx={p.dotX}
               cy={p.dotY}
               r="2.5"
-              fill="white"
+              fill="var(--ds-accent, #0A84FF)"
               opacity={opacity}
             />
           );
@@ -124,10 +125,10 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
 
         {/* Current position */}
         <g opacity={confident ? 1 : 0.35}>
-          {/* Solid white dot */}
-          <circle cx={dotX} cy={dotY} r="4" fill="white" />
+          {/* Solid dot */}
+          <circle cx={dotX} cy={dotY} r="4" fill="var(--ds-text-primary, #fff)" />
           {/* Thin ring */}
-          <circle cx={dotX} cy={dotY} r="7" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="0.5" />
+          <circle cx={dotX} cy={dotY} r="7" fill="none" stroke="var(--ds-text-tertiary)" strokeWidth="0.5" />
         </g>
 
         {/* Coordinate label when confident */}
@@ -135,7 +136,7 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
           <text
             x={dotX + 10} y={dotY - 6}
             fontFamily={svgFont} fontSize="7"
-            fill="rgba(255,255,255,0.45)"
+            fill="var(--ds-text-quaternary)"
           >
             {energyVal} &middot; {orientVal}
           </text>

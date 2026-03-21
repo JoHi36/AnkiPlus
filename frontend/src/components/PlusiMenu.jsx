@@ -60,14 +60,22 @@ export default function PlusiMenu({ bridge, onNavigateBack }) {
       </div>
 
       {/* ── Container 2: Personality + Diary ────────────────────────── */}
-      <div style={{ marginTop: 24 }}>
+      <div style={{
+        marginTop: 24,
+        background: 'var(--ds-bg-canvas)',
+        borderRadius: 16,
+        border: '1px solid var(--ds-border, rgba(255,255,255,0.06))',
+        overflow: 'hidden',
+      }}>
         <PersonalityGrid
           position={personality.position}
           trail={personality.trail}
           quadrant={personality.quadrant}
           confident={personality.confident}
         />
-        <DiaryStream entries={diary} />
+        <div style={{ padding: '16px 20px 20px' }}>
+          <DiaryStream entries={diary} />
+        </div>
       </div>
     </div>
   );

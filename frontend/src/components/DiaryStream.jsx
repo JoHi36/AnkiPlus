@@ -8,24 +8,6 @@ const CATEGORY_COLORS = {
   gemerkt:     '#30D158',
 };
 
-const CATEGORY_EMOJIS = {
-  reflektiert: '💭',
-  forscht:     '🔍',
-  gemerkt:     '✍️',
-};
-
-const MOOD_EMOJIS = {
-  happy:     '😊',
-  thinking:  '🧠',
-  curious:   '🤔',
-  empathy:   '🫂',
-  excited:   '🤩',
-  sleepy:    '😴',
-  annoyed:   '😤',
-  blush:     '😳',
-  surprised: '😮',
-};
-
 const GERMAN_MONTHS = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -58,17 +40,9 @@ function getCategoryColor(category) {
   return CATEGORY_COLORS[category] || '#8E8E93';
 }
 
-function getCategoryEmoji(category) {
-  return CATEGORY_EMOJIS[category] || '';
-}
-
-function getMoodEmoji(mood) {
-  return MOOD_EMOJIS[mood] || '😐';
-}
-
 /**
- * Render entry text, replacing {{CIPHER}} placeholders with cipher block spans.
- * cipher_parts provides the replacement strings (one per {{CIPHER}} occurrence).
+ * Render entry text, replacing {{CIPHER}} placeholders with blurred spans.
+ * cipher_parts provides the actual text content shown blurred.
  */
 function renderEntryText(text, cipherParts = []) {
   if (!text) return null;
@@ -86,29 +60,19 @@ function renderEntryText(text, cipherParts = []) {
       nodes.push(<span key={`t-${idx}`}>{segment}</span>);
     }
     if (idx < segments.length - 1) {
-      // Use the corresponding cipher part or fall back to generic blocks
-      const cipherContent = cipherParts[idx] || '██████';
-      const blockChars = '█'.repeat(Math.max(cipherContent.length, 6));
+      const cipherContent = cipherParts[idx] || 'verschlüsselt';
       nodes.push(
         <span
           key={`c-${idx}`}
           style={{
-            display: 'inline-block',
-            fontFamily: 'monospace',
-            fontSize: 10,
-            lineHeight: 1.4,
-            background: 'rgba(0,0,0,0.35)',
-            color: 'rgba(255,255,255,0.15)',
-            borderRadius: 3,
-            padding: '1px 4px',
-            letterSpacing: '0.05em',
+            display: 'inline',
+            filter: 'blur(4px)',
             userSelect: 'none',
-            verticalAlign: 'middle',
-            margin: '0 2px',
+            WebkitUserSelect: 'none',
           }}
           title="[verschlüsselt]"
         >
-          {blockChars}
+          {cipherContent}
         </span>
       );
     }
@@ -121,10 +85,8 @@ function renderEntryText(text, cipherParts = []) {
 
 function DiaryEntry({ entry }) {
   const categoryColor = getCategoryColor(entry.category);
-  const categoryEmoji = getCategoryEmoji(entry.category);
-  const moodEmoji = getMoodEmoji(entry.mood);
   const timeStr = formatTime(entry.timestamp);
-  const categoryLabel = entry.category || 'notiz';
+  const categoryLabel = (entry.category || 'notiz').toLowerCase();
 
   return (
     <div
@@ -137,7 +99,7 @@ function DiaryEntry({ entry }) {
       {/* Left color border */}
       <div
         style={{
-          width: 2,
+          width: 1.5,
           borderRadius: 2,
           flexShrink: 0,
           alignSelf: 'stretch',
@@ -160,33 +122,22 @@ function DiaryEntry({ entry }) {
           <span
             style={{
               fontSize: 11,
-              color: 'var(--ds-text-tertiary, rgba(255,255,255,0.35))',
+              color: 'var(--ds-text-quaternary, rgba(255,255,255,0.25))',
               fontVariantNumeric: 'tabular-nums',
             }}
           >
             {timeStr}
           </span>
 
-          <span style={{ color: 'var(--ds-text-tertiary, rgba(255,255,255,0.25))', fontSize: 11 }}>·</span>
-
-          {categoryEmoji && (
-            <span style={{ fontSize: 11 }}>{categoryEmoji}</span>
-          )}
+          <span style={{ color: 'var(--ds-text-quaternary, rgba(255,255,255,0.2))', fontSize: 11 }}>·</span>
 
           <span
             style={{
               fontSize: 11,
-              color: categoryColor,
-              opacity: 0.85,
-              textTransform: 'lowercase',
+              color: 'var(--ds-text-tertiary, rgba(255,255,255,0.35))',
             }}
           >
             {categoryLabel}
-          </span>
-
-          {/* Mood emoji — right-aligned */}
-          <span style={{ marginLeft: 'auto', fontSize: 13 }}>
-            {moodEmoji}
           </span>
         </div>
 
@@ -196,7 +147,7 @@ function DiaryEntry({ entry }) {
             margin: 0,
             fontSize: 13,
             lineHeight: 1.55,
-            color: 'var(--ds-text-primary, rgba(255,255,255,0.85))',
+            color: 'var(--ds-text-primary)',
           }}
         >
           {renderEntryText(entry.entry_text, entry.cipher_parts)}
@@ -226,7 +177,6 @@ function DiaryEntry({ entry }) {
                   gap: 3,
                 }}
               >
-                <span>📎</span>
                 <span>{disc}</span>
               </span>
             ))}
@@ -244,29 +194,17 @@ export default function DiaryStream({ entries = [] }) {
   if (!entries || entries.length === 0) {
     return (
       <div>
-        <div
+        <p
           style={{
-            background: 'var(--ds-bg-canvas)',
-            borderRadius: 16,
-            padding: 20,
-            border: '1px solid var(--ds-border, rgba(255,255,255,0.06))',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            minHeight: 80,
+            margin: 0,
+            fontSize: 13,
+            color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))',
+            textAlign: 'center',
+            padding: '20px 0',
           }}
         >
-          <p
-            style={{
-              margin: 0,
-              fontSize: 13,
-              color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))',
-              textAlign: 'center',
-            }}
-          >
-            Plusi hat noch keine Tagebucheinträge geschrieben.
-          </p>
-        </div>
+          Plusi hat noch keine Tagebucheinträge geschrieben.
+        </p>
       </div>
     );
   }
@@ -289,48 +227,39 @@ export default function DiaryStream({ entries = [] }) {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div>
-      <div
-        style={{
-          background: 'var(--ds-bg-canvas)',
-          borderRadius: 16,
-          padding: 20,
-          border: '1px solid var(--ds-border, rgba(255,255,255,0.06))',
-        }}
-      >
-        {groups.map((group, groupIdx) => (
+      {groups.map((group, groupIdx) => (
+        <div
+          key={group.key}
+          style={
+            groupIdx === 0
+              ? {}
+              : {
+                  marginTop: 20,
+                  paddingTop: 16,
+                  borderTop: '1px solid var(--ds-border, rgba(255,255,255,0.06))',
+                }
+          }
+        >
+          {/* Day label */}
           <div
-            key={group.key}
-            style={
-              groupIdx === 0
-                ? {}
-                : {
-                    marginTop: 20,
-                    paddingTop: 16,
-                    borderTop: '1px solid var(--ds-border, rgba(255,255,255,0.06))',
-                  }
-            }
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: 'var(--ds-text-tertiary, rgba(255,255,255,0.28))',
+              marginBottom: 10,
+            }}
           >
-            {/* Day label */}
-            <div
-              style={{
-                fontSize: 10,
-                fontWeight: 600,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                color: 'var(--ds-text-tertiary, rgba(255,255,255,0.28))',
-                marginBottom: 10,
-              }}
-            >
-              {group.dayLabel}
-            </div>
-
-            {/* Entries for this day */}
-            {group.entries.map((entry) => (
-              <DiaryEntry key={entry.id} entry={entry} />
-            ))}
+            {group.dayLabel}
           </div>
-        ))}
-      </div>
+
+          {/* Entries for this day */}
+          {group.entries.map((entry) => (
+            <DiaryEntry key={entry.id} entry={entry} />
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
