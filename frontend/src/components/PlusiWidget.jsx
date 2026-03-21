@@ -105,12 +105,34 @@ export default function PlusiWidget({
   friendship = null,
   isLoading = false,
   isFrozen = false,
+  messageId = null,
 }) {
   const color = MOOD_COLORS[mood] || MOOD_COLORS.neutral;
   const resolvedMeta = isLoading ? 'denkt nach...' : metaText || MOOD_META[mood] || '';
   const displayText = isLoading ? 'hmm, moment mal...' : text;
   const textParts = displayText.split('\n---\n');
   const rgb = hexToRgb(color);
+
+  const [liked, setLiked] = React.useState(false);
+  const [showHeart, setShowHeart] = React.useState(false);
+  const lastTapRef = React.useRef(0);
+
+  const handleDoubleTap = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 400) {
+      if (!liked && !isFrozen) {
+        setLiked(true);
+        setShowHeart(true);
+        if (window.ankiBridge) {
+          window.ankiBridge.addMessage('plusiLike', {});
+        }
+        setTimeout(() => setShowHeart(false), 800);
+      }
+      lastTapRef.current = 0;
+    } else {
+      lastTapRef.current = now;
+    }
+  };
 
   return (
     <>
@@ -124,6 +146,8 @@ export default function PlusiWidget({
         }}
       >
         {isLoading && <div className="plusi-shimmer" />}
+        {showHeart && <div className="plusi-heart-burst">❤️</div>}
+        {liked && <div className="plusi-heart-badge">❤️</div>}
 
         {/* Top row: Mascot + Name + Mood */}
         <div className="plusi-top">
@@ -140,7 +164,7 @@ export default function PlusiWidget({
         </div>
 
         {/* Body: Text */}
-        <div className="plusi-body">
+        <div className="plusi-body" onClick={handleDoubleTap}>
           {isLoading ? (
             <p className="plusi-placeholder">{displayText}</p>
           ) : (
@@ -332,4 +356,28 @@ const PLUSI_CSS = `
     z-index: 1;
   }
   @keyframes plusi-shimmer { 0% { left: -100%; } 100% { left: 100%; } }
+
+  /* ── Heart Like ── */
+  .plusi-heart-burst {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    font-size: 32px;
+    animation: plusi-heart-pop 0.6s ease-out forwards;
+    pointer-events: none;
+    z-index: 10;
+  }
+  @keyframes plusi-heart-pop {
+    0% { transform: translate(-50%, -50%) scale(0); opacity: 1; }
+    50% { transform: translate(-50%, -50%) scale(1.3); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+  }
+  .plusi-heart-badge {
+    position: absolute;
+    bottom: 6px;
+    right: 8px;
+    font-size: 10px;
+    opacity: 0.6;
+  }
 `;

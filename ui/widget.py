@@ -457,6 +457,7 @@ class ChatbotWidget(QWidget):
             'plusiPanel': self._msg_plusi_settings,
             'plusiSettings': self._msg_plusi_settings,
             'plusiDirect': self._msg_plusi_direct,
+            'plusiLike': self._msg_plusi_like,
             'textFieldFocus': self._msg_text_field_focus,
         }
         return handlers.get(msg_type)
@@ -1030,6 +1031,18 @@ class ChatbotWidget(QWidget):
                 mw.onPrefs()
         except Exception as e:
             logger.warning("Could not open Anki preferences: %s", e)
+
+    def _msg_plusi_like(self, data):
+        """Handle like on Plusi message."""
+        try:
+            try:
+                from ..plusi.storage import record_resonance_like
+            except ImportError:
+                from plusi.storage import record_resonance_like
+            record_resonance_like()
+            logger.info("plusi like recorded from UI")
+        except Exception as e:
+            logger.exception("plusi like error: %s", e)
 
     def _msg_plusi_direct(self, data):
         # Ignore if Plusi is disabled
