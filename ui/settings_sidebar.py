@@ -552,6 +552,35 @@ html[data-theme="light"] .logout-btn:hover { background: rgba(255,59,48,0.06); c
 
 <div class="divider" style="margin-top:12px"></div>
 
+<!-- Shortcuts -->
+<div style="padding:14px 14px 8px;">
+  <div class="section-label">Tastenkürzel</div>
+  <div style="display:flex;flex-direction:column;gap:6px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:11px;color:var(--text-tertiary);">Chat fokussieren</span>
+      <kbd style="font-size:10px;font-family:ui-monospace,monospace;color:var(--text-muted);background:var(--hover);padding:2px 6px;border-radius:4px;border:1px solid var(--border-subtle);">&#8984;K</kbd>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:11px;color:var(--text-tertiary);">Menü öffnen</span>
+      <kbd style="font-size:10px;font-family:ui-monospace,monospace;color:var(--text-muted);background:var(--hover);padding:2px 6px;border-radius:4px;border:1px solid var(--border-subtle);">&#8984;I</kbd>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:11px;color:var(--text-tertiary);">Weiter / Zurück</span>
+      <kbd style="font-size:10px;font-family:ui-monospace,monospace;color:var(--text-muted);background:var(--hover);padding:2px 6px;border-radius:4px;border:1px solid var(--border-subtle);">Space</kbd>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:11px;color:var(--text-tertiary);">Ausführen / Vertiefen</span>
+      <kbd style="font-size:10px;font-family:ui-monospace,monospace;color:var(--text-muted);background:var(--hover);padding:2px 6px;border-radius:4px;border:1px solid var(--border-subtle);">Enter</kbd>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:11px;color:var(--text-tertiary);">Zwischen Karten</span>
+      <kbd style="font-size:10px;font-family:ui-monospace,monospace;color:var(--text-muted);background:var(--hover);padding:2px 6px;border-radius:4px;border:1px solid var(--border-subtle);">&#8592; &#8594;</kbd>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
 <button class="logout-btn" id="logout-btn" onclick="bridge.logout()">Abmelden</button>
 
 <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
