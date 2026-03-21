@@ -39,11 +39,8 @@ DEFAULT_CONFIG = {
         "storage_bucket": ""  # Firebase Storage Bucket (optional, kann auch über Umgebungsvariable gesetzt werden)
     },
     "plusi_autonomy": {
-        "token_budget_per_hour": 500,
-        "can_reflect": True,
-        "can_explore_cards": True,
-        "can_write_diary": True,
-        "can_comment_events": False,
+        "budget_per_hour": 2000,
+        "enabled": True,
     },
     "mascot_enabled": False
 }
