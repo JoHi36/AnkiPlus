@@ -12,25 +12,21 @@ const CAPABILITIES = [
   {
     key: 'can_reflect',
     label: 'Selbst reflektieren',
-    desc: 'Denkt eigenständig über dein Lernen nach',
     locked: false,
   },
   {
     key: 'can_explore_cards',
     label: 'Karten erkunden',
-    desc: 'Durchsucht deine Decks nach Verbindungen',
     locked: false,
   },
   {
     key: 'can_write_diary',
     label: 'Tagebuch schreiben',
-    desc: 'Hält Gedanken und Entdeckungen fest',
     locked: false,
   },
   {
     key: 'can_comment_events',
     label: 'Event-Kommentare',
-    desc: 'Ab Lv 3 · Freunde',
     locked: true,
     requiredLevel: 3,
   },
@@ -203,8 +199,6 @@ export default function AutonomyCard({
   friendshipMaxPoints = 0,
   mood = 'neutral',
   energy = 5,
-  mascotEnabled = true,
-  onMascotToggle,
   onSave,
 }) {
   const [config, setConfig] = useState(() => ({
@@ -256,7 +250,7 @@ export default function AutonomyCard({
   return (
     <div style={CARD_STYLE}>
 
-      {/* ── Row 1: Plusi icon + name/mood + master toggle ──────────── */}
+      {/* ── Row 1: Plusi icon + name/mood ──────────────────────────── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14,
       }}>
@@ -274,11 +268,6 @@ export default function AutonomyCard({
             {mood} &middot; {energy}
           </span>
         </div>
-
-        <Toggle
-          on={mascotEnabled}
-          onChange={onMascotToggle}
-        />
       </div>
 
       {/* ── Row 2: Friendship bar ──────────────────────────────────── */}
@@ -346,15 +335,12 @@ export default function AutonomyCard({
         />
       </div>
 
-      {/* ── Capabilities label ─────────────────────────────────────── */}
+      {/* ── Separator line ───────────────────────────────────────── */}
       <div style={{
-        fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
-        letterSpacing: '0.8px',
-        color: 'var(--ds-text-tertiary, rgba(255,255,255,0.22))',
-        marginBottom: 12,
-      }}>
-        F&auml;higkeiten
-      </div>
+        height: 1,
+        background: 'var(--ds-border, rgba(255,255,255,0.06))',
+        marginBottom: 14,
+      }} />
 
       {/* ── Capability toggles ─────────────────────────────────────── */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -369,8 +355,8 @@ export default function AutonomyCard({
                 display: 'flex',
                 alignItems: 'center',
                 gap: 12,
-                paddingTop: i === 0 ? 0 : 12,
-                paddingBottom: i < CAPABILITIES.length - 1 ? 12 : 0,
+                paddingTop: i === 0 ? 0 : 10,
+                paddingBottom: i < CAPABILITIES.length - 1 ? 10 : 0,
                 borderBottom: i < CAPABILITIES.length - 1
                   ? '1px solid var(--ds-border-subtle, rgba(255,255,255,0.06))'
                   : 'none',
@@ -379,18 +365,10 @@ export default function AutonomyCard({
             >
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{
-                  fontSize: 13, fontWeight: 500,
+                  fontSize: 13, fontWeight: 400,
                   color: 'var(--ds-text-secondary, rgba(255,255,255,0.7))',
-                  marginBottom: 2,
                 }}>
-                  {cap.label}
-                </div>
-                <div style={{
-                  fontSize: 11,
-                  color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))',
-                  lineHeight: 1.4,
-                }}>
-                  {cap.desc}
+                  {cap.label}{isLocked ? ' (locked)' : ''}
                 </div>
               </div>
               <Toggle

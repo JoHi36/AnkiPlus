@@ -2,12 +2,6 @@ import React from 'react';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const CATEGORY_COLORS = {
-  reflektiert: '#0A84FF',
-  forscht:     '#5AC8FA',
-  gemerkt:     '#30D158',
-};
-
 const GERMAN_MONTHS = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -34,10 +28,6 @@ function formatTime(timestamp) {
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
   return `${hh}:${mm}`;
-}
-
-function getCategoryColor(category) {
-  return CATEGORY_COLORS[category] || '#8E8E93';
 }
 
 /**
@@ -84,105 +74,62 @@ function renderEntryText(text, cipherParts = []) {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function DiaryEntry({ entry }) {
-  const categoryColor = getCategoryColor(entry.category);
   const timeStr = formatTime(entry.timestamp);
-  const categoryLabel = (entry.category || 'notiz').toLowerCase();
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        gap: 10,
-        marginBottom: 12,
-      }}
-    >
-      {/* Left color border */}
+    <div style={{ marginBottom: 20 }}>
+      {/* Time */}
       <div
         style={{
-          width: 1.5,
-          borderRadius: 2,
-          flexShrink: 0,
-          alignSelf: 'stretch',
-          background: categoryColor,
-          opacity: 0.75,
+          fontSize: 11,
+          color: 'var(--ds-text-quaternary, rgba(255,255,255,0.25))',
+          fontVariantNumeric: 'tabular-nums',
+          marginBottom: 4,
         }}
-      />
+      >
+        {timeStr}
+      </div>
 
-      {/* Entry body */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {/* Meta row */}
+      {/* Entry text */}
+      <p
+        style={{
+          margin: 0,
+          fontSize: 14,
+          lineHeight: 1.6,
+          color: 'var(--ds-text-primary)',
+        }}
+      >
+        {renderEntryText(entry.entry_text, entry.cipher_parts)}
+      </p>
+
+      {/* Discoveries */}
+      {entry.discoveries && entry.discoveries.length > 0 && (
         <div
           style={{
             display: 'flex',
-            alignItems: 'center',
-            marginBottom: 5,
-            gap: 4,
+            flexWrap: 'wrap',
+            gap: 5,
+            marginTop: 8,
           }}
         >
-          <span
-            style={{
-              fontSize: 11,
-              color: 'var(--ds-text-quaternary, rgba(255,255,255,0.25))',
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            {timeStr}
-          </span>
-
-          <span style={{ color: 'var(--ds-text-quaternary, rgba(255,255,255,0.2))', fontSize: 11 }}>·</span>
-
-          <span
-            style={{
-              fontSize: 11,
-              color: 'var(--ds-text-tertiary, rgba(255,255,255,0.35))',
-            }}
-          >
-            {categoryLabel}
-          </span>
+          {entry.discoveries.map((disc, idx) => (
+            <span
+              key={idx}
+              style={{
+                fontSize: 10,
+                color: 'var(--ds-text-tertiary, rgba(255,255,255,0.35))',
+                background: 'var(--ds-bg-overlay, rgba(255,255,255,0.06))',
+                borderRadius: 6,
+                padding: '2px 7px',
+                display: 'inline-flex',
+                alignItems: 'center',
+              }}
+            >
+              {disc}
+            </span>
+          ))}
         </div>
-
-        {/* Entry text */}
-        <p
-          style={{
-            margin: 0,
-            fontSize: 13,
-            lineHeight: 1.55,
-            color: 'var(--ds-text-primary)',
-          }}
-        >
-          {renderEntryText(entry.entry_text, entry.cipher_parts)}
-        </p>
-
-        {/* Discoveries */}
-        {entry.discoveries && entry.discoveries.length > 0 && (
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 5,
-              marginTop: 8,
-            }}
-          >
-            {entry.discoveries.map((disc, idx) => (
-              <span
-                key={idx}
-                style={{
-                  fontSize: 11,
-                  color: 'var(--ds-accent, #0A84FF)',
-                  background: 'rgba(10,132,255,0.12)',
-                  borderRadius: 6,
-                  padding: '2px 7px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 3,
-                }}
-              >
-                <span>{disc}</span>
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
@@ -190,23 +137,8 @@ function DiaryEntry({ entry }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function DiaryStream({ entries = [] }) {
-  // ── Empty state ────────────────────────────────────────────────────────────
   if (!entries || entries.length === 0) {
-    return (
-      <div>
-        <p
-          style={{
-            margin: 0,
-            fontSize: 13,
-            color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))',
-            textAlign: 'center',
-            padding: '20px 0',
-          }}
-        >
-          Plusi hat noch keine Tagebucheinträge geschrieben.
-        </p>
-      </div>
-    );
+    return null;
   }
 
   // ── Group entries by day ───────────────────────────────────────────────────
@@ -230,25 +162,19 @@ export default function DiaryStream({ entries = [] }) {
       {groups.map((group, groupIdx) => (
         <div
           key={group.key}
-          style={
-            groupIdx === 0
-              ? {}
-              : {
-                  marginTop: 20,
-                  paddingTop: 16,
-                  borderTop: '1px solid var(--ds-border, rgba(255,255,255,0.06))',
-                }
-          }
+          style={{
+            marginTop: groupIdx === 0 ? 0 : 28,
+          }}
         >
           {/* Day label */}
           <div
             style={{
               fontSize: 10,
               fontWeight: 600,
-              letterSpacing: '0.08em',
+              letterSpacing: '0.5px',
               textTransform: 'uppercase',
-              color: 'var(--ds-text-tertiary, rgba(255,255,255,0.28))',
-              marginBottom: 10,
+              color: 'var(--ds-text-quaternary, rgba(255,255,255,0.2))',
+              marginBottom: 12,
             }}
           >
             {group.dayLabel}

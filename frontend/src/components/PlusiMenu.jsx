@@ -26,11 +26,6 @@ export default function PlusiMenu({ bridge, onNavigateBack }) {
     window.ankiBridge?.addMessage('savePlusiAutonomy', config);
   }, []);
 
-  const handleMascotToggle = useCallback(() => {
-    const next = !(data?.state?.mascotEnabled !== false);
-    window.ankiBridge?.addMessage('saveMascotEnabled', next);
-  }, []);
-
   const state = data?.state || {};
   const friendship = data?.friendship || {};
   const personality = data?.personality || {};
@@ -53,8 +48,6 @@ export default function PlusiMenu({ bridge, onNavigateBack }) {
           friendshipMaxPoints={friendship.maxPoints ?? 0}
           mood={state.mood || 'neutral'}
           energy={state.energy ?? 5}
-          mascotEnabled={state.mascotEnabled !== false}
-          onMascotToggle={handleMascotToggle}
           onSave={handleAutonomySave}
         />
       </div>
