@@ -27,7 +27,8 @@ export default function PlusiMenu({ bridge, onNavigateBack }) {
   }, []);
 
   const handleMascotToggle = useCallback(() => {
-    window.ankiBridge?.addMessage('togglePlusiMascot', null);
+    const next = !(data?.state?.mascotEnabled !== false);
+    window.ankiBridge?.addMessage('saveMascotEnabled', next);
   }, []);
 
   const state = data?.state || {};
