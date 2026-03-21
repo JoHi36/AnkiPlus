@@ -125,10 +125,12 @@ export default function PlusiMenu({ bridge, onNavigateBack }) {
             confident={personality.confident}
           />
         </div>
-        {/* Fade zone below grid — text dissolves as it scrolls behind */}
+        {/* Fade zone below grid — text dissolves as it scrolls behind.
+            Uses mask-image on the content side instead, so this is just extra solid space
+            to ensure no gap between grid bg and fade */}
         <div style={{
-          height: 24,
-          background: 'linear-gradient(to bottom, var(--ds-bg-deep, #141416) 0%, transparent 100%)',
+          height: 20,
+          background: 'linear-gradient(to bottom, var(--ds-bg-deep, #141416), transparent)',
           pointerEvents: 'none',
         }} />
       </div>
