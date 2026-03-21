@@ -3,11 +3,15 @@ Plusi Dock — Injectable HTML/CSS/JS for the main Anki window.
 Renders the Plusi mascot character as a fixed-position element in the
 bottom-left corner of the reviewer and deck browser webviews.
 
+Uses the unified plusi-renderer.js for character rendering (SVG, animations,
+mood system). Adds dock-specific features: event bubbles, click/drag
+interactions, and Python ↔ JS API glue.
+
 Features:
-- 48px animated Plusi character (same CSS as MascotCharacter.jsx)
+- 48px animated Plusi character via createPlusi() renderer
 - Single-click: toggle diary panel; double-click: open chat
 - Event bubbles (card correct/wrong, streaks)
-- Mood system (neutral/happy/empathy/excited + animations)
+- Mood system via renderer API
 - Communication via pycmd() in reviewer, window._apAction in deck browser
 """
 
@@ -20,42 +24,31 @@ except ImportError:
     from utils.logging import get_logger
 logger = get_logger(__name__)
 
-_FACES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'shared', 'assets', 'plusi-faces.json')
+# ═══════════════════════════════════════════════════
+# Renderer cache — loads shared/plusi-renderer.js once
+# ═══════════════════════════════════════════════════
 
-def get_faces_dict():
-    """Return the FACES dict with SVG inner HTML strings for each mood.
-    Loaded from shared/assets/plusi-faces.json — single source of truth."""
-    with open(_FACES_PATH, 'r', encoding='utf-8') as f:
-        return json.load(f)
+_renderer_cache = None
+
+def _get_renderer_js():
+    """Load and cache the unified Plusi renderer JavaScript."""
+    global _renderer_cache
+    if _renderer_cache is None:
+        renderer_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            '..', 'shared', 'plusi-renderer.js'
+        )
+        logger.info("Loading Plusi renderer from %s", renderer_path)
+        with open(renderer_path, 'r', encoding='utf-8') as f:
+            _renderer_cache = f.read()
+    return _renderer_cache
 
 
 # ═══════════════════════════════════════════════════
-# CSS — MascotCharacter port (exact copy from React)
+# Bubble CSS — event bubble (card correct/wrong, streaks)
 # ═══════════════════════════════════════════════════
 
-PLUSI_CSS = """
-/* ── Integrity Glow ── */
-:root {
-  --plusi-integrity: 0.5;
-}
-
-#plusi-dock .plusi-body {
-  filter: drop-shadow(0 0 calc(var(--plusi-integrity) * 8px) rgba(10, 132, 255, var(--plusi-integrity)));
-  opacity: calc(0.6 + var(--plusi-integrity) * 0.4);
-  transition: filter 0.5s ease, opacity 0.5s ease;
-}
-
-/* ── Sleep Animation ── */
-@keyframes plusi-breathe {
-  0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-1px) scale(1.02); }
-}
-
-#plusi-dock.plusi-sleeping .plusi-body {
-  animation: plusi-breathe 4s ease-in-out infinite !important;
-  filter: saturate(0.4) brightness(0.7) !important;
-}
-
+BUBBLE_CSS = """
 /* ── Plusi Dock Container ── */
 #plusi-dock {
   position: fixed;
@@ -68,52 +61,20 @@ PLUSI_CSS = """
   pointer-events: auto;
 }
 
-/* Parent animation classes */
-#plusi-dock.pd-float  { animation: pd-float 3.5s ease-in-out infinite; }
-#plusi-dock.pd-bounce { animation: pd-bounce 0.55s ease-in-out infinite alternate; }
-#plusi-dock.pd-droop  { animation: pd-droop 4s ease-in-out infinite; }
-
-@keyframes pd-float  { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
-@keyframes pd-bounce { 0%{transform:translateY(0)} 100%{transform:translateY(-6px)} }
-@keyframes pd-droop  { 0%,100%{transform:translateY(0)} 50%{transform:translateY(2px)} }
-
 #plusi-dock-char {
   cursor: pointer;
   flex-shrink: 0;
-  width: 48px;
-  height: 48px;
 }
 
-/* ── Mascot Character (48px) ── */
-.mascot-body { position: relative; width: 48px; height: 48px; transition: opacity 0.3s; }
+/* ── Sleep Animation ── */
+@keyframes plusi-breathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-1px) scale(1.02); }
+}
 
-.mascot-float    { animation: m-float 3.5s ease-in-out infinite; }
-.mascot-bounce   { animation: m-bounce 0.55s ease-in-out infinite alternate; }
-.mascot-droop    { animation: m-droop 4s ease-in-out infinite; }
-.mascot-tilt     { animation: m-tilt 4s ease-in-out infinite; }
-.mascot-sway     { animation: m-sway 5s ease-in-out infinite; }
-.mascot-wiggle   { animation: m-wiggle 1.5s ease-in-out infinite; }
-.mascot-dance    { animation: m-dance 0.4s ease-in-out infinite alternate; }
-.mascot-pop-once { animation: m-pop 0.5s ease-out; }
-
-@keyframes m-float  { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
-@keyframes m-bounce { 0%{transform:translateY(0) scale(1,1)} 100%{transform:translateY(-9px) scale(1.04,0.97)} }
-@keyframes m-droop  { 0%,100%{transform:translateY(0) rotate(-1deg)} 50%{transform:translateY(3px) rotate(1deg)} }
-@keyframes m-tilt   { 0%,100%{transform:rotate(0deg)} 50%{transform:rotate(-8deg)} }
-@keyframes m-sway   { 0%,100%{transform:translateX(0)} 50%{transform:translateX(4px)} }
-@keyframes m-wiggle { 0%,100%{transform:rotate(0deg)} 25%{transform:rotate(3deg)} 75%{transform:rotate(-3deg)} }
-@keyframes m-dance  { 0%{transform:translateY(0) rotate(-3deg)} 100%{transform:translateY(-8px) rotate(3deg)} }
-@keyframes m-pop    { 0%{transform:scale(1)} 40%{transform:scale(1.25)} 100%{transform:scale(1)} }
-
-.mascot-shadow { width: 32px; height: 4px; background: #007AFF15; border-radius: 50%; margin: 4px auto 0; }
-.mascot-shadow.mascot-float { animation: s-float 3.5s ease-in-out infinite; }
-.mascot-shadow.mascot-bounce { animation: s-bounce 0.55s ease-in-out infinite alternate; }
-@keyframes s-float  { 0%,100%{width:32px;opacity:.4} 50%{width:24px;opacity:.2} }
-@keyframes s-bounce { 0%{width:32px;opacity:.4} 100%{width:26px;opacity:.2} }
-
-/* Glow when active */
-.mascot-glow {
-  filter: drop-shadow(0 0 4px rgba(0,122,255,.95)) drop-shadow(0 0 10px rgba(0,122,255,.5));
+#plusi-dock.plusi-sleeping #plusi-dock-char > div {
+  animation: plusi-breathe 4s ease-in-out infinite !important;
+  filter: saturate(0.4) brightness(0.7) !important;
 }
 
 /* ── Event Bubble ── */
@@ -145,77 +106,37 @@ PLUSI_CSS = """
 """
 
 # ═══════════════════════════════════════════════════
-# HTML — Character + Menu + Bubble
+# Dock HTML — minimal container for renderer + bubble
 # ═══════════════════════════════════════════════════
 
-PLUSI_HTML = """
-<div id="plusi-dock" class="pd-float">
-  <!-- Character (SVG-based, matches PlusiIcon in chat widget) -->
-  <div id="plusi-dock-char" onclick="window._plusiClick()">
-    <div class="mascot-body mascot-float" id="plusi-mascot">
-      <svg id="plusi-svg" viewBox="0 0 120 120" width="48" height="48">
-        <rect x="40" y="5" width="40" height="110" rx="8" fill="#0a84ff"/>
-        <rect x="5" y="35" width="110" height="40" rx="8" fill="#0a84ff"/>
-        <rect x="40" y="35" width="40" height="40" fill="#0a84ff"/>
-        <g id="plusi-face">
-          <ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/>
-          <ellipse cx="49" cy="50" rx="4" ry="4" fill="#1a1a1a"/>
-          <ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/>
-          <ellipse cx="71" cy="50" rx="4" ry="4" fill="#1a1a1a"/>
-          <path d="M 48 68 Q 60 74 72 68" stroke="#1a1a1a" stroke-width="3" fill="none" stroke-linecap="round"/>
-        </g>
-      </svg>
-    </div>
-    <div class="mascot-shadow mascot-float" id="plusi-shadow"></div>
-  </div>
-
-  <!-- Event Bubble -->
+DOCK_HTML = """
+<div id="plusi-dock">
+  <div id="plusi-dock-char"></div>
   <div class="plusi-dock-bubble" id="plusi-bubble"></div>
 </div>
 """
 
 # ═══════════════════════════════════════════════════
-# JS — Interaction logic
+# Dock JS — interaction logic (click, drag, bubble)
 # ═══════════════════════════════════════════════════
 
-PLUSI_JS = """
+DOCK_JS = """
 (function() {
   var bubbleTimer = null;
+  var plusiInstance = null;
 
-  // SVG face definitions — injected from shared/assets/plusi-faces.json at runtime
-  var FACES = window.__plusi_faces__ || {};
-
-  // Body animation per mood
-  var MOODS = {
-    neutral:   { bodyAnim: 'mascot-float',    dockAnim: 'pd-float' },
-    happy:     { bodyAnim: 'mascot-bounce',   dockAnim: 'pd-bounce' },
-    annoyed:   { bodyAnim: 'mascot-float',    dockAnim: 'pd-float' },
-    curious:   { bodyAnim: 'mascot-tilt',     dockAnim: 'pd-float' },
-    excited:   { bodyAnim: 'mascot-dance',    dockAnim: 'pd-bounce' },
-    sleepy:    { bodyAnim: 'mascot-sway',     dockAnim: 'pd-float' },
-    surprised: { bodyAnim: 'mascot-pop-once', dockAnim: 'pd-bounce' },
-    blush:     { bodyAnim: 'mascot-wiggle',   dockAnim: 'pd-float' },
-    empathy:   { bodyAnim: 'mascot-droop',    dockAnim: 'pd-droop' },
-    thinking:  { bodyAnim: 'mascot-float',    dockAnim: 'pd-float' },
-    reading:   { bodyAnim: 'mascot-tilt',     dockAnim: 'pd-float' },
-  };
+  // Initialize renderer into #plusi-dock-char
+  var charEl = document.getElementById('plusi-dock-char');
+  if (charEl && window.createPlusi) {
+    plusiInstance = window.createPlusi(charEl, {
+      mood: '__INITIAL_MOOD__',
+      size: 48,
+      animated: true
+    });
+  }
 
   function setMood(mood) {
-    var m = MOODS[mood] || MOODS.neutral;
-    var face = FACES[mood] || FACES.neutral;
-    var mascot = document.getElementById('plusi-mascot');
-    var faceEl = document.getElementById('plusi-face');
-    var shadow = document.getElementById('plusi-shadow');
-    var dock = document.getElementById('plusi-dock');
-    if (!mascot || !faceEl) return;
-
-    // Update SVG face
-    faceEl.innerHTML = face;
-
-    // Update body animation
-    mascot.className = 'mascot-body ' + m.bodyAnim;
-    shadow.className = 'mascot-shadow ' + m.bodyAnim;
-    dock.className = m.dockAnim;
+    if (plusiInstance) plusiInstance.setMood(mood);
   }
 
   function showBubble(text, mood) {
@@ -237,7 +158,6 @@ PLUSI_JS = """
 
   /* Drag to chat */
   var _dragStartX = 0;
-  var _dragStartY = 0;
   var _isDragging = false;
   var _dragThreshold = 80;
 
@@ -247,7 +167,6 @@ PLUSI_JS = """
 
     char.addEventListener('mousedown', function(e) {
       _dragStartX = e.clientX;
-      _dragStartY = e.clientY;
       _isDragging = false;
     });
 
@@ -256,10 +175,10 @@ PLUSI_JS = """
       var dx = e.clientX - _dragStartX;
       if (dx > 30) {
         _isDragging = true;
-        var mascot = document.getElementById('plusi-mascot');
-        if (mascot) {
-          mascot.style.transform = 'translateX(' + (dx - 30) + 'px) scale(0.9)';
-          mascot.style.opacity = '0.7';
+        var wrapper = char.firstElementChild;
+        if (wrapper) {
+          wrapper.style.transform = 'translateX(' + (dx - 30) + 'px) scale(0.9)';
+          wrapper.style.opacity = '0.7';
         }
       }
     });
@@ -267,7 +186,7 @@ PLUSI_JS = """
     document.addEventListener('mouseup', function(e) {
       if (_dragStartX === 0) return;
       var dx = e.clientX - _dragStartX;
-      var mascot = document.getElementById('plusi-mascot');
+      var wrapper = char.firstElementChild;
 
       if (_isDragging && dx > _dragThreshold) {
         /* Drag completed — open chat with @Plusi */
@@ -279,9 +198,9 @@ PLUSI_JS = """
       }
 
       /* Reset */
-      if (mascot) {
-        mascot.style.transform = '';
-        mascot.style.opacity = '';
+      if (wrapper) {
+        wrapper.style.transform = '';
+        wrapper.style.opacity = '';
       }
       _dragStartX = 0;
       _isDragging = false;
@@ -311,23 +230,27 @@ PLUSI_JS = """
     }
   };
 
+  // Wire up click on the dock char container
+  if (charEl) {
+    charEl.addEventListener('click', function() { window._plusiClick(); });
+  }
+
   // API for Python to call
   window._plusiSetMood = setMood;
   window._plusiShowBubble = showBubble;
 
   window._plusiSetIntegrity = function(val) {
-      var el = document.getElementById('plusi-dock');
-      if (el) el.style.setProperty('--plusi-integrity', val);
+    if (plusiInstance) plusiInstance.setIntegrity(val);
   };
 
   window._plusiSetSleeping = function(sleeping) {
-      var el = document.getElementById('plusi-dock');
-      if (!el) return;
-      if (sleeping) {
-          el.classList.add('plusi-sleeping');
-      } else {
-          el.classList.remove('plusi-sleeping');
-      }
+    var el = document.getElementById('plusi-dock');
+    if (!el) return;
+    if (sleeping) {
+      el.classList.add('plusi-sleeping');
+    } else {
+      el.classList.remove('plusi-sleeping');
+    }
   };
 })();
 """
@@ -349,16 +272,19 @@ def is_plusi_enabled():
 def get_plusi_dock_injection():
     """Return the complete HTML/CSS/JS to inject into a webview.
     Returns empty string if Plusi is disabled in config.
-    Includes initial mood restore from persisted state.
-    Faces data is loaded from shared/assets/plusi-faces.json and injected
-    as window.__plusi_faces__ before PLUSI_JS runs."""
+    Uses the unified plusi-renderer.js for character rendering,
+    plus dock-specific bubble/interaction code."""
     if not is_plusi_enabled():
         return ''
     mood = get_persisted_mood()
-    faces_json = json.dumps(get_faces_dict())
-    faces_init = f"window.__plusi_faces__ = {faces_json};"
-    init_script = f"\nwindow.addEventListener('DOMContentLoaded', function() {{ if(window._plusiSetMood) window._plusiSetMood('{mood}'); }});\nsetTimeout(function() {{ if(window._plusiSetMood) window._plusiSetMood('{mood}'); }}, 100);"
-    return f'<style>{PLUSI_CSS}</style>\n{PLUSI_HTML}\n<script>{faces_init}\n{PLUSI_JS}\n{init_script}</script>'
+    renderer_js = _get_renderer_js()
+    dock_js = DOCK_JS.replace('__INITIAL_MOOD__', mood)
+    return (
+        f'<style>{BUBBLE_CSS}</style>\n'
+        f'{DOCK_HTML}\n'
+        f'<script>{renderer_js}</script>\n'
+        f'<script>{dock_js}</script>'
+    )
 
 
 def _get_active_webview():
