@@ -17,19 +17,19 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
     <svg viewBox="0 0 360 90" style={{ width: '100%', display: 'block' }}>
       <defs>
         <linearGradient id="pgTL" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#5AC8FA" stopOpacity="0.07" />
+          <stop offset="0%" stopColor="#5AC8FA" stopOpacity="0.08" />
           <stop offset="100%" stopColor="#5AC8FA" stopOpacity="0" />
         </linearGradient>
         <linearGradient id="pgTR" x1="1" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#30D158" stopOpacity="0.07" />
+          <stop offset="0%" stopColor="#30D158" stopOpacity="0.08" />
           <stop offset="100%" stopColor="#30D158" stopOpacity="0" />
         </linearGradient>
         <linearGradient id="pgBL" x1="0" y1="1" x2="1" y2="0">
-          <stop offset="0%" stopColor="#BF5AF2" stopOpacity="0.05" />
+          <stop offset="0%" stopColor="#BF5AF2" stopOpacity="0.08" />
           <stop offset="100%" stopColor="#BF5AF2" stopOpacity="0" />
         </linearGradient>
         <linearGradient id="pgBR" x1="1" y1="1" x2="0" y2="0">
-          <stop offset="0%" stopColor="#FF9F0A" stopOpacity="0.05" />
+          <stop offset="0%" stopColor="#FF9F0A" stopOpacity="0.08" />
           <stop offset="100%" stopColor="#FF9F0A" stopOpacity="0" />
         </linearGradient>
       </defs>
@@ -42,30 +42,30 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
 
       {/* Border + center cross */}
       <rect x={PX} y={PY} width={RX} height={RY} rx="3" fill="none"
-        stroke="var(--ds-border, rgba(255,255,255,0.05))" strokeWidth="0.5" />
+        stroke="var(--ds-border)" strokeWidth="0.5" />
       <line x1={CX} y1={PY} x2={CX} y2={PY+RY}
-        stroke="var(--ds-border, rgba(255,255,255,0.04))" strokeWidth="0.5" />
+        stroke="var(--ds-border)" strokeWidth="0.5" />
       <line x1={PX} y1={CY} x2={PX+RX} y2={CY}
-        stroke="var(--ds-border, rgba(255,255,255,0.04))" strokeWidth="0.5" />
+        stroke="var(--ds-border)" strokeWidth="0.5" />
 
       {/* Minor grid */}
       {[PX + RX*0.25, PX + RX*0.75].map(v => (
         <line key={`v${v}`} x1={v} y1={PY} x2={v} y2={PY+RY}
-          stroke="rgba(255,255,255,0.02)" strokeWidth="0.5" />
+          stroke="var(--ds-border)" strokeWidth="0.5" opacity="0.4" />
       ))}
       {[PY + RY*0.25, PY + RY*0.75].map(v => (
         <line key={`h${v}`} x1={PX} y1={v} x2={PX+RX} y2={v}
-          stroke="rgba(255,255,255,0.02)" strokeWidth="0.5" />
+          stroke="var(--ds-border)" strokeWidth="0.5" opacity="0.4" />
       ))}
 
       {/* Axis labels */}
-      <text x={CX} y={PY-1} textAnchor="middle" fontSize="5" fill="var(--ds-text-quaternary, rgba(255,255,255,0.16))"
+      <text x={CX} y={PY-1} textAnchor="middle" fontSize="5" fill="var(--ds-text-quaternary)"
         letterSpacing="0.8" fontFamily="-apple-system,system-ui">AKTIV</text>
-      <text x={CX} y={PY+RY+7} textAnchor="middle" fontSize="5" fill="var(--ds-text-quaternary, rgba(255,255,255,0.12))"
+      <text x={CX} y={PY+RY+7} textAnchor="middle" fontSize="5" fill="var(--ds-text-quaternary)"
         letterSpacing="0.8" fontFamily="-apple-system,system-ui">REFLEKTIV</text>
-      <text x={PX-4} y={CY} textAnchor="middle" fontSize="5" fill="var(--ds-text-quaternary, rgba(255,255,255,0.12))"
+      <text x={PX-4} y={CY} textAnchor="middle" fontSize="5" fill="var(--ds-text-quaternary)"
         letterSpacing="0.8" fontFamily="-apple-system,system-ui" transform={`rotate(-90,${PX-4},${CY})`}>SACH</text>
-      <text x={PX+RX+4} y={CY} textAnchor="middle" fontSize="5" fill="var(--ds-text-quaternary, rgba(255,255,255,0.12))"
+      <text x={PX+RX+4} y={CY} textAnchor="middle" fontSize="5" fill="var(--ds-text-quaternary)"
         letterSpacing="0.8" fontFamily="-apple-system,system-ui" transform={`rotate(90,${PX+RX+4},${CY})`}>MENSCH</text>
 
       {/* Trail */}
@@ -83,14 +83,14 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
 
       {/* Current dot */}
       <circle cx={sx} cy={sy} r="5" fill="none"
-        stroke="var(--ds-text-tertiary, rgba(255,255,255,0.18))" strokeWidth="0.5" />
+        stroke="var(--ds-text-tertiary)" strokeWidth="0.5" />
       <circle cx={sx} cy={sy} r="2.5"
-        fill="var(--ds-text-primary, white)" opacity={confident ? 0.85 : 0.35} />
+        fill="var(--ds-text-primary)" opacity={confident ? 0.85 : 0.35} />
 
       {/* Coordinate label */}
       {confident && (
         <text x={sx + 8} y={sy - 1} fontSize="6.5"
-          fill="var(--ds-text-quaternary, rgba(255,255,255,0.25))"
+          fill="var(--ds-text-quaternary)"
           fontFamily="-apple-system,system-ui">{energy} · {orient}</text>
       )}
     </svg>

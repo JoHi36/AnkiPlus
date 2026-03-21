@@ -36,6 +36,7 @@ export interface ChatInputProps {
   actionSecondary: ActionConfig;
   plusiEnabled?: boolean; // When false, @Plusi detection/highlighting is disabled
   topSlot?: React.ReactNode; // Optional content rendered above the textarea (e.g. token budget slider)
+  hideInput?: boolean; // When true, hide the textarea row (topSlot + actionbar only)
 }
 
 export default function ChatInput({
@@ -53,6 +54,7 @@ export default function ChatInput({
   actionSecondary,
   plusiEnabled = true,
   topSlot,
+  hideInput = false,
 }: ChatInputProps) {
   const [input, setInput] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -172,7 +174,7 @@ export default function ChatInput({
         {topSlot}
 
         {/* Textarea area — grid stack: overlay behind textarea, both same size */}
-        <div style={{ display: 'grid', position: 'relative' }}>
+        {!hideInput && <div style={{ display: 'grid', position: 'relative' }}>
           {/* Highlight overlay — same grid cell as textarea */}
           {hasPlusiTag && (() => {
             const idx = input.indexOf('@Plusi');
@@ -254,7 +256,7 @@ export default function ChatInput({
               <ArrowUp size={14} strokeWidth={2.5} style={{ color: 'white' }} />
             </button>
           )}
-        </div>
+        </div>}
 
         {/* Split action row — primary (left) | divider | secondary (right) */}
         <div className="ds-split-actions">

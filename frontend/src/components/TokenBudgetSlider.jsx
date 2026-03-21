@@ -47,7 +47,7 @@ export default function TokenBudgetSlider({ value = 500, onChange }) {
 
   return (
     <div style={{
-      padding: '6px 4px 2px',
+      padding: '8px 0 4px',
       display: 'flex',
       flexDirection: 'column',
       gap: 4,

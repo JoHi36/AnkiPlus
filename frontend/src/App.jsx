@@ -2378,6 +2378,7 @@ function AppInner() {
           topSlot={activeView === 'plusiMenu' ? (
             <TokenBudgetSlider value={500} />
           ) : undefined}
+          hideInput={activeView === 'plusiMenu'}
           actionPrimary={{
             label: activeView === 'plusiMenu' ? 'Zurück' : 'Weiter',
             shortcut: 'SPACE',

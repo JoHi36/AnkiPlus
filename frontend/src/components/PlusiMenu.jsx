@@ -112,25 +112,16 @@ export default function PlusiMenu({ bridge, onNavigateBack }) {
         position: 'sticky',
         top: 0,
         zIndex: 10,
-        paddingTop: 12,
-        paddingBottom: 8,
-        background: 'linear-gradient(to bottom, var(--ds-bg-deep, #141416) 70%, transparent)',
+        paddingTop: 0,
+        paddingBottom: 4,
+        background: 'var(--ds-bg-deep, #141416)',
       }}>
-        <div style={{
-          background: 'var(--ds-bg-frosted, rgba(255,255,255,0.04))',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
-          borderRadius: 12,
-          border: '1px solid var(--ds-border, rgba(255,255,255,0.06))',
-          padding: '8px 14px 6px',
-        }}>
-          <PersonalityGrid
-            position={currentPosition}
-            trail={visibleTrail}
-            quadrant={personality.quadrant}
-            confident={personality.confident}
-          />
-        </div>
+        <PersonalityGrid
+          position={currentPosition}
+          trail={visibleTrail}
+          quadrant={personality.quadrant}
+          confident={personality.confident}
+        />
       </div>
 
       {/* Diary — free scrolling */}
