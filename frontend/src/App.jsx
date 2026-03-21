@@ -35,6 +35,7 @@ import AgentStudio from './components/AgentStudio';
 import ExtractInsightsButton from './components/ExtractInsightsButton';
 import useInsights from './hooks/useInsights';
 import PlusiMenu from './components/PlusiMenu';
+import TokenBudgetSlider from './components/TokenBudgetSlider';
 
 // Stable empty references — prevent new object creation on every render
 const EMPTY_STEPS = [];
@@ -2317,18 +2318,21 @@ function AppInner() {
                         <ExtractInsightsButton
                           messageCount={chatHook.messages.length}
                           onExtract={(onDone, onError) => {
-                            if (cardContextHook.cardContext?.cardId) {
-                              insightsHook.extractInsights(
-                                cardContextHook.cardContext.cardId,
-                                cardContextHook.cardContext,
-                                chatHook.messages,
-                                null
-                              );
+                            if (!cardContextHook.cardContext?.cardId) {
+                              onError?.();
+                              return;
                             }
-                            // Listen for extraction result
+                            insightsHook.extractInsights(
+                              cardContextHook.cardContext.cardId,
+                              cardContextHook.cardContext,
+                              chatHook.messages,
+                              null
+                            );
+                            // Listen for extraction result (one-shot)
                             const handler = (e) => {
                               window.removeEventListener('ankiInsightExtractionComplete', handler);
-                              if (e.detail?.success) {
+                              const data = e.detail;
+                              if (data?.success) {
                                 onDone?.();
                               } else {
                                 onError?.();
@@ -2371,6 +2375,9 @@ function AppInner() {
           currentAuthToken={currentAuthToken}
           onClose={handleClose}
           plusiEnabled={mascotEnabled}
+          topSlot={activeView === 'plusiMenu' ? (
+            <TokenBudgetSlider value={500} />
+          ) : undefined}
           actionPrimary={{
             label: activeView === 'plusiMenu' ? 'Zurück' : 'Weiter',
             shortcut: 'SPACE',

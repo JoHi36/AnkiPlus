@@ -35,6 +35,7 @@ export interface ChatInputProps {
   actionPrimary: ActionConfig;
   actionSecondary: ActionConfig;
   plusiEnabled?: boolean; // When false, @Plusi detection/highlighting is disabled
+  topSlot?: React.ReactNode; // Optional content rendered above the textarea (e.g. token budget slider)
 }
 
 export default function ChatInput({
@@ -51,6 +52,7 @@ export default function ChatInput({
   actionPrimary,
   actionSecondary,
   plusiEnabled = true,
+  topSlot,
 }: ChatInputProps) {
   const [input, setInput] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -165,6 +167,9 @@ export default function ChatInput({
             animation: 'borderRotate 4s linear infinite',
           }}
         />
+
+        {/* Top slot — e.g. token budget slider when in plusiMenu view */}
+        {topSlot}
 
         {/* Textarea area — grid stack: overlay behind textarea, both same size */}
         <div style={{ display: 'grid', position: 'relative' }}>

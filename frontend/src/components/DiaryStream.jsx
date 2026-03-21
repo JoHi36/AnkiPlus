@@ -136,7 +136,7 @@ function DiaryEntry({ entry }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function DiaryStream({ entries = [] }) {
+export default function DiaryStream({ entries = [], dayRefs }) {
   if (!entries || entries.length === 0) {
     return null;
   }
@@ -162,6 +162,7 @@ export default function DiaryStream({ entries = [] }) {
       {groups.map((group, groupIdx) => (
         <div
           key={group.key}
+          ref={dayRefs ? (el) => { dayRefs.current[groupIdx] = el; } : undefined}
           style={{
             marginTop: groupIdx === 0 ? 0 : 28,
           }}
@@ -169,11 +170,13 @@ export default function DiaryStream({ entries = [] }) {
           {/* Day label */}
           <div
             style={{
-              fontSize: 10,
-              fontWeight: 600,
+              fontSize: 11,
+              fontWeight: 500,
               letterSpacing: '0.5px',
               textTransform: 'uppercase',
-              color: 'var(--ds-text-quaternary, rgba(255,255,255,0.2))',
+              color: 'var(--ds-text-secondary, rgba(255,255,255,0.55))',
+              borderBottom: '1px solid var(--ds-border, rgba(255,255,255,0.06))',
+              paddingBottom: 6,
               marginBottom: 12,
             }}
           >

@@ -81,7 +81,7 @@ header *,
 
 /* Markdown Content Styles */
 .markdown-content {
-  @apply text-base-content/90;
+  color: var(--ds-text-primary);
 }
 
 .markdown-content pre {
@@ -128,11 +128,12 @@ header *,
 }
 
 .markdown-content pre::-webkit-scrollbar-thumb {
-  @apply bg-base-300/50 rounded;
+  background: var(--ds-border-medium);
+  border-radius: 4px;
 }
 
 .markdown-content pre::-webkit-scrollbar-track {
-  @apply bg-base-300/20;
+  background: var(--ds-hover-tint);
 }
 
 /* Reset Strong inside Blockquotes to avoid double styling */
@@ -212,4 +213,34 @@ header *,
 @keyframes borderRotate {
   from { --border-angle: 0deg; }
   to   { --border-angle: 360deg; }
+}
+
+/* ═══ Token Budget Range Slider ═══ */
+.token-budget-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  cursor: pointer;
+  border: none;
+}
+.token-budget-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  cursor: pointer;
+  border: none;
+}
+.token-budget-range::-webkit-slider-runnable-track {
+  background: transparent;
+  height: 4px;
+}
+.token-budget-range::-moz-range-track {
+  background: transparent;
+  height: 4px;
 }

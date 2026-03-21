@@ -1,25 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PersonalityGrid from './PersonalityGrid';
 import DiaryStream from './DiaryStream';
 
-// Same PlusiIcon as AgentStudio
-function PlusiIcon() {
-  return (
-    <svg viewBox="0 0 120 120" width={28} height={28}>
-      <rect x="40" y="5" width="40" height="110" rx="8" fill="#0a84ff"/>
-      <rect x="5" y="35" width="110" height="40" rx="8" fill="#0a84ff"/>
-      <rect x="40" y="35" width="40" height="40" fill="#0a84ff"/>
-      <ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/>
-      <ellipse cx="49" cy="50" rx="4" ry="4" fill="#1a1a1a"/>
-      <ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/>
-      <ellipse cx="71" cy="50" rx="4" ry="4" fill="#1a1a1a"/>
-      <path d="M 48 68 Q 60 74 72 68" stroke="#1a1a1a" strokeWidth="3" fill="none" strokeLinecap="round"/>
-    </svg>
-  );
-}
-
 export default function PlusiMenu({ bridge, onNavigateBack }) {
   const [data, setData] = useState(null);
+  const [activeDayIndex, setActiveDayIndex] = useState(0);
+  const scrollRef = useRef(null);
+  const dayRefs = useRef([]);
 
   useEffect(() => {
     window.ankiBridge?.addMessage('getPlusiMenuData', null);
@@ -31,101 +18,127 @@ export default function PlusiMenu({ bridge, onNavigateBack }) {
     return () => window.removeEventListener('ankiPlusiMenuDataLoaded', handleData);
   }, []);
 
-  const state = data?.state || {};
-  const friendship = data?.friendship || {};
   const personality = data?.personality || {};
-  const autonomy = data?.autonomy || {};
   const diary = data?.diary || [];
-  const budget = autonomy.token_budget_per_hour ?? 500;
+
+  // Group diary entries by day
+  const dayGroups = React.useMemo(() => {
+    if (!diary.length) return [];
+    const sorted = [...diary].sort((a, b) => b.timestamp - a.timestamp);
+    const groups = [];
+    let currentDay = null;
+    for (const entry of sorted) {
+      const d = new Date(entry.timestamp);
+      const dayKey = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      if (dayKey !== currentDay) {
+        groups.push({ dayKey, entries: [], position: null });
+        currentDay = dayKey;
+      }
+      groups[groups.length - 1].entries.push(entry);
+    }
+    return groups;
+  }, [diary]);
+
+  // For each day group, compute a personality position
+  // In real implementation, this would come from stored trail snapshots
+  // For now, interpolate from the trail data or use the overall position
+  const dayPositions = React.useMemo(() => {
+    const trail = personality.trail || [];
+    const pos = personality.position || { x: 0.5, y: 0.5 };
+
+    if (!dayGroups.length) return [];
+
+    // If we have trail data, distribute trail points across days
+    // Otherwise use the current position for all days
+    if (trail.length >= dayGroups.length) {
+      // Map trail points to days (newest first)
+      return dayGroups.map((_, i) => {
+        const trailIdx = Math.min(i, trail.length - 1);
+        return trail[trail.length - 1 - trailIdx] || pos;
+      });
+    }
+
+    // Fallback: interpolate from current position toward center
+    return dayGroups.map((_, i) => {
+      const t = dayGroups.length > 1 ? i / (dayGroups.length - 1) : 0;
+      return {
+        x: pos.x * (1 - t * 0.3) + 0.5 * (t * 0.3),
+        y: pos.y * (1 - t * 0.3) + 0.5 * (t * 0.3),
+      };
+    });
+  }, [dayGroups, personality]);
+
+  // Scroll handler — find which day group is closest to viewport top
+  const handleScroll = useCallback(() => {
+    if (!dayRefs.current.length) return;
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const viewTop = container.scrollTop + 120; // offset for sticky header
+    let closest = 0;
+    let closestDist = Infinity;
+
+    dayRefs.current.forEach((ref, i) => {
+      if (!ref) return;
+      const dist = Math.abs(ref.offsetTop - viewTop);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closest = i;
+      }
+    });
+
+    if (closest !== activeDayIndex) {
+      setActiveDayIndex(closest);
+    }
+  }, [activeDayIndex]);
+
+  // Current position based on active day
+  const currentPosition = dayPositions[activeDayIndex] || personality.position || { x: 0.5, y: 0.5 };
+
+  // Trail from current day backwards
+  const visibleTrail = dayPositions.slice(activeDayIndex);
 
   return (
-    <div style={{
-      flex: 1, display: 'flex', flexDirection: 'column',
-      padding: '0 20px 140px', overflowY: 'auto',
-    }}>
-
-      {/* ── Frosted Glass Header ──────────────────────────────── */}
+    <div
+      ref={scrollRef}
+      onScroll={handleScroll}
+      style={{
+        flex: 1, display: 'flex', flexDirection: 'column',
+        padding: '0 20px 140px', overflowY: 'auto',
+      }}
+    >
+      {/* Sticky Grid Header */}
       <div style={{
-        background: 'var(--ds-bg-frosted)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        borderRadius: 16,
-        border: '1px solid var(--ds-border, rgba(255,255,255,0.06))',
-        padding: '16px 20px',
-        marginTop: 16,
+        position: 'sticky',
+        top: 0,
+        zIndex: 10,
+        paddingTop: 12,
+        paddingBottom: 8,
+        background: 'linear-gradient(to bottom, var(--ds-bg-deep, #141416) 70%, transparent)',
       }}>
-        {/* Plusi Identity Row */}
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          marginBottom: 8,
+          background: 'var(--ds-bg-frosted, rgba(255,255,255,0.04))',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderRadius: 12,
+          border: '1px solid var(--ds-border, rgba(255,255,255,0.06))',
+          padding: '8px 14px 6px',
         }}>
-          <PlusiIcon />
-          <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--ds-text-primary)' }}>Plusi</span>
-          <span style={{ fontSize: 12, color: 'var(--ds-text-tertiary)' }}>
-            {state.mood || 'neutral'} &middot; {state.energy ?? '?'}
-          </span>
-        </div>
-
-        {/* Friendship Bar */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          marginBottom: 14,
-        }}>
-          <span style={{ fontSize: 10, color: 'var(--ds-text-quaternary)', whiteSpace: 'nowrap' }}>
-            Lv {friendship.level ?? 0} &middot; {friendship.levelName || ''}
-          </span>
-          <div style={{
-            flex: 1, height: 2,
-            background: 'var(--ds-border, rgba(255,255,255,0.08))',
-            borderRadius: 1, overflow: 'hidden',
-          }}>
-            <div style={{
-              height: '100%', borderRadius: 1,
-              background: 'var(--ds-accent, #0A84FF)',
-              width: friendship.maxPoints ? `${(friendship.points / friendship.maxPoints) * 100}%` : '0%',
-            }} />
-          </div>
-          <span style={{ fontSize: 10, color: 'var(--ds-text-quaternary)', whiteSpace: 'nowrap' }}>
-            {friendship.points ?? 0}/{friendship.maxPoints ?? 0}
-          </span>
-        </div>
-
-        {/* Personality Grid Strip — inline, no wrapper */}
-        <div style={{ marginBottom: 14 }}>
           <PersonalityGrid
-            position={personality.position}
-            trail={personality.trail}
+            position={currentPosition}
+            trail={visibleTrail}
             quadrant={personality.quadrant}
             confident={personality.confident}
           />
         </div>
-
-        {/* Token Budget — compact inline */}
-        <div style={{
-          display: 'flex', justifyContent: 'space-between',
-          alignItems: 'center', marginBottom: 6,
-        }}>
-          <span style={{ fontSize: 12, color: 'var(--ds-text-secondary)' }}>Token-Budget</span>
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ds-accent)' }}>{budget} / h</span>
-        </div>
-        {/* Simple track + fill budget indicator */}
-        <div style={{ position: 'relative', marginBottom: 4 }}>
-          <div style={{
-            height: 4, borderRadius: 2,
-            background: 'var(--ds-border, rgba(255,255,255,0.08))',
-          }}>
-            <div style={{
-              height: '100%', borderRadius: 2,
-              background: 'linear-gradient(90deg, #30D158, #0A84FF)',
-              width: `${((budget - 100) / 1900) * 100}%`,
-            }} />
-          </div>
-        </div>
       </div>
 
-      {/* ── Diary — free scrolling, no container ─────────────── */}
-      <div style={{ marginTop: 20, paddingBottom: 20 }}>
-        <DiaryStream entries={diary} />
+      {/* Diary — free scrolling */}
+      <div style={{ marginTop: 8 }}>
+        <DiaryStream
+          entries={diary}
+          dayRefs={dayRefs}
+        />
       </div>
     </div>
   );
