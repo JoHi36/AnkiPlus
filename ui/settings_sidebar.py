@@ -539,15 +539,15 @@ html[data-theme="light"] .logout-btn:hover { background: rgba(255,59,48,0.06); c
   </div>
 </div>
 
-<div class="action-row" onclick="bridge.copyLogs()">
+<div class="action-row" onclick="handleCopyLogs(this)">
   <div class="action-icon">
     <svg viewBox="0 0 24 24">
       <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
       <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
     </svg>
   </div>
-  <span class="action-text">Logs kopieren</span>
-  <span class="action-sub">Debug-Info</span>
+  <span class="action-text" id="copy-logs-label">Logs kopieren</span>
+  <span class="action-sub" id="copy-logs-sub">Debug-Info</span>
 </div>
 
 <div class="divider" style="margin-top:12px"></div>
@@ -643,6 +643,20 @@ function updateTokens(used, limit) {
 
 function handleUpgrade() {
     if (bridge) bridge.openUpgradePage();
+}
+
+function handleCopyLogs(el) {
+    if (!bridge) return;
+    bridge.copyLogs();
+    var label = document.getElementById('copy-logs-label');
+    var sub = document.getElementById('copy-logs-sub');
+    if (label) label.textContent = 'Kopiert!';
+    if (sub) sub.textContent = '\\u2713';
+    if (sub) sub.style.color = 'var(--accent)';
+    setTimeout(function() {
+        if (label) label.textContent = 'Logs kopieren';
+        if (sub) { sub.textContent = 'Debug-Info'; sub.style.color = ''; }
+    }, 1500);
 }
 
 // Init QWebChannel
