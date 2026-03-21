@@ -7,6 +7,7 @@ with Plusi's own system prompt and persistent conversation history.
 """
 import json
 import requests
+from datetime import datetime, timedelta
 
 try:
     from ..utils.logging import get_logger
@@ -17,15 +18,22 @@ logger = get_logger(__name__)
 try:
     from .storage import (save_interaction, load_history, build_memory_context,
                            apply_friendship_delta, get_friendship_data, build_internal_state_context,
-                           persist_internal_state, build_relationship_context)
+                           persist_internal_state, build_relationship_context,
+                           compute_integrity, get_plusi_params, record_resonance_interaction,
+                           record_friendship_delta, set_memory)
     from ..config import get_config, is_backend_mode, get_backend_url, get_auth_token
 except ImportError:
     from storage import (save_interaction, load_history, build_memory_context,
                           apply_friendship_delta, get_friendship_data, build_internal_state_context,
-                          persist_internal_state, build_relationship_context)
+                          persist_internal_state, build_relationship_context,
+                          compute_integrity, get_plusi_params, record_resonance_interaction,
+                          record_friendship_delta, set_memory)
     from config import get_config, is_backend_mode, get_backend_url, get_auth_token
 
 PLUSI_MODEL = 'gemini-3-flash-preview'
+PLUSI_MODEL_SONNET = 'claude-sonnet-4-6-20250514'
+PLUSI_API_URL_SONNET = 'https://api.anthropic.com/v1/messages'
+PLUSI_API_KEY_SONNET = ''  # Hardcoded locally for testing — empty = fallback to Gemini
 
 MAX_HISTORY = 20  # last 20 interactions as context (includes invisible reflect/silent entries)
 
@@ -326,20 +334,14 @@ def self_reflect():
     """
     config = get_config()
     api_key = config.get("api_key", "")
-    if not api_key:
+    if not api_key and not PLUSI_API_KEY_SONNET:
         return None
 
-    memory_context = build_memory_context()
-    internal_state = build_internal_state_context()
-    relationship_context = build_relationship_context()
-    system_prompt = PLUSI_SYSTEM_PROMPT \
-        .replace("{memory_context}", memory_context) \
-        .replace("{internal_state}", internal_state) \
-        .replace("{relationship_context}", relationship_context)
+    system_prompt = _build_system_prompt()
 
     try:
         # Step 1: Generate search query
-        raw_step1 = _gemini_call(system_prompt, SELF_REFLECT_STEP1, api_key, max_tokens=64)
+        raw_step1 = _call_plusi_api(system_prompt, SELF_REFLECT_STEP1, api_key, max_tokens=64, temperature=0.9)
         logger.debug(f"plusi reflect step1 raw: {raw_step1[:100]}")
 
         query = ""
@@ -372,10 +374,10 @@ def self_reflect():
 
         # Step 2b: Reflect with found cards
         step2_prompt = SELF_REFLECT_STEP2.replace("{cards_context}", cards_context)
-        raw_step2 = _gemini_call(system_prompt, step2_prompt, api_key, max_tokens=768)
+        raw_step2 = _call_plusi_api(system_prompt, step2_prompt, api_key, max_tokens=768, temperature=0.9)
         logger.debug(f"plusi reflect step2 raw: {raw_step2[:100]}")
 
-        mood, text, internal, _, diary_raw, discoveries = parse_plusi_response(raw_step2)
+        mood, text, internal, _, diary_raw, discoveries, _ = parse_plusi_response(raw_step2)
         if internal:
             persist_internal_state(internal)
 
@@ -439,7 +441,7 @@ def _parse_diary_text(raw):
 
 
 def parse_plusi_response(raw_text):
-    """Parse Plusi response into (mood, text, internal_state, friendship_delta, diary, discoveries).
+    """Parse Plusi response into (mood, text, internal_state, friendship_delta, diary, discoveries, next_wake).
 
     Uses json.JSONDecoder().raw_decode() to correctly parse nested JSON
     (regex fails on nested objects like {"mood":"x", "internal":{...}}).
@@ -465,8 +467,10 @@ def parse_plusi_response(raw_text):
         discoveries = meta.get("discoveries", [])
         if not isinstance(discoveries, list):
             discoveries = []
+        next_wake_raw = meta.get("next_wake", None)
+        next_wake = _validate_next_wake(next_wake_raw)
         text = clean[end_idx:].strip()
-        return mood, text, internal, friendship_delta, diary_raw, discoveries
+        return mood, text, internal, friendship_delta, diary_raw, discoveries, next_wake
     except (json.JSONDecodeError, ValueError):
         pass
 
@@ -483,9 +487,67 @@ def parse_plusi_response(raw_text):
         if not text or text.startswith('"'):
             text = ""
         logger.debug(f"plusi_agent: recovered from truncated JSON: mood={mood}, delta={delta}")
-        return mood, text, {}, delta, None, []
+        return mood, text, {}, delta, None, [], None
 
-    return "neutral", raw_text.strip(), {}, 0, None, []
+    return "neutral", raw_text.strip(), {}, 0, None, [], None
+
+
+def _sonnet_call(system_prompt, messages, api_key, max_tokens=256, temperature=0.9):
+    """Anthropic Messages API call for Plusi."""
+    data = {
+        "model": PLUSI_MODEL_SONNET,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "system": system_prompt,
+        "messages": messages,
+    }
+    headers = {
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
+    response = requests.post(PLUSI_API_URL_SONNET, json=data, headers=headers, timeout=30)
+    response.raise_for_status()
+    result = response.json()
+    content = result.get("content", [])
+    return "".join(block.get("text", "") for block in content if block.get("type") == "text")
+
+
+def _build_system_prompt():
+    """Build full Plusi system prompt with all dynamic sections."""
+    memory_context = build_memory_context()
+    internal_state = build_internal_state_context()
+    relationship_context = build_relationship_context()
+    return PLUSI_SYSTEM_PROMPT \
+        .replace("{memory_context}", memory_context) \
+        .replace("{internal_state}", internal_state) \
+        .replace("{relationship_context}", relationship_context)
+
+
+def _call_plusi_api(system_prompt, user_prompt, api_key, max_tokens=256, temperature=0.9):
+    """Unified API call — dispatches to Sonnet or Gemini fallback."""
+    if PLUSI_API_KEY_SONNET:
+        messages = [{"role": "user", "content": user_prompt}]
+        return _sonnet_call(system_prompt, messages, PLUSI_API_KEY_SONNET, max_tokens, temperature)
+    else:
+        return _gemini_call(system_prompt, user_prompt, api_key, max_tokens)
+
+
+def _validate_next_wake(next_wake_raw):
+    """Validate and clamp next_wake to 10-120 minutes."""
+    if not next_wake_raw:
+        return None
+    try:
+        wake_time = datetime.fromisoformat(next_wake_raw)
+        now = datetime.now()
+        delta_min = (wake_time - now).total_seconds() / 60
+        if delta_min < 10:
+            return (now + timedelta(minutes=10)).isoformat()
+        elif delta_min > 120:
+            return (now + timedelta(minutes=120)).isoformat()
+        return next_wake_raw
+    except (ValueError, TypeError):
+        return None
 
 
 def run_plusi(situation, deck_id=None):
@@ -503,64 +565,74 @@ def run_plusi(situation, deck_id=None):
     config = get_config()
     api_key = config.get("api_key", "")
 
+    # Compute integrity and get dynamic params
+    integrity = compute_integrity()
+    params = get_plusi_params(integrity)
+
+    logger.info("plusi run: integrity=%.2f max_tokens=%d temp=%.2f history=%d",
+                integrity, params['max_tokens'], params['temperature'], params['history_limit'])
+    logger.info("plusi run: using %s API", 'sonnet' if PLUSI_API_KEY_SONNET else 'gemini')
+
     # Build system prompt with all dynamic sections
-    memory_context = build_memory_context()
-    internal_state = build_internal_state_context()
-    relationship_context = build_relationship_context()
-    system_prompt = PLUSI_SYSTEM_PROMPT \
-        .replace("{memory_context}", memory_context) \
-        .replace("{internal_state}", internal_state) \
-        .replace("{relationship_context}", relationship_context)
+    system_prompt = _build_system_prompt()
 
     # Load persistent history
-    history = load_history(limit=MAX_HISTORY)
-
-    # Build Gemini API request
-    contents = []
-    for msg in history:
-        contents.append({
-            "role": "user" if msg["role"] == "user" else "model",
-            "parts": [{"text": msg["content"]}]
-        })
-    contents.append({
-        "role": "user",
-        "parts": [{"text": situation}]
-    })
-
-    data = {
-        "contents": contents,
-        "generationConfig": {
-            "temperature": 0.8,
-            "maxOutputTokens": 3072,
-        },
-        "systemInstruction": {
-            "parts": [{"text": system_prompt}]
-        }
-    }
+    history = load_history(limit=params['history_limit'])
 
     try:
-        # Plusi ALWAYS uses direct Gemini API (not backend) — own lightweight model
-        if not api_key:
-            logger.debug("plusi_agent: No API key configured")
-            return {"mood": "neutral", "text": "", "error": True}
-
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{PLUSI_MODEL}:generateContent?key={api_key}"
-        headers = {"Content-Type": "application/json"}
-        response = requests.post(url, json=data, headers=headers, timeout=30)
-
-        response.raise_for_status()
-        result = response.json()
-
-        # Extract text from Gemini API response
-        candidates = result.get("candidates", [])
-        if candidates:
-            parts = candidates[0].get("content", {}).get("parts", [])
-            raw_text = "".join(p.get("text", "") for p in parts)
+        if PLUSI_API_KEY_SONNET:
+            # Anthropic Sonnet path
+            messages = []
+            for msg in history:
+                messages.append({"role": msg["role"], "content": msg["content"]})
+            messages.append({"role": "user", "content": situation})
+            raw_text = _sonnet_call(system_prompt, messages, PLUSI_API_KEY_SONNET,
+                                   max_tokens=params['max_tokens'], temperature=params['temperature'])
         else:
-            raw_text = ""
+            # Existing Gemini path (fallback)
+            if not api_key:
+                logger.debug("plusi_agent: No API key configured")
+                return {"mood": "neutral", "text": "", "error": True}
+
+            contents = []
+            for msg in history:
+                contents.append({
+                    "role": "user" if msg["role"] == "user" else "model",
+                    "parts": [{"text": msg["content"]}]
+                })
+            contents.append({
+                "role": "user",
+                "parts": [{"text": situation}]
+            })
+
+            data = {
+                "contents": contents,
+                "generationConfig": {
+                    "temperature": params['temperature'],
+                    "maxOutputTokens": params['max_tokens'],
+                },
+                "systemInstruction": {
+                    "parts": [{"text": system_prompt}]
+                }
+            }
+
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{PLUSI_MODEL}:generateContent?key={api_key}"
+            headers = {"Content-Type": "application/json"}
+            response = requests.post(url, json=data, headers=headers, timeout=30)
+
+            response.raise_for_status()
+            result = response.json()
+
+            # Extract text from Gemini API response
+            candidates = result.get("candidates", [])
+            if candidates:
+                parts = candidates[0].get("content", {}).get("parts", [])
+                raw_text = "".join(p.get("text", "") for p in parts)
+            else:
+                raw_text = ""
 
         # Parse mood + internal state from response
-        mood, text, internal, friendship_delta, diary_raw, discoveries = parse_plusi_response(raw_text)
+        mood, text, internal, friendship_delta, diary_raw, discoveries, next_wake = parse_plusi_response(raw_text)
 
         # Persist internal state updates
         if internal:
@@ -599,10 +671,20 @@ def run_plusi(situation, deck_id=None):
             history_type='silent' if is_silent else 'chat',
         )
         apply_friendship_delta(friendship_delta)
+        record_resonance_interaction()
+        record_friendship_delta(friendship_delta)
+        set_memory('state', 'last_interaction_ts', datetime.now().isoformat())
+
+        # Persist next_wake if provided
+        if next_wake:
+            set_memory('state', 'next_wake', next_wake)
+            logger.info("plusi set next_wake: %s", next_wake)
+
         friendship = get_friendship_data()
         friendship['delta'] = friendship_delta
 
-        logger.debug(f"plusi_agent: mood={mood}, delta={friendship_delta}, text_len={len(text)}, silent={is_silent}")
+        logger.info("plusi response: mood=%s delta=%d text_len=%d silent=%s next_wake=%s",
+                     mood, friendship_delta, len(text), is_silent, next_wake)
         return {
             "mood": mood,
             "text": text,
