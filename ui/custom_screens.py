@@ -476,7 +476,7 @@ def _account_widget():
         f'</style>'
         f'<div style="position:fixed;bottom:0;right:0;padding:12px 18px;z-index:9998;">'
         f'<button class="ap-settings-btn"'
-        f' onclick="window._apAction={{type:\'cmd\',cmd:\'settings\'}}">'
+        f' onclick="window._apAction={{type:\'cmd\',cmd:\'toggle-sidebar\'}}">'
         f'<span class="ap-uname" style="font-size:11px;font-weight:500;color:var(--ds-text-placeholder);'
         f'white-space:nowrap;transition:color 0.15s;">AnkiPlus</span>'
         f'{badge_html}'
