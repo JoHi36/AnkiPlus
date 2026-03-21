@@ -288,21 +288,6 @@ class GlobalShortcutFilter(QObject):
 
             return super().eventFilter(obj, event)
 
-        # --- 1/2 keys: Tab switching in deck browser/overview (not in reviewer) ---
-        if not self._is_reviewer_active() and event.modifiers() == Qt.KeyboardModifier.NoModifier:
-            if event.key() == Qt.Key.Key_1:
-                try:
-                    if mw: mw.moveToState("deckBrowser")
-                except Exception:
-                    pass
-                return True
-            elif event.key() == Qt.Key.Key_2:
-                try:
-                    if mw: mw.moveToState("overview")
-                except Exception:
-                    pass
-                return True
-
         # --- No text field focused: forward reviewer shortcuts ---
         if not self._is_reviewer_active():
             return super().eventFilter(obj, event)
