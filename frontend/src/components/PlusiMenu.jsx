@@ -107,16 +107,16 @@ export default function PlusiMenu({ bridge, onNavigateBack }) {
         padding: '0 0 140px', overflowY: 'auto',
       }}
     >
-      {/* Sticky Grid Header — edge-to-edge banner at the very top */}
+      {/* Sticky Grid Header — banner with breathing room, text scrolls behind */}
       <div style={{
         position: 'sticky',
         top: 0,
         zIndex: 10,
-        margin: '0 -0px',
       }}>
+        {/* Solid bg block — same color as page so grid floats cleanly */}
         <div style={{
           background: 'var(--ds-bg-deep, #141416)',
-          padding: '0 20px',
+          padding: '12px 20px 0',
         }}>
           <PersonalityGrid
             position={currentPosition}
@@ -125,10 +125,10 @@ export default function PlusiMenu({ bridge, onNavigateBack }) {
             confident={personality.confident}
           />
         </div>
-        {/* Fade-out gradient */}
+        {/* Fade zone below grid — text dissolves as it scrolls behind */}
         <div style={{
-          height: 16,
-          background: 'linear-gradient(to bottom, var(--ds-bg-deep, #141416), transparent)',
+          height: 24,
+          background: 'linear-gradient(to bottom, var(--ds-bg-deep, #141416) 0%, transparent 100%)',
           pointerEvents: 'none',
         }} />
       </div>

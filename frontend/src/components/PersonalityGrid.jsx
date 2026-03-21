@@ -1,7 +1,7 @@
 import React from 'react';
 
-// Grid area: padded inside 360x90 viewBox
-const PX = 28, PY = 10, RX = 304, RY = 68;
+// Grid area: axis labels sit outside, grid border aligns with text edges
+const PX = 16, PY = 10, RX = 328, RY = 68;
 const CX = PX + RX / 2, CY = PY + RY / 2;
 
 function toSVG(x, y) {
@@ -71,12 +71,12 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
         letterSpacing="1" fontFamily="-apple-system,system-ui">AKTIV</text>
       <text x={CX} y={PY + RY + 8} textAnchor="middle" fontSize="5" fill={labelColor}
         letterSpacing="1" fontFamily="-apple-system,system-ui">REFLEKTIV</text>
-      <text x={PX - 6} y={CY} textAnchor="middle" fontSize="5" fill={labelColor}
+      <text x={PX - 5} y={CY} textAnchor="middle" fontSize="5" fill={labelColor}
         letterSpacing="1" fontFamily="-apple-system,system-ui"
-        transform={`rotate(-90,${PX - 6},${CY})`}>SACH</text>
-      <text x={PX + RX + 6} y={CY} textAnchor="middle" fontSize="5" fill={labelColor}
+        transform={`rotate(-90,${PX - 5},${CY})`}>SACH</text>
+      <text x={PX + RX + 5} y={CY} textAnchor="middle" fontSize="5" fill={labelColor}
         letterSpacing="1" fontFamily="-apple-system,system-ui"
-        transform={`rotate(90,${PX + RX + 6},${CY})`}>MENSCH</text>
+        transform={`rotate(90,${PX + RX + 5},${CY})`}>MENSCH</text>
 
       {/* Trail */}
       {trailPts.length > 1 && (
