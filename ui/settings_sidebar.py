@@ -742,15 +742,10 @@ def toggle_settings_sidebar():
     if _sidebar_open:
         _sidebar_dock.setMinimumWidth(SIDEBAR_WIDTH)
         _sidebar_dock.setMaximumWidth(SIDEBAR_WIDTH)
+        # Reload HTML fresh on every open (picks up code changes, theme)
+        if _sidebar_webview:
+            _sidebar_webview.setHtml(_build_sidebar_html(), QUrl("file:///"))
         _sidebar_dock.show()
-        # Refresh status on open
-        try:
-            if _sidebar_webview:
-                _sidebar_webview.page().runJavaScript(
-                    "if(typeof loadStatus==='function') loadStatus();"
-                )
-        except Exception:
-            pass
     else:
         _sidebar_dock.hide()
 
