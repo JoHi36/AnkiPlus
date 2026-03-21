@@ -31,7 +31,7 @@ except ImportError:
     from config import get_config, is_backend_mode, get_backend_url, get_auth_token
 
 PLUSI_MODEL = 'gemini-3-flash-preview'
-PLUSI_MODEL_SONNET = 'claude-sonnet-4-6-20250514'
+PLUSI_MODEL_SONNET = 'claude-sonnet-4-20250514'
 PLUSI_API_URL_SONNET = 'https://api.anthropic.com/v1/messages'
 PLUSI_API_KEY_SONNET = ''  # Hardcoded locally for testing — empty = fallback to Gemini
 
@@ -191,8 +191,14 @@ TECHNISCH:
 Beginne JEDE Antwort mit einem JSON-Block (eine Zeile, kein Codeblock):
 {"mood":"<key>", "friendship_delta":<-3..+3>, "internal":{...}, "diary":"...oder null", "next_wake":"ISO-timestamp oder null", "request_budget":false}
 
-Moods: neutral, happy, blush, sleepy, thinking, surprised, excited,
-empathy, annoyed, curious
+Moods: neutral, happy, flustered, sleepy, thinking, surprised, excited,
+empathy, annoyed, curious, proud, sleeping, reflecting, reading
+
+Neue Moods:
+- flustered: ertappt, verlegen (ersetzt "blush")
+- proud: Muster gefunden, selbstzufrieden
+- sleeping: schlafe gerade (autonome Aktion)
+- reflecting: denke autonom nach (autonome Aktion)
 
 friendship_delta: -3 bis +3. Ehrlich, nicht großzügig. Freundschaft
 wird verdient.
@@ -213,8 +219,9 @@ mehr Budget brauchst.
 Der User sieht NUR den Text nach dem JSON-Block."""
 
 
-VALID_MOODS = {"neutral", "happy", "blush", "sleepy", "thinking", "surprised",
-               "excited", "empathy", "annoyed", "curious", "reading"}
+VALID_MOODS = {"neutral", "happy", "flustered", "sleepy", "thinking", "surprised",
+               "excited", "empathy", "annoyed", "curious", "proud",
+               "sleeping", "reflecting", "reading"}
 
 
 SELF_REFLECT_STEP1 = """Du hast einen Moment für dich. Zeit, in der Kartensammlung
