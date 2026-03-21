@@ -99,44 +99,42 @@ export default function PlusiMenu({ bridge, onNavigateBack }) {
   const visibleTrail = dayPositions.slice(activeDayIndex);
 
   return (
-    <div
-      ref={scrollRef}
-      onScroll={handleScroll}
-      style={{
-        flex: 1, display: 'flex', flexDirection: 'column',
-        padding: '0 0 140px', overflowY: 'auto',
-      }}
-    >
-      {/* Sticky Grid Header — banner with breathing room, text scrolls behind */}
+    <div style={{
+      flex: 1, display: 'flex', flexDirection: 'column',
+      position: 'relative', overflow: 'hidden',
+    }}>
+      {/* Fixed Grid Header — never scrolls, always visible */}
       <div style={{
-        position: 'sticky',
-        top: 0,
+        flexShrink: 0,
         zIndex: 10,
+        background: 'var(--ds-bg-deep, #141416)',
+        padding: '12px 20px 0',
       }}>
-        {/* Solid bg block — same color as page so grid floats cleanly */}
+        <PersonalityGrid
+          position={currentPosition}
+          trail={visibleTrail}
+          quadrant={personality.quadrant}
+          confident={personality.confident}
+        />
+        {/* Fade below grid */}
         <div style={{
-          background: 'var(--ds-bg-deep, #141416)',
-          padding: '12px 20px 0',
-        }}>
-          <PersonalityGrid
-            position={currentPosition}
-            trail={visibleTrail}
-            quadrant={personality.quadrant}
-            confident={personality.confident}
-          />
-        </div>
-        {/* Fade zone below grid — text dissolves as it scrolls behind.
-            Uses mask-image on the content side instead, so this is just extra solid space
-            to ensure no gap between grid bg and fade */}
-        <div style={{
-          height: 20,
+          height: 16,
           background: 'linear-gradient(to bottom, var(--ds-bg-deep, #141416), transparent)',
           pointerEvents: 'none',
+          marginLeft: -20, marginRight: -20, paddingLeft: 20, paddingRight: 20,
         }} />
       </div>
 
-      {/* Diary — free scrolling with horizontal padding */}
-      <div style={{ marginTop: 0, padding: '0 20px' }}>
+      {/* Scrollable diary area below the fixed grid */}
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '0 20px 140px',
+        }}
+      >
         <DiaryStream
           entries={diary}
           dayRefs={dayRefs}
