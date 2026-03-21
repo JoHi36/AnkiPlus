@@ -70,25 +70,6 @@ export default function ChatInput({
 
   const hasPlusiTag = plusiEnabled && input.startsWith('@Plusi');
 
-  // Listen for global shortcut filter events (Enter → send, Escape → clear+blur)
-  useEffect(() => {
-    const handleSend = () => {
-      if (input.trim()) {
-        handleSubmit();
-      }
-    };
-    const handleClearAndBlur = () => {
-      setInput('');
-      textareaRef.current?.blur();
-    };
-    window.addEventListener('ankiSendMessage', handleSend);
-    window.addEventListener('ankiClearAndBlur', handleClearAndBlur);
-    return () => {
-      window.removeEventListener('ankiSendMessage', handleSend);
-      window.removeEventListener('ankiClearAndBlur', handleClearAndBlur);
-    };
-  }, [input, handleSubmit]);
-
   // Listen for "Plusi fragen" from MascotShell context menu
   useEffect(() => {
     if (!plusiEnabled) return;
@@ -120,6 +101,25 @@ export default function ChatInput({
       if (textareaRef.current) textareaRef.current.style.height = 'auto';
     }
   };
+
+  // Listen for global shortcut filter events (Enter → send, Escape → clear+blur)
+  useEffect(() => {
+    const handleSend = () => {
+      if (input.trim()) {
+        handleSubmit();
+      }
+    };
+    const handleClearAndBlur = () => {
+      setInput('');
+      textareaRef.current?.blur();
+    };
+    window.addEventListener('ankiSendMessage', handleSend);
+    window.addEventListener('ankiClearAndBlur', handleClearAndBlur);
+    return () => {
+      window.removeEventListener('ankiSendMessage', handleSend);
+      window.removeEventListener('ankiClearAndBlur', handleClearAndBlur);
+    };
+  }, [input, handleSubmit]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Escape') {

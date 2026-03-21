@@ -412,15 +412,18 @@ def on_profile_loaded():
     _plusi_reflect_lock = threading.Lock()
 
     def _plusi_reflect_once():
-        """Run one self-reflection cycle in a background thread."""
+        """Run one self-reflection cycle in a background thread.
+        No-op if Plusi is disabled."""
         try:
+            from .plusi.dock import is_plusi_enabled, sync_mood
+            if not is_plusi_enabled():
+                return
             from .plusi.agent import self_reflect
-            from .plusi.dock import sync_mood
             sync_mood('reading')
             try:
                 self_reflect()
             except Exception as e:
-                logger.error(f"Plusi self-reflect failed: {e}")
+                logger.error("Plusi self-reflect failed: %s", e)
             sync_mood('neutral')
             try:
                 from .plusi.panel import notify_new_diary_entry
@@ -428,7 +431,7 @@ def on_profile_loaded():
             except Exception:
                 pass
         except Exception as e:
-            logger.error(f"Plusi reflect error: {e}")
+            logger.error("Plusi reflect error: %s", e)
 
     def _run_guarded_reflect():
         """Run _plusi_reflect_once with a guard to prevent concurrent executions."""
@@ -440,8 +443,16 @@ def on_profile_loaded():
             _plusi_reflect_lock.release()
 
     def _open_reflect_window():
-        """Open the reflection window — next interaction will trigger reflect."""
+        """Open the reflection window — next interaction will trigger reflect.
+        Skips if Plusi is disabled but still schedules next check."""
         global _plusi_reflect_pending
+        try:
+            from .plusi.dock import is_plusi_enabled
+            if not is_plusi_enabled():
+                _schedule_next_window()
+                return
+        except Exception:
+            pass
         _plusi_reflect_pending = True
         logger.debug("plusi reflect: window opened, waiting for next interaction")
         # Schedule next window

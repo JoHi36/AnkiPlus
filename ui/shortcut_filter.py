@@ -103,11 +103,47 @@ class GlobalShortcutFilter(QObject):
         return False
 
     def _toggle_text_field_focus(self):
-        """Cmd+K handler: toggle focus on the visible text field."""
+        """Cmd+K handler: focus the text field visible on the current screen."""
         if self._text_field_has_focus:
             self._defocus_text_field()
         elif self._has_visible_text_field():
             self._focus_text_field()
+        else:
+            # No chat panel visible — try focusing the search bar in the main webview
+            # (e.g. deck browser's "Stelle eine Frage..." input)
+            self._focus_main_webview_input()
+
+    def _is_focus_in_main_webview(self):
+        """Check if Qt focus is on the main Anki webview (deck browser, overview)."""
+        try:
+            focused = QApplication.focusWidget()
+            if focused and mw and hasattr(mw, 'web') and mw.web:
+                return focused is mw.web or mw.web.isAncestorOf(focused)
+        except Exception:
+            pass
+        return False
+
+    def _focus_main_webview_input(self):
+        """Toggle focus on the search/input bar in the main Anki webview."""
+        try:
+            if not (mw and hasattr(mw, 'web') and mw.web):
+                return
+            if self._is_focus_in_main_webview():
+                # Already focused in main webview — defocus (toggle off)
+                mw.web.page().runJavaScript(
+                    "document.activeElement?.blur(); document.body.focus();"
+                )
+                # Move Qt focus away from the webview
+                mw.setFocus()
+            else:
+                # Focus the input field (toggle on)
+                mw.web.setFocus()
+                mw.web.page().runJavaScript(
+                    "document.querySelector('input[type=text], input[type=search], "
+                    "[data-chat-input], textarea')?.focus();"
+                )
+        except Exception as e:
+            logger.warning("Could not toggle main webview input: %s", e)
 
     def _focus_text_field(self):
         """Focus the chat input in the visible panel."""
@@ -196,7 +232,7 @@ class GlobalShortcutFilter(QObject):
         meta = 'true' if event.modifiers() & Qt.KeyboardModifier.MetaModifier else 'false'
 
         js = (
-            f"document.dispatchEvent(new KeyboardEvent('keydown', {{"
+            f"document.body.dispatchEvent(new KeyboardEvent('keydown', {{"
             f"  key: '{key}', code: '{code}',"
             f"  shiftKey: {shift}, ctrlKey: {ctrl}, metaKey: {meta},"
             f"  bubbles: true, cancelable: true"

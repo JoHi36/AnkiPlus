@@ -878,7 +878,7 @@
     // ═══ Keyboard ═══
 
     function onKeydown(e) {
-        const tag = e.target.tagName.toLowerCase();
+        const tag = (e.target.tagName || '').toLowerCase();
         if (tag === 'textarea' || tag === 'input' || e.target.isContentEditable) return;
 
         // ESC closes chat if open

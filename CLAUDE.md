@@ -294,6 +294,10 @@ Always run `npm run build` from the `frontend/` directory before testing in Anki
 - Uses relative paths (configured in `vite.config.js`) for local file loading
 - Generates cache-busted filenames
 
+### Global Shortcut System
+
+All keyboard shortcuts are routed through a single `GlobalShortcutFilter` (`ui/shortcut_filter.py`) installed on `QApplication`. Never register shortcuts via `QShortcut` or local `document.addEventListener('keydown', ...)` — the filter handles all routing. Text field focus state is tracked via `focusin`/`focusout` messages from JavaScript. See spec: `docs/superpowers/specs/2026-03-20-global-shortcut-filter.md`.
+
 ## Known Issues & Quirks
 
 ### Dark Bar Above Reviewer
