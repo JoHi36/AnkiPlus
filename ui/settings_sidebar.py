@@ -553,11 +553,11 @@ html[data-theme="light"] .sc-title { color: rgba(0,0,0,0.25) !important; }
   <span class="action-sub" id="copy-logs-sub">Debug-Info</span>
 </div>
 
-<div class="divider" style="margin-top:12px"></div>
+<div class="divider"></div>
 
 <!-- Shortcuts -->
-<div style="padding:14px 14px;">
-  <div class="sc-title" style="font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:rgba(255,255,255,0.12);font-weight:400;margin-bottom:10px;">Tastenkürzel</div>
+<div style="padding:16px 14px 14px;">
+  <div class="sc-title" style="font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:rgba(255,255,255,0.12);font-weight:400;margin-bottom:8px;">Tastenkürzel</div>
   <div style="display:flex;flex-direction:column;gap:7px;">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <span class="sc-label" style="font-size:10px;color:rgba(255,255,255,0.22);">Chat fokussieren</span>
@@ -585,7 +585,7 @@ html[data-theme="light"] .sc-title { color: rgba(0,0,0,0.25) !important; }
   </div>
 </div>
 
-<div class="divider"></div>
+<div class="divider" style="margin-top:2px;"></div>
 
 <button class="logout-btn" id="logout-btn" onclick="bridge.logout()">Abmelden</button>
 
