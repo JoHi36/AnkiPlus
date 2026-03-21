@@ -1,11 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 
-const SECTION_TITLE_STYLE = {
-  fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
-  letterSpacing: '0.8px', color: 'var(--ds-text-tertiary, rgba(255,255,255,0.22))',
-  marginBottom: 10,
-};
-
 const CARD_STYLE = {
   background: 'var(--ds-bg-frosted)',
   borderRadius: 16,
@@ -182,9 +176,34 @@ function BudgetSlider({ min, max, step, value, onChange }) {
   );
 }
 
+// ─── Static Plus Icon ───────────────────────────────────────────────────────
+
+function PlusiIcon({ size = 36 }) {
+  const arm = size * 0.22;
+  const len = size * 0.55;
+  const half = size / 2;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0 }}>
+      <rect x={half - arm / 2} y={half - len / 2} width={arm} height={len} rx={arm / 2} fill="var(--ds-accent, #0A84FF)" />
+      <rect x={half - len / 2} y={half - arm / 2} width={len} height={arm} rx={arm / 2} fill="var(--ds-accent, #0A84FF)" />
+    </svg>
+  );
+}
+
 // ─── Main Component ─────────────────────────────────────────────────────────
 
-export default function AutonomyCard({ autonomy, friendshipLevel = 0, onSave }) {
+export default function AutonomyCard({
+  autonomy,
+  friendshipLevel = 0,
+  friendshipLevelName = '',
+  friendshipPoints = 0,
+  friendshipMaxPoints = 0,
+  mood = 'neutral',
+  energy = 5,
+  mascotEnabled = true,
+  onMascotToggle,
+  onSave,
+}) {
   const [config, setConfig] = useState(() => ({
     token_budget: 500,
     can_reflect: true,
@@ -227,102 +246,160 @@ export default function AutonomyCard({ autonomy, friendshipLevel = 0, onSave }) 
     });
   }, [triggerSave]);
 
+  const friendshipPct = friendshipMaxPoints
+    ? Math.min(100, (friendshipPoints / friendshipMaxPoints) * 100)
+    : 0;
+
   return (
-    <div style={{ marginBottom: 20 }}>
-      {/* Section label */}
-      <div style={SECTION_TITLE_STYLE}>Autonomie</div>
+    <div style={CARD_STYLE}>
 
-      {/* Card wrapper */}
-      <div style={CARD_STYLE}>
+      {/* ── Row 1: Plusi icon + name/mood + master toggle ──────────── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14,
+      }}>
+        <PlusiIcon size={36} />
 
-        {/* Token Budget */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={{
-            display: 'flex', alignItems: 'center',
-            justifyContent: 'space-between', marginBottom: 10,
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <span style={{
+            fontSize: 16, fontWeight: 700,
+            color: 'var(--ds-text-primary, rgba(255,255,255,0.88))',
+          }}>Plusi</span>
+          <span style={{
+            fontSize: 12, marginLeft: 8,
+            color: 'var(--ds-text-secondary, rgba(255,255,255,0.55))',
           }}>
-            <span style={{
-              fontSize: 13, fontWeight: 500,
-              color: 'var(--ds-text-secondary, rgba(255,255,255,0.7))',
-            }}>
-              Token-Budget
-            </span>
-            <span style={{
-              fontSize: 13, fontWeight: 600,
-              color: 'var(--ds-accent, #0A84FF)',
-              fontVariantNumeric: 'tabular-nums',
-            }}>
-              {config.token_budget} / h
-            </span>
-          </div>
-
-          <BudgetSlider
-            min={100}
-            max={2000}
-            step={100}
-            value={config.token_budget}
-            onChange={handleBudgetChange}
-          />
+            {mood} &middot; {energy}
+          </span>
         </div>
 
-        {/* Capabilities label */}
-        <div style={{
-          fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
-          letterSpacing: '0.8px',
-          color: 'var(--ds-text-tertiary, rgba(255,255,255,0.22))',
-          marginBottom: 12,
-        }}>
-          Fähigkeiten
-        </div>
-
-        {/* Capability toggles */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-          {CAPABILITIES.map((cap, i) => {
-            const isLocked = cap.locked && friendshipLevel < (cap.requiredLevel ?? 99);
-            const isOn = !isLocked && !!config[cap.key];
-
-            return (
-              <div
-                key={cap.key}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  paddingTop: i === 0 ? 0 : 12,
-                  paddingBottom: i < CAPABILITIES.length - 1 ? 12 : 0,
-                  borderBottom: i < CAPABILITIES.length - 1
-                    ? '1px solid var(--ds-border-subtle, rgba(255,255,255,0.06))'
-                    : 'none',
-                  opacity: isLocked ? 0.4 : 1,
-                }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontSize: 13, fontWeight: 500,
-                    color: 'var(--ds-text-secondary, rgba(255,255,255,0.7))',
-                    marginBottom: 2,
-                  }}>
-                    {cap.label}
-                  </div>
-                  <div style={{
-                    fontSize: 11,
-                    color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))',
-                    lineHeight: 1.4,
-                  }}>
-                    {cap.desc}
-                  </div>
-                </div>
-                <Toggle
-                  on={isOn}
-                  onChange={() => handleCapabilityToggle(cap.key)}
-                  disabled={isLocked}
-                />
-              </div>
-            );
-          })}
-        </div>
-
+        <Toggle
+          on={mascotEnabled}
+          onChange={onMascotToggle}
+        />
       </div>
+
+      {/* ── Row 2: Friendship bar ──────────────────────────────────── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18,
+      }}>
+        <span style={{
+          fontSize: 11, fontWeight: 600,
+          color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))',
+          whiteSpace: 'nowrap',
+        }}>
+          Lv {friendshipLevel}{friendshipLevelName ? ` \u00B7 ${friendshipLevelName}` : ''}
+        </span>
+
+        <div style={{
+          flex: 1, height: 3, borderRadius: 2,
+          background: 'var(--ds-border, rgba(255,255,255,0.08))',
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            width: `${friendshipPct}%`,
+            height: '100%', borderRadius: 2,
+            background: 'var(--ds-accent, #0A84FF)',
+            transition: 'width 0.4s ease',
+          }} />
+        </div>
+
+        <span style={{
+          fontSize: 11,
+          color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))',
+          whiteSpace: 'nowrap',
+          fontVariantNumeric: 'tabular-nums',
+        }}>
+          {friendshipPoints}/{friendshipMaxPoints}
+        </span>
+      </div>
+
+      {/* ── Token Budget ───────────────────────────────────────────── */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{
+          display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between', marginBottom: 10,
+        }}>
+          <span style={{
+            fontSize: 13, fontWeight: 500,
+            color: 'var(--ds-text-secondary, rgba(255,255,255,0.7))',
+          }}>
+            Token-Budget
+          </span>
+          <span style={{
+            fontSize: 13, fontWeight: 600,
+            color: 'var(--ds-accent, #0A84FF)',
+            fontVariantNumeric: 'tabular-nums',
+          }}>
+            {config.token_budget} / h
+          </span>
+        </div>
+
+        <BudgetSlider
+          min={100}
+          max={2000}
+          step={100}
+          value={config.token_budget}
+          onChange={handleBudgetChange}
+        />
+      </div>
+
+      {/* ── Capabilities label ─────────────────────────────────────── */}
+      <div style={{
+        fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
+        letterSpacing: '0.8px',
+        color: 'var(--ds-text-tertiary, rgba(255,255,255,0.22))',
+        marginBottom: 12,
+      }}>
+        F&auml;higkeiten
+      </div>
+
+      {/* ── Capability toggles ─────────────────────────────────────── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+        {CAPABILITIES.map((cap, i) => {
+          const isLocked = cap.locked && friendshipLevel < (cap.requiredLevel ?? 99);
+          const isOn = !isLocked && !!config[cap.key];
+
+          return (
+            <div
+              key={cap.key}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                paddingTop: i === 0 ? 0 : 12,
+                paddingBottom: i < CAPABILITIES.length - 1 ? 12 : 0,
+                borderBottom: i < CAPABILITIES.length - 1
+                  ? '1px solid var(--ds-border-subtle, rgba(255,255,255,0.06))'
+                  : 'none',
+                opacity: isLocked ? 0.4 : 1,
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontSize: 13, fontWeight: 500,
+                  color: 'var(--ds-text-secondary, rgba(255,255,255,0.7))',
+                  marginBottom: 2,
+                }}>
+                  {cap.label}
+                </div>
+                <div style={{
+                  fontSize: 11,
+                  color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))',
+                  lineHeight: 1.4,
+                }}>
+                  {cap.desc}
+                </div>
+              </div>
+              <Toggle
+                on={isOn}
+                onChange={() => handleCapabilityToggle(cap.key)}
+                disabled={isLocked}
+              />
+            </div>
+          );
+        })}
+      </div>
+
     </div>
   );
 }

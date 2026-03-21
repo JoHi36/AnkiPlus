@@ -244,20 +244,6 @@ export default function DiaryStream({ entries = [] }) {
   if (!entries || entries.length === 0) {
     return (
       <div>
-        {/* Section label */}
-        <div
-          style={{
-            fontSize: 10,
-            fontWeight: 600,
-            letterSpacing: '0.1em',
-            textTransform: 'uppercase',
-            color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))',
-            marginBottom: 10,
-          }}
-        >
-          Tagebuch
-        </div>
-
         <div
           style={{
             background: 'var(--ds-bg-canvas)',
@@ -303,20 +289,6 @@ export default function DiaryStream({ entries = [] }) {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div>
-      {/* Section label */}
-      <div
-        style={{
-          fontSize: 10,
-          fontWeight: 600,
-          letterSpacing: '0.1em',
-          textTransform: 'uppercase',
-          color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))',
-          marginBottom: 10,
-        }}
-      >
-        Tagebuch
-      </div>
-
       <div
         style={{
           background: 'var(--ds-bg-canvas)',
