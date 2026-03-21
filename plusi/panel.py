@@ -326,10 +326,11 @@ var CIPHER_CHARS = '\u283f\u283e\u283d\u283b\u2837\u282f\u281f\u283e\u283c\u283a
 var cipherIntervals = [];
 
 var MOOD_COLORS = {
-    neutral: '#818cf8', happy: '#6ee7b7', curious: '#fbbf24',
-    annoyed: '#f87171', sleepy: '#9ca3af', excited: '#c084fc',
-    surprised: '#fbbf24', blush: '#f87171', empathy: '#818cf8',
-    thinking: '#60a5fa', reading: '#60a5fa'
+    neutral: '#0a84ff', curious: '#f59e0b', thinking: '#0a84ff',
+    annoyed: '#f87171', empathy: '#818cf8', happy: '#34d399',
+    excited: '#a78bfa', surprised: '#f59e0b', flustered: '#f87171',
+    proud: '#34d399', sleepy: '#6b7280', sleeping: '#6b7280',
+    reflecting: '#818cf8', reading: '#0a84ff'
 };
 
 var FACES = {};
@@ -501,8 +502,6 @@ _settings_channel = None
 
 def _get_panel_html():
     """Build complete HTML document for the panel webview."""
-    from .dock import get_faces_dict
-    faces_json = json.dumps(get_faces_dict())
     mood = _get_current_mood()
     energy = _get_current_energy()
     friendship = _get_current_friendship()
@@ -516,7 +515,6 @@ def _get_panel_html():
 <script>
 {PANEL_JS}
 window.addEventListener('DOMContentLoaded', function() {{
-    FACES = {faces_json};
     updateMood('{mood}', {energy});
     updateFriendship({json.dumps(friendship)});
 }});
