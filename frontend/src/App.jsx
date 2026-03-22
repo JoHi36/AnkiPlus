@@ -299,9 +299,6 @@ function AppInner() {
   const showSessionOverview = forceShowOverview;
 
   // ── Free Chat State ──────────────────────────────────────────────
-  const [freeChatOpen, setFreeChatOpen] = useState(false);
-  const [freeChatInitialText, setFreeChatInitialText] = useState('');
-  const [animPhase, setAnimPhase] = useState('idle'); // 'idle'|'entering'|'entered'|'exiting'
   const [activeChat, setActiveChat] = useState('session'); // "session" | "free"
 
   // activeChatRef must be declared AFTER activeChat (can't reference before initialization)
@@ -311,21 +308,12 @@ function AppInner() {
   const freeChatHook = useFreeChat({
     bridge,
     onLoadingChange: (loading) => {
-      // Only restore session routing if free chat is no longer open.
-      // If free chat is open, the exit handlers (handleFreeChatClose/onCancelComplete)
-      // are responsible for calling setActiveChat('session').
-      if (!loading && !freeChatOpenRef.current) {
+      if (!loading) {
         setActiveChat('session');
       }
     },
     onCancelComplete: () => {
-      // Must animate out — do NOT call setFreeChatOpen(false) directly
-      setAnimPhase('exiting');
-      setTimeout(() => {
-        setFreeChatOpen(false);
-        setAnimPhase('idle');
-        setActiveChat('session');
-      }, 300);
+      setActiveChat('session');
     },
   });
   const freeChatHookRef = useRef(freeChatHook);
@@ -344,9 +332,7 @@ function AppInner() {
     };
     return () => { chatHook.freeChatPushRef.current = null; };
   }, []);
-  const freeChatOpenRef = useRef(false);
   const handleFreeChatOpenRef = useRef(null);
-  useEffect(() => { freeChatOpenRef.current = freeChatOpen; }, [freeChatOpen]);
 
   // Theme state — 'dark' | 'light' | 'system'; resolvedTheme is the effective value
   const [theme, setTheme] = useState('dark');
@@ -1750,14 +1736,14 @@ function AppInner() {
   // ⌘X — reset free chat history (stay in chat mode)
   useEffect(() => {
     const handler = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'x' && freeChatOpen && animPhase === 'entered') {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'x' && activeChat === 'free') {
         e.preventDefault();
         freeChatHookRef.current.resetMessages();
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [freeChatOpen, animPhase]);
+  }, [activeChat]);
 
   // ⌘. — toggle between chat and agentStudio
   useEffect(() => {
@@ -1865,37 +1851,11 @@ function AppInner() {
   const handleFreeChatOpen = useCallback((text) => {
     // Load persisted deck messages before opening (0 = global Free Chat fallback)
     const deckId = sessionContext.currentSession?.deckId || 0;
-    console.error('📦 handleFreeChatOpen called, deckId:', deckId, 'text:', text?.substring(0, 30));
     freeChatHook.loadForDeck(deckId);
-
-    // Step 1: show DeckBrowser (deck list visible)
     setForceShowOverview(true);
     setActiveChat('free');
-    // Step 2: after DeckBrowser has mounted and rendered, start animation
-    setTimeout(() => {
-      setFreeChatInitialText(text);
-      setFreeChatOpen(true);
-      setAnimPhase('entering');
-      setTimeout(() => setFreeChatInitialText(''), 0);
-      setTimeout(() => setAnimPhase('entered'), 350);
-    }, 80);
   }, [sessionContext.currentSession?.deckId, freeChatHook]);
   useEffect(() => { handleFreeChatOpenRef.current = handleFreeChatOpen; }, [handleFreeChatOpen]);
-
-  const handleFreeChatClose = useCallback(() => {
-    if (freeChatHookRef.current.isLoading) {
-      freeChatHookRef.current.startCancel();
-      if (bridge?.cancelRequest) bridge.cancelRequest();
-      // onCancelComplete (above) will trigger the exit animation
-    } else {
-      setAnimPhase('exiting');
-      setTimeout(() => {
-        setFreeChatOpen(false);
-        setAnimPhase('idle');
-        setActiveChat('session');
-      }, 300);
-    }
-  }, [bridge]);
 
   // (handleTrailNavigateLeft/Right defined earlier, before the keyboard useEffect)
 
@@ -2116,11 +2076,7 @@ function AppInner() {
               onOpenDeck={handleOpenDeck}
               headerHeight={headerHeight}
               onFreeChatOpen={handleFreeChatOpen}
-              freeChatOpen={freeChatOpen}
-              animPhase={animPhase}
-              freeChatInitialText={freeChatInitialText}
               freeChatHook={freeChatHook}
-              onFreeChatClose={handleFreeChatClose}
             />
           </div>
         ) : (

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight, MessageSquare, Layers } from 'lucide-react';
 import FreeChatSearchBar from './FreeChatSearchBar';
-import FreeChatView from './FreeChatView';
 import ChatMessage from './ChatMessage';
 import CardRefChip from './CardRefChip';
 import DeckSectionDivider from './DeckSectionDivider';
@@ -371,11 +370,7 @@ export default function DeckBrowser({
   onOpenDeck,
   headerHeight,
   onFreeChatOpen,
-  freeChatOpen = false,
-  animPhase = 'idle',
-  freeChatInitialText = '',
   freeChatHook = null,
-  onFreeChatClose = null,
 }) {
   const [decks, setDecks] = useState([]);
   const [deckStatsMap, setDeckStatsMap] = useState({});
@@ -446,20 +441,9 @@ export default function DeckBrowser({
       .slice(0, 12)
   ), [sessions]);
 
-  const deckContentVisible = animPhase === 'idle' || animPhase === 'exiting';
-  const deckContentStyle = {
-    transition: 'opacity 250ms ease, transform 250ms ease',
-    opacity: deckContentVisible ? 1 : 0,
-    transform: deckContentVisible ? 'translateY(0)' : 'translateY(60px)',
-    pointerEvents: deckContentVisible ? 'auto' : 'none',
-    flexShrink: 0,
-    // When not visible: collapse to 0 so FreeChatView fills all available space
-    ...(deckContentVisible ? {} : { flex: '0 0 0', overflow: 'hidden' }),
-  };
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-      {/* Scrollable deck content — animates out when freeChatOpen */}
+      {/* Scrollable deck content */}
       <div
         style={{
           flex: 1,
@@ -467,7 +451,6 @@ export default function DeckBrowser({
           scrollbarWidth: 'none',
           paddingTop: (headerHeight || 60) + 12,
           paddingBottom: 24,
-          ...deckContentStyle,
         }}
       >
         {/* ── Free Chat Search Bar ── */}
@@ -528,7 +511,7 @@ export default function DeckBrowser({
         )}
 
         {/* ── Chat History (all messages across decks) ── */}
-        {!freeChatOpen && freeChatHook && freeChatHook.messages && freeChatHook.messages.length > 0 && (
+        {freeChatHook && freeChatHook.messages && freeChatHook.messages.length > 0 && (
           <div>
             <div style={{ height: 1, background: 'var(--ds-border-subtle)', margin: '8px 16px' }} />
             <SectionLabel count={freeChatHook.messages.length}>Chat-Verlauf</SectionLabel>
@@ -564,17 +547,6 @@ export default function DeckBrowser({
           </div>
         )}
       </div>
-
-      {/* FreeChatView — renders inline when freeChatOpen, fills remaining space */}
-      {freeChatOpen && freeChatHook && (
-        <FreeChatView
-          freeChatHook={freeChatHook}
-          initialText={freeChatInitialText}
-          onClose={onFreeChatClose}
-          bridge={bridge}
-          animPhase={animPhase}
-        />
-      )}
     </div>
   );
 }
