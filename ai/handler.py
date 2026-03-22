@@ -29,6 +29,11 @@ except ImportError:
     from router import route_message
 
 try:
+    from .handoff import parse_handoff, validate_handoff
+except ImportError:
+    from handoff import parse_handoff, validate_handoff
+
+try:
     from ..utils.logging import get_logger
 except ImportError:
     from utils.logging import get_logger
@@ -580,6 +585,69 @@ class AIHandler:
                         rag_context=rag_context,
                         system_prompt_override=insights_system_prompt,
                     )
+
+                # --- Handoff check ---
+                # Parse the Tutor's response for a HANDOFF signal
+                if result and isinstance(result, str):
+                    clean_result, handoff_req = parse_handoff(result)
+                    if handoff_req:
+                        # Validate the handoff
+                        if validate_handoff(handoff_req, 'tutor', ['tutor'], self.config):
+                            logger.info("Executing handoff: tutor -> %s (query: %s)",
+                                        handoff_req.to, handoff_req.query[:50])
+
+                            # Execute the target agent
+                            try:
+                                from .agents import get_agent, lazy_load_run_fn
+                                target_def = get_agent(handoff_req.to)
+                                if target_def:
+                                    run_fn = lazy_load_run_fn(target_def)
+                                    # Pass the handoff query as the situation
+                                    target_result = run_fn(
+                                        situation=handoff_req.query,
+                                        **target_def.extra_kwargs
+                                    )
+
+                                    # Emit the target agent's result
+                                    if isinstance(target_result, dict):
+                                        target_text = target_result.get('text', '')
+                                    else:
+                                        target_text = str(target_result)
+
+                                    if target_text and callback:
+                                        # Send a tool marker so the frontend renders
+                                        # the target agent in its own AgenticCell
+                                        import json as _json
+                                        marker = '[[TOOL:%s]]' % _json.dumps({
+                                            'name': 'agent_handoff',
+                                            'displayType': 'widget',
+                                            'result': {
+                                                'agent': handoff_req.to,
+                                                'text': target_text,
+                                                'reason': handoff_req.reason,
+                                                'sources': target_result.get('sources', []) if isinstance(target_result, dict) else [],
+                                            }
+                                        }, ensure_ascii=False)
+                                        callback(marker, False, True)
+
+                                    # Run on_finished if defined
+                                    if target_def.on_finished and self.widget:
+                                        try:
+                                            target_def.on_finished(
+                                                self.widget, handoff_req.to,
+                                                target_result if isinstance(target_result, dict) else {}
+                                            )
+                                        except Exception as e:
+                                            logger.warning("Handoff on_finished error: %s", e)
+
+                                    logger.info("Handoff complete: tutor -> %s", handoff_req.to)
+                            except Exception as e:
+                                logger.warning("Handoff execution failed: %s", e)
+
+                            return clean_result
+                        else:
+                            logger.info("Handoff rejected, returning original response")
+
                 return result
 
             except Exception as e:
