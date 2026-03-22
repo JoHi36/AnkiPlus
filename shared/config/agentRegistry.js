@@ -12,6 +12,10 @@ export function getRegistry() {
 
 export function setRegistry(agents) {
   registry = new Map(agents.map(a => [a.name, a]));
+  // Notify listeners (e.g. AgentStudio) that the registry has been updated
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('agentRegistryUpdated'));
+  }
 }
 
 /**

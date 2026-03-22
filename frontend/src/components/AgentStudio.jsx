@@ -1,24 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { getRegistry } from '@shared/config/agentRegistry';
 
-function ResearchIcon({ size = 28 }) {
-  const c = '#00D084';
-  return (
-    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10"/>
-      <line x1="12" y1="12" x2="12" y2="2"/>
-      <path d="M12 12 L16.24 7.76" strokeWidth="2.5"/>
-      <circle cx="12" cy="12" r="6" opacity="0.4"/>
-      <circle cx="12" cy="12" r="2" fill={c} stroke="none"/>
-    </svg>
-  );
-}
-
-function PlusiIcon({ size = 28 }) {
+/* ── Hardcoded Plusi icon (special mascot -- not an SVG from the registry) ── */
+function PlusiIcon({ size = 28, color = '#0a84ff' }) {
   return (
     <svg viewBox="0 0 120 120" width={size} height={size}>
-      <rect x="40" y="5" width="40" height="110" rx="8" fill="#0a84ff"/>
-      <rect x="5" y="35" width="110" height="40" rx="8" fill="#0a84ff"/>
-      <rect x="40" y="35" width="40" height="40" fill="#0a84ff"/>
+      <rect x="40" y="5" width="40" height="110" rx="8" fill={color}/>
+      <rect x="5" y="35" width="110" height="40" rx="8" fill={color}/>
+      <rect x="40" y="35" width="40" height="40" fill={color}/>
       <ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/>
       <ellipse cx="49" cy="50" rx="4" ry="4" fill="#1a1a1a"/>
       <ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/>
@@ -28,14 +17,54 @@ function PlusiIcon({ size = 28 }) {
   );
 }
 
-function Toggle({ on, onChange }) {
+/* ── Render agent icon from registry iconSvg or fallback ── */
+function AgentIcon({ agent, size = 28 }) {
+  if (agent.name === 'plusi') {
+    return <PlusiIcon size={size} color={agent.color || '#0a84ff'} />;
+  }
+
+  if (agent.iconSvg) {
+    // Build a safe SVG by parsing and injecting color + size attributes.
+    // The iconSvg comes from trusted Python agent definitions (hardcoded constants
+    // in ai/agents.py), never from user input.
+    const colored = agent.iconSvg
+      .replace(/stroke="currentColor"/g, `stroke="${agent.color || 'var(--ds-text-secondary)'}"`)
+      .replace(/width="[^"]*"/, `width="${size}"`)
+      .replace(/height="[^"]*"/, '');
+    const withSize = colored.includes(`width="${size}"`)
+      ? colored
+      : colored.replace('<svg', `<svg width="${size}" height="${size}"`);
+    /* eslint-disable react/no-danger -- iconSvg is a trusted server-side constant */
+    return <span dangerouslySetInnerHTML={{ __html: withSize }} />;
+    /* eslint-enable react/no-danger */
+  }
+
+  // Default fallback: colored circle with first letter
+  const letter = (agent.label || agent.name || '?')[0].toUpperCase();
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%',
+      background: agent.color ? `${agent.color}22` : 'var(--ds-bg-overlay)',
+      color: agent.color || 'var(--ds-text-secondary)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: size * 0.45, fontWeight: 700,
+    }}>
+      {letter}
+    </div>
+  );
+}
+
+/* ── Toggle switch ── */
+function Toggle({ on, onChange, disabled = false }) {
   return (
     <button
-      onClick={onChange}
+      onClick={disabled ? undefined : onChange}
       style={{
         width: 36, height: 20, borderRadius: 10, position: 'relative',
-        cursor: 'pointer', border: 'none', transition: 'background 0.2s',
+        cursor: disabled ? 'default' : 'pointer', border: 'none', transition: 'background 0.2s',
         background: on ? 'var(--ds-accent, #0a84ff)' : 'rgba(255,255,255,0.08)',
+        opacity: disabled ? 0.5 : 1,
+        flexShrink: 0,
       }}
     >
       <div style={{
@@ -47,18 +76,20 @@ function Toggle({ on, onChange }) {
   );
 }
 
+/* ── Tool arrays for the Tutor tools section ── */
 const LEARNING_TOOLS = [
-  { key: 'card_search', emoji: '🔍', label: 'Kartensuche', desc: 'Karten aus dem Deck suchen' },
-  { key: 'statistics', emoji: '📈', label: 'Statistiken', desc: 'Streak, Heatmap, Deck-Überblick' },
-  { key: 'compact', emoji: '✦', label: 'Zusammenfassen', desc: 'Chat-Erkenntnisse extrahieren' },
+  { key: 'card_search', emoji: '\u{1F50D}', label: 'Kartensuche', desc: 'Karten aus dem Deck suchen' },
+  { key: 'statistics', emoji: '\u{1F4C8}', label: 'Statistiken', desc: 'Streak, Heatmap, Deck-\u00DCberblick' },
+  { key: 'compact', emoji: '\u2726', label: 'Zusammenfassen', desc: 'Chat-Erkenntnisse extrahieren' },
 ];
 
 const CONTENT_TOOLS = [
-  { key: 'images', emoji: '🖼️', label: 'Bilder', desc: 'Bilder aus Karten und Internet' },
-  { key: 'diagrams', emoji: '📊', label: 'Diagramme', desc: 'Mermaid-Diagramme' },
-  { key: 'molecules', emoji: '🧬', label: 'Moleküle', desc: 'Molekülstrukturen darstellen', badge: 'Beta' },
+  { key: 'images', emoji: '\u{1F5BC}\uFE0F', label: 'Bilder', desc: 'Bilder aus Karten und Internet' },
+  { key: 'diagrams', emoji: '\u{1F4CA}', label: 'Diagramme', desc: 'Mermaid-Diagramme' },
+  { key: 'molecules', emoji: '\u{1F9EC}', label: 'Molek\u00FCle', desc: 'Molek\u00FClstrukturen darstellen', badge: 'Beta' },
 ];
 
+/* ── Section header with optional tooltip ── */
 function SectionHeader({ title, tooltip }) {
   const [showTip, setShowTip] = useState(false);
   return (
@@ -109,11 +140,77 @@ function SectionHeader({ title, tooltip }) {
   );
 }
 
+/* ── Format tool name for display: "search_pubmed" -> "Search Pubmed" ── */
+function formatToolName(name) {
+  return name
+    .split('_')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+/* ── Inline tool list shown under an agent when expanded ── */
+function AgentToolList({ tools, agentColor }) {
+  if (!tools || tools.length === 0) return null;
+  return (
+    <div style={{ padding: '6px 16px 10px 54px' }}>
+      {tools.map((toolName) => (
+        <div key={toolName} style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '3px 0',
+        }}>
+          <div style={{
+            width: 4, height: 4, borderRadius: 2,
+            background: agentColor && agentColor !== 'transparent'
+              ? agentColor
+              : 'var(--ds-text-tertiary)',
+            opacity: 0.5, flexShrink: 0,
+          }} />
+          <span style={{
+            fontSize: 11, color: 'var(--ds-text-tertiary, rgba(255,255,255,0.35))',
+            fontFamily: 'var(--ds-font-mono, monospace)',
+          }}>
+            {formatToolName(toolName)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── Map of agent names to sub-menu navigation keys ── */
+const AGENT_SUBMENU_MAP = {
+  plusi: 'plusiMenu',
+  research: 'researchMenu',
+};
+
 export default function AgentStudio({ bridge, onNavigateToPlusi, onNavigateToResearch }) {
   const [tools, setTools] = useState({});
-  const [mascotEnabled, setMascotEnabled] = useState(false);
-  const [researchEnabled, setResearchEnabled] = useState(true);
+  const [agentStates, setAgentStates] = useState({}); // { agentName: enabled }
+  const [expandedAgents, setExpandedAgents] = useState({}); // { agentName: true }
   const [embedding, setEmbedding] = useState({ embeddedCards: 0, totalCards: 0, isRunning: false });
+  const [agents, setAgents] = useState([]);
+
+  // Read agents from registry whenever it updates
+  useEffect(() => {
+    const refreshAgents = () => {
+      const reg = getRegistry();
+      const list = [...reg.values()];
+      setAgents(list);
+      // Initialize agent enabled states from registry data
+      const states = {};
+      list.forEach(a => {
+        states[a.name] = a.enabled ?? a.isDefault;
+      });
+      setAgentStates(states);
+    };
+
+    refreshAgents();
+
+    // Listen for registry updates (pushed from Python)
+    const onRegistryUpdate = () => refreshAgents();
+    window.addEventListener('agentRegistryUpdated', onRegistryUpdate);
+    return () => window.removeEventListener('agentRegistryUpdated', onRegistryUpdate);
+  }, []);
 
   // Load config and tools via async message queue
   useEffect(() => {
@@ -123,8 +220,13 @@ export default function AgentStudio({ bridge, onNavigateToPlusi, onNavigateToRes
       const data = e.detail?.data || e.detail;
       if (data) {
         setTools(data.ai_tools || data.aiTools || {});
-        setMascotEnabled(data.mascot_enabled || data.mascotEnabled || false);
-        setResearchEnabled(data.research_enabled ?? data.researchEnabled ?? true);
+        // Sync agent states from config keys
+        setAgentStates(prev => ({
+          ...prev,
+          plusi: data.mascot_enabled ?? data.mascotEnabled ?? prev.plusi ?? false,
+          research: data.research_enabled ?? data.researchEnabled ?? prev.research ?? true,
+          help: data.help_enabled ?? data.helpEnabled ?? prev.help ?? true,
+        }));
       }
     };
     const onToolsLoaded = (e) => {
@@ -135,7 +237,6 @@ export default function AgentStudio({ bridge, onNavigateToPlusi, onNavigateToRes
     window.addEventListener('ankiConfigLoaded', onConfigLoaded);
     window.addEventListener('ankiAiToolsLoaded', onToolsLoaded);
 
-    // Request config (includes ai_tools now)
     bridge.getCurrentConfig?.();
     bridge.getAITools?.();
 
@@ -145,7 +246,7 @@ export default function AgentStudio({ bridge, onNavigateToPlusi, onNavigateToRes
     };
   }, [bridge]);
 
-  // Poll embedding status via async message queue
+  // Poll embedding status
   useEffect(() => {
     if (!bridge) return;
 
@@ -156,7 +257,6 @@ export default function AgentStudio({ bridge, onNavigateToPlusi, onNavigateToRes
 
     window.addEventListener('ankiEmbeddingStatusLoaded', onEmbeddingStatus);
 
-    // Request immediately and poll every 3s
     window.ankiBridge?.addMessage('getEmbeddingStatus', null);
     const timer = setInterval(() => {
       window.ankiBridge?.addMessage('getEmbeddingStatus', null);
@@ -178,28 +278,38 @@ export default function AgentStudio({ bridge, onNavigateToPlusi, onNavigateToRes
     });
   }, [bridge]);
 
-  const handleToggleMascot = useCallback(() => {
-    setMascotEnabled(prev => {
-      const next = !prev;
-      if (bridge?.saveMascotEnabled) {
-        bridge.saveMascotEnabled(next);
+  const handleToggleAgent = useCallback((agentName) => {
+    setAgentStates(prev => {
+      const next = !prev[agentName];
+      // Use the generic saveSubagentEnabled for all agents
+      // Special case: Plusi uses saveMascotEnabled for backward compat
+      if (agentName === 'plusi') {
+        bridge?.saveMascotEnabled?.(next);
+      } else {
+        window.ankiBridge?.addMessage('saveSubagentEnabled', { name: agentName, enabled: next });
       }
-      return next;
+      return { ...prev, [agentName]: next };
     });
   }, [bridge]);
 
-  const handleToggleResearch = useCallback(() => {
-    setResearchEnabled(prev => {
-      const next = !prev;
-      window.ankiBridge?.addMessage('saveSubagentEnabled', { name: 'research', enabled: next });
-      return next;
-    });
+  const toggleExpanded = useCallback((agentName) => {
+    setExpandedAgents(prev => ({ ...prev, [agentName]: !prev[agentName] }));
   }, []);
+
+  // Navigation handlers per agent
+  const navigateToSubmenu = useCallback((agentName) => {
+    if (agentName === 'plusi' && onNavigateToPlusi) onNavigateToPlusi();
+    else if (agentName === 'research' && onNavigateToResearch) onNavigateToResearch();
+  }, [onNavigateToPlusi, onNavigateToResearch]);
 
   const embedPct = embedding.totalCards > 0
     ? Math.round((embedding.embeddedCards / embedding.totalCards) * 100)
     : 0;
   const embedDone = embedPct >= 100 && !embedding.isRunning;
+
+  // Separate default agent (Tutor) from subagents
+  const defaultAgent = agents.find(a => a.isDefault);
+  const subagents = agents.filter(a => !a.isDefault);
 
   const S = styles;
 
@@ -207,6 +317,7 @@ export default function AgentStudio({ bridge, onNavigateToPlusi, onNavigateToRes
     <div style={S.container}>
       <div style={S.header}>Agent Studio</div>
 
+      {/* ── Semantische Suche ── */}
       <div style={S.section}>
         <div style={S.sectionTitle}>Semantische Suche</div>
         <div style={{ ...S.card, padding: '12px 16px' }}>
@@ -224,7 +335,7 @@ export default function AgentStudio({ bridge, onNavigateToPlusi, onNavigateToRes
                   background: embedDone ? 'rgba(34,197,94,0.12)' : 'rgba(10,132,255,0.12)',
                   color: embedDone ? 'rgba(34,197,94,0.8)' : 'rgba(10,132,255,0.7)',
                 }}>
-                  {embedDone ? 'Fertig' : 'Läuft...'}
+                  {embedDone ? 'Fertig' : 'L\u00E4uft...'}
                 </span>
               )}
             </div>
@@ -239,15 +350,16 @@ export default function AgentStudio({ bridge, onNavigateToPlusi, onNavigateToRes
             }} />
           </div>
           <div style={{ fontSize: 11, color: 'var(--ds-text-tertiary, rgba(255,255,255,0.22))', marginTop: 10, lineHeight: 1.5 }}>
-            Karten werden im Hintergrund indiziert, um semantisch ähnliche Inhalte zu finden.
+            Karten werden im Hintergrund indiziert, um semantisch \u00E4hnliche Inhalte zu finden.
           </div>
         </div>
       </div>
 
+      {/* ── Lerntools (Tutor tools) ── */}
       <div style={S.section}>
         <SectionHeader
           title="Lerntools"
-          tooltip="Werkzeuge für Kartensuche, Lernstatistiken und Chat-Zusammenfassung. Unterstützen dich beim aktiven Lernen."
+          tooltip="Werkzeuge f\u00FCr Kartensuche, Lernstatistiken und Chat-Zusammenfassung. Unterst\u00FCtzen dich beim aktiven Lernen."
         />
         <div style={S.card}>
           {LEARNING_TOOLS.map((tool, i) => (
@@ -280,10 +392,11 @@ export default function AgentStudio({ bridge, onNavigateToPlusi, onNavigateToRes
         </div>
       </div>
 
+      {/* ── Inhalte (Content tools) ── */}
       <div style={S.section}>
         <SectionHeader
           title="Inhalte"
-          tooltip="Werkzeuge für visuelle Inhalte — Bilder, Diagramme und Molekülstrukturen. Werden automatisch in Antworten eingebettet."
+          tooltip="Werkzeuge f\u00FCr visuelle Inhalte \u2014 Bilder, Diagramme und Molek\u00FClstrukturen. Werden automatisch in Antworten eingebettet."
         />
         <div style={S.card}>
           {CONTENT_TOOLS.map((tool, i) => (
@@ -316,74 +429,175 @@ export default function AgentStudio({ bridge, onNavigateToPlusi, onNavigateToRes
         </div>
       </div>
 
+      {/* ── Agenten (All agents from registry) ── */}
       <div style={S.section}>
         <SectionHeader
-          title="Subagenten"
-          tooltip="Eigenständige KI-Persönlichkeiten mit eigenem Gedächtnis. Werden automatisch vom Tutor gerufen oder direkt mit @Name angesprochen."
+          title="Agenten"
+          tooltip="KI-Agenten mit eigenen F\u00E4higkeiten. Der Tutor ist immer aktiv, Subagenten k\u00F6nnen einzeln aktiviert werden. Werden automatisch vom Tutor gerufen oder direkt mit @Name angesprochen."
         />
-        <div style={S.card}>
-          <div style={S.toolRow}>
-            <div style={{ marginRight: 10 }}><PlusiIcon size={28} /></div>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ds-text-secondary, rgba(255,255,255,0.7))' }}>Plusi</span>
-                <span style={{ fontSize: 9, fontWeight: 600, padding: '2px 7px', borderRadius: 5, background: 'rgba(10,132,255,0.12)', color: 'rgba(10,132,255,0.8)' }}>Beta</span>
+
+        {/* Default agent (Tutor) -- always on, shown first */}
+        {defaultAgent && (
+          <div style={S.card}>
+            <div
+              style={{ ...S.toolRow, cursor: 'pointer' }}
+              onClick={() => toggleExpanded(defaultAgent.name)}
+            >
+              <div style={{ marginRight: 10 }}>
+                <AgentIcon agent={defaultAgent} size={28} />
               </div>
-              <div style={{ fontSize: 11, color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))', marginTop: 1 }}>
-                Lern-Begleiter mit Persönlichkeit
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ds-text-secondary, rgba(255,255,255,0.7))' }}>
+                    {defaultAgent.label}
+                  </span>
+                  <span style={{
+                    fontSize: 9, fontWeight: 600, padding: '2px 7px', borderRadius: 5,
+                    background: 'var(--ds-bg-overlay, rgba(255,255,255,0.06))',
+                    color: 'var(--ds-text-tertiary, rgba(255,255,255,0.35))',
+                  }}>
+                    Standard
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))', marginTop: 1 }}>
+                  {defaultAgent.description}
+                </div>
               </div>
+              <Toggle on={true} disabled={true} />
             </div>
-            <Toggle on={mascotEnabled} onChange={handleToggleMascot} />
-          </div>
-          {mascotEnabled && (
-            <>
-              <div style={{ height: 1, background: 'var(--ds-border-subtle, rgba(255,255,255,0.06))' }} />
+            {/* Expand/collapse tool list */}
+            {expandedAgents[defaultAgent.name] && defaultAgent.tools?.length > 0 && (
+              <>
+                <div style={{ height: 1, background: 'var(--ds-border-subtle, rgba(255,255,255,0.06))' }} />
+                <AgentToolList tools={defaultAgent.tools} agentColor={defaultAgent.color} />
+              </>
+            )}
+            {defaultAgent.tools?.length > 0 && (
               <div
-                onClick={onNavigateToPlusi}
-                style={S.subAgentButton}
+                style={{
+                  ...S.expandButton,
+                  borderTop: expandedAgents[defaultAgent.name] ? 'none' : '1px solid var(--ds-border-subtle, rgba(255,255,255,0.06))',
+                }}
+                onClick={() => toggleExpanded(defaultAgent.name)}
                 onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
               >
-                <span style={{ fontSize: 12, color: 'var(--ds-text-secondary, rgba(255,255,255,0.45))' }}>Sub-Agent-Menü</span>
-                <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="var(--ds-text-tertiary, rgba(255,255,255,0.18))" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="9 18 15 12 9 6"/>
+                <span style={{ fontSize: 11, color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))' }}>
+                  {expandedAgents[defaultAgent.name] ? 'Weniger' : `${defaultAgent.tools.length} Tools`}
+                </span>
+                <svg
+                  width={12} height={12} viewBox="0 0 24 24" fill="none"
+                  stroke="var(--ds-text-tertiary, rgba(255,255,255,0.18))"
+                  strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+                  style={{
+                    transition: 'transform 0.2s',
+                    transform: expandedAgents[defaultAgent.name] ? 'rotate(180deg)' : 'rotate(0deg)',
+                  }}
+                >
+                  <polyline points="6 9 12 15 18 9"/>
                 </svg>
               </div>
-            </>
-          )}
-
-        </div>
-
-        <div style={{ ...S.card, marginTop: 10 }}>
-          <div style={S.toolRow}>
-            <div style={{ marginRight: 10 }}><ResearchIcon size={28} /></div>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ds-text-secondary, rgba(255,255,255,0.7))' }}>Research Agent</span>
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))', marginTop: 1 }}>
-                Internet-Recherche mit Quellenangaben
-              </div>
-            </div>
-            <Toggle on={researchEnabled} onChange={handleToggleResearch} />
+            )}
           </div>
-          {researchEnabled && (
-            <>
-              <div style={{ height: 1, background: 'var(--ds-border-subtle, rgba(255,255,255,0.06))' }} />
-              <div
-                style={S.subAgentButton}
-                onClick={onNavigateToResearch}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-              >
-                <span style={{ fontSize: 12, color: 'var(--ds-text-secondary, rgba(255,255,255,0.45))' }}>Sub-Agent-Menü</span>
-                <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="var(--ds-text-tertiary, rgba(255,255,255,0.18))" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="9 18 15 12 9 6"/>
-                </svg>
+        )}
+
+        {/* Non-default agents -- toggleable */}
+        {subagents.map((agent) => {
+          const isEnabled = !!agentStates[agent.name];
+          const hasSubmenu = AGENT_SUBMENU_MAP[agent.name];
+          const isExpanded = expandedAgents[agent.name];
+
+          return (
+            <div key={agent.name} style={{ ...S.card, marginTop: 10 }}>
+              <div style={S.toolRow}>
+                <div style={{ marginRight: 10 }}>
+                  <AgentIcon agent={agent} size={28} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{
+                      fontSize: 13, fontWeight: 500,
+                      color: isEnabled
+                        ? 'var(--ds-text-secondary, rgba(255,255,255,0.7))'
+                        : 'var(--ds-text-tertiary, rgba(255,255,255,0.35))',
+                    }}>
+                      {agent.label}
+                    </span>
+                    {agent.color && agent.color !== 'transparent' && (
+                      <div style={{
+                        width: 6, height: 6, borderRadius: 3,
+                        background: agent.color, flexShrink: 0,
+                      }} />
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))', marginTop: 1 }}>
+                    {agent.description}
+                  </div>
+                </div>
+                <Toggle on={isEnabled} onChange={() => handleToggleAgent(agent.name)} />
               </div>
-            </>
-          )}
-        </div>
+
+              {/* Show tools + submenu link when enabled */}
+              {isEnabled && (
+                <>
+                  {/* Tool list (expandable) */}
+                  {agent.tools?.length > 0 && (
+                    <>
+                      <div style={{ height: 1, background: 'var(--ds-border-subtle, rgba(255,255,255,0.06))' }} />
+                      {isExpanded && (
+                        <AgentToolList tools={agent.tools} agentColor={agent.color} />
+                      )}
+                      <div
+                        style={{
+                          ...S.expandButton,
+                          borderTop: isExpanded ? 'none' : undefined,
+                        }}
+                        onClick={() => toggleExpanded(agent.name)}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                      >
+                        <span style={{ fontSize: 11, color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))' }}>
+                          {isExpanded ? 'Weniger' : `${agent.tools.length} Tools`}
+                        </span>
+                        <svg
+                          width={12} height={12} viewBox="0 0 24 24" fill="none"
+                          stroke="var(--ds-text-tertiary, rgba(255,255,255,0.18))"
+                          strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+                          style={{
+                            transition: 'transform 0.2s',
+                            transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                          }}
+                        >
+                          <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Submenu link (only for agents that have a dedicated submenu) */}
+                  {hasSubmenu && (
+                    <>
+                      <div style={{ height: 1, background: 'var(--ds-border-subtle, rgba(255,255,255,0.06))' }} />
+                      <div
+                        onClick={() => navigateToSubmenu(agent.name)}
+                        style={S.subAgentButton}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                      >
+                        <span style={{ fontSize: 12, color: 'var(--ds-text-secondary, rgba(255,255,255,0.45))' }}>
+                          Sub-Agent-Men\u00FC
+                        </span>
+                        <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="var(--ds-text-tertiary, rgba(255,255,255,0.18))" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="9 18 15 12 9 6"/>
+                        </svg>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -415,6 +629,11 @@ const styles = {
   },
   subAgentButton: {
     padding: '14px 16px', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    transition: 'background 0.12s',
+  },
+  expandButton: {
+    padding: '8px 16px', cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     transition: 'background 0.12s',
   },

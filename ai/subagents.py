@@ -52,14 +52,10 @@ def get_enabled_subagents(config: dict) -> list:
 
 
 def get_registry_for_frontend(config: dict) -> list[dict]:
-    """Return enabled non-default agents as dicts for JSON serialization.
+    """Return ALL enabled agents as dicts for JSON serialization.
 
-    The old subagents.py only returned Plusi/Research — never the default
-    agent (Tutor). The new agents.get_registry_for_frontend() returns ALL
-    enabled agents including the default. This wrapper filters to match
-    the old behavior.
+    Returns all agents including the default (Tutor) so that the
+    Agent Studio can display the full agent list. Frontend consumers
+    that need only non-default agents use getNonDefaultAgents().
     """
-    return [
-        entry for entry in _agents_get_registry_for_frontend(config)
-        if not entry.get('isDefault', False)
-    ]
+    return _agents_get_registry_for_frontend(config)
