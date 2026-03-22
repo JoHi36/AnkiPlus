@@ -26,3 +26,9 @@ def test_perplexity_missing_key():
     from research.perplexity import search_perplexity
     result = search_perplexity('test', '')
     assert result['error'] == 'No Perplexity API key configured'
+
+
+def test_pubmed_search_function_exists():
+    """PubMed search function is importable."""
+    from research.pubmed import search_pubmed
+    assert callable(search_pubmed)
