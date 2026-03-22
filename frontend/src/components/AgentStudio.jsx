@@ -46,7 +46,12 @@ function SectionHeader({ title, tooltip }) {
   const [showTip, setShowTip] = useState(false);
   return (
     <div
-      style={{ ...S.sectionTitle, display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}
+      style={{
+        fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
+        letterSpacing: '0.8px', color: 'var(--ds-text-tertiary, rgba(255,255,255,0.22))',
+        marginBottom: 10,
+        display: 'flex', alignItems: 'center', gap: 6, position: 'relative',
+      }}
       onMouseEnter={() => tooltip && setShowTip(true)}
       onMouseLeave={() => setShowTip(false)}
     >
