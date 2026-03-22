@@ -1183,6 +1183,8 @@ class ChatbotWidget(QWidget):
             payload = {
                 'type': 'subagent_result',
                 'agent_name': agent_name,
+                'result': result,  # Pass full result dict — agent-specific
+                # Legacy Plusi fields for backwards compatibility
                 'text': result.get('text', ''),
                 'mood': result.get('mood', 'neutral'),
                 'meta': result.get('meta', ''),

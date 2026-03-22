@@ -986,7 +986,8 @@ function AppInner() {
               });
             }
 
-            if (payload.error) {
+            if (payload.error && agentName !== 'research') {
+              // For non-research agents, error = abort. Research shows error in widget.
               console.error(`Subagent[${agentName}] error`);
               if (_chatForAgent.setIsLoading) _chatForAgent.setIsLoading(false);
               if (_chatForAgent.setStreamingMessage) _chatForAgent.setStreamingMessage('');
@@ -1011,21 +1012,38 @@ function AppInner() {
               timestamp: Date.now()
             }];
 
-            if (payload.text && _chatForAgent.appendMessageRef?.current) {
-              // Render subagent response inside its widget (same as spawn_plusi tool)
-              const widgetMarker = `[[TOOL:${JSON.stringify({
-                name: 'spawn_plusi',
-                displayType: 'widget',
-                result: {
-                  mood: payload.mood || 'neutral',
-                  text: payload.text,
-                  meta: payload.meta || '',
-                  friendship: payload.friendship || null,
-                }
-              })}]]`;
-              _chatForAgent.appendMessageRef.current(
-                widgetMarker, 'bot', [], {}, null, [], subagentPipelineData
-              );
+            if (_chatForAgent.appendMessageRef?.current) {
+              // Build agent-specific tool marker
+              let widgetMarker;
+              if (agentName === 'research' && payload.result) {
+                // Research Agent: use search_web widget with full result
+                widgetMarker = `[[TOOL:${JSON.stringify({
+                  name: 'search_web',
+                  displayType: 'widget',
+                  result: payload.result,
+                })}]]`;
+                // If research has an answer, prepend it before the widget
+                const answer = payload.result?.answer || '';
+                const markerText = answer ? `${answer}\n\n${widgetMarker}` : widgetMarker;
+                _chatForAgent.appendMessageRef.current(
+                  markerText, 'bot', [], {}, null, [], subagentPipelineData
+                );
+              } else if (payload.text) {
+                // Plusi and other agents: use spawn_plusi widget
+                widgetMarker = `[[TOOL:${JSON.stringify({
+                  name: 'spawn_plusi',
+                  displayType: 'widget',
+                  result: {
+                    mood: payload.mood || 'neutral',
+                    text: payload.text,
+                    meta: payload.meta || '',
+                    friendship: payload.friendship || null,
+                  }
+                })}]]`;
+                _chatForAgent.appendMessageRef.current(
+                  widgetMarker, 'bot', [], {}, null, [], subagentPipelineData
+                );
+              }
             }
             if (_chatForAgent.setIsLoading) _chatForAgent.setIsLoading(false);
             if (_chatForAgent.setStreamingMessage) _chatForAgent.setStreamingMessage('');
