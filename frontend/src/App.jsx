@@ -34,6 +34,7 @@ import InsightsDashboard from './components/InsightsDashboard';
 import AgentStudio from './components/AgentStudio';
 import useInsights from './hooks/useInsights';
 import PlusiMenu from './components/PlusiMenu';
+import ResearchMenu from './components/ResearchMenu';
 import TokenBudgetSlider from './components/TokenBudgetSlider';
 import SettingsSidebar from './components/SettingsSidebar';
 import AgenticCell from './components/AgenticCell';
@@ -2157,9 +2158,15 @@ function AppInner() {
                   <AgentStudio
                     bridge={bridge}
                     onNavigateToPlusi={() => setActiveView('plusiMenu')}
+                    onNavigateToResearch={() => setActiveView('researchMenu')}
                   />
                 ) : activeView === 'plusiMenu' ? (
                   <PlusiMenu
+                    bridge={bridge}
+                    onNavigateBack={() => setActiveView('agentStudio')}
+                  />
+                ) : activeView === 'researchMenu' ? (
+                  <ResearchMenu
                     bridge={bridge}
                     onNavigateBack={() => setActiveView('agentStudio')}
                   />

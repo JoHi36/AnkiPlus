@@ -109,7 +109,7 @@ function SectionHeader({ title, tooltip }) {
   );
 }
 
-export default function AgentStudio({ bridge, onNavigateToPlusi }) {
+export default function AgentStudio({ bridge, onNavigateToPlusi, onNavigateToResearch }) {
   const [tools, setTools] = useState({});
   const [mascotEnabled, setMascotEnabled] = useState(false);
   const [researchEnabled, setResearchEnabled] = useState(true);
@@ -372,6 +372,7 @@ export default function AgentStudio({ bridge, onNavigateToPlusi }) {
               <div style={{ height: 1, background: 'var(--ds-border-subtle, rgba(255,255,255,0.06))' }} />
               <div
                 style={S.subAgentButton}
+                onClick={onNavigateToResearch}
                 onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
               >
