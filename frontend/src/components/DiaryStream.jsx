@@ -119,25 +119,40 @@ function DiaryEntry({ entry }) {
         }}
       >
         {timeStr}
-        {entry.category && (
-          <span style={{
-            fontSize: 9,
-            fontWeight: 600,
-            letterSpacing: '0.04em',
-            textTransform: 'uppercase',
-            padding: '1px 5px',
-            borderRadius: 3,
-            ...({
-              gemerkt:     { color: '#6ee7b7', background: 'rgba(52,211,153,0.08)' },
-              reflektiert: { color: '#a78bfa', background: 'rgba(167,139,250,0.08)' },
-              entdeckt:    { color: '#fbbf24', background: 'rgba(251,191,36,0.08)' },
-              forscht:     { color: '#fbbf24', background: 'rgba(251,191,36,0.08)' },
-              'geträumt':  { color: '#60a5fa', background: 'rgba(96,165,250,0.08)' },
-            }[entry.category] || { color: 'var(--ds-text-muted)', background: 'var(--ds-hover-tint)' }),
-          }}>
-            {entry.category}
-          </span>
-        )}
+        {entry.category && (() => {
+          const TAG_CONFIG = {
+            gemerkt:     { color: '#6ee7b7', bg: 'rgba(52,211,153,0.08)',  tip: 'Aus dem Chat entstanden' },
+            reflektiert: { color: '#a78bfa', bg: 'rgba(167,139,250,0.08)', tip: 'Plusi hat eigenständig nachgedacht' },
+            entdeckt:    { color: '#fbbf24', bg: 'rgba(251,191,36,0.08)',  tip: 'Plusi hat Karten durchsucht' },
+            forscht:     { color: '#fbbf24', bg: 'rgba(251,191,36,0.08)',  tip: 'Plusi hat Karten durchsucht' },
+            'geträumt':  { color: '#60a5fa', bg: 'rgba(96,165,250,0.08)', tip: 'Plusi hat im Schlaf geträumt' },
+          };
+          const cfg = TAG_CONFIG[entry.category] || { color: 'var(--ds-text-muted)', bg: 'var(--ds-hover-tint)', tip: '' };
+          return (
+            <span
+              title={cfg.tip}
+              style={{
+                fontSize: 9,
+                fontWeight: 600,
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+                padding: '1px 5px',
+                borderRadius: 3,
+                color: cfg.color,
+                background: cfg.bg,
+                cursor: cfg.tip ? 'help' : 'default',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 3,
+              }}
+            >
+              {entry.category}
+              {cfg.tip && (
+                <span style={{ fontSize: 7, opacity: 0.5 }}>?</span>
+              )}
+            </span>
+          );
+        })()}
       </div>
 
       {/* Entry text */}
