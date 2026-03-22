@@ -1012,8 +1012,19 @@ function AppInner() {
             }];
 
             if (payload.text && _chatForAgent.appendMessageRef?.current) {
+              // Render subagent response inside its widget (same as spawn_plusi tool)
+              const widgetMarker = `[[TOOL:${JSON.stringify({
+                name: 'spawn_plusi',
+                displayType: 'widget',
+                result: {
+                  mood: payload.mood || 'neutral',
+                  text: payload.text,
+                  meta: payload.meta || '',
+                  friendship: payload.friendship || null,
+                }
+              })}]]`;
               _chatForAgent.appendMessageRef.current(
-                payload.text, 'bot', [], {}, null, [], subagentPipelineData
+                widgetMarker, 'bot', [], {}, null, [], subagentPipelineData
               );
             }
             if (_chatForAgent.setIsLoading) _chatForAgent.setIsLoading(false);

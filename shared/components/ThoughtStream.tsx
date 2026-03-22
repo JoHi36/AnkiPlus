@@ -100,9 +100,14 @@ function getDoneLabel(step: string, data: Record<string, any>, status: string): 
   if (status === 'error') return `${STEP_NAMES[step] || step} fehlgeschlagen`;
   switch (step) {
     case 'router': {
-      const mode = MODE_LABELS[data.retrieval_mode] || data.retrieval_mode || '';
+      const rm = data.retrieval_mode || '';
+      if (rm.startsWith('subagent:')) {
+        const name = rm.split(':')[1];
+        return `Subagent · ${name.charAt(0).toUpperCase() + name.slice(1)}`;
+      }
+      const mode = MODE_LABELS[rm] || rm || '';
       const scope = data.scope_label || '';
-      if (data.retrieval_mode === 'plusi') return 'Plusi';
+      if (rm === 'plusi') return 'Plusi';
       if (!data.search_needed) return 'Direkte Antwort';
       return scope ? `${mode} · ${scope}` : mode || 'Anfrage analysiert';
     }
@@ -248,14 +253,56 @@ function useAccumulatingPipeline(
    ═══════════════════════════════════════════════════ */
 
 /* ── Router Details (done state) ── */
-function RouterDetails({ data }: { data: Record<string, any> }) {
+function RouterDetails({ data, agentColor }: { data: Record<string, any>; agentColor?: string }) {
   const RESPONSE_LENGTH_LABELS: Record<string, string> = {
     short: 'Kurz',
     medium: 'Mittel',
     long: 'Ausführlich',
   };
 
-  const isPlusi = data.retrieval_mode === 'plusi';
+  const retrievalMode = data.retrieval_mode || '';
+  const isSubagent = retrievalMode.startsWith('subagent:');
+  const subagentName = isSubagent ? retrievalMode.split(':')[1] : '';
+
+  // Subagent routing — show agent-specific tags
+  if (isSubagent) {
+    // Capitalize first letter of agent name
+    const agentLabel = subagentName.charAt(0).toUpperCase() + subagentName.slice(1);
+    const isDirect = data.scope === 'none' || !data.scope;
+    const tags = [
+      { label: 'Routing', value: 'Subagent', icon: 'M8 2v12M2 8h12', color: undefined as string | undefined },
+      { label: 'Agent', value: agentLabel, icon: 'M3 3h4v4H3zM9 3h4v4H9zM6 9h4v4H6z', color: agentColor },
+      { label: 'Modus', value: isDirect ? 'Direkt' : 'Router', icon: 'M2 8h12M8 2v12', color: undefined as string | undefined },
+    ];
+
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+        {tags.map((tag) => (
+          <div
+            key={tag.label}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              fontSize: 11,
+              padding: '3px 8px',
+              borderRadius: 5,
+              background: tag.color ? `${tag.color}15` : 'var(--ds-hover-tint)',
+              border: tag.color ? `1px solid ${tag.color}30` : 'none',
+            }}
+          >
+            <svg width={10} height={10} viewBox="0 0 16 16" fill="none" stroke={tag.color || 'currentColor'} strokeWidth={1.5} strokeLinecap="round" style={{ opacity: tag.color ? 0.6 : 0.2 }}>
+              <path d={tag.icon} />
+            </svg>
+            <span style={{ color: 'var(--ds-text-muted)' }}>{tag.label}</span>
+            <span style={{ color: tag.color || 'var(--ds-text-tertiary)', fontWeight: 500 }}>{tag.value}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  const isPlusi = retrievalMode === 'plusi';
   const tags = data.search_needed === false
     ? (isPlusi
       ? [
@@ -526,12 +573,16 @@ function PhaseRow({ step, data, status, isActive, isFirst = false, animate = tru
   if (isActive) {
     title = ACTIVE_TITLES[step] || 'Verarbeite...';
   } else if (step === 'router') {
-    if (data.retrieval_mode === 'plusi') {
+    const rm = data.retrieval_mode || '';
+    if (rm.startsWith('subagent:')) {
+      const name = rm.split(':')[1];
+      title = `Subagent · ${name.charAt(0).toUpperCase() + name.slice(1)}`;
+    } else if (rm === 'plusi') {
       title = 'Plusi';
     } else if (!data.search_needed) {
       title = 'Direkte Antwort';
     } else {
-      const mode = MODE_LABELS[data.retrieval_mode] || data.retrieval_mode || '';
+      const mode = MODE_LABELS[rm] || rm || '';
       const scope = data.scope_label || '';
       title = scope ? `${mode} · ${scope}` : mode || 'Anfrage analysiert';
     }
@@ -589,7 +640,7 @@ function PhaseRow({ step, data, status, isActive, isFirst = false, animate = tru
       {/* Phase-specific content */}
       <div style={{ marginLeft: 14 }}>
         {step === 'router' && isActive && animate && <RouterThinking />}
-        {step === 'router' && isDone && <RouterDetails data={data} />}
+        {step === 'router' && isDone && <RouterDetails data={data} agentColor={agentColor} />}
         {step === 'sql_search' && <SqlTags data={data} isDone={isDone} animate={animate} />}
         {step === 'semantic_search' && <SemanticChunks data={data} isDone={isDone} animate={animate} />}
         {step === 'merge' && isDone && <MergeBar data={data} />}
