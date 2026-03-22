@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ArrowUp, Square } from 'lucide-react';
-import { findAgent } from '../config/subagentRegistry';
+import { findAgent, getRegistry } from '../config/subagentRegistry';
 
 /**
  * ChatInput — Unified dock-style input component
@@ -64,6 +64,45 @@ export default function ChatInput({
   // Detect @AgentName case-insensitive, normalize to @Label at front
   // Uses subagent registry for dynamic agent detection
   const [activeAgentTag, setActiveAgentTag] = useState<{ name: string; label: string; color: string } | null>(null);
+
+  // @-mention autocomplete
+  const [showMentionMenu, setShowMentionMenu] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState('');
+  const [mentionIndex, setMentionIndex] = useState(0);
+
+  // Build filtered agent list for autocomplete
+  const mentionAgents = React.useMemo(() => {
+    const registry = getRegistry();
+    const FALLBACK_AGENTS = [
+      { name: 'plusi', label: 'Plusi', color: '#0A84FF', pipelineLabel: 'Plusi', enabled: true },
+    ];
+    const agents = registry.size > 0
+      ? [...registry.values()].filter(a => a.enabled)
+      : (plusiEnabled ? FALLBACK_AGENTS : []);
+    if (!mentionFilter) return agents;
+    const lower = mentionFilter.toLowerCase();
+    return agents.filter(a => a.name.includes(lower) || a.label.toLowerCase().includes(lower));
+  }, [mentionFilter, plusiEnabled]);
+
+  // Detect @ trigger
+  useEffect(() => {
+    // Show menu when input is exactly "@" or starts with "@" and no space after @Name yet
+    if (input === '@' || (input.startsWith('@') && !input.includes(' ') && !activeAgentTag)) {
+      const filter = input.slice(1); // everything after @
+      setMentionFilter(filter);
+      setShowMentionMenu(true);
+      setMentionIndex(0);
+    } else {
+      setShowMentionMenu(false);
+    }
+  }, [input, activeAgentTag]);
+
+  const selectMentionAgent = useCallback((agent: any) => {
+    setInput(`@${agent.label} `);
+    setShowMentionMenu(false);
+    setActiveAgentTag({ name: agent.name, label: agent.label, color: agent.color });
+    setTimeout(() => textareaRef.current?.focus(), 20);
+  }, []);
 
   useEffect(() => {
     // Check if input already starts with a known @Agent tag
@@ -156,6 +195,30 @@ export default function ChatInput({
   }, [input, handleSubmit]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // @-mention menu navigation
+    if (showMentionMenu && mentionAgents.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionIndex(prev => (prev + 1) % mentionAgents.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionIndex(prev => (prev - 1 + mentionAgents.length) % mentionAgents.length);
+        return;
+      }
+      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+        e.preventDefault();
+        selectMentionAgent(mentionAgents[mentionIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowMentionMenu(false);
+        return;
+      }
+    }
+
     if (e.key === 'Escape') {
       e.preventDefault();
       if (onClose) onClose();
@@ -201,6 +264,63 @@ export default function ChatInput({
             animation: 'borderRotate 4s linear infinite',
           }}
         />
+
+        {/* @-mention autocomplete dropdown — floats above input */}
+        {showMentionMenu && mentionAgents.length > 0 && (
+          <div style={{
+            position: 'absolute',
+            bottom: '100%',
+            left: 0,
+            right: 0,
+            marginBottom: 4,
+            background: 'var(--ds-bg-canvas)',
+            border: '1px solid var(--ds-border-subtle)',
+            borderRadius: 12,
+            overflow: 'hidden',
+            boxShadow: '0 -4px 20px rgba(0,0,0,0.3)',
+            zIndex: 50,
+          }}>
+            {mentionAgents.map((agent, i) => (
+              <div
+                key={agent.name}
+                onClick={() => selectMentionAgent(agent)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '10px 14px',
+                  cursor: 'pointer',
+                  background: i === mentionIndex ? 'var(--ds-hover-tint)' : 'transparent',
+                  transition: 'background 0.1s',
+                }}
+                onMouseEnter={() => setMentionIndex(i)}
+              >
+                {/* Agent color dot */}
+                <div style={{
+                  width: 8, height: 8, borderRadius: '50%',
+                  background: agent.color, flexShrink: 0,
+                  boxShadow: `0 0 6px ${agent.color}60`,
+                }} />
+                {/* Agent name */}
+                <span style={{
+                  fontSize: 13, fontWeight: 500,
+                  color: 'var(--ds-text-primary)',
+                  flex: 1,
+                }}>
+                  @{agent.label}
+                </span>
+                {/* Keyboard hint */}
+                <span style={{
+                  fontSize: 10,
+                  color: 'var(--ds-text-muted)',
+                  fontFamily: 'monospace',
+                }}>
+                  {i === mentionIndex ? 'Tab ↵' : ''}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Top slot — e.g. token budget slider when in plusiMenu view */}
         {topSlot}
