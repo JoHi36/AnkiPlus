@@ -454,6 +454,8 @@ class ChatbotWidget(QWidget):
             'saveAITools': self._msg_save_ai_tools,
             'saveMascotEnabled': self._msg_save_mascot_enabled,
             'saveSubagentEnabled': self._msg_save_subagent_enabled,
+            'getResearchSources': self._msg_get_research_sources,
+            'saveResearchSources': self._msg_save_research_sources,
             'getEmbeddingStatus': self._msg_get_embedding_status,
             'getPlusiMenuData': self._msg_get_plusi_menu_data,
             'savePlusiAutonomy': self._msg_save_plusi_autonomy,
@@ -831,6 +833,22 @@ class ChatbotWidget(QWidget):
                 logger.warning("Unknown subagent: %s", name)
         except Exception as e:
             logger.exception("saveSubagentEnabled error: %s", e)
+
+    def _msg_get_research_sources(self, data):
+        """Return current research source toggles."""
+        config = get_config()
+        sources = config.get('research_sources', {'pubmed': True, 'wikipedia': True})
+        self._send_to_frontend('researchSourcesLoaded', sources)
+
+    def _msg_save_research_sources(self, data):
+        """Save research source toggles to config."""
+        try:
+            if isinstance(data, dict):
+                update_config(research_sources=data)
+                self.config = get_config(force_reload=True)
+                logger.info("Research sources updated: %s", data)
+        except Exception as e:
+            logger.exception("saveResearchSources error: %s", e)
 
     def _msg_get_embedding_status(self, data):
         """Return embedding indexing progress to frontend."""
