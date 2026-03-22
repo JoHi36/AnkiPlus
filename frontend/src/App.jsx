@@ -1016,17 +1016,14 @@ function AppInner() {
               // Build agent-specific tool marker
               let widgetMarker;
               if (agentName === 'research' && payload.result) {
-                // Research Agent: use search_web widget with full result
+                // Research Agent: only the widget marker — ResearchContent renders answer + sources
                 widgetMarker = `[[TOOL:${JSON.stringify({
                   name: 'search_web',
                   displayType: 'widget',
                   result: payload.result,
                 })}]]`;
-                // If research has an answer, prepend it before the widget
-                const answer = payload.result?.answer || '';
-                const markerText = answer ? `${answer}\n\n${widgetMarker}` : widgetMarker;
                 _chatForAgent.appendMessageRef.current(
-                  markerText, 'bot', [], {}, null, [], subagentPipelineData
+                  widgetMarker, 'bot', [], {}, null, [], subagentPipelineData
                 );
               } else if (payload.text) {
                 // Plusi and other agents: use spawn_plusi widget

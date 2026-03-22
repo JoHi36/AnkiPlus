@@ -1,8 +1,28 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
+import WebCitationBadge from './WebCitationBadge';
 
+/**
+ * ResearchContent — renders Research Agent answer with inline citations + source chips.
+ * Converts [[WEB:N]] markers to clickable WebCitationBadge components.
+ */
 export default function ResearchContent({ sources = [], answer = '', error = null }) {
   const rgb = '0, 208, 132';
+  const color = '#00D084';
+
+  // Convert [[WEB:N]] markers to markdown links that the renderer can catch
+  const processedAnswer = useMemo(() => {
+    if (!answer) return '';
+    return answer.replace(/\[\[WEB:(\d+)\]\]/g, (match, indexStr) => {
+      const idx = parseInt(indexStr, 10);
+      const source = sources[idx - 1];
+      if (source) {
+        const url = source.url || '';
+        return `[${idx}](webcite:${idx}:${encodeURIComponent(url)})`;
+      }
+      return match;
+    });
+  }, [answer, sources]);
 
   if (error) {
     return (
@@ -12,11 +32,24 @@ export default function ResearchContent({ sources = [], answer = '', error = nul
     );
   }
 
+  // Custom link renderer that catches webcite: links
+  const linkRenderer = ({ href, children, ...props }) => {
+    if (href && href.startsWith('webcite:')) {
+      const parts = href.split(':');
+      const webIndex = parseInt(parts[1], 10);
+      const webUrl = decodeURIComponent(parts.slice(2).join(':'));
+      return <WebCitationBadge index={webIndex} url={webUrl} color={color} />;
+    }
+    return <a href={href} {...props}>{children}</a>;
+  };
+
   return (
     <>
-      {answer && (
+      {processedAnswer && (
         <div className="agent-cell-content">
-          <ReactMarkdown>{answer}</ReactMarkdown>
+          <ReactMarkdown components={{ a: linkRenderer }}>
+            {processedAnswer}
+          </ReactMarkdown>
         </div>
       )}
       {sources.length > 0 && (
