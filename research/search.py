@@ -1,5 +1,6 @@
 """Multi-tool search orchestrator — selects best source for the query."""
 import re
+import requests
 
 try:
     from ..utils.logging import get_logger
@@ -93,6 +94,85 @@ def _sources_from_wikipedia(articles: list) -> list:
     ]
 
 
+def _summarize_pubmed_de(snippets: list, query: str) -> str:
+    """Summarize PubMed abstracts in German via Gemini."""
+    try:
+        try:
+            from ..config import get_config, is_backend_mode, get_backend_url, get_auth_token
+            from ..ai.auth import get_auth_headers
+        except ImportError:
+            from config import get_config, is_backend_mode, get_backend_url, get_auth_token
+            from ai.auth import get_auth_headers
+
+        config = get_config() or {}
+        use_backend = is_backend_mode() and get_auth_token()
+        api_key_cfg = config.get("api_key", "").strip()
+
+        if not use_backend and not api_key_cfg:
+            logger.warning("_summarize_pubmed_de: no API key, using raw snippets")
+            combined = '\n\n'.join(f'[{i+1}] {s}' for i, s in enumerate(snippets))
+            return _convert_citations(combined)
+
+        combined = '\n\n'.join(f'[{i+1}] {s}' for i, s in enumerate(snippets))
+        prompt = (
+            f'Frage: {query}\n\n'
+            f'Studienergebnisse:\n{combined}\n\n'
+            'Fasse die relevanten Ergebnisse in 2-4 Sätzen auf Deutsch zusammen. '
+            'Zitiere mit [1], [2] etc. Antworte direkt ohne Einleitung.'
+        )
+
+        if use_backend:
+            url = f"{get_backend_url()}/chat"
+            payload = {
+                "message": prompt,
+                "model": "gemini-2.5-flash",
+                "mode": "compact",
+                "history": [],
+                "stream": False,
+            }
+            headers = get_auth_headers()
+            response = requests.post(url, json=payload, headers=headers, timeout=20)
+        else:
+            model = "gemini-2.5-flash"
+            url = (
+                f"https://generativelanguage.googleapis.com/v1beta/models/"
+                f"{model}:generateContent?key={api_key_cfg}"
+            )
+            payload = {
+                "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                "generationConfig": {"temperature": 0.3, "maxOutputTokens": 400},
+            }
+            headers = {"Content-Type": "application/json"}
+            response = requests.post(url, json=payload, headers=headers, timeout=20)
+
+        if response.status_code == 200:
+            data = response.json()
+            # Backend format: {"response": "..."} or {"text": "..."}
+            # Direct Gemini format: candidates[0].content.parts[0].text
+            text = (
+                data.get('response')
+                or data.get('text')
+                or (
+                    data.get('candidates', [{}])[0]
+                    .get('content', {})
+                    .get('parts', [{}])[0]
+                    .get('text', '')
+                )
+            )
+            if text:
+                return _convert_citations(text)
+            logger.warning("_summarize_pubmed_de: empty text in response")
+        else:
+            logger.warning("_summarize_pubmed_de: HTTP %s", response.status_code)
+
+    except Exception:
+        logger.exception("PubMed Gemini summarization failed")
+
+    # Fallback: return raw snippets with citation markers
+    combined = '\n\n'.join(f'[{i+1}] {s}' for i, s in enumerate(snippets))
+    return _convert_citations(combined)
+
+
 def search(query: str, api_key: str = '', enabled_sources: dict = None) -> ResearchResult:
     """Run the best search tool for the given query."""
     if enabled_sources is None:
@@ -104,10 +184,9 @@ def search(query: str, api_key: str = '', enabled_sources: dict = None) -> Resea
             from .pubmed import search_pubmed
             pm_result = search_pubmed(query)
             if pm_result['articles']:
-                # Build answer from abstracts
+                # Build answer from abstracts — summarize in German via Gemini
                 snippets = [a.get('snippet', '') for a in pm_result['articles'] if a.get('snippet')]
-                answer = '\n\n'.join(f'[{i+1}] {s}' for i, s in enumerate(snippets)) if snippets else ''
-                answer = _convert_citations(answer) if answer else ''
+                answer = _summarize_pubmed_de(snippets, query) if snippets else ''
                 return ResearchResult(
                     sources=_sources_from_pubmed(pm_result['articles']),
                     answer=answer,
