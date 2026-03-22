@@ -65,22 +65,24 @@ def show_qwebengine_warning():
 # Globale Variablen
 _chatbot_dock = None
 _chatbot_widget = None  # Widget-Instanz für Event-Hooks
+_panel_user_closed = False  # True wenn User das Panel manuell geschlossen hat
 
 def _notify_reviewer_chat_state(is_open):
-    """Tell the reviewer webview to show/hide its dock based on chat panel visibility.
-    Uses multiple retries because the reviewer HTML may still be loading when this is called."""
-    try:
-        if mw and mw.reviewer and mw.reviewer.web:
-            # Note: mw.reviewer.web.eval() is Qt's QWebEngineView API for running JS
-            # in the webview — this is NOT Python's eval().
-            val = "true" if is_open else "false"
-            js = f'if(window.setChatOpen) setChatOpen({val});'
-            mw.reviewer.web.eval(js)
-            # Multiple retries to cover page load timing
-            for delay in [200, 500, 1000]:
-                QTimer.singleShot(delay, lambda: mw.reviewer.web.eval(js) if mw and mw.reviewer and mw.reviewer.web else None)
-    except Exception:
-        pass
+    """Tell the reviewer webview to show/hide its dock based on chat panel visibility."""
+    val = "true" if is_open else "false"
+    js = f'if(window.setChatOpen) setChatOpen({val});'
+
+    def _send():
+        try:
+            if mw and mw.reviewer and mw.reviewer.web:
+                mw.reviewer.web.eval(js)
+        except Exception:
+            pass
+
+    _send()
+    # Retries to cover page load timing (each wrapped in try/except)
+    for delay in [200, 500, 1000]:
+        QTimer.singleShot(delay, _send)
 
 def _create_chatbot_dock():
     """Creates the chatbot dock widget (called on first use)."""
@@ -150,11 +152,13 @@ def show_settings():
 
 def toggle_chatbot_panel():
     """Öffnet oder schließt das Chatbot-Panel."""
-    global _chatbot_dock
+    global _chatbot_dock, _panel_user_closed
     if _chatbot_dock is not None and _chatbot_dock.isVisible():
         _chatbot_dock.hide()
+        _panel_user_closed = True
         _notify_reviewer_chat_state(False)
     else:
+        _panel_user_closed = False
         ensure_chatbot_open()
 
 # Alias for backwards compatibility (custom_reviewer, custom_screens use this name)
@@ -162,9 +166,10 @@ toggle_chatbot = toggle_chatbot_panel
 
 def close_chatbot_panel():
     """Schließt das Dock-Panel"""
-    global _chatbot_dock
+    global _chatbot_dock, _panel_user_closed
     if _chatbot_dock:
         _chatbot_dock.hide()
+        _panel_user_closed = True
         _notify_reviewer_chat_state(False)
 
 def get_chatbot_widget():
@@ -320,10 +325,14 @@ def setup_ui():
 
 def on_state_did_change(new_state, old_state):
     """Wird aufgerufen, wenn sich der Anki-Status ändert"""
-    global _chatbot_dock
-    # Show chatbot panel only in review state, hide in deck browser/overview
+    global _chatbot_dock, _panel_user_closed
     if new_state == 'review':
-        ensure_chatbot_open()
+        # Respect user's choice — only auto-open if user hasn't manually closed it
+        if not _panel_user_closed:
+            ensure_chatbot_open()
+        else:
+            # Panel stays closed, but still notify reviewer about panel state
+            _notify_reviewer_chat_state(False)
     elif _chatbot_dock is not None and _chatbot_dock.isVisible():
         _chatbot_dock.hide()
         _notify_reviewer_chat_state(False)

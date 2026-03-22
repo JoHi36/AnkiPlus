@@ -63,46 +63,62 @@ This addon bridges three major technologies:
 AnkiPlus_main/
 ├── __init__.py              # Entry point (Anki loads this)
 ├── config.py                # Global configuration
-├── ai/                      # AI engine
-│   ├── handler.py           # Google Gemini API integration (main AI handler)
+├── ai/                      # AI engine (modular architecture)
+│   ├── handler.py           # Orchestrator — delegates to gemini, rag, models
+│   ├── gemini.py            # Google Gemini API: requests, streaming, retry
+│   ├── models.py            # Model fetching, section title generation
+│   ├── rag.py               # RAG pipeline: router, query analysis, keyword extraction
 │   ├── auth.py              # Token management, JWT validation
 │   ├── system_prompt.py     # System prompt construction
 │   ├── agent_loop.py        # Agent loop for tool use
 │   ├── tools.py             # Tool definitions (registry)
 │   ├── tool_executor.py     # Tool execution
-│   ├── retrieval.py         # RAG/hybrid retrieval
-│   └── embeddings.py        # Embedding management
+│   ├── retrieval.py         # Hybrid retrieval: SQL + semantic search merge
+│   └── embeddings.py        # Embedding management (Gemini API, cosine similarity)
 ├── plusi/                   # Plusi companion subsystem
 │   ├── agent.py             # Plusi personality agent
 │   ├── dock.py              # Dock widget (mood display)
 │   ├── panel.py             # Side panel (diary, chat)
 │   └── storage.py           # Plusi data persistence
 ├── storage/                 # Data persistence layer
-│   ├── card_sessions.py     # Per-card session SQLite storage
-│   ├── sessions.py          # Legacy session storage
+│   ├── card_sessions.py     # Per-card SQLite storage (PRIMARY session system)
+│   ├── sessions.py          # Legacy JSON sessions (DEPRECATED, kept as fallback)
 │   ├── mc_cache.py          # Multiple-choice cache
 │   └── insights.py          # Card insight extraction
 ├── ui/                      # Qt UI components & communication
 │   ├── widget.py            # ChatbotWidget (QWebEngineView)
-│   ├── bridge.py            # WebBridge (JS ↔ Python communication)
+│   ├── bridge.py            # WebBridge (JS ↔ Python communication, 50 slots)
 │   ├── setup.py             # DockWidget creation, keyboard shortcuts
 │   ├── manager.py           # Toolbar/bottom bar hide/show
-│   ├── settings.py          # Settings dialog
+│   ├── shortcut_filter.py   # GlobalShortcutFilter (all keyboard routing)
 │   ├── theme.py             # Theme utilities
 │   ├── global_theme.py      # Application-wide dark theme
+│   ├── tokens_qt.py         # Qt-compatible design token approximations
 │   ├── overlay_chat.py      # Free chat overlay
+│   ├── settings_sidebar.py  # Settings sidebar Python integration
 │   └── custom_screens.py    # DeckBrowser + Overview replacement
 ├── utils/                   # Shared utilities
 │   ├── text.py              # HTML cleaning, image extraction
 │   ├── anki.py              # Thread-safe Anki API helpers
 │   ├── card_tracker.py      # Card tracking + JS injection
-│   └── image_search.py      # PubChem/Wikimedia image search
+│   ├── image_search.py      # PubChem/Wikimedia image search
+│   └── logging.py           # Centralized logging system
+├── shared/                  # Cross-context shared resources
+│   ├── styles/design-system.css  # Design token source of truth (CSS vars)
+│   ├── config/tailwind.preset.js # Tailwind ↔ design token mapping
+│   ├── components/          # Shared TypeScript components (10 files)
+│   ├── plusi-renderer.js    # Unified Plusi SVG mood renderer
+│   └── utils/constants.ts   # Shared constants
 ├── custom_reviewer/         # Custom reviewer (HTML/CSS/JS replacement)
-├── frontend/                # React source code
+├── frontend/                # React source code (48 components, 12 hooks)
 ├── web/                     # Built frontend (loaded by QWebEngineView)
 ├── docs/                    # Documentation + specs + plans
 ├── scripts/                 # Shell scripts (build, deploy, cache)
-└── firebase/                # Firebase configuration
+├── firebase/                # Firebase configuration
+├── functions/               # Firebase Cloud Functions (subscription, tokens)
+├── backend/                 # Vercel backend (embeddings API, routing)
+├── Landingpage/             # Marketing website
+└── Assets/                  # Logo and brand assets
 ```
 
 ## Critical File Locations
@@ -110,27 +126,51 @@ AnkiPlus_main/
 ### Python Backend
 
 - `__init__.py`: Main entry point, hook registration, addon initialization
-- `ui/bridge.py`: WebBridge class with 35+ `@pyqtSlot` methods for JS communication
+- `ui/bridge.py`: WebBridge class with 50 `@pyqtSlot` methods for JS communication
 - `ui/widget.py`: ChatbotWidget class, QWebEngineView setup, message queue polling, AI request handling
 - `ui/setup.py`: QDockWidget creation, keyboard shortcuts (Cmd/Ctrl+I), toolbar button, menu items
 - `ui/global_theme.py`: Application-wide dark theme styling, continuous re-application logic
-- `ai/handler.py`: API integration for Google (Gemini)
+- `ui/shortcut_filter.py`: GlobalShortcutFilter — all keyboard routing
+- `ai/handler.py`: AI orchestrator — delegates to gemini.py, rag.py, models.py
+- `ai/gemini.py`: Google Gemini API requests, streaming, retry logic
+- `ai/rag.py`: RAG pipeline router, query analysis
 - `ai/auth.py`: Token management, JWT validation
 - `ai/system_prompt.py`: System prompt construction
 - `ai/agent_loop.py`: Agent loop for tool use
-- `ai/retrieval.py`: RAG/hybrid retrieval
 - `config.py`: Configuration management (API keys, model preferences, stored in config.json)
 - `custom_reviewer/__init__.py`: Custom reviewer HTML/CSS/JS replacement
 - `plusi/agent.py`: Plusi personality agent
-- `storage/card_sessions.py`: Per-card session SQLite storage
+- `storage/card_sessions.py`: Per-card SQLite storage (primary session system)
 
 ### React Frontend
 
 - `frontend/src/App.jsx`: Main React component, state management, message handling
 - `frontend/src/hooks/useAnki.js`: Bridge wrapper hook for Python communication
-- `frontend/src/components/`: React UI components (Header, ChatMessage, ChatInput, etc.)
+- `frontend/src/hooks/useChat.js`: Main chat state, streaming, section management
+- `frontend/src/hooks/useCardContext.js`: Card context (front/back, deck info, metadata)
+- `frontend/src/hooks/useCardSession.js`: Per-card session state (load/save history)
+- `frontend/src/hooks/useDeckTracking.js`: Deck state tracking, state transitions
+- `frontend/src/hooks/useFreeChat.js`: Card-independent chat for overlay (Stapel)
+- `frontend/src/hooks/useInsights.js`: Card insights dashboard data
+- `frontend/src/hooks/useMascot.js`: Plusi mood state, event-driven mood changes
+- `frontend/src/hooks/useModels.js`: Model management, provider detection
+- `frontend/src/hooks/useQuotaDisplay.js`: Token quota and tier limits
+- `frontend/src/hooks/useReviewTrail.js`: Review history tracking
+- `frontend/src/hooks/usePlusiDirect.js`: Direct Plusi personality/autonomy state
+- `frontend/src/components/`: 48 React components (see below)
+- `frontend/src/components/SettingsSidebar.jsx`: React settings panel (replaces old Python settings dialog)
 - `frontend/vite.config.js`: Vite build configuration (relative paths for local file loading)
 - `frontend/tailwind.config.js`: Tailwind + DaisyUI styling configuration
+
+**Key component groups** (48 total in `frontend/src/components/`):
+- Chat: `ChatInput`, `ChatMessage`, `StreamingChatMessage`, `FreeChatView`, `FreeChatSearchBar`
+- Cards: `CardContext`, `CardListWidget`, `CardPreviewModal`, `CardRefChip`, `CardWidget`
+- Plusi: `PlusiWidget`, `PlusiMenu`, `PersonalityGrid`, `MascotCharacter`, `MascotShell`, `DiaryStream`, `AutonomyCard`
+- Insights: `InsightsDashboard`, `InsightBullet`, `ExtractInsightsButton`
+- Navigation: `Header`, `DeckBrowser`, `DeckProgressBar`, `SectionDropdown`, `SectionNavigation`
+- Tools: `ToolWidgetRenderer`, `ImageWidget`, `StatsWidget`, `MultipleChoiceCard`, `ToolTogglePopup`
+- Settings: `SettingsSidebar`, `SettingsButton`, `TokenBudgetSlider`, `TokenBar`
+- Modals: `PaywallModal`, `QuotaLimitDialog`
 
 ### Build Output
 
@@ -139,21 +179,23 @@ AnkiPlus_main/
 
 ## Python ↔ JavaScript Bridge Methods
 
-The WebBridge exposes these methods to JavaScript (all defined in `ui/bridge.py`):
+The WebBridge exposes 50 `@pyqtSlot` methods to JavaScript (all defined in `ui/bridge.py`):
 
 **AI & Messaging**: `sendMessage()`, `cancelRequest()`, `setModel()`, `generateSectionTitle()`
 
-**Settings**: `openSettings()`, `closePanel()`, `saveSettings()`, `getCurrentConfig()`, `fetchModels()`, `getAITools()`, `saveAITools()`
+**Settings & Preferences**: `openSettings()`, `closePanel()`, `saveSettings()`, `getCurrentConfig()`, `fetchModels()`, `getAITools()`, `saveAITools()`, `getResponseStyle()`, `saveResponseStyle()`, `getTheme()`, `saveTheme()`, `openAnkiPreferences()`, `saveMascotEnabled()`
 
-**Deck Management**: `getCurrentDeck()`, `getAvailableDecks()`, `openDeck()`, `getDeckStats()`, `openDeckBrowser()`
+**Deck Management**: `getCurrentDeck()`, `getAvailableDecks()`, `openDeck()`, `getDeckStats()`, `openDeckBrowser()`, `openStats()`, `createNewDeck()`, `openImport()`
 
-**Card Operations**: `getCardDetails()`, `goToCard()`, `previewCard()`, `showAnswer()`, `hideAnswer()`, `saveMultipleChoice()`, `loadMultipleChoice()`, `hasMultipleChoice()`
+**Card Operations**: `getCardDetails()`, `goToCard()`, `previewCard()`, `openPreview()`, `advanceCard()`, `showAnswer()`, `hideAnswer()`, `saveMultipleChoice()`, `loadMultipleChoice()`, `hasMultipleChoice()`
 
-**Sessions**: `loadSessions()`, `saveSessions()`
+**Sessions & Storage** (SQLite-based): `loadCardSession()`, `saveCardSession()`, `saveCardMessage()`, `saveCardSection()`, `loadDeckMessages()`, `saveDeckMessage()`
 
-**Authentication**: `authenticate()`, `getAuthStatus()`, `getAuthToken()`, `refreshAuth()`, `handleAuthDeepLink()`
+**Authentication**: `authenticate()`, `getAuthStatus()`, `getAuthToken()`, `refreshAuth()`, `logout()`, `startLinkAuth()`, `handleAuthDeepLink()`
 
-**Media**: `searchImage()`, `fetchImage()`, `openUrl()`
+**Media & URLs**: `searchImage()`, `fetchImage()`, `openUrl()`
+
+**Embeddings**: `getEmbeddingStatus()`
 
 ## Anki Integration Hooks
 
@@ -215,7 +257,14 @@ Custom reviewer caches CSS/JS/HTML files in memory (`_css_cache`, `_js_cache`, `
 
 ## AI Provider Support
 
-The addon uses **Google Gemini** as its AI provider (Gemini 3 Flash). API calls are handled in `ai/handler.py` with streaming support, and the agent loop in `ai/agent_loop.py` handles tool use cycles.
+The addon uses **Google Gemini** as its AI provider (Gemini 3 Flash). The AI module follows a modular architecture:
+
+- **`handler.py`** — Orchestrator: public API, delegates to specialized modules
+- **`gemini.py`** — Gemini API integration: request building, streaming, retry logic
+- **`rag.py`** — RAG pipeline: query routing, keyword extraction, retrieval orchestration
+- **`models.py`** — Model management: fetching available models, section title generation
+- **`agent_loop.py`** — Multi-turn agent loop: tool call processing, context pruning
+- **`retrieval.py`** — Hybrid retrieval: SQL + semantic search merge, dual-match prioritization
 
 ## Frontend Technology Stack
 
@@ -252,7 +301,9 @@ The addon uses **Google Gemini** as its AI provider (Gemini 3 Flash). API calls 
 
 ### Design System & Styling
 
-**Source of truth:** `shared/styles/design-system.css` — defines ALL colors, typography, spacing, and component classes as CSS custom properties. Never hardcode colors anywhere.
+**CRITICAL: ALL colors MUST use CSS custom properties from the design system. NEVER use hardcoded hex values (`#0A84FF`), rgba literals (`rgba(255,255,255,0.5)`), or any raw color value in React components, inline styles, or CSS. This applies to backgrounds, text colors, borders, shadows, and opacity values. The design system tokens automatically handle dark/light mode — hardcoded colors break light mode. If you write `rgba(255, 255, 255, ...)` anywhere in a `.jsx` file, it is a bug.**
+
+**Source of truth:** `shared/styles/design-system.css` — defines ALL colors, typography, spacing, and component classes as CSS custom properties.
 
 **Core Principle — Material = Function:**
 - **Frosted Glass** (`.ds-frosted`): for action elements (input docks, search fields). Uses `var(--ds-bg-frosted)` + `backdrop-filter: blur(20px)`.
@@ -278,11 +329,13 @@ The addon uses **Google Gemini** as its AI provider (Gemini 3 Flash). API calls 
 
 **Fonts:** SF Pro (system font) for all UI. Space Grotesk (`--ds-font-brand`) exclusively for Plusi and brand.
 
-**Rules:**
-1. No component may define its own colors — use tokens
+**Rules (MANDATORY — no exceptions):**
+1. No component may define its own colors — use `var(--ds-*)` tokens exclusively
 2. Frosted Glass for action, Borderless for content
 3. Chat body text is 15px (`--ds-text-lg`)
-4. Spec: `docs/superpowers/specs/2026-03-20-unified-design-system.md`
+4. Every new React component MUST be tested in both dark and light mode
+5. Inline styles in JSX: use `var(--ds-text-primary)` not `rgba(255,255,255,0.9)`, use `var(--ds-bg-overlay)` not `#3A3A3C`
+6. Spec: `docs/superpowers/specs/2026-03-20-unified-design-system.md`
 
 Global Qt theme styles are in `ui/global_theme.py` (imports from `ui/tokens_qt.py`).
 
@@ -419,7 +472,7 @@ except ImportError:
 
 See `TECHNICAL.md` for exhaustive implementation details including:
 - Line-by-line Qt component documentation
-- All 35 WebBridge methods with signatures
+- WebBridge method signatures (note: TECHNICAL.md may lag behind bridge.py which has 50 methods)
 - Complete hook integration documentation
 - Error handling patterns
 - Toolbar hiding investigation (section 9)

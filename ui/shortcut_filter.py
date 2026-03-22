@@ -214,6 +214,7 @@ class GlobalShortcutFilter(QObject):
         """Forward a key event as a synthetic JS KeyboardEvent to the reviewer."""
         reviewer_web = self._get_reviewer_web()
         if not reviewer_web:
+            logger.debug("FORWARD: no reviewer_web")
             return False
 
         qt_key = event.key()
@@ -231,13 +232,7 @@ class GlobalShortcutFilter(QObject):
         ctrl = 'true' if event.modifiers() & Qt.KeyboardModifier.ControlModifier else 'false'
         meta = 'true' if event.modifiers() & Qt.KeyboardModifier.MetaModifier else 'false'
 
-        js = (
-            f"document.body.dispatchEvent(new KeyboardEvent('keydown', {{"
-            f"  key: '{key}', code: '{code}',"
-            f"  shiftKey: {shift}, ctrlKey: {ctrl}, metaKey: {meta},"
-            f"  bubbles: true, cancelable: true"
-            f"}}));"
-        )
+        js = f"if(window.handleKey) window.handleKey('{key}', '{code}');"
         reviewer_web.page().runJavaScript(js)
         return True
 
@@ -252,14 +247,14 @@ class GlobalShortcutFilter(QObject):
             self._toggle_text_field_focus()
             return True
 
-        # --- Cmd+I: Toggle settings sidebar ---
+        # --- Cmd+I: Toggle chatbot panel ---
         if (event.key() == Qt.Key.Key_I and
                 event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier)):
             try:
-                from .settings_sidebar import toggle_settings_sidebar
-                toggle_settings_sidebar()
+                from .setup import toggle_chatbot_panel
+                toggle_chatbot_panel()
             except Exception as e:
-                logger.warning("Could not toggle settings sidebar: %s", e)
+                logger.warning("Could not toggle chatbot panel: %s", e)
             return True
 
         # --- Cmd+Z: Always forward to reviewer (undo card) ---
@@ -272,8 +267,32 @@ class GlobalShortcutFilter(QObject):
 
         # --- Text field has focus: handle special keys, pass through rest ---
         text_field_active = self._text_field_has_focus
-        if self._is_focus_in_reviewer():
+        focus_in_reviewer = self._is_focus_in_reviewer()
+        if focus_in_reviewer:
             text_field_active = False
+
+        # In review state: arrow keys and number keys always go to the reviewer,
+        # even if a chat text field has focus (these aren't needed for typing).
+        # Space and Enter stay with the text field (space = type, enter = send).
+        # User presses Escape to exit text field, then Space/Enter go to reviewer.
+        if text_field_active and self._is_reviewer_active():
+            always_reviewer_keys = {
+                Qt.Key.Key_Left, Qt.Key.Key_Right,
+                Qt.Key.Key_1, Qt.Key.Key_2, Qt.Key.Key_3, Qt.Key.Key_4, Qt.Key.Key_5,
+            }
+            if event.key() in always_reviewer_keys:
+                text_field_active = False
+
+        # DEBUG: Log shortcut routing for Space/Enter/Escape (temporary)
+        if event.key() in (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Escape):
+            focused_widget = QApplication.focusWidget()
+            logger.debug(
+                "SHORTCUT key=%s text_field_flag=%s text_field_active=%s "
+                "focus_in_reviewer=%s reviewer_active=%s focused_widget=%s",
+                event.key(), self._text_field_has_focus, text_field_active,
+                focus_in_reviewer, self._is_reviewer_active(),
+                type(focused_widget).__name__ if focused_widget else 'None'
+            )
 
         if text_field_active:
             if event.key() == Qt.Key.Key_Escape:

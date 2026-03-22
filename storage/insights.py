@@ -88,10 +88,16 @@ def parse_extraction_response(response_text):
     """Parse AI response into insights JSON. Returns None on failure."""
     try:
         text = response_text.strip()
+        # Strip markdown code fences
         if '```json' in text:
             text = text.split('```json')[1].split('```')[0].strip()
         elif '```' in text:
             text = text.split('```')[1].split('```')[0].strip()
+
+        # Try to find JSON object in text (handles thinking tokens, preamble)
+        json_match = re.search(r'\{[\s\S]*"insights"\s*:\s*\[[\s\S]*\]\s*\}', text)
+        if json_match:
+            text = json_match.group(0)
 
         data = json.loads(text)
 

@@ -30,7 +30,6 @@ import { useFreeChat } from './hooks/useFreeChat';
 import { setRegistry, findAgent } from '@shared/config/subagentRegistry';
 // MascotShell moved to main window (plusi_dock.py) — no longer imported
 import { useMascot } from './hooks/useMascot';
-import { usePlusiDirect } from './hooks/usePlusiDirect';
 import InsightsDashboard from './components/InsightsDashboard';
 import AgentStudio from './components/AgentStudio';
 import ExtractInsightsButton from './components/ExtractInsightsButton';
@@ -378,8 +377,6 @@ function AppInner() {
   const activationCountRef = useRef(0);
   const activationResetRef = useRef(null);
 
-  // Plusi Direct — @Plusi inline messages
-  const { sendDirect: sendPlusiDirect } = usePlusiDirect();
   const eventTriggerRef = useRef(null);
   const [streak, setStreak] = useState(0);
 
@@ -1519,39 +1516,8 @@ function AppInner() {
       setActiveView('chat');
     }
 
-    // @Plusi intercept — route to Plusi Direct instead of main AI
-    // Uses case-insensitive match, works regardless of mascot toggle
-    if (/^@plusi\b/i.test(text.trim())) {
-      const plusiText = text.trim().replace(/^@plusi\s*/i, '').trim();
-      if (plusiText) {
-        // Add user message to chat
-        chatHook.setMessages(prev => [
-          ...prev,
-          { id: Date.now(), from: 'user', text }
-        ]);
-        // Set loading state and emit synthetic pipeline for ThoughtStream
-        chatHook.setIsLoading(true);
-        // Emit synthetic router-active immediately
-        const now = Date.now();
-        chatHook.updatePipelineSteps
-          ? chatHook.updatePipelineSteps([{ step: 'router', status: 'active', data: {}, timestamp: now }])
-          : null;
-        // After 700ms, emit router-done
-        setTimeout(() => {
-          chatHook.updatePipelineSteps
-            ? chatHook.updatePipelineSteps(prev => prev.map(s => s.step === 'router' ? {
-                ...s,
-                status: 'done',
-                data: { search_needed: false, retrieval_mode: 'none', response_length: 'short', scope: 'none', scope_label: '' },
-                timestamp: Date.now()
-              } : s))
-            : null;
-        }, 700);
-        // Send to Plusi directly
-        sendPlusiDirect(plusiText);
-      }
-      return;
-    }
+    // @Subagent intercept is now handled inside useChat.handleSend() via registry-based detection.
+    // No App.jsx-level interception needed — useChat routes via bridge.subagentDirect().
 
     // Auto-transition from peek to card_chat when user sends a message
     if (previewModeRef.current?.stage === 'peek') {

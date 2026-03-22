@@ -226,6 +226,7 @@ header *,
   box-shadow: 0 1px 4px rgba(0,0,0,0.3);
   cursor: pointer;
   border: none;
+  margin-top: -5px;
 }
 .token-budget-range::-moz-range-thumb {
   width: 14px;
@@ -238,9 +239,9 @@ header *,
 }
 .token-budget-range::-webkit-slider-runnable-track {
   background: transparent;
-  height: 4px;
+  height: 20px;
 }
 .token-budget-range::-moz-range-track {
   background: transparent;
-  height: 4px;
+  height: 20px;
 }

@@ -810,6 +810,23 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
             logger.error("plusi:settings error: %s", e)
         return (True, None)
 
+    elif message == "dock:query_panel_state":
+        # Reviewer asks: is the side panel open? Respond authoritatively.
+        # Note: web.eval() is Qt's QWebEngineView JS execution API, not Python eval().
+        try:
+            from ..ui.setup import _chatbot_dock
+            is_open = _chatbot_dock is not None and _chatbot_dock.isVisible()
+            if mw and mw.reviewer and mw.reviewer.web:
+                val = "true" if is_open else "false"
+                mw.reviewer.web.eval(f'if(window.setChatOpen) setChatOpen({val});')
+        except Exception as e:
+            logger.debug("dock:query_panel_state error: %s", e)
+        return (True, None)
+
+    elif message.startswith("debug:"):
+        logger.debug("REVIEWER JS: %s", message)
+        return (True, None)
+
     elif message == "plusi:panel":
         from ..plusi.panel import toggle_panel
         toggle_panel()
@@ -890,8 +907,9 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
             from ..ui import setup as ui_setup
             is_open = hasattr(ui_setup, '_chatbot_dock') and ui_setup._chatbot_dock and ui_setup._chatbot_dock.isVisible()
             if is_open:
-                if hasattr(ui_setup, 'toggle_chatbot'):
-                    ui_setup.toggle_chatbot()
+                # Hide panel without setting _panel_user_closed (auto-close on card advance)
+                ui_setup._chatbot_dock.hide()
+                ui_setup._notify_reviewer_chat_state(False)
             # Tell reviewer JS that chat is now closed
             try:
                 if mw and mw.reviewer and mw.reviewer.web:
@@ -1446,7 +1464,7 @@ class CustomReviewer:
                 is_dark_mode=is_dark_mode  # NEW
             )
 
-        # Inject chat panel state so interactions.js knows whether dock should be hidden
+        # Inject chat panel state so interactions.js knows whether dock should be hidden.
         chat_panel_open = False
         try:
             from ..ui.setup import _chatbot_dock

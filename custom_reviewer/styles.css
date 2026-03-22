@@ -705,3 +705,23 @@ button:focus-visible {
 
 /* Preserve external styles */
 [data-amboss], [class*="amboss"] { /* Don't override */ }
+
+/* ═══ Light-mode adjustments for card-embedded badges ═══
+   Card templates (AMBOSS, tags, errata, note-id) often assume dark background.
+   Override common patterns so they adapt to light mode. */
+[data-theme="light"] .question,
+[data-theme="light"] .answer {
+  color-scheme: light;
+}
+
+/* Generic pill/badge elements inside card content — make readable in light mode */
+[data-theme="light"] .tags,
+[data-theme="light"] [class*="tag-"],
+[data-theme="light"] [class*="badge"],
+[data-theme="light"] [class*="errata"],
+[data-theme="light"] [class*="note-id"],
+[data-theme="light"] [class*="noteId"] {
+  background: var(--ds-hover-tint) !important;
+  color: var(--ds-text-secondary) !important;
+  border-color: var(--ds-border-subtle) !important;
+}

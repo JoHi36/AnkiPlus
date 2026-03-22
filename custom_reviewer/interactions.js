@@ -32,7 +32,7 @@
     let mcWrongPicks = [];    // Track which wrong options were picked
     let autoRateEase = 0;
     let questionStartTime = Date.now();
-    let chatOpen = false;
+    let chatOpen = window.__chatOpen || false;
     let aiSteps = [];         // ThoughtStream steps
     let lastUserAnswer = '';
 
@@ -418,13 +418,21 @@
         if (current !== S.ANSWER) return;
         const max = window.buttonCount || 4;
         if (ease < 1 || ease > max) return;
-        console.log('[AnkiPlus] rateCard ease=' + ease + ' state=' + current);
+        // Close chat panel if open before advancing
+        if (chatOpen) {
+            pycmd('chat:close');
+            chatOpen = false;
+        }
         pycmd('ease' + ease);
     };
 
     window.proceedAfterEval = function() {
         if (autoRateEase > 0) {
-            console.log('[AnkiPlus] proceedAfterEval ease=' + autoRateEase);
+            // Close chat panel if open before advancing
+            if (chatOpen) {
+                pycmd('chat:close');
+                chatOpen = false;
+            }
             pycmd('ease' + autoRateEase);
         }
     };
@@ -878,6 +886,9 @@
     // ═══ Keyboard ═══
 
     function onKeydown(e) {
+        // DEBUG: log all keydown events reaching this handler
+        pycmd('debug:keydown:' + e.key + ':' + e.code + ':state=' + current + ':chatOpen=' + chatOpen);
+
         const tag = (e.target.tagName || '').toLowerCase();
         if (tag === 'textarea' || tag === 'input' || e.target.isContentEditable) return;
 
@@ -961,6 +972,8 @@
         questionStartTime = Date.now();
         setupTextarea();
         setState(S.QUESTION);
+        // Ask Python for authoritative panel state (covers all race conditions)
+        pycmd('dock:query_panel_state');
         document.addEventListener('keydown', onKeydown);
         document.addEventListener('touchstart', onTouchStart, { passive: true });
         document.addEventListener('touchend', onTouchEnd, { passive: true });
@@ -1006,7 +1019,7 @@
                         canvas.style.transform = 'translateY(0)';
                     });
                 }
-                if (dock) {
+                if (dock && !chatOpen) {
                     dock.style.opacity = '0';
                     dock.style.transform = 'translateX(-50%) translateY(12px)';
                     dock.style.transition = 'opacity 0.35s ease 0.1s, transform 0.35s ease 0.1s';
@@ -1030,7 +1043,7 @@
         aiSteps = [];
         autoRateEase = 0;
         questionStartTime = Date.now();
-        chatOpen = false;
+        chatOpen = window.__chatOpen || false;
         setState(S.QUESTION);
     });
 
@@ -1039,6 +1052,17 @@
     } else {
         init();
     }
+
+    // Expose handleKey for Python shortcut filter (synthetic KeyboardEvents
+    // don't work reliably in QWebEngineView)
+    window.handleKey = function(key, code) {
+        onKeydown({
+            key: key, code: code,
+            target: { tagName: 'BODY', isContentEditable: false },
+            shiftKey: false, ctrlKey: false, metaKey: false, altKey: false,
+            preventDefault: function() {}
+        });
+    };
 
     window._state = { get: () => current };
     Object.defineProperty(window, 'autoRateEase', {

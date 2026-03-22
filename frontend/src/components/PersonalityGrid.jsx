@@ -1,7 +1,7 @@
 import React from 'react';
 
 // Grid area: axis labels sit outside, grid border aligns with text edges
-const PX = 16, PY = 14, RX = 328, RY = 62;
+const PX = 16, PY = 10, RX = 328, RY = 62;
 const CX = PX + RX / 2, CY = PY + RY / 2;
 
 function toSVG(x, y) {
@@ -67,7 +67,7 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
       ))}
 
       {/* Axis labels */}
-      <text x={CX} y={PY - 2} textAnchor="middle" fontSize="5" fill={labelColor}
+      <text x={CX} y={PY - 4} textAnchor="middle" fontSize="5" fill={labelColor}
         letterSpacing="1" fontFamily="-apple-system,system-ui">AKTIV</text>
       <text x={CX} y={PY + RY + 10} textAnchor="middle" fontSize="5" fill={labelColor}
         letterSpacing="1" fontFamily="-apple-system,system-ui">REFLEKTIV</text>

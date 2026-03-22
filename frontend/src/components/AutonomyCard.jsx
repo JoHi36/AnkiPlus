@@ -75,99 +75,67 @@ function Toggle({ on, onChange, disabled = false }) {
   );
 }
 
-// ─── Custom Slider ──────────────────────────────────────────────────────────
+// ─── Activity Level Slider (Sparsam / Aktiv) ────────────────────────────────
 
-function BudgetSlider({ min, max, step, value, onChange }) {
-  const trackRef = useRef(null);
-  const dragging = useRef(false);
+const ACTIVITY_LEVELS = [
+  { key: 'chat', label: 'Nur Chat', budget: 0, desc: 'Keine proaktiven Aktionen' },
+  { key: 'sparsam', label: 'Sparsam', budget: 1500, desc: 'Wacht ~1× pro Stunde auf' },
+  { key: 'aktiv', label: 'Aktiv', budget: 4000, desc: 'Wacht alle 20–30 Min auf' },
+];
 
-  const pct = ((value - min) / (max - min)) * 100;
+function ActivitySegments({ value, onChange }) {
+  const containerRef = useRef(null);
+  const [pillStyle, setPillStyle] = useState({});
 
-  const calcValue = useCallback((clientX) => {
-    const rect = trackRef.current.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    const raw = min + ratio * (max - min);
-    const stepped = Math.round(raw / step) * step;
-    return Math.max(min, Math.min(max, stepped));
-  }, [min, max, step]);
-
-  const handleTrackClick = useCallback((e) => {
-    onChange(calcValue(e.clientX));
-  }, [calcValue, onChange]);
-
-  const handlePointerDown = useCallback((e) => {
-    e.preventDefault();
-    dragging.current = true;
-
-    const onMove = (ev) => {
-      if (!dragging.current) return;
-      const clientX = ev.touches ? ev.touches[0].clientX : ev.clientX;
-      onChange(calcValue(clientX));
-    };
-
-    const onUp = () => {
-      dragging.current = false;
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      document.removeEventListener('touchmove', onMove);
-      document.removeEventListener('touchend', onUp);
-    };
-
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-    document.addEventListener('touchmove', onMove, { passive: false });
-    document.addEventListener('touchend', onUp);
-  }, [calcValue, onChange]);
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const buttons = containerRef.current.querySelectorAll('[data-level]');
+    const idx = ACTIVITY_LEVELS.findIndex(l => l.key === value);
+    const btn = buttons[idx >= 0 ? idx : 0];
+    if (btn) {
+      setPillStyle({ left: btn.offsetLeft, width: btn.offsetWidth });
+    }
+  }, [value]);
 
   return (
     <div
-      ref={trackRef}
-      onClick={handleTrackClick}
+      ref={containerRef}
       style={{
         position: 'relative',
-        height: 24,
-        cursor: 'pointer',
         display: 'flex',
-        alignItems: 'center',
+        background: 'var(--ds-bg-overlay, rgba(255,255,255,0.06))',
+        borderRadius: 8,
+        padding: 2,
       }}
     >
-      {/* Track background */}
       <div style={{
-        position: 'absolute',
-        left: 0, right: 0,
-        height: 6,
-        borderRadius: 4,
-        background: 'var(--ds-bg-overlay, #3A3A3C)',
+        position: 'absolute', top: 2, height: 'calc(100% - 4px)',
+        borderRadius: 6,
+        background: 'rgba(10, 132, 255, 0.15)',
+        border: '1px solid rgba(10, 132, 255, 0.25)',
+        transition: 'left 0.25s ease, width 0.25s ease',
+        ...pillStyle,
       }} />
-
-      {/* Filled portion */}
-      <div style={{
-        position: 'absolute',
-        left: 0,
-        width: `${pct}%`,
-        height: 6,
-        borderRadius: 4,
-        background: 'linear-gradient(90deg, #30D158, #0A84FF)',
-      }} />
-
-      {/* Thumb */}
-      <div
-        onMouseDown={handlePointerDown}
-        onTouchStart={handlePointerDown}
-        style={{
-          position: 'absolute',
-          left: `${pct}%`,
-          top: '50%',
-          transform: 'translate(-50%, -50%)',
-          width: 18,
-          height: 18,
-          borderRadius: '50%',
-          background: '#fff',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
-          cursor: 'pointer',
-          zIndex: 1,
-        }}
-      />
+      {ACTIVITY_LEVELS.map((level) => (
+        <button
+          key={level.key}
+          data-level={level.key}
+          onClick={() => onChange(level.key)}
+          style={{
+            flex: 1, position: 'relative', zIndex: 1,
+            padding: '6px 4px', border: 'none', background: 'none',
+            cursor: 'pointer', fontSize: 11, whiteSpace: 'nowrap',
+            fontWeight: value === level.key ? 600 : 400,
+            color: value === level.key
+              ? 'var(--ds-accent, #0A84FF)'
+              : 'var(--ds-text-tertiary, rgba(255,255,255,0.35))',
+            transition: 'color 0.2s',
+            fontFamily: '-apple-system, Inter, system-ui, sans-serif',
+          }}
+        >
+          {level.label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -202,7 +170,8 @@ export default function AutonomyCard({
   onSave,
 }) {
   const [config, setConfig] = useState(() => ({
-    token_budget: 500,
+    activity_level: 'sparsam',
+    budget_per_hour: 1500,
     can_reflect: true,
     can_explore_cards: false,
     can_write_diary: false,
@@ -227,9 +196,15 @@ export default function AutonomyCard({
     }, 500);
   }, [onSave]);
 
-  const handleBudgetChange = useCallback((value) => {
+  const handleActivityChange = useCallback((level) => {
+    const levelData = ACTIVITY_LEVELS.find(l => l.key === level) || ACTIVITY_LEVELS[0];
     setConfig(prev => {
-      const next = { ...prev, token_budget: value };
+      const next = {
+        ...prev,
+        activity_level: level,
+        budget_per_hour: levelData.budget,
+        enabled: level !== 'chat',
+      };
       triggerSave(next);
       return next;
     });
@@ -305,33 +280,29 @@ export default function AutonomyCard({
         </span>
       </div>
 
-      {/* ── Token Budget ───────────────────────────────────────────── */}
+      {/* ── Activity Level ─────────────────────────────────────────── */}
       <div style={{ marginBottom: 20 }}>
         <div style={{
           display: 'flex', alignItems: 'center',
-          justifyContent: 'space-between', marginBottom: 10,
+          justifyContent: 'space-between', marginBottom: 6,
         }}>
           <span style={{
             fontSize: 13, fontWeight: 500,
             color: 'var(--ds-text-secondary, rgba(255,255,255,0.7))',
           }}>
-            Token-Budget
+            Aktivität
           </span>
           <span style={{
-            fontSize: 13, fontWeight: 600,
-            color: 'var(--ds-accent, #0A84FF)',
-            fontVariantNumeric: 'tabular-nums',
+            fontSize: 11,
+            color: 'var(--ds-text-tertiary, rgba(255,255,255,0.35))',
           }}>
-            {config.token_budget} / h
+            {(ACTIVITY_LEVELS.find(l => l.key === config.activity_level) || ACTIVITY_LEVELS[0]).desc}
           </span>
         </div>
 
-        <BudgetSlider
-          min={100}
-          max={2000}
-          step={100}
-          value={config.token_budget}
-          onChange={handleBudgetChange}
+        <ActivitySegments
+          value={config.activity_level}
+          onChange={handleActivityChange}
         />
       </div>
 

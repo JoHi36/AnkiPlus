@@ -1436,3 +1436,26 @@ class WebBridge(QObject):
         except Exception as e:
             logger.exception("saveMascotEnabled error: %s", e)
 
+    @pyqtSlot(str, str, str)
+    def subagentDirect(self, agent_name, text, extra_json='{}'):
+        """Route @Name messages to the appropriate subagent."""
+        try:
+            extra = json.loads(extra_json) if extra_json else {}
+            self.widget._handle_subagent_direct(agent_name, text, extra)
+        except Exception as e:
+            logger.exception("subagentDirect error: %s", e)
+
+    @pyqtSlot(result=str)
+    def getSubagentRegistry(self):
+        """Return enabled subagents as JSON for frontend registry."""
+        try:
+            try:
+                from ..ai.subagents import get_registry_for_frontend
+            except ImportError:
+                from ai.subagents import get_registry_for_frontend
+            config = self.widget.config
+            return json.dumps(get_registry_for_frontend(config))
+        except Exception as e:
+            logger.exception("getSubagentRegistry error: %s", e)
+            return '[]'
+

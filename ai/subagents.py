@@ -13,13 +13,14 @@ logger = get_logger(__name__)
 class SubagentDefinition:
     name: str                  # Unique ID: 'plusi'
     label: str                 # Display name: 'Plusi'
-    description: str           # For router prompt
+    description: str           # General description (for UI/settings)
     color: str                 # Hex color for pipeline: '#A78BFA'
     enabled_key: str           # Config key: 'mascot_enabled'
     pipeline_label: str        # Shown in router done-step: 'Plusi'
     run_module: str            # Module path for lazy import: 'plusi.agent'
     run_function: str          # Function name: 'run_plusi'
-    router_hint: str           # When router should delegate
+    router_hint: str           # When router should delegate (router-specific instruction)
+    main_model_hint: str = ''  # Instruction for the main model (e.g., how to use spawn_plusi tool)
     on_finished: Optional[Callable] = None
     extra_kwargs: dict = field(default_factory=dict)
 
@@ -36,14 +37,32 @@ def get_enabled_subagents(config: dict) -> list[SubagentDefinition]:
             if config.get(s.enabled_key, False)]
 
 def get_router_subagent_prompt(config: dict) -> str:
-    """Auto-generate router prompt section from enabled subagents."""
+    """Auto-generate router prompt section from enabled subagents.
+
+    Uses router_hint — tells the router WHEN to delegate to a subagent.
+    """
     enabled = get_enabled_subagents(config)
     if not enabled:
         return ""
     lines = ["Available subagents (use retrieval_mode 'subagent:<name>' ONLY when "
              "exclusively this agent's function is needed, no search required):"]
     for s in enabled:
-        lines.append(f"  - subagent:{s.name} -- {s.label}: {s.description}. {s.router_hint}")
+        lines.append(f"  - subagent:{s.name} -- {s.label}: {s.router_hint}")
+    return "\n".join(lines)
+
+def get_main_model_subagent_prompt(config: dict) -> str:
+    """Auto-generate subagent section for the main model's system prompt.
+
+    Uses main_model_hint — tells the main model HOW to interact with subagents.
+    Only includes agents that have a main_model_hint defined.
+    """
+    enabled = get_enabled_subagents(config)
+    hints = [s for s in enabled if s.main_model_hint]
+    if not hints:
+        return ""
+    lines = ["Available subagents:"]
+    for s in hints:
+        lines.append(f"  - {s.label}: {s.main_model_hint}")
     return "\n".join(lines)
 
 def lazy_load_run_fn(agent: SubagentDefinition) -> Callable:
@@ -112,6 +131,7 @@ register_subagent(SubagentDefinition(
     pipeline_label='Plusi',
     run_module='plusi.agent',
     run_function='run_plusi',
-    router_hint='Use when user wants casual conversation, emotional support, or explicitly addresses Plusi.',
+    router_hint='Use when user wants casual conversation, emotional support, or explicitly addresses Plusi. NOT when the question also requires card search or factual answers.',
+    main_model_hint='Use the spawn_plusi tool when the user explicitly addresses Plusi or wants personal/emotional interaction. Do NOT spawn Plusi for factual questions.',
     on_finished=_plusi_on_finished,
 ))

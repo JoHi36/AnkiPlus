@@ -45,11 +45,11 @@ class TestSubagentRegistry:
     def test_router_prompt_includes_agent(self):
         from ai.subagents import register_subagent, get_router_subagent_prompt
         register_subagent(self._make_agent('plusi', enabled_key='mascot_enabled',
-                                            description='Companion'))
+                                            router_hint='Use for casual chat.'))
         prompt = get_router_subagent_prompt({'mascot_enabled': True})
         assert 'subagent:plusi' in prompt
         assert 'Plusi' in prompt
-        assert 'Companion' in prompt
+        assert 'Use for casual chat.' in prompt
 
     def test_router_prompt_empty_when_disabled(self):
         from ai.subagents import register_subagent, get_router_subagent_prompt
@@ -80,3 +80,26 @@ class TestSubagentRegistry:
         def my_callback(widget, name, result): pass
         register_subagent(self._make_agent('x', on_finished=my_callback))
         assert SUBAGENT_REGISTRY['x'].on_finished is my_callback
+
+    def test_router_prompt_uses_router_hint_not_description(self):
+        from ai.subagents import register_subagent, get_router_subagent_prompt
+        register_subagent(self._make_agent('web', enabled_key='web_on',
+                                            description='Searches the internet',
+                                            router_hint='Only when user explicitly asks for web search.'))
+        prompt = get_router_subagent_prompt({'web_on': True})
+        assert 'Only when user explicitly asks for web search' in prompt
+        assert 'Searches the internet' not in prompt  # description NOT in router prompt
+
+    def test_main_model_prompt_uses_main_model_hint(self):
+        from ai.subagents import register_subagent, get_main_model_subagent_prompt
+        register_subagent(self._make_agent('plusi', enabled_key='on',
+                                            main_model_hint='Use spawn_plusi for personal chat.'))
+        prompt = get_main_model_subagent_prompt({'on': True})
+        assert 'spawn_plusi' in prompt
+        assert 'Plusi' in prompt
+
+    def test_main_model_prompt_empty_without_hint(self):
+        from ai.subagents import register_subagent, get_main_model_subagent_prompt
+        register_subagent(self._make_agent('x', enabled_key='on'))  # no main_model_hint
+        prompt = get_main_model_subagent_prompt({'on': True})
+        assert prompt == ""
