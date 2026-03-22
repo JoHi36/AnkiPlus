@@ -13,15 +13,16 @@ export default function ResearchContent({ sources = [], answer = '', error = nul
   // Convert [[WEB:N]] markers to markdown links that the renderer can catch
   const processedAnswer = useMemo(() => {
     if (!answer) return '';
-    return answer.replace(/\[\[WEB:(\d+)\]\]/g, (match, indexStr) => {
+    let result = answer.replace(/\[\[WEB:(\d+)\]\]/g, (match, indexStr) => {
       const idx = parseInt(indexStr, 10);
       const source = sources[idx - 1];
       if (source) {
         const url = source.url || '';
         return `[${idx}](webcite:${idx}:${encodeURIComponent(url)})`;
       }
-      return match;
+      return `\\[${idx}\\]`; // Fallback: escaped brackets so Markdown doesn't eat them
     });
+    return result;
   }, [answer, sources]);
 
   if (error) {

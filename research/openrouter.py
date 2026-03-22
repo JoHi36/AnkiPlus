@@ -58,6 +58,9 @@ def search_via_openrouter(query: str, api_key: str,
         answer = message.get('content', '')
 
         # Citations: OpenRouter puts Perplexity citations in message.annotations
+        # Perplexity annotations come in two batches: first N with titles (the indexed sources
+        # matching [1], [2] etc. in the text), then duplicates without titles. Keep the first
+        # batch only (those with non-empty titles), preserving order so index [1] = citations[0].
         citations = []
         seen_urls = set()
         for ann in message.get('annotations', []):

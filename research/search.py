@@ -24,8 +24,15 @@ def _is_medical_query(query: str) -> bool:
 
 
 def _convert_citations(text: str) -> str:
-    """Convert Perplexity [1], [2] citations to [[WEB:1]], [[WEB:2]] format."""
-    return re.sub(r'\[(\d+)\]', r'[[WEB:\1]]', text)
+    """Convert Perplexity [1], [2] citations to [[WEB:1]], [[WEB:2]] format.
+
+    Also adds spaces between adjacent citations so ReactMarkdown
+    doesn't interpret ][ as nested link syntax.
+    """
+    converted = re.sub(r'\[(\d+)\]', r'[[WEB:\1]]', text)
+    # Add space between adjacent markers: ]][[WEB → ]] [[WEB
+    converted = converted.replace(']][[WEB:', ']] [[WEB:')
+    return converted
 
 
 def _sources_from_citations(citations: list) -> list:

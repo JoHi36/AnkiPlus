@@ -252,11 +252,11 @@ header *,
   position: absolute; top: 0; left: -9999px; right: -9999px; bottom: 0;
   background:
     linear-gradient(180deg,
-      rgba(var(--agent-rgb), 0.08) 0%,
-      rgba(var(--agent-rgb), 0.03) 15%,
-      transparent 40%,
-      rgba(var(--agent-rgb), 0.02) 85%,
-      rgba(var(--agent-rgb), 0.06) 100%);
+      rgba(var(--agent-rgb), 0.05) 0%,
+      rgba(var(--agent-rgb), 0.02) 20%,
+      transparent 45%,
+      transparent 80%,
+      rgba(var(--agent-rgb), 0.03) 100%);
   pointer-events: none; z-index: 0;
 }
 .agent-cell > *:not(.agent-cell-glow) { position: relative; z-index: 1; }
