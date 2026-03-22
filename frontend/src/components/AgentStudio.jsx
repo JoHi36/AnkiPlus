@@ -47,13 +47,16 @@ function Toggle({ on, onChange }) {
   );
 }
 
-const TOOLS = [
+const LEARNING_TOOLS = [
   { key: 'card_search', emoji: '🔍', label: 'Kartensuche', desc: 'Karten aus dem Deck suchen' },
+  { key: 'statistics', emoji: '📈', label: 'Statistiken', desc: 'Streak, Heatmap, Deck-Überblick' },
+  { key: 'compact', emoji: '✦', label: 'Zusammenfassen', desc: 'Chat-Erkenntnisse extrahieren' },
+];
+
+const CONTENT_TOOLS = [
   { key: 'images', emoji: '🖼️', label: 'Bilder', desc: 'Bilder aus Karten und Internet' },
   { key: 'diagrams', emoji: '📊', label: 'Diagramme', desc: 'Mermaid-Diagramme' },
-  { key: 'statistics', emoji: '📈', label: 'Statistiken', desc: 'Streak, Heatmap, Deck-Überblick' },
   { key: 'molecules', emoji: '🧬', label: 'Moleküle', desc: 'Molekülstrukturen darstellen', badge: 'Beta' },
-  { key: 'compact', emoji: '✦', label: 'Zusammenfassen', desc: 'Chat-Erkenntnisse extrahieren' },
 ];
 
 function SectionHeader({ title, tooltip }) {
@@ -243,14 +246,50 @@ export default function AgentStudio({ bridge, onNavigateToPlusi }) {
 
       <div style={S.section}>
         <SectionHeader
-          title="Agent Tools"
-          tooltip="Werkzeuge die der Tutor während eines Gesprächs einsetzen kann — Kartensuche, Bilder, Diagramme und mehr. Werden automatisch genutzt wenn der Kontext es erfordert."
+          title="Lerntools"
+          tooltip="Werkzeuge für Kartensuche, Lernstatistiken und Chat-Zusammenfassung. Unterstützen dich beim aktiven Lernen."
         />
         <div style={S.card}>
-          {TOOLS.map((tool, i) => (
+          {LEARNING_TOOLS.map((tool, i) => (
             <div key={tool.key} style={{
               ...S.toolRow,
-              borderBottom: i < TOOLS.length - 1 ? '1px solid var(--ds-border-subtle, rgba(255,255,255,0.06))' : 'none',
+              borderBottom: i < LEARNING_TOOLS.length - 1 ? '1px solid var(--ds-border-subtle, rgba(255,255,255,0.06))' : 'none',
+            }}>
+              <span style={{ fontSize: 16, marginRight: 10 }}>{tool.emoji}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ds-text-secondary, rgba(255,255,255,0.7))' }}>
+                    {tool.label}
+                  </span>
+                  {tool.badge && (
+                    <span style={{
+                      fontSize: 9, fontWeight: 600, padding: '2px 7px', borderRadius: 5,
+                      background: 'rgba(10,132,255,0.12)', color: 'rgba(10,132,255,0.8)',
+                    }}>
+                      {tool.badge}
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))', marginTop: 1 }}>
+                  {tool.desc}
+                </div>
+              </div>
+              <Toggle on={!!tools[tool.key]} onChange={() => handleToggleTool(tool.key)} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={S.section}>
+        <SectionHeader
+          title="Inhalte"
+          tooltip="Werkzeuge für visuelle Inhalte — Bilder, Diagramme und Molekülstrukturen. Werden automatisch in Antworten eingebettet."
+        />
+        <div style={S.card}>
+          {CONTENT_TOOLS.map((tool, i) => (
+            <div key={tool.key} style={{
+              ...S.toolRow,
+              borderBottom: i < CONTENT_TOOLS.length - 1 ? '1px solid var(--ds-border-subtle, rgba(255,255,255,0.06))' : 'none',
             }}>
               <span style={{ fontSize: 16, marginRight: 10 }}>{tool.emoji}</span>
               <div style={{ flex: 1 }}>
