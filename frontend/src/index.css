@@ -245,3 +245,45 @@ header *,
   background: transparent;
   height: 20px;
 }
+
+/* ── Agentic Cell Skeleton ── */
+.agent-cell { position: relative; padding: 18px 0; margin: 4px 0; }
+.agent-cell-glow {
+  position: absolute; top: 0; left: -24px; right: -24px; bottom: 0;
+  background: linear-gradient(135deg,
+    rgba(var(--agent-rgb), 0.07) 0%,
+    rgba(var(--agent-rgb), 0.02) 40%,
+    transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+.agent-cell > *:not(.agent-cell-glow) { position: relative; z-index: 1; }
+.agent-cell-header { display: flex; align-items: center; margin-bottom: 12px; }
+.agent-cell-header-left { display: flex; align-items: center; gap: 8px; flex: 1; }
+.agent-cell-header-right { display: flex; align-items: center; gap: 6px; }
+.agent-cell-icon {
+  width: 22px; height: 22px; display: flex; align-items: center;
+  justify-content: center; border-radius: 6px; flex-shrink: 0;
+}
+.agent-cell-icon svg { width: 16px; height: 16px; }
+.agent-cell-icon-letter { font-size: 11px; font-weight: 600; }
+.agent-cell-emote { width: 22px; height: 22px; flex-shrink: 0; }
+.agent-cell-name { font-size: 13px; font-weight: 600; letter-spacing: 0.2px; }
+.agent-cell-content { font-size: 15px; line-height: 1.65; }
+.agent-cell-content p { margin-bottom: 12px; }
+.agent-cell-loading-hint { font-size: 13px; font-style: italic; opacity: 0.5; margin-bottom: 12px; }
+.agent-cell-shimmer {
+  height: 14px; border-radius: 4px; margin-bottom: 10px; width: 92%;
+  position: relative; overflow: hidden;
+}
+.agent-cell-shimmer::after {
+  content: ''; position: absolute; top: 0; left: -100%;
+  width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, var(--ds-hover-tint), transparent);
+  animation: agent-shimmer 1.8s ease-in-out infinite;
+}
+@keyframes agent-shimmer { 0% { left: -100%; } 100% { left: 100%; } }
+.agent-cell-pulse-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  animation: agent-pulse 1.5s ease-in-out infinite;
+}
+@keyframes agent-pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.8; } }
