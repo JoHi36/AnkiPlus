@@ -8,6 +8,7 @@ import ImageWidget from './ImageWidget';
 import ToolErrorBadge from './ToolErrorBadge';
 import AgenticCell from './AgenticCell';
 import ResearchContent from './ResearchContent';
+import CompactWidget from './CompactWidget';
 
 export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, isLastMessage }) {
   if (!toolWidgets || toolWidgets.length === 0) return null;
@@ -84,6 +85,16 @@ export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, i
               return <ImageWidget key={`media-${i}`} data={tw.result} toolName="show_card_media" />;
             case 'search_image':
               return <ImageWidget key={`img-${i}`} data={tw.result} toolName="search_image" />;
+            case 'compact':
+              return (
+                <CompactWidget
+                  key={`compact-${i}`}
+                  onConfirm={() => {
+                    window.dispatchEvent(new CustomEvent('compactConfirmed'));
+                  }}
+                  onDismiss={() => {}}
+                />
+              );
             default:
               return null;
           }
