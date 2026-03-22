@@ -14,6 +14,7 @@ import CitationBadge from './CitationBadge';
 import WebCitationBadge from './WebCitationBadge';
 import ThoughtStream from './ThoughtStream';
 import ToolWidgetRenderer from './ToolWidgetRenderer';
+import AgenticCell from './AgenticCell';
 import mermaid from 'mermaid';
 // SmilesDrawer wird dynamisch importiert, da es CommonJS ist und Vite-Probleme verursachen kann
 
@@ -1819,7 +1820,20 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                     </span>
                 );
             })()}
-            {processedMessageWithCitations && (
+            {processedMessageWithCitations && !isUser && (
+                <AgenticCell agentName="tutor">
+                    <SafeMarkdownRenderer
+                        content={processedMessageWithCitations}
+                        MermaidDiagram={MermaidDiagram}
+                        isStreaming={isStreaming}
+                        citations={citations}
+                        citationIndices={citationIndices} // PASS INDICES
+                        bridge={bridge}
+                        onPreviewCard={onPreviewCard}
+                    />
+                </AgenticCell>
+            )}
+            {processedMessageWithCitations && isUser && (
                 <SafeMarkdownRenderer
                     content={processedMessageWithCitations}
                     MermaidDiagram={MermaidDiagram}

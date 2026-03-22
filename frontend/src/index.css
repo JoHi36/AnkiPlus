@@ -292,6 +292,7 @@ header *,
 /* Transparent agent (Tutor) — no glow, subtle presence */
 .agent-cell[data-transparent="true"] {
   background: none;
+  margin: 0 -32px;
   padding: 12px 32px;
 }
 .agent-cell[data-transparent="true"] .agent-cell-name {

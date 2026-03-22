@@ -22,9 +22,11 @@ export default function AgenticCell({
   const label = agent?.label || agentName;
   const iconType = agent?.iconType || 'svg';
   const iconSvg = agent?.iconSvg || '';
+  const badgeLogo = agent?.badgeLogo || '';
   const hintTemplate = agent?.loadingHintTemplate || `${label} arbeitet...`;
 
-  const rgb = useMemo(() => hexToRgb(color), [color]);
+  const isTransparent = color === 'transparent';
+  const rgb = useMemo(() => isTransparent ? '0, 0, 0' : hexToRgb(color), [color, isTransparent]);
   const hint = loadingHint || hintTemplate;
 
   // Render SVG icon safely via ref (avoids dangerouslySetInnerHTML)
@@ -48,16 +50,37 @@ export default function AgenticCell({
     }
   }, [iconType, agentName]);
 
+  // Badge logo for the right meta slot (e.g. "Anki" text badge)
+  const badgeLogoElement = useMemo(() => {
+    if (badgeLogo === 'anki') {
+      return (
+        <span style={{
+          fontSize: 11,
+          fontWeight: 600,
+          color: 'var(--ds-text-tertiary)',
+          letterSpacing: '0.3px',
+        }}>
+          Anki
+        </span>
+      );
+    }
+    return null;
+  }, [badgeLogo]);
+
+  // Determine what goes in the right meta slot
+  const rightMeta = headerMeta || badgeLogoElement;
+
   return (
     <div
       className="agent-cell"
-      style={{ '--agent-rgb': rgb, '--agent-color': color }}
+      style={isTransparent ? {} : { '--agent-rgb': rgb, '--agent-color': color }}
+      data-transparent={isTransparent ? 'true' : undefined}
     >
       <div className="agent-cell-glow" />
 
       <div className="agent-cell-top">
         <div className="agent-cell-top-left">
-          {iconType === 'svg' && iconSvg ? (
+          {iconType === 'none' ? null : iconType === 'svg' && iconSvg ? (
             <div
               className="agent-cell-icon"
               style={{ background: `rgba(${rgb}, 0.10)` }}
@@ -66,33 +89,35 @@ export default function AgenticCell({
           ) : iconType === 'emote' ? (
             <div className="agent-cell-emote" ref={emoteRef} />
           ) : (
-            <div
-              className="agent-cell-icon agent-cell-icon-letter"
-              style={{ background: `rgba(${rgb}, 0.10)`, color }}
-            >
-              {label[0]}
-            </div>
+            !isTransparent && (
+              <div
+                className="agent-cell-icon agent-cell-icon-letter"
+                style={{ background: `rgba(${rgb}, 0.10)`, color }}
+              >
+                {label[0]}
+              </div>
+            )
           )}
-          <span className="agent-cell-name" style={{ color }}>
+          <span className="agent-cell-name" style={isTransparent ? {} : { color }}>
             {label}
           </span>
         </div>
-        {headerMeta && (
-          <div className="agent-cell-top-right">{headerMeta}</div>
+        {rightMeta && (
+          <div className="agent-cell-top-right">{rightMeta}</div>
         )}
-        {isLoading && !headerMeta && (
+        {isLoading && !rightMeta && (
           <div className="agent-cell-top-right">
-            <div className="agent-cell-pulse-dot" style={{ background: color }} />
+            <div className="agent-cell-pulse-dot" style={{ background: isTransparent ? 'var(--ds-text-tertiary)' : color }} />
           </div>
         )}
       </div>
 
       {isLoading ? (
         <div className="agent-cell-content">
-          <div className="agent-cell-loading-hint" style={{ color }}>{hint}</div>
-          <div className="agent-cell-shimmer" style={{ background: `rgba(${rgb}, 0.06)` }} />
-          <div className="agent-cell-shimmer" style={{ background: `rgba(${rgb}, 0.06)`, width: '78%' }} />
-          <div className="agent-cell-shimmer" style={{ background: `rgba(${rgb}, 0.06)`, width: '85%' }} />
+          <div className="agent-cell-loading-hint" style={isTransparent ? {} : { color }}>{hint}</div>
+          <div className="agent-cell-shimmer" style={{ background: isTransparent ? 'var(--ds-hover-tint)' : `rgba(${rgb}, 0.06)` }} />
+          <div className="agent-cell-shimmer" style={{ background: isTransparent ? 'var(--ds-hover-tint)' : `rgba(${rgb}, 0.06)`, width: '78%' }} />
+          <div className="agent-cell-shimmer" style={{ background: isTransparent ? 'var(--ds-hover-tint)' : `rgba(${rgb}, 0.06)`, width: '85%' }} />
         </div>
       ) : (
         <div className="agent-cell-content">{children}</div>
