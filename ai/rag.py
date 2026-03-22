@@ -227,7 +227,7 @@ def rag_router(user_message, context=None, config=None, emit_step=None):
 
         # Emit pipeline step
         if emit_step:
-            emit_step("router", "active")
+            emit_step("orchestrating", "active")
 
         # Fetch lastAssistantMessage from session storage
         last_assistant_message = ""
@@ -295,53 +295,58 @@ def rag_router(user_message, context=None, config=None, emit_step=None):
         logger.debug("Router: card_question='%s', card_answer='%s'", card_question[:100] if card_question else 'LEER', card_answer[:80] if card_answer else 'LEER')
         logger.debug("Router: context keys=%s", list(context.keys()) if context else 'None')
 
-        router_prompt = f"""Du bist ein Such-Router für eine Lernkarten-App. Entscheide ob und wie gesucht werden soll.
+        router_prompt = f"""You are a search router for a flashcard learning app. Decide whether and how to search the user's card collection.
 
-Benutzer-Nachricht: "{user_message}"
-{f'Letzte Antwort: "{last_assistant_message[:200]}"' if last_assistant_message else ''}
+User message: "{user_message}"
+{f'Last assistant response: "{last_assistant_message[:200]}"' if last_assistant_message else ''}
 
-Aktuelle Karte (die der Nutzer gerade lernt):
-- Frage: {card_question}
-- Antwort: {card_answer}
+Current card (the one the user is studying right now):
+- Question: {card_question}
+- Answer: {card_answer}
 - Deck: {deck_name}
-- Tags: {', '.join(card_tags) if card_tags else 'keine'}
+- Tags: {', '.join(card_tags) if card_tags else 'none'}
 {extra_fields}
 
-Antworte NUR mit JSON:
+Respond with JSON ONLY:
 {{
   "search_needed": true/false,
   "retrieval_mode": "sql" | "semantic" | "both",
   "response_length": "short" | "medium" | "long",
-  "embedding_queries": ["semantischer Suchtext 1", "semantischer Suchtext 2"],
+  "embedding_queries": ["semantic search text 1", "semantic search text 2"],
   "precise_queries": ["keyword1 AND keyword2", ...],
   "broad_queries": ["keyword1 OR keyword2", ...],
   "search_scope": "current_deck" | "collection",
   "max_sources": "low" | "medium" | "high"
 }}
 
-KONTEXT-ERKENNUNG (KRITISCH):
-Bestimme zuerst, ob die Frage sich auf die aktuelle Karte/Gesprächskontext bezieht oder ein eigenständiges Thema ist.
+DECISION TREE (follow in order):
+1. Is this small talk, thanks, greeting, or a meta-question about the app? → search_needed=false
+2. Does this match a subagent's domain EXCLUSIVELY (see below)? → retrieval_mode="subagent:<name>"
+3. Does the user ask a factual/learning question? → search_needed=true (continue below)
+4. Can the current card ALONE fully answer the question? → search_needed=false (rare — only if the card text obviously contains the complete answer)
 
-Kontextbezogene Fragen erkennen: "was ist damit gemeint", "erkläre das genauer", "ich verstehe das nicht", "was bedeutet das", "kannst du das erklären", "erzähl mir mehr darüber", Pronomen wie "das", "es", "dieser".
-→ Bei kontextbezogenen Fragen: Nutze Karten-Kontext + letzte Antwort um spezifische Queries zu erstellen.
-  embedding_queries MÜSSEN die Schlüsselbegriffe der Karte enthalten, aus verschiedenen Perspektiven.
-  Beispiel: Karte="K-Zellen GIP", Frage="ich verstehe das nicht"
-  → embedding_queries=["K-Zellen GIP Dünndarm endokrine Zellen Lokalisation", "GIP Insulinsekretion Magensäure gastrointestinale Hormone Wirkung"]
+CONTEXT DETECTION (CRITICAL):
+First determine: does the question refer to the current card/conversation, or is it a standalone topic?
 
-Eigenständige Fragen erkennen: Enthält eigene Fachbegriffe die NICHT auf der Karte stehen.
-→ Bei eigenständigen Fragen: Ignoriere Kartenkontext, erstelle Queries aus der Frage selbst.
-  Beispiel: Karte="Nucleotid", Frage="wie viel Volumen hat das Herz?"
-  → embedding_queries=["Herzvolumen Herzgröße Schlagvolumen", "Pumpleistung Herzzeitvolumen Ejektionsfraktion"]
+Context-dependent signals: "what does that mean", "explain this", "I don't understand", pronouns ("this", "it", "that"), vague references, follow-up questions.
+→ For context-dependent questions: Use card keywords + last response to create specific queries.
+  embedding_queries MUST contain the card's key terms from DIFFERENT perspectives.
+  Example: Card="K cells GIP", Question="I don't get it"
+  → embedding_queries=["K cells GIP duodenum endocrine cells localization", "GIP insulin secretion gastric acid gastrointestinal hormones effect"]
 
-REGELN:
-- search_needed=false NUR bei Smalltalk, Danke, Meta-Fragen über die App
-- embedding_queries: 2-3 semantische Suchtexte aus VERSCHIEDENEN Perspektiven/Aspekten des Themas. NIEMALS die Benutzerfrage wörtlich verwenden. Immer zu fachlichen Suchbegriffen expandieren.
-- precise_queries: 2-3 AND-Queries aus den relevanten Keywords (Karte ODER Frage, je nach Kontext)
-- broad_queries: 2-3 OR-Queries für breitere Suche
-- search_scope: "current_deck" als Default, "collection" nur bei fächerübergreifenden Fragen
-- retrieval_mode: "both" als Default, "sql" für exakte Fakten, "semantic" für konzeptuelle Fragen
-- max_sources: "low" (3-5 Quellen, einfache Faktenfragen), "medium" (8-10, Standard-Erklärungen), "high" (bis 15, Vergleiche/Überblicke)
-- response_length: "short" für einfache Fakten, "medium" für Erklärungen, "long" für detaillierte Vergleiche oder mehrteilige Fragen{subagent_prompt}"""
+Standalone signals: Contains domain-specific terms NOT on the current card.
+→ For standalone questions: Ignore card context, create queries from the question itself.
+  Example: Card="Nucleotide", Question="what is the volume of the heart?"
+  → embedding_queries=["heart volume stroke volume cardiac output", "ejection fraction cardiac pump function"]
+
+QUERY RULES:
+- embedding_queries: 2-3 semantic search texts from DIFFERENT perspectives/aspects. NEVER copy the user's question verbatim. Always expand to domain-specific search terms.
+- precise_queries: 2-3 AND-queries from relevant keywords (card OR question, depending on context)
+- broad_queries: 2-3 OR-queries for broader search
+- search_scope: "current_deck" by default, "collection" only for cross-subject questions
+- retrieval_mode: "both" by default, "sql" for exact facts/names, "semantic" for conceptual questions
+- max_sources: "low" (3-5, simple fact questions), "medium" (8-10, standard explanations), "high" (up to 15, comparisons/overviews)
+- response_length: "short" for simple facts, "medium" for explanations, "long" for detailed comparisons{subagent_prompt}"""
 
         # Backend-Modus: Router über Cloud Function (API-Key serverseitig)
         if use_backend:
@@ -392,7 +397,7 @@ REGELN:
             if retrieval_mode.startswith('subagent:'):
                 router_result['search_needed'] = False
                 if emit_step:
-                    emit_step('router', 'done', {
+                    emit_step('orchestrating', 'done', {
                         'search_needed': False,
                         'retrieval_mode': retrieval_mode,
                         'scope': 'none',
@@ -418,7 +423,7 @@ REGELN:
                 if deck_name:
                     scope_label = deck_name.split("::")[-1]
                 if emit_step:
-                    emit_step("router", "done", {
+                    emit_step("orchestrating", "done", {
                         "search_needed": router_result.get("search_needed", True),
                         "retrieval_mode": retrieval_mode,
                         "scope": router_result.get("search_scope", "current_deck"),
@@ -559,7 +564,7 @@ REGELN:
                                 if retrieval_mode.startswith('subagent:'):
                                     router_result['search_needed'] = False
                                     if emit_step:
-                                        emit_step('router', 'done', {
+                                        emit_step('orchestrating', 'done', {
                                             'search_needed': False,
                                             'retrieval_mode': retrieval_mode,
                                             'scope': 'none',
@@ -707,7 +712,7 @@ REGELN:
                                     if deck_name:
                                         scope_label = deck_name.split("::")[-1]
                                     if emit_step:
-                                        emit_step("router", "done", {
+                                        emit_step("orchestrating", "done", {
                                             "search_needed": router_result.get("search_needed", True),
                                             "retrieval_mode": retrieval_mode,
                                             "scope": router_result.get("search_scope", "current_deck"),
@@ -801,7 +806,7 @@ REGELN:
         if deck_name:
             scope_label = deck_name.split("::")[-1]
         if emit_step:
-            emit_step("router", "done", {
+            emit_step("orchestrating", "done", {
                 "search_needed": True,
                 "retrieval_mode": "both",
                 "scope": "current_deck",
@@ -824,7 +829,7 @@ REGELN:
 
         # Emit pipeline error
         if emit_step:
-            emit_step("router", "error")
+            emit_step("orchestrating", "error")
 
         # Fallback: Versuche Keywords aus Karteninhalt zu extrahieren
         fallback_precise = []

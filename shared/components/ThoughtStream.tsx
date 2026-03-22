@@ -81,7 +81,8 @@ const MODE_LABELS: Record<string, string> = {
 };
 
 const STEP_NAMES: Record<string, string> = {
-  router: 'Analyse',
+  router: 'Orchestrating',
+  orchestrating: 'Orchestrating',
   sql_search: 'Keyword-Suche',
   semantic_search: 'Semantische Suche',
   merge: 'Zusammenführung',
@@ -90,6 +91,7 @@ const STEP_NAMES: Record<string, string> = {
 
 const ACTIVE_TITLES: Record<string, string> = {
   router: 'Suchstrategie wird festgelegt...',
+  orchestrating: 'Suchstrategie wird festgelegt...',
   sql_search: 'Durchsuche Karten...',
   semantic_search: 'Semantische Suche...',
   merge: 'Kombiniere Quellen...',
@@ -99,7 +101,8 @@ const ACTIVE_TITLES: Record<string, string> = {
 function getDoneLabel(step: string, data: Record<string, any>, status: string): string {
   if (status === 'error') return `${STEP_NAMES[step] || step} fehlgeschlagen`;
   switch (step) {
-    case 'router': {
+    case 'router':
+    case 'orchestrating': {
       const rm = data.retrieval_mode || '';
       if (rm.startsWith('subagent:')) {
         return 'Routing abgeschlossen';
@@ -579,7 +582,7 @@ function PhaseRow({ step, data, status, isActive, isFirst = false, animate = tru
   let title: string;
   if (isActive) {
     title = ACTIVE_TITLES[step] || 'Verarbeite...';
-  } else if (step === 'router') {
+  } else if (step === 'router' || step === 'orchestrating') {
     const rm = data.retrieval_mode || '';
     if (rm.startsWith('subagent:')) {
       title = 'Routing abgeschlossen';
@@ -645,8 +648,8 @@ function PhaseRow({ step, data, status, isActive, isFirst = false, animate = tru
 
       {/* Phase-specific content */}
       <div style={{ marginLeft: 14 }}>
-        {step === 'router' && isActive && animate && <RouterThinking />}
-        {step === 'router' && isDone && <RouterDetails data={data} agentColor={agentColor} />}
+        {(step === 'router' || step === 'orchestrating') && isActive && animate && <RouterThinking />}
+        {(step === 'router' || step === 'orchestrating') && isDone && <RouterDetails data={data} agentColor={agentColor} />}
         {step === 'sql_search' && <SqlTags data={data} isDone={isDone} animate={animate} />}
         {step === 'semantic_search' && <SemanticChunks data={data} isDone={isDone} animate={animate} />}
         {step === 'merge' && isDone && <MergeBar data={data} />}

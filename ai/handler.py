@@ -292,7 +292,7 @@ class AIHandler:
             label = self._step_done_label(step, data)
             self._current_step_labels.append(label)
 
-        if getattr(self, '_fallback_in_progress', False) and step != 'router':
+        if getattr(self, '_fallback_in_progress', False) and step not in ('router', 'orchestrating'):
             return
 
         callback = getattr(self, '_pipeline_signal_callback', None)
@@ -310,7 +310,7 @@ class AIHandler:
             'sql': 'Keyword-Suche',
             'semantic': 'Semantische Suche',
         }
-        if step == 'router':
+        if step in ('router', 'orchestrating'):
             mode = mode_labels.get(data.get('retrieval_mode', ''),
                                    data.get('retrieval_mode', ''))
             scope = data.get('scope_label', '')

@@ -58,7 +58,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
   }, []);
   
   const [pipelineSteps, setPipelineSteps] = useState([]);
-  // Each: { step: 'router'|'sql_search'|..., status: 'active'|'done'|'error', data: {}, timestamp: number }
+  // Each: { step: 'orchestrating'|'sql_search'|..., status: 'active'|'done'|'error', data: {}, timestamp: number }
   const pipelineStepsRef = useRef([]);
   // Generation counter — increments on each new pipeline to signal ThoughtStream to reset refs
   const [pipelineGeneration, setPipelineGeneration] = useState(0);
@@ -385,12 +385,12 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       const agent = findAgent(agentName);
       if (agent) {
         console.log(`@${agent.label} detected, emitting synthetic pipeline`);
-        // Emit synthetic router-active immediately
-        updatePipelineSteps([{ step: 'router', status: 'active', data: {}, timestamp: Date.now() }]);
+        // Emit synthetic orchestrating-active immediately
+        updatePipelineSteps([{ step: 'orchestrating', status: 'active', data: {}, timestamp: Date.now() }]);
 
-        // After 700ms, emit router-done with subagent info
+        // After 700ms, emit orchestrating-done with subagent info
         setTimeout(() => {
-          updatePipelineSteps(prev => prev.map(s => s.step === 'router' ? {
+          updatePipelineSteps(prev => prev.map(s => s.step === 'orchestrating' ? {
             ...s,
             status: 'done',
             data: {
