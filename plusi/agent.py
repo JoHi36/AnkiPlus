@@ -732,6 +732,11 @@ def _execute_chat_action(action, action_query, next_wake, config):
             from .storage import (enter_sleep, clamp_next_wake, spend_budget,
                                   get_memory, save_diary_entry)
 
+            # Sync dock mood BEFORE executing (so activity is visible during execution)
+            mood_map = {'sleep': 'sleeping', 'reflect': 'reflecting', 'search': 'reading'}
+            dock_mood = mood_map.get(action, 'neutral')
+            _sync_dock_mood(dock_mood)
+
             if action == 'sleep':
                 sleep_wake = next_wake if next_wake else (datetime.now() + timedelta(minutes=30)).isoformat()
                 sleep_wake = clamp_next_wake(sleep_wake)
@@ -755,16 +760,9 @@ def _execute_chat_action(action, action_query, next_wake, config):
                 self_reflect()
                 spend_budget(300)
 
-            # Sync dock visual state after action (must be on main thread)
-            try:
-                from aqt import mw
-                if mw:
-                    from .dock import sync_mood
-                    mood_map = {'sleep': 'sleeping', 'reflect': 'reflecting', 'search': 'reading'}
-                    dock_mood = mood_map.get(action, 'neutral')
-                    mw.taskman.run_on_main(lambda m=dock_mood: sync_mood(m))
-            except Exception:
-                pass
+            # After non-sleep actions, revert mood to neutral (activity is done)
+            if action != 'sleep':
+                _sync_dock_mood('neutral')
 
         except Exception as e:
             logger.exception("plusi action '%s' error: %s", action, e)
@@ -951,6 +949,15 @@ Dein Budget: {budget_feeling}
 Dein nächstes Aufwachen war geplant für: jetzt"""
 
 
+def _sync_dock_mood(mood):
+    """Sync a mood to the dock from a background thread. No-op on failure."""
+    try:
+        from .dock import sync_mood
+        sync_mood(mood)
+    except Exception:
+        pass
+
+
 def run_autonomous_chain():
     """Run Plusi's autonomous chain: plan → execute → repeat until done."""
     from .storage import (compute_integrity, get_plusi_params, get_memory, set_memory,
@@ -1035,11 +1042,12 @@ def run_autonomous_chain():
             logger.info("plusi chain: chose sleep, next_wake=%s", next_wake)
             break
 
-        # Execute actions
+        # Execute actions — sync dock mood for each activity
         if 'search' in actions and search_count < CHAIN_MAX_SEARCHES:
             query = plan.get('query', '')
             if query:
                 try:
+                    _sync_dock_mood('reading')
                     card_tuples = _search_cards(query, top_k=10)
                     spend_budget(500)
                     search_count += 1
@@ -1050,6 +1058,7 @@ def run_autonomous_chain():
 
         if 'reflect' in actions:
             try:
+                _sync_dock_mood('reflecting')
                 self_reflect()
                 spend_budget(300)
                 remaining = get_memory('autonomy', 'budget_remaining', 0)
@@ -1060,8 +1069,9 @@ def run_autonomous_chain():
         action_count += 1
         remaining = get_memory('autonomy', 'budget_remaining', 0)
 
-    # If loop ended without sleep, set default next_wake
+    # Chain done — sync sleeping mood to dock
     if not get_memory('state', 'is_sleeping', False):
         default_wake = clamp_next_wake((datetime.now() + timedelta(minutes=30)).isoformat())
         enter_sleep(default_wake)
         logger.info("plusi chain: budget exhausted or max actions, sleeping until %s", default_wake)
+    _sync_dock_mood('sleeping')

@@ -823,6 +823,7 @@
     // Shared mutable state for the animation engine
     var state = { integrity: currentIntegrity };
     var engine = null;
+    var transitionTimer = null;
 
     if (animated) {
       ensureCSS();
@@ -879,11 +880,17 @@
     var api = {
       setMood: function (newMood) {
         if (newMood === currentMood) return;
+        // Cancel any pending transition to prevent race conditions
+        if (transitionTimer) {
+          clearTimeout(transitionTimer);
+          transitionTimer = null;
+        }
         // Opacity crossfade
         wrapper.style.transition = 'opacity 0.25s ease';
         wrapper.style.opacity = '0';
         stopEngine();
-        setTimeout(function () {
+        transitionTimer = setTimeout(function () {
+          transitionTimer = null;
           currentMood = newMood;
           render();
           wrapper.style.opacity = '1';
@@ -919,6 +926,10 @@
       },
 
       destroy: function () {
+        if (transitionTimer) {
+          clearTimeout(transitionTimer);
+          transitionTimer = null;
+        }
         stopEngine();
         if (wrapper.parentNode) {
           wrapper.parentNode.removeChild(wrapper);

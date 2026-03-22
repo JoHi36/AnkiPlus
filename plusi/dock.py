@@ -248,6 +248,8 @@ DOCK_JS = """
     if (!el) return;
     if (sleeping) {
       el.classList.add('plusi-sleeping');
+      // Also set mood to 'sleeping' so ZZZ accessoire renders
+      setMood('sleeping');
     } else {
       el.classList.remove('plusi-sleeping');
     }

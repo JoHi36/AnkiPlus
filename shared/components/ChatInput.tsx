@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ArrowUp, Square } from 'lucide-react';
+import { findAgent } from '../config/subagentRegistry';
 
 /**
  * ChatInput — Unified dock-style input component
@@ -76,13 +77,9 @@ export default function ChatInput({
     }
 
     const typed = match[1].toLowerCase();
-    // Import findAgent from registry
-    let agent: any = null;
-    try {
-      const { findAgent } = require('../../../shared/config/subagentRegistry');
-      agent = findAgent(typed);
-    } catch {
-      // Fallback: check hardcoded names
+    let agent: any = findAgent(typed) || null;
+    // Fallback: check hardcoded names if registry is empty
+    if (!agent) {
       if (typed === 'plusi' && plusiEnabled) {
         agent = { name: 'plusi', label: 'Plusi', color: '#0A84FF' };
       } else if (typed === 'research') {

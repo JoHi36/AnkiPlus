@@ -4,34 +4,33 @@ import WebCitationBadge from './WebCitationBadge';
 
 /**
  * ResearchContent — renders Research Agent answer with inline citations + source chips.
- * Converts [[WEB:N]] markers to clickable WebCitationBadge components.
+ * Converts [[WEB:N]] markers to markdown links with webcite: protocol,
+ * rendered as clickable WebCitationBadge components via custom link renderer.
  */
 export default function ResearchContent({ sources = [], answer = '', error = null }) {
   const rgb = '0, 208, 132';
   const color = '#00D084';
 
-  // Convert [[WEB:N]] markers to markdown links that the renderer can catch
+  // Convert [[WEB:N]] markers to markdown links with webcite: protocol
   const processedAnswer = useMemo(() => {
     if (!answer) return '';
-    let result = answer.replace(/\[\[WEB:(\d+)\]\]/g, (match, indexStr) => {
+    return answer.replace(/\[\[WEB:(\d+)\]\]/g, (_, indexStr) => {
       const idx = parseInt(indexStr, 10);
       const source = sources[idx - 1];
       if (source) {
         const url = source.url || '';
         return `[${idx}](webcite:${idx}:${encodeURIComponent(url)})`;
       }
-      return `\\[${idx}\\]`; // Fallback: escaped brackets so Markdown doesn't eat them
+      return `[${idx}]`;
     });
-    return result;
   }, [answer, sources]);
 
-  if (error) {
-    return (
-      <div className="agent-cell-content">
-        <p style={{ color: 'var(--ds-text-secondary)' }}>{error}</p>
-      </div>
-    );
-  }
+  // Allow webcite: protocol through react-markdown's URL sanitization
+  const urlTransform = (url) => {
+    if (url.startsWith('webcite:')) return url;
+    // Default: return as-is (react-markdown v10 default behavior)
+    return url;
+  };
 
   // Custom link renderer that catches webcite: links
   const linkRenderer = ({ href, children, ...props }) => {
@@ -44,11 +43,22 @@ export default function ResearchContent({ sources = [], answer = '', error = nul
     return <a href={href} {...props}>{children}</a>;
   };
 
+  if (error) {
+    return (
+      <div className="agent-cell-content">
+        <p style={{ color: 'var(--ds-text-secondary)' }}>{error}</p>
+      </div>
+    );
+  }
+
   return (
     <>
       {processedAnswer && (
         <div className="agent-cell-content">
-          <ReactMarkdown components={{ a: linkRenderer }}>
+          <ReactMarkdown
+            urlTransform={urlTransform}
+            components={{ a: linkRenderer }}
+          >
             {processedAnswer}
           </ReactMarkdown>
         </div>

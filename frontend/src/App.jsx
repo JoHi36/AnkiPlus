@@ -36,6 +36,7 @@ import useInsights from './hooks/useInsights';
 import PlusiMenu from './components/PlusiMenu';
 import TokenBudgetSlider from './components/TokenBudgetSlider';
 import SettingsSidebar from './components/SettingsSidebar';
+import AgenticCell from './components/AgenticCell';
 
 // Stable empty references — prevent new object creation on every render
 const EMPTY_STEPS = [];
@@ -372,6 +373,30 @@ function AppInner() {
   }, [mascotEnabled]);
 
   const [activeAgentColor, setActiveAgentColor] = useState(null);
+  const [activeAgentName, setActiveAgentName] = useState(null);
+
+  // Detect subagent routing from pipeline steps (covers both direct @Name and router delegation)
+  useEffect(() => {
+    const steps = chatHook?.pipelineSteps || [];
+    const routerDone = steps.find(s => s.step === 'router' && s.status === 'done');
+    if (routerDone) {
+      const rm = routerDone.data?.retrieval_mode || '';
+      if (rm.startsWith('subagent:')) {
+        const name = rm.split(':')[1];
+        const agent = findAgent(name);
+        if (agent && activeAgentName !== name) {
+          setActiveAgentName(name);
+          setActiveAgentColor(agent.color);
+        }
+      }
+    }
+    // Clear when not loading
+    if (!chatHook?.isLoading && activeAgentName) {
+      setActiveAgentName(null);
+      setActiveAgentColor(null);
+    }
+  }, [chatHook?.pipelineSteps, chatHook?.isLoading]);
+
   const [consecutiveWrong, setConsecutiveWrong] = useState(0);
   const activationCountRef = useRef(0);
   const activationResetRef = useRef(null);
@@ -994,18 +1019,23 @@ function AppInner() {
               if (_chatForAgent.setIsLoading) _chatForAgent.setIsLoading(false);
               if (_chatForAgent.setStreamingMessage) _chatForAgent.setStreamingMessage('');
               setActiveAgentColor(null);
+              setActiveAgentName(null);
               return;
             }
             if (payload.silent) {
               if (_chatForAgent.setIsLoading) _chatForAgent.setIsLoading(false);
               if (_chatForAgent.setStreamingMessage) _chatForAgent.setStreamingMessage('');
               setActiveAgentColor(null);
+              setActiveAgentName(null);
               return;
             }
 
-            // Set agent color for ThoughtStream
+            // Set agent info for ThoughtStream and loading indicator
             const agent = findAgent(agentName);
-            if (agent) setActiveAgentColor(agent.color);
+            if (agent) {
+              setActiveAgentColor(agent.color);
+              setActiveAgentName(agentName);
+            }
 
             // Build pipeline_data for persisted ThoughtStream
             const subagentPipelineData = [{
@@ -2109,7 +2139,7 @@ function AppInner() {
               {/* Top Fade Gradient — hidden in PlusiMenu */}
               {activeView !== 'plusiMenu' && (
               <div
-                className="fixed left-0 right-0 pointer-events-none z-25 max-w-3xl mx-auto"
+                className="fixed left-0 right-0 pointer-events-none z-25"
                 style={{
                   top: `${headerHeight}px`,
                   height: '40px',
@@ -2120,7 +2150,7 @@ function AppInner() {
               <div
                 ref={messagesContainerRef}
                 id="messages-container"
-                className={`h-full max-w-3xl mx-auto w-full scrollbar-thin relative z-10 ${activeView === 'plusiMenu' ? 'overflow-hidden flex flex-col px-0 pt-2 pb-0' : 'overflow-y-auto px-4 pt-20 pb-40'}`}
+                className={`h-full w-full scrollbar-thin relative z-10 ${activeView === 'plusiMenu' ? 'overflow-hidden flex flex-col px-0 pt-2 pb-0' : 'overflow-y-auto px-4 pt-20 pb-40'}`}
               >
 
                 {activeView === 'agentStudio' ? (
@@ -2359,23 +2389,31 @@ function AppInner() {
                         )}
                         {/* Generating skeleton — shows after pipeline completes, before first chunk */}
                         {chatHook.isLoading && !chatHook.streamingMessage && (chatHook.pipelineSteps || []).length > 0 && !(chatHook.pipelineSteps || []).some(s => s.status === 'active') && (
-                          <div className="w-full flex-none mb-2" style={{ padding: '0 4px' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                              {[0.92, 0.76, 0.58].map((w, i) => (
-                                <div
-                                  key={i}
-                                  style={{
-                                    height: 12,
-                                    borderRadius: 6,
-                                    width: `${w * 100}%`,
-                                    background: 'linear-gradient(90deg, var(--ds-hover-tint), var(--ds-active-tint), var(--ds-hover-tint))',
-                                    backgroundSize: '200% 100%',
-                                    animation: `ts-shimmerWave 2s ease-in-out infinite ${i * 0.15}s`,
-                                  }}
-                                />
-                              ))}
+                          activeAgentName ? (
+                            /* Agent-specific loading: show AgenticCell with loading hint */
+                            <div className="w-full flex-none mb-2">
+                              <AgenticCell agentName={activeAgentName} isLoading />
                             </div>
-                          </div>
+                          ) : (
+                            /* Generic loading: shimmer bars for main agent */
+                            <div className="w-full flex-none mb-2" style={{ padding: '0 4px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {[0.92, 0.76, 0.58].map((w, i) => (
+                                  <div
+                                    key={i}
+                                    style={{
+                                      height: 12,
+                                      borderRadius: 6,
+                                      width: `${w * 100}%`,
+                                      background: 'linear-gradient(90deg, var(--ds-hover-tint), var(--ds-active-tint), var(--ds-hover-tint))',
+                                      backgroundSize: '200% 100%',
+                                      animation: `ts-shimmerWave 2s ease-in-out infinite ${i * 0.15}s`,
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          )
                         )}
                         {(chatHook.isLoading || chatHook.streamingMessage) && !(
                           nextMsg &&

@@ -247,9 +247,8 @@ header *,
 }
 
 /* ── Agentic Cell Skeleton ── */
-.agent-cell { position: relative; padding: 20px 16px; margin: 8px 0; }
-.agent-cell-glow {
-  position: absolute; top: 0; left: -9999px; right: -9999px; bottom: 0;
+.agent-cell {
+  position: relative; padding: 20px 32px; margin: 8px -16px;
   background:
     linear-gradient(180deg,
       rgba(var(--agent-rgb), 0.05) 0%,
@@ -257,12 +256,11 @@ header *,
       transparent 45%,
       transparent 80%,
       rgba(var(--agent-rgb), 0.03) 100%);
-  pointer-events: none; z-index: 0;
 }
-.agent-cell > *:not(.agent-cell-glow) { position: relative; z-index: 1; }
-.agent-cell-header { display: flex; align-items: center; margin-bottom: 12px; }
-.agent-cell-header-left { display: flex; align-items: center; gap: 8px; flex: 1; }
-.agent-cell-header-right { display: flex; align-items: center; gap: 6px; }
+.agent-cell-glow { display: none; }
+.agent-cell-top { display: flex; align-items: center; margin-bottom: 12px; }
+.agent-cell-top-left { display: flex; align-items: center; gap: 8px; flex: 1; }
+.agent-cell-top-right { display: flex; align-items: center; gap: 6px; }
 .agent-cell-icon {
   width: 22px; height: 22px; display: flex; align-items: center;
   justify-content: center; border-radius: 6px; flex-shrink: 0;

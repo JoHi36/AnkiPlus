@@ -44,8 +44,7 @@ export default function AgenticCell({
   useEffect(() => {
     if (emoteRef.current && iconType === 'emote' && agentName === 'plusi' && window.createPlusi) {
       emoteRef.current.textContent = '';
-      const svg = window.createPlusi('neutral', 22);
-      if (svg) emoteRef.current.appendChild(svg);
+      window.createPlusi(emoteRef.current, { mood: 'neutral', size: 22, animated: false });
     }
   }, [iconType, agentName]);
 
@@ -56,8 +55,8 @@ export default function AgenticCell({
     >
       <div className="agent-cell-glow" />
 
-      <div className="agent-cell-header">
-        <div className="agent-cell-header-left">
+      <div className="agent-cell-top">
+        <div className="agent-cell-top-left">
           {iconType === 'svg' && iconSvg ? (
             <div
               className="agent-cell-icon"
@@ -79,10 +78,10 @@ export default function AgenticCell({
           </span>
         </div>
         {headerMeta && (
-          <div className="agent-cell-header-right">{headerMeta}</div>
+          <div className="agent-cell-top-right">{headerMeta}</div>
         )}
         {isLoading && !headerMeta && (
-          <div className="agent-cell-header-right">
+          <div className="agent-cell-top-right">
             <div className="agent-cell-pulse-dot" style={{ background: color }} />
           </div>
         )}
