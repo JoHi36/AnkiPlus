@@ -178,7 +178,7 @@ class SubagentThread(QThread):
 
 
 class InsightExtractionThread(QThread):
-    """Background thread for insight extraction."""
+    """Background thread for insight extraction via OpenRouter."""
     finished_signal = pyqtSignal(int, str)  # card_id, insights_json
     error_signal = pyqtSignal(int, str)     # card_id, error_message
 
@@ -189,7 +189,7 @@ class InsightExtractionThread(QThread):
         self.messages = messages
         self.existing_insights = existing_insights
         self.performance_data = performance_data
-        self.ai_handler = ai_handler
+        self.ai_handler = ai_handler  # kept for fallback compatibility
         self._cancelled = False
 
     def cancel(self):
@@ -199,117 +199,65 @@ class InsightExtractionThread(QThread):
         if self._cancelled:
             return
         try:
-            from ..storage.insights import build_extraction_prompt, parse_extraction_response
+            from ..storage.insights import (
+                build_extraction_prompt, parse_extraction_response,
+                extract_insights_via_openrouter, compute_new_indices, insight_hash
+            )
+            from ..storage.card_sessions import load_insights, save_insights
+            from ..config import get_config
 
             prompt = build_extraction_prompt(
                 self.card_context, self.messages,
                 self.existing_insights, self.performance_data
             )
 
-            # Use non-streaming AI request — context=None to avoid doubling the card data
-            # (card content is already embedded in the extraction prompt)
-            logger.debug("🟢 InsightExtractionThread: Starting extraction for card %s, prompt length=%s", self.card_id, len(prompt))
-            import threading
-            result_container = [None, None]  # [response, error]
-
-            def _call_api():
-                try:
-                    result_container[0] = self.ai_handler.get_response(
-                        user_message=prompt,
-                        context=None,
-                        history=[],
-                        mode='compact',
-                    )
-                except Exception as e:
-                    result_container[1] = e
-
-            api_thread = threading.Thread(target=_call_api, daemon=True)
-            api_thread.start()
-            api_thread.join(timeout=30)
-
-            if api_thread.is_alive():
-                logger.warning("InsightExtractionThread: API request timed out after 30s")
-                self.error_signal.emit(self.card_id, "Timeout: Extraktion dauerte zu lange")
-                return
-
-            if result_container[1]:
-                raise result_container[1]
-            response = result_container[0]
+            logger.debug("InsightExtractionThread: Starting for card %s, prompt length=%s",
+                         self.card_id, len(prompt))
 
             if self._cancelled:
                 return
 
-            logger.debug("🟢 InsightExtractionThread: Response received, length=%s", len(response) if response else 0)
-            if response:
-                logger.debug("🟢 InsightExtractionThread: Response text: %s", response[:200])
-            if not response:
-                self.error_signal.emit(self.card_id, "Empty response from AI")
+            # Call OpenRouter directly (fast, cheap, no Gemini handler overhead)
+            api_key = get_config().get('openrouter_api_key', '')
+            response = extract_insights_via_openrouter(prompt, api_key)
+
+            if self._cancelled:
                 return
 
-            # Check if response is an error message from the API layer
-            if response.startswith("Fehler bei der API"):
-                self.error_signal.emit(self.card_id, response[:200])
-                return
+            logger.debug("InsightExtractionThread: Response: %s", response[:200] if response else 'None')
 
             result = parse_extraction_response(response)
 
             if result is None:
-                logger.debug("🟡 InsightExtractionThread: Parse failed, retrying...")
-                # Retry once with timeout
-                result_container2 = [None, None]
-
-                def _retry_api():
-                    try:
-                        result_container2[0] = self.ai_handler.get_response(
-                            user_message=prompt,
-                            context=None,
-                            history=[],
-                            mode='compact',
-                        )
-                    except Exception as e:
-                        result_container2[1] = e
-
-                retry_thread = threading.Thread(target=_retry_api, daemon=True)
-                retry_thread.start()
-                retry_thread.join(timeout=30)
-
-                if retry_thread.is_alive() or self._cancelled:
-                    self.error_signal.emit(self.card_id, "Retry timed out")
-                    return
-                if result_container2[1]:
-                    raise result_container2[1]
-                response = result_container2[0]
-                if response:
-                    logger.debug("🟡 InsightExtractionThread: Retry response: %s", response[:200])
-                result = parse_extraction_response(response) if response else None
-
-            if result is None:
-                self.error_signal.emit(self.card_id, "Failed to parse extraction response after retry")
+                self.error_signal.emit(self.card_id, "Konnte die Antwort nicht verarbeiten")
                 return
 
             # Compute new_indices before saving
-            from ..storage.insights import compute_new_indices, insight_hash
-            from ..storage.card_sessions import load_insights, save_insights
-
-            # Load existing seen_hashes
             existing = load_insights(self.card_id)
             seen_hashes = existing.get('seen_hashes', [])
-
             new_indices = compute_new_indices(result.get('insights', []), seen_hashes)
 
-            # Preserve seen_hashes in saved data
-            result['seen_hashes'] = seen_hashes
+            # Check if no new insights were found
+            if not new_indices and existing.get('insights'):
+                # No new insights — emit special signal
+                emit_data = dict(existing)
+                emit_data.pop('seen_hashes', None)
+                emit_data['new_indices'] = []
+                emit_data['no_new_insights'] = True
+                self.finished_signal.emit(self.card_id, json.dumps(emit_data, ensure_ascii=False))
+                return
 
+            result['seen_hashes'] = seen_hashes
             save_insights(self.card_id, result)
 
-            # Embed new_indices in the emitted JSON (not persisted, just for frontend)
             emit_data = dict(result)
-            emit_data.pop('seen_hashes', None)  # Don't send to frontend
+            emit_data.pop('seen_hashes', None)
             emit_data['new_indices'] = new_indices
             self.finished_signal.emit(self.card_id, json.dumps(emit_data, ensure_ascii=False))
 
         except Exception as e:
             if not self._cancelled:
+                logger.exception("InsightExtractionThread failed for card %s", self.card_id)
                 self.error_signal.emit(self.card_id, str(e))
 
 

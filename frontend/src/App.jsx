@@ -2170,6 +2170,7 @@ function AppInner() {
               chartData={insightsHook.chartData}
               isExtracting={insightsHook.isExtracting}
               newInsightIds={insightsHook.newInsightIds}
+              noNewInsights={insightsHook.noNewInsights}
               onCitationClick={(cardId) => bridge.goToCard?.(String(cardId))}
             />
           ) : (

@@ -40,6 +40,7 @@ export default function InsightsDashboard({
   isExtracting = false,
   onCitationClick,
   newInsightIds = [],
+  noNewInsights = false,
 }) {
   const hasInsights = insights.insights?.length > 0;
   const hasStats = (cardStats.reps || 0) > 0;
@@ -58,6 +59,16 @@ export default function InsightsDashboard({
         position: 'relative',
       }}
     >
+
+      {noNewInsights && (
+        <div style={{
+          fontSize: 12, color: 'var(--ds-text-muted)',
+          padding: '8px 0', marginBottom: 12,
+          opacity: 0.7,
+        }}>
+          Keine neuen Erkenntnisse zu dieser Karte erkannt.
+        </div>
+      )}
 
       <div style={{ marginBottom: 36 }}>
         {isExtracting && !hasInsights ? (
