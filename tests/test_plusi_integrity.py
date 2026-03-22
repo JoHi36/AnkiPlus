@@ -29,8 +29,8 @@ def _seed_confident(self_count=3, user_count=3, energy=5):
         mod.set_memory('self', f'trait_{i}', f'value_{i}')
     for i in range(user_count):
         mod.set_memory('user', f'fact_{i}', f'value_{i}')
-    for _ in range(max(self_count + user_count, 5)):
-        mod._append_energy_log(energy)
+    for i in range(max(self_count + user_count, 5)):
+        mod.save_diary_entry(f'seed_{i}', [], energy=energy)
 
 
 # ── Pattern Score ──────────────────────────────────────────────────────

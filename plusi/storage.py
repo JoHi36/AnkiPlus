@@ -79,6 +79,10 @@ def _init_tables(db):
         db.execute("ALTER TABLE plusi_diary ADD COLUMN discoveries TEXT DEFAULT '[]'")
     except sqlite3.OperationalError:
         pass  # column already exists
+    try:
+        db.execute("ALTER TABLE plusi_diary ADD COLUMN energy INTEGER DEFAULT 5")
+    except sqlite3.OperationalError:
+        pass  # column already exists
     db.commit()
 
 
@@ -359,7 +363,8 @@ def compute_personality_position():
 
     X-axis: ratio of user-memories to total memories (self + user).
             0 = self-reflektiert (merkt sich viel über sich), 1 = empathisch (merkt sich viel über den User)
-    Y-axis: average energy normalized to 0-1 range (energy 1-10 → (avg-1)/9)
+    Y-axis: average energy from diary entries (long-term character, not per-call fluctuation)
+            Fallback to energy_log if no diary entries with energy exist.
 
     Returns dict with x, y, quadrant_label, drives, confident.
     """
@@ -368,12 +373,21 @@ def compute_personality_position():
     user_data = get_category('user')
     total_memories = len(self_data) + len(user_data)
 
-    # Get energy log
-    energy_log = get_memory('personality', 'energy_log', [])
+    # Y-axis: energy from diary entries (long-term) or energy_log (fallback)
+    diary_entries = load_diary(limit=50)
+    diary_energies = [e['energy'] for e in diary_entries if e.get('energy') is not None]
+
+    if diary_energies:
+        energy_count = len(diary_energies)
+    else:
+        # Fallback to old energy_log for backwards compatibility
+        energy_log = get_memory('personality', 'energy_log', [])
+        diary_energies = [entry['energy'] for entry in energy_log]
+        energy_count = len(diary_energies)
 
     # Check confidence
     confident = (total_memories >= CONFIDENCE_THRESHOLD
-                 and len(energy_log) >= CONFIDENCE_THRESHOLD)
+                 and energy_count >= CONFIDENCE_THRESHOLD)
 
     if not confident:
         return {
@@ -387,9 +401,8 @@ def compute_personality_position():
     # X-axis: user-focus ratio (0 = self-reflektiert, 1 = user-fokussiert)
     x = len(user_data) / total_memories if total_memories > 0 else 0.5
 
-    # Y-axis: normalized average energy (1-10 → 0-1)
-    energies = [entry['energy'] for entry in energy_log]
-    avg_energy = sum(energies) / len(energies)
+    # Y-axis: normalized average energy from diary (1-10 → 0-1)
+    avg_energy = sum(diary_energies) / len(diary_energies)
     y = (avg_energy - 1) / 9.0
 
     # Clamp to [0, 1]
@@ -658,13 +671,19 @@ def get_friendship_data():
     }
 
 
-def save_diary_entry(entry_text, cipher_parts, category='gemerkt', mood='neutral', discoveries=None):
+def save_diary_entry(entry_text, cipher_parts, category='gemerkt', mood='neutral', discoveries=None, energy=None):
     """Save a parsed diary entry. cipher_parts is a list of encrypted strings."""
     db = _get_db()
     disc_json = json.dumps(discoveries or [], ensure_ascii=False)
+    if energy is None:
+        energy = get_memory('state', 'energy', 5)
+        try:
+            energy = int(energy)
+        except (ValueError, TypeError):
+            energy = 5
     db.execute(
-        'INSERT INTO plusi_diary (timestamp, entry_text, cipher_text, category, mood, discoveries) VALUES (?, ?, ?, ?, ?, ?)',
-        (datetime.now().isoformat(), entry_text, json.dumps(cipher_parts), category, mood, disc_json)
+        'INSERT INTO plusi_diary (timestamp, entry_text, cipher_text, category, mood, discoveries, energy) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        (datetime.now().isoformat(), entry_text, json.dumps(cipher_parts), category, mood, disc_json, energy)
     )
     db.commit()
 
@@ -673,7 +692,7 @@ def load_diary(limit=50, offset=0):
     """Load diary entries, newest first. Returns list of dicts."""
     db = _get_db()
     rows = db.execute(
-        'SELECT id, timestamp, entry_text, cipher_text, category, mood, discoveries FROM plusi_diary ORDER BY timestamp DESC LIMIT ? OFFSET ?',
+        'SELECT id, timestamp, entry_text, cipher_text, category, mood, discoveries, energy FROM plusi_diary ORDER BY timestamp DESC LIMIT ? OFFSET ?',
         (limit, offset)
     ).fetchall()
     entries = []
@@ -685,7 +704,8 @@ def load_diary(limit=50, offset=0):
             'cipher_parts': json.loads(row[3]),
             'category': row[4],
             'mood': row[5],
-            'discoveries': json.loads(row[6]) if row[6] else []
+            'discoveries': json.loads(row[6]) if row[6] else [],
+            'energy': row[7] if len(row) > 7 and row[7] is not None else 5,
         })
     return entries
 

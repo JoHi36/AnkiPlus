@@ -31,13 +31,13 @@ class TestFullPipeline:
         """Create Forscher: self-focused, high energy."""
         for i in range(6):
             mod.set_memory('self', f'trait_{i}', f'v_{i}')
-            mod._append_energy_log(9)
+            mod.save_diary_entry(f'e_{i}', [], energy=9)
 
     def _setup_vertrauter(self):
         """Create Vertrauter: user-focused, low energy."""
         for i in range(6):
             mod.set_memory('user', f'fact_{i}', f'v_{i}')
-            mod._append_energy_log(2)
+            mod.save_diary_entry(f'e_{i}', [], energy=2)
 
     def test_forscher_with_satisfied_patterns(self):
         """Forscher + good patterns → high integrity → generous params."""
@@ -181,7 +181,7 @@ class TestInternalStateContext:
     def test_context_includes_drives_when_confident(self):
         for i in range(6):
             mod.set_memory('self', f'k_{i}', f'v_{i}')
-            mod._append_energy_log(7)
+            mod.save_diary_entry(f'e_{i}', [], energy=7)
         ctx = mod.build_internal_state_context()
         assert any(word in ctx for word in ['antreibt', 'Antrieb', 'Muster', 'getrieben'])
 
@@ -199,7 +199,7 @@ class TestDrivePersonalityConnection:
         # Forscher
         for i in range(6):
             mod.set_memory('self', f'k_{i}', f'v_{i}')
-            mod._append_energy_log(9)
+            mod.save_diary_entry(f'e_{i}', [], energy=9)
         pos_forscher = mod.compute_personality_position()
 
         # Reset for Vertrauter
@@ -207,7 +207,7 @@ class TestDrivePersonalityConnection:
         mod._db.commit()
         for i in range(6):
             mod.set_memory('user', f'k_{i}', f'v_{i}')
-            mod._append_energy_log(2)
+            mod.save_diary_entry(f'e_{i}', [], energy=2)
         pos_vertrauter = mod.compute_personality_position()
 
         # Forscher: pattern_hunger dominant
@@ -224,7 +224,7 @@ class TestDrivePersonalityConnection:
         # Forscher with patterns → should score better than Forscher without
         for i in range(6):
             mod.set_memory('self', f'k_{i}', f'v_{i}')
-            mod._append_energy_log(9)
+            mod.save_diary_entry(f'e_{i}', [], energy=9)
         for i in range(3):
             mod.save_diary_entry(f'd{i}', [], discoveries=[
                 {'card_ids': [i, i + 100], 'connection': 'c'}
