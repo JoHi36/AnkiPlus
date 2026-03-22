@@ -15,18 +15,17 @@ export function setRegistry(agents) {
 }
 
 /**
- * Build regex for @Name detection from enabled NON-DEFAULT agents.
- * Returns null if no matchable agents are enabled.
- * Default agent (Tutor) is excluded — users don't @mention the default.
+ * Build regex for @Name detection from ALL enabled agents (including Tutor).
+ * Returns null if no agents are enabled.
  */
 export function getDirectCallPattern() {
   const names = [...registry.values()]
-    .filter(a => a.enabled && !a.isDefault)
+    .filter(a => a.enabled)
     .map(a => a.name);
   if (names.length === 0) return null;
-  // Match @Name or @Label (e.g., @plusi, @Plusi, @Research Agent)
+  // Match @Name or @Label (e.g., @tutor, @Plusi, @Research Agent)
   const labels = [...registry.values()]
-    .filter(a => a.enabled && !a.isDefault)
+    .filter(a => a.enabled)
     .map(a => a.label);
   const allPatterns = [...new Set([...names, ...labels])];
   return new RegExp('^@(' + allPatterns.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')\\b', 'i');

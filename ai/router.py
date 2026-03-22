@@ -53,8 +53,6 @@ def _detect_agent_mention(user_message: str, config: dict) -> Optional[RoutingRe
 
     enabled = get_enabled_agents(config)
     for agent in enabled:
-        if agent.is_default:
-            continue  # Don't match @Tutor
         # Match @name or @label at start of message
         patterns = [agent.name, agent.label]
         for pattern in patterns:
