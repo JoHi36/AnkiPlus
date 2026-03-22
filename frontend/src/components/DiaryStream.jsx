@@ -34,6 +34,47 @@ function formatTime(timestamp) {
  * Render entry text, replacing {{CIPHER}} placeholders with blurred spans.
  * cipher_parts provides the actual text content shown blurred.
  */
+const BRAILLE_CHARS = '⠿⠾⠽⠻⠷⠯⠟⠾⠼⠺⠹⠳⠧';
+
+function CipherSpan({ length }) {
+  const [text, setText] = React.useState(() => {
+    let s = '';
+    for (let i = 0; i < length; i++) s += BRAILLE_CHARS[Math.floor(Math.random() * BRAILLE_CHARS.length)];
+    return s;
+  });
+
+  React.useEffect(() => {
+    const id = setInterval(() => {
+      setText(prev => {
+        const arr = prev.split('');
+        for (let i = 0; i < 3; i++) {
+          const pos = Math.floor(Math.random() * arr.length);
+          arr[pos] = BRAILLE_CHARS[Math.floor(Math.random() * BRAILLE_CHARS.length)];
+        }
+        return arr.join('');
+      });
+    }, 200);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <span
+      style={{
+        display: 'inline',
+        color: 'rgba(255,255,255,0.08)',
+        fontSize: 14,
+        wordBreak: 'break-all',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        cursor: 'default',
+      }}
+      title="[verschlüsselt]"
+    >
+      {text}
+    </span>
+  );
+}
+
 function renderEntryText(text, cipherParts = []) {
   if (!text) return null;
 
@@ -50,21 +91,8 @@ function renderEntryText(text, cipherParts = []) {
       nodes.push(<span key={`t-${idx}`}>{segment}</span>);
     }
     if (idx < segments.length - 1) {
-      const cipherContent = cipherParts[idx] || 'verschlüsselt';
-      nodes.push(
-        <span
-          key={`c-${idx}`}
-          style={{
-            display: 'inline',
-            filter: 'blur(4px)',
-            userSelect: 'none',
-            WebkitUserSelect: 'none',
-          }}
-          title="[verschlüsselt]"
-        >
-          {cipherContent}
-        </span>
-      );
+      const cipherLen = cipherParts[idx] ? cipherParts[idx].length : 12;
+      nodes.push(<CipherSpan key={`c-${idx}`} length={cipherLen} />);
     }
   });
 
