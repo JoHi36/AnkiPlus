@@ -1796,8 +1796,12 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                 const match = processedMessageWithCitations.match(/^@(\w+)/i);
                 if (!match) return null;
                 const agentName = match[1].toLowerCase();
+                // Try registry first, fallback to hardcoded colors for known agents
                 const agent = findSubagent(agentName);
-                if (!agent) return null;
+                const FALLBACK_COLORS = { plusi: '#0A84FF', research: '#00D084' };
+                const color = agent?.color || FALLBACK_COLORS[agentName];
+                if (!color) return null;
+                const label = agent?.label || (agentName.charAt(0).toUpperCase() + agentName.slice(1));
                 return (
                     <span style={{
                         display: 'inline-block',
@@ -1805,13 +1809,13 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                         fontWeight: 600,
                         padding: '2px 8px',
                         borderRadius: 4,
-                        background: `${agent.color}18`,
-                        color: agent.color,
-                        border: `1px solid ${agent.color}30`,
+                        background: `${color}18`,
+                        color: color,
+                        border: `1px solid ${color}30`,
                         marginBottom: 6,
                         letterSpacing: '0.3px',
                     }}>
-                        @{agent.label}
+                        @{label}
                     </span>
                 );
             })()}

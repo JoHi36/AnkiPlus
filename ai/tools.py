@@ -808,7 +808,9 @@ SEARCH_IMAGE_SCHEMA = {
         "Verwende dieses Tool NUR wenn keine passenden Bilder in den Karten des Nutzers "
         "vorhanden sind — prüfe zuerst ob show_card_media funktioniert. "
         "Geeignet für: Molekülstrukturen, anatomische Abbildungen, wissenschaftliche Diagramme. "
-        "Für Moleküle wird automatisch PubChem verwendet, sonst Wikimedia Commons."
+        "Für Moleküle wird automatisch PubChem verwendet, sonst Wikimedia Commons. "
+        "WICHTIG: Bilder sind immer nur ERGÄNZUNG zu einer textuellen Erklärung — "
+        "NIEMALS nur ein Bild als Antwort senden ohne textuelle Erklärung dazu."
     ),
     "parameters": {
         "type": "object",
