@@ -39,7 +39,6 @@ class OverlayChatWidget(QWidget):
         super().__init__(parent or mw)
         self.web_view = None
         self.message_timer = None
-        self._current_thread = None
         self._streaming_text = ''
         self._visible = False
         self._chat_open = False
@@ -145,13 +144,12 @@ class OverlayChatWidget(QWidget):
                 logger.error("OverlayChat: sendMessage error: %s", e)
 
         elif msg_type == 'cancelRequest':
-            if self._current_thread:
-                try:
-                    self._current_thread.cancel()
-                except Exception:
-                    pass
-                self._current_thread = None
-                self._send_to_react({"type": "loading", "loading": False})
+            try:
+                from ..ai.request_manager import get_request_manager
+            except ImportError:
+                from ai.request_manager import get_request_manager
+            get_request_manager().cancel()
+            self._send_to_react({"type": "loading", "loading": False})
 
         elif msg_type == 'closeOverlay':
             self.hide_overlay()
@@ -207,87 +205,38 @@ class OverlayChatWidget(QWidget):
             self.web_view.page().runJavaScript(js)
 
     def _start_ai_request(self, text, msg_data):
-        """Start an AI request using the same AIHandler as the main chat."""
+        """Start an AI request via shared AIRequestManager."""
         try:
-            from ..ai.handler import get_ai_handler
+            from ..ai.request_manager import get_request_manager
         except ImportError:
-            from ai.handler import get_ai_handler
+            from ai.request_manager import get_request_manager
 
         try:
-            ai_handler = get_ai_handler()
-            if not hasattr(ai_handler, 'get_response_with_rag'):
-                self._send_to_react({"type": "error", "message": "AI handler does not support RAG responses"})
-                self._send_to_react({"type": "loading", "loading": False})
-                return
+            context = self._build_context()
+        except Exception:
+            context = "Du bist ein hilfreicher Lernassistent für Anki-Karteikarten."
 
-            try:
-                context = self._build_context()
-            except Exception as e:
-                context = "Du bist ein hilfreicher Lernassistent für Anki-Karteikarten."
+        db_messages = load_deck_messages(0, limit=20)
+        history = [
+            {'role': 'assistant' if m.get('sender') == 'assistant' else 'user',
+             'content': m.get('text', '')}
+            for m in db_messages
+        ]
+        mode = msg_data.get('mode', 'compact') if isinstance(msg_data, dict) else 'compact'
 
-            self._streaming_text = ''
-            self._send_to_react({"type": "loading", "loading": True})
+        self._streaming_text = ''
+        self._send_to_react({"type": "loading", "loading": True})
 
-            from aqt.qt import QThread
-
-            class FreeChatThread(QThread):
-                chunk_signal = pyqtSignal(str, str, bool, bool)
-                finished_signal = pyqtSignal(str)
-                error_signal = pyqtSignal(str, str)
-
-                def __init__(self, handler, text, context, history, mode):
-                    super().__init__()
-                    self.handler = handler
-                    self.text = text
-                    self.context = context
-                    self.history = history
-                    self.mode = mode
-                    self.request_id = f"fc-{int(time.time()*1000)}"
-                    self._cancelled = False
-
-                def cancel(self):
-                    self._cancelled = True
-
-                def run(self):
-                    try:
-                        def stream_callback(chunk, done, is_function_call=False, steps=None, citations=None, step_labels=None):
-                            if self._cancelled:
-                                return
-                            self.chunk_signal.emit(self.request_id, chunk or "", done, is_function_call)
-
-                        self.handler.get_response_with_rag(
-                            self.text, context=self.context, history=self.history,
-                            mode=self.mode, callback=stream_callback
-                        )
-
-                        if not self._cancelled:
-                            self.finished_signal.emit(self.request_id)
-                    except Exception as e:
-                        if not self._cancelled:
-                            self.error_signal.emit(self.request_id, str(e))
-                    finally:
-                        if hasattr(self.handler, '_pipeline_signal_callback'):
-                            self.handler._pipeline_signal_callback = None
-
-            db_messages = load_deck_messages(0, limit=20)
-            history = [
-                {'role': 'assistant' if m.get('sender') == 'assistant' else 'user',
-                 'content': m.get('text', '')}
-                for m in db_messages
-            ]
-
-            mode = msg_data.get('mode', 'compact') if isinstance(msg_data, dict) else 'compact'
-            thread = FreeChatThread(ai_handler, text, context, history, mode)
-            thread.chunk_signal.connect(self._on_chunk)
-            thread.finished_signal.connect(self._on_ai_done)
-            thread.error_signal.connect(self._on_ai_error)
-            thread.finished.connect(thread.deleteLater)
-            self._current_thread = thread
-            thread.start()
-
-        except Exception as e:
-            self._send_to_react({"type": "error", "message": str(e)})
-            self._send_to_react({"type": "loading", "loading": False})
+        manager = get_request_manager()
+        manager.start_request(
+            text=text, context=context, history=history, mode=mode,
+            caller_id='overlay',
+            callbacks={
+                'on_chunk': self._on_chunk,
+                'on_finished': self._on_ai_done,
+                'on_error': self._on_ai_error,
+            }
+        )
 
     def _on_chunk(self, request_id, chunk, done, is_function_call):
         if chunk:
@@ -302,13 +251,11 @@ class OverlayChatWidget(QWidget):
         })
         self._send_to_react({"type": "loading", "loading": False})
         self._streaming_text = ''
-        self._current_thread = None
 
     def _on_ai_error(self, request_id, error):
         self._send_to_react({"type": "error", "message": error})
         self._send_to_react({"type": "loading", "loading": False})
         self._streaming_text = ''
-        self._current_thread = None
 
     def _build_context(self):
         """Build deck-level context (no card context)."""
@@ -389,12 +336,11 @@ class OverlayChatWidget(QWidget):
         self._visible = False
         self._chat_open = False
 
-        if self._current_thread:
-            try:
-                self._current_thread.cancel()
-            except Exception:
-                pass
-            self._current_thread = None
+        try:
+            from ..ai.request_manager import get_request_manager
+        except ImportError:
+            from ai.request_manager import get_request_manager
+        get_request_manager().cancel()
 
         # Notify shortcut filter
         try:
@@ -418,12 +364,11 @@ class OverlayChatWidget(QWidget):
             return
         self._visible = False
 
-        if self._current_thread:
-            try:
-                self._current_thread.cancel()
-            except Exception:
-                pass
-            self._current_thread = None
+        try:
+            from ..ai.request_manager import get_request_manager
+        except ImportError:
+            from ai.request_manager import get_request_manager
+        get_request_manager().cancel()
 
         try:
             from .shortcut_filter import get_shortcut_filter
