@@ -482,20 +482,13 @@ def self_reflect():
                 save_diary_entry(visible, cipher_parts, category='reflektiert', mood=mood, discoveries=discoveries)
         elif meaningful_changed:
             from .storage import save_diary_entry
-            changes = []
-            if internal.get('self'):
-                changes.append(f"self: {json.dumps(internal['self'], ensure_ascii=False)}")
-            if internal.get('user'):
-                changes.append(f"user: {json.dumps(internal['user'], ensure_ascii=False)}")
-            if internal.get('moments'):
-                changes.append(f"moments: {json.dumps(internal['moments'], ensure_ascii=False)}")
-            auto_text = "Interne Änderung: " + ", ".join(changes)
+            auto_text = _format_auto_diary(internal)
             save_diary_entry(auto_text, [], category='reflektiert', mood=mood, discoveries=discoveries)
         elif discoveries:
             from .storage import save_diary_entry
-            why_texts = [d.get('why', '?') for d in discoveries]
-            auto_text = "Gefunden: " + "; ".join(why_texts)
-            save_diary_entry(auto_text, [], category='forscht', mood=mood, discoveries=discoveries)
+            disc_texts = [d.get('connection', d.get('why', '?')) for d in discoveries]
+            auto_text = "Verbindung gefunden: " + "; ".join(disc_texts)
+            save_diary_entry(auto_text, [], category='entdeckt', mood=mood, discoveries=discoveries)
 
         # Save as invisible history entry
         save_interaction(
@@ -702,6 +695,24 @@ def _validate_next_wake(next_wake_raw):
         return None
 
 
+def _format_auto_diary(internal):
+    """Format internal state changes as readable diary text instead of raw JSON."""
+    parts = []
+    if internal.get('self'):
+        for key, val in internal['self'].items():
+            if val is not None:
+                parts.append(f"{key}: {val}")
+    if internal.get('user'):
+        for key, val in internal['user'].items():
+            if val is not None:
+                parts.append(f"Über den User — {key}: {val}")
+    if internal.get('moments'):
+        for key, val in internal['moments'].items():
+            if val is not None:
+                parts.append(f"Moment: {val}")
+    return "; ".join(parts) if parts else "Stille Veränderung."
+
+
 VALID_ACTIONS = {'sleep', 'search', 'reflect'}
 
 
@@ -867,16 +878,9 @@ def run_plusi(situation, deck_id=None):
             if visible:
                 save_diary_entry(visible, cipher_parts, category='gemerkt', mood=mood)
         elif meaningful_changed:
-            # Auto-generate diary entry for meaningful changes without explicit diary
+            # Auto-generate diary entry for meaningful changes
             from .storage import save_diary_entry
-            changes = []
-            if internal.get('self'):
-                changes.append(f"self: {json.dumps(internal['self'], ensure_ascii=False)}")
-            if internal.get('user'):
-                changes.append(f"user: {json.dumps(internal['user'], ensure_ascii=False)}")
-            if internal.get('moments'):
-                changes.append(f"moments: {json.dumps(internal['moments'], ensure_ascii=False)}")
-            auto_text = "Interne Änderung: " + ", ".join(changes)
+            auto_text = _format_auto_diary(internal)
             save_diary_entry(auto_text, [], category='gemerkt', mood=mood)
 
         # Determine if silent (we're in the success path — error handled by except)

@@ -145,6 +145,7 @@ body {
 .tag-gemerkt { color: #6ee7b7; background: rgba(52,211,153,0.08); }
 .tag-reflektiert { color: #a78bfa; background: rgba(167,139,250,0.08); }
 .tag-forscht { color: #fbbf24; background: rgba(251,191,36,0.08); }
+.tag-entdeckt { color: #fbbf24; background: rgba(251,191,36,0.08); }
 .entry-text {
     font-size: 13.5px;
     line-height: 1.65;
