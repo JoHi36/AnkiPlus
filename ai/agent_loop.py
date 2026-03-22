@@ -176,6 +176,13 @@ def run_agent_loop(
         # Handle response: emit markers, build Gemini response
         gemini_response = _handle_tool_response(function_name, tool_response, callback)
 
+        # Terminal tools (UI-only signals like compact): stop loop after execution
+        if tool_def and tool_def.display_type == "widget" and tool_response.result and isinstance(tool_response.result, dict) and tool_response.result.get("type") == "compact":
+            logger.info("agent_loop: Terminal tool '%s', stopping loop", function_name)
+            if callback:
+                callback("", True, False)
+            return text_result or ""
+
         # Append function call + response to contents
         contents = data.get("contents", [])
         contents.append({
