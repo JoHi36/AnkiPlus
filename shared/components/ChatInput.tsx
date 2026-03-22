@@ -40,6 +40,37 @@ export interface ChatInputProps {
   hideInput?: boolean; // When true, hide the textarea row (topSlot + actionbar only)
 }
 
+/** Renders agent SVG icon safely via ref (no dangerouslySetInnerHTML) */
+function MentionAgentIcon({ svg, color, label }: { svg: string; color: string; label: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    ref.current.textContent = '';
+    if (svg) {
+      const template = document.createElement('template');
+      // Resize SVG to 20x20
+      const resized = svg.replace(/width="[^"]*"/, 'width="20"').replace(/height="[^"]*"/, 'height="20"');
+      template.innerHTML = resized.trim();
+      const el = template.content.firstChild;
+      if (el) ref.current.appendChild(el);
+    }
+  }, [svg]);
+
+  if (!svg) {
+    return (
+      <div style={{
+        width: 20, height: 20, borderRadius: 5, flexShrink: 0,
+        background: `${color}18`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 11, fontWeight: 700, color,
+      }}>
+        {label[0]}
+      </div>
+    );
+  }
+  return <div ref={ref} style={{ width: 20, height: 20, flexShrink: 0 }} />;
+}
+
 export default function ChatInput({
   onSend,
   onOpenSettings,
@@ -265,40 +296,26 @@ export default function ChatInput({
           }}
         />
 
-        {/* @-mention autocomplete dropdown — floats above input */}
+        {/* @-mention autocomplete dropdown — compact, left-anchored */}
         {showMentionMenu && mentionAgents.length > 0 && (
           <div style={{
             position: 'absolute',
             bottom: '100%',
-            left: 8,
-            right: 8,
+            left: 12,
             marginBottom: 6,
             background: 'var(--ds-bg-frosted)',
             backdropFilter: 'blur(20px)',
             WebkitBackdropFilter: 'blur(20px)',
             border: '1px solid var(--ds-border-subtle)',
-            borderRadius: 14,
+            borderRadius: 12,
             overflow: 'hidden',
-            boxShadow: '0 -8px 32px rgba(0,0,0,0.25)',
+            boxShadow: '0 -4px 24px rgba(0,0,0,0.25)',
             zIndex: 50,
+            minWidth: 180,
           }}>
-            <div style={{
-              padding: '6px 12px 4px',
-              fontSize: 9,
-              fontWeight: 600,
-              textTransform: 'uppercase',
-              letterSpacing: '0.8px',
-              color: 'var(--ds-text-muted)',
-            }}>
-              Agenten
-            </div>
             {mentionAgents.map((agent, i) => {
               const isSelected = i === mentionIndex;
-              const AGENT_ICONS: Record<string, string> = {
-                plusi: 'M12 2v8M8 6h8M2 10v4M18 10v4M6 14h12M8 18h8',
-                research: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM18 18l3 3',
-              };
-              const iconPath = AGENT_ICONS[agent.name] || 'M4 4L12 4M4 4L8 12M12 4L8 12';
+              // Render icon via ref to avoid dangerouslySetInnerHTML
               return (
                 <div
                   key={agent.name}
@@ -306,48 +323,32 @@ export default function ChatInput({
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 10,
-                    padding: '8px 12px',
-                    margin: '0 4px 2px',
-                    borderRadius: 10,
+                    gap: 8,
+                    padding: '7px 12px',
                     cursor: 'pointer',
-                    background: isSelected ? `${agent.color}15` : 'transparent',
-                    transition: 'background 0.15s',
+                    background: isSelected ? `${agent.color}12` : 'transparent',
+                    transition: 'background 0.1s',
                   }}
                   onMouseEnter={() => setMentionIndex(i)}
                 >
-                  {/* Agent icon */}
-                  <div style={{
-                    width: 26, height: 26, borderRadius: 8,
-                    background: `${agent.color}15`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    flexShrink: 0,
-                  }}>
-                    <svg width={14} height={14} viewBox="0 0 24 24" fill="none"
-                      stroke={agent.color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                      <path d={iconPath} />
-                    </svg>
-                  </div>
-                  {/* Agent name as colored tag pill */}
+                  {/* Agent icon — rendered via ref for safety */}
+                  <MentionAgentIcon svg={(agent as any).iconSvg || ''} color={agent.color} label={agent.label} />
+                  {/* Agent name as colored pill */}
                   <span style={{
-                    fontSize: 13, fontWeight: 600,
+                    fontSize: 12, fontWeight: 600,
                     color: agent.color,
-                    background: `${agent.color}12`,
-                    padding: '2px 10px',
-                    borderRadius: 6,
-                    border: `1px solid ${agent.color}25`,
-                    flex: 1,
+                    background: `${agent.color}15`,
+                    padding: '1px 8px',
+                    borderRadius: 5,
+                    border: `1px solid ${agent.color}20`,
                   }}>
                     @{agent.label}
                   </span>
                   {/* Keyboard hint */}
                   {isSelected && (
                     <span style={{
-                      fontSize: 9, fontWeight: 500,
-                      color: 'var(--ds-text-muted)',
-                      padding: '2px 6px',
-                      borderRadius: 4,
-                      background: 'var(--ds-hover-tint)',
+                      fontSize: 9, color: 'var(--ds-text-muted)',
+                      marginLeft: 'auto',
                     }}>
                       Tab ↵
                     </span>
@@ -355,7 +356,6 @@ export default function ChatInput({
                 </div>
               );
             })}
-            <div style={{ height: 4 }} />
           </div>
         )}
 
