@@ -42,6 +42,51 @@ const TOOLS = [
   { key: 'molecules', emoji: '🧬', label: 'Moleküle', desc: 'Molekülstrukturen darstellen', badge: 'Beta' },
 ];
 
+function SectionHeader({ title, tooltip }) {
+  const [showTip, setShowTip] = useState(false);
+  return (
+    <div
+      style={{ ...S.sectionTitle, display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}
+      onMouseEnter={() => tooltip && setShowTip(true)}
+      onMouseLeave={() => setShowTip(false)}
+    >
+      {title}
+      {tooltip && (
+        <span style={{
+          width: 13, height: 13, borderRadius: '50%',
+          border: '1px solid var(--ds-text-tertiary, rgba(255,255,255,0.22))',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 8, fontWeight: 700,
+          color: 'var(--ds-text-tertiary, rgba(255,255,255,0.22))',
+          cursor: 'help',
+        }}>?</span>
+      )}
+      {showTip && tooltip && (
+        <>
+          <span style={{
+            position: 'absolute', left: 12, top: '100%',
+            width: 0, height: 0,
+            borderLeft: '5px solid transparent', borderRight: '5px solid transparent',
+            borderBottom: '5px solid var(--ds-bg-overlay, #3A3A3C)',
+            zIndex: 21,
+          }} />
+          <span style={{
+            position: 'absolute', left: 0, top: '100%', marginTop: 5,
+            padding: '6px 10px', borderRadius: 6, maxWidth: 260,
+            background: 'var(--ds-bg-overlay, #3A3A3C)',
+            color: 'var(--ds-text-secondary, rgba(255,255,255,0.7))',
+            fontSize: 11, lineHeight: 1.5, whiteSpace: 'normal',
+            zIndex: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
+            pointerEvents: 'none',
+          }}>
+            {tooltip}
+          </span>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function AgentStudio({ bridge, onNavigateToPlusi }) {
   const [tools, setTools] = useState({});
   const [mascotEnabled, setMascotEnabled] = useState(false);
@@ -168,7 +213,10 @@ export default function AgentStudio({ bridge, onNavigateToPlusi }) {
       </div>
 
       <div style={S.section}>
-        <div style={S.sectionTitle}>Agent Tools</div>
+        <SectionHeader
+          title="Agent Tools"
+          tooltip="Werkzeuge die der Tutor während eines Gesprächs einsetzen kann — Kartensuche, Bilder, Diagramme und mehr. Werden automatisch genutzt wenn der Kontext es erfordert."
+        />
         <div style={S.card}>
           {TOOLS.map((tool, i) => (
             <div key={tool.key} style={{
@@ -201,7 +249,10 @@ export default function AgentStudio({ bridge, onNavigateToPlusi }) {
       </div>
 
       <div style={S.section}>
-        <div style={S.sectionTitle}>Subagenten</div>
+        <SectionHeader
+          title="Subagenten"
+          tooltip="Eigenständige KI-Persönlichkeiten mit eigenem Gedächtnis. Werden automatisch vom Tutor gerufen oder direkt mit @Name angesprochen."
+        />
         <div style={S.card}>
           <div style={S.toolRow}>
             <div style={{ marginRight: 10 }}><PlusiIcon size={28} /></div>
