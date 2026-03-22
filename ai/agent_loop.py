@@ -24,7 +24,8 @@ MAX_ITERATIONS = 5
 MAX_CONTEXT_CHARS = 100_000  # ~25k tokens
 
 
-def _build_tool_marker(name: str, marker_type: str, result=None, error=None) -> str:
+def _build_tool_marker(name: str, marker_type: str, result=None, error=None,
+                       extra_fields: dict = None) -> str:
     """Build a [[TOOL:{...}]] marker string for the frontend.
 
     Args:
@@ -32,12 +33,15 @@ def _build_tool_marker(name: str, marker_type: str, result=None, error=None) -> 
         marker_type: One of 'loading', 'widget', 'error'.
         result: Tool result data (for 'widget' type).
         error: Error message string (for 'error' type).
+        extra_fields: Optional dict of additional fields to merge into the payload.
     """
     payload = {"name": name, "displayType": marker_type}
     if result is not None:
         payload["result"] = result
     if error is not None:
         payload["error"] = error
+    if extra_fields:
+        payload.update(extra_fields)
     return f"[[TOOL:{json.dumps(payload, ensure_ascii=False)}]]"
 
 
