@@ -299,6 +299,7 @@ class InsightExtractionThread(QThread):
 
             # Embed new_indices in the emitted JSON (not persisted, just for frontend)
             emit_data = dict(result)
+            emit_data.pop('seen_hashes', None)  # Don't send to frontend
             emit_data['new_indices'] = new_indices
             self.finished_signal.emit(self.card_id, json.dumps(emit_data, ensure_ascii=False))
 
