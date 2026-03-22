@@ -40,23 +40,35 @@ export interface ChatInputProps {
   hideInput?: boolean; // When true, hide the textarea row (topSlot + actionbar only)
 }
 
-/** Renders agent SVG icon safely via ref (no dangerouslySetInnerHTML) */
-function MentionAgentIcon({ svg, color, label }: { svg: string; color: string; label: string }) {
+/** Renders agent icon — uses createPlusi for Plusi, registry SVG for others.
+ *  SVG content comes from our own Python registry (trusted, not user input). */
+function MentionAgentIcon({ name, svg, color, label }: { name: string; svg: string; color: string; label: string }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!ref.current) return;
     ref.current.textContent = '';
-    if (svg) {
-      const template = document.createElement('template');
-      // Resize SVG to 20x20
-      const resized = svg.replace(/width="[^"]*"/, 'width="20"').replace(/height="[^"]*"/, 'height="20"');
-      template.innerHTML = resized.trim();
-      const el = template.content.firstChild;
-      if (el) ref.current.appendChild(el);
-    }
-  }, [svg]);
 
-  if (!svg) {
+    // Plusi: use the animated createPlusi renderer if available
+    if (name === 'plusi' && (window as any).createPlusi) {
+      (window as any).createPlusi(ref.current, { mood: 'neutral', size: 20, animated: false });
+      return;
+    }
+
+    // Others: parse registry SVG safely via DOMParser (trusted source: our Python registry)
+    if (svg) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(svg.trim(), 'image/svg+xml');
+      const svgEl = doc.documentElement;
+      if (svgEl && svgEl.nodeName === 'svg') {
+        svgEl.setAttribute('width', '20');
+        svgEl.setAttribute('height', '20');
+        ref.current.appendChild(svgEl);
+      }
+    }
+  }, [name, svg]);
+
+  // Fallback: colored letter initial
+  if (!svg && name !== 'plusi') {
     return (
       <div style={{
         width: 20, height: 20, borderRadius: 5, flexShrink: 0,
@@ -301,7 +313,7 @@ export default function ChatInput({
           <div style={{
             position: 'absolute',
             bottom: '100%',
-            left: 12,
+            left: 0,
             marginBottom: 6,
             background: 'var(--ds-bg-frosted)',
             backdropFilter: 'blur(20px)',
@@ -331,8 +343,8 @@ export default function ChatInput({
                   }}
                   onMouseEnter={() => setMentionIndex(i)}
                 >
-                  {/* Agent icon — rendered via ref for safety */}
-                  <MentionAgentIcon svg={(agent as any).iconSvg || ''} color={agent.color} label={agent.label} />
+                  {/* Agent icon — createPlusi for Plusi, registry SVG for others */}
+                  <MentionAgentIcon name={agent.name} svg={(agent as any).iconSvg || ''} color={agent.color} label={agent.label} />
                   {/* Agent name as colored pill */}
                   <span style={{
                     fontSize: 12, fontWeight: 600,
