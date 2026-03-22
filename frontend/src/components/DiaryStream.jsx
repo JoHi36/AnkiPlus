@@ -78,16 +78,37 @@ function DiaryEntry({ entry }) {
 
   return (
     <div style={{ marginBottom: 20 }}>
-      {/* Time */}
+      {/* Time + Category Tag */}
       <div
         style={{
           fontSize: 11,
           color: 'var(--ds-text-quaternary, rgba(255,255,255,0.25))',
           fontVariantNumeric: 'tabular-nums',
           marginBottom: 4,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
         }}
       >
         {timeStr}
+        {entry.category && (
+          <span style={{
+            fontSize: 9,
+            fontWeight: 600,
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+            padding: '1px 5px',
+            borderRadius: 3,
+            ...({
+              gemerkt:     { color: '#6ee7b7', background: 'rgba(52,211,153,0.08)' },
+              reflektiert: { color: '#a78bfa', background: 'rgba(167,139,250,0.08)' },
+              entdeckt:    { color: '#fbbf24', background: 'rgba(251,191,36,0.08)' },
+              forscht:     { color: '#fbbf24', background: 'rgba(251,191,36,0.08)' },
+            }[entry.category] || { color: 'var(--ds-text-muted)', background: 'var(--ds-hover-tint)' }),
+          }}>
+            {entry.category}
+          </span>
+        )}
       </div>
 
       {/* Entry text */}
