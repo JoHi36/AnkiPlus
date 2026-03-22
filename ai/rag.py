@@ -227,7 +227,7 @@ def rag_router(user_message, context=None, config=None, emit_step=None):
 
         # Emit pipeline step
         if emit_step:
-            emit_step("orchestrating", "active")
+            emit_step("router", "active")
 
         # Fetch lastAssistantMessage from session storage
         last_assistant_message = ""
@@ -397,7 +397,7 @@ QUERY RULES:
             if retrieval_mode.startswith('subagent:'):
                 router_result['search_needed'] = False
                 if emit_step:
-                    emit_step('orchestrating', 'done', {
+                    emit_step('router', 'done', {
                         'search_needed': False,
                         'retrieval_mode': retrieval_mode,
                         'scope': 'none',
@@ -423,7 +423,7 @@ QUERY RULES:
                 if deck_name:
                     scope_label = deck_name.split("::")[-1]
                 if emit_step:
-                    emit_step("orchestrating", "done", {
+                    emit_step("router", "done", {
                         "search_needed": router_result.get("search_needed", True),
                         "retrieval_mode": retrieval_mode,
                         "scope": router_result.get("search_scope", "current_deck"),
@@ -564,7 +564,7 @@ QUERY RULES:
                                 if retrieval_mode.startswith('subagent:'):
                                     router_result['search_needed'] = False
                                     if emit_step:
-                                        emit_step('orchestrating', 'done', {
+                                        emit_step('router', 'done', {
                                             'search_needed': False,
                                             'retrieval_mode': retrieval_mode,
                                             'scope': 'none',
@@ -712,7 +712,7 @@ QUERY RULES:
                                     if deck_name:
                                         scope_label = deck_name.split("::")[-1]
                                     if emit_step:
-                                        emit_step("orchestrating", "done", {
+                                        emit_step("router", "done", {
                                             "search_needed": router_result.get("search_needed", True),
                                             "retrieval_mode": retrieval_mode,
                                             "scope": router_result.get("search_scope", "current_deck"),
@@ -806,7 +806,7 @@ QUERY RULES:
         if deck_name:
             scope_label = deck_name.split("::")[-1]
         if emit_step:
-            emit_step("orchestrating", "done", {
+            emit_step("router", "done", {
                 "search_needed": True,
                 "retrieval_mode": "both",
                 "scope": "current_deck",
@@ -829,7 +829,7 @@ QUERY RULES:
 
         # Emit pipeline error
         if emit_step:
-            emit_step("orchestrating", "error")
+            emit_step("router", "error")
 
         # Fallback: Versuche Keywords aus Karteninhalt zu extrahieren
         fallback_precise = []

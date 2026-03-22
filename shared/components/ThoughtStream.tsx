@@ -81,7 +81,7 @@ const MODE_LABELS: Record<string, string> = {
 };
 
 const STEP_NAMES: Record<string, string> = {
-  router: 'Orchestrating',
+  router: 'Analyse',
   orchestrating: 'Orchestrating',
   sql_search: 'Keyword-Suche',
   semantic_search: 'Semantische Suche',
