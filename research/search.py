@@ -17,10 +17,21 @@ MEDICAL_KEYWORDS = {
     'lancet', 'nejm', 'bmj', 'jama',
 }
 
+DEFINITION_KEYWORDS = {
+    'was ist', 'what is', 'definition', 'bedeutung', 'meaning',
+    'erkläre', 'explain', 'überblick', 'overview', 'zusammenfassung',
+    'wer war', 'who was', 'geschichte von', 'history of',
+}
+
 
 def _is_medical_query(query: str) -> bool:
     q_lower = query.lower()
     return any(kw in q_lower for kw in MEDICAL_KEYWORDS)
+
+
+def _is_definition_query(query: str) -> bool:
+    q_lower = query.lower()
+    return any(kw in q_lower for kw in DEFINITION_KEYWORDS)
 
 
 def _convert_citations(text: str) -> str:
@@ -69,10 +80,26 @@ def _sources_from_pubmed(articles: list) -> list:
     ]
 
 
-def search(query: str, api_key: str = '') -> ResearchResult:
+def _sources_from_wikipedia(articles: list) -> list:
+    return [
+        Source(
+            title=a.get('title', ''),
+            url=a.get('url', ''),
+            domain=a.get('domain', 'de.wikipedia.org'),
+            favicon_letter='W',
+            snippet=a.get('snippet', ''),
+        )
+        for a in articles
+    ]
+
+
+def search(query: str, api_key: str = '', enabled_sources: dict = None) -> ResearchResult:
     """Run the best search tool for the given query."""
-    # Try PubMed for medical queries
-    if _is_medical_query(query):
+    if enabled_sources is None:
+        enabled_sources = {'pubmed': True, 'wikipedia': True}
+
+    # 1. Try PubMed for medical queries (if enabled)
+    if enabled_sources.get('pubmed', True) and _is_medical_query(query):
         try:
             from .pubmed import search_pubmed
             pm_result = search_pubmed(query)
@@ -88,7 +115,29 @@ def search(query: str, api_key: str = '') -> ResearchResult:
                     tool_used='pubmed',
                 )
         except Exception:
-            logger.exception("PubMed search failed, falling back to Perplexity")
+            logger.exception("PubMed search failed, falling back")
+
+    # 2. Wikipedia for definition queries (if enabled)
+    if enabled_sources.get('wikipedia', True) and _is_definition_query(query):
+        try:
+            from .wikipedia import search_wikipedia
+            wiki_result = search_wikipedia(query)
+            if wiki_result['articles']:
+                articles = wiki_result['articles']
+                parts = []
+                for i, a in enumerate(articles):
+                    extract = a.get('extract', a.get('snippet', ''))
+                    if extract:
+                        parts.append(f'[[WEB:{i+1}]] {extract}')
+                answer = '\n\n'.join(parts)
+                return ResearchResult(
+                    sources=_sources_from_wikipedia(articles),
+                    answer=answer,
+                    query=query,
+                    tool_used='wikipedia',
+                )
+        except Exception:
+            logger.exception("Wikipedia search failed, falling back")
 
     # Default: Perplexity Sonar via OpenRouter
     if not api_key:

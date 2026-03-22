@@ -18,9 +18,10 @@ def run_research(query: str = '', **kwargs) -> dict:
 
     config = get_config()
     api_key = config.get('openrouter_api_key', '')
+    enabled_sources = config.get('research_sources', {'pubmed': True, 'wikipedia': True})
 
     logger.info("Research Agent searching: %s", query[:80])
-    result = search(query, api_key=api_key)
+    result = search(query, api_key=api_key, enabled_sources=enabled_sources)
 
     if result.error:
         logger.warning("Research Agent error: %s", result.error)
