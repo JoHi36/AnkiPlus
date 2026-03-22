@@ -102,8 +102,7 @@ function getDoneLabel(step: string, data: Record<string, any>, status: string): 
     case 'router': {
       const rm = data.retrieval_mode || '';
       if (rm.startsWith('subagent:')) {
-        const name = rm.split(':')[1];
-        return `Subagent · ${name.charAt(0).toUpperCase() + name.slice(1)}`;
+        return 'Routing abgeschlossen';
       }
       const mode = MODE_LABELS[rm] || rm || '';
       const scope = data.scope_label || '';
@@ -264,15 +263,23 @@ function RouterDetails({ data, agentColor }: { data: Record<string, any>; agentC
   const isSubagent = retrievalMode.startsWith('subagent:');
   const subagentName = isSubagent ? retrievalMode.split(':')[1] : '';
 
-  // Subagent routing — show agent-specific tags
+  // Subagent routing — show agent-specific tags with distinct icons
   if (isSubagent) {
-    // Capitalize first letter of agent name
     const agentLabel = subagentName.charAt(0).toUpperCase() + subagentName.slice(1);
     const isDirect = data.scope === 'none' || !data.scope;
+
+    // SVG icon paths (16x16 viewBox)
+    // Routing: split-path / decision tree
+    const routingIcon = 'M3 3v10M3 8h4l3-5h3M3 8h4l3 5h3';
+    // Agent: sparkle / agentic star
+    const agentIcon = 'M8 1l1.5 3.5L13 6l-3.5 1.5L8 11l-1.5-3.5L3 6l3.5-1.5zM12 10l.75 1.75L14.5 12.5l-1.75.75L12 15l-.75-1.75L9.5 12.5l1.75-.75z';
+    // Modus: direct bolt vs routed arrows
+    const modusIcon = isDirect ? 'M8 2l-3 6h6l-3 6' : 'M2 4h5l3 4-3 4h5';
+
     const tags = [
-      { label: 'Routing', value: 'Subagent', icon: 'M8 2v12M2 8h12', color: undefined as string | undefined },
-      { label: 'Agent', value: agentLabel, icon: 'M3 3h4v4H3zM9 3h4v4H9zM6 9h4v4H6z', color: agentColor },
-      { label: 'Modus', value: isDirect ? 'Direkt' : 'Router', icon: 'M2 8h12M8 2v12', color: undefined as string | undefined },
+      { label: 'Routing', value: 'Subagent', icon: routingIcon, color: undefined as string | undefined },
+      { label: 'Agent', value: agentLabel, icon: agentIcon, color: agentColor },
+      { label: 'Modus', value: isDirect ? 'Direkt' : 'Router', icon: modusIcon, color: undefined as string | undefined },
     ];
 
     return (
@@ -287,11 +294,11 @@ function RouterDetails({ data, agentColor }: { data: Record<string, any>; agentC
               fontSize: 11,
               padding: '3px 8px',
               borderRadius: 5,
-              background: tag.color ? `${tag.color}15` : 'var(--ds-hover-tint)',
-              border: tag.color ? `1px solid ${tag.color}30` : 'none',
+              background: tag.color ? `${tag.color}18` : 'var(--ds-hover-tint)',
+              border: tag.color ? `1px solid ${tag.color}35` : 'none',
             }}
           >
-            <svg width={10} height={10} viewBox="0 0 16 16" fill="none" stroke={tag.color || 'currentColor'} strokeWidth={1.5} strokeLinecap="round" style={{ opacity: tag.color ? 0.6 : 0.2 }}>
+            <svg width={10} height={10} viewBox="0 0 16 16" fill={tag.label === 'Agent' && tag.color ? tag.color : 'none'} stroke={tag.color || 'currentColor'} strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" style={{ opacity: tag.color ? 0.7 : 0.25 }}>
               <path d={tag.icon} />
             </svg>
             <span style={{ color: 'var(--ds-text-muted)' }}>{tag.label}</span>
@@ -575,8 +582,7 @@ function PhaseRow({ step, data, status, isActive, isFirst = false, animate = tru
   } else if (step === 'router') {
     const rm = data.retrieval_mode || '';
     if (rm.startsWith('subagent:')) {
-      const name = rm.split(':')[1];
-      title = `Subagent · ${name.charAt(0).toUpperCase() + name.slice(1)}`;
+      title = 'Routing abgeschlossen';
     } else if (rm === 'plusi') {
       title = 'Plusi';
     } else if (!data.search_needed) {
