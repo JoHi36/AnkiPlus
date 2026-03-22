@@ -132,6 +132,7 @@ function DiaryEntry({ entry }) {
               reflektiert: { color: '#a78bfa', background: 'rgba(167,139,250,0.08)' },
               entdeckt:    { color: '#fbbf24', background: 'rgba(251,191,36,0.08)' },
               forscht:     { color: '#fbbf24', background: 'rgba(251,191,36,0.08)' },
+              'geträumt':  { color: '#60a5fa', background: 'rgba(96,165,250,0.08)' },
             }[entry.category] || { color: 'var(--ds-text-muted)', background: 'var(--ds-hover-tint)' }),
           }}>
             {entry.category}

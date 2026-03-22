@@ -868,6 +868,8 @@ def generate_dream():
 
     dream = ' '.join(dream_parts)
     set_memory('state', 'last_dream', dream)
+    # Log dream as diary entry
+    save_diary_entry(dream, [], category='geträumt', mood='sleeping')
     logger.info("dream generated: %s", dream[:100])
     return dream
 
