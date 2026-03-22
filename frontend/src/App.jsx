@@ -2150,7 +2150,7 @@ function AppInner() {
               <div
                 ref={messagesContainerRef}
                 id="messages-container"
-                className={`h-full w-full scrollbar-thin relative z-10 ${activeView === 'plusiMenu' ? 'overflow-hidden flex flex-col px-0 pt-2 pb-0' : 'overflow-y-auto px-4 pt-20 pb-40'}`}
+                className={`h-full w-full scrollbar-thin relative z-10 ${activeView === 'plusiMenu' ? 'overflow-hidden flex flex-col px-0 pt-2 pb-0' : 'overflow-y-auto px-8 pt-20 pb-40'}`}
               >
 
                 {activeView === 'agentStudio' ? (

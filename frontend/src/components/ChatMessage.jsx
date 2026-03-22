@@ -1791,10 +1791,36 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
             )}
 
             {/* 3. Text Content (Markdown) - Show only if not empty */}
+            {processedMessageWithCitations && isUser && /^@\w+/i.test(processedMessageWithCitations) && (() => {
+                const match = processedMessageWithCitations.match(/^@(\w+)/i);
+                if (!match) return null;
+                const agentName = match[1].toLowerCase();
+                try {
+                    const { findAgent: _findAgent } = require('@shared/config/subagentRegistry');
+                    const agent = _findAgent(agentName);
+                    if (!agent) return null;
+                    return (
+                        <span style={{
+                            display: 'inline-block',
+                            fontSize: 10,
+                            fontWeight: 600,
+                            padding: '2px 8px',
+                            borderRadius: 4,
+                            background: `${agent.color}18`,
+                            color: agent.color,
+                            border: `1px solid ${agent.color}30`,
+                            marginBottom: 6,
+                            letterSpacing: '0.3px',
+                        }}>
+                            @{agent.label}
+                        </span>
+                    );
+                } catch { return null; }
+            })()}
             {processedMessageWithCitations && (
-                <SafeMarkdownRenderer 
-                    content={processedMessageWithCitations} 
-                    MermaidDiagram={MermaidDiagram} 
+                <SafeMarkdownRenderer
+                    content={processedMessageWithCitations}
+                    MermaidDiagram={MermaidDiagram}
                     isStreaming={isStreaming}
                     citations={citations}
                     citationIndices={citationIndices} // PASS INDICES
