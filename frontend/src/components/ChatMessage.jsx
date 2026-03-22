@@ -1615,21 +1615,35 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
         return match; // Keep original if citation not found or no index
       });
     }
-    // Replace [[WEB:N]] markers with special markdown links for WebCitationBadge rendering
-    if (webSources && webSources.length > 0) {
+    // Replace [[WEB:N]] markers with clickable citation badges
+    // Extract sources from tool markers in the raw message (sync, no state dependency)
+    let resolvedWebSources = webSources || [];
+    if (resolvedWebSources.length === 0 && fixedMessage) {
+      const toolMatches = [...fixedMessage.matchAll(/\[\[TOOL:(\{.*?\})\]\]/g)];
+      for (const m of toolMatches) {
+        try {
+          const td = JSON.parse(m[1]);
+          if (td.name === 'search_web' && td.result?.sources) {
+            resolvedWebSources = td.result.sources;
+            break;
+          }
+        } catch {}
+      }
+    }
+    if (resolvedWebSources.length > 0) {
       const webCiteRegex = /\[\[WEB:(\d+)\]\]/g;
       message = message.replace(webCiteRegex, (match, indexStr) => {
         const idx = parseInt(indexStr, 10);
-        const source = webSources[idx - 1]; // WEB:1 → webSources[0]
+        const source = resolvedWebSources[idx - 1]; // WEB:1 → sources[0]
         if (source) {
           const url = source.url || '';
-          return `[WEB:${idx}](webcite:${idx}:${encodeURIComponent(url)})`;
+          return `[${idx}](webcite:${idx}:${encodeURIComponent(url)})`;
         }
-        return match; // Keep original if source not found
+        return match;
       });
     }
     return message;
-  }, [processedMessage, citations, citationIndices, webSources]);
+  }, [processedMessage, citations, citationIndices, webSources, fixedMessage]);
     
   // Handler für MC Klick
   const handleAnswerClick = (option) => {

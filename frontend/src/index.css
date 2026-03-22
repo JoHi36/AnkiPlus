@@ -247,13 +247,16 @@ header *,
 }
 
 /* ── Agentic Cell Skeleton ── */
-.agent-cell { position: relative; padding: 18px 0; margin: 4px 0; }
+.agent-cell { position: relative; padding: 20px 16px; margin: 8px 0; }
 .agent-cell-glow {
   position: absolute; top: 0; left: -24px; right: -24px; bottom: 0;
-  background: linear-gradient(135deg,
-    rgba(var(--agent-rgb), 0.07) 0%,
-    rgba(var(--agent-rgb), 0.02) 40%,
-    transparent 70%);
+  background:
+    linear-gradient(180deg,
+      rgba(var(--agent-rgb), 0.08) 0%,
+      rgba(var(--agent-rgb), 0.03) 15%,
+      transparent 40%,
+      rgba(var(--agent-rgb), 0.02) 85%,
+      rgba(var(--agent-rgb), 0.06) 100%);
   pointer-events: none; z-index: 0;
 }
 .agent-cell > *:not(.agent-cell-glow) { position: relative; z-index: 1; }
@@ -298,14 +301,25 @@ header *,
 
 /* ── Research Source Strip ── */
 .research-source-strip {
+  position: relative;
   display: flex; gap: 8px; overflow-x: auto; padding: 10px 0;
   margin-top: 12px; scrollbar-width: none;
+  mask-image: linear-gradient(to right, transparent, black 20px, black calc(100% - 20px), transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 20px, black calc(100% - 20px), transparent);
 }
 .research-source-strip::-webkit-scrollbar { display: none; }
 .research-source-chip {
   display: flex; align-items: center; gap: 8px;
   padding: 7px 12px 7px 9px; border-radius: 9px; cursor: pointer;
-  white-space: nowrap; flex-shrink: 0; transition: all 0.2s ease;
+  flex-shrink: 0; transition: all 0.2s ease;
+  max-width: 220px;
+}
+.research-source-chip > div:last-child {
+  min-width: 0; overflow: hidden;
+}
+.research-source-title {
+  font-size: 12px; font-weight: 500; color: var(--ds-text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .research-source-chip:hover { filter: brightness(1.2); }
 .research-source-fav {
@@ -314,5 +328,5 @@ header *,
   display: flex; align-items: center; justify-content: center;
   font-size: 9px; flex-shrink: 0; color: var(--ds-text-primary);
 }
-.research-source-title { font-size: 12px; font-weight: 500; color: var(--ds-text-primary); }
+/* merged into .research-source-title above */
 .research-source-domain { font-size: 10.5px; color: var(--ds-text-tertiary); }
