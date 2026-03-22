@@ -60,6 +60,7 @@ def _handle_sidebar_message(msg_type, data):
         'sidebarCopyLogs': _msg_copy_logs,
         'sidebarOpenUpgrade': _msg_open_upgrade,
         'sidebarLogout': _msg_logout,
+        'jsError': _msg_js_error,
     }
     handler = handlers.get(msg_type)
     if handler:
@@ -204,6 +205,15 @@ def _msg_copy_logs(_data):
         _send_to_sidebar("sidebarLogsCopied", {})
     except Exception:
         logger.exception("_msg_copy_logs failed")
+
+
+def _msg_js_error(data):
+    """Log JavaScript errors from the sidebar React frontend."""
+    if isinstance(data, dict):
+        logger.error("Sidebar JS Error: %s\nStack: %s\nComponent: %s",
+                      data.get('message', '?'), data.get('stack', ''), data.get('component', ''))
+    else:
+        logger.error("Sidebar JS Error: %s", data)
 
 
 def _msg_logout(_data):

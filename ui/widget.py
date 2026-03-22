@@ -508,6 +508,7 @@ class ChatbotWidget(QWidget):
             'plusiLike': self._msg_plusi_like,
             'resetPlusi': self._msg_reset_plusi,
             'textFieldFocus': self._msg_text_field_focus,
+            'jsError': self._msg_js_error,
         }
         return handlers.get(msg_type)
 
@@ -1223,6 +1224,14 @@ class ChatbotWidget(QWidget):
                 )
         except Exception as e:
             logger.exception("plusi integrity sync error: %s", e)
+
+    def _msg_js_error(self, data):
+        """Log JavaScript errors from the React frontend."""
+        if isinstance(data, dict):
+            logger.error("Frontend JS Error: %s\nStack: %s\nComponent: %s",
+                          data.get('message', '?'), data.get('stack', ''), data.get('component', ''))
+        else:
+            logger.error("Frontend JS Error: %s", data)
 
     def _msg_text_field_focus(self, data):
         """Handle text field focus state changes from JavaScript."""
