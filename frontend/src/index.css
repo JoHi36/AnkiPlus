@@ -249,7 +249,7 @@ header *,
 /* ── Agentic Cell Skeleton ── */
 .agent-cell { position: relative; padding: 20px 16px; margin: 8px 0; }
 .agent-cell-glow {
-  position: absolute; top: 0; left: -24px; right: -24px; bottom: 0;
+  position: absolute; top: 0; left: -9999px; right: -9999px; bottom: 0;
   background:
     linear-gradient(180deg,
       rgba(var(--agent-rgb), 0.08) 0%,

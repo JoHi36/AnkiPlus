@@ -21,12 +21,7 @@ export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, i
   return (
     <>
       {toolWidgets.map((tw, i) => {
-        if (tw.displayType === 'loading' && tw.name !== 'search_web') {
-          return <ToolLoadingPlaceholder key={`loading-${i}`} toolName={tw.name} />;
-        }
-        if (tw.displayType === 'error') {
-          return <ToolErrorBadge key={`error-${i}`} toolName={tw.name} error={tw.error} />;
-        }
+        // Research Agent: use AgenticCell shell
         if (tw.name === 'search_web') {
           if (tw.displayType === 'loading') {
             return <AgenticCell key={`loading-${i}`} agentName="research" isLoading loadingHint={tw.loadingHint} />;
@@ -40,6 +35,12 @@ export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, i
               />
             </AgenticCell>
           );
+        }
+        if (tw.displayType === 'loading') {
+          return <ToolLoadingPlaceholder key={`loading-${i}`} toolName={tw.name} />;
+        }
+        if (tw.displayType === 'error') {
+          return <ToolErrorBadge key={`error-${i}`} toolName={tw.name} error={tw.error} />;
         }
         if (tw.displayType === 'widget' && tw.result) {
           switch (tw.name) {
