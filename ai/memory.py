@@ -9,8 +9,9 @@ Only the owning agent reads/writes. Currently only Plusi has meaningful state.
 
 import json
 import os
+import re
 from dataclasses import dataclass, field, asdict
-from typing import Any
+from typing import Any, List
 
 try:
     from ..utils.logging import get_logger
@@ -220,3 +221,115 @@ def _load_plusi_state() -> AgentState:
     except Exception as e:
         logger.debug("Could not load Plusi state: %s", e)
         return AgentState(agent_name='plusi')
+
+
+# ---------------------------------------------------------------------------
+# Rule-based memory extraction (post-response)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class MemoryUpdate:
+    """A single memory update extracted from conversation."""
+    section: str   # 'profile', 'learning_patterns', 'preferences'
+    key: str       # Field name
+    value: Any     # New value
+
+
+def extract_memory_signals(user_message: str, agent_output: str = '',
+                           session_context: dict = None) -> List[MemoryUpdate]:
+    """Extract memory-worthy signals from a user message using pattern matching.
+
+    This is intentionally simple -- 5-10 rules that catch obvious signals.
+    Memory builds up slowly over many sessions.
+
+    Args:
+        user_message: The user's original message
+        agent_output: The agent's response (for future use)
+        session_context: Session context dict
+
+    Returns:
+        List of MemoryUpdate to apply
+    """
+    updates: List[MemoryUpdate] = []
+    msg = user_message.lower().strip()
+
+    # Rule 1: Study field detection
+    # "ich studiere Medizin" / "ich bin Medizinstudent" / "Studiengang: Jura"
+    _GENERIC_WORDS = frozenset([
+        'gerade', 'jetzt', 'noch', 'auch', 'das', 'die', 'der',
+        'ein', 'eine', 'mal', 'mir', 'mich', 'hier', 'dort',
+    ])
+    study_patterns = [
+        (r'(?:ich\s+)?studier(?:e|t)\s+(\w+)', 1),
+        (r'(\w+)student(?:in)?', 1),
+        (r'studiengang[:\s]+(\w+)', 1),
+        (r'ich\s+(?:mache?|bin\s+in)\s+(?:der\s+)?(\w+)', 1),
+    ]
+    for pattern, group in study_patterns:
+        match = re.search(pattern, msg, re.IGNORECASE)
+        if match:
+            field_name = match.group(group).capitalize()
+            if field_name.lower() not in _GENERIC_WORDS:
+                updates.append(MemoryUpdate('profile', 'study_field', field_name))
+                break
+
+    # Rule 2: Semester detection
+    # "3. Semester" / "im 5. Semester" / "Semester 3"
+    semester_match = re.search(
+        r'(?:im\s+)?(\d+)\.\s*semester|semester\s*(\d+)', msg, re.IGNORECASE
+    )
+    if semester_match:
+        sem = semester_match.group(1) or semester_match.group(2)
+        updates.append(MemoryUpdate('profile', 'semester', f'{sem}. Semester'))
+
+    # Rule 3: University detection
+    # "Uni Heidelberg" / "an der TU München" / "Universität Zürich"
+    uni_match = re.search(
+        r'(?:uni(?:versität)?|th|tu|fh|hochschule)\s+(\w+(?:\s+\w+)?)',
+        msg, re.IGNORECASE,
+    )
+    if uni_match:
+        uni = uni_match.group(0).strip()
+        uni = ' '.join(w.capitalize() for w in uni.split())
+        updates.append(MemoryUpdate('profile', 'university', uni))
+
+    # Rule 4: Exam goal detection
+    # "ich lerne für das Physikum" / "Prüfung im August" / "Examen in 3 Monaten"
+    exam_match = re.search(
+        r'(?:lerne?\s+für\s+(?:das?\s+)?|vorbereitung\s+auf\s+(?:das?\s+)?)'
+        r'(physikum|staatsexamen|examen|klausur|prüfung)'
+        r'(?:\s+(?:im|in|am)\s+(\w+))?',
+        msg, re.IGNORECASE,
+    )
+    if exam_match:
+        exam = exam_match.group(1).capitalize()
+        when = exam_match.group(2)
+        goal = f'{exam} {when.capitalize()}' if when else exam
+        updates.append(MemoryUpdate('profile', 'exam_goal', goal))
+
+    # Rule 5: Language preference
+    # Detected by checking for German- or English-specific high-frequency words.
+    german_indicators = sum(
+        1 for w in ['ich', 'und', 'der', 'die', 'das', 'ist', 'nicht']
+        if w in msg.split()
+    )
+    if german_indicators >= 3:
+        updates.append(MemoryUpdate('preferences', 'language', 'de'))
+    elif not any(c in msg for c in 'äöüß') and msg.isascii():
+        english_indicators = sum(
+            1 for w in ['the', 'and', 'is', 'are', 'what', 'how']
+            if w in msg.split()
+        )
+        if english_indicators >= 3:
+            updates.append(MemoryUpdate('preferences', 'language', 'en'))
+
+    return updates
+
+
+def apply_memory_updates(updates: List[MemoryUpdate]):
+    """Apply a list of memory updates."""
+    if not updates:
+        return
+    for u in updates:
+        update_memory_field(u.section, u.key, u.value)
+    logger.info("Applied %d memory updates", len(updates))
