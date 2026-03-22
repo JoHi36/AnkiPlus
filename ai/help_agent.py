@@ -66,11 +66,12 @@ REGELN:
 HELP_MODEL = 'gemini-2.5-flash'
 
 
-def run_help(situation: str = '', **kwargs) -> dict:
+def run_help(situation: str = '', memory_context: str = '', **kwargs) -> dict:
     """Run the Help agent.
 
     Args:
         situation: The user's message/question about the app.
+        memory_context: Optional user profile context from SharedMemory.
         **kwargs: Additional keyword arguments (ignored, required by lazy_load_run_fn pattern).
 
     Returns:
@@ -93,6 +94,11 @@ def run_help(situation: str = '', **kwargs) -> dict:
                 'error': True,
             }
 
+        # Build system prompt with optional memory context
+        system_prompt = HELP_SYSTEM_PROMPT
+        if memory_context:
+            system_prompt += f"\n\nUSER-KONTEXT:\n{memory_context}"
+
         # Build request contents
         contents = [
             {"role": "user", "parts": [{"text": situation}]}
@@ -101,7 +107,7 @@ def run_help(situation: str = '', **kwargs) -> dict:
         data = {
             "contents": contents,
             "systemInstruction": {
-                "parts": [{"text": HELP_SYSTEM_PROMPT}]
+                "parts": [{"text": system_prompt}]
             },
             "generationConfig": {
                 "temperature": 0.3,
@@ -122,7 +128,7 @@ def run_help(situation: str = '', **kwargs) -> dict:
             payload = {
                 "message": situation,
                 "model": HELP_MODEL,
-                "systemPrompt": HELP_SYSTEM_PROMPT,
+                "systemPrompt": system_prompt,
             }
             response = requests.post(url, json=payload, headers=headers, timeout=15)
             response.raise_for_status()

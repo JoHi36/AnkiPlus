@@ -382,6 +382,15 @@ class AIHandler:
                     'scope': 'none',
                     'scope_label': routing_result.agent,
                 })
+
+                # Load shared memory for context
+                try:
+                    from .memory import load_shared_memory
+                    memory = load_shared_memory()
+                    memory_context = memory.to_context_string()
+                except Exception:
+                    memory_context = ''
+
                 # Dispatch to agent via widget's subagent handler
                 # The widget will handle streaming and UI updates
                 if self.widget:
@@ -394,7 +403,10 @@ class AIHandler:
                         if agent_def:
                             clean_msg = routing_result.clean_message or user_message
                             run_fn = lazy_load_run_fn(agent_def)
-                            result = run_fn(situation=clean_msg, **agent_def.extra_kwargs)
+                            agent_kwargs = dict(agent_def.extra_kwargs)
+                            if memory_context:
+                                agent_kwargs['memory_context'] = memory_context
+                            result = run_fn(situation=clean_msg, **agent_kwargs)
                             # Format result for streaming callback
                             text = result.get('text', '') if isinstance(result, dict) else str(result)
                             if callback:
@@ -647,6 +659,15 @@ class AIHandler:
                             return clean_result
                         else:
                             logger.info("Handoff rejected, returning original response")
+
+                # Async memory extraction (non-blocking)
+                try:
+                    from .memory import load_shared_memory
+                    # Memory extraction will be added in Task 25
+                    # For now, just log that the hook exists
+                    logger.debug("Memory extraction hook: would extract from response")
+                except Exception:
+                    pass
 
                 return result
 
