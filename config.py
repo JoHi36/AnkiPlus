@@ -51,6 +51,12 @@ DEFAULT_CONFIG = {
         "pubmed": True,
         "wikipedia": True,
     },
+    # Agent orchestration
+    "tutor_enabled": True,           # Always True — Tutor cannot be disabled
+    "help_enabled": True,            # Help agent toggle
+    "default_interaction_mode": "auto",  # 'auto', 'tutor', 'research', 'help', 'plusi'
+    "router_model": "gemini-2.5-flash",  # Router model selection
+    "max_chain_depth": 2,            # Max agents in a handoff chain
 }
 
 # Standard Backend URL
