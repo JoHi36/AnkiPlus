@@ -271,8 +271,8 @@ function RouterDetails({ data, agentColor }: { data: Record<string, any>; agentC
     // SVG icon paths (16x16 viewBox)
     // Routing: split-path / decision tree
     const routingIcon = 'M3 3v10M3 8h4l3-5h3M3 8h4l3 5h3';
-    // Agent: sparkle / agentic star
-    const agentIcon = 'M8 1l1.5 3.5L13 6l-3.5 1.5L8 11l-1.5-3.5L3 6l3.5-1.5zM12 10l.75 1.75L14.5 12.5l-1.75.75L12 15l-.75-1.75L9.5 12.5l1.75-.75z';
+    // Agent: connected nodes — autonomous units in a network
+    const agentIcon = 'M4 4L12 4M4 4L8 12M12 4L8 12M4 4a1.5 1.5 0 1 0 0-.01M12 4a1.5 1.5 0 1 0 0-.01M8 12a1.5 1.5 0 1 0 0-.01';
     // Modus: direct bolt vs routed arrows
     const modusIcon = isDirect ? 'M8 2l-3 6h6l-3 6' : 'M2 4h5l3 4-3 4h5';
 
@@ -298,7 +298,7 @@ function RouterDetails({ data, agentColor }: { data: Record<string, any>; agentC
               border: tag.color ? `1px solid ${tag.color}35` : 'none',
             }}
           >
-            <svg width={10} height={10} viewBox="0 0 16 16" fill={tag.label === 'Agent' && tag.color ? tag.color : 'none'} stroke={tag.color || 'currentColor'} strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" style={{ opacity: tag.color ? 0.7 : 0.25 }}>
+            <svg width={10} height={10} viewBox="0 0 16 16" fill={tag.label === 'Agent' && tag.color ? tag.color : 'none'} stroke={tag.color || 'currentColor'} strokeWidth={tag.label === 'Agent' ? 1 : 1.2} strokeLinecap="round" strokeLinejoin="round" style={{ opacity: tag.color ? 0.8 : 0.25 }}>
               <path d={tag.icon} />
             </svg>
             <span style={{ color: 'var(--ds-text-muted)' }}>{tag.label}</span>
