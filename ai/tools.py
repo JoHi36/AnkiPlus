@@ -1003,18 +1003,24 @@ COMPACT_SCHEMA = {
         "und die Lernerkenntnisse zu extrahieren. Nutze dieses Tool "
         "am ENDE deiner Antwort, wenn der Chat lang wird (>6 Nachrichten) "
         "oder wenn ein Thema abgeschlossen scheint. "
-        "Das Tool rendert einen Bestätigungs-Button. Keine Parameter nötig."
+        "Das Tool rendert einen Bestätigungs-Button."
     ),
     "parameters": {
         "type": "object",
-        "properties": {},
+        "properties": {
+            "reason": {
+                "type": "string",
+                "description": "Kurze Begründung warum jetzt ein guter Zeitpunkt zum Zusammenfassen ist (z.B. 'Wir haben das Thema Enzymhemmung ausführlich besprochen').",
+            },
+        },
+        "required": ["reason"],
     },
 }
 
 
 def execute_compact(args):
     """No-op execution — the tool is a UI signal, not a data processor."""
-    return {"type": "compact"}
+    return {"type": "compact", "reason": args.get("reason", "")}
 
 
 registry.register(

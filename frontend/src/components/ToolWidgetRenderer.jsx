@@ -1,5 +1,5 @@
 import React from 'react';
-import PlusiWidget from './PlusiWidget';
+import PlusiContent, { PlusiMoodMeta } from './PlusiWidget';
 import CardWidget from './CardWidget';
 import CardListWidget from './CardListWidget';
 import StatsWidget from './StatsWidget';
@@ -22,7 +22,7 @@ export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, i
   return (
     <>
       {toolWidgets.map((tw, i) => {
-        // Research Agent: use AgenticCell shell
+        // Agents using AgenticCell shell
         if (tw.name === 'search_web') {
           if (tw.displayType === 'loading') {
             return <AgenticCell key={`loading-${i}`} agentName="research" isLoading loadingHint={tw.loadingHint} />;
@@ -37,6 +37,9 @@ export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, i
             </AgenticCell>
           );
         }
+        if (tw.name === 'spawn_plusi' && tw.displayType === 'loading') {
+          return <AgenticCell key={`loading-${i}`} agentName="plusi" isLoading />;
+        }
         if (tw.displayType === 'loading') {
           return <ToolLoadingPlaceholder key={`loading-${i}`} toolName={tw.name} />;
         }
@@ -45,18 +48,26 @@ export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, i
         }
         if (tw.displayType === 'widget' && tw.result) {
           switch (tw.name) {
-            case 'spawn_plusi':
+            case 'spawn_plusi': {
+              const plusiMood = tw.result.mood || 'neutral';
+              const plusiColor = (typeof window.getPlusiColor === 'function')
+                ? window.getPlusiColor(plusiMood)
+                : '#0a84ff';
               return (
-                <PlusiWidget
+                <AgenticCell
                   key={`plusi-${i}`}
-                  mood={tw.result.mood || 'neutral'}
-                  text={tw.result.text || ''}
-                  metaText={tw.result.meta || ''}
-                  friendship={tw.result.friendship || null}
-                  isLoading={false}
-                  isFrozen={!isStreaming && !isLastMessage}
-                />
+                  agentName="plusi"
+                  headerMeta={<PlusiMoodMeta mood={plusiMood} color={plusiColor} />}
+                >
+                  <PlusiContent
+                    mood={plusiMood}
+                    text={tw.result.text || ''}
+                    friendship={tw.result.friendship || null}
+                    isFrozen={!isStreaming && !isLastMessage}
+                  />
+                </AgenticCell>
               );
+            }
             case 'show_card':
               return (
                 <CardWidget
@@ -89,6 +100,7 @@ export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, i
               return (
                 <CompactWidget
                   key={`compact-${i}`}
+                  reason={tw.result?.reason}
                   onConfirm={() => {
                     window.dispatchEvent(new CustomEvent('compactConfirmed'));
                   }}

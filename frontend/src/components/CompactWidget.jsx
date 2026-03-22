@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export default function CompactWidget({ onConfirm, onDismiss }) {
+export default function CompactWidget({ reason, onConfirm, onDismiss }) {
   const [state, setState] = useState('idle'); // 'idle' | 'confirmed' | 'dismissed'
 
   if (state === 'dismissed') return null;
@@ -31,7 +31,7 @@ export default function CompactWidget({ onConfirm, onDismiss }) {
         color: 'var(--ds-text-secondary)',
         flex: 1,
       }}>
-        Erkenntnisse zusammenfassen?
+{reason || 'Erkenntnisse zusammenfassen?'}
       </span>
 
       {state === 'idle' && (
