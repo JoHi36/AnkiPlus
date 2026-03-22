@@ -43,7 +43,7 @@ def test_search_medical_query_detection():
 def test_search_no_api_key_returns_error():
     from research.search import search
     result = search('French revolution', api_key='')
-    assert result.error == 'No Perplexity API key configured'
+    assert 'OpenRouter' in result.error
 
 def test_convert_citations():
     from research.search import _convert_citations

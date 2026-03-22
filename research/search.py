@@ -81,24 +81,27 @@ def search(query: str, api_key: str = '') -> ResearchResult:
         except Exception:
             logger.exception("PubMed search failed, falling back to Perplexity")
 
-    # Default: Perplexity Sonar
+    # Default: Perplexity Sonar via OpenRouter
     if not api_key:
-        return ResearchResult(query=query, error='No Perplexity API key configured')
+        return ResearchResult(query=query,
+                              error='Kein OpenRouter API-Key konfiguriert. '
+                                    'Gehe zu openrouter.ai um einen zu erstellen.')
 
     try:
-        from .perplexity import search_perplexity
-        px_result = search_perplexity(query, api_key)
+        from .openrouter import search_via_openrouter
+        result = search_via_openrouter(query, api_key, model='perplexity/sonar')
 
-        if px_result.get('error'):
-            return ResearchResult(query=query, tool_used='perplexity', error=px_result['error'])
+        if result.get('error'):
+            return ResearchResult(query=query, tool_used='perplexity/sonar',
+                                  error=result['error'])
 
-        answer = _convert_citations(px_result.get('answer', ''))
+        answer = _convert_citations(result.get('answer', ''))
         return ResearchResult(
-            sources=_sources_from_perplexity(px_result.get('citations', [])),
+            sources=_sources_from_perplexity(result.get('citations', [])),
             answer=answer,
             query=query,
-            tool_used='perplexity',
+            tool_used='perplexity/sonar',
         )
     except Exception as e:
-        logger.exception("Perplexity search failed")
+        logger.exception("OpenRouter search failed")
         return ResearchResult(query=query, error=str(e))

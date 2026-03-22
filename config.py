@@ -19,7 +19,7 @@ DEFAULT_CONFIG = {
     "model_provider": "google",  # Nur Google unterstützt
     "model_name": "gemini-3-flash-preview",  # Standard: Gemini 3 Flash (schnell, minimal thinking)
     "api_key": "",  # Wird vom Nutzer eingegeben (für Backward-Kompatibilität)
-    "perplexity_api_key": "",  # Perplexity API key for Research Agent
+    "openrouter_api_key": "",  # OpenRouter API key (unified gateway for Perplexity, Gemini, etc.)
     "auth_token": "",  # Firebase Auth ID Token
     "refresh_token": "",  # Firebase Refresh Token
     "backend_url": "",  # Backend URL (Standard: Firebase Function URL)
@@ -33,7 +33,7 @@ DEFAULT_CONFIG = {
         "diagrams": True,    # Tool: Mermaid diagrams
         "stats": True,       # Tool: Learning statistics
         "molecules": False,  # Tool: Molecules (Beta)
-        "research": True,    # Sub-Agent: Research via Perplexity
+        "research": True,    # Sub-Agent: Research via OpenRouter
     },
     "firebase": {
         "enabled": False,  # Firebase MCP Integration aktiviert

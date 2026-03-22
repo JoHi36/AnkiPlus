@@ -17,7 +17,7 @@ def run_research(query: str = '', **kwargs) -> dict:
         query = kwargs['situation']
 
     config = get_config()
-    api_key = config.get('perplexity_api_key', '')
+    api_key = config.get('openrouter_api_key', '')
 
     logger.info("Research Agent searching: %s", query[:80])
     result = search(query, api_key=api_key)

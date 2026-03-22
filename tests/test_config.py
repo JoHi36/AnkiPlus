@@ -69,7 +69,7 @@ def test_research_config_defaults():
     """Research agent has default config entries."""
     from config import DEFAULT_CONFIG
     assert DEFAULT_CONFIG.get('research_enabled') is True
-    assert DEFAULT_CONFIG.get('perplexity_api_key') == ''
+    assert DEFAULT_CONFIG.get('openrouter_api_key') == ''
     assert DEFAULT_CONFIG['ai_tools'].get('research') is True
 
 
