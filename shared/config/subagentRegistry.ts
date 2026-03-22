@@ -9,6 +9,9 @@ export interface SubagentConfig {
   color: string;
   enabled: boolean;
   pipelineLabel: string;
+  iconType?: 'svg' | 'emote';
+  iconSvg?: string;
+  loadingHintTemplate?: string;
 }
 
 let registry: Map<string, SubagentConfig> = new Map();
