@@ -227,8 +227,3 @@ def parse_extraction_response(response_text):
     except (json.JSONDecodeError, KeyError, IndexError) as e:
         logger.error("[InsightExtractor] Failed to parse response: %s", e)
         return None
-
-
-def should_extract(messages):
-    """Check if extraction should trigger (≥2 user messages)."""
-    return _count_user_messages(messages) >= 2

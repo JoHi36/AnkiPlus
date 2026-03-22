@@ -16,6 +16,7 @@ export default function useInsights() {
     setInsights(EMPTY_INSIGHTS);
     setRevlogData([]);
     setNewInsightIds([]);
+    setNoNewInsights(false);
     window.ankiBridge?.addMessage('getCardInsights', { cardId });
     window.ankiBridge?.addMessage('getCardRevlog', { cardId });
   }, []);
