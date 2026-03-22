@@ -28,16 +28,18 @@ def _convert_citations(text: str) -> str:
     return re.sub(r'\[(\d+)\]', r'[[WEB:\1]]', text)
 
 
-def _sources_from_perplexity(citations: list) -> list:
-    """Convert Perplexity citation URLs to Source objects."""
+def _sources_from_citations(citations: list) -> list:
+    """Convert citation dicts (url + title) to Source objects."""
     from urllib.parse import urlparse
     sources = []
-    for url in citations:
+    for cite in citations:
         try:
+            url = cite.get('url', '') if isinstance(cite, dict) else str(cite)
+            title = cite.get('title', '') if isinstance(cite, dict) else ''
             parsed = urlparse(url)
             domain = parsed.netloc.replace('www.', '')
             sources.append(Source(
-                title=domain,
+                title=title or domain,
                 url=url,
                 domain=domain,
                 favicon_letter=domain[0].upper() if domain else '?',
@@ -97,7 +99,7 @@ def search(query: str, api_key: str = '') -> ResearchResult:
 
         answer = _convert_citations(result.get('answer', ''))
         return ResearchResult(
-            sources=_sources_from_perplexity(result.get('citations', [])),
+            sources=_sources_from_citations(result.get('citations', [])),
             answer=answer,
             query=query,
             tool_used='perplexity/sonar',

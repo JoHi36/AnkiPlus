@@ -54,8 +54,23 @@ def search_via_openrouter(query: str, api_key: str,
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode('utf-8'))
 
-        answer = data.get('choices', [{}])[0].get('message', {}).get('content', '')
-        citations = data.get('citations', [])
+        message = data.get('choices', [{}])[0].get('message', {})
+        answer = message.get('content', '')
+
+        # Citations: OpenRouter puts Perplexity citations in message.annotations
+        citations = []
+        seen_urls = set()
+        for ann in message.get('annotations', []):
+            if ann.get('type') == 'url_citation':
+                url = ann.get('url_citation', {}).get('url', '')
+                title = ann.get('url_citation', {}).get('title', '')
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    citations.append({'url': url, 'title': title})
+
+        # Fallback: check top-level citations field (direct Perplexity API format)
+        if not citations:
+            citations = [{'url': u, 'title': ''} for u in data.get('citations', [])]
 
         # Extract usage for cost tracking
         usage = data.get('usage', {})
