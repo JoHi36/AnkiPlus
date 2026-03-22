@@ -27,6 +27,7 @@ import SectionDivider from './components/SectionDivider';
 import ReviewTrailIndicator from './components/ReviewTrailIndicator';
 import { BookOpen } from 'lucide-react';
 import { useFreeChat } from './hooks/useFreeChat';
+import { setRegistry, findAgent } from '@shared/config/subagentRegistry';
 // MascotShell moved to main window (plusi_dock.py) — no longer imported
 import { useMascot } from './hooks/useMascot';
 import { usePlusiDirect } from './hooks/usePlusiDirect';
@@ -372,6 +373,7 @@ function AppInner() {
     window._plusiEnabled = mascotEnabled; // Expose for useChat.js @Plusi guard
   }, [mascotEnabled]);
 
+  const [activeAgentColor, setActiveAgentColor] = useState(null);
   const [consecutiveWrong, setConsecutiveWrong] = useState(0);
   const activationCountRef = useRef(0);
   const activationResetRef = useRef(null);
@@ -417,6 +419,19 @@ function AppInner() {
       }
     } catch (e) {
       // ignore parse errors
+    }
+  }, [isReady, bridge]);
+
+  // Load subagent registry from bridge on ready
+  useEffect(() => {
+    if (!isReady || !bridge || !bridge.getSubagentRegistry) return;
+    try {
+      const registryJson = bridge.getSubagentRegistry();
+      if (registryJson) {
+        setRegistry(JSON.parse(registryJson));
+      }
+    } catch (e) {
+      console.warn('Failed to load subagent registry:', e);
     }
   }, [isReady, bridge]);
 
@@ -966,59 +981,60 @@ function AppInner() {
           }
         }
 
-        // Plusi Direct Result — @Plusi inline messages (ignored when Plusi is disabled)
-        if (payload.type === 'plusi_direct_result') {
-          if (!mascotEnabledRef.current) return;
-          const _chatForPlusi = chatHookRef.current;
-          if (_chatForPlusi) {
-            // End loading state from @Plusi direct mode
-            if (_chatForPlusi.setIsLoading) _chatForPlusi.setIsLoading(false);
-            // Reset pipeline steps (ThoughtStream will use persisted pipeline_data)
-            if (_chatForPlusi.updatePipelineSteps) _chatForPlusi.updatePipelineSteps([]);
+        // Subagent Direct Result — unified handler for all subagent inline messages
+        if (payload.type === 'subagent_result') {
+          const agentName = payload.agent_name || 'unknown';
+          console.log(`Subagent[${agentName}] result received:`, payload.text?.substring(0, 50));
 
-            // Plusi-specific pipeline data for ThoughtStream persistence
-            const plusiPipelineData = [
-              { step: 'router', status: 'done', data: {
-                search_needed: false,
-                retrieval_mode: 'plusi',
-                response_length: 'short',
-                scope: 'none',
-                scope_label: ''
-              }, timestamp: Date.now() }
-            ];
-
-            const result = {
-              mood: payload.mood || 'neutral',
-              text: payload.text || '',
-              meta: payload.meta || '',
-              friendship: payload.friendship || null,
-              error: payload.error || false,
-              silent: payload.silent || false,
-            };
-            if (!result.error && !result.silent && result.text) {
-              const plusiMarker = `[[TOOL:${JSON.stringify({
-                name: "spawn_plusi",
-                displayType: "widget",
-                result: { mood: result.mood, text: result.text, meta: result.meta, friendship: result.friendship }
-              })}]]`;
-              // Add as a new bot message with pipeline_data for persistent ThoughtStream
-              _chatForPlusi.setMessages(prev => [
-                ...prev,
-                { id: Date.now(), from: 'bot', text: plusiMarker, pipeline_data: plusiPipelineData }
-              ]);
-              setAiMood(result.mood);
-            } else if (result.silent) {
-              const silentMarker = `[[TOOL:${JSON.stringify({
-                name: "spawn_plusi",
-                displayType: "widget",
-                result: { mood: result.mood, text: '*Plusi antwortet nicht.*', meta: '', friendship: result.friendship }
-              })}]]`;
-              _chatForPlusi.setMessages(prev => [
-                ...prev,
-                { id: Date.now(), from: 'bot', text: silentMarker, pipeline_data: plusiPipelineData }
-              ]);
-              setAiMood(result.mood);
+          const _chatForAgent = chatHookRef.current;
+          if (_chatForAgent) {
+            // Mark pipeline steps as done
+            if (_chatForAgent.updatePipelineSteps) {
+              _chatForAgent.updatePipelineSteps(prev => {
+                return prev.map(s => s.status === 'active' ? {
+                  ...s, status: 'done',
+                  data: { ...s.data, search_needed: false, retrieval_mode: `subagent:${agentName}` },
+                  timestamp: Date.now()
+                } : s);
+              });
             }
+
+            if (payload.error) {
+              console.error(`Subagent[${agentName}] error`);
+              if (_chatForAgent.setIsLoading) _chatForAgent.setIsLoading(false);
+              if (_chatForAgent.setStreamingMessage) _chatForAgent.setStreamingMessage('');
+              setActiveAgentColor(null);
+              return;
+            }
+            if (payload.silent) {
+              if (_chatForAgent.setIsLoading) _chatForAgent.setIsLoading(false);
+              if (_chatForAgent.setStreamingMessage) _chatForAgent.setStreamingMessage('');
+              setActiveAgentColor(null);
+              return;
+            }
+
+            // Set agent color for ThoughtStream
+            const agent = findAgent(agentName);
+            if (agent) setActiveAgentColor(agent.color);
+
+            // Build pipeline_data for persisted ThoughtStream
+            const subagentPipelineData = [{
+              step: 'router', status: 'done',
+              data: { search_needed: false, retrieval_mode: `subagent:${agentName}` },
+              timestamp: Date.now()
+            }];
+
+            if (payload.text && _chatForAgent.appendMessageRef?.current) {
+              _chatForAgent.appendMessageRef.current(
+                payload.text, 'bot', [], {}, null, [], subagentPipelineData
+              );
+            }
+            if (_chatForAgent.setIsLoading) _chatForAgent.setIsLoading(false);
+            if (_chatForAgent.setStreamingMessage) _chatForAgent.setStreamingMessage('');
+            setActiveAgentColor(null);
+
+            // Update mood if provided (Plusi compatibility)
+            if (payload.mood) setAiMood(payload.mood);
           }
         }
 
@@ -1085,6 +1101,12 @@ function AppInner() {
           setMascotEnabled(mascotVal);
           if (payload.data.theme) setTheme(payload.data.theme);
           if (payload.data.resolvedTheme) setResolvedTheme(payload.data.resolvedTheme);
+        }
+
+        // Subagent registry push from Python
+        if (payload.type === 'subagent_registry') {
+          setRegistry(payload.agents || []);
+          return;
         }
 
         // Theme events
@@ -2318,7 +2340,12 @@ function AppInner() {
                             {/* ThoughtStream divider — v5 no longer renders sources */}
                             <ThoughtStream
                               pipelineSteps={chatHook.pipelineSteps || []}
+                              pipelineGeneration={chatHook.pipelineGeneration}
+                              agentColor={activeAgentColor}
+                              citations={chatHook.currentCitations || {}}
                               isStreaming={true}
+                              bridge={bridge}
+                              onPreviewCard={handlePreviewCard}
                               message={chatHook.streamingMessage || ''}
                               steps={[]}
                             />

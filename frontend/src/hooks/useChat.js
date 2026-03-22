@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, startTransition } from 'react';
 import { updateSession, updateSessionSections, createSession, findSessionByDeck } from '../utils/sessions';
+import { getDirectCallPattern, findAgent } from '@shared/config/subagentRegistry';
 
 // REMOVED: Auto-scroll helper functions - no longer needed with Interaction Container approach
 
@@ -59,6 +60,8 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
   const [pipelineSteps, setPipelineSteps] = useState([]);
   // Each: { step: 'router'|'sql_search'|..., status: 'active'|'done'|'error', data: {}, timestamp: number }
   const pipelineStepsRef = useRef([]);
+  // Generation counter — increments on each new pipeline to signal ThoughtStream to reset refs
+  const [pipelineGeneration, setPipelineGeneration] = useState(0);
 
   const updatePipelineSteps = useCallback((updater) => {
     setPipelineSteps(prev => {
@@ -127,29 +130,30 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       pipeline_data: pipelineData,  // Full pipeline step data for persistent ThoughtStream
     };
     
-    setMessages((prev) => {
-      const updated = [...prev, newMessage];
+    // CRITICAL PATH: Update messages immediately
+    setMessages((prev) => [...prev, newMessage]);
 
-      // Speichere in Session - verwende Ref für aktuelle Session-ID
+    // LOW PRIORITY: Session persistence deferred to avoid blocking render
+    startTransition(() => {
       const sessionId = currentSessionIdRef.current;
       if (sessionId) {
         setSessions((prevSessions) => {
           try {
-            return updateSession(prevSessions, sessionId, updated);
+            // Use functional updater to get latest messages
+            return updateSession(prevSessions, sessionId, [...(prevSessions.find(s => s.id === sessionId)?.messages || []), newMessage]);
           } catch (error) {
             console.error('Fehler beim Speichern der Nachricht:', error);
             return prevSessions;
           }
         });
       }
-      return updated;
     });
 
-    // Per-Card SQLite Persistence
+    // DEFERRED: Per-Card SQLite Persistence
     if (cardSessionHookRef.current) {
       const cardId = cardSessionHookRef.current.currentCardId;
       if (cardId) {
-        cardSessionHookRef.current.saveMessage(cardId, newMessage);
+        queueMicrotask(() => cardSessionHookRef.current?.saveMessage(cardId, newMessage));
       }
     }
 
@@ -260,149 +264,138 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       request_id: requestId  // Link to request for correlation
     };
     
-    // ATOMARE OPERATION: Session-Erstellung + Nachricht-Speicherung
-    // Alles passiert in EINEM setSessions-Aufruf
-    setSessions((prevSessions) => {
-      let targetSessionId = currentSessionIdRef.current;
-      let updatedSessions = prevSessions;
-      let needsNewSession = false;
-      
-      // Prüfe ob Session erstellt werden muss
-      if (!targetSessionId && pendingDeckSession) {
-        // Suche zuerst ob Session vielleicht schon existiert
-        const existingSession = findSessionByDeck(prevSessions, pendingDeckSession.deckId);
-        
-        if (existingSession) {
-          // Session existiert bereits - verwende sie
-          console.log('📖 useChat: Session bereits vorhanden:', existingSession.id);
-          targetSessionId = existingSession.id;
-        } else {
-          // Erstelle neue Session
-          console.log('➕ useChat: Erstelle neue Session für Deck:', pendingDeckSession.deckName);
+    // ── CRITICAL PATH: These must fire FIRST to unblock the UI ──
+    // Pipeline generation increment signals ThoughtStream to reset its internal refs
+    // (seenRef, activeRef, etc.) even when React batches the [] and new steps together.
+    setPipelineGeneration(g => g + 1);
+    updatePipelineSteps([]);
+    updateCurrentSteps([]);
+    updateCurrentCitations({});
+    setMessages((prev) => [...prev, newMessage]);
+    setIsLoading(true);
+    setStreamingMessage('');
+    setError(null);
+    setConnectionStatus('connecting');
+
+    // ── DEFERRED: Session persistence (heavy computation, not visible to user) ──
+    startTransition(() => {
+      setSessions((prevSessions) => {
+        let targetSessionId = currentSessionIdRef.current;
+        let updatedSessions = prevSessions;
+        let needsNewSession = false;
+
+        if (!targetSessionId && pendingDeckSession) {
+          const existingSession = findSessionByDeck(prevSessions, pendingDeckSession.deckId);
+
+          if (existingSession) {
+            targetSessionId = existingSession.id;
+          } else {
+            try {
+              const newSession = createSession(
+                prevSessions,
+                pendingDeckSession.deckId,
+                pendingDeckSession.deckName,
+                tempSeenCardIds
+              );
+              targetSessionId = newSession.id;
+              updatedSessions = [...prevSessions, newSession];
+              needsNewSession = true;
+            } catch (error) {
+              console.error('Fehler beim Erstellen der Session:', error);
+              targetSessionId = null;
+            }
+          }
+
+          if (targetSessionId) {
+            setCurrentSessionId(targetSessionId);
+            currentSessionIdRef.current = targetSessionId;
+          }
+          setPendingDeckSession(null);
+        }
+
+        if (targetSessionId) {
+          const currentSession = updatedSessions.find(s => s.id === targetSessionId);
+          const currentSessionMessages = needsNewSession
+            ? []
+            : (currentSession?.messages || []);
+          const updatedMessages = [...currentSessionMessages, newMessage];
+
+          let updatedSectionsArray = currentSession?.sections || [];
+          if (newlyCreatedSection) {
+            updatedSectionsArray = [...updatedSectionsArray, {
+              id: newlyCreatedSection.id,
+              cardId: newlyCreatedSection.cardId,
+              title: newlyCreatedSection.title,
+              createdAt: newlyCreatedSection.createdAt
+            }];
+          }
+
           try {
-            const newSession = createSession(
-              prevSessions, 
-              pendingDeckSession.deckId, 
-              pendingDeckSession.deckName, 
-              tempSeenCardIds // Übergebe temporäre IDs
-            );
-            targetSessionId = newSession.id;
-            updatedSessions = [...prevSessions, newSession];
-            needsNewSession = true;
+            updatedSessions = updateSession(updatedSessions, targetSessionId, updatedMessages, updatedSectionsArray);
           } catch (error) {
-            console.error('Fehler beim Erstellen der Session:', error);
-            // Fallback: Sende Nachricht ohne Session
-            targetSessionId = null;
+            console.error('Fehler beim Speichern der Nachricht:', error);
           }
         }
-        
-        // Aktualisiere State (außerhalb des funktionalen Updates, aber synchron geplant)
-        if (targetSessionId) {
-          setCurrentSessionId(targetSessionId);
-          currentSessionIdRef.current = targetSessionId;
-        }
-        setPendingDeckSession(null);
-      }
-      
-      // Füge Nachricht zu Session hinzu
-      if (targetSessionId) {
-        const currentSession = updatedSessions.find(s => s.id === targetSessionId);
-        const currentSessionMessages = needsNewSession 
-          ? [] 
-          : (currentSession?.messages || []);
-        const updatedMessages = [...currentSessionMessages, newMessage];
-        
-        // Berechne aktualisierte Sections (mit neuer Section falls erstellt)
-        let updatedSectionsArray = currentSession?.sections || [];
-        if (newlyCreatedSection) {
-          // Füge neue Section hinzu (nur die persistierbaren Felder)
-          updatedSectionsArray = [...updatedSectionsArray, {
-            id: newlyCreatedSection.id,
-            cardId: newlyCreatedSection.cardId,
-            title: newlyCreatedSection.title,
-            createdAt: newlyCreatedSection.createdAt
-          }];
-        }
-        
-        try {
-          updatedSessions = updateSession(updatedSessions, targetSessionId, updatedMessages, updatedSectionsArray);
-        } catch (error) {
-          console.error('Fehler beim Speichern der Nachricht:', error);
-        }
-      }
-      return updatedSessions;
+        return updatedSessions;
+      });
     });
-    
-    // Aktualisiere lokale Messages State
-    setMessages((prev) => [...prev, newMessage]);
 
-    // Per-Card SQLite: Save user message
+    // ── DEFERRED: Per-Card SQLite persistence ──
     if (cardSessionHookRef.current) {
       const cardId = cardSessionHookRef.current.currentCardId;
       if (cardId) {
-        cardSessionHookRef.current.saveMessage(cardId, newMessage);
+        queueMicrotask(() => cardSessionHookRef.current?.saveMessage(cardId, newMessage));
       }
     }
-    
+
     // Sammle die letzten 10 Nachrichten für KI-Kontext
     const allMessages = [...(currentMessages || []), newMessage];
     const historyMessages = allMessages.slice(-10);
-    
+
     // Konvertiere zu Format für KI
     const conversationHistory = historyMessages.map(msg => ({
       role: msg.from === 'user' ? 'user' : 'assistant',
       content: msg.text
     }));
-    
-    // DISABLED: Auto-Scroll während Generation
-    // Die View bleibt am Top des Interaction Containers
-    
-    // Sende an API
-    setIsLoading(true);
-    setStreamingMessage('');
-    setError(null);
-    setConnectionStatus('connecting');
-    updateCurrentSteps([]);  // Reset steps for new request
-    updateCurrentCitations({});  // Reset citations for new request
-    updatePipelineSteps([]);  // Reset pipeline steps for new request
 
-    // @Plusi direct mode — skip router, emit synthetic pipeline, route via plusiDirect
-    const isPlusiDirect = /^@plusi\b/i.test(text);
-    console.log('🔍 @Plusi check:', { isPlusiDirect, text: text.substring(0, 20), hasBridge: !!bridge, hasPlusiDirect: !!(bridge && bridge.plusiDirect) });
-    if (isPlusiDirect) {
-      console.log('✅ @Plusi detected, emitting synthetic pipeline');
-      // Emit synthetic router-active immediately
-      updatePipelineSteps([{ step: 'router', status: 'active', data: {}, timestamp: Date.now() }]);
+    // @Subagent direct mode — detect via registry, emit synthetic pipeline, route via subagentDirect
+    const directCallPattern = getDirectCallPattern();
+    const directMatch = directCallPattern ? directCallPattern.exec(text) : null;
 
-      // After 700ms, emit router-done (simulated thinking)
-      setTimeout(() => {
-        updatePipelineSteps(prev => prev.map(s => s.step === 'router' ? {
-          ...s,
-          status: 'done',
-          data: {
-            search_needed: false,
-            retrieval_mode: 'none',
-            response_length: 'short',
-            scope: 'none',
-            scope_label: ''
-          },
-          timestamp: Date.now()
-        } : s));
-      }, 700);
-    }
+    if (directMatch) {
+      const agentName = directMatch[1].toLowerCase();
+      const agent = findAgent(agentName);
+      if (agent) {
+        console.log(`@${agent.label} detected, emitting synthetic pipeline`);
+        // Emit synthetic router-active immediately
+        updatePipelineSteps([{ step: 'router', status: 'active', data: {}, timestamp: Date.now() }]);
 
-    if (isPlusiDirect) {
-      // Strip @Plusi prefix
-      const cleanText = text.replace(/^@plusi\s*/i, '').trim() || text;
-      console.log('📤 @Plusi: routing via bridge.plusiDirect, cleanText:', cleanText);
-      // Use existing plusiDirect bridge — handles run_plusi(), mood sync, panel notify
-      if (bridge && bridge.plusiDirect) {
-        bridge.plusiDirect(cleanText, null); // deck_id=null, backend resolves current deck
-        console.log('📤 @Plusi: bridge.plusiDirect called successfully');
-      } else {
-        console.error('❌ @Plusi: bridge.plusiDirect NOT available!', { bridge: !!bridge, keys: bridge ? Object.keys(bridge) : [] });
+        // After 700ms, emit router-done with subagent info
+        setTimeout(() => {
+          updatePipelineSteps(prev => prev.map(s => s.step === 'router' ? {
+            ...s,
+            status: 'done',
+            data: {
+              search_needed: false,
+              retrieval_mode: `subagent:${agentName}`,
+              response_length: 'short',
+              scope: 'none',
+              scope_label: ''
+            },
+            timestamp: Date.now()
+          } : s));
+        }, 700);
+
+        // Strip @Name prefix and route via generic bridge method
+        const cleanText = text.replace(directCallPattern, '').trim() || text;
+        console.log(`@${agent.label}: routing via bridge.subagentDirect`);
+        if (bridge && bridge.subagentDirect) {
+          bridge.subagentDirect(agentName, cleanText, JSON.stringify({}));
+        } else {
+          console.error(`@${agent.label}: bridge.subagentDirect NOT available!`);
+        }
+        return; // Skip normal sendMessage flow
       }
-      return; // Skip normal sendMessage flow — no router, no main model
     }
 
     // Store message for potential retry
@@ -821,6 +814,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     currentSteps,  // NEW: Expose current steps for streaming
     currentCitations,  // NEW: Expose current citations for streaming
     pipelineSteps,  // NEW: Expose pipeline steps for ThoughtStream
+    pipelineGeneration,  // Generation counter for ThoughtStream reset
     updatePipelineSteps,  // Expose for @Plusi synthetic pipeline in App.jsx
     error,  // NEW: Error state
     connectionStatus,  // NEW: Connection status
