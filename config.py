@@ -33,6 +33,7 @@ DEFAULT_CONFIG = {
         "diagrams": True,    # Tool: Mermaid diagrams
         "stats": True,       # Tool: Learning statistics
         "molecules": False,  # Tool: Molecules (Beta)
+        "compact": True,     # Tool: Chat-Zusammenfassung / Insight Extraction
         "research": True,    # Sub-Agent: Research via OpenRouter
     },
     "firebase": {

@@ -53,6 +53,7 @@ const TOOLS = [
   { key: 'diagrams', emoji: '📊', label: 'Diagramme', desc: 'Mermaid-Diagramme' },
   { key: 'statistics', emoji: '📈', label: 'Statistiken', desc: 'Streak, Heatmap, Deck-Überblick' },
   { key: 'molecules', emoji: '🧬', label: 'Moleküle', desc: 'Molekülstrukturen darstellen', badge: 'Beta' },
+  { key: 'compact', emoji: '✦', label: 'Zusammenfassen', desc: 'Chat-Erkenntnisse extrahieren' },
 ];
 
 function SectionHeader({ title, tooltip }) {

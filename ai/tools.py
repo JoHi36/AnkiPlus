@@ -1023,7 +1023,7 @@ registry.register(
         schema=COMPACT_SCHEMA,
         execute_fn=execute_compact,
         category="meta",
-        config_key=None,
+        config_key="compact",
         agent="tutor",
         disabled_modes=[],
         display_type="widget",

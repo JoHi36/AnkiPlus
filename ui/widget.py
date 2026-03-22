@@ -516,7 +516,7 @@ class ChatbotWidget(QWidget):
             # Media
             'fetchImage': self._msg_fetch_image,
             # Utilities
-            'openUrl': lambda d: self.bridge.openUrl(d) if isinstance(d, str) else None,
+            'openUrl': lambda d: self.bridge.openUrl(d.get('url', '') if isinstance(d, dict) else d),
             'debugLog': self._msg_debug_log,
             'plusiPanel': self._msg_plusi_settings,
             'plusiSettings': self._msg_plusi_settings,
@@ -770,7 +770,7 @@ class ChatbotWidget(QWidget):
             "mascot_enabled": config.get("mascot_enabled", False),
             "ai_tools": config.get("ai_tools", {
                 "images": True, "diagrams": True, "card_search": True,
-                "statistics": True, "molecules": False,
+                "statistics": True, "molecules": False, "compact": True,
             }),
             "theme": config.get("theme", "dark"),
             "resolvedTheme": get_resolved_theme(),
