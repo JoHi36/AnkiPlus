@@ -6,6 +6,8 @@ import StatsWidget from './StatsWidget';
 import ToolLoadingPlaceholder from './ToolLoadingPlaceholder';
 import ImageWidget from './ImageWidget';
 import ToolErrorBadge from './ToolErrorBadge';
+import AgenticCell from './AgenticCell';
+import ResearchContent from './ResearchContent';
 
 export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, isLastMessage }) {
   if (!toolWidgets || toolWidgets.length === 0) return null;
@@ -19,11 +21,25 @@ export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, i
   return (
     <>
       {toolWidgets.map((tw, i) => {
-        if (tw.displayType === 'loading') {
+        if (tw.displayType === 'loading' && tw.name !== 'search_web') {
           return <ToolLoadingPlaceholder key={`loading-${i}`} toolName={tw.name} />;
         }
         if (tw.displayType === 'error') {
           return <ToolErrorBadge key={`error-${i}`} toolName={tw.name} error={tw.error} />;
+        }
+        if (tw.name === 'search_web') {
+          if (tw.displayType === 'loading') {
+            return <AgenticCell key={`loading-${i}`} agentName="research" isLoading loadingHint={tw.loadingHint} />;
+          }
+          return (
+            <AgenticCell key={`widget-${i}`} agentName="research">
+              <ResearchContent
+                sources={tw.result?.sources}
+                answer={tw.result?.answer}
+                error={tw.result?.error}
+              />
+            </AgenticCell>
+          );
         }
         if (tw.displayType === 'widget' && tw.result) {
           switch (tw.name) {
