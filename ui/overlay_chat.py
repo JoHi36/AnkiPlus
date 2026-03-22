@@ -155,6 +155,17 @@ class OverlayChatWidget(QWidget):
         elif msg_type == 'closeOverlay':
             self.hide_overlay()
 
+        elif msg_type == 'clearDeckMessages':
+            try:
+                from ..storage.card_sessions import clear_deck_messages
+            except ImportError:
+                from storage.card_sessions import clear_deck_messages
+            try:
+                count = clear_deck_messages()
+                self._send_to_react({"type": "deckMessagesCleared", "count": count})
+            except Exception as e:
+                logger.error("OverlayChat: clearDeckMessages error: %s", e)
+
     def _send_to_react(self, payload):
         """Send a payload to the React app via window.ankiReceive."""
         if self.web_view:

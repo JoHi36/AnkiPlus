@@ -802,6 +802,20 @@ class WebBridge(QObject):
             logger.error("saveDeckMessage error: %s", e)
             return json.dumps({"success": False, "error": str(e)})
 
+    @pyqtSlot(result=str)
+    def clearDeckMessages(self):
+        """Clear all free-chat messages (card_id IS NULL)."""
+        try:
+            from ..storage.card_sessions import clear_deck_messages
+        except ImportError:
+            from storage.card_sessions import clear_deck_messages
+        try:
+            count = clear_deck_messages()
+            return json.dumps({"success": True, "count": count})
+        except Exception as e:
+            logger.exception("clearDeckMessages error")
+            return json.dumps({"success": False, "error": str(e)})
+
     @pyqtSlot(str, str, result=str)
     def searchImage(self, query, image_type="general"):
         """Delegiert an image_search Modul."""
