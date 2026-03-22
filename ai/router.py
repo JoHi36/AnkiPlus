@@ -114,7 +114,11 @@ def _llm_route(user_message: str, session_context: dict, config: dict) -> Routin
 
     Returns RoutingResult — always succeeds (defaults to tutor on failure).
     """
-    import requests as _requests
+    try:
+        import requests as _requests
+    except ImportError:
+        return RoutingResult(agent='tutor', method='default',
+                             reasoning='requests module not available')
 
     # Only attempt if we have an API key
     api_key = config.get('api_key', '')
