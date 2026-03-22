@@ -24,6 +24,11 @@ except ImportError:
     from agent_loop import run_agent_loop
 
 try:
+    from .router import route_message
+except ImportError:
+    from router import route_message
+
+try:
     from ..utils.logging import get_logger
 except ImportError:
     from utils.logging import get_logger
@@ -354,6 +359,54 @@ class AIHandler:
         citations = {}
 
         try:
+            # Stage 0: Agent Routing
+            session_context = {
+                'locked_agent': None,  # Will be passed from frontend later
+                'mode': 'card_session' if context and context.get('cardId') else 'free_chat',
+                'deck_name': (context or {}).get('deckName', ''),
+                'has_card': bool(context and context.get('cardId')),
+            }
+            routing_result = route_message(user_message, session_context, self.config)
+            logger.info("Router: agent=%s, method=%s", routing_result.agent, routing_result.method)
+
+            # If routed to a non-tutor agent, dispatch and return
+            if routing_result.agent != 'tutor':
+                self._emit_pipeline_step("orchestrating", "done", {
+                    'search_needed': False,
+                    'retrieval_mode': 'agent:%s' % routing_result.agent,
+                    'scope': 'none',
+                    'scope_label': routing_result.agent,
+                })
+                # Dispatch to agent via widget's subagent handler
+                # The widget will handle streaming and UI updates
+                if self.widget:
+                    try:
+                        try:
+                            from .agents import get_agent, lazy_load_run_fn, AGENT_REGISTRY
+                        except ImportError:
+                            from agents import get_agent, lazy_load_run_fn, AGENT_REGISTRY
+                        agent_def = get_agent(routing_result.agent)
+                        if agent_def:
+                            clean_msg = routing_result.clean_message or user_message
+                            run_fn = lazy_load_run_fn(agent_def)
+                            result = run_fn(situation=clean_msg, **agent_def.extra_kwargs)
+                            # Format result for streaming callback
+                            text = result.get('text', '') if isinstance(result, dict) else str(result)
+                            if callback:
+                                callback(text, True, False,
+                                         steps=self._current_request_steps,
+                                         citations={},
+                                         step_labels=self._current_step_labels)
+                            if agent_def.on_finished and self.widget:
+                                agent_def.on_finished(self.widget, routing_result.agent, result)
+                            return text
+                    except Exception as e:
+                        logger.warning("Agent dispatch failed for %s: %s, falling back to Tutor",
+                                       routing_result.agent, e)
+                        # Fall through to Tutor pipeline
+
+            # Continue with Tutor pipeline (existing RAG flow)
+
             # Stage 1: Router
             router_result = self._rag_router(user_message, context=context)
 
