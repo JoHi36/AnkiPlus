@@ -129,6 +129,32 @@ class TestCardSessionsCRUD:
         assert 100 in ids
         assert 200 in ids
 
+    def test_clear_deck_messages(self):
+        """clear_deck_messages deletes only card_id=NULL messages."""
+        from storage.card_sessions import save_deck_message, load_deck_messages, clear_deck_messages, save_message
+
+        # Save a free-chat message (card_id=NULL)
+        save_deck_message(0, {'id': 'free-1', 'text': 'free question', 'sender': 'user'})
+        save_deck_message(0, {'id': 'free-2', 'text': 'free answer', 'sender': 'assistant'})
+
+        # Save a card-context message (card_id != NULL)
+        save_message(12345, {'id': 'card-1', 'text': 'card question', 'sender': 'user', 'section_id': None})
+
+        # Verify all exist
+        msgs = load_deck_messages(0, limit=100)
+        assert len(msgs) >= 3
+
+        # Clear free-chat messages
+        count = clear_deck_messages()
+
+        # Free-chat messages gone, card message remains
+        msgs_after = load_deck_messages(0, limit=100)
+        card_msgs = [m for m in msgs_after if m.get('card_id')]
+        free_msgs = [m for m in msgs_after if not m.get('card_id')]
+        assert len(free_msgs) == 0
+        assert len(card_msgs) >= 1
+        assert count == 2
+
 
 class TestInsights:
     """Test insight storage (stored as JSON in summary column)."""

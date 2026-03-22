@@ -521,6 +521,21 @@ def save_deck_message(deck_id, message):
         return False
 
 
+def clear_deck_messages():
+    """Delete all free-chat messages (card_id IS NULL). Returns count of deleted rows."""
+    db = _get_db()
+    try:
+        cursor = db.execute("DELETE FROM messages WHERE card_id IS NULL")
+        db.commit()
+        count = cursor.rowcount
+        logger.info("Cleared %s free-chat messages", count)
+        return count
+    except sqlite3.Error as e:
+        logger.error("Failed to clear deck messages: %s", e)
+        db.rollback()
+        return 0
+
+
 def save_section(card_id, section):
     """Create or update a review section for a card."""
     db = _get_db()
