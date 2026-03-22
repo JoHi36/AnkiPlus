@@ -2,6 +2,7 @@
 Insight extraction from card chats.
 Extracts learning insights incrementally using AI, merges with existing insights.
 """
+import hashlib
 import json
 import re
 
@@ -12,24 +13,38 @@ except ImportError:
 logger = get_logger(__name__)
 
 
-EXTRACTION_PROMPT = """Extrahiere Lernerkenntnisse aus diesem Chat über eine Anki-Lernkarte.
+def insight_hash(text):
+    """Deterministic 8-char hash of insight text for seen-tracking."""
+    return hashlib.md5(text.encode('utf-8')).hexdigest()[:8]
 
-Karte: {question}
 
-Bisherige Erkenntnisse: {existing_insights}
+def compute_new_indices(insights, seen_hashes):
+    """Return indices of insights whose text hash is not in seen_hashes."""
+    return [
+        i for i, ins in enumerate(insights)
+        if insight_hash(ins.get('text', '')) not in seen_hashes
+    ]
 
-Chat:
+
+EXTRACTION_PROMPT = """Du extrahierst Lernerkenntnisse aus einem Chat über eine Anki-Karte.
+
+KARTE: {question}
+
+BISHERIGE ERKENNTNISSE: {existing_insights}
+
+CHAT:
 {chat_messages}
 
-Regeln:
-- Stichpunktartig, keine ganzen Sätze
-- Priorisiere: User-Fehler > neue Konzepte > Bestätigungen
-- Typ "learned" = verstanden, "weakness" = Fehler/Unsicherheit
-- Maximal 10 Erkenntnisse, ersetze unwichtigste wenn nötig
-- Nur JSON, kein anderer Text
+AUFGABE:
+- Extrahiere die wichtigsten Lernpunkte als kurze Stichpunkte
+- Typ "learned": Konzept verstanden, Wissen bestätigt
+- Typ "weakness": Fehler gemacht, Verwechslung, Unsicherheit
+- Priorisiere: Fehler des Nutzers > neue Konzepte > Bestätigungen
+- Merge mit bisherigen Erkenntnissen: Duplikate entfernen, Widersprüche aktualisieren, max 10 Einträge
+- NUR das JSON-Objekt ausgeben, KEIN anderer Text
 
-Format:
-{{"version":1,"insights":[{{"text":"...","type":"learned","citations":[]}}]}}"""
+BEISPIEL-OUTPUT:
+{{"version":1,"insights":[{{"text":"Kompetitive Hemmung erhöht Km, nicht Vmax","type":"learned"}},{{"text":"Verwechslung: allosterisch ≠ nicht-kompetitiv","type":"weakness"}}]}}"""
 
 
 def _strip_html(text):
