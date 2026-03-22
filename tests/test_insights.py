@@ -21,7 +21,7 @@ def test_build_extraction_prompt_card_relevance():
         [{'from': 'user', 'text': 'explain'}],
         {'version': 1, 'insights': []},
     )
-    assert 'VERHALTEN DES NUTZERS' in prompt
+    assert 'NUTZER' in prompt
     assert 'Off-Topic' in prompt
 
 

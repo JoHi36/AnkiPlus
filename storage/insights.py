@@ -43,25 +43,24 @@ CHAT:
 {chat_messages}
 
 FOKUS:
-Du analysierst das VERHALTEN DES NUTZERS, nicht den Inhalt der Tutor-Antworten.
-Fasse NICHT zusammen was der Tutor erklärt hat. Erfasse stattdessen:
-- Was hat der Nutzer GEFRAGT? (zeigt Wissenslücke)
-- Was hat der Nutzer FALSCH verstanden oder verwechselt?
-- Wo war der Nutzer UNSICHER?
-- Was hat der Nutzer erst nach Erklärung verstanden? (Schlüsselmoment)
+Erfasse was der NUTZER in diesem Chat gelernt, gefragt oder falsch verstanden hat.
+Fasse NICHT den Tutor-Text zusammen — erfasse das Lernverhalten des Nutzers:
+
+1. FRAGEN des Nutzers → zeigen Wissenslücken oder aktives Interesse (type: "learned")
+2. FEHLER/VERWECHSLUNGEN → was der Nutzer falsch verstanden hat (type: "weakness")
+3. UNSICHERHEITEN → wo der Nutzer nachfragen musste (type: "weakness")
+4. SCHLÜSSELMOMENTE → was der Nutzer erst durch die Erklärung verstanden hat (type: "learned")
 
 REGELN:
-- Typ "weakness": Fehler, Verwechslung, Unsicherheit, falsche Annahme des Nutzers
-- Typ "learned": Konzept das der Nutzer erst durch den Chat verstanden hat
-- NICHT: Fakten die der Tutor erklärt hat (das steht auf der Karte)
-- NICHT: Allgemeinwissen oder Kontext den der Tutor ergänzt hat
+- Formuliere aus Nutzerperspektive: "Gefragt nach X", "Verwechslung: X vs Y", "Verstanden: X"
+- Jede Frage des Nutzers ist eine potenzielle Erkenntnis (zeigt Interesse oder Wissenslücke)
 - NUR kartenrelevante Erkenntnisse, kein Off-Topic/Smalltalk
 - Merge mit bisherigen Erkenntnissen: Duplikate entfernen, max 10 Einträge
-- Wenn keine neuen Erkenntnisse zum User-Verhalten: bisherige unverändert zurückgeben
+- Wenn keine neuen Erkenntnisse: bisherige unverändert zurückgeben
 - NUR das JSON-Objekt ausgeben, KEIN anderer Text
 
 BEISPIEL-OUTPUT:
-{{"version":1,"insights":[{{"text":"Verwechslung: kompetitiv vs. nicht-kompetitiv bei Enzymhemmung","type":"weakness"}},{{"text":"Erst nach Erklärung verstanden: Km ändert sich nur bei kompetitiver Hemmung","type":"learned"}}]}}"""
+{{"version":1,"insights":[{{"text":"Gefragt nach weiteren Ansätzen am Tuber ischiadicum","type":"learned"}},{{"text":"Verwechslung: M. pterygoideus lateralis vs. medialis","type":"weakness"}},{{"text":"Verstanden: Km ändert sich nur bei kompetitiver Hemmung","type":"learned"}}]}}"""
 
 
 def _strip_html(text):
