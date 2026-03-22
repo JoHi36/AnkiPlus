@@ -20,22 +20,11 @@ export default function CompactWidget({ reason, onConfirm, onDismiss }) {
       display: 'flex',
       alignItems: 'center',
       gap: 10,
-      padding: '10px 14px',
-      marginTop: 8,
-      borderRadius: 12,
-      background: 'var(--ds-bg-frosted)',
-      border: '1px solid var(--ds-border-subtle)',
+      padding: '8px 0',
+      marginTop: 6,
     }}>
-      <span style={{
-        fontSize: 13,
-        color: 'var(--ds-text-secondary)',
-        flex: 1,
-      }}>
-{reason || 'Erkenntnisse zusammenfassen?'}
-      </span>
-
       {state === 'idle' && (
-        <div style={{ display: 'flex', gap: 6 }}>
+        <>
           <button
             onClick={handleConfirm}
             style={{
@@ -49,7 +38,7 @@ export default function CompactWidget({ reason, onConfirm, onDismiss }) {
               cursor: 'pointer',
             }}
           >
-            Zusammenfassen
+            Erkenntnisse extrahieren
           </button>
           <button
             onClick={handleDismiss}
@@ -64,7 +53,7 @@ export default function CompactWidget({ reason, onConfirm, onDismiss }) {
           >
             Nein danke
           </button>
-        </div>
+        </>
       )}
 
       {state === 'confirmed' && (

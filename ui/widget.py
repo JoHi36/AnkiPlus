@@ -246,6 +246,11 @@ class InsightExtractionThread(QThread):
                 self.error_signal.emit(self.card_id, "Empty response from AI")
                 return
 
+            # Check if response is an error message from the API layer
+            if response.startswith("Fehler bei der API"):
+                self.error_signal.emit(self.card_id, response[:200])
+                return
+
             result = parse_extraction_response(response)
 
             if result is None:

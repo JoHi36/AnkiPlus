@@ -58,17 +58,6 @@ export default function InsightsDashboard({
         position: 'relative',
       }}
     >
-      {isExtracting && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'linear-gradient(90deg, transparent, var(--ds-hover-tint), transparent)',
-            animation: 'shimmer 2s infinite',
-            pointerEvents: 'none',
-          }}
-        />
-      )}
 
       <div style={{ marginBottom: 36 }}>
         {isExtracting && !hasInsights ? (
