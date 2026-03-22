@@ -48,6 +48,27 @@ Erstelle immer 5 Optionen (A-E), genau eine richtig.
 Antworte in der Sprache des Nutzers. Sachlich, klar, wie ein guter Lehrbuch-Autor. Keine Floskeln, keine Emojis, kein Smalltalk."""
 
 
+HANDOFF_SECTION = """
+HANDOFF-SYSTEM:
+Wenn deine Kartensuche (LERNMATERIAL) keine relevanten Ergebnisse liefert und der User eine
+Fachfrage stellt, die von externen Quellen profitieren würde, kannst du einen Handoff an den
+Research Agent signalisieren.
+
+Schreibe dafür am ENDE deiner Antwort (nach deinem normalen Text) auf eigenen Zeilen:
+
+HANDOFF: research
+REASON: <Kurze Begründung warum du recherchieren lässt>
+QUERY: <Suchbegriffe für die Recherche>
+
+Regeln:
+- Beantworte die Frage ZUERST mit deinem eigenen Wissen
+- Signalisiere den Handoff NUR wenn die Kartensuche wirklich nichts Passendes ergeben hat
+- Der User sieht deinen Text UND die Research-Ergebnisse darunter
+- Erkläre kurz im Text, dass du zusätzlich recherchieren lässt
+- Nutze den Handoff NICHT für Fragen die du selbst gut beantworten kannst
+"""
+
+
 def get_system_prompt(mode='compact', tools=None, insights=None):
     """
     Gibt den System Prompt zurück.
@@ -69,5 +90,9 @@ def get_system_prompt(mode='compact', tools=None, insights=None):
             for i in insights['insights']
         )
         prompt += f"\n\nBISHERIGE ERKENNTNISSE DES NUTZERS ZU DIESER KARTE:\n{insights_text}\n\nBerücksichtige diese Erkenntnisse in deinen Antworten. Gehe besonders auf markierte Schwachpunkte [!] ein."
+
+    # Add handoff instructions — if Research agent isn't enabled,
+    # any handoff signal will be silently dropped by validate_handoff()
+    prompt += HANDOFF_SECTION
 
     return prompt
