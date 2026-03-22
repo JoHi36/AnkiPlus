@@ -3,34 +3,28 @@ import ChatMessage from './components/ChatMessage';
 import StreamingChatMessage from './components/StreamingChatMessage';
 import ChatInput from './components/ChatInput';
 import ErrorBoundary from './components/ErrorBoundary';
-import CardRefChip from './components/CardRefChip';
-import DeckSectionDivider from './components/DeckSectionDivider';
+import ContextTags from './components/ContextTags';
+import OverlayHeader from './components/OverlayHeader';
 import { useFreeChat } from './hooks/useFreeChat';
+import { useHoldToReset } from './hooks/useHoldToReset';
 
 /**
  * FreeChatApp — standalone React app for the overlay chat.
- * Uses the exact same components as the session chat.
+ * Renders a pixel-identical header, smooth transitions, and full chat.
  * Loaded when URL has ?mode=freechat
  */
 export default function FreeChatApp() {
-  const [isReady, setIsReady] = useState(false);
-  const [animState, setAnimState] = useState('visible');
+  const [animState, setAnimState] = useState('hidden'); // hidden | entering | visible | exiting
+  const [inputFocused, setInputFocused] = useState(false);
+  const [headerInfo, setHeaderInfo] = useState({ totalDue: 0, dueNew: 0, dueLearning: 0, dueReview: 0 });
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
 
   const bridge = useRef({
-    sendMessage: (data) => {
-      window.ankiBridge?.addMessage('sendMessage', data);
-    },
-    cancelRequest: () => {
-      window.ankiBridge?.addMessage('cancelRequest', '');
-    },
-    goToCard: (cardId) => {
-      window.ankiBridge?.addMessage('goToCard', cardId);
-    },
-    openPreview: (cardId) => {
-      window.ankiBridge?.addMessage('openPreview', { cardId: String(cardId) });
-    },
+    sendMessage: (data) => window.ankiBridge?.addMessage('sendMessage', data),
+    cancelRequest: () => window.ankiBridge?.addMessage('cancelRequest', ''),
+    goToCard: (cardId) => window.ankiBridge?.addMessage('goToCard', cardId),
+    openPreview: (cardId) => window.ankiBridge?.addMessage('openPreview', { cardId: String(cardId) }),
   }).current;
 
   const freeChatHook = useFreeChat({
@@ -42,9 +36,17 @@ export default function FreeChatApp() {
   const {
     messages, streamingMessage, isLoading, handleSend,
     handleDeckMessagesLoaded, handleAnkiReceive, loadForDeck,
+    clearMessages, messageCount,
   } = freeChatHook;
 
-  // Refs for stable callback references (prevent ankiReceive reassignment)
+  // Hold-to-reset
+  const chatOpen = animState === 'visible' || animState === 'entering';
+  const holdToReset = useHoldToReset({
+    onReset: clearMessages,
+    enabled: chatOpen && !inputFocused && !isLoading,
+  });
+
+  // Stable refs for ankiReceive
   const handleDeckMessagesLoadedRef = useRef(handleDeckMessagesLoaded);
   const handleAnkiReceiveRef = useRef(handleAnkiReceive);
   const handleSendRef = useRef(handleSend);
@@ -55,7 +57,7 @@ export default function FreeChatApp() {
   useEffect(() => { handleSendRef.current = handleSend; }, [handleSend]);
   useEffect(() => { loadForDeckRef.current = loadForDeck; }, [loadForDeck]);
 
-  // Set up window.ankiReceive handler ONCE (stable via refs)
+  // Set up window.ankiReceive ONCE
   useEffect(() => {
     const queued = window._ankiReceiveQueue?.splice(0) || [];
 
@@ -68,10 +70,13 @@ export default function FreeChatApp() {
       }
 
       if (payload.type === 'overlayShow') {
+        if (payload.headerInfo) setHeaderInfo(payload.headerInfo);
         setAnimState('entering');
-        setTimeout(() => setAnimState('visible'), 20);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => setAnimState('visible'));
+        });
         loadForDeckRef.current(0);
-        if (payload.initialText) {
+        if (payload.initialText?.trim()) {
           setTimeout(() => handleSendRef.current(payload.initialText), 400);
         }
         return;
@@ -79,6 +84,7 @@ export default function FreeChatApp() {
 
       if (payload.type === 'overlayHide') {
         setAnimState('exiting');
+        setTimeout(() => setAnimState('hidden'), 300);
         return;
       }
 
@@ -91,170 +97,167 @@ export default function FreeChatApp() {
     };
 
     queued.forEach(p => window.ankiReceive(p));
-
-    // Load messages from DB immediately on mount
     loadForDeckRef.current(0);
-
-    setIsReady(true);
     return () => { window.ankiReceive = null; };
   }, []);
 
-  // Auto-scroll to bottom
+  // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingMessage]);
 
-  // ESC key to close
+  // Close handler
   const handleClose = useCallback(() => {
-    if (isLoading) {
-      bridge.cancelRequest();
-    }
+    if (isLoading) bridge.cancelRequest();
     window.ankiBridge?.addMessage('closeOverlay', '');
   }, [isLoading, bridge]);
 
+  // Keyboard: Escape and Space to close
   useEffect(() => {
     const handler = (e) => {
-      if (e.key === 'Escape') {
+      if (inputFocused) return;
+      if (e.key === 'Escape' || e.key === ' ') {
+        e.preventDefault();
         handleClose();
       }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [handleClose]);
+    if (chatOpen) {
+      window.addEventListener('keydown', handler);
+      return () => window.removeEventListener('keydown', handler);
+    }
+  }, [handleClose, chatOpen, inputFocused]);
+
+  // Focus tracking for input
+  const handleInputFocus = useCallback(() => {
+    setInputFocused(true);
+    window.ankiBridge?.addMessage('textFieldFocus', JSON.stringify({ focused: true }));
+  }, []);
+  const handleInputBlur = useCallback(() => {
+    setInputFocused(false);
+    window.ankiBridge?.addMessage('textFieldFocus', JSON.stringify({ focused: false }));
+  }, []);
 
   const handleSendMessage = useCallback((text) => {
     handleSend(text, 'compact');
   }, [handleSend]);
 
-  const isVisible = animState === 'entering' || animState === 'visible';
+  // Tab click handler
+  const handleTabClick = useCallback((tab) => {
+    if (tab === 'stapel') {
+      handleClose();
+    } else {
+      window.ankiBridge?.addMessage('closeOverlay', '');
+      window.ankiBridge?.addMessage('switchTab', tab);
+    }
+  }, [handleClose]);
+
+  const isVisible = animState === 'visible' || animState === 'entering';
+  const isHidden = animState === 'hidden';
+
+  if (isHidden) return null;
 
   return (
     <div style={{
-      position: 'fixed',
-      inset: 0,
-      background: 'var(--ds-bg-deep)',
-      display: 'flex',
-      flexDirection: 'column',
-      opacity: isVisible ? 1 : 0,
-      transform: isVisible ? 'translateY(0)' : 'translateY(12px)',
-      transition: 'opacity 280ms ease, transform 280ms ease',
+      position: 'fixed', inset: 0,
+      display: 'flex', flexDirection: 'column',
+      background: isVisible ? 'var(--ds-bg-deep)' : 'transparent',
+      transition: 'background-color 350ms cubic-bezier(0.25, 0.1, 0.25, 1)',
     }}>
       {/* Header */}
+      <OverlayHeader
+        chatOpen={true}
+        messageCount={messageCount}
+        totalDue={headerInfo.totalDue}
+        dueNew={headerInfo.dueNew}
+        dueLearning={headerInfo.dueLearning}
+        dueReview={headerInfo.dueReview}
+        onTabClick={handleTabClick}
+        onSidebarToggle={() => window.ankiBridge?.addMessage('toggleSidebar', '')}
+        holdToResetProps={holdToReset}
+      />
+
+      {/* Content area */}
       <div style={{
-        padding: '16px 20px 12px',
-        borderBottom: '1px solid var(--ds-border-subtle)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexShrink: 0,
+        flex: 1, display: 'flex', flexDirection: 'column',
+        opacity: isVisible ? 1 : 0,
+        transform: isVisible ? 'translateY(0)' : 'translateY(-12px)',
+        transition: 'opacity 300ms cubic-bezier(0.25, 0.1, 0.25, 1), transform 300ms cubic-bezier(0.25, 0.1, 0.25, 1)',
       }}>
-        <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--ds-text-primary)', letterSpacing: '-0.3px' }}>
-          Anki<span style={{ color: 'var(--ds-accent)' }}>Plus</span>
-          <span style={{ color: 'var(--ds-text-placeholder)', fontWeight: 400, marginLeft: 8, fontSize: 12 }}>Chat</span>
-        </div>
-        <button
-          onClick={handleClose}
+        <div
+          ref={messagesContainerRef}
           style={{
-            background: 'var(--ds-border-subtle)',
-            border: 'none',
-            borderRadius: 8,
-            color: 'var(--ds-text-secondary)',
-            fontSize: 11,
-            padding: '4px 12px',
-            cursor: 'pointer',
-            transition: 'all 0.15s',
+            flex: 1, overflowY: 'auto', padding: '20px 16px 120px',
+            maxWidth: 720, width: '100%', margin: '0 auto',
           }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'var(--ds-border-medium)'; e.currentTarget.style.color = 'var(--ds-text-primary)'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'var(--ds-border-subtle)'; e.currentTarget.style.color = 'var(--ds-text-secondary)'; }}
         >
-          ESC
-        </button>
-      </div>
+          {messages.length === 0 && !isLoading && !streamingMessage && (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              height: '100%', color: 'var(--ds-text-muted)', fontSize: 13,
+            }}>
+              Stelle eine Frage...
+            </div>
+          )}
 
-      {/* Messages area */}
-      <div
-        ref={messagesContainerRef}
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: '20px 16px 120px',
-          maxWidth: 720,
-          width: '100%',
-          margin: '0 auto',
-        }}
-      >
-        {messages.length === 0 && !isLoading && !streamingMessage && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '100%',
-            color: 'var(--ds-text-muted)',
-            fontSize: 13,
-          }}>
-            Stelle eine Frage...
-          </div>
-        )}
-
-        {messages.map((msg, idx) => {
-          const prevMsg = idx > 0 ? messages[idx - 1] : null;
-          const deckChanged = msg.deckName && (!prevMsg || prevMsg.deckName !== msg.deckName);
-          const showDivider = deckChanged || (idx === 0 && msg.deckName);
-
-          return (
-            <React.Fragment key={msg.id}>
-              {showDivider && <DeckSectionDivider deckName={msg.deckName} />}
-              <div className="mb-6">
-                <ErrorBoundary>
-                  <ChatMessage
-                    message={msg.text}
-                    from={msg.from}
-                    cardContext={null}
-                    steps={msg.steps || []}
-                    citations={msg.citations || {}}
-                    pipelineSteps={[]}
-                    bridge={bridge}
-                    isLastMessage={idx === messages.length - 1}
+          {messages.map((msg, idx) => (
+            <div key={msg.id} style={{
+              opacity: isVisible ? 1 : 0,
+              transform: isVisible ? 'translateY(0)' : 'translateY(-8px)',
+              transition: `opacity 250ms ease ${200 + Math.min(idx, 10) * 30}ms, transform 250ms ease ${200 + Math.min(idx, 10) * 30}ms`,
+            }}>
+              {msg.from === 'user' && (
+                <>
+                  <div className="mb-1">
+                    <ErrorBoundary>
+                      <ChatMessage
+                        message={msg.text} from={msg.from} cardContext={null}
+                        steps={[]} citations={{}} pipelineSteps={[]}
+                        bridge={bridge} isLastMessage={false}
+                      />
+                    </ErrorBoundary>
+                  </div>
+                  <ContextTags
+                    deckName={msg.deckName} cardFront={msg.cardFront}
+                    cardId={msg.cardId} bridge={bridge}
                   />
-                </ErrorBoundary>
-              </div>
-              {msg.cardId && (
-                <div style={{ padding: '0 16px', marginTop: -16, marginBottom: 16 }}>
-                  <CardRefChip cardId={msg.cardId} cardFront={msg.cardFront} bridge={bridge} />
+                </>
+              )}
+              {msg.from === 'bot' && (
+                <div className="mb-6">
+                  <ErrorBoundary>
+                    <ChatMessage
+                      message={msg.text} from={msg.from} cardContext={null}
+                      steps={msg.steps || []} citations={msg.citations || {}}
+                      pipelineSteps={[]} bridge={bridge}
+                      isLastMessage={idx === messages.length - 1}
+                    />
+                  </ErrorBoundary>
                 </div>
               )}
-            </React.Fragment>
-          );
-        })}
+            </div>
+          ))}
 
-        {/* Streaming message */}
-        {(isLoading || streamingMessage) && (
-          <div className="w-full flex-none">
-            <StreamingChatMessage
-              message={streamingMessage || ''}
-              isStreaming={isLoading}
-              cardContext={null}
-              steps={[]}
-              citations={{}}
-              pipelineSteps={[]}
-              bridge={bridge}
-            />
-          </div>
-        )}
+          {(isLoading || streamingMessage) && (
+            <div className="w-full flex-none">
+              <StreamingChatMessage
+                message={streamingMessage || ''} isStreaming={isLoading}
+                cardContext={null} steps={[]} citations={{}}
+                pipelineSteps={[]} bridge={bridge}
+              />
+            </div>
+          )}
 
-        <div ref={messagesEndRef} />
+          <div ref={messagesEndRef} />
+        </div>
       </div>
 
-      {/* Chat Input — fixed bottom */}
+      {/* Input dock */}
       <div style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        padding: '0 16px 16px',
-        maxWidth: 720,
-        margin: '0 auto',
-        width: '100%',
+        position: 'fixed', bottom: 0, left: 0, right: 0,
+        padding: '0 16px 16px', maxWidth: 720, margin: '0 auto', width: '100%',
+        opacity: isVisible ? 1 : 0,
+        transform: isVisible ? 'translateY(0)' : 'translateY(8px)',
+        transition: 'opacity 250ms ease 150ms, transform 250ms ease 150ms',
       }}>
         <ChatInput
           onSend={handleSendMessage}
@@ -263,14 +266,16 @@ export default function FreeChatApp() {
           cardContext={null}
           isPremium={true}
           onClose={handleClose}
+          onFocus={handleInputFocus}
+          onBlur={handleInputBlur}
           actionPrimary={{
             label: 'Schließen',
-            shortcut: 'ESC',
+            shortcut: '\u2423',
             onClick: handleClose,
           }}
           actionSecondary={{
             label: 'Senden',
-            shortcut: '↵',
+            shortcut: '\u21B5',
             onClick: () => {},
             disabled: isLoading,
           }}
