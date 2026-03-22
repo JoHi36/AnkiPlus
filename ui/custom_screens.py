@@ -1391,9 +1391,25 @@ class CustomScreens:
         if DeckBrowser and isinstance(context, DeckBrowser):
             self._inject_deck_browser(web_content)
             self._start_poll()
+            # Restore overlay if it was open before leaving Stapel tab
+            try:
+                from .overlay_chat import get_overlay
+                overlay = get_overlay()
+                if hasattr(overlay, 'restore_if_open'):
+                    QTimer.singleShot(200, overlay.restore_if_open)
+            except Exception:
+                pass
         elif Overview and isinstance(context, Overview):
             self._inject_overview(web_content)
             self._start_poll()
+            # Hide overlay when switching away from Stapel (to Session/overview)
+            try:
+                from .overlay_chat import get_overlay
+                overlay = get_overlay()
+                if hasattr(overlay, 'hide_for_tab_switch'):
+                    overlay.hide_for_tab_switch()
+            except Exception:
+                pass
 
     def _inject_deck_browser(self, web_content):
         try:
