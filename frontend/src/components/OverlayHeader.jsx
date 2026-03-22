@@ -90,6 +90,8 @@ export default function OverlayHeader({
               background: isActive ? 'var(--ds-border-subtle)' : 'transparent',
               color: isActive ? 'var(--ds-text-primary)' : 'var(--ds-text-muted)',
               transition: 'background 0.15s, color 0.15s',
+              fontFamily: 'inherit',
+              lineHeight: 1,
             }}
           >
             {tab}

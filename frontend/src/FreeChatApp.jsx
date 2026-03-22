@@ -14,7 +14,7 @@ import { useHoldToReset } from './hooks/useHoldToReset';
  * Loaded when URL has ?mode=freechat
  */
 export default function FreeChatApp() {
-  const [animState, setAnimState] = useState('hidden'); // hidden | entering | visible | exiting
+  const [animState, setAnimState] = useState('hidden'); // hidden | mounting | entering | visible | exiting
   const [inputFocused, setInputFocused] = useState(false);
   const [headerInfo, setHeaderInfo] = useState({ totalDue: 0, dueNew: 0, dueLearning: 0, dueReview: 0 });
   const messagesEndRef = useRef(null);
@@ -40,7 +40,7 @@ export default function FreeChatApp() {
   } = freeChatHook;
 
   // Hold-to-reset
-  const chatOpen = animState === 'visible' || animState === 'entering';
+  const chatOpen = animState === 'visible' || animState === 'entering' || animState === 'mounting';
   const holdToReset = useHoldToReset({
     onReset: clearMessages,
     enabled: chatOpen && !inputFocused && !isLoading,
@@ -71,20 +71,26 @@ export default function FreeChatApp() {
 
       if (payload.type === 'overlayShow') {
         if (payload.headerInfo) setHeaderInfo(payload.headerInfo);
-        setAnimState('entering');
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => setAnimState('visible'));
-        });
+        // Phase 1: mount the component with transparent background
+        setAnimState('mounting');
+        // Phase 2: allow one frame to paint the transparent state,
+        // then trigger CSS transition to opaque background.
+        // Use 50ms delay as safety margin for Qt WebEngine rendering.
+        setTimeout(() => {
+          setAnimState('entering');
+          // Phase 3: after transition completes, mark as fully visible
+          setTimeout(() => setAnimState('visible'), 450);
+        }, 50);
         loadForDeckRef.current(0);
         if (payload.initialText?.trim()) {
-          setTimeout(() => handleSendRef.current(payload.initialText), 400);
+          setTimeout(() => handleSendRef.current(payload.initialText), 600);
         }
         return;
       }
 
       if (payload.type === 'overlayHide') {
         setAnimState('exiting');
-        setTimeout(() => setAnimState('hidden'), 300);
+        setTimeout(() => setAnimState('hidden'), 350);
         return;
       }
 
@@ -151,17 +157,17 @@ export default function FreeChatApp() {
     }
   }, [handleClose]);
 
-  const isVisible = animState === 'visible' || animState === 'entering';
-  const isHidden = animState === 'hidden';
+  const isAnimatingIn = animState === 'entering' || animState === 'visible';
+  const isMounted = animState !== 'hidden';
 
-  if (isHidden) return null;
+  if (!isMounted) return null;
 
   return (
     <div style={{
       position: 'fixed', inset: 0,
       display: 'flex', flexDirection: 'column',
-      background: isVisible ? 'var(--ds-bg-deep)' : 'transparent',
-      transition: 'background-color 350ms cubic-bezier(0.25, 0.1, 0.25, 1)',
+      background: isAnimatingIn ? 'var(--ds-bg-deep)' : 'transparent',
+      transition: 'background-color 400ms cubic-bezier(0.25, 0.1, 0.25, 1)',
     }}>
       {/* Header */}
       <OverlayHeader
@@ -179,9 +185,9 @@ export default function FreeChatApp() {
       {/* Content area */}
       <div style={{
         flex: 1, display: 'flex', flexDirection: 'column',
-        opacity: isVisible ? 1 : 0,
-        transform: isVisible ? 'translateY(0)' : 'translateY(-12px)',
-        transition: 'opacity 300ms cubic-bezier(0.25, 0.1, 0.25, 1), transform 300ms cubic-bezier(0.25, 0.1, 0.25, 1)',
+        opacity: isAnimatingIn ? 1 : 0,
+        transform: isAnimatingIn ? 'translateY(0)' : 'translateY(-12px)',
+        transition: 'opacity 350ms cubic-bezier(0.25, 0.1, 0.25, 1) 50ms, transform 350ms cubic-bezier(0.25, 0.1, 0.25, 1) 50ms',
       }}>
         <div
           ref={messagesContainerRef}
@@ -201,8 +207,8 @@ export default function FreeChatApp() {
 
           {messages.map((msg, idx) => (
             <div key={msg.id} style={{
-              opacity: isVisible ? 1 : 0,
-              transform: isVisible ? 'translateY(0)' : 'translateY(-8px)',
+              opacity: isAnimatingIn ? 1 : 0,
+              transform: isAnimatingIn ? 'translateY(0)' : 'translateY(-8px)',
               transition: `opacity 250ms ease ${200 + Math.min(idx, 10) * 30}ms, transform 250ms ease ${200 + Math.min(idx, 10) * 30}ms`,
             }}>
               {msg.from === 'user' && (
@@ -255,8 +261,8 @@ export default function FreeChatApp() {
       <div style={{
         position: 'fixed', bottom: 0, left: 0, right: 0,
         padding: '0 16px 16px', maxWidth: 720, margin: '0 auto', width: '100%',
-        opacity: isVisible ? 1 : 0,
-        transform: isVisible ? 'translateY(0)' : 'translateY(8px)',
+        opacity: isAnimatingIn ? 1 : 0,
+        transform: isAnimatingIn ? 'translateY(0)' : 'translateY(8px)',
         transition: 'opacity 250ms ease 150ms, transform 250ms ease 150ms',
       }}>
         <ChatInput
