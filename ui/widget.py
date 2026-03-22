@@ -282,11 +282,25 @@ class InsightExtractionThread(QThread):
                 self.error_signal.emit(self.card_id, "Failed to parse extraction response after retry")
                 return
 
-            # Save to storage
-            from ..storage.card_sessions import save_insights
+            # Compute new_indices before saving
+            from ..storage.insights import compute_new_indices, insight_hash
+            from ..storage.card_sessions import load_insights, save_insights
+
+            # Load existing seen_hashes
+            existing = load_insights(self.card_id)
+            seen_hashes = existing.get('seen_hashes', [])
+
+            new_indices = compute_new_indices(result.get('insights', []), seen_hashes)
+
+            # Preserve seen_hashes in saved data
+            result['seen_hashes'] = seen_hashes
+
             save_insights(self.card_id, result)
 
-            self.finished_signal.emit(self.card_id, json.dumps(result, ensure_ascii=False))
+            # Embed new_indices in the emitted JSON (not persisted, just for frontend)
+            emit_data = dict(result)
+            emit_data['new_indices'] = new_indices
+            self.finished_signal.emit(self.card_id, json.dumps(emit_data, ensure_ascii=False))
 
         except Exception as e:
             if not self._cancelled:
@@ -476,6 +490,7 @@ class ChatbotWidget(QWidget):
             'getCardInsights': self._msg_get_card_insights,
             'saveCardInsights': self._msg_save_card_insights,
             'getCardRevlog': self._msg_get_card_revlog,
+            'markInsightsSeen': self._msg_mark_insights_seen,
             'loadDeckMessages': self._msg_load_deck_messages,
             'saveDeckMessage': self._msg_save_deck_message,
             # Config & Settings
@@ -694,6 +709,18 @@ class ChatbotWidget(QWidget):
         self._extraction_thread.finished_signal.connect(_on_done)
         self._extraction_thread.error_signal.connect(_on_error)
         self._extraction_thread.start()
+
+    def _msg_mark_insights_seen(self, data):
+        """Mark all current insights as seen (update seen_hashes)."""
+        from ..storage.card_sessions import load_insights, save_insights
+        from ..storage.insights import insight_hash
+        card_id = data.get('cardId') if isinstance(data, dict) else int(data)
+        if not card_id:
+            return
+        current = load_insights(int(card_id))
+        hashes = [insight_hash(ins.get('text', '')) for ins in current.get('insights', [])]
+        current['seen_hashes'] = hashes
+        save_insights(int(card_id), current)
 
     def _msg_load_deck_messages(self, data):
         deck_id = data if isinstance(data, (int, str)) else data.get('deckId')
