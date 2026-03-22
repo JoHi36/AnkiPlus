@@ -33,7 +33,10 @@ def search_via_openrouter(query: str, api_key: str,
         'model': model,
         'messages': [
             {'role': 'system',
-             'content': 'Be precise and academic. Cite your sources with [1], [2] etc. '
+             'content': 'You are a research tool for a learning app. '
+                        'Answer the question directly in 2-5 sentences. No introductions, no meta-commentary about yourself. '
+                        'Every factual claim must have a citation: [1], [2] etc. '
+                        'If no reliable source exists, say so explicitly. '
                         'Answer in the same language as the question.'},
             {'role': 'user', 'content': query},
         ],

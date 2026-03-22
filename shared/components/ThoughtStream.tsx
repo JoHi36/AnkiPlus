@@ -663,8 +663,8 @@ function ExtendingLine() {
         flex: 1,
         height: 1,
         marginLeft: 8,
-        background: 'linear-gradient(90deg, var(--ds-text-muted), transparent 80%)',
-        opacity: 0.3,
+        background: 'linear-gradient(90deg, var(--ds-text-secondary), transparent 85%)',
+        opacity: 0.25,
       }}
     />
   );

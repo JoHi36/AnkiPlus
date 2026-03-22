@@ -6,6 +6,7 @@ import rehypeKatex from 'rehype-katex';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { CheckCircle2, XCircle, RotateCcw, CheckCircle, Lightbulb, Brain, Sparkles, User, Bot, MessageSquare, List, ImageIcon, AlertCircle } from 'lucide-react';
+import { findAgent as findSubagent } from '@shared/config/subagentRegistry';
 import ReviewFeedback from './ReviewFeedback';
 import ReviewResult from './ReviewResult';
 import MultipleChoiceCard from './MultipleChoiceCard';
@@ -1795,27 +1796,24 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                 const match = processedMessageWithCitations.match(/^@(\w+)/i);
                 if (!match) return null;
                 const agentName = match[1].toLowerCase();
-                try {
-                    const { findAgent: _findAgent } = require('@shared/config/subagentRegistry');
-                    const agent = _findAgent(agentName);
-                    if (!agent) return null;
-                    return (
-                        <span style={{
-                            display: 'inline-block',
-                            fontSize: 10,
-                            fontWeight: 600,
-                            padding: '2px 8px',
-                            borderRadius: 4,
-                            background: `${agent.color}18`,
-                            color: agent.color,
-                            border: `1px solid ${agent.color}30`,
-                            marginBottom: 6,
-                            letterSpacing: '0.3px',
-                        }}>
-                            @{agent.label}
-                        </span>
-                    );
-                } catch { return null; }
+                const agent = findSubagent(agentName);
+                if (!agent) return null;
+                return (
+                    <span style={{
+                        display: 'inline-block',
+                        fontSize: 10,
+                        fontWeight: 600,
+                        padding: '2px 8px',
+                        borderRadius: 4,
+                        background: `${agent.color}18`,
+                        color: agent.color,
+                        border: `1px solid ${agent.color}30`,
+                        marginBottom: 6,
+                        letterSpacing: '0.3px',
+                    }}>
+                        @{agent.label}
+                    </span>
+                );
             })()}
             {processedMessageWithCitations && (
                 <SafeMarkdownRenderer
