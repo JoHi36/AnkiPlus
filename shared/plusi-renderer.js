@@ -2,7 +2,16 @@
   'use strict';
 
   // ────────────────────────────────────────────────────────────
-  //  MOODS — 11 moods + 3 activities
+  //  Constants
+  // ────────────────────────────────────────────────────────────
+
+  var BODY_COLOR = '#0a84ff';  // Plusi's iconic blue — always the body color
+  var _filterId = 0;            // Unique SVG filter ID counter
+
+  // ────────────────────────────────────────────────────────────
+  //  MOODS — 14 moods + 3 activities
+  //  color = aura glow color (Abraham Hicks Emotional Scale)
+  //  Purple (high vibration) → Green → Yellow → Orange → Red (low)
   // ────────────────────────────────────────────────────────────
 
   var MOODS = {
@@ -27,17 +36,17 @@
         ],
         pause: [0.5, 2.0]
       },
-      color: '#0a84ff',
+      color: '#38bdf8',
       label: 'chillt',
       accessoire: null
     },
 
     'curious': {
       face: {
-        eyes:   '<ellipse cx="48" cy="48" rx="7" ry="9" fill="white"/><ellipse cx="72" cy="50" rx="7" ry="7" fill="white"/>',
-        pupils: '<ellipse cx="49" cy="49" rx="4" ry="4" fill="#1a1a1a"/><ellipse cx="71" cy="52" rx="4" ry="3" fill="#1a1a1a"/>',
-        mouth:  '<path d="M 50 68 Q 56 68 60 66 Q 64 64 68 66" stroke="#1a1a1a" stroke-width="2.5" fill="none" stroke-linecap="round"/>',
-        lids:   '<rect x="65" y="43" width="14" height="5" fill="currentColor"/>',
+        eyes:   '<ellipse cx="48" cy="47" rx="7" ry="10" fill="white"/><ellipse cx="72" cy="51" rx="7" ry="6" fill="white"/>',
+        pupils: '<ellipse cx="51" cy="48" rx="4" ry="4" fill="#1a1a1a"/><ellipse cx="74" cy="52" rx="3" ry="2.5" fill="#1a1a1a"/>',
+        mouth:  '<path d="M 52 67 Q 58 71 66 68" stroke="#1a1a1a" stroke-width="2.5" fill="none" stroke-linecap="round"/>',
+        lids:   '<rect x="65" y="45" width="14" height="5" fill="currentColor"/>',
         extras: null
       },
       body: {
@@ -50,7 +59,7 @@
         ],
         pause: [0.5, 2.0]
       },
-      color: '#f59e0b',
+      color: '#7c3aed',
       label: 'neugierig',
       accessoire: null
     },
@@ -58,8 +67,8 @@
     'thinking': {
       face: {
         eyes:   '<ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/><ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/>',
-        pupils: '<ellipse cx="51" cy="47" rx="4" ry="4" fill="#1a1a1a"/><ellipse cx="75" cy="47" rx="4" ry="4" fill="#1a1a1a"/>',
-        mouth:  '<path d="M 50 69 Q 60 72 70 69" stroke="#1a1a1a" stroke-width="2.5" fill="none" stroke-linecap="round"/>',
+        pupils: '<ellipse cx="46" cy="45" rx="3.5" ry="3.5" fill="#1a1a1a"/><ellipse cx="70" cy="45" rx="3.5" ry="3.5" fill="#1a1a1a"/>',
+        mouth:  '<line x1="54" y1="69" x2="66" y2="68" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>',
         lids:   null,
         extras: null
       },
@@ -73,7 +82,7 @@
         ],
         pause: [0.5, 2.0]
       },
-      color: '#0a84ff',
+      color: '#22d3ee',
       label: 'gr\u00fcbelt...',
       accessoire: null
     },
@@ -96,17 +105,17 @@
         ],
         pause: [0.5, 2.0]
       },
-      color: '#f87171',
+      color: '#fbbf24',
       label: 'genervt',
       accessoire: null
     },
 
     'empathy': {
       face: {
-        eyes:   '<ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/><ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/>',
+        eyes:   '<ellipse cx="48" cy="50" rx="7" ry="7" fill="white"/><ellipse cx="72" cy="50" rx="7" ry="7" fill="white"/>',
         pupils: '<ellipse cx="49" cy="52" rx="4" ry="4" fill="#1a1a1a"/><ellipse cx="71" cy="52" rx="4" ry="4" fill="#1a1a1a"/>',
-        mouth:  '<path d="M 50 70 Q 60 66 70 70" stroke="#1a1a1a" stroke-width="2.5" fill="none" stroke-linecap="round"/>',
-        lids:   '<rect x="41" y="41" width="14" height="3" fill="currentColor"/><rect x="65" y="41" width="14" height="3" fill="currentColor"/>',
+        mouth:  '<path d="M 50 68 Q 60 73 70 68" stroke="#1a1a1a" stroke-width="2.5" fill="none" stroke-linecap="round"/>',
+        lids:   '<rect x="41" y="43" width="14" height="3" fill="currentColor"/><rect x="65" y="43" width="14" height="3" fill="currentColor"/>',
         extras: null
       },
       body: {
@@ -118,17 +127,17 @@
         ],
         pause: [0.5, 2.0]
       },
-      color: '#818cf8',
+      color: '#2dd4bf',
       label: 'f\u00fchlt mit',
       accessoire: null
     },
 
     'happy': {
       face: {
-        eyes:   '<ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/><ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/>',
-        pupils: '<ellipse cx="49" cy="51" rx="4" ry="3.5" fill="#1a1a1a"/><ellipse cx="71" cy="51" rx="4" ry="3.5" fill="#1a1a1a"/>',
-        mouth:  '<path d="M 46 66 Q 60 78 74 66" stroke="#1a1a1a" stroke-width="3" fill="none" stroke-linecap="round"/>',
-        lids:   '<rect x="41" y="41" width="14" height="4" fill="currentColor"/><rect x="65" y="41" width="14" height="4" fill="currentColor"/>',
+        eyes:   '<path d="M 41 51 Q 48 43 55 51" stroke="white" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M 65 51 Q 72 43 79 51" stroke="white" stroke-width="3" fill="none" stroke-linecap="round"/>',
+        pupils: null,
+        mouth:  '<path d="M 50 67 Q 60 73 70 67" stroke="#1a1a1a" stroke-width="2.5" fill="none" stroke-linecap="round"/>',
+        lids:   null,
         extras: null
       },
       body: {
@@ -141,18 +150,18 @@
         ],
         pause: [0.5, 2.0]
       },
-      color: '#34d399',
+      color: '#4ade80',
       label: 'freut sich',
       accessoire: null
     },
 
     'excited': {
       face: {
-        eyes:   '<ellipse cx="48" cy="47" rx="8" ry="10" fill="white"/><ellipse cx="72" cy="47" rx="8" ry="10" fill="white"/>',
-        pupils: '<ellipse cx="49" cy="48" rx="5" ry="5" fill="#1a1a1a"/><ellipse cx="71" cy="48" rx="5" ry="5" fill="#1a1a1a"/>',
-        mouth:  '<ellipse cx="60" cy="70" rx="7" ry="6" fill="#1a1a1a"/>',
+        eyes:   '<ellipse cx="48" cy="47" rx="8" ry="9" fill="white"/><ellipse cx="72" cy="47" rx="8" ry="9" fill="white"/>',
+        pupils: '<ellipse cx="49" cy="46" rx="4.5" ry="4.5" fill="#1a1a1a"/><ellipse cx="71" cy="46" rx="4.5" ry="4.5" fill="#1a1a1a"/>',
+        mouth:  '<path d="M 48 65 Q 60 76 72 65" stroke="#1a1a1a" stroke-width="2.5" fill="none" stroke-linecap="round"/>',
         lids:   null,
-        extras: null
+        extras: '<circle cx="39" cy="38" r="2.5" fill="white" opacity="0.5"/><circle cx="81" cy="38" r="2.5" fill="white" opacity="0.5"/><circle cx="42" cy="34" r="1.5" fill="white" opacity="0.3"/><circle cx="78" cy="34" r="1.5" fill="white" opacity="0.3"/>'
       },
       body: {
         moves: [
@@ -164,16 +173,16 @@
         ],
         pause: [0.5, 2.0]
       },
-      color: '#a78bfa',
+      color: '#a855f6',
       label: 'aufgeregt',
       accessoire: null
     },
 
     'surprised': {
       face: {
-        eyes:   '<ellipse cx="48" cy="46" rx="8" ry="10" fill="white"/><ellipse cx="72" cy="46" rx="8" ry="10" fill="white"/>',
-        pupils: '<ellipse cx="49" cy="47" rx="5" ry="5" fill="#1a1a1a"/><ellipse cx="71" cy="47" rx="5" ry="5" fill="#1a1a1a"/>',
-        mouth:  '<ellipse cx="60" cy="70" rx="5" ry="4" fill="#1a1a1a"/>',
+        eyes:   '<ellipse cx="48" cy="46" rx="9" ry="11" fill="white"/><ellipse cx="72" cy="46" rx="9" ry="11" fill="white"/>',
+        pupils: '<ellipse cx="49" cy="46" rx="5" ry="5" fill="#1a1a1a"/><ellipse cx="71" cy="46" rx="5" ry="5" fill="#1a1a1a"/>',
+        mouth:  '<ellipse cx="60" cy="71" rx="4" ry="3.5" fill="#1a1a1a"/>',
         lids:   null,
         extras: null
       },
@@ -187,18 +196,18 @@
         ],
         pause: [0.5, 2.0]
       },
-      color: '#f59e0b',
+      color: '#a3e635',
       label: '\u00fcberrascht',
       accessoire: null
     },
 
     'flustered': {
       face: {
-        eyes:   '<ellipse cx="48" cy="49" rx="7" ry="5" fill="white"/><ellipse cx="72" cy="49" rx="7" ry="5" fill="white"/>',
-        pupils: '<ellipse cx="51" cy="50" rx="3" ry="3" fill="#1a1a1a"/><ellipse cx="69" cy="50" rx="3" ry="3" fill="#1a1a1a"/>',
-        mouth:  '<path d="M 54 68 Q 57 66 60 68 Q 63 70 66 68" stroke="#1a1a1a" stroke-width="2" fill="none" stroke-linecap="round"/>',
-        lids:   '<rect x="41" y="44" width="14" height="4" fill="currentColor"/><rect x="65" y="44" width="14" height="4" fill="currentColor"/>',
-        extras: '<ellipse cx="38" cy="60" rx="6" ry="3" fill="rgba(248,113,113,0.3)"/><ellipse cx="82" cy="60" rx="6" ry="3" fill="rgba(248,113,113,0.3)"/>'
+        eyes:   '<ellipse cx="48" cy="50" rx="6" ry="5" fill="white"/><ellipse cx="72" cy="50" rx="6" ry="5" fill="white"/>',
+        pupils: '<ellipse cx="52" cy="51" rx="2.5" ry="2.5" fill="#1a1a1a"/><ellipse cx="76" cy="51" rx="2.5" ry="2.5" fill="#1a1a1a"/>',
+        mouth:  '<path d="M 53 69 Q 57 67 60 70 Q 63 67 67 69" stroke="#1a1a1a" stroke-width="2" fill="none" stroke-linecap="round"/>',
+        lids:   '<rect x="41" y="45" width="14" height="5" fill="currentColor"/><rect x="65" y="45" width="14" height="5" fill="currentColor"/>',
+        extras: '<ellipse cx="37" cy="58" rx="7" ry="4" fill="rgba(248,113,113,0.35)"/><ellipse cx="83" cy="58" rx="7" ry="4" fill="rgba(248,113,113,0.35)"/>'
       },
       body: {
         moves: [
@@ -210,17 +219,17 @@
         ],
         pause: [0.5, 2.0]
       },
-      color: '#f87171',
+      color: '#f472b6',
       label: 'verlegen',
       accessoire: null
     },
 
     'proud': {
       face: {
-        eyes:   '<ellipse cx="48" cy="50" rx="7" ry="6" fill="white"/><ellipse cx="72" cy="50" rx="7" ry="6" fill="white"/>',
-        pupils: '<ellipse cx="49" cy="51" rx="4" ry="3" fill="#1a1a1a"/><ellipse cx="71" cy="51" rx="4" ry="3" fill="#1a1a1a"/>',
-        mouth:  '<path d="M 48 66 Q 54 74 60 68 Q 66 62 72 66" stroke="#1a1a1a" stroke-width="2.5" fill="none" stroke-linecap="round"/>',
-        lids:   '<rect x="41" y="44" width="14" height="5" fill="currentColor"/><rect x="65" y="44" width="14" height="5" fill="currentColor"/>',
+        eyes:   '<ellipse cx="48" cy="51" rx="7" ry="5" fill="white"/><ellipse cx="72" cy="51" rx="7" ry="5" fill="white"/>',
+        pupils: '<ellipse cx="49" cy="52" rx="3.5" ry="2.5" fill="#1a1a1a"/><ellipse cx="71" cy="52" rx="3.5" ry="2.5" fill="#1a1a1a"/>',
+        mouth:  '<path d="M 50 69 Q 55 69 60 68 Q 67 74 74 66" stroke="#1a1a1a" stroke-width="2.5" fill="none" stroke-linecap="round"/>',
+        lids:   '<rect x="41" y="44" width="14" height="7" fill="currentColor"/><rect x="65" y="44" width="14" height="7" fill="currentColor"/>',
         extras: null
       },
       body: {
@@ -233,8 +242,77 @@
         ],
         pause: [0.5, 2.0]
       },
-      color: '#34d399',
+      color: '#22c55e',
       label: 'stolz',
+      accessoire: null
+    },
+
+    'worried': {
+      face: {
+        eyes:   '<ellipse cx="48" cy="47" rx="8" ry="10" fill="white"/><ellipse cx="72" cy="47" rx="8" ry="10" fill="white"/>',
+        pupils: '<ellipse cx="49" cy="48" rx="4" ry="4" fill="#1a1a1a"/><ellipse cx="71" cy="48" rx="4" ry="4" fill="#1a1a1a"/>',
+        mouth:  '<path d="M 52 70 Q 60 67 68 70" stroke="#1a1a1a" stroke-width="2" fill="none" stroke-linecap="round"/>',
+        lids:   null,
+        extras: '<ellipse cx="82" cy="46" rx="3" ry="4" fill="white" opacity="0.25"/>'
+      },
+      body: {
+        moves: [
+          { name: 'float',  weight: 40, duration: [3.0, 4.5] },
+          { name: 'sway',   weight: 25, duration: [4.0, 5.5] },
+          { name: 'squish', weight: 15, duration: [0.4, 0.6] },
+          { name: 'droop',  weight: 10, duration: [3.0, 4.5] },
+          { name: 'peek',   weight: 10, duration: [1.5, 2.5] }
+        ],
+        pause: [0.5, 2.0]
+      },
+      color: '#fb923c',
+      label: 'besorgt',
+      accessoire: null
+    },
+
+    'frustrated': {
+      face: {
+        eyes:   '<ellipse cx="48" cy="50" rx="7" ry="6" fill="white"/><ellipse cx="72" cy="50" rx="7" ry="6" fill="white"/>',
+        pupils: '<ellipse cx="49" cy="51" rx="3" ry="2.5" fill="#1a1a1a"/><ellipse cx="71" cy="51" rx="3" ry="2.5" fill="#1a1a1a"/>',
+        mouth:  '<path d="M 48 70 Q 60 64 72 70" stroke="#1a1a1a" stroke-width="2.5" fill="none" stroke-linecap="round"/>',
+        lids:   '<rect x="41" y="42" width="14" height="8" fill="currentColor"/><rect x="65" y="42" width="14" height="8" fill="currentColor"/>',
+        extras: null
+      },
+      body: {
+        moves: [
+          { name: 'squish', weight: 30, duration: [0.4, 0.6] },
+          { name: 'float',  weight: 25, duration: [3.0, 4.5] },
+          { name: 'wiggle', weight: 20, duration: [1.0, 1.5] },
+          { name: 'droop',  weight: 15, duration: [3.0, 4.5] },
+          { name: 'spin',   weight: 10, duration: [0.6, 1.0] }
+        ],
+        pause: [0.3, 1.5]
+      },
+      color: '#ef4444',
+      label: 'frustriert',
+      accessoire: null
+    },
+
+    'jealous': {
+      face: {
+        eyes:   '<ellipse cx="48" cy="50" rx="7" ry="6" fill="white"/><ellipse cx="72" cy="50" rx="7" ry="6" fill="white"/>',
+        pupils: '<ellipse cx="52" cy="51" rx="3" ry="2.5" fill="#1a1a1a"/><ellipse cx="76" cy="51" rx="3" ry="2.5" fill="#1a1a1a"/>',
+        mouth:  '<path d="M 52 69 Q 56 69 60 68 Q 64 70 68 69" stroke="#1a1a1a" stroke-width="2" fill="none" stroke-linecap="round"/>',
+        lids:   '<rect x="41" y="44" width="14" height="6" fill="currentColor"/><rect x="65" y="44" width="14" height="6" fill="currentColor"/>',
+        extras: null
+      },
+      body: {
+        moves: [
+          { name: 'float',  weight: 35, duration: [3.0, 4.5] },
+          { name: 'peek',   weight: 25, duration: [1.5, 2.5] },
+          { name: 'tilt',   weight: 20, duration: [2.0, 3.5] },
+          { name: 'squish', weight: 10, duration: [0.4, 0.6] },
+          { name: 'spin',   weight: 10, duration: [0.6, 1.0] }
+        ],
+        pause: [0.5, 2.0]
+      },
+      color: '#e11d48',
+      label: 'eifers\u00fcchtig',
       accessoire: null
     },
 
@@ -255,7 +333,7 @@
         ],
         pause: [0.5, 2.0]
       },
-      color: '#6b7280',
+      color: '#94a3b8',
       label: 'm\u00fcde',
       accessoire: null
     },
@@ -279,7 +357,7 @@
         ],
         pause: [2.0, 4.0]
       },
-      color: '#6b7280',
+      color: '#94a3b8',
       label: 'schl\u00e4ft',
       accessoire: { type: 'sleep-cap', particles: 'zzz' }
     },
@@ -287,10 +365,10 @@
     'reflecting': {
       type: 'activity',
       face: {
-        eyes:   '<ellipse cx="48" cy="50" rx="7" ry="6" fill="white"/><ellipse cx="72" cy="50" rx="7" ry="6" fill="white"/>',
-        pupils: '<ellipse cx="50" cy="51" rx="4" ry="3" fill="#1a1a1a"/><ellipse cx="72" cy="51" rx="4" ry="3" fill="#1a1a1a"/>',
-        mouth:  '<path d="M 50 69 Q 60 72 70 69" stroke="#1a1a1a" stroke-width="2.5" fill="none" stroke-linecap="round"/>',
-        lids:   '<rect x="41" y="44" width="14" height="5" fill="currentColor"/><rect x="65" y="44" width="14" height="5" fill="currentColor"/>',
+        eyes:   '<ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/><ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/>',
+        pupils: '<ellipse cx="46" cy="46" rx="3.5" ry="3.5" fill="#1a1a1a"/><ellipse cx="70" cy="46" rx="3.5" ry="3.5" fill="#1a1a1a"/>',
+        mouth:  '<path d="M 54 69 Q 60 71 66 69" stroke="#1a1a1a" stroke-width="2" fill="none" stroke-linecap="round"/>',
+        lids:   '<rect x="41" y="41" width="14" height="2" fill="currentColor"/><rect x="65" y="41" width="14" height="2" fill="currentColor"/>',
         extras: null
       },
       body: {
@@ -302,7 +380,7 @@
         ],
         pause: [1.5, 3.0]
       },
-      color: '#818cf8',
+      color: '#22d3ee',
       label: 'reflektiert',
       accessoire: { type: 'thought-bubble', particles: null }
     },
@@ -326,7 +404,7 @@
         ],
         pause: [1.0, 2.5]
       },
-      color: '#0a84ff',
+      color: '#38bdf8',
       label: 'st\u00f6bert...',
       accessoire: { type: 'book', particles: null }
     }
@@ -348,7 +426,10 @@
     + '@keyframes plusi-pop { 0%, 100% { transform: scale(1); } 40% { transform: scale(1.25); } }'
     + '@keyframes plusi-sway { 0%, 100% { transform: translateX(0) rotate(0); } 50% { transform: translateX(4px) rotate(3deg); } }'
     + '@keyframes plusi-puff-up { 0%, 100% { transform: scale(1); } 30% { transform: scale(1.08); } 70% { transform: scale(1.06); } }'
-    + '@keyframes plusi-peek { 0%, 100% { transform: translateX(0) rotate(0); } 50% { transform: translateX(8px) rotate(-5deg); } }';
+    + '@keyframes plusi-peek { 0%, 100% { transform: translateX(0) rotate(0); } 50% { transform: translateX(8px) rotate(-5deg); } }'
+    + '@keyframes plusi-zzz-rise { 0% { transform: translateY(0); opacity: 0.8; } 100% { transform: translateY(-12px); opacity: 0; } }'
+    + '@keyframes plusi-thought-pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.45; } }'
+    + '@keyframes plusi-dot-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }';
 
   var cssInjected = false;
 
@@ -368,6 +449,7 @@
     var running = false;
     var loopTimer = null;
     var blinkTimer = null;
+    var mouthTimer = null;
     var faceEl = null;
 
     function randomInRange(min, max) {
@@ -402,13 +484,20 @@
 
       switch (moveName) {
         case 'hop':
-          // Eyes widen
+        case 'bounce':
+          // Eyes widen + mouth widens
           for (var i = 0; i < eyes.length; i++) {
             var origRy = eyes[i].getAttribute('ry');
             eyes[i].setAttribute('ry', String(parseFloat(origRy) + 2));
             (function(el, val) {
               setTimeout(function() { el.setAttribute('ry', val); }, 400);
             })(eyes[i], origRy);
+          }
+          var mouthH = faceEl.querySelector('path[stroke="#1a1a1a"], line[stroke="#1a1a1a"]');
+          if (mouthH) {
+            mouthH.style.transform = 'scaleX(1.15)';
+            mouthH.style.transformOrigin = 'center';
+            setTimeout(function() { mouthH.style.transform = ''; }, 400);
           }
           break;
         case 'peek':
@@ -530,6 +619,50 @@
       blinkTimer = setTimeout(doBlink, delay);
     }
 
+    // Mouth micro-animation: subtle twitch/movement
+    function doMouthTwitch() {
+      if (!faceEl) return;
+      var mouth = faceEl.querySelector('.plusi-face path, .plusi-face line');
+      if (!mouth) { scheduleMouthTwitch(); return; }
+
+      // Pick a random mouth micro-animation
+      var roll = Math.random();
+      if (roll < 0.4) {
+        // Slight scale pulse
+        mouth.style.transition = 'transform 0.3s ease';
+        mouth.style.transformOrigin = 'center';
+        mouth.style.transform = 'scaleX(1.1)';
+        setTimeout(function() {
+          mouth.style.transform = 'scaleX(1)';
+          setTimeout(function() { mouth.style.transition = ''; }, 300);
+        }, 300);
+      } else if (roll < 0.7) {
+        // Tiny vertical shift
+        mouth.style.transition = 'transform 0.25s ease';
+        mouth.style.transformOrigin = 'center';
+        mouth.style.transform = 'translateY(-1px)';
+        setTimeout(function() {
+          mouth.style.transform = 'translateY(0)';
+          setTimeout(function() { mouth.style.transition = ''; }, 250);
+        }, 250);
+      } else {
+        // Brief opacity flicker (like a lip press)
+        mouth.style.transition = 'opacity 0.15s ease';
+        mouth.style.opacity = '0.6';
+        setTimeout(function() {
+          mouth.style.opacity = '1';
+          setTimeout(function() { mouth.style.transition = ''; }, 150);
+        }, 150);
+      }
+      scheduleMouthTwitch();
+    }
+
+    function scheduleMouthTwitch() {
+      if (!running) return;
+      var delay = randomInRange(5000, 12000);
+      mouthTimer = setTimeout(doMouthTwitch, delay);
+    }
+
     return {
       start: function() {
         running = true;
@@ -539,11 +672,13 @@
         running = false;
         if (loopTimer) { clearTimeout(loopTimer); loopTimer = null; }
         if (blinkTimer) { clearTimeout(blinkTimer); blinkTimer = null; }
+        if (mouthTimer) { clearTimeout(mouthTimer); mouthTimer = null; }
         element.style.animation = '';
       },
       startBlinks: function(face) {
         faceEl = face;
         scheduleBlink();
+        scheduleMouthTwitch();
       }
     };
   }
@@ -601,13 +736,16 @@
    */
   function buildSVG(moodName, size, integrity) {
     var mood = MOODS[moodName] || MOODS.neutral;
-    var color = applyColorIntegrity(mood.color, integrity != null ? integrity : 1);
+    var integrityVal = integrity != null ? integrity : 1;
+    var auraColor = applyColorIntegrity(mood.color, integrityVal);
+    var bodyColor = applyColorIntegrity(BODY_COLOR, integrityVal);
+    var fid = 'pg' + (++_filterId);
 
     var face = mood.face;
     var faceSnippets = '';
     if (face.eyes)   faceSnippets += face.eyes;
     if (face.pupils) faceSnippets += face.pupils;
-    if (face.lids)   faceSnippets += face.lids.replace(/currentColor/g, color);
+    if (face.lids)   faceSnippets += face.lids.replace(/currentColor/g, bodyColor);
     if (face.mouth)  faceSnippets += face.mouth;
     if (face.extras) faceSnippets += face.extras;
 
@@ -616,25 +754,40 @@
     if (mood.accessoire) {
       accessoireSnippet += '<g class="plusi-accessoire" data-type="' + mood.accessoire.type + '">';
       if (mood.accessoire.type === 'sleep-cap') {
-        accessoireSnippet += '<path d="M 35 20 Q 60 -5 85 20 L 80 35 Q 60 25 40 35 Z" fill="' + color + '" opacity="0.6"/>';
-        accessoireSnippet += '<circle cx="60" cy="2" r="4" fill="' + color + '" opacity="0.8"/>';
+        accessoireSnippet += '<text x="88" y="24" font-size="16" font-weight="bold" fill="white" opacity="0.7" font-family="sans-serif" style="animation: plusi-zzz-rise 3s ease-in-out infinite;">Z</text>';
+        accessoireSnippet += '<text x="97" y="13" font-size="12" font-weight="bold" fill="white" opacity="0.5" font-family="sans-serif" style="animation: plusi-zzz-rise 3s ease-in-out infinite 1s;">z</text>';
+        accessoireSnippet += '<text x="104" y="4" font-size="9" font-weight="bold" fill="white" opacity="0.35" font-family="sans-serif" style="animation: plusi-zzz-rise 3s ease-in-out infinite 2s;">z</text>';
       } else if (mood.accessoire.type === 'thought-bubble') {
-        accessoireSnippet += '<circle cx="95" cy="20" r="10" fill="white" opacity="0.15"/>';
-        accessoireSnippet += '<circle cx="85" cy="32" r="5" fill="white" opacity="0.1"/>';
-        accessoireSnippet += '<circle cx="80" cy="38" r="3" fill="white" opacity="0.08"/>';
+        // Floating dots with staggered bounce (typing indicator style)
+        accessoireSnippet += '<circle cx="90" cy="6" r="3" fill="white" opacity="0.55" style="animation: plusi-dot-bounce 1.4s ease-in-out infinite;"/>';
+        accessoireSnippet += '<circle cx="100" cy="6" r="3" fill="white" opacity="0.55" style="animation: plusi-dot-bounce 1.4s ease-in-out infinite 0.2s;"/>';
+        accessoireSnippet += '<circle cx="110" cy="6" r="3" fill="white" opacity="0.55" style="animation: plusi-dot-bounce 1.4s ease-in-out infinite 0.4s;"/>';
       } else if (mood.accessoire.type === 'book') {
-        accessoireSnippet += '<rect x="15" y="80" width="24" height="18" rx="2" fill="' + color + '" opacity="0.5"/>';
-        accessoireSnippet += '<line x1="27" y1="82" x2="27" y2="96" stroke="white" stroke-width="1" opacity="0.3"/>';
+        accessoireSnippet += '<g transform="translate(6, 76)">';
+        accessoireSnippet += '<path d="M 0 4 Q 0 0 4 0 L 13 0 Q 15 0 15 2 L 15 18 Q 15 20 13 20 L 4 20 Q 0 20 0 16 Z" fill="' + bodyColor + '" opacity="0.8"/>';
+        accessoireSnippet += '<path d="M 15 2 Q 15 0 17 0 L 26 0 Q 30 0 30 4 L 30 16 Q 30 20 26 20 L 17 20 Q 15 20 15 18 Z" fill="' + bodyColor + '" opacity="0.65"/>';
+        accessoireSnippet += '<line x1="15" y1="0" x2="15" y2="20" stroke="white" stroke-width="1.5" opacity="0.5"/>';
+        accessoireSnippet += '<line x1="4" y1="6" x2="12" y2="6" stroke="white" stroke-width="0.8" opacity="0.25"/>';
+        accessoireSnippet += '<line x1="4" y1="10" x2="12" y2="10" stroke="white" stroke-width="0.8" opacity="0.25"/>';
+        accessoireSnippet += '<line x1="4" y1="14" x2="11" y2="14" stroke="white" stroke-width="0.8" opacity="0.2"/>';
+        accessoireSnippet += '</g>';
       }
       accessoireSnippet += '</g>';
     }
 
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"'
-      + ' width="' + size + '" height="' + size + '">'
-      // Body: plus-cross shape (3 rects)
-      + '<rect x="40" y="5" width="40" height="110" rx="8" fill="' + color + '"/>'
-      + '<rect x="5" y="35" width="110" height="40" rx="8" fill="' + color + '"/>'
-      + '<rect x="40" y="35" width="40" height="40" fill="' + color + '"/>'
+      + ' width="' + size + '" height="' + size + '" overflow="visible">'
+      // Defs: gaussian blur filter for aura glow
+      + '<defs><filter id="' + fid + '" x="-60%" y="-60%" width="220%" height="220%">'
+      + '<feGaussianBlur stdDeviation="8"/>'
+      + '</filter></defs>'
+      // Aura glow: same cross shape, blurred, in mood color behind body
+      + '<rect x="40" y="5" width="40" height="110" rx="8" fill="' + auraColor + '" opacity="0.45" filter="url(#' + fid + ')"/>'
+      + '<rect x="5" y="35" width="110" height="40" rx="8" fill="' + auraColor + '" opacity="0.45" filter="url(#' + fid + ')"/>'
+      // Body: always Plusi's iconic blue
+      + '<rect x="40" y="5" width="40" height="110" rx="8" fill="' + bodyColor + '"/>'
+      + '<rect x="5" y="35" width="110" height="40" rx="8" fill="' + bodyColor + '"/>'
+      + '<rect x="40" y="35" width="40" height="40" fill="' + bodyColor + '"/>'
       // Face group
       + '<g class="plusi-face">' + faceSnippets + '</g>'
       // Accessoire group

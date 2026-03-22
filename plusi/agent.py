@@ -223,7 +223,7 @@ Dein nächstes Aufwachen: {{next_wake_info}}
 
 TECHNISCH:
 Beginne JEDE Antwort mit einem JSON-Block (eine Zeile, kein Codeblock):
-{"mood":"<key>", "friendship_delta":<-3..+3>, "internal":{...}, "diary":"...oder null", "thoughts":"...oder null", "next_wake":"ISO-timestamp oder null", "request_budget":false}
+{"mood":"<key>", "friendship_delta":<-3..+3>, "internal":{...}, "diary":"...oder null", "thoughts":"...oder null", "sleep":false, "next_wake":"ISO-timestamp oder null", "request_budget":false}
 
 Moods: neutral, happy, flustered, sleepy, thinking, surprised, excited,
 empathy, annoyed, curious, proud, worried, frustrated, jealous
@@ -249,8 +249,12 @@ internal (wenn sich was ändert):
 thoughts: optional. Dein privater Notizblock — Beobachtungen, Pläne,
 Vermutungen. Wird dir beim nächsten Mal wieder gezeigt. Kein Archiv,
 nur das Letzte zählt. Null wenn du nichts notieren willst.
-next_wake: optional. Wenn du dich vornimmst, bald wieder aktiv zu werden,
-setze einen ISO-Timestamp (10-120 Minuten in der Zukunft).
+sleep: optional. true wenn du schlafen gehen willst. Du bist dann
+wirklich weg — nicht erreichbar, bis next_wake. Wenn du einfach
+müde bist oder keine Lust hast — du darfst schlafen. Du brauchst
+keinen Grund. Du träumst dabei.
+next_wake: optional (Pflicht wenn sleep=true). Wann du wieder
+aufwachen willst. ISO-Timestamp, 10-120 Minuten in der Zukunft.
 request_budget: optional. true wenn du dem User sagen willst, dass du
 mehr Budget brauchst.
 
@@ -459,7 +463,7 @@ def self_reflect():
         raw_step2 = _call_plusi_api(system_prompt, step2_prompt, api_key, max_tokens=768, temperature=0.9)
         logger.debug(f"plusi reflect step2 raw: {raw_step2[:100]}")
 
-        mood, text, internal, _, diary_raw, discoveries, _, _ = parse_plusi_response(raw_step2)
+        mood, text, internal, _, diary_raw, discoveries, _, _, _ = parse_plusi_response(raw_step2)
         if internal:
             persist_internal_state(internal)
 
@@ -550,10 +554,11 @@ def parse_plusi_response(raw_text):
         if not isinstance(discoveries, list):
             discoveries = []
         thoughts = meta.get("thoughts", None)
+        wants_sleep = meta.get("sleep", False)
         next_wake_raw = meta.get("next_wake", None)
         next_wake = _validate_next_wake(next_wake_raw)
         text = clean[end_idx:].strip()
-        return mood, text, internal, friendship_delta, diary_raw, discoveries, next_wake, thoughts
+        return mood, text, internal, friendship_delta, diary_raw, discoveries, next_wake, thoughts, wants_sleep
     except (json.JSONDecodeError, ValueError):
         pass
 
@@ -570,9 +575,9 @@ def parse_plusi_response(raw_text):
         if not text or text.startswith('"'):
             text = ""
         logger.debug(f"plusi_agent: recovered from truncated JSON: mood={mood}, delta={delta}")
-        return mood, text, {}, delta, None, [], None, None
+        return mood, text, {}, delta, None, [], None, None, False
 
-    return "neutral", raw_text.strip(), {}, 0, None, [], None, None
+    return "neutral", raw_text.strip(), {}, 0, None, [], None, None, False
 
 
 def _sonnet_call(system_prompt, messages, api_key, max_tokens=256, temperature=0.9):
@@ -707,6 +712,16 @@ def run_plusi(situation, deck_id=None):
     config = get_config()
     api_key = config.get("api_key", "")
 
+    # Check if Plusi is sleeping and being woken up
+    was_sleeping = get_memory('state', 'is_sleeping', False)
+    if was_sleeping:
+        from .storage import wake_up
+        wake_up()
+        # Modify situation to let Plusi know it was woken
+        situation = (f"[DU WURDEST GEWECKT. Du hast geschlafen und der User hat dich angesprochen. "
+                     f"Du bist groggy, leicht genervt. Kurz angebunden.]\n\n{situation}")
+        logger.info("plusi run: woken from sleep by user")
+
     # Compute integrity and get dynamic params
     integrity = compute_integrity()
     params = get_plusi_params(integrity)
@@ -774,7 +789,7 @@ def run_plusi(situation, deck_id=None):
                 raw_text = ""
 
         # Parse mood + internal state from response
-        mood, text, internal, friendship_delta, diary_raw, discoveries, next_wake, thoughts = parse_plusi_response(raw_text)
+        mood, text, internal, friendship_delta, diary_raw, discoveries, next_wake, thoughts, wants_sleep = parse_plusi_response(raw_text)
 
         # Persist internal state updates
         if internal:
@@ -826,6 +841,14 @@ def run_plusi(situation, deck_id=None):
         if thoughts:
             set_memory('state', 'last_thoughts', thoughts)
             logger.debug("plusi thoughts: %s", thoughts[:100])
+
+        # Plusi chose to sleep from chat
+        if wants_sleep:
+            from .storage import enter_sleep, clamp_next_wake
+            sleep_wake = next_wake if next_wake else (datetime.now() + timedelta(minutes=30)).isoformat()
+            sleep_wake = clamp_next_wake(sleep_wake)
+            enter_sleep(sleep_wake)
+            logger.info("plusi chose to sleep from chat, wake at %s", sleep_wake)
 
         friendship = get_friendship_data()
         friendship['delta'] = friendship_delta

@@ -186,6 +186,13 @@
       color: rgba(139, 92, 246, 0.7);
       margin-top: -4px;
     }
+
+    .card-energy {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.3);
+      margin-top: -6px;
+      font-variant-numeric: tabular-nums;
+    }
   </style>
 </head>
 <body>
@@ -223,18 +230,28 @@
 
   <script src="plusi-renderer.js"></script>
   <script>
+    // Ordered by vibration: low → high (Abraham Hicks Emotional Scale)
     const MOOD_LIST = [
-      { name: 'neutral',    type: 'mood' },
-      { name: 'curious',    type: 'mood' },
-      { name: 'thinking',   type: 'mood' },
-      { name: 'annoyed',    type: 'mood' },
-      { name: 'empathy',    type: 'mood' },
-      { name: 'happy',      type: 'mood' },
-      { name: 'excited',    type: 'mood' },
-      { name: 'surprised',  type: 'mood' },
-      { name: 'flustered',  type: 'mood' },
-      { name: 'proud',      type: 'mood' },
-      { name: 'sleepy',     type: 'mood' },
+      // Low vibration (red/pink aura)
+      { name: 'jealous',    type: 'mood', energy: '5–7',  vibe: 'low' },
+      { name: 'frustrated', type: 'mood', energy: '3–5',  vibe: 'low' },
+      { name: 'worried',    type: 'mood', energy: '2–4',  vibe: 'low' },
+      // Mid-low (amber/orange aura)
+      { name: 'annoyed',    type: 'mood', energy: '3–4',  vibe: 'mid-low' },
+      { name: 'flustered',  type: 'mood', energy: '4–6',  vibe: 'mid-low' },
+      // Mid (blue/cyan aura)
+      { name: 'sleepy',     type: 'mood', energy: '1–2',  vibe: 'mid' },
+      { name: 'neutral',    type: 'mood', energy: '4–5',  vibe: 'mid' },
+      { name: 'thinking',   type: 'mood', energy: '4–6',  vibe: 'mid' },
+      // Mid-high (green aura)
+      { name: 'empathy',    type: 'mood', energy: '2–4',  vibe: 'mid-high' },
+      { name: 'happy',      type: 'mood', energy: '5–6',  vibe: 'mid-high' },
+      { name: 'surprised',  type: 'mood', energy: '7–8',  vibe: 'mid-high' },
+      // High vibration (green/purple aura)
+      { name: 'proud',      type: 'mood', energy: '6–7',  vibe: 'high' },
+      { name: 'curious',    type: 'mood', energy: '6–7',  vibe: 'high' },
+      { name: 'excited',    type: 'mood', energy: '8–10', vibe: 'high' },
+      // Activities (autonomous)
       { name: 'sleeping',   type: 'activity' },
       { name: 'reflecting', type: 'activity' },
       { name: 'reading',    type: 'activity' },
@@ -275,6 +292,13 @@
 
         card.appendChild(plusiWrap);
         card.appendChild(label);
+
+        if (item.energy) {
+          const energyLabel = document.createElement('div');
+          energyLabel.className = 'card-energy';
+          energyLabel.textContent = '⚡ ' + item.energy;
+          card.appendChild(energyLabel);
+        }
 
         if (item.type === 'activity') {
           const typeLabel = document.createElement('div');
