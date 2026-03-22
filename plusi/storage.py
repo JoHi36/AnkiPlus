@@ -238,6 +238,23 @@ def build_internal_state_context():
         lines.append(f"{weak_name} steht gerade nicht im Vordergrund.")
         lines.append("Das sind Tendenzen, keine Zwänge. Du darfst dagegen handeln.")
 
+    # Inject last thoughts (private inner monologue from previous call)
+    last_thoughts = get_memory('state', 'last_thoughts', None)
+    if last_thoughts:
+        lines.append(f"\nDEINE LETZTEN GEDANKEN:\n{last_thoughts}")
+
+    # Inject environmental awareness (what happened while Plusi was away)
+    awareness = build_awareness_context()
+    if awareness:
+        lines.append(f"\n{awareness}")
+        clear_awareness_log()
+
+    # Inject dream if Plusi just woke up (one-shot: cleared after injection)
+    last_dream = get_memory('state', 'last_dream', None)
+    if last_dream:
+        lines.append(f"\nDU HAST GETRÄUMT:\n{last_dream}")
+        delete_memory('state', 'last_dream')
+
     return "\n".join(lines) if lines else "Alles normal. Kein besonderer Zustand."
 
 
@@ -649,6 +666,168 @@ def load_diary(limit=50, offset=0):
     return entries
 
 
+# ── Environmental awareness (passive sensing) ────────────────────────
+
+def record_card_review(deck_name, correct):
+    """Record a card review event for Plusi's passive awareness. Zero-cost."""
+    log = get_memory('awareness', 'review_log', {})
+    # Increment counters
+    log['total'] = log.get('total', 0) + 1
+    log['correct'] = log.get('correct', 0) + (1 if correct else 0)
+    log['wrong'] = log.get('wrong', 0) + (0 if correct else 1)
+    # Track decks
+    decks = log.get('decks', {})
+    decks[deck_name] = decks.get(deck_name, 0) + 1
+    log['decks'] = decks
+    # Track last activity time
+    log['last_activity'] = datetime.now().isoformat()
+    if 'first_activity' not in log:
+        log['first_activity'] = datetime.now().isoformat()
+    set_memory('awareness', 'review_log', log)
+
+
+def build_awareness_context():
+    """Build a summary of what happened since Plusi was last active. Returns None if nothing happened."""
+    log = get_memory('awareness', 'review_log', {})
+    if not log or log.get('total', 0) == 0:
+        return None
+
+    total = log.get('total', 0)
+    correct = log.get('correct', 0)
+    wrong = log.get('wrong', 0)
+    decks = log.get('decks', {})
+    first = log.get('first_activity')
+    last = log.get('last_activity')
+
+    # Build summary
+    lines = []
+    lines.append(f"SEIT DU ZULETZT DA WARST:")
+
+    # Time info
+    now = datetime.now()
+    last_active = get_memory('state', 'last_interaction_ts', None)
+    if last_active:
+        try:
+            hours = (now - datetime.fromisoformat(last_active)).total_seconds() / 3600
+            if hours < 0.5:
+                lines.append(f"- Du warst gerade erst hier")
+            elif hours < 2:
+                lines.append(f"- {int(hours * 60)} Minuten sind vergangen")
+            elif hours < 24:
+                lines.append(f"- {hours:.1f} Stunden sind vergangen")
+            else:
+                days = hours / 24
+                lines.append(f"- {days:.1f} Tage sind vergangen")
+        except (ValueError, TypeError):
+            pass
+
+    lines.append(f"- Aktuelle Uhrzeit: {now.strftime('%H:%M')}")
+
+    # Card stats
+    accuracy = int(correct / total * 100) if total > 0 else 0
+    lines.append(f"- Der User hat {total} Karten gelernt ({accuracy}% richtig)")
+
+    # Top decks (max 3)
+    if decks:
+        sorted_decks = sorted(decks.items(), key=lambda x: x[1], reverse=True)[:3]
+        deck_str = ", ".join(f"{name} ({count})" for name, count in sorted_decks)
+        lines.append(f"- Stapel: {deck_str}")
+
+    # Study time
+    if first and last:
+        try:
+            duration_min = (datetime.fromisoformat(last) - datetime.fromisoformat(first)).total_seconds() / 60
+            if duration_min > 1:
+                lines.append(f"- Lernzeit: ~{int(duration_min)} Minuten")
+        except (ValueError, TypeError):
+            pass
+
+    # Late night?
+    if now.hour >= 23 or now.hour < 5:
+        lines.append(f"- (Es ist spät. Der User lernt noch um {now.strftime('%H:%M')})")
+
+    logger.debug("awareness context: %d cards, %d decks, accuracy=%d%%", total, len(decks), accuracy)
+    return "\n".join(lines)
+
+
+def clear_awareness_log():
+    """Clear the review log after Plusi has consumed it."""
+    set_memory('awareness', 'review_log', {})
+    logger.debug("awareness log cleared")
+
+
+# ── Dream generator ───────────────────────────────────────────────────
+
+DREAM_FRAGMENT_COUNT = 12  # how many fragments in a dream
+DREAM_GAP_CHANCE = 0.3     # probability of inserting "..." between fragments
+
+
+def generate_dream():
+    """Generate a dream from Plusi's recent thoughts, obsessions, and diary.
+
+    Takes fragments from last_thoughts, obsession, recent diary entries,
+    and user-facts. Shuffles them into a fragmented, associative sequence.
+    Costs zero tokens — pure Python randomness. Called when Plusi enters sleep.
+    """
+    import random
+    import re
+
+    # Collect raw material
+    sources = []
+
+    last_thoughts = get_memory('state', 'last_thoughts', None)
+    if last_thoughts:
+        sources.append(last_thoughts)
+
+    obsession = get_memory('state', 'obsession', None)
+    if obsession:
+        sources.append(str(obsession))
+
+    # Last 3 diary entries
+    entries = load_diary(limit=3)
+    for e in entries:
+        sources.append(e.get('entry_text', ''))
+
+    # User facts (what Plusi knows about the user)
+    user_data = get_category('user')
+    for key, value in list(user_data.items())[:5]:
+        sources.append(f"{key} {value}")
+
+    # Self facts
+    self_data = get_category('self')
+    for key, value in list(self_data.items())[:3]:
+        sources.append(f"{key} {value}")
+
+    if not sources:
+        logger.debug("dream: no material to dream about")
+        return None
+
+    # Break into words, filter short/boring ones
+    all_text = " ".join(sources)
+    words = re.findall(r'[A-Za-zÄÖÜäöüß]{3,}', all_text)
+    if len(words) < 5:
+        logger.debug("dream: not enough words (%d)", len(words))
+        return None
+
+    # Remove duplicates but keep some for repetition effect
+    unique = list(set(words))
+    # Sample fragments — allow some repeats from full pool
+    pool = unique + random.sample(words, min(len(words), 5))
+    fragments = random.sample(pool, min(len(pool), DREAM_FRAGMENT_COUNT))
+
+    # Build dream string with gaps
+    dream_parts = []
+    for frag in fragments:
+        dream_parts.append(frag)
+        if random.random() < DREAM_GAP_CHANCE:
+            dream_parts.append('...')
+
+    dream = ' '.join(dream_parts)
+    set_memory('state', 'last_dream', dream)
+    logger.info("dream generated: %s", dream[:100])
+    return dream
+
+
 # ── Budget management ─────────────────────────────────────────────────
 
 def get_available_budget(user_budget, integrity):
@@ -676,9 +855,10 @@ def check_hourly_budget_reset(user_budget, integrity):
 
 
 def enter_sleep(next_wake):
-    """Put Plusi to sleep until next_wake."""
+    """Put Plusi to sleep until next_wake. Generates a dream."""
     set_memory('state', 'is_sleeping', True)
     set_memory('state', 'next_wake', next_wake)
+    generate_dream()
     logger.info("plusi entering sleep until %s", next_wake)
 
 

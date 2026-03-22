@@ -125,7 +125,9 @@ function DiaryEntry({ entry }) {
                 alignItems: 'center',
               }}
             >
-              {disc}
+              {typeof disc === 'string'
+                ? disc
+                : disc.connection || disc.why || JSON.stringify(disc)}
             </span>
           ))}
         </div>

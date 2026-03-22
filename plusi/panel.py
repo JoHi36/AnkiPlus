@@ -405,9 +405,11 @@ function renderEntries(entries) {
         if (e.discoveries && e.discoveries.length > 0) {
             html += '<div class="discoveries">';
             e.discoveries.forEach(function(d) {
-                html += '<div class="discovery" onclick="window._apAction={type:\'goToCard\',cardId:' + d.card_id + '}">';
+                var cardId = d.card_id || (d.card_ids && d.card_ids[0]) || 0;
+                var label = d.why || d.connection || '?';
+                html += '<div class="discovery" onclick="window._apAction={type:\'goToCard\',cardId:' + cardId + '}">';
                 html += '<span class="discovery-icon">🔍</span> ';
-                html += '<span class="discovery-why">' + d.why + '</span>';
+                html += '<span class="discovery-why">' + label + '</span>';
                 html += '</div>';
             });
             html += '</div>';

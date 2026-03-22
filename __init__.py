@@ -556,6 +556,15 @@ def on_reviewer_did_answer_card(reviewer, card, ease):
     try:
         correct = ease >= 2  # ease 1 = Again (wrong), 2+ = correct
 
+        # Record for Plusi's environmental awareness (zero-cost passive sensing)
+        try:
+            deck = mw.col.decks.get(card.did)
+            deck_name = deck['name'] if deck else 'Unknown'
+            from plusi.storage import record_card_review
+            record_card_review(deck_name, correct)
+        except Exception:
+            pass
+
         # Send to chat panel (React)
         widget = get_chatbot_widget()
         if widget and hasattr(widget, 'web_view') and widget.web_view:

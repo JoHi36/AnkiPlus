@@ -98,6 +98,18 @@ export default function PlusiMenu({ bridge, onNavigateBack }) {
   // Trail from current day backwards
   const visibleTrail = dayPositions.slice(activeDayIndex);
 
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  const handleReset = () => {
+    window.ankiBridge?.addMessage('resetPlusi', null);
+    setShowResetConfirm(false);
+    setData(null);
+    // Reload data after reset
+    setTimeout(() => {
+      window.ankiBridge?.addMessage('getPlusiMenuData', null);
+    }, 500);
+  };
+
   return (
     <div style={{
       flex: 1, display: 'flex', flexDirection: 'column',
@@ -116,29 +128,101 @@ export default function PlusiMenu({ bridge, onNavigateBack }) {
           quadrant={personality.quadrant}
           confident={personality.confident}
         />
-        {/* Fade below grid */}
-        <div style={{
-          height: 16,
-          background: 'linear-gradient(to bottom, var(--ds-bg-deep, #141416), transparent)',
-          pointerEvents: 'none',
-          marginLeft: -20, marginRight: -20, paddingLeft: 20, paddingRight: 20,
-        }} />
       </div>
 
       {/* Scrollable diary area below the fixed grid */}
-      <div
-        ref={scrollRef}
-        onScroll={handleScroll}
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: '0 20px 140px',
-        }}
-      >
-        <DiaryStream
-          entries={diary}
-          dayRefs={dayRefs}
-        />
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        {/* Fade overlay — diary text disappears under this */}
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0,
+          height: 32, zIndex: 5, pointerEvents: 'none',
+          background: 'linear-gradient(to bottom, var(--ds-bg-deep, #141416) 0%, transparent 100%)',
+        }} />
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="scrollbar-hide"
+          style={{
+            height: '100%',
+            overflowY: 'auto',
+            padding: '24px 20px 140px',
+          }}
+        >
+          <DiaryStream
+            entries={diary}
+            dayRefs={dayRefs}
+          />
+
+          {/* Reset option at bottom */}
+          <div style={{ marginTop: 40, paddingBottom: 20, textAlign: 'center' }}>
+            {!showResetConfirm ? (
+              <button
+                onClick={() => setShowResetConfirm(true)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--ds-text-muted, rgba(255,255,255,0.18))',
+                  fontSize: 11,
+                  cursor: 'pointer',
+                  padding: '6px 12px',
+                  transition: 'color 0.2s',
+                }}
+                onMouseEnter={e => e.target.style.color = 'var(--ds-red, #f87171)'}
+                onMouseLeave={e => e.target.style.color = 'var(--ds-text-muted, rgba(255,255,255,0.18))'}
+              >
+                Plusi zurücksetzen
+              </button>
+            ) : (
+              <div style={{
+                background: 'var(--ds-bg-overlay, rgba(255,255,255,0.06))',
+                borderRadius: 10,
+                padding: '14px 16px',
+                maxWidth: 280,
+                margin: '0 auto',
+              }}>
+                <p style={{
+                  fontSize: 12,
+                  color: 'var(--ds-text-secondary, rgba(255,255,255,0.55))',
+                  margin: '0 0 12px',
+                  lineHeight: 1.5,
+                }}>
+                  Plusis Erinnerungen, Tagebuch und Persönlichkeit werden gelöscht. Das kann nicht rückgängig gemacht werden.
+                </p>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                  <button
+                    onClick={() => setShowResetConfirm(false)}
+                    style={{
+                      background: 'var(--ds-hover-tint, rgba(255,255,255,0.04))',
+                      border: '1px solid var(--ds-border-subtle, rgba(255,255,255,0.06))',
+                      borderRadius: 6,
+                      color: 'var(--ds-text-secondary)',
+                      fontSize: 11,
+                      padding: '5px 14px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Abbrechen
+                  </button>
+                  <button
+                    onClick={handleReset}
+                    style={{
+                      background: 'rgba(248,113,113,0.12)',
+                      border: '1px solid rgba(248,113,113,0.2)',
+                      borderRadius: 6,
+                      color: '#f87171',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      padding: '5px 14px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Zurücksetzen
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

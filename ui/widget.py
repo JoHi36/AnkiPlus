@@ -484,6 +484,7 @@ class ChatbotWidget(QWidget):
             'plusiSettings': self._msg_plusi_settings,
             'plusiDirect': self._msg_plusi_direct,
             'plusiLike': self._msg_plusi_like,
+            'resetPlusi': self._msg_reset_plusi,
             'textFieldFocus': self._msg_text_field_focus,
         }
         return handlers.get(msg_type)
@@ -1069,6 +1070,22 @@ class ChatbotWidget(QWidget):
             logger.info("plusi like recorded from UI")
         except Exception as e:
             logger.exception("plusi like error: %s", e)
+
+    def _msg_reset_plusi(self, data):
+        """Reset Plusi — clear all memories, diary, and history."""
+        try:
+            try:
+                from ..plusi.storage import _get_db
+            except ImportError:
+                from plusi.storage import _get_db
+            db = _get_db()
+            db.execute("DELETE FROM plusi_memory")
+            db.execute("DELETE FROM plusi_diary")
+            db.execute("DELETE FROM plusi_history")
+            db.commit()
+            logger.info("plusi RESET: all memories, diary, and history cleared")
+        except Exception as e:
+            logger.exception("plusi reset error: %s", e)
 
     def _msg_plusi_direct(self, data):
         # Ignore if Plusi is disabled
