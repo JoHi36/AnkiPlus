@@ -32,7 +32,6 @@ import { setRegistry, findAgent } from '@shared/config/subagentRegistry';
 import { useMascot } from './hooks/useMascot';
 import InsightsDashboard from './components/InsightsDashboard';
 import AgentStudio from './components/AgentStudio';
-import ExtractInsightsButton from './components/ExtractInsightsButton';
 import useInsights from './hooks/useInsights';
 import PlusiMenu from './components/PlusiMenu';
 import TokenBudgetSlider from './components/TokenBudgetSlider';
@@ -708,8 +707,11 @@ function AppInner() {
             if (prevCardId && _chat.messages && _chat.messages.length > 0) {
               _cardSession.updateLocalMessages(prevCardId, _chat.messages);
             }
-            // Auto-extraction removed — now manual via ExtractInsightsButton
             const _insights = insightsHookRef.current;
+            // Mark previous card's insights as seen
+            if (_insights.currentCardId) {
+              _insights.markInsightsSeen(_insights.currentCardId);
+            }
             _session.handleCardShown(newCardId);
             // Clear chat and sections for new card
             _chat.setMessages([]);
@@ -1216,8 +1218,11 @@ function AppInner() {
         if (prevCardId && _chat.messages && _chat.messages.length > 0) {
           _cardSession.updateLocalMessages(prevCardId, _chat.messages);
         }
-        // Auto-extraction removed — now manual via ExtractInsightsButton
         const _insights = insightsHookRef.current;
+        // Mark previous card's insights as seen
+        if (_insights.currentCardId) {
+          _insights.markInsightsSeen(_insights.currentCardId);
+        }
         _session.handleCardShown(newCardId);
         // Clear chat and sections for new card
         _chat.setMessages([]);
@@ -1872,21 +1877,36 @@ function AppInner() {
 
   const handleResetChat = useCallback(() => {
     if (confirm('Möchtest du den Chat wirklich zurücksetzen? Alle Nachrichten und Abschnitte werden gelöscht.')) {
-      const userMsgCount = chatHook.messages.filter(m => m.from === 'user').length;
-      if (userMsgCount >= 2 && cardContextHook.cardContext?.cardId) {
-        insightsHook.extractInsights(
-          cardContextHook.cardContext.cardId,
-          cardContextHook.cardContext,
-          chatHook.messages,
-          null
-        );
-      }
       chatHook.setMessages([]);
       cardContextHook.setSections([]);
       cardContextHook.setCurrentSectionId(null);
     }
-  }, [chatHook, cardContextHook, insightsHook]);
-  
+  }, [chatHook, cardContextHook]);
+
+  // Compact tool: when user confirms, clear chat and trigger extraction
+  useEffect(() => {
+    const handleCompactConfirmed = () => {
+      const cardId = cardContextHook.cardContext?.cardId;
+      if (!cardId) return;
+
+      // Trigger extraction with current messages before clearing
+      insightsHook.extractInsights(
+        cardId,
+        cardContextHook.cardContext,
+        chatHook.messages,
+        null
+      );
+
+      // Clear chat immediately
+      chatHook.setMessages([]);
+      cardContextHook.setSections([]);
+      cardContextHook.setCurrentSectionId(null);
+    };
+
+    window.addEventListener('compactConfirmed', handleCompactConfirmed);
+    return () => window.removeEventListener('compactConfirmed', handleCompactConfirmed);
+  }, [cardContextHook, chatHook, insightsHook]);
+
   // Prüfe ob Reset-Button inaktiv sein soll (keine Messages und keine Sections)
   const isResetDisabled = chatHook.messages.length === 0 && cardContextHook.sections.length === 0;
   
@@ -2119,6 +2139,7 @@ function AppInner() {
               cardStats={cardContextHook.cardContext?.stats || {}}
               chartData={insightsHook.chartData}
               isExtracting={insightsHook.isExtracting}
+              newInsightIds={insightsHook.newInsightIds}
               onCitationClick={(cardId) => bridge.goToCard?.(String(cardId))}
             />
           ) : (
@@ -2379,33 +2400,6 @@ function AppInner() {
                           </div>
                         )}
                         
-                        {/* Manual insight extraction button */}
-                        <ExtractInsightsButton
-                          messageCount={chatHook.messages.length}
-                          onExtract={(onDone, onError) => {
-                            if (!cardContextHook.cardContext?.cardId) {
-                              onError?.();
-                              return;
-                            }
-                            insightsHook.extractInsights(
-                              cardContextHook.cardContext.cardId,
-                              cardContextHook.cardContext,
-                              chatHook.messages,
-                              null
-                            );
-                            // Listen for extraction result (one-shot)
-                            const handler = (e) => {
-                              window.removeEventListener('ankiInsightExtractionComplete', handler);
-                              const data = e.detail;
-                              if (data?.success) {
-                                onDone?.();
-                              } else {
-                                onError?.();
-                              }
-                            };
-                            window.addEventListener('ankiInsightExtractionComplete', handler);
-                          }}
-                        />
 
                         {/* SPACER - Drückt alles nach oben und füllt den Rest des Screens */}
                         <div className="flex-grow w-full min-h-[50px]" />
