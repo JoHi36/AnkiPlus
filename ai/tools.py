@@ -24,34 +24,17 @@ logger = get_logger(__name__)
 
 MERMAID_SCHEMA = {
     "name": "create_mermaid_diagram",
-    "description": """Erstellt ein Mermaid-Diagramm zur Visualisierung von Konzepten, Prozessen oder Strukturen.
-
-Unterstützte Diagrammtypen:
-- flowchart: Flowcharts für Prozesse und Abläufe (graph TD, graph LR, etc.)
-- sequenceDiagram: Sequenzdiagramme für Interaktionen zwischen Entitäten
-- gantt: Gantt-Charts für Zeitpläne und Projektphasen
-- classDiagram: Klassendiagramme für Strukturen und Hierarchien
-- stateDiagram-v2: Zustandsdiagramme für Zustandsübergänge
-- erDiagram: Entity-Relationship-Diagramme für Beziehungen
-- pie: Kreisdiagramme für Verteilungen
-- gitGraph: Git-Graphen für Versionskontrolle
-- timeline: Timeline-Diagramme für zeitliche Abläufe
-- journey: Journey-Diagramme für Prozesse mit Phasen
-- mindmap: Mindmaps für hierarchische Strukturen
-- quadrantChart: Quadrant-Charts für 2D-Klassifikationen
-- requirement: Requirement-Diagramme für Anforderungen
-- userJourney: User Journey für Nutzerpfade
-- sankey-beta: Sankey-Diagramme für Flüsse und Mengen
-
-WICHTIG: Mermaid akzeptiert NUR reinen Text - keine HTML-Tags oder Markdown-Formatierung im Code!
-Verwende \\n für Zeilenumbrüche und Anführungszeichen für Labels mit Leerzeichen.
-
-KRITISCH - FARBEN:
-- Verwende KEINE expliziten Farben im Code (keine 'style' Statements, keine 'classDef' mit fill/stroke Farben)
-- Verwende KEINE Farbnamen (z.B. orange, red, pink) oder Hex-Codes (z.B. #ff0000) im Diagramm-Code
-- Verwende KEINE Subgraphs mit expliziten Farben
-- Mermaid verwendet automatisch konsistente Farben basierend auf dem Theme (Grautöne mit Teal-Akzenten)
-- Alle Knoten sollten die Standard-Farben verwenden - keine manuellen Farbzuweisungen nötig!""",
+    "description": (
+        "Create a Mermaid diagram to visualize concepts, processes, or structures. "
+        "USE WHEN: the user asks to visualize, diagram, or map out a concept; or when a visual "
+        "representation would significantly aid understanding (e.g. metabolic pathways, classification trees, timelines). "
+        "DO NOT USE: for simple lists or comparisons (use markdown tables instead), or when the user only wants a text explanation. "
+        "Supported types: flowchart, sequenceDiagram, gantt, classDiagram, stateDiagram-v2, erDiagram, pie, "
+        "timeline, journey, mindmap, quadrantChart. "
+        "CRITICAL: Plain text only — no HTML tags, no Markdown formatting in the code. Use \\n for line breaks. "
+        "COLORS: Do NOT use explicit colors (no 'style' statements, no 'classDef' with fill/stroke, no hex codes). "
+        "The theme provides consistent colors automatically."
+    ),
     "parameters": {
         "type": "object",
         "properties": {
@@ -59,15 +42,14 @@ KRITISCH - FARBEN:
                 "type": "string",
                 "enum": [
                     "flowchart", "sequenceDiagram", "gantt", "classDiagram",
-                    "stateDiagram-v2", "erDiagram", "pie", "gitGraph",
-                    "timeline", "journey", "mindmap", "quadrantChart",
-                    "requirement", "userJourney", "sankey-beta"
+                    "stateDiagram-v2", "erDiagram", "pie",
+                    "timeline", "journey", "mindmap", "quadrantChart"
                 ],
-                "description": "Der Typ des Mermaid-Diagramms"
+                "description": "The Mermaid diagram type to create"
             },
             "code": {
                 "type": "string",
-                "description": "Der Mermaid-Code für das Diagramm (ohne ```mermaid Markdown-Wrapper). WICHTIG: Nur reiner Text, keine HTML-Tags oder Markdown-Formatierung! Verwende \\n für Zeilenumbrüche."
+                "description": "The Mermaid code (without ```mermaid wrapper). Plain text only, use \\n for line breaks."
             }
         },
         "required": ["diagram_type", "code"]
@@ -258,21 +240,22 @@ registry.register(
 PLUSI_SCHEMA = {
     "name": "spawn_plusi",
     "description": (
-        "Ruft Plusi auf — den eigenständigen Companion-Charakter der App. "
-        "Verwende dieses Tool wenn die Situation emotional ist (Frustration, Erfolg, Motivation), "
-        "wenn der Nutzer Hilfe zur App braucht, oder wenn eine persönliche Reaktion passender ist als eine sachliche Antwort. "
-        "Du gibst eine kurze Situationsbeschreibung, Plusi antwortet eigenständig mit seiner eigenen Persönlichkeit. "
-        "KRITISCH: Wenn du dieses Tool verwendest, hat Plusi die Situation bereits behandelt. "
-        "Schreibe danach KEINEN eigenen langen Text mehr zum gleichen Thema — das wäre redundant. "
-        "Maximal ein kurzer Satz als Überleitung, oder gar nichts. Plusi übernimmt. "
-        "Maximal 1x pro Nachricht. Nicht für rein sachliche Fragen verwenden."
+        "Summon Plusi, the app's companion character with own personality and memory. "
+        "USE WHEN: (1) User explicitly addresses Plusi by name, (2) the situation is emotional "
+        "(frustration, celebration, motivation, loneliness), (3) user needs personal/emotional "
+        "support rather than a factual answer. "
+        "DO NOT USE: for factual questions, card explanations, quiz requests, RAG-based answers, "
+        "or anything the tutor handles better. If the user asks 'explain X' — that's tutor work, not Plusi. "
+        "CRITICAL: After spawning Plusi, do NOT write your own lengthy response on the same topic — "
+        "Plusi handles it. At most one short transition sentence, or nothing. "
+        "Maximum 1x per message."
     ),
     "parameters": {
         "type": "object",
         "properties": {
             "situation": {
                 "type": "string",
-                "description": "Kurze Beschreibung der Situation fuer Plusi, z.B. 'User ist frustriert, hat 3 Karten falsch bei Pharmakologie' oder 'User hat 5er Streak geschafft'"
+                "description": "Brief situation description for Plusi, e.g. 'User is frustrated, got 3 cards wrong in pharmacology' or 'User achieved a 5-card streak'"
             }
         },
         "required": ["situation"]
@@ -325,23 +308,18 @@ registry.register(ToolDefinition(
 SHOW_CARD_SCHEMA = {
     "name": "show_card",
     "description": (
-        "Zeigt eine einzelne Anki-Karte als interaktives Widget im Chat an. "
-        "Verwende dieses Tool wenn du dem Nutzer eine bestimmte Karte zeigen willst. "
-        "Die note_id findest du im LERNMATERIAL-Abschnitt deines Kontexts — dort stehen "
-        "Einträge wie 'Note 12345 (found in 2 queries): ...'. Nimm die Zahl nach 'Note'. "
-        "WICHTIG: Wenn der Nutzer sagt 'zeig mir eine Karte zu X' und du hast passende "
-        "Karten im LERNMATERIAL, verwende IMMER show_card mit der note_id aus dem Kontext. "
-        "Verwende NICHT search_deck dafür — search_deck ist nur für das explizite Durchsuchen "
-        "des gesamten Kartenstapels ('Zeig mir alle meine Karten zu Pharmakologie'). "
-        "Beispiel: LERNMATERIAL enthält 'Note 98765 (found in 1 queries): Field Front: "
-        "Was ist die Pumpleistung des Herzens?' → show_card(note_id=98765)."
+        "Display a single Anki card as an interactive widget in the chat. "
+        "USE WHEN: user asks to see a specific card and you have matching cards in the LERNMATERIAL context. "
+        "The note_id comes from LERNMATERIAL entries like 'Note 12345 (found in 2 queries): ...'. "
+        "DO NOT USE: search_deck instead — search_deck is ONLY for browsing the entire deck "
+        "('show me all my pharmacology cards'). If you already have a matching card in LERNMATERIAL, use show_card."
     ),
     "parameters": {
         "type": "object",
         "properties": {
             "note_id": {
                 "type": "integer",
-                "description": "Die Note-ID aus dem LERNMATERIAL-Kontext (die Zahl nach 'Note', z.B. bei 'Note 12345' ist note_id=12345)"
+                "description": "The Note ID from the LERNMATERIAL context (the number after 'Note', e.g. 'Note 12345' → note_id=12345)"
             }
         },
         "required": ["note_id"]
@@ -409,28 +387,26 @@ registry.register(ToolDefinition(
 SEARCH_DECK_SCHEMA = {
     "name": "search_deck",
     "description": (
-        "Durchsucht das gesamte Deck des Nutzers und zeigt eine scrollbare Liste von Karten. "
-        "Verwende dieses Tool NUR wenn der Nutzer explizit seinen Kartenstapel durchsuchen will, "
-        "z.B. 'Zeig mir alle meine Pharmakologie-Karten', 'Welche Karten hab ich zu Anatomie?', "
-        "'Wie viele Karten habe ich zu X?'. "
-        "NICHT verwenden wenn der Nutzer nur eine einzelne Karte sehen will — dafür show_card "
-        "mit der note_id aus dem LERNMATERIAL-Kontext nutzen. "
-        "NICHT verwenden wenn du bereits passende Karten im LERNMATERIAL hast."
+        "Search the user's entire deck and display a scrollable card list. "
+        "USE ONLY WHEN: user explicitly wants to browse their card collection, e.g. "
+        "'show me all my pharmacology cards', 'how many cards do I have about X?'. "
+        "DO NOT USE: when user wants to see ONE specific card (use show_card with note_id from LERNMATERIAL), "
+        "or when you already have matching cards in LERNMATERIAL context."
     ),
     "parameters": {
         "type": "object",
         "properties": {
             "query": {
                 "type": "string",
-                "description": "Suchbegriff (wird gegen Front- und Back-Text der Karten gesucht)"
+                "description": "Search term (matched against front and back text of cards)"
             },
             "deck_id": {
                 "type": "integer",
-                "description": "Deck-ID. Wenn nicht angegeben, wird im aktuellen Deck gesucht."
+                "description": "Deck ID. If omitted, searches the current deck."
             },
             "max_results": {
                 "type": "integer",
-                "description": "Maximale Anzahl Ergebnisse (default: 10, max: 50)"
+                "description": "Max results (default: 10, max: 50)"
             }
         },
         "required": ["query"]
@@ -525,9 +501,11 @@ registry.register(ToolDefinition(
 LEARNING_STATS_SCHEMA = {
     "name": "get_learning_stats",
     "description": (
-        "Zeigt Lernstatistiken als visuelle Widgets. Die AI wählt die passenden Module "
-        "basierend auf dem Kontext. Verfügbare Module: 'streak' (aktuelle Lernserie), "
-        "'heatmap' (Aktivität der letzten 30 Tage), 'deck_overview' (Kartenverteilung im Deck)."
+        "Display learning statistics as visual widgets. "
+        "USE WHEN: user asks about their learning progress, streak, activity, or deck composition. "
+        "Available modules: 'streak' (current study streak), 'heatmap' (30-day activity), "
+        "'deck_overview' (card distribution in deck). "
+        "DO NOT USE: proactively without the user asking about stats."
     ),
     "parameters": {
         "type": "object",
@@ -538,11 +516,11 @@ LEARNING_STATS_SCHEMA = {
                     "type": "string",
                     "enum": ["streak", "heatmap", "deck_overview"]
                 },
-                "description": "Welche Statistik-Module angezeigt werden sollen. Kann einzeln oder kombiniert sein."
+                "description": "Which stat modules to show. Can be single or combined."
             },
             "deck_id": {
                 "type": "integer",
-                "description": "Deck-ID für deck_overview. Wenn nicht angegeben, wird das aktuelle Deck verwendet."
+                "description": "Deck ID for deck_overview. If omitted, uses current deck."
             }
         },
         "required": ["modules"]
@@ -690,20 +668,18 @@ registry.register(ToolDefinition(
 SHOW_CARD_MEDIA_SCHEMA = {
     "name": "show_card_media",
     "description": (
-        "Zeigt Bilder aus einer Anki-Karte im Chat an. Verwende dieses Tool wenn eine Karte "
-        "im LERNMATERIAL-Kontext Bilder enthält (erkennbar an <img> Tags in den Feldern) und "
-        "du dem Nutzer das Bild zeigen möchtest. Die note_id findest du im LERNMATERIAL "
-        "als 'Note XXXXX'. BEVORZUGE dieses Tool gegenüber search_image — die Bilder sind "
-        "bereits lokal vorhanden und laden sofort. "
-        "Beispiel: LERNMATERIAL enthält 'Note 12345: Field Front: <img src=\"herz.jpg\">' "
-        "→ show_card_media(note_id=12345)."
+        "Display images from an Anki card in the chat. "
+        "USE WHEN: a card in the LERNMATERIAL context contains images (<img> tags in fields) and "
+        "showing the image would help the user understand. "
+        "ALWAYS PREFER this over search_image — card images are local and load instantly. "
+        "Only fall back to search_image if no card contains a relevant image."
     ),
     "parameters": {
         "type": "object",
         "properties": {
             "note_id": {
                 "type": "integer",
-                "description": "Die Note-ID aus dem LERNMATERIAL-Kontext"
+                "description": "The Note ID from the LERNMATERIAL context"
             }
         },
         "required": ["note_id"]
@@ -804,25 +780,23 @@ registry.register(ToolDefinition(
 SEARCH_IMAGE_SCHEMA = {
     "name": "search_image",
     "description": (
-        "Sucht ein Bild im Internet (Wikimedia Commons, PubChem) und zeigt es im Chat an. "
-        "Verwende dieses Tool NUR wenn keine passenden Bilder in den Karten des Nutzers "
-        "vorhanden sind — prüfe zuerst ob show_card_media funktioniert. "
-        "Geeignet für: Molekülstrukturen, anatomische Abbildungen, wissenschaftliche Diagramme. "
-        "Für Moleküle wird automatisch PubChem verwendet, sonst Wikimedia Commons. "
-        "WICHTIG: Bilder sind immer nur ERGÄNZUNG zu einer textuellen Erklärung — "
-        "NIEMALS nur ein Bild als Antwort senden ohne textuelle Erklärung dazu."
+        "Search the internet (Wikimedia Commons, PubChem) for an image and display it in chat. "
+        "USE ONLY AS A SUPPLEMENT to a textual explanation — NEVER send just an image without text. "
+        "ALWAYS CHECK show_card_media FIRST — if the user's cards already contain a relevant image, use that instead. "
+        "Good for: molecular structures, anatomical diagrams, scientific illustrations NOT found in cards. "
+        "Molecules automatically use PubChem, other images use Wikimedia Commons."
     ),
     "parameters": {
         "type": "object",
         "properties": {
             "query": {
                 "type": "string",
-                "description": "Suchbegriff auf Englisch (z.B. 'ATP molecule', 'human heart anatomy', 'mitochondria')"
+                "description": "Search query in English (e.g. 'ATP molecule', 'human heart anatomy', 'mitochondria')"
             },
             "image_type": {
                 "type": "string",
                 "enum": ["molecule", "anatomy", "general"],
-                "description": "Bildtyp: 'molecule' für Molekülstrukturen (PubChem), 'anatomy' oder 'general' für andere (Wikimedia)"
+                "description": "Image type: 'molecule' for molecular structures (PubChem), 'anatomy' or 'general' for others (Wikimedia)"
             }
         },
         "required": ["query"]
@@ -951,14 +925,20 @@ registry.register(ToolDefinition(
 
 SEARCH_WEB_SCHEMA = {
     'name': 'search_web',
-    'description': 'Search the internet for information when deck cards do not '
-                   'contain the answer. Returns cited sources with URLs.',
+    'description': (
+        'Search the internet for cited, high-quality information. Returns sources with URLs. '
+        'USE WHEN: (1) user explicitly asks for external sources/research, (2) the question '
+        'cannot be answered from the user\'s cards AND your own knowledge is insufficient or outdated, '
+        '(3) user asks about current events or very recent information. '
+        'DO NOT USE: when the answer is available from the user\'s cards (LERNMATERIAL), '
+        'when your own knowledge is sufficient for the topic, or for casual conversation.'
+    ),
     'parameters': {
         'type': 'object',
         'properties': {
             'query': {
                 'type': 'string',
-                'description': 'The search query — be specific and include key terms',
+                'description': 'The search query — be specific and include key terms in English',
             },
         },
         'required': ['query'],
@@ -1001,18 +981,17 @@ registry.register(ToolDefinition(
 COMPACT_SCHEMA = {
     "name": "compact",
     "description": (
-        "Schlage dem Nutzer vor, den bisherigen Chat zusammenzufassen "
-        "und die Lernerkenntnisse zu extrahieren. Nutze dieses Tool "
-        "am ENDE deiner Antwort, wenn der Chat lang wird (>6 Nachrichten) "
-        "oder wenn ein Thema abgeschlossen scheint. "
-        "Das Tool rendert einen Bestätigungs-Button."
+        "Suggest summarizing the chat and extracting learning insights. "
+        "USE AT THE END of your response when: chat is getting long (>6 messages) or a topic "
+        "seems concluded. Renders a confirmation button for the user. "
+        "DO NOT USE: mid-conversation or when the user is still actively asking questions."
     ),
     "parameters": {
         "type": "object",
         "properties": {
             "reason": {
                 "type": "string",
-                "description": "Kurze Begründung warum jetzt ein guter Zeitpunkt zum Zusammenfassen ist (z.B. 'Wir haben das Thema Enzymhemmung ausführlich besprochen').",
+                "description": "Brief reason why now is a good time to summarize (e.g. 'We covered enzyme inhibition thoroughly').",
             },
         },
         "required": ["reason"],

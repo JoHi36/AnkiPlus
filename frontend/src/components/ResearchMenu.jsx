@@ -1,42 +1,15 @@
 import React, { useState, useEffect } from 'react';
+import perplexitySmall from '../assets/perplexity-logo-small.png';
+import pubmedSmall from '../assets/pubmed-logo-small.svg';
+import wikipediaSmall from '../assets/wikipedia-logo-small.png';
 
-function PerplexityIcon({ size = 28 }) {
+function SourceLogo({ src, alt, size = 28 }) {
   return (
-    <svg viewBox="0 0 28 28" width={size} height={size} fill="none">
-      <polygon points="14,2 26,8 26,20 14,26 2,20 2,8" fill="#20B8CD" opacity="0.15"/>
-      <polygon points="14,5 23,9.5 23,18.5 14,23 5,18.5 5,9.5" fill="none" stroke="#20B8CD" strokeWidth="1.5"/>
-      <line x1="14" y1="5" x2="14" y2="23" stroke="#20B8CD" strokeWidth="1.5"/>
-      <line x1="5" y1="9.5" x2="23" y2="9.5" stroke="#20B8CD" strokeWidth="1" opacity="0.6"/>
-      <line x1="5" y1="18.5" x2="23" y2="18.5" stroke="#20B8CD" strokeWidth="1" opacity="0.6"/>
-    </svg>
-  );
-}
-
-function PubMedIcon({ size = 28 }) {
-  return (
-    <svg viewBox="0 0 28 28" width={size} height={size} fill="none">
-      <rect x="4" y="3" width="14" height="18" rx="2" fill="#326599" opacity="0.2" stroke="#326599" strokeWidth="1.5"/>
-      <rect x="8" y="6" width="14" height="18" rx="2" fill="#326599" opacity="0.15" stroke="#326599" strokeWidth="1.5"/>
-      <line x1="7" y1="10" x2="14" y2="10" stroke="#326599" strokeWidth="1.2" strokeLinecap="round"/>
-      <line x1="7" y1="13" x2="14" y2="13" stroke="#326599" strokeWidth="1.2" strokeLinecap="round"/>
-      <line x1="7" y1="16" x2="11" y2="16" stroke="#326599" strokeWidth="1.2" strokeLinecap="round"/>
-    </svg>
-  );
-}
-
-function WikipediaIcon({ size = 28 }) {
-  return (
-    <svg viewBox="0 0 28 28" width={size} height={size} fill="none">
-      <circle cx="14" cy="14" r="11" stroke="var(--ds-text-secondary, rgba(255,255,255,0.45))" strokeWidth="1.5"/>
-      <text
-        x="14" y="19"
-        textAnchor="middle"
-        fontFamily="Georgia, serif"
-        fontSize="13"
-        fontWeight="700"
-        fill="var(--ds-text-secondary, rgba(255,255,255,0.45))"
-      >W</text>
-    </svg>
+    <img
+      src={src}
+      alt={alt}
+      style={{ height: size, width: size, objectFit: 'contain' }}
+    />
   );
 }
 
@@ -119,19 +92,19 @@ const SOURCES = [
     badge: 'Standard',
     badgeColor: '#20B8CD',
     alwaysOn: true,
-    Icon: PerplexityIcon,
+    logo: perplexitySmall,
   },
   {
     key: 'pubmed',
     label: 'PubMed',
     desc: 'Wissenschaftliche Studien — bei medizinischen Fragen',
-    Icon: PubMedIcon,
+    logo: pubmedSmall,
   },
   {
     key: 'wikipedia',
     label: 'Wikipedia',
     desc: 'Definitionen & Überblick — schnell und kostenlos',
-    Icon: WikipediaIcon,
+    logo: wikipediaSmall,
   },
 ];
 
@@ -192,7 +165,7 @@ export default function ResearchMenu({ bridge, onNavigateBack }) {
         />
         <div style={S.card}>
           {SOURCES.map((source, i) => {
-            const { key, label, desc, badge, badgeColor, alwaysOn, Icon } = source;
+            const { key, label, desc, badge, badgeColor, alwaysOn, logo } = source;
             return (
               <div
                 key={key}
@@ -204,7 +177,7 @@ export default function ResearchMenu({ bridge, onNavigateBack }) {
                 }}
               >
                 <div style={{ marginRight: 10, flexShrink: 0 }}>
-                  <Icon size={28} />
+                  <SourceLogo src={logo} alt={label} size={28} />
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
