@@ -213,6 +213,18 @@ def rag_router(user_message, context=None, config=None, emit_step=None):
         router_model = "gemini-2.5-flash"
         fallback_model = "gemini-3-flash-preview"
 
+        # Get subagent options for router
+        try:
+            try:
+                from ..ai.subagents import get_router_subagent_prompt
+            except ImportError:
+                from ai.subagents import get_router_subagent_prompt
+            subagent_prompt = get_router_subagent_prompt(config or {})
+            if subagent_prompt:
+                subagent_prompt = "\n\n" + subagent_prompt
+        except Exception:
+            subagent_prompt = ""
+
         # Emit pipeline step
         if emit_step:
             emit_step("router", "active")
@@ -329,7 +341,7 @@ REGELN:
 - search_scope: "current_deck" als Default, "collection" nur bei fächerübergreifenden Fragen
 - retrieval_mode: "both" als Default, "sql" für exakte Fakten, "semantic" für konzeptuelle Fragen
 - max_sources: "low" (3-5 Quellen, einfache Faktenfragen), "medium" (8-10, Standard-Erklärungen), "high" (bis 15, Vergleiche/Überblicke)
-- response_length: "short" für einfache Fakten, "medium" für Erklärungen, "long" für detaillierte Vergleiche oder mehrteilige Fragen"""
+- response_length: "short" für einfache Fakten, "medium" für Erklärungen, "long" für detaillierte Vergleiche oder mehrteilige Fragen{subagent_prompt}"""
 
         # Backend-Modus: Router über Cloud Function (API-Key serverseitig)
         if use_backend:
@@ -372,9 +384,20 @@ REGELN:
         if use_backend and 'router_result' in locals() and router_result and router_result.get("search_needed") is not None:
             # Validierung des Backend-Ergebnisses
             retrieval_mode = router_result.get('retrieval_mode', 'both')
-            if retrieval_mode not in ('sql', 'semantic', 'both'):
+            if retrieval_mode not in ('sql', 'semantic', 'both') and not retrieval_mode.startswith('subagent:'):
                 retrieval_mode = 'both'
             router_result['retrieval_mode'] = retrieval_mode
+
+            # Handle subagent delegation from router
+            if retrieval_mode.startswith('subagent:'):
+                router_result['search_needed'] = False
+                if emit_step:
+                    emit_step('router', 'done', {
+                        'search_needed': False,
+                        'retrieval_mode': retrieval_mode,
+                        'scope': 'none',
+                        'scope_label': '',
+                    })
 
             precise_queries = router_result.get("precise_queries", [])
             broad_queries = router_result.get("broad_queries", [])
@@ -389,19 +412,20 @@ REGELN:
             router_result["precise_queries"] = precise_queries[:3]
             router_result["broad_queries"] = broad_queries[:3]
 
-            # Emit pipeline done
-            scope_label = ""
-            if deck_name:
-                scope_label = deck_name.split("::")[-1]
-            if emit_step:
-                emit_step("router", "done", {
-                    "search_needed": router_result.get("search_needed", True),
-                    "retrieval_mode": retrieval_mode,
-                    "scope": router_result.get("search_scope", "current_deck"),
-                    "scope_label": scope_label,
-                    "max_sources": router_result.get("max_sources", "medium"),
-                    "response_length": router_result.get("response_length", "medium")
-                })
+            # Emit pipeline done (skip if subagent already emitted)
+            if not retrieval_mode.startswith('subagent:'):
+                scope_label = ""
+                if deck_name:
+                    scope_label = deck_name.split("::")[-1]
+                if emit_step:
+                    emit_step("router", "done", {
+                        "search_needed": router_result.get("search_needed", True),
+                        "retrieval_mode": retrieval_mode,
+                        "scope": router_result.get("search_scope", "current_deck"),
+                        "scope_label": scope_label,
+                        "max_sources": router_result.get("max_sources", "medium"),
+                        "response_length": router_result.get("response_length", "medium")
+                    })
 
             logger.info("Router (Backend): search_needed=%s, retrieval_mode=%s", router_result.get('search_needed'), retrieval_mode)
             return fix_router_queries(router_result, user_message, context)
@@ -527,9 +551,20 @@ REGELN:
                             if "search_needed" in router_result:
                                 # Extract and validate retrieval_mode
                                 retrieval_mode = router_result.get('retrieval_mode', 'both')
-                                if retrieval_mode not in ('sql', 'semantic', 'both'):
+                                if retrieval_mode not in ('sql', 'semantic', 'both') and not retrieval_mode.startswith('subagent:'):
                                     retrieval_mode = 'both'
                                 router_result['retrieval_mode'] = retrieval_mode
+
+                                # Handle subagent delegation from router
+                                if retrieval_mode.startswith('subagent:'):
+                                    router_result['search_needed'] = False
+                                    if emit_step:
+                                        emit_step('router', 'done', {
+                                            'search_needed': False,
+                                            'retrieval_mode': retrieval_mode,
+                                            'scope': 'none',
+                                            'scope_label': '',
+                                        })
 
                                 # Extract embedding_queries (array) with backward compat for embedding_query (string)
                                 embedding_queries = router_result.get("embedding_queries", [])
@@ -666,19 +701,20 @@ REGELN:
 
                                     logger.info("Router: Validierung abgeschlossen: %s precise, %s broad", len([q for q in corrected_precise if q]), len([q for q in corrected_broad if q]))
 
-                                # Emit pipeline done
-                                scope_label = ""
-                                if deck_name:
-                                    scope_label = deck_name.split("::")[-1]
-                                if emit_step:
-                                    emit_step("router", "done", {
-                                        "search_needed": router_result.get("search_needed", True),
-                                        "retrieval_mode": retrieval_mode,
-                                        "scope": router_result.get("search_scope", "current_deck"),
-                                        "scope_label": scope_label,
-                                        "max_sources": router_result.get("max_sources", "medium"),
-                                        "response_length": router_result.get("response_length", "medium")
-                                    })
+                                # Emit pipeline done (skip if subagent already emitted)
+                                if not retrieval_mode.startswith('subagent:'):
+                                    scope_label = ""
+                                    if deck_name:
+                                        scope_label = deck_name.split("::")[-1]
+                                    if emit_step:
+                                        emit_step("router", "done", {
+                                            "search_needed": router_result.get("search_needed", True),
+                                            "retrieval_mode": retrieval_mode,
+                                            "scope": router_result.get("search_scope", "current_deck"),
+                                            "scope_label": scope_label,
+                                            "max_sources": router_result.get("max_sources", "medium"),
+                                            "response_length": router_result.get("response_length", "medium")
+                                        })
 
                                 # Finale Log-Ausgabe
                                 logger.info("Router: search_needed=%s, retrieval_mode=%s, embedding_queries=%s, precise_queries=%s, broad_queries=%s, scope=%s", router_result.get('search_needed'), retrieval_mode, [q[:40] for q in embedding_queries], len([q for q in precise_queries if q]), len([q for q in broad_queries if q]), router_result.get('search_scope'))

@@ -422,18 +422,8 @@ function AppInner() {
     }
   }, [isReady, bridge]);
 
-  // Load subagent registry from bridge on ready
-  useEffect(() => {
-    if (!isReady || !bridge || !bridge.getSubagentRegistry) return;
-    try {
-      const registryJson = bridge.getSubagentRegistry();
-      if (registryJson) {
-        setRegistry(JSON.parse(registryJson));
-      }
-    } catch (e) {
-      console.warn('Failed to load subagent registry:', e);
-    }
-  }, [isReady, bridge]);
+  // Subagent registry is pushed from Python via ankiReceive('subagent_registry')
+  // — no synchronous bridge call needed here.
 
   useEffect(() => {
     bridgeRef.current = bridge;

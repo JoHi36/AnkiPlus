@@ -305,6 +305,7 @@ class ChatbotWidget(QWidget):
         self.bridge = WebBridge(self)  # Bridge-Instanz für Deck-Zugriff
         self.card_tracker = None  # Card-Tracker wird später initialisiert
         self.current_card_context = None  # Aktueller Karten-Kontext
+        self._active_subagent_thread = None
         self.setup_ui()
         # Card-Tracking wird nach UI-Setup initialisiert
         if self.web_view:
@@ -1267,6 +1268,22 @@ class ChatbotWidget(QWidget):
         self.web_view.page().runJavaScript(js)
         # Also apply data-theme attribute immediately
         self._apply_theme_to_webview()
+
+        # Push subagent registry to frontend
+        try:
+            try:
+                from ..ai.subagents import get_registry_for_frontend
+            except ImportError:
+                from ai.subagents import get_registry_for_frontend
+            registry_payload = {
+                'type': 'subagent_registry',
+                'agents': get_registry_for_frontend(self.config)
+            }
+            self.web_view.page().runJavaScript(
+                f"window.ankiReceive({json.dumps(registry_payload)});"
+            )
+        except Exception as e:
+            logger.error("Failed to push subagent registry: %s", e)
     
     def push_updated_models(self):
         """Sendet aktualisierte Model-Liste an die Web-UI"""
