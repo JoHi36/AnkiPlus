@@ -102,11 +102,11 @@ function renderEntryText(text, cipherParts = []) {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 const TAG_CONFIG = {
-  gemerkt:     { color: '#6ee7b7', bg: 'rgba(52,211,153,0.08)',  tip: 'Aus dem Chat entstanden' },
-  reflektiert: { color: '#a78bfa', bg: 'rgba(167,139,250,0.08)', tip: 'Plusi hat eigenständig nachgedacht' },
-  entdeckt:    { color: '#fbbf24', bg: 'rgba(251,191,36,0.08)',  tip: 'Plusi hat Karten durchsucht' },
-  forscht:     { color: '#fbbf24', bg: 'rgba(251,191,36,0.08)',  tip: 'Plusi hat Karten durchsucht' },
-  'geträumt':  { color: '#60a5fa', bg: 'rgba(96,165,250,0.08)', tip: 'Plusi hat im Schlaf geträumt' },
+  gemerkt:     { color: '#6ee7b7', bg: 'rgba(52,211,153,0.08)',  tip: 'Während eines Gesprächs entstanden' },
+  reflektiert: { color: '#a78bfa', bg: 'rgba(167,139,250,0.08)', tip: 'Plusi war allein aktiv und hat selbstständig nachgedacht' },
+  entdeckt:    { color: '#fbbf24', bg: 'rgba(251,191,36,0.08)',  tip: 'Plusi hat eigenständig Karten durchsucht und Verbindungen gefunden' },
+  forscht:     { color: '#fbbf24', bg: 'rgba(251,191,36,0.08)',  tip: 'Plusi hat eigenständig Karten durchsucht und Verbindungen gefunden' },
+  'geträumt':  { color: '#60a5fa', bg: 'rgba(96,165,250,0.08)', tip: 'Plusi hat im Schlaf geträumt — automatisch, ohne gesteuert zu werden' },
 };
 
 function CategoryTag({ category }) {
@@ -114,62 +114,78 @@ function CategoryTag({ category }) {
   const cfg = TAG_CONFIG[category] || { color: 'var(--ds-text-muted)', bg: 'var(--ds-hover-tint)', tip: '' };
 
   return (
-    <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+    <span
+      style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}
+      onMouseEnter={() => setShowTip(true)}
+      onMouseLeave={() => setShowTip(false)}
+    >
       <span style={{
         fontSize: 9,
         fontWeight: 600,
         letterSpacing: '0.04em',
         textTransform: 'uppercase',
-        padding: '1px 5px',
+        padding: '1px 5px 1px 5px',
         borderRadius: 3,
         color: cfg.color,
         background: cfg.bg,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 3,
+        cursor: cfg.tip ? 'help' : 'default',
       }}>
         {category}
-      </span>
-      {cfg.tip && (
-        <span
-          onClick={(e) => { e.stopPropagation(); setShowTip(!showTip); }}
-          style={{
-            width: 12,
-            height: 12,
+        {cfg.tip && (
+          <span style={{
+            width: 10,
+            height: 10,
             borderRadius: '50%',
             border: `1px solid ${cfg.color}`,
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 7,
+            fontSize: 6,
             fontWeight: 700,
-            color: cfg.color,
-            opacity: 0.5,
-            cursor: 'pointer',
+            opacity: 0.6,
             flexShrink: 0,
-          }}
-        >
-          ?
-        </span>
-      )}
-      {showTip && (
-        <span
-          onClick={() => setShowTip(false)}
-          style={{
+          }}>
+            ?
+          </span>
+        )}
+      </span>
+      {showTip && cfg.tip && (
+        <>
+          {/* Arrow */}
+          <span style={{
+            position: 'absolute',
+            left: 12,
+            top: '100%',
+            width: 0,
+            height: 0,
+            borderLeft: '5px solid transparent',
+            borderRight: '5px solid transparent',
+            borderBottom: '5px solid var(--ds-bg-overlay, #3A3A3C)',
+            zIndex: 21,
+          }} />
+          {/* Tooltip */}
+          <span style={{
             position: 'absolute',
             left: 0,
             top: '100%',
-            marginTop: 4,
-            padding: '4px 8px',
-            borderRadius: 5,
+            marginTop: 5,
+            padding: '5px 10px',
+            borderRadius: 6,
             background: 'var(--ds-bg-overlay, #3A3A3C)',
             color: 'var(--ds-text-secondary, rgba(255,255,255,0.7))',
             fontSize: 10,
+            lineHeight: 1.4,
             whiteSpace: 'nowrap',
             zIndex: 20,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-            cursor: 'pointer',
-          }}
-        >
-          {cfg.tip}
-        </span>
+            boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
+            pointerEvents: 'none',
+          }}>
+            {cfg.tip}
+          </span>
+        </>
       )}
     </span>
   );
