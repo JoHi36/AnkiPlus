@@ -156,6 +156,27 @@ class AIRequestThread(QThread):
             self.ai_handler._pipeline_signal_callback = None
 
 
+class SubagentThread(QThread):
+    """Generic thread for any subagent — keeps UI responsive."""
+    finished_signal = pyqtSignal(str, object)   # agent_name, result dict
+    error_signal = pyqtSignal(str, str)         # agent_name, error message
+
+    def __init__(self, agent_name, run_fn, text, **kwargs):
+        super().__init__()
+        self.agent_name = agent_name
+        self.run_fn = run_fn
+        self.text = text
+        self.kwargs = kwargs
+
+    def run(self):
+        try:
+            result = self.run_fn(situation=self.text, **self.kwargs)
+            self.finished_signal.emit(self.agent_name, result)
+        except Exception as e:
+            logger.exception("SubagentThread[%s] error: %s", self.agent_name, e)
+            self.error_signal.emit(self.agent_name, str(e))
+
+
 class InsightExtractionThread(QThread):
     """Background thread for insight extraction."""
     finished_signal = pyqtSignal(int, str)  # card_id, insights_json
@@ -482,7 +503,7 @@ class ChatbotWidget(QWidget):
             'debugLog': self._msg_debug_log,
             'plusiPanel': self._msg_plusi_settings,
             'plusiSettings': self._msg_plusi_settings,
-            'plusiDirect': self._msg_plusi_direct,
+            'subagentDirect': self._msg_subagent_direct,
             'plusiLike': self._msg_plusi_like,
             'resetPlusi': self._msg_reset_plusi,
             'textFieldFocus': self._msg_text_field_focus,
@@ -1087,76 +1108,78 @@ class ChatbotWidget(QWidget):
         except Exception as e:
             logger.exception("plusi reset error: %s", e)
 
-    def _msg_plusi_direct(self, data):
-        # Ignore if Plusi is disabled
-        if not self.config.get('mascot_enabled', False):
-            return
+    def _msg_subagent_direct(self, data):
+        """Handle @Name subagent direct call from frontend."""
         msg_data = data if isinstance(data, dict) else json.loads(data) if isinstance(data, str) else {}
+        agent_name = msg_data.get('agent_name', '')
         text = msg_data.get('text', '')
-        if text:
-            self._handle_plusi_direct(text, msg_data.get('deck_id'))
+        extra = {k: v for k, v in msg_data.items() if k not in ('agent_name', 'text')}
+        if agent_name and text:
+            self._handle_subagent_direct(agent_name, text, extra)
 
-    def _handle_plusi_direct(self, text, deck_id=None):
-        """Route @Plusi messages directly to plusi_agent.py"""
+    def _handle_subagent_direct(self, agent_name, text, extra=None):
+        """Route @Name messages to the appropriate subagent in a background thread."""
         try:
-            try:
-                from ..plusi.agent import run_plusi
-            except ImportError:
-                from plusi.agent import run_plusi
+            from ..ai.subagents import SUBAGENT_REGISTRY, lazy_load_run_fn
+        except ImportError:
+            from ai.subagents import SUBAGENT_REGISTRY, lazy_load_run_fn
+        agent = SUBAGENT_REGISTRY.get(agent_name)
+        if not agent:
+            logger.warning("Unknown subagent: %s", agent_name)
+            return
+        if not self.config.get(agent.enabled_key, False):
+            logger.info("Subagent %s is disabled", agent_name)
+            return
+        run_fn = lazy_load_run_fn(agent)
+        kwargs = {**agent.extra_kwargs, **(extra or {})}
+        thread = SubagentThread(agent_name, run_fn, text, **kwargs)
+        thread.finished_signal.connect(self._on_subagent_finished)
+        thread.error_signal.connect(self._on_subagent_error)
+        self._active_subagent_thread = thread
+        thread.start()
 
-            result = run_plusi(situation=text, deck_id=deck_id)
-            mood = result.get('mood', 'neutral')
-            friendship = result.get('friendship', {})
-            is_silent = result.get('silent', False)
+    def _on_subagent_finished(self, agent_name, result):
+        """Handle subagent result on main thread — emit to JS + run agent-specific side effects."""
+        try:
             payload = {
-                'type': 'plusi_direct_result',
-                'mood': mood,
+                'type': 'subagent_result',
+                'agent_name': agent_name,
                 'text': result.get('text', ''),
+                'mood': result.get('mood', 'neutral'),
                 'meta': result.get('meta', ''),
-                'friendship': friendship,
-                'silent': is_silent,
-                'error': result.get('error', False)
+                'friendship': result.get('friendship', {}),
+                'silent': result.get('silent', False),
+                'error': result.get('error', False),
             }
             self.web_view.page().runJavaScript(
                 f"window.ankiReceive({json.dumps(payload)});"
             )
-            # Sync mood to main window Plusi dock
+            # Run agent-specific post-processing (mood sync, panel notify, etc.)
             try:
+                from ..ai.subagents import SUBAGENT_REGISTRY
+            except ImportError:
+                from ai.subagents import SUBAGENT_REGISTRY
+            agent = SUBAGENT_REGISTRY.get(agent_name)
+            if agent and agent.on_finished:
                 try:
-                    from ..plusi.dock import sync_mood
-                except ImportError:
-                    from plusi.dock import sync_mood
-                sync_mood(mood)
-            except Exception as e:
-                logger.error("plusi dock sync error: %s", e)
-            self._sync_plusi_integrity()
-            # Notify panel of diary entry and state changes
-            try:
-                from ..plusi.panel import notify_new_diary_entry, update_panel_mood, update_panel_friendship
-                if result.get('diary'):
-                    notify_new_diary_entry()
-                update_panel_mood(mood)
-                if friendship:
-                    update_panel_friendship(friendship)
-            except Exception as e:
-                logger.error("plusi panel notify error: %s", e)
-            # Check if a reflect window is open — trigger after interaction
-            try:
-                from .. import check_and_trigger_reflect
-                check_and_trigger_reflect()
-            except Exception:
-                pass
+                    agent.on_finished(self, agent_name, result)
+                except Exception as e:
+                    logger.error("Subagent[%s] on_finished error: %s", agent_name, e)
         except Exception as e:
-            logger.error("plusiDirect error: %s", e)
-            payload = {
-                'type': 'plusi_direct_result',
-                'mood': 'neutral',
-                'text': '',
-                'error': True
-            }
-            self.web_view.page().runJavaScript(
-                f"window.ankiReceive({json.dumps(payload)});"
-            )
+            logger.error("Subagent[%s] finished handler error: %s", agent_name, e)
+
+    def _on_subagent_error(self, agent_name, error_msg):
+        """Handle subagent error on main thread."""
+        logger.error("Subagent[%s] error: %s", agent_name, error_msg)
+        payload = {
+            'type': 'subagent_result',
+            'agent_name': agent_name,
+            'text': '',
+            'error': True,
+        }
+        self.web_view.page().runJavaScript(
+            f"window.ankiReceive({json.dumps(payload)});"
+        )
 
     def _sync_plusi_integrity(self):
         """Sync integrity glow and sleep state to dock."""
