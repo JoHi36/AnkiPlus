@@ -7,6 +7,7 @@ export default function useInsights() {
   const [revlogData, setRevlogData] = useState([]);
   const [isExtracting, setIsExtracting] = useState(false);
   const [currentCardId, setCurrentCardId] = useState(null);
+  const [newInsightIds, setNewInsightIds] = useState([]);
 
   const loadInsights = useCallback((cardId) => {
     if (!cardId) return;
@@ -37,6 +38,12 @@ export default function useInsights() {
     });
   }, [insights]);
 
+  const markInsightsSeen = useCallback((cardId) => {
+    if (!cardId) return;
+    setNewInsightIds([]);
+    window.ankiBridge?.addMessage('markInsightsSeen', { cardId });
+  }, []);
+
   useEffect(() => {
     const onInsightsLoaded = (e) => {
       const data = e.detail;
@@ -57,6 +64,7 @@ export default function useInsights() {
       setIsExtracting(false);
       if (data?.success && data.insights) {
         setInsights(data.insights);
+        setNewInsightIds(data.insights.new_indices || []);
       }
     };
 
@@ -83,9 +91,11 @@ export default function useInsights() {
     chartData,
     isExtracting,
     currentCardId,
+    newInsightIds,
     loadInsights,
     saveInsights,
     extractInsights,
+    markInsightsSeen,
     setInsights,
   };
 }
