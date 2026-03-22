@@ -38,6 +38,8 @@ export interface ChatInputProps {
   plusiEnabled?: boolean; // When false, @Plusi detection/highlighting is disabled
   topSlot?: React.ReactNode; // Optional content rendered above the textarea (e.g. token budget slider)
   hideInput?: boolean; // When true, hide the textarea row (topSlot + actionbar only)
+  onFocus?: () => void; // Called when the textarea gains focus
+  onBlur?: () => void;  // Called when the textarea loses focus
 }
 
 /** Renders agent icon — uses createPlusi for Plusi, registry SVG for others.
@@ -99,6 +101,8 @@ export default function ChatInput({
   plusiEnabled = true,
   topSlot,
   hideInput = false,
+  onFocus: onFocusProp,
+  onBlur: onBlurProp,
 }: ChatInputProps) {
   const [input, setInput] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -414,8 +418,8 @@ export default function ChatInput({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
+            onFocus={() => { setIsFocused(true); onFocusProp?.(); }}
+            onBlur={() => { setIsFocused(false); onBlurProp?.(); }}
             placeholder="Stelle eine Frage..."
             data-chat-input="true"
             rows={1}
