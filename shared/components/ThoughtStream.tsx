@@ -1,34 +1,28 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SourcesCarousel from './SourcesCarousel';
 
 /* ═══════════════════════════════════════════════════
-   ThoughtStream v4 — Smart Pipeline + Phase Animations
-   - Guaranteed visibility queue (800ms min per step)
-   - Phase-specific Active Box content (SQL tags, Embedding glow, Merge bar, Shimmer)
-   - Two states per step: active (loading) → done (results) inside same box
-   - Clean collapse/expand for saved messages
+   ThoughtStream v6 — Accumulating Pipeline + Phase Animations
+   - Steps accumulate in a flat list
+   - Each step updates status inline (active → done)
+   - New steps throttled by MIN_STEP_INTERVAL
+   - No promotion queue, no Active Box
    ═══════════════════════════════════════════════════ */
 
-const MIN_PHASE_DURATION = 800;
-const DONE_GRACE = 300; // Extra ms to show results after done
+const MIN_STEP_INTERVAL = 800;
 
 const KEYFRAMES = `
 @keyframes ts-phaseReveal {
   from { opacity: 0; transform: translateY(-3px); }
   to { opacity: 1; transform: translateY(0); }
 }
+@keyframes ts-containerFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 @keyframes ts-dotPulse {
   0%, 100% { opacity: 0.3; transform: scale(1); }
   50% { opacity: 1; transform: scale(1.3); }
-}
-@keyframes ts-routerScan {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-@keyframes ts-routerDotFloat {
-  0%, 100% { transform: translateX(0); opacity: 0.4; }
-  50% { transform: translateX(3px); opacity: 0.8; }
 }
 @keyframes ts-pulseIn {
   0% { opacity: 0; transform: scale(0.95); }
@@ -57,26 +51,22 @@ interface PipelineStep {
   timestamp: number;
 }
 
-interface ActiveEntry {
+interface DisplayStep {
   step: string;
   status: 'active' | 'done' | 'error';
   data: Record<string, any>;
-  label: string;
-}
-
-interface DoneEntry {
-  step: string;
-  label: string;
-  isError: boolean;
+  visibleSince: number;
 }
 
 export interface ThoughtStreamProps {
   pipelineSteps?: PipelineStep[];
+  pipelineGeneration?: number;
+  agentColor?: string;
   citations?: Record<string, any>;
   citationIndices?: Record<string, number>;
   isStreaming?: boolean;
   bridge?: any;
-  onPreviewCard?: (citation: Citation) => void;
+  onPreviewCard?: (citation: any) => void;
   message?: string;
   steps?: any[];
   intent?: string | null;
@@ -134,137 +124,123 @@ function getDoneLabel(step: string, data: Record<string, any>, status: string): 
 }
 
 /* ═══════════════════════════════════════════════════
-   SMART PIPELINE HOOK
-   - Tracks activeEntry (what's in the Active Box)
-   - Guarantees MIN_PHASE_DURATION visibility per step
-   - Shows active→done transition in the same box
-   - Uses polling interval to drive promotions (no recursive setTimeout chains)
+   ACCUMULATING PIPELINE HOOK (v6)
+   - Steps accumulate in a flat list
+   - Each step updates status inline (active → done)
+   - New steps throttled by MIN_STEP_INTERVAL
+   - No promotion queue, no Active Box
    ═══════════════════════════════════════════════════ */
 
-function useSmartPipeline(pipelineSteps: PipelineStep[]) {
-  const [activeEntry, setActiveEntry] = useState<ActiveEntry | null>(null);
-  const [doneStack, setDoneStack] = useState<DoneEntry[]>([]);
+function useAccumulatingPipeline(
+  pipelineSteps: PipelineStep[],
+  generation: number = 0
+): { displaySteps: DisplayStep[]; isProcessing: boolean } {
+  const [displaySteps, setDisplaySteps] = useState<DisplayStep[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const queueRef = useRef<PipelineStep[]>([]);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastShowTimeRef = useRef(0);
+  const prevGenerationRef = useRef(generation);
+  const knownStepsRef = useRef<Set<string>>(new Set());
 
-  const pendingRef = useRef<ActiveEntry[]>([]);
-  const seenRef = useRef<Set<string>>(new Set());
-  const activeRef = useRef<ActiveEntry | null>(null);
-  const showStartRef = useRef<number>(0);
-  // Track if a promotion is already scheduled
-  const promotionScheduledRef = useRef(false);
-
-  // Promote: move active → done stack, show next from queue
-  const promote = useCallback(() => {
-    promotionScheduledRef.current = false;
-    const current = activeRef.current;
-    if (current) {
-      const label = getDoneLabel(current.step, current.data, current.status);
-      setDoneStack(prev => [{ step: current.step, label, isError: current.status === 'error' }, ...prev]);
+  // Reset on new generation
+  useEffect(() => {
+    if (generation !== prevGenerationRef.current) {
+      prevGenerationRef.current = generation;
+      setDisplaySteps([]);
+      setIsProcessing(false);
+      queueRef.current = [];
+      knownStepsRef.current = new Set();
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = null;
+      lastShowTimeRef.current = 0;
     }
-    // Show next
-    const next = pendingRef.current.shift();
-    if (next) {
-      activeRef.current = next;
-      setActiveEntry({ ...next });
-      showStartRef.current = Date.now();
-      // If already done, schedule promotion after min time + grace
-      if (next.status !== 'active') {
-        schedulePromotion(MIN_PHASE_DURATION + DONE_GRACE);
+  }, [generation]);
+
+  const flushQueue = useCallback(() => {
+    if (queueRef.current.length === 0 || timerRef.current) return;
+    const elapsed = Date.now() - lastShowTimeRef.current;
+    const delay = Math.max(0, MIN_STEP_INTERVAL - elapsed);
+
+    const showNext = () => {
+      if (queueRef.current.length === 0) return;
+      const next = queueRef.current.shift()!;
+      lastShowTimeRef.current = Date.now();
+      setDisplaySteps(prev => [
+        ...prev,
+        { step: next.step, status: next.status, data: next.data || {}, visibleSince: Date.now() }
+      ]);
+      // Continue flushing if more queued
+      if (queueRef.current.length > 0) {
+        timerRef.current = setTimeout(() => {
+          timerRef.current = null;
+          showNext();
+        }, MIN_STEP_INTERVAL);
       }
+    };
+
+    if (delay === 0) {
+      showNext();
     } else {
-      activeRef.current = null;
-      setActiveEntry(null);
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
+        showNext();
+      }, delay);
     }
   }, []);
 
-  const schedulePromotion = useCallback((delay: number) => {
-    if (promotionScheduledRef.current) return; // already scheduled
-    promotionScheduledRef.current = true;
-    setTimeout(() => promote(), delay);
-  }, [promote]);
-
-  // Ingest pipeline steps
+  // Process incoming pipeline steps
   useEffect(() => {
-    if (!pipelineSteps || pipelineSteps.length === 0) {
-      pendingRef.current = [];
-      seenRef.current = new Set();
-      activeRef.current = null;
-      promotionScheduledRef.current = false;
-      setActiveEntry(null);
-      setDoneStack([]);
-      setIsProcessing(false);
-      return;
-    }
-
+    if (!pipelineSteps || pipelineSteps.length === 0) return;
     setIsProcessing(true);
 
+    // 1. Update existing displayed steps (status/data changes)
+    setDisplaySteps(prev => {
+      let changed = false;
+      const updated = prev.map(ds => {
+        const source = pipelineSteps.find(s => s.step === ds.step);
+        if (!source) return ds;
+        const statusChanged = source.status !== ds.status;
+        const dataChanged = source.data && JSON.stringify(source.data) !== JSON.stringify(ds.data);
+        if (statusChanged || dataChanged) {
+          changed = true;
+          return { ...ds, status: source.status, data: source.data || ds.data };
+        }
+        return ds;
+      });
+      return changed ? updated : prev;
+    });
+
+    // 2. Queue new steps (ref-only, no setState)
     for (const s of pipelineSteps) {
-      const entry: ActiveEntry = {
-        step: s.step,
-        status: s.status,
-        data: s.data || {},
-        label: getDoneLabel(s.step, s.data || {}, s.status),
-      };
-
-      // Currently showing in Active Box?
-      if (activeRef.current && activeRef.current.step === s.step) {
-        activeRef.current = entry;
-        setActiveEntry({ ...entry });
-
-        // If it went done and no promotion scheduled yet, check timing
-        if (s.status !== 'active' && !promotionScheduledRef.current) {
-          const elapsed = Date.now() - showStartRef.current;
-          const remaining = Math.max(0, MIN_PHASE_DURATION - elapsed) + DONE_GRACE;
-          schedulePromotion(remaining);
-        }
-        continue;
-      }
-
-      // Already seen?
-      if (seenRef.current.has(s.step)) {
-        // In pending queue?
-        const pendingIdx = pendingRef.current.findIndex(p => p.step === s.step);
-        if (pendingIdx >= 0) {
-          pendingRef.current[pendingIdx] = entry;
-          continue;
-        }
-        // In done stack — update label
-        if (s.status !== 'active') {
-          const label = getDoneLabel(s.step, s.data || {}, s.status);
-          setDoneStack(prev => prev.map(d => d.step === s.step ? { ...d, label, isError: s.status === 'error' } : d));
-        }
-        continue;
-      }
-
-      // New step
-      seenRef.current.add(s.step);
-
-      if (!activeRef.current) {
-        // Show immediately
-        activeRef.current = entry;
-        setActiveEntry({ ...entry });
-        showStartRef.current = Date.now();
-
-        // If arrives already done, schedule promotion
-        if (s.status !== 'active') {
-          schedulePromotion(MIN_PHASE_DURATION + DONE_GRACE);
-        }
-      } else {
-        pendingRef.current.push(entry);
+      if (!knownStepsRef.current.has(s.step)) {
+        knownStepsRef.current.add(s.step);
+        queueRef.current.push(s);
       }
     }
-  }, [pipelineSteps, schedulePromotion]);
 
-  // Detect when processing is truly done
+    // 3. Flush queue
+    flushQueue();
+  }, [pipelineSteps, flushQueue]);
+
+  // Detect processing end
   useEffect(() => {
-    if (!activeEntry && pendingRef.current.length === 0 && seenRef.current.size > 0 &&
-        !pipelineSteps?.some(s => s.status === 'active')) {
-      const t = setTimeout(() => setIsProcessing(false), 100);
+    if (displaySteps.length > 0 &&
+        queueRef.current.length === 0 &&
+        !displaySteps.some(d => d.status === 'active')) {
+      const t = setTimeout(() => setIsProcessing(false), 200);
       return () => clearTimeout(t);
     }
-  }, [activeEntry, pipelineSteps]);
+  }, [displaySteps]);
 
-  return { activeEntry, doneStack, isProcessing };
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  return { displaySteps, isProcessing };
 }
 
 /* ═══════════════════════════════════════════════════
@@ -542,7 +518,7 @@ function MergeBar({ data }: { data: Record<string, any> }) {
    PHASE ROW — Unified renderer for active + done
    ═══════════════════════════════════════════════════ */
 
-function PhaseRow({ step, data, status, isActive, isFirst = false, animate = true }: { step: string; data: Record<string, any>; status: string; isActive: boolean; isFirst?: boolean; animate?: boolean }) {
+function PhaseRow({ step, data, status, isActive, isFirst = false, animate = true, agentColor }: { step: string; data: Record<string, any>; status: string; isActive: boolean; isFirst?: boolean; animate?: boolean; agentColor?: string }) {
   const isDone = !isActive;
 
   // Title logic
@@ -585,14 +561,14 @@ function PhaseRow({ step, data, status, isActive, isFirst = false, animate = tru
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {/* Dot */}
         {isDone ? (
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'rgba(20,184,166,0.5)', flexShrink: 0, willChange: 'transform, opacity', contain: 'layout style' }} />
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: agentColor ? `${agentColor}80` : 'rgba(20,184,166,0.5)', flexShrink: 0, willChange: 'transform, opacity', contain: 'layout style' }} />
         ) : (
           <div
             style={{
               width: 6,
               height: 6,
               borderRadius: '50%',
-              background: 'var(--ds-accent)',
+              background: agentColor || 'var(--ds-accent)',
               flexShrink: 0,
               animation: animate ? 'ts-dotPulse 1.5s ease-in-out infinite' : undefined,
               willChange: 'transform, opacity',
@@ -723,11 +699,13 @@ function LegacyThoughtStream({ steps, citations, citationIndices, bridge, onPrev
 }
 
 /* ═══════════════════════════════════════════════════
-   MAIN COMPONENT (v5)
+   MAIN COMPONENT (v6)
    ═══════════════════════════════════════════════════ */
 
 export default function ThoughtStream({
   pipelineSteps = [],
+  pipelineGeneration = 0,
+  agentColor,
   citations = {},
   citationIndices = {},
   isStreaming = false,
@@ -739,25 +717,22 @@ export default function ThoughtStream({
 }: ThoughtStreamProps) {
   // Inject keyframes once
   useEffect(() => {
-    if (typeof document !== 'undefined' && !document.getElementById('ts-keyframes-v5')) {
+    if (typeof document !== 'undefined' && !document.getElementById('ts-keyframes-v6')) {
       const s = document.createElement('style');
-      s.id = 'ts-keyframes-v5';
+      s.id = 'ts-keyframes-v6';
       s.textContent = KEYFRAMES;
       document.head.appendChild(s);
       // Remove old keyframes if present
-      const oldV4 = document.getElementById('ts-keyframes-v4');
-      if (oldV4) oldV4.remove();
-      const old = document.getElementById('ts-keyframes');
-      if (old) old.remove();
+      for (const oldId of ['ts-keyframes-v5', 'ts-keyframes-v4', 'ts-keyframes']) {
+        const old = document.getElementById(oldId);
+        if (old) old.remove();
+      }
     }
   }, []);
 
   const isLegacy = pipelineSteps.length === 0 && steps.length > 0;
-  const { activeEntry, doneStack, isProcessing } = useSmartPipeline(pipelineSteps);
+  const { displaySteps, isProcessing } = useAccumulatingPipeline(pipelineSteps, pipelineGeneration);
   const animate = isStreaming || isProcessing;
-
-  // Reverse doneStack for chronological display (doneStack is newest-first)
-  const chronologicalDone = useMemo(() => [...doneStack].reverse(), [doneStack]);
 
   // Collapse state
   const hasText = Boolean(message && message.trim().length > 0);
@@ -766,13 +741,11 @@ export default function ThoughtStream({
   // Track if user manually expanded — prevents auto-collapse from overriding user intent
   const userExpandedRef = useRef(false);
 
-  // Auto-collapse: when streaming message text appears, collapse the pipeline
-  // Two conditions: (a) text arrived, (b) user hasn't manually re-expanded
-  // This fires regardless of isProcessing/activeEntry — text arriving = time to collapse
+  // Auto-collapse: when streaming message text appears, collapse immediately
+  // No delay — the moment text starts streaming, the pipeline collapses
   useEffect(() => {
     if (hasText && !isCollapsed && !userExpandedRef.current) {
-      const t = setTimeout(() => setIsCollapsed(true), 800);
-      return () => clearTimeout(t);
+      setIsCollapsed(true);
     }
   }, [hasText, isCollapsed]);
 
@@ -787,18 +760,25 @@ export default function ThoughtStream({
   const hasCitations = Object.keys(citations).length > 0;
   const citationCount = Object.keys(citations).length;
   // Show when processing, has data, OR when streaming started but no events yet
-  const showLoadingBox = isStreaming && !isProcessing && !activeEntry && doneStack.length === 0 && pipelineSteps.length === 0 && !isLegacy;
-  // Include pipelineSteps.length > 0 to prevent flash: steps arrive before useSmartPipeline effect runs
-  const hasContent = isProcessing || activeEntry !== null || doneStack.length > 0 || isLegacy || showLoadingBox || (isStreaming && pipelineSteps.length > 0);
-  const totalSteps = doneStack.length;
+  const showLoadingBox = isStreaming && !isProcessing && displaySteps.length === 0 && pipelineSteps.length === 0 && !isLegacy;
+  // Include pipelineSteps.length > 0 to prevent flash: steps arrive before hook effect runs
+  const hasContent = isProcessing || displaySteps.length > 0 || isLegacy || showLoadingBox || (isStreaming && pipelineSteps.length > 0);
+  const totalSteps = displaySteps.filter(d => d.status !== 'active').length;
 
   if (!hasContent) return null;
   if (isLegacy) return <LegacyThoughtStream steps={steps} citations={citations} citationIndices={citationIndices} bridge={bridge} onPreviewCard={onPreviewCard} />;
 
   return (
-    <div style={{ marginTop: 12, marginBottom: 8, maxWidth: '100%', userSelect: 'none' }}>
+    <div style={{
+      marginTop: 12,
+      marginBottom: 8,
+      maxWidth: '100%',
+      userSelect: 'none',
+      // Only animate fade-in for live streaming, not saved messages (avoids flash on mount)
+      animation: isStreaming ? 'ts-containerFadeIn 0.25s ease-out both' : undefined,
+    }}>
       {/* ── Collapsed view ── */}
-      {isCollapsed && !isProcessing && !showLoadingBox && !(isStreaming && pipelineSteps.length > 0 && !activeEntry) && (
+      {isCollapsed && !isProcessing && !showLoadingBox && !(isStreaming && pipelineSteps.length > 0 && displaySteps.length === 0) && (
         <button
           onClick={() => { userExpandedRef.current = true; setIsCollapsed(false); }}
           style={{
@@ -828,12 +808,12 @@ export default function ThoughtStream({
       )}
 
       {/* ── Expanded view ── */}
-      {(!isCollapsed || showLoadingBox || (isStreaming && pipelineSteps.length > 0 && !activeEntry)) && (
-        <div>
+      {(!isCollapsed || showLoadingBox || (isStreaming && pipelineSteps.length > 0 && displaySteps.length === 0)) && (
+        <div style={{ animation: isStreaming ? 'ts-phaseReveal 0.2s ease-out both' : undefined }}>
           {/* Header row — always visible in expanded view */}
           {(() => {
             const isLoading = (isProcessing || showLoadingBox) && totalSteps === 0;
-            const isLoadingGap = isStreaming && pipelineSteps.length > 0 && !activeEntry && doneStack.length === 0;
+            const isLoadingGap = isStreaming && pipelineSteps.length > 0 && displaySteps.length === 0;
 
             if (isLoading || isLoadingGap) {
               // During loading: non-interactive header with extending line
@@ -879,50 +859,23 @@ export default function ThoughtStream({
             return null;
           })()}
 
-          {/* Loading state: show router skeleton as first step */}
-          {((isProcessing || showLoadingBox) && doneStack.length === 0 && !activeEntry || (isStreaming && pipelineSteps.length > 0 && !activeEntry && doneStack.length === 0)) && (
-            <div style={{ marginLeft: 16 }}>
-              <PhaseRow
-                step="router"
-                data={{}}
-                status="active"
-                isActive={true}
-                isFirst={true}
-                animate={true}
-              />
-            </div>
-          )}
-
-          {/* Step rows — indented under "X Schritte" header */}
+          {/* Step rows — single flat list */}
           <div style={{ marginLeft: 16 }}>
-            {/* Chronological done phases */}
-            {chronologicalDone.map((entry, idx) => (
+            {displaySteps.map((ds, idx) => (
               <PhaseRow
-                key={entry.step}
-                step={entry.step}
-                data={pipelineSteps.find(s => s.step === entry.step)?.data || {}}
-                status={entry.isError ? 'error' : 'done'}
-                isActive={false}
+                key={ds.step}
+                step={ds.step}
+                data={ds.data}
+                status={ds.status}
+                isActive={ds.status === 'active'}
                 isFirst={idx === 0}
                 animate={animate}
+                agentColor={agentColor}
               />
             ))}
 
-            {/* Active phase */}
-            {activeEntry && (
-              <PhaseRow
-                key={`active-${activeEntry.step}`}
-                step={activeEntry.step}
-                data={activeEntry.data}
-                status={activeEntry.status}
-                isActive={activeEntry.status === 'active'}
-                isFirst={chronologicalDone.length === 0}
-                animate={animate}
-              />
-            )}
-
-            {/* Source cards — only after pipeline completes */}
-            {!isProcessing && hasCitations && (
+            {/* Source cards — show after all pipeline steps done */}
+            {hasCitations && !displaySteps.some(d => d.status === 'active') && (
               <SourcesCarousel
                 citations={citations}
                 citationIndices={citationIndices}
