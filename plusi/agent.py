@@ -744,9 +744,11 @@ def _execute_chat_action(action, action_query, next_wake, config):
             # Sync dock visual state after action (must be on main thread)
             try:
                 from aqt import mw
-                if mw and action == 'sleep':
+                if mw:
                     from .dock import sync_mood
-                    mw.taskman.run_on_main(lambda: sync_mood('sleeping'))
+                    mood_map = {'sleep': 'sleeping', 'reflect': 'reflecting', 'search': 'reading'}
+                    dock_mood = mood_map.get(action, 'neutral')
+                    mw.taskman.run_on_main(lambda m=dock_mood: sync_mood(m))
             except Exception:
                 pass
 

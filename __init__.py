@@ -560,10 +560,13 @@ def on_reviewer_did_answer_card(reviewer, card, ease):
         try:
             deck = mw.col.decks.get(card.did)
             deck_name = deck['name'] if deck else 'Unknown'
-            from plusi.storage import record_card_review
+            try:
+                from .plusi.storage import record_card_review
+            except ImportError:
+                from plusi.storage import record_card_review
             record_card_review(deck_name, correct)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("plusi awareness tracking error: %s", e)
 
         # Send to chat panel (React)
         widget = get_chatbot_widget()

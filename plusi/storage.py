@@ -217,6 +217,24 @@ def build_internal_state_context():
         if 'relationship_note' in state:
             lines.append(f"- Beziehungsnotiz: {state['relationship_note']}")
 
+    # Time awareness — always present
+    now = datetime.now()
+    lines.append(f"- Aktuelle Uhrzeit: {now.strftime('%H:%M')}")
+    last_active = get_memory('state', 'last_interaction_ts', None)
+    if last_active:
+        try:
+            hours = (now - datetime.fromisoformat(last_active)).total_seconds() / 3600
+            if hours < 0.5:
+                lines.append("- Du warst gerade erst hier")
+            elif hours < 2:
+                lines.append(f"- {int(hours * 60)} Minuten sind vergangen seit deiner letzten Interaktion")
+            elif hours < 24:
+                lines.append(f"- {hours:.1f} Stunden sind vergangen")
+            else:
+                lines.append(f"- {hours / 24:.1f} Tage sind vergangen")
+        except (ValueError, TypeError):
+            pass
+
     # Integrity-based self-awareness
     integrity = compute_integrity()
     lines.append(f"\n{_integrity_to_feeling(integrity)}")
@@ -248,6 +266,12 @@ def build_internal_state_context():
     if awareness:
         lines.append(f"\n{awareness}")
         clear_awareness_log()
+
+    # Inject search results from last action (one-shot)
+    last_search = get_memory('state', 'last_search_results', None)
+    if last_search:
+        lines.append(f"\nDEINE LETZTE SUCHE HAT ERGEBEN:\n{last_search}")
+        delete_memory('state', 'last_search_results')
 
     # Inject dream if Plusi just woke up (one-shot: cleared after injection)
     last_dream = get_memory('state', 'last_dream', None)
