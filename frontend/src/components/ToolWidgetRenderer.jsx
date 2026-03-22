@@ -9,6 +9,7 @@ import ToolErrorBadge from './ToolErrorBadge';
 import AgenticCell from './AgenticCell';
 import ResearchContent from './ResearchContent';
 import CompactWidget from './CompactWidget';
+import ResearchSourceBadge from './ResearchSourceBadge';
 
 export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, isLastMessage }) {
   if (!toolWidgets || toolWidgets.length === 0) return null;
@@ -27,8 +28,9 @@ export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, i
           if (tw.displayType === 'loading') {
             return <AgenticCell key={`loading-${i}`} agentName="research" isLoading loadingHint={tw.loadingHint} />;
           }
+          const toolUsed = tw.result?.tool_used || 'perplexity';
           return (
-            <AgenticCell key={`widget-${i}`} agentName="research">
+            <AgenticCell key={`widget-${i}`} agentName="research" headerMeta={<ResearchSourceBadge toolUsed={toolUsed} />}>
               <ResearchContent
                 sources={tw.result?.sources}
                 answer={tw.result?.answer}
