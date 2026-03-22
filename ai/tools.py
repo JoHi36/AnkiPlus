@@ -990,3 +990,43 @@ registry.register(ToolDefinition(
     display_type='widget',
     timeout_seconds=15,
 ))
+
+
+# ---------------------------------------------------------------------------
+# Compact Tool — AI-initiated insight extraction
+# ---------------------------------------------------------------------------
+
+COMPACT_SCHEMA = {
+    "name": "compact",
+    "description": (
+        "Schlage dem Nutzer vor, den bisherigen Chat zusammenzufassen "
+        "und die Lernerkenntnisse zu extrahieren. Nutze dieses Tool "
+        "am ENDE deiner Antwort, wenn der Chat lang wird (>6 Nachrichten) "
+        "oder wenn ein Thema abgeschlossen scheint. "
+        "Das Tool rendert einen Bestätigungs-Button. Keine Parameter nötig."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {},
+    },
+}
+
+
+def execute_compact(args):
+    """No-op execution — the tool is a UI signal, not a data processor."""
+    return {"type": "compact"}
+
+
+registry.register(
+    ToolDefinition(
+        name="compact",
+        schema=COMPACT_SCHEMA,
+        execute_fn=execute_compact,
+        category="meta",
+        config_key=None,
+        agent="tutor",
+        disabled_modes=[],
+        display_type="widget",
+        timeout_seconds=1,
+    )
+)
