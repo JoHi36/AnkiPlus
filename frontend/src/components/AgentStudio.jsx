@@ -1,5 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
+function ResearchIcon({ size = 28 }) {
+  const c = '#00D084';
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <line x1="12" y1="12" x2="12" y2="2"/>
+      <path d="M12 12 L16.24 7.76" strokeWidth="2.5"/>
+      <circle cx="12" cy="12" r="6" opacity="0.4"/>
+      <circle cx="12" cy="12" r="2" fill={c} stroke="none"/>
+    </svg>
+  );
+}
+
 function PlusiIcon({ size = 28 }) {
   return (
     <svg viewBox="0 0 120 120" width={size} height={size}>
@@ -95,6 +108,7 @@ function SectionHeader({ title, tooltip }) {
 export default function AgentStudio({ bridge, onNavigateToPlusi }) {
   const [tools, setTools] = useState({});
   const [mascotEnabled, setMascotEnabled] = useState(false);
+  const [researchEnabled, setResearchEnabled] = useState(true);
   const [embedding, setEmbedding] = useState({ embeddedCards: 0, totalCards: 0, isRunning: false });
 
   // Load config and tools via async message queue
@@ -106,6 +120,7 @@ export default function AgentStudio({ bridge, onNavigateToPlusi }) {
       if (data) {
         setTools(data.ai_tools || data.aiTools || {});
         setMascotEnabled(data.mascot_enabled || data.mascotEnabled || false);
+        setResearchEnabled(data.research_enabled ?? data.researchEnabled ?? true);
       }
     };
     const onToolsLoaded = (e) => {
@@ -168,6 +183,14 @@ export default function AgentStudio({ bridge, onNavigateToPlusi }) {
       return next;
     });
   }, [bridge]);
+
+  const handleToggleResearch = useCallback(() => {
+    setResearchEnabled(prev => {
+      const next = !prev;
+      window.ankiBridge?.addMessage('saveSubagentEnabled', { name: 'research', enabled: next });
+      return next;
+    });
+  }, []);
 
   const embedPct = embedding.totalCards > 0
     ? Math.round((embedding.embeddedCards / embedding.totalCards) * 100)
@@ -288,6 +311,21 @@ export default function AgentStudio({ bridge, onNavigateToPlusi }) {
               </div>
             </>
           )}
+
+          <div style={{ height: 1, background: 'var(--ds-border-subtle, rgba(255,255,255,0.06))' }} />
+
+          <div style={S.toolRow}>
+            <div style={{ marginRight: 10 }}><ResearchIcon size={28} /></div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ds-text-secondary, rgba(255,255,255,0.7))' }}>Research Agent</span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))', marginTop: 1 }}>
+                Internet-Recherche mit Quellenangaben
+              </div>
+            </div>
+            <Toggle on={researchEnabled} onChange={handleToggleResearch} />
+          </div>
         </div>
       </div>
     </div>

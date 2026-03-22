@@ -484,6 +484,7 @@ class ChatbotWidget(QWidget):
             'getAITools': self._msg_get_ai_tools,
             'saveAITools': self._msg_save_ai_tools,
             'saveMascotEnabled': self._msg_save_mascot_enabled,
+            'saveSubagentEnabled': self._msg_save_subagent_enabled,
             'getEmbeddingStatus': self._msg_get_embedding_status,
             'getPlusiMenuData': self._msg_get_plusi_menu_data,
             'savePlusiAutonomy': self._msg_save_plusi_autonomy,
@@ -829,6 +830,26 @@ class ChatbotWidget(QWidget):
                         web.page().runJavaScript(js)
         except Exception as e:
             logger.warning("Failed to toggle Plusi dock: %s", e)
+
+    def _msg_save_subagent_enabled(self, data):
+        """Toggle any subagent on/off by its enabled_key."""
+        try:
+            name = data.get('name', '') if isinstance(data, dict) else ''
+            enabled = bool(data.get('enabled', False)) if isinstance(data, dict) else False
+            # Map subagent name to its config enabled_key
+            try:
+                from ..ai.subagents import SUBAGENT_REGISTRY
+            except ImportError:
+                from ai.subagents import SUBAGENT_REGISTRY
+            agent = SUBAGENT_REGISTRY.get(name)
+            if agent:
+                update_config(**{agent.enabled_key: enabled})
+                self.config = get_config(force_reload=True)
+                logger.info("Subagent %s %s", name, "enabled" if enabled else "disabled")
+            else:
+                logger.warning("Unknown subagent: %s", name)
+        except Exception as e:
+            logger.exception("saveSubagentEnabled error: %s", e)
 
     def _msg_get_embedding_status(self, data):
         """Return embedding indexing progress to frontend."""
