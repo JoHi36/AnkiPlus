@@ -28,13 +28,13 @@ class AgentDefinition:
     description: str                   # One-line for UI/router
 
     # Visual
-    color: str                         # Hex color or 'transparent'
-    icon_type: str                     # 'svg', 'emote', 'none'
-    icon_svg: str                      # SVG markup (or empty)
-    badge_logo: str                    # 'anki', 'perplexity', '' etc.
+    color: str = ''                    # Hex color or 'transparent'
+    icon_type: str = 'svg'             # 'svg', 'emote', 'none'
+    icon_svg: str = ''                 # SVG markup (or empty)
+    badge_logo: str = ''               # 'anki', 'perplexity', '' etc.
 
     # Configuration
-    enabled_key: str                   # Config key: 'tutor_enabled'
+    enabled_key: str = ''              # Config key: 'tutor_enabled'
     is_default: bool = False           # True only for Tutor
 
     # Execution

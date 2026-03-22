@@ -113,7 +113,7 @@ class TestSubagentRegistry:
         )
         assert d.icon_type == 'svg'
         assert d.icon_svg == ''
-        assert d.loading_hint_template == ''
+        assert d.loading_hint_template == '{label} arbeitet...'
 
     def test_registry_for_frontend_includes_new_fields(self):
         from ai.subagents import SubagentDefinition, register_subagent, get_registry_for_frontend, SUBAGENT_REGISTRY
