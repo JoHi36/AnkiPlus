@@ -42,18 +42,26 @@ BISHERIGE ERKENNTNISSE: {existing_insights}
 CHAT:
 {chat_messages}
 
+FOKUS:
+Du analysierst das VERHALTEN DES NUTZERS, nicht den Inhalt der Tutor-Antworten.
+Fasse NICHT zusammen was der Tutor erklärt hat. Erfasse stattdessen:
+- Was hat der Nutzer GEFRAGT? (zeigt Wissenslücke)
+- Was hat der Nutzer FALSCH verstanden oder verwechselt?
+- Wo war der Nutzer UNSICHER?
+- Was hat der Nutzer erst nach Erklärung verstanden? (Schlüsselmoment)
+
 REGELN:
-- Extrahiere NUR Erkenntnisse die direkt mit dem Karteninhalt zu tun haben
-- Ignoriere Off-Topic-Gespräche, UI-Tests, Smalltalk oder Fragen die nichts mit der Karte zu tun haben
-- Typ "learned": Konzept verstanden, Wissen bestätigt, neue Fakten gelernt
-- Typ "weakness": Fehler gemacht, Verwechslung, Unsicherheit beim User
-- Priorisiere: User-Fehler > neue Konzepte > Bestätigungen
-- Merge mit bisherigen Erkenntnissen: Duplikate entfernen, Widersprüche aktualisieren, max 10 Einträge
-- Wenn keine neuen kartenrelevanten Erkenntnisse vorhanden: gib die bisherigen Erkenntnisse unverändert zurück
+- Typ "weakness": Fehler, Verwechslung, Unsicherheit, falsche Annahme des Nutzers
+- Typ "learned": Konzept das der Nutzer erst durch den Chat verstanden hat
+- NICHT: Fakten die der Tutor erklärt hat (das steht auf der Karte)
+- NICHT: Allgemeinwissen oder Kontext den der Tutor ergänzt hat
+- NUR kartenrelevante Erkenntnisse, kein Off-Topic/Smalltalk
+- Merge mit bisherigen Erkenntnissen: Duplikate entfernen, max 10 Einträge
+- Wenn keine neuen Erkenntnisse zum User-Verhalten: bisherige unverändert zurückgeben
 - NUR das JSON-Objekt ausgeben, KEIN anderer Text
 
 BEISPIEL-OUTPUT:
-{{"version":1,"insights":[{{"text":"Kompetitive Hemmung erhöht Km, nicht Vmax","type":"learned"}},{{"text":"Verwechslung: allosterisch ≠ nicht-kompetitiv","type":"weakness"}}]}}"""
+{{"version":1,"insights":[{{"text":"Verwechslung: kompetitiv vs. nicht-kompetitiv bei Enzymhemmung","type":"weakness"}},{{"text":"Erst nach Erklärung verstanden: Km ändert sich nur bei kompetitiver Hemmung","type":"learned"}}]}}"""
 
 
 def _strip_html(text):
