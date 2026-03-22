@@ -61,7 +61,7 @@ function CipherSpan({ length }) {
     <span
       style={{
         display: 'inline',
-        color: 'rgba(255,255,255,0.18)',
+        color: 'var(--ds-text-muted, rgba(255,255,255,0.18))',
         fontSize: 14,
         wordBreak: 'break-all',
         userSelect: 'none',
