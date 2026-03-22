@@ -119,6 +119,23 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
   // Verwendet Refs um immer die aktuelle Session-ID und Section-ID zu haben
   const appendMessage = useCallback((text, from, steps = [], citations = {}, requestId = null, stepLabels = [], pipelineData = null) => {
     console.log(`💬 useChat: Füge Nachricht hinzu (${from}):`, text.substring(0, 50) + (text.length > 50 ? '...' : ''));
+
+    // Extract webSources from search_web tool markers in the message text
+    let webSources = null;
+    if (from === 'bot') {
+      const toolMarkers = [...text.matchAll(/\[\[TOOL:(\{.*?\})\]\]/g)];
+      for (const match of toolMarkers) {
+        try {
+          const toolData = JSON.parse(match[1]);
+          if (toolData.name === 'search_web' && toolData.result?.sources) {
+            webSources = toolData.result.sources;
+          }
+        } catch (e) {
+          // Ignore parse errors
+        }
+      }
+    }
+
     const newMessage = {
       text,
       from,
@@ -128,6 +145,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       citations: citations || {},  // NEW: Citations map
       request_id: requestId || activeRequestIdRef.current,  // Link to request
       pipeline_data: pipelineData,  // Full pipeline step data for persistent ThoughtStream
+      ...(webSources ? { webSources } : {}),  // Web sources from search_web tool for [[WEB:N]] citations
     };
     
     // CRITICAL PATH: Update messages immediately

@@ -2181,6 +2181,7 @@ function AppInner() {
                                   steps={msg.steps || EMPTY_STEPS}
                                   citations={msg.citations || EMPTY_CITATIONS}
                                   pipelineSteps={msg.pipeline_data || []}
+                                  webSources={msg.webSources || null}
                                   bridge={bridge}
                                   isLastMessage={false}
                                   onAnswerSelect={(letter, isCorrect) => {
@@ -2277,6 +2278,7 @@ function AppInner() {
                                                                 steps={nextMsg.steps || []}
                                                                 citations={nextMsg.citations || {}}
                                                                 pipelineSteps={nextMsg.pipeline_data || []}
+                                                                webSources={nextMsg.webSources || null}
                                                                 bridge={bridge}
                                                                 isLastMessage={!chatHook.isLoading && !chatHook.streamingMessage}
                                                                 onAnswerSelect={(letter, isCorrect) => {

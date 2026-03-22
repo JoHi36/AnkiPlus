@@ -10,6 +10,7 @@ import ReviewFeedback from './ReviewFeedback';
 import ReviewResult from './ReviewResult';
 import MultipleChoiceCard from './MultipleChoiceCard';
 import CitationBadge from './CitationBadge';
+import WebCitationBadge from './WebCitationBadge';
 import ThoughtStream from './ThoughtStream';
 import ToolWidgetRenderer from './ToolWidgetRenderer';
 import mermaid from 'mermaid';
@@ -1241,13 +1242,14 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
  * ChatMessage Komponente - INTENT BASED RENDERING
  * Analysiert JSON-Daten oder Intents und rendert die entsprechende High-End Card.
  */
-function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, isStreaming = false, isLastMessage = false, steps = [], citations = {}, pipelineSteps = [], bridge = null, onPreviewCard, onPerformanceCapture }) {
+function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, isStreaming = false, isLastMessage = false, steps = [], citations = {}, pipelineSteps = [], bridge = null, onPreviewCard, onPerformanceCapture, webSources: webSourcesProp = null }) {
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [answerFeedback, setAnswerFeedback] = useState(null);
   const [score, setScore] = useState(null);
   const [reviewData, setReviewData] = useState(null);
   const [quizData, setQuizData] = useState(null);
   const [toolWidgets, setToolWidgets] = useState([]);
+  const [webSources, setWebSources] = useState(webSourcesProp || []); // Sources from search_web tool for [[WEB:N]] citation resolution
   const [intent, setIntent] = useState(null); // 'REVIEW', 'MC', 'HINT', 'EXPLANATION', 'MNEMONIC', 'CHAT'
   const [routerIntent, setRouterIntent] = useState(null); // Router intent: 'EXPLANATION', 'FACT_CHECK', 'MNEMONIC', 'QUIZ', 'CHAT'
   
@@ -1435,6 +1437,10 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                                 updated.push(toolData);
                             }
                         }
+                        // Extract webSources from search_web tool results for [[WEB:N]] citation resolution
+                        if (toolData.name === 'search_web' && toolData.result?.sources) {
+                            setWebSources(toolData.result.sources);
+                        }
                     } catch (e) {
                         console.warn('Failed to parse TOOL marker:', e);
                     }
@@ -1528,6 +1534,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
   processedMessage = processedMessage.replace(/\[\[SCORE:\s*\d+\]\]/g, '');
   processedMessage = processedMessage.replace(/\[\[INTENT:\s*\w+\]\]/g, '');
   processedMessage = processedMessage.replace(/\[\[TOOL:\{.*?\}\]\]/g, '');
+  // [[WEB:N]] markers are replaced with inline WebCitationBadge components during rendering (see below)
   // Remove "JSON undefined" artefacts if any leaked
   processedMessage = processedMessage.replace(/JSON\s*\n\s*undefined/g, '');
   
@@ -1608,8 +1615,21 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
         return match; // Keep original if citation not found or no index
       });
     }
+    // Replace [[WEB:N]] markers with special markdown links for WebCitationBadge rendering
+    if (webSources && webSources.length > 0) {
+      const webCiteRegex = /\[\[WEB:(\d+)\]\]/g;
+      message = message.replace(webCiteRegex, (match, indexStr) => {
+        const idx = parseInt(indexStr, 10);
+        const source = webSources[idx - 1]; // WEB:1 → webSources[0]
+        if (source) {
+          const url = source.url || '';
+          return `[WEB:${idx}](webcite:${idx}:${encodeURIComponent(url)})`;
+        }
+        return match; // Keep original if source not found
+      });
+    }
     return message;
-  }, [processedMessage, citations, citationIndices]);
+  }, [processedMessage, citations, citationIndices, webSources]);
     
   // Handler für MC Klick
   const handleAnswerClick = (option) => {
@@ -1783,7 +1803,8 @@ const MemoizedChatMessage = React.memo(ChatMessage, (prevProps, nextProps) => {
          prevProps.isLastMessage === nextProps.isLastMessage &&
          prevProps.cardContext === nextProps.cardContext &&
          prevProps.steps === nextProps.steps &&
-         prevProps.citations === nextProps.citations;
+         prevProps.citations === nextProps.citations &&
+         prevProps.webSources === nextProps.webSources;
 });
 
 MemoizedChatMessage.displayName = 'ChatMessage';
@@ -2179,6 +2200,18 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                                 }
                                 // If citation not found, render as normal link (fallback)
                                 return <a href={href} {...props}>{children}</a>;
+                              }
+                              // Check if this is a web citation link (format: webcite:INDEX:ENCODED_URL)
+                              if (href && href.startsWith('webcite:')) {
+                                const parts = href.split(':');
+                                const webIndex = parseInt(parts[1], 10);
+                                const webUrl = decodeURIComponent(parts.slice(2).join(':'));
+                                return (
+                                  <WebCitationBadge
+                                    index={webIndex}
+                                    url={webUrl}
+                                  />
+                                );
                               }
                               // Normal link - check if it's a number that might be a citation
                               // Normal link - CRITICAL: Prevent default if href is empty, #, or undefined
