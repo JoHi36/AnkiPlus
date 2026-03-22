@@ -270,55 +270,92 @@ export default function ChatInput({
           <div style={{
             position: 'absolute',
             bottom: '100%',
-            left: 0,
-            right: 0,
-            marginBottom: 4,
-            background: 'var(--ds-bg-canvas)',
+            left: 8,
+            right: 8,
+            marginBottom: 6,
+            background: 'var(--ds-bg-frosted)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
             border: '1px solid var(--ds-border-subtle)',
-            borderRadius: 12,
+            borderRadius: 14,
             overflow: 'hidden',
-            boxShadow: '0 -4px 20px rgba(0,0,0,0.3)',
+            boxShadow: '0 -8px 32px rgba(0,0,0,0.25)',
             zIndex: 50,
           }}>
-            {mentionAgents.map((agent, i) => (
-              <div
-                key={agent.name}
-                onClick={() => selectMentionAgent(agent)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  padding: '10px 14px',
-                  cursor: 'pointer',
-                  background: i === mentionIndex ? 'var(--ds-hover-tint)' : 'transparent',
-                  transition: 'background 0.1s',
-                }}
-                onMouseEnter={() => setMentionIndex(i)}
-              >
-                {/* Agent color dot */}
-                <div style={{
-                  width: 8, height: 8, borderRadius: '50%',
-                  background: agent.color, flexShrink: 0,
-                  boxShadow: `0 0 6px ${agent.color}60`,
-                }} />
-                {/* Agent name */}
-                <span style={{
-                  fontSize: 13, fontWeight: 500,
-                  color: 'var(--ds-text-primary)',
-                  flex: 1,
-                }}>
-                  @{agent.label}
-                </span>
-                {/* Keyboard hint */}
-                <span style={{
-                  fontSize: 10,
-                  color: 'var(--ds-text-muted)',
-                  fontFamily: 'monospace',
-                }}>
-                  {i === mentionIndex ? 'Tab ↵' : ''}
-                </span>
-              </div>
-            ))}
+            <div style={{
+              padding: '6px 12px 4px',
+              fontSize: 9,
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.8px',
+              color: 'var(--ds-text-muted)',
+            }}>
+              Agenten
+            </div>
+            {mentionAgents.map((agent, i) => {
+              const isSelected = i === mentionIndex;
+              const AGENT_ICONS: Record<string, string> = {
+                plusi: 'M12 2v8M8 6h8M2 10v4M18 10v4M6 14h12M8 18h8',
+                research: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM18 18l3 3',
+              };
+              const iconPath = AGENT_ICONS[agent.name] || 'M4 4L12 4M4 4L8 12M12 4L8 12';
+              return (
+                <div
+                  key={agent.name}
+                  onClick={() => selectMentionAgent(agent)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '8px 12px',
+                    margin: '0 4px 2px',
+                    borderRadius: 10,
+                    cursor: 'pointer',
+                    background: isSelected ? `${agent.color}15` : 'transparent',
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={() => setMentionIndex(i)}
+                >
+                  {/* Agent icon */}
+                  <div style={{
+                    width: 26, height: 26, borderRadius: 8,
+                    background: `${agent.color}15`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0,
+                  }}>
+                    <svg width={14} height={14} viewBox="0 0 24 24" fill="none"
+                      stroke={agent.color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d={iconPath} />
+                    </svg>
+                  </div>
+                  {/* Agent name as colored tag pill */}
+                  <span style={{
+                    fontSize: 13, fontWeight: 600,
+                    color: agent.color,
+                    background: `${agent.color}12`,
+                    padding: '2px 10px',
+                    borderRadius: 6,
+                    border: `1px solid ${agent.color}25`,
+                    flex: 1,
+                  }}>
+                    @{agent.label}
+                  </span>
+                  {/* Keyboard hint */}
+                  {isSelected && (
+                    <span style={{
+                      fontSize: 9, fontWeight: 500,
+                      color: 'var(--ds-text-muted)',
+                      padding: '2px 6px',
+                      borderRadius: 4,
+                      background: 'var(--ds-hover-tint)',
+                    }}>
+                      Tab ↵
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+            <div style={{ height: 4 }} />
           </div>
         )}
 
