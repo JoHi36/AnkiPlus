@@ -289,6 +289,30 @@ header *,
 }
 @keyframes agent-pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.8; } }
 
+/* Transparent agent (Tutor) — no glow, subtle presence */
+.agent-cell[data-transparent="true"] {
+  background: none;
+  padding: 12px 32px;
+}
+.agent-cell[data-transparent="true"] .agent-cell-name {
+  color: var(--ds-text-secondary);
+}
+
+/* Chain stacking — flush cells when agents chain */
+.agent-cell[data-chained="true"] {
+  margin-top: -8px;
+  border-top: 1px solid var(--ds-border);
+  padding-top: 16px;
+}
+
+/* Badge logo in header right */
+.agent-cell-badge-logo {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ds-text-tertiary);
+  letter-spacing: 0.3px;
+}
+
 /* ── Web Citation Badge ── */
 .web-cite-badge {
   display: inline-flex; align-items: center; justify-content: center;
