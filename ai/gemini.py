@@ -186,21 +186,21 @@ def get_google_response(user_message, model, api_key, context=None, history=None
 
     # Erweitere System Prompt mit RAG-Anweisungen falls RAG-Kontext vorhanden
     if rag_context and rag_context.get("cards"):
-        rag_instruction = """\n\nQUELLEN-SYSTEM (KRITISCH — MUSS BEFOLGT WERDEN):
-Du erhältst Quellen-Karten aus dem Lernmaterial des Nutzers. Diese Karten sind dein PRIMÄRES Wissen.
+        rag_instruction = """\n\nSOURCE SYSTEM (CRITICAL — MUST BE FOLLOWED):
+You receive source cards from the user's learning material. These cards are your PRIMARY knowledge source.
 
-ANTWORTSTRATEGIE:
-1. Beantworte die Frage KONKRET und DIREKT — gib dem Nutzer genau die Information die er braucht
-2. Nutze dabei die Fakten aus den Quellen-Karten als Grundlage — der Nutzer lernt diese Karten, also verwende deren Terminologie und Fakten
-3. Ergänze mit deinem eigenen Wissen nur wo die Karten nicht ausreichen, um die Frage vollständig zu beantworten
-4. Die aktuelle Karte (die der Nutzer gerade lernt) ist die WICHTIGSTE Quelle — beziehe dich darauf
+RESPONSE STRATEGY:
+1. Answer the question CONCRETELY and DIRECTLY — give the user exactly the information they need
+2. Use facts from the source cards as your foundation — the user is studying these cards, so use their terminology and facts
+3. Supplement with your own knowledge ONLY where cards are insufficient to fully answer the question
+4. The current card (the one the user is studying) is the MOST IMPORTANT source — refer to it
 
-ZITIER-REGELN (PFLICHT):
-- Setze [[NoteID]] DIREKT nach jedem Fakt der aus einer Karte stammt (z.B. [[1735567472099]])
-- JEDE Aussage die auf einer Karte basiert MUSS eine Citation haben — ohne Citation ist die Aussage wertlos
-- Die Note-IDs findest du im Kontext als "Note XXXXX" — verwende genau diese Zahlen
-- Auch wenn du nur EINE Karte als Quelle hast, zitiere sie trotzdem
-- Die Nummern erscheinen dem Nutzer als klickbare [1], [2], [3] Badges"""
+CITATION RULES (MANDATORY):
+- Place [[NoteID]] DIRECTLY after every fact that comes from a card (e.g. [[1735567472099]])
+- EVERY statement based on a card MUST have a citation — a statement without citation is worthless
+- Find the Note IDs in the context as "Note XXXXX" — use exactly these numbers
+- Even if you only have ONE card as a source, cite it
+- The numbers appear to the user as clickable [1], [2], [3] badges"""
         system_instruction = system_instruction + rag_instruction
 
     # Erstelle Tools Array für Function Calling (nur wenn aktiviert)
@@ -704,21 +704,21 @@ def get_google_response_streaming(user_message, model, api_key, context=None, hi
 
     # Erweitere System Prompt mit RAG-Anweisungen falls RAG-Kontext vorhanden
     if rag_context and rag_context.get("cards"):
-        rag_instruction = """\n\nQUELLEN-SYSTEM (KRITISCH — MUSS BEFOLGT WERDEN):
-Du erhältst Quellen-Karten aus dem Lernmaterial des Nutzers. Diese Karten sind dein PRIMÄRES Wissen.
+        rag_instruction = """\n\nSOURCE SYSTEM (CRITICAL — MUST BE FOLLOWED):
+You receive source cards from the user's learning material. These cards are your PRIMARY knowledge source.
 
-ANTWORTSTRATEGIE:
-1. Beantworte die Frage KONKRET und DIREKT — gib dem Nutzer genau die Information die er braucht
-2. Nutze dabei die Fakten aus den Quellen-Karten als Grundlage — der Nutzer lernt diese Karten, also verwende deren Terminologie und Fakten
-3. Ergänze mit deinem eigenen Wissen nur wo die Karten nicht ausreichen, um die Frage vollständig zu beantworten
-4. Die aktuelle Karte (die der Nutzer gerade lernt) ist die WICHTIGSTE Quelle — beziehe dich darauf
+RESPONSE STRATEGY:
+1. Answer the question CONCRETELY and DIRECTLY — give the user exactly the information they need
+2. Use facts from the source cards as your foundation — the user is studying these cards, so use their terminology and facts
+3. Supplement with your own knowledge ONLY where cards are insufficient to fully answer the question
+4. The current card (the one the user is studying) is the MOST IMPORTANT source — refer to it
 
-ZITIER-REGELN (PFLICHT):
-- Setze [[NoteID]] DIREKT nach jedem Fakt der aus einer Karte stammt (z.B. [[1735567472099]])
-- JEDE Aussage die auf einer Karte basiert MUSS eine Citation haben — ohne Citation ist die Aussage wertlos
-- Die Note-IDs findest du im Kontext als "Note XXXXX" — verwende genau diese Zahlen
-- Auch wenn du nur EINE Karte als Quelle hast, zitiere sie trotzdem
-- Die Nummern erscheinen dem Nutzer als klickbare [1], [2], [3] Badges"""
+CITATION RULES (MANDATORY):
+- Place [[NoteID]] DIRECTLY after every fact that comes from a card (e.g. [[1735567472099]])
+- EVERY statement based on a card MUST have a citation — a statement without citation is worthless
+- Find the Note IDs in the context as "Note XXXXX" — use exactly these numbers
+- Even if you only have ONE card as a source, cite it
+- The numbers appear to the user as clickable [1], [2], [3] badges"""
         system_instruction = system_instruction + rag_instruction
 
     # Tools Array — built from central registry
