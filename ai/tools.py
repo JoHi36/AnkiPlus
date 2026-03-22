@@ -10,6 +10,13 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 # ---------------------------------------------------------------------------
 # Mermaid tool schema (migrated from ai_handler.py)
@@ -932,5 +939,54 @@ registry.register(ToolDefinition(
     config_key="images",
     agent="tutor",
     display_type="widget",
+    timeout_seconds=15,
+))
+
+
+# ---------------------------------------------------------------------------
+# Research Agent Tool
+# ---------------------------------------------------------------------------
+
+SEARCH_WEB_SCHEMA = {
+    'name': 'search_web',
+    'description': 'Search the internet for information when deck cards do not '
+                   'contain the answer. Returns cited sources with URLs.',
+    'parameters': {
+        'type': 'object',
+        'properties': {
+            'query': {
+                'type': 'string',
+                'description': 'The search query — be specific and include key terms',
+            },
+        },
+        'required': ['query'],
+    },
+}
+
+
+def execute_search_web(args: dict) -> dict:
+    """Execute the search_web tool."""
+    query = args.get('query', '')
+    if not query:
+        return {'error': 'No query provided'}
+    try:
+        try:
+            from ..research import run_research
+        except ImportError:
+            from research import run_research
+        return run_research(query)
+    except Exception as e:
+        logger.exception("search_web tool error")
+        return {'error': str(e)}
+
+
+registry.register(ToolDefinition(
+    name='search_web',
+    schema=SEARCH_WEB_SCHEMA,
+    execute_fn=execute_search_web,
+    category='content',
+    config_key='research',
+    agent='tutor',
+    display_type='widget',
     timeout_seconds=15,
 ))

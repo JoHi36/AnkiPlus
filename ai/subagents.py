@@ -142,3 +142,35 @@ register_subagent(SubagentDefinition(
     icon_type='emote',
     loading_hint_template='Plusi denkt nach...',
 ))
+
+
+# ── Research Agent Registration ──
+
+RADAR_ICON_SVG = ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+                  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+                  '<circle cx="12" cy="12" r="10"/>'
+                  '<line x1="12" y1="12" x2="12" y2="2"/>'
+                  '<path d="M12 12 L16.24 7.76" stroke-width="2.5"/>'
+                  '<circle cx="12" cy="12" r="6" opacity="0.4"/>'
+                  '<circle cx="12" cy="12" r="2" fill="#00D084" stroke="none"/>'
+                  '</svg>')
+
+register_subagent(SubagentDefinition(
+    name='research',
+    label='Research Agent',
+    description='Searches the internet for cited, high-quality sources',
+    color='#00D084',
+    enabled_key='research_enabled',
+    pipeline_label='Research',
+    run_module='research',
+    run_function='run_research',
+    router_hint='Use when the user asks a question that cannot be adequately '
+                'answered from deck cards alone and requires external or '
+                'current information. NOT for casual conversation or card-specific questions.',
+    main_model_hint='Use search_web tool when your knowledge is insufficient '
+                    'to answer the question or the user explicitly asks for '
+                    'sources/research from the internet.',
+    icon_type='svg',
+    icon_svg=RADAR_ICON_SVG,
+    loading_hint_template='Durchsuche Quellen zu {query}...',
+))
