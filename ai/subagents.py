@@ -131,7 +131,7 @@ register_subagent(SubagentDefinition(
     name='plusi',
     label='Plusi',
     description='Persoenlicher Lernbegleiter mit Charakter und Gedaechtnis',
-    color='#A78BFA',
+    color='#0A84FF',
     enabled_key='mascot_enabled',
     pipeline_label='Plusi',
     run_module='plusi.agent',
@@ -139,4 +139,6 @@ register_subagent(SubagentDefinition(
     router_hint='Use when user wants casual conversation, emotional support, or explicitly addresses Plusi. NOT when the question also requires card search or factual answers.',
     main_model_hint='Use the spawn_plusi tool when the user explicitly addresses Plusi or wants personal/emotional interaction. Do NOT spawn Plusi for factual questions.',
     on_finished=_plusi_on_finished,
+    icon_type='emote',
+    loading_hint_template='Plusi denkt nach...',
 ))
