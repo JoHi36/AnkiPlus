@@ -660,14 +660,14 @@ class AIHandler:
                         else:
                             logger.info("Handoff rejected, returning original response")
 
-                # Async memory extraction (non-blocking)
+                # Memory extraction (rule-based, fast)
                 try:
-                    from .memory import load_shared_memory
-                    # Memory extraction will be added in Task 25
-                    # For now, just log that the hook exists
-                    logger.debug("Memory extraction hook: would extract from response")
-                except Exception:
-                    pass
+                    from .memory import extract_memory_signals, apply_memory_updates
+                    mem_updates = extract_memory_signals(user_message)
+                    if mem_updates:
+                        apply_memory_updates(mem_updates)
+                except Exception as mem_err:
+                    logger.debug("Memory extraction skipped: %s", mem_err)
 
                 return result
 
