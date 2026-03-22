@@ -2,6 +2,37 @@ import React from 'react';
 import InsightBullet from './InsightBullet';
 import MiniChart from './MiniChart';
 
+const SKELETON_KEYFRAMES = `
+@keyframes insight-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}`;
+
+// Inject once
+if (typeof document !== 'undefined' && !document.getElementById('insight-skeleton-kf')) {
+  const s = document.createElement('style');
+  s.id = 'insight-skeleton-kf';
+  s.textContent = SKELETON_KEYFRAMES;
+  document.head.appendChild(s);
+}
+
+function SkeletonRow({ width = '75%' }) {
+  return (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 14 }}>
+      <div style={{
+        width: 6, height: 6, borderRadius: '50%',
+        background: 'var(--ds-border-subtle)', flexShrink: 0, marginTop: 4,
+      }} />
+      <div style={{
+        height: 10, width, borderRadius: 5,
+        background: 'linear-gradient(90deg, var(--ds-border-subtle), var(--ds-hover-tint), var(--ds-border-subtle))',
+        backgroundSize: '200% 100%',
+        animation: 'insight-shimmer 1.8s ease-in-out infinite',
+      }} />
+    </div>
+  );
+}
+
 export default function InsightsDashboard({
   insights = { version: 1, insights: [] },
   cardStats = {},
@@ -40,7 +71,20 @@ export default function InsightsDashboard({
       )}
 
       <div style={{ marginBottom: 36 }}>
-        {hasInsights ? (
+        {isExtracting && !hasInsights ? (
+          <>
+            <div style={{ fontSize: 11, color: 'var(--ds-text-muted)', letterSpacing: '0.3px', marginBottom: 20 }}>
+              Erkenntnisse werden extrahiert...
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <SkeletonRow width="85%" />
+              <SkeletonRow width="70%" />
+              <SkeletonRow width="90%" />
+              <SkeletonRow width="60%" />
+              <SkeletonRow width="78%" />
+            </div>
+          </>
+        ) : hasInsights ? (
           <>
             <div style={{ fontSize: 11, color: 'var(--ds-text-muted)', letterSpacing: '0.3px', marginBottom: 20 }}>
               {insights.insights.length} Erkenntnisse gesammelt
