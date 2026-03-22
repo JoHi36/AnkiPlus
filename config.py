@@ -46,7 +46,11 @@ DEFAULT_CONFIG = {
         "enabled": True,
     },
     "mascot_enabled": False,
-    "research_enabled": True  # Research Agent enabled
+    "research_enabled": True,  # Research Agent enabled
+    "research_sources": {
+        "pubmed": True,
+        "wikipedia": True,
+    },
 }
 
 # Standard Backend URL
@@ -119,13 +123,22 @@ def load_config():
                         for k, v in default_autonomy.items():
                             if k not in config[key]:
                                 config[key][k] = v
+                    elif key == "research_sources" and isinstance(value, dict):
+                        default_sources = DEFAULT_CONFIG["research_sources"]
+                        for source_key, source_value in default_sources.items():
+                            if source_key not in config[key]:
+                                config[key][source_key] = source_value
                 # Migration: Wenn ai_tools fehlt, füge Standardwerte hinzu
                 if "ai_tools" not in config:
                     config["ai_tools"] = DEFAULT_CONFIG["ai_tools"].copy()
                 # Migration: Wenn firebase fehlt, füge Standardwerte hinzu
                 if "firebase" not in config:
                     config["firebase"] = DEFAULT_CONFIG["firebase"].copy()
-                
+
+                # Migration: Wenn research_sources fehlt, füge Standardwerte hinzu
+                if "research_sources" not in config:
+                    config["research_sources"] = DEFAULT_CONFIG["research_sources"].copy()
+
                 # Migration: "auto" → "dark" (legacy value renamed)
                 if config.get("theme") == "auto":
                     config["theme"] = "dark"
