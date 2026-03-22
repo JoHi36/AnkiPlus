@@ -42,6 +42,7 @@ class OverlayChatWidget(QWidget):
         self._current_thread = None
         self._streaming_text = ''
         self._visible = False
+        self._chat_open = False
         self._bridge_initialized = False
         self._setup_ui()
 
@@ -90,7 +91,7 @@ class OverlayChatWidget(QWidget):
         self.web_view.page().runJavaScript(js)
         self.message_timer = QTimer()
         self.message_timer.timeout.connect(self._poll_messages)
-        self.message_timer.start(200)
+        self.message_timer.start(100)
 
     def _poll_messages(self):
         """Poll for messages from React."""
@@ -165,6 +166,39 @@ class OverlayChatWidget(QWidget):
                 self._send_to_react({"type": "deckMessagesCleared", "count": count})
             except Exception as e:
                 logger.error("OverlayChat: clearDeckMessages error: %s", e)
+
+        elif msg_type == 'switchTab':
+            tab = data if isinstance(data, str) else ''
+            self.hide_overlay()
+            if tab == 'session':
+                QTimer.singleShot(350, lambda: mw.onOverview() if hasattr(mw, 'onOverview') else None)
+            elif tab == 'statistik':
+                QTimer.singleShot(350, lambda: self._open_stats())
+
+        elif msg_type == 'toggleSidebar':
+            try:
+                from .settings_sidebar import toggle_settings_sidebar
+                toggle_settings_sidebar()
+            except Exception as e:
+                logger.warning("Could not toggle sidebar: %s", e)
+
+        elif msg_type == 'textFieldFocus':
+            try:
+                from .shortcut_filter import get_shortcut_filter
+                sf = get_shortcut_filter()
+                if sf:
+                    data_parsed = json.loads(data) if isinstance(data, str) else data
+                    sf.set_text_field_focus(data_parsed.get('focused', False), self.web_view)
+            except Exception as e:
+                logger.warning("Could not set text field focus: %s", e)
+
+    def _open_stats(self):
+        """Open stats window."""
+        try:
+            from aqt.stats import NewDeckStats
+            NewDeckStats(mw)
+        except Exception:
+            pass
 
     def _send_to_react(self, payload):
         """Send a payload to the React app via window.ankiReceive."""
@@ -295,6 +329,8 @@ class OverlayChatWidget(QWidget):
 
     def show_overlay(self, initial_text=''):
         """Show the overlay with a fade-in animation."""
+        self._chat_open = True
+
         if self._visible:
             if initial_text:
                 self._send_to_react({"type": "initialText", "text": initial_text})
@@ -306,21 +342,69 @@ class OverlayChatWidget(QWidget):
         self.raise_()
 
         if hasattr(self, 'message_timer') and self.message_timer:
-            self.message_timer.start(200)
+            self.message_timer.start(100)
 
         if self.parent():
             self.parent().installEventFilter(self)
 
+        # Notify shortcut filter
+        try:
+            from .shortcut_filter import get_shortcut_filter
+            sf = get_shortcut_filter()
+            if sf and hasattr(sf, 'set_overlay_visible'):
+                sf.set_overlay_visible(True)
+        except Exception:
+            pass
+
+        header_info = self._get_header_info()
+
         QTimer.singleShot(50, lambda: self._send_to_react({
             "type": "overlayShow",
-            "initialText": initial_text or ''
+            "initialText": initial_text or '',
+            "headerInfo": header_info,
         }))
 
+    def _get_header_info(self):
+        """Get deck stats for the overlay header."""
+        try:
+            if mw and mw.col:
+                tree = mw.col.sched.deck_due_tree()
+                total_new = sum(n.new_count for n in tree.children)
+                total_lrn = sum(n.learn_count for n in tree.children)
+                total_rev = sum(n.review_count for n in tree.children)
+                return {
+                    'totalDue': total_new + total_lrn + total_rev,
+                    'dueNew': total_new,
+                    'dueLearning': total_lrn,
+                    'dueReview': total_rev,
+                }
+        except Exception as e:
+            logger.warning("Could not get header info: %s", e)
+        return {'totalDue': 0, 'dueNew': 0, 'dueLearning': 0, 'dueReview': 0}
+
     def hide_overlay(self):
-        """Hide the overlay with a fade-out animation."""
+        """Hide the overlay. User explicitly closed."""
         if not self._visible:
             return
         self._visible = False
+        self._chat_open = False
+
+        if self._current_thread:
+            try:
+                self._current_thread.cancel()
+            except Exception:
+                pass
+            self._current_thread = None
+
+        # Notify shortcut filter
+        try:
+            from .shortcut_filter import get_shortcut_filter
+            sf = get_shortcut_filter()
+            if sf and hasattr(sf, 'set_overlay_visible'):
+                sf.set_overlay_visible(False)
+        except Exception:
+            pass
+
         if hasattr(self, 'message_timer') and self.message_timer:
             self.message_timer.stop()
         self._send_to_react({"type": "overlayHide"})
@@ -328,15 +412,53 @@ class OverlayChatWidget(QWidget):
             self.parent().removeEventFilter(self)
         QTimer.singleShot(300, self.hide)
 
-    def _position_over_main(self):
-        """Position this widget exactly over Anki's main content area."""
+    def hide_for_tab_switch(self):
+        """Hide overlay temporarily (tab switch). Preserves _chat_open for restore."""
+        if not self._visible:
+            return
+        self._visible = False
+
+        if self._current_thread:
+            try:
+                self._current_thread.cancel()
+            except Exception:
+                pass
+            self._current_thread = None
+
         try:
-            main_widget = mw.centralWidget()
-            if main_widget:
-                pos = main_widget.mapTo(mw, QPoint(0, 0))
-                self.setGeometry(pos.x(), pos.y(), main_widget.width(), main_widget.height())
+            from .shortcut_filter import get_shortcut_filter
+            sf = get_shortcut_filter()
+            if sf and hasattr(sf, 'set_overlay_visible'):
+                sf.set_overlay_visible(False)
+        except Exception:
+            pass
+
+        if hasattr(self, 'message_timer') and self.message_timer:
+            self.message_timer.stop()
+        self._send_to_react({"type": "overlayHide"})
+        if self.parent():
+            self.parent().removeEventFilter(self)
+        QTimer.singleShot(300, self.hide)
+
+    def restore_if_open(self):
+        """Called when returning to Stapel tab. Restore overlay if chat was open."""
+        if self._chat_open:
+            self.show_overlay()
+
+    def _position_over_main(self):
+        """Position this widget exactly over Anki's main webview (mw.web)."""
+        try:
+            web = mw.web if hasattr(mw, 'web') else None
+            if web:
+                pos = web.mapTo(mw, QPoint(0, 0))
+                self.setGeometry(pos.x(), pos.y(), web.width(), web.height())
             else:
-                self.setGeometry(mw.rect())
+                main_widget = mw.centralWidget()
+                if main_widget:
+                    pos = main_widget.mapTo(mw, QPoint(0, 0))
+                    self.setGeometry(pos.x(), pos.y(), main_widget.width(), main_widget.height())
+                else:
+                    self.setGeometry(mw.rect())
         except Exception:
             self.setGeometry(mw.rect())
 
