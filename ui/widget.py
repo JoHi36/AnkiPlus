@@ -750,6 +750,22 @@ class ChatbotWidget(QWidget):
             "configLoaded", {"type": "configLoaded", "data": config_data},
             "ankiConfigLoaded")
 
+        # Also push subagent registry (frontend is guaranteed ready at this point)
+        try:
+            try:
+                from ..ai.subagents import get_registry_for_frontend
+            except ImportError:
+                from ai.subagents import get_registry_for_frontend
+            registry_payload = {
+                'type': 'subagent_registry',
+                'agents': get_registry_for_frontend(config)
+            }
+            self.web_view.page().runJavaScript(
+                f"window.ankiReceive({json.dumps(registry_payload)});"
+            )
+        except Exception as e:
+            logger.error("Failed to push subagent registry on config: %s", e)
+
     def _msg_fetch_models(self, data):
         if not isinstance(data, dict):
             return

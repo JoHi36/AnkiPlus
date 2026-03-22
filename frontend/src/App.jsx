@@ -2319,6 +2319,26 @@ function AppInner() {
 
                           </div>
                         )}
+                        {/* Generating skeleton — shows after pipeline completes, before first chunk */}
+                        {chatHook.isLoading && !chatHook.streamingMessage && (chatHook.pipelineSteps || []).length > 0 && !(chatHook.pipelineSteps || []).some(s => s.status === 'active') && (
+                          <div className="w-full flex-none mb-2" style={{ padding: '0 4px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              {[0.92, 0.76, 0.58].map((w, i) => (
+                                <div
+                                  key={i}
+                                  style={{
+                                    height: 12,
+                                    borderRadius: 6,
+                                    width: `${w * 100}%`,
+                                    background: 'linear-gradient(90deg, var(--ds-hover-tint), var(--ds-active-tint), var(--ds-hover-tint))',
+                                    backgroundSize: '200% 100%',
+                                    animation: `ts-shimmerWave 2s ease-in-out infinite ${i * 0.15}s`,
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         {(chatHook.isLoading || chatHook.streamingMessage) && !(
                           nextMsg &&
                           nextMsg.from === 'bot' &&
