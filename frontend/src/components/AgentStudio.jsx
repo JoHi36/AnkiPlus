@@ -314,7 +314,7 @@ export default function AgentStudio({ bridge, onNavigateToPlusi }) {
 
         </div>
 
-        <div style={S.card}>
+        <div style={{ ...S.card, marginTop: 10 }}>
           <div style={S.toolRow}>
             <div style={{ marginRight: 10 }}><ResearchIcon size={28} /></div>
             <div style={{ flex: 1 }}>

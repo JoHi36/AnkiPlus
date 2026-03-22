@@ -60,19 +60,52 @@ export default function ChatInput({
   const [isFocused, setIsFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Detect @Plusi case-insensitive, normalize to @Plusi at front
+  // Detect @AgentName case-insensitive, normalize to @Label at front
+  // Uses subagent registry for dynamic agent detection
+  const [activeAgentTag, setActiveAgentTag] = useState<{ name: string; label: string; color: string } | null>(null);
+
   useEffect(() => {
-    if (!plusiEnabled) return;
-    if (input.startsWith('@Plusi')) return;
-    const match = input.match(/@plusi/i);
-    if (match && match.index !== undefined) {
-      const without = input.slice(0, match.index) + input.slice(match.index + 6);
+    // Check if input already starts with a known @Agent tag
+    if (activeAgentTag && input.startsWith(`@${activeAgentTag.label}`)) return;
+
+    // Try to detect @AgentName pattern
+    const match = input.match(/@(\w+)/i);
+    if (!match || match.index === undefined) {
+      if (activeAgentTag) setActiveAgentTag(null);
+      return;
+    }
+
+    const typed = match[1].toLowerCase();
+    // Import findAgent from registry
+    let agent: any = null;
+    try {
+      const { findAgent } = require('../../../shared/config/subagentRegistry');
+      agent = findAgent(typed);
+    } catch {
+      // Fallback: check hardcoded names
+      if (typed === 'plusi' && plusiEnabled) {
+        agent = { name: 'plusi', label: 'Plusi', color: '#0A84FF' };
+      } else if (typed === 'research') {
+        agent = { name: 'research', label: 'Research', color: '#00D084' };
+      }
+    }
+
+    if (agent) {
+      const prefix = `@${agent.label}`;
+      const without = input.slice(0, match.index) + input.slice(match.index + match[0].length);
       const cleaned = without.replace(/^\s+/, '');
-      setInput('@Plusi ' + cleaned);
+      setInput(prefix + ' ' + cleaned);
+      setActiveAgentTag({ name: agent.name, label: agent.label, color: agent.color });
+    } else {
+      if (activeAgentTag) setActiveAgentTag(null);
     }
   }, [input, plusiEnabled]);
 
-  const hasPlusiTag = plusiEnabled && input.startsWith('@Plusi');
+  const hasAgentTag = !!activeAgentTag;
+  const agentTagLabel = activeAgentTag ? `@${activeAgentTag.label}` : '';
+  const agentTagColor = activeAgentTag?.color || '#0A84FF';
+  // Backwards compat
+  const hasPlusiTag = hasAgentTag && activeAgentTag?.name === 'plusi';
 
   // Listen for "Plusi fragen" from MascotShell context menu
   useEffect(() => {
@@ -152,7 +185,7 @@ export default function ChatInput({
     <div className="w-full relative">
       <div
         className="ds-input-dock relative overflow-visible transition-all duration-300"
-        style={hasPlusiTag ? { borderColor: 'rgba(10,132,255,0.4)' } : undefined}
+        style={hasAgentTag ? { borderColor: `${agentTagColor}66` } : undefined}
       >
         {/* Animated snake border — blue on focus or @Plusi tag */}
         <div
@@ -161,11 +194,13 @@ export default function ChatInput({
             inset: '-1px',
             borderRadius: '17px',
             padding: '1px',
-            background: 'conic-gradient(from var(--border-angle, 0deg) at 50% 100%, rgba(10,132,255,0.0) 0deg, rgba(10,132,255,0.5) 60deg, rgba(10,132,255,0.1) 120deg, rgba(10,132,255,0.0) 180deg, rgba(10,132,255,0.1) 240deg, rgba(10,132,255,0.5) 300deg, rgba(10,132,255,0.0) 360deg)',
+            background: hasAgentTag
+              ? `conic-gradient(from var(--border-angle, 0deg) at 50% 100%, ${agentTagColor}00 0deg, ${agentTagColor}80 60deg, ${agentTagColor}1A 120deg, ${agentTagColor}00 180deg, ${agentTagColor}1A 240deg, ${agentTagColor}80 300deg, ${agentTagColor}00 360deg)`
+              : 'conic-gradient(from var(--border-angle, 0deg) at 50% 100%, rgba(10,132,255,0.0) 0deg, rgba(10,132,255,0.5) 60deg, rgba(10,132,255,0.1) 120deg, rgba(10,132,255,0.0) 180deg, rgba(10,132,255,0.1) 240deg, rgba(10,132,255,0.5) 300deg, rgba(10,132,255,0.0) 360deg)',
             WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
             WebkitMaskComposite: 'xor',
             maskComposite: 'exclude',
-            opacity: (isFocused || hasPlusiTag) ? 1 : 0,
+            opacity: (isFocused || hasAgentTag) ? 1 : 0,
             animation: 'borderRotate 4s linear infinite',
           }}
         />
@@ -176,10 +211,10 @@ export default function ChatInput({
         {/* Textarea area — grid stack: overlay behind textarea, both same size */}
         {!hideInput && <div style={{ display: 'grid', position: 'relative' }}>
           {/* Highlight overlay — same grid cell as textarea */}
-          {hasPlusiTag && (() => {
-            const idx = input.indexOf('@Plusi');
+          {hasAgentTag && (() => {
+            const idx = input.indexOf(agentTagLabel);
             const before = input.slice(0, idx);
-            const after = input.slice(idx + 6);
+            const after = input.slice(idx + agentTagLabel.length);
             return (
               <div
                 aria-hidden="true"
@@ -200,10 +235,10 @@ export default function ChatInput({
               >
                 {before && <span>{before}</span>}
                 <span style={{
-                  background: 'rgba(10,132,255,.18)',
-                  color: 'var(--ds-accent)',
+                  background: `${agentTagColor}2E`,
+                  color: agentTagColor,
                   borderRadius: '3px',
-                }}>@Plusi</span>
+                }}>{agentTagLabel}</span>
                 {after && <span>{after}</span>}
               </div>
             );
@@ -223,9 +258,9 @@ export default function ChatInput({
               minHeight: '24px',
               maxHeight: '120px',
               paddingRight: '40px',
-              color: hasPlusiTag ? 'transparent' : undefined,
+              color: hasAgentTag ? 'transparent' : undefined,
               caretColor: 'var(--ds-text-primary)',
-              WebkitTextFillColor: hasPlusiTag ? 'transparent' : undefined,
+              WebkitTextFillColor: hasAgentTag ? 'transparent' : undefined,
             }}
           />
           {/* Send button — appears when text present */}
