@@ -103,3 +103,30 @@ class TestSubagentRegistry:
         register_subagent(self._make_agent('x', enabled_key='on'))  # no main_model_hint
         prompt = get_main_model_subagent_prompt({'on': True})
         assert prompt == ""
+
+    def test_subagent_definition_new_fields(self):
+        from ai.subagents import SubagentDefinition
+        d = SubagentDefinition(
+            name='test', label='Test', description='desc', color='#FF0000',
+            enabled_key='test_enabled', pipeline_label='Test',
+            run_module='test', run_function='run_test', router_hint='hint'
+        )
+        assert d.icon_type == 'svg'
+        assert d.icon_svg == ''
+        assert d.loading_hint_template == ''
+
+    def test_registry_for_frontend_includes_new_fields(self):
+        from ai.subagents import SubagentDefinition, register_subagent, get_registry_for_frontend, SUBAGENT_REGISTRY
+        SUBAGENT_REGISTRY.clear()
+        register_subagent(SubagentDefinition(
+            name='test', label='Test Agent', description='d', color='#00FF00',
+            enabled_key='test_on', pipeline_label='Test',
+            run_module='test', run_function='run', router_hint='h',
+            icon_type='svg', icon_svg='<svg>radar</svg>',
+            loading_hint_template='Searching {query}...'
+        ))
+        result = get_registry_for_frontend({'test_on': True})
+        assert len(result) == 1
+        assert result[0]['iconType'] == 'svg'
+        assert result[0]['iconSvg'] == '<svg>radar</svg>'
+        assert result[0]['loadingHintTemplate'] == 'Searching {query}...'

@@ -23,6 +23,9 @@ class SubagentDefinition:
     main_model_hint: str = ''  # Instruction for the main model (e.g., how to use spawn_plusi tool)
     on_finished: Optional[Callable] = None
     extra_kwargs: dict = field(default_factory=dict)
+    icon_type: str = 'svg'
+    icon_svg: str = ''
+    loading_hint_template: str = ''
 
 SUBAGENT_REGISTRY: dict[str, SubagentDefinition] = {}
 
@@ -78,7 +81,9 @@ def get_registry_for_frontend(config: dict) -> list[dict]:
     """Return enabled subagents as dicts for JSON serialization to frontend."""
     enabled = get_enabled_subagents(config)
     return [{'name': a.name, 'label': a.label, 'color': a.color,
-             'enabled': True, 'pipelineLabel': a.pipeline_label}
+             'enabled': True, 'pipelineLabel': a.pipeline_label,
+             'iconType': a.icon_type, 'iconSvg': a.icon_svg,
+             'loadingHintTemplate': a.loading_hint_template}
             for a in enabled]
 
 
