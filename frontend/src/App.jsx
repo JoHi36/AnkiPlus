@@ -2485,7 +2485,11 @@ export default function App() {
   const view = params.get('view');
 
   if (view === 'sidebar') {
-    return <SettingsSidebar />;
+    return (
+      <ErrorBoundary>
+        <SettingsSidebar />
+      </ErrorBoundary>
+    );
   }
 
   const { bridge, isReady } = useAnki();
