@@ -312,8 +312,9 @@ export default function AgentStudio({ bridge, onNavigateToPlusi }) {
             </>
           )}
 
-          <div style={{ height: 1, background: 'var(--ds-border-subtle, rgba(255,255,255,0.06))' }} />
+        </div>
 
+        <div style={S.card}>
           <div style={S.toolRow}>
             <div style={{ marginRight: 10 }}><ResearchIcon size={28} /></div>
             <div style={{ flex: 1 }}>
@@ -326,6 +327,21 @@ export default function AgentStudio({ bridge, onNavigateToPlusi }) {
             </div>
             <Toggle on={researchEnabled} onChange={handleToggleResearch} />
           </div>
+          {researchEnabled && (
+            <>
+              <div style={{ height: 1, background: 'var(--ds-border-subtle, rgba(255,255,255,0.06))' }} />
+              <div
+                style={S.subAgentButton}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                <span style={{ fontSize: 12, color: 'var(--ds-text-secondary, rgba(255,255,255,0.45))' }}>Sub-Agent-Menü</span>
+                <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="var(--ds-text-tertiary, rgba(255,255,255,0.18))" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
