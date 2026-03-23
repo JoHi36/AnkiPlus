@@ -1,30 +1,34 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
-import { flushSync } from 'react-dom';
+import { useState, useRef, useCallback } from 'react';
 
 /**
  * useAgenticMessage — builds a structured BotMessage from backend events.
  * Single source of truth for the current live message.
  *
- * Message shape:
- * {
- *   id, from: 'bot', status,
- *   orchestration: { agent, mode, steps },
- *   agentCells: [{ agent, status, text, pipelineSteps, citations, sources, toolWidgets, loadingHint }]
- * }
+ * CRITICAL DESIGN: Every handler updates BOTH React state (for rendering)
+ * AND a synchronous ref (for finalize). This is necessary because Qt fires
+ * multiple runJavaScript calls in rapid succession, React 18 batches them,
+ * and finalize() needs the latest state synchronously before React renders.
  */
 export default function useAgenticMessage() {
   const [currentMessage, setCurrentMessage] = useState(null);
   const [pipelineGeneration, setPipelineGeneration] = useState(0);
-  const currentMessageRef = useRef(null);
-
-  // Keep ref in sync for use in done handler
-  useEffect(() => { currentMessageRef.current = currentMessage; }, [currentMessage]);
+  // Synchronous mirror of currentMessage — updated in every handler
+  const msgRef = useRef(null);
 
   const isLoading = currentMessage !== null;
 
+  // Helper: update both state and ref
+  const updateMsg = useCallback((updater) => {
+    setCurrentMessage(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      msgRef.current = next;
+      return next;
+    });
+  }, []);
+
   const handleMsgStart = useCallback((payload) => {
     setPipelineGeneration(g => g + 1);
-    setCurrentMessage({
+    const msg = {
       id: payload.messageId || `msg-${Date.now()}`,
       from: 'bot',
       status: 'routing',
@@ -34,15 +38,15 @@ export default function useAgenticMessage() {
         steps: [{ step: 'orchestrating', status: 'active', data: {}, timestamp: Date.now() }],
       },
       agentCells: [],
-    });
+    };
+    msgRef.current = msg;
+    setCurrentMessage(msg);
   }, []);
 
   const handleOrchestration = useCallback((payload) => {
-    setCurrentMessage(prev => {
+    updateMsg(prev => {
       if (!prev) return prev;
-      // Merge incoming steps with the existing active orchestrating step (now done)
       const finalSteps = payload.steps || [];
-      // Ensure the orchestrating step is marked done
       if (!finalSteps.some(s => s.step === 'orchestrating')) {
         finalSteps.unshift({ step: 'orchestrating', status: 'done', data: payload.steps?.[0]?.data || {}, timestamp: Date.now() });
       }
@@ -56,17 +60,16 @@ export default function useAgenticMessage() {
         },
       };
     });
-  }, []);
+  }, [updateMsg]);
 
   const handleAgentCell = useCallback((payload) => {
-    setCurrentMessage(prev => {
+    updateMsg(prev => {
       if (!prev) return prev;
       const cells = prev.agentCells.map(c =>
         c.agent === payload.agent
           ? { ...c, ...payload.data, status: payload.status }
           : c
       );
-      // If agent not found, add new cell
       if (!cells.some(c => c.agent === payload.agent)) {
         cells.push({
           agent: payload.agent,
@@ -83,10 +86,10 @@ export default function useAgenticMessage() {
       const newStatus = payload.status === 'loading' ? 'handoff' : prev.status;
       return { ...prev, agentCells: cells, status: newStatus };
     });
-  }, []);
+  }, [updateMsg]);
 
   const handlePipelineStep = useCallback((payload) => {
-    setCurrentMessage(prev => {
+    updateMsg(prev => {
       if (!prev) return prev;
       const cells = prev.agentCells.map(c => {
         if (!['thinking', 'streaming'].includes(c.status)) return c;
@@ -101,10 +104,10 @@ export default function useAgenticMessage() {
       });
       return { ...prev, agentCells: cells };
     });
-  }, []);
+  }, [updateMsg]);
 
   const handleTextChunk = useCallback((payload) => {
-    setCurrentMessage(prev => {
+    updateMsg(prev => {
       if (!prev) return prev;
       const targetAgent = payload.agent;
       const cells = prev.agentCells.map(c => {
@@ -114,10 +117,10 @@ export default function useAgenticMessage() {
       });
       return { ...prev, agentCells: cells, status: 'streaming' };
     });
-  }, []);
+  }, [updateMsg]);
 
   const handleCitations = useCallback((payload) => {
-    setCurrentMessage(prev => {
+    updateMsg(prev => {
       if (!prev) return prev;
       const cells = prev.agentCells.map(c => {
         if (!['thinking', 'streaming'].includes(c.status)) return c;
@@ -125,28 +128,26 @@ export default function useAgenticMessage() {
       });
       return { ...prev, agentCells: cells };
     });
-  }, []);
+  }, [updateMsg]);
 
   const finalize = useCallback(() => {
-    // flushSync forces React to process all pending state updates synchronously,
-    // ensuring the updater runs immediately (not deferred by React 18 auto-batching).
-    // This is critical because ankiReceive is a non-React context.
-    let finalMsg = null;
-    flushSync(() => {
-      setCurrentMessage(prev => {
-        if (!prev) return null;
-        finalMsg = {
-          ...prev,
-          status: 'done',
-          agentCells: prev.agentCells.map(c => ({ ...c, status: 'done' })),
-        };
-        return null;
-      });
-    });
+    // Read from synchronous ref — guaranteed to have latest state
+    // even if React hasn't rendered pending updates yet.
+    const prev = msgRef.current;
+    if (!prev) return null;
+    const finalMsg = {
+      ...prev,
+      status: 'done',
+      agentCells: prev.agentCells.map(c => ({ ...c, status: 'done' })),
+    };
+    // Clear both ref and state
+    msgRef.current = null;
+    setCurrentMessage(null);
     return finalMsg;
   }, []);
 
   const cancel = useCallback(() => {
+    msgRef.current = null;
     setCurrentMessage(null);
   }, []);
 
