@@ -470,44 +470,44 @@ class AIHandler:
                         if memory_context:
                             agent_kwargs['memory_context'] = memory_context
                         result = _run_fn(situation=clean_msg, **agent_kwargs)
-                            # Format result for streaming callback
-                            text = result.get('text', '') if isinstance(result, dict) else str(result)
+                        # Format result for streaming callback
+                        text = result.get('text', '') if isinstance(result, dict) else str(result)
 
-                            # v2: Emit text via msg_event (thread-safe Qt signal)
-                            self._emit_msg_event("text_chunk", {
-                                "messageId": request_id or '',
-                                "agent": routing_result.agent,
-                                "chunk": text,
-                            })
+                        # v2: Emit text via msg_event (thread-safe Qt signal)
+                        self._emit_msg_event("text_chunk", {
+                            "messageId": request_id or '',
+                            "agent": routing_result.agent,
+                            "chunk": text,
+                        })
 
-                            # v2: Mark agent cell done
-                            self._emit_msg_event("agent_cell", {
-                                "messageId": request_id or '',
-                                "agent": routing_result.agent,
-                                "status": "done",
-                                "data": {}
-                            })
+                        # v2: Mark agent cell done
+                        self._emit_msg_event("agent_cell", {
+                            "messageId": request_id or '',
+                            "agent": routing_result.agent,
+                            "status": "done",
+                            "data": {}
+                        })
 
-                            # v1 callback (will be gated by v2ActiveRef in frontend)
-                            if callback:
-                                callback(text, True, False,
-                                         steps=self._current_request_steps,
-                                         citations={},
-                                         step_labels=self._current_step_labels)
+                        # v1 callback (will be gated by v2ActiveRef in frontend)
+                        if callback:
+                            callback(text, True, False,
+                                     steps=self._current_request_steps,
+                                     citations={},
+                                     step_labels=self._current_step_labels)
 
-                            # v2: Emit msg_done (thread-safe)
-                            self._emit_msg_event("msg_done", {"messageId": request_id or ''})
+                        # v2: Emit msg_done (thread-safe)
+                        self._emit_msg_event("msg_done", {"messageId": request_id or ''})
 
-                            # on_finished must run on main thread — schedule via taskman
-                            if _agent_def.on_finished and self.widget:
-                                _widget = self.widget
-                                _agent_name = routing_result.agent
-                                _result = result if isinstance(result, dict) else {}
-                                _on_finished = _agent_def.on_finished
-                                if mw and mw.taskman:
-                                    mw.taskman.run_on_main(
-                                        lambda: _on_finished(_widget, _agent_name, _result))
-                            return text
+                        # on_finished must run on main thread — schedule via taskman
+                        if _agent_def.on_finished and self.widget:
+                            _widget = self.widget
+                            _agent_name = routing_result.agent
+                            _result = result if isinstance(result, dict) else {}
+                            _on_finished = _agent_def.on_finished
+                            if mw and mw.taskman:
+                                mw.taskman.run_on_main(
+                                    lambda: _on_finished(_widget, _agent_name, _result))
+                        return text
                     except Exception as e:
                         logger.warning("Agent dispatch failed for %s: %s, falling back to Tutor",
                                        routing_result.agent, e)
