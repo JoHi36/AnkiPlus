@@ -57,11 +57,11 @@ class GlobalShortcutFilter(QObject):
         super().__init__(parent)
         self._text_field_has_focus = False
         self._focused_webview = None
-        self._overlay_visible = False
+        self._main_view_active = False
 
-    def set_overlay_visible(self, visible):
-        """Called by overlay_chat.py when overlay shows/hides."""
-        self._overlay_visible = visible
+    def set_main_view_active(self, active):
+        """Called by MainViewWidget on show/hide."""
+        self._main_view_active = active
 
     def set_text_field_focus(self, focused, webview=None):
         """Called by widget.py when a textFieldFocus message is received."""
@@ -262,6 +262,11 @@ class GlobalShortcutFilter(QObject):
                 logger.warning("Could not toggle chatbot panel: %s", e)
             return True
 
+        # When MainViewWidget is active (not in review), let all keys pass through
+        # to the React app — it handles Space, Enter, Escape, R internally
+        if self._main_view_active:
+            return super().eventFilter(obj, event)
+
         # --- Cmd+Z: Always forward to reviewer (undo card) ---
         if (event.key() == Qt.Key.Key_Z and
                 event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier)):
@@ -280,22 +285,6 @@ class GlobalShortcutFilter(QObject):
         # even if a chat text field has focus (these aren't needed for typing).
         # Space and Enter stay with the text field (space = type, enter = send).
         # User presses Escape to exit text field, then Space/Enter go to reviewer.
-        # --- Space in deckBrowser (no text field, no reviewer): toggle overlay ---
-        if (event.key() == Qt.Key.Key_Space and
-                not text_field_active and
-                not self._is_reviewer_active() and
-                hasattr(mw, 'state') and mw.state == 'deckBrowser'):
-            try:
-                if self._overlay_visible:
-                    from .overlay_chat import hide_overlay_chat
-                    hide_overlay_chat()
-                else:
-                    from .overlay_chat import show_overlay_chat
-                    show_overlay_chat()
-            except Exception as e:
-                logger.warning("Could not toggle overlay: %s", e)
-            return True
-
         if text_field_active and self._is_reviewer_active():
             always_reviewer_keys = {
                 Qt.Key.Key_Left, Qt.Key.Key_Right,
@@ -327,10 +316,6 @@ class GlobalShortcutFilter(QObject):
                 return True
 
             return super().eventFilter(obj, event)
-
-        # --- Overlay visible: pass R key through to overlay webview (for HoldToReset) ---
-        if self._overlay_visible and event.key() == Qt.Key.Key_R and not text_field_active:
-            return super().eventFilter(obj, event)  # let Qt deliver to overlay's webview
 
         # --- No text field focused: forward reviewer shortcuts ---
         if not self._is_reviewer_active():

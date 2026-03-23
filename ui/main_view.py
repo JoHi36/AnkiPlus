@@ -608,6 +608,13 @@ class MainViewWidget(QWidget):
         if self._visible:
             return
         self._visible = True
+        try:
+            from .shortcut_filter import get_shortcut_filter
+            sf = get_shortcut_filter()
+            if sf and hasattr(sf, 'set_main_view_active'):
+                sf.set_main_view_active(True)
+        except Exception:
+            pass
         self._position_over_main()
         self.show()
         self.raise_()
@@ -620,6 +627,13 @@ class MainViewWidget(QWidget):
         if not self._visible:
             return
         self._visible = False
+        try:
+            from .shortcut_filter import get_shortcut_filter
+            sf = get_shortcut_filter()
+            if sf and hasattr(sf, 'set_main_view_active'):
+                sf.set_main_view_active(False)
+        except Exception:
+            pass
         # Cancel any active AI request
         try:
             from ..ai.request_manager import get_request_manager

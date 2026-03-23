@@ -39,11 +39,11 @@ try:
 except ImportError:
     from custom_reviewer import custom_reviewer
 
-# Custom Screens Import (DeckBrowser + Overview)
+# MainViewWidget Import (replaces custom_screens)
 try:
-    from .ui.custom_screens import custom_screens
+    from .ui.main_view import get_main_view, show_main_view
 except ImportError:
-    from ui.custom_screens import custom_screens
+    from ui.main_view import get_main_view, show_main_view
 
 # ── Early class-level patches (MUST run at import time, before first render) ──
 # Anki renders DeckBrowser during profile load, BEFORE profile_did_open fires.
@@ -321,10 +321,14 @@ def init_addon():
         config = mw.addonManager.getConfig(__name__) or {}
         use_custom_reviewer = config.get("use_custom_reviewer", True)
 
-        # Enable Custom Screens (DeckBrowser + Overview)
-        custom_screens.enable()
-        QTimer.singleShot(80, custom_screens.refresh_if_visible)
-        logger.info("Custom Screens: Enabled on addon init")
+        # Initialize MainViewWidget (replaces custom_screens)
+        try:
+            main_view = get_main_view()
+            current_state = getattr(mw, 'state', 'deckBrowser')
+            QTimer.singleShot(200, lambda: show_main_view(current_state))
+            logger.info("MainViewWidget: Initialized")
+        except Exception as e:
+            logger.error("Failed to init MainViewWidget: %s", e)
 
         # Hide toolbar + bottom bar on Qt level (backup to class-level patches)
         hide_native_toolbar()
@@ -602,6 +606,12 @@ def on_state_will_change(new_state, old_state):
             # Don't return — let normal state_will_change logic run
     except Exception as e:
         logger.error(f"Preview state check error: {e}")
+
+    # Update MainViewWidget for the new state
+    try:
+        show_main_view(new_state)
+    except Exception as e:
+        logger.warning("MainView state update failed: %s", e)
 
     # Smart Toolbar Management: Hide in Review, Show elsewhere
     config = mw.addonManager.getConfig(__name__) or {}
