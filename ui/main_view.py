@@ -30,6 +30,8 @@ except ImportError:
     from storage.card_sessions import load_deck_messages, save_deck_message, clear_deck_messages
     from config import get_config
 
+SIDEBAR_DEFAULT_WIDTH = 450
+
 
 class MainViewWidget(QWidget):
     """Permanent fullscreen React app covering mw.web."""
@@ -37,6 +39,9 @@ class MainViewWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent or mw)
         self.web_view = None
+        self._sidebar_widget = None
+        self._sidebar_visible = False
+        self._current_mode = 'fullscreen'  # 'fullscreen' or 'sidebar'
         self.message_timer = None
         self._streaming_text = ''
         self._visible = False
@@ -410,8 +415,7 @@ class MainViewWidget(QWidget):
 
     def _handle_plusi_ask(self, data):
         try:
-            from .setup import ensure_chatbot_open
-            ensure_chatbot_open()
+            self.show_sidebar()
         except Exception as e:
             logger.warning("MainView: plusi.ask error: %s", e)
 
@@ -596,14 +600,107 @@ class MainViewWidget(QWidget):
             logger.error("MainView: getOverviewData error: %s", e)
             return {'deckId': 0, 'deckName': '', 'dueNew': 0, 'dueLearning': 0, 'dueReview': 0}
 
+    # ── Sidebar (ChatbotWidget) ─────────────────────────────────────
+
+    def _ensure_sidebar(self):
+        """Lazily create the ChatbotWidget sidebar."""
+        if self._sidebar_widget is not None:
+            return
+        try:
+            from .widget import ChatbotWidget
+        except ImportError:
+            from ui.widget import ChatbotWidget
+        self._sidebar_widget = ChatbotWidget()
+        self.layout().addWidget(self._sidebar_widget)
+        self._sidebar_widget.hide()
+        logger.info("MainView: sidebar (ChatbotWidget) created")
+
+    def show_sidebar(self):
+        """Show the sidebar (ChatbotWidget) in review mode."""
+        self._ensure_sidebar()
+        self._current_mode = 'sidebar'
+        self._sidebar_visible = True
+        if self.web_view:
+            self.web_view.hide()
+        self._sidebar_widget.show()
+        self._position_over_main()
+        self._squeeze_main_content(True)
+        self._visible = True
+        self.show()
+        self.raise_()
+        if self.parent():
+            self.parent().installEventFilter(self)
+        # Trigger panelOpened in sidebar React
+        try:
+            if self._sidebar_widget.web_view:
+                self._sidebar_widget.web_view.page().runJavaScript(
+                    "window.ankiReceive && window.ankiReceive({type:'panelOpened'});"
+                )
+        except Exception:
+            pass
+
+    def hide_sidebar(self):
+        """Hide the sidebar. Only hides the whole widget if still in sidebar mode."""
+        self._sidebar_visible = False
+        if self._sidebar_widget:
+            self._sidebar_widget.hide()
+        self._squeeze_main_content(False)
+        # Only hide entire widget if in sidebar mode — don't kill fullscreen
+        if self._current_mode == 'sidebar':
+            self._visible = False
+            if self.parent():
+                self.parent().removeEventFilter(self)
+            self.hide()
+
+    def _squeeze_main_content(self, make_room):
+        """Resize mw.web so the custom reviewer doesn't render behind the sidebar."""
+        try:
+            central = mw.centralWidget()
+            if central and central.layout():
+                right_margin = SIDEBAR_DEFAULT_WIDTH if make_room else 0
+                central.layout().setContentsMargins(0, 0, right_margin, 0)
+        except Exception:
+            pass
+
+    def toggle_sidebar(self):
+        """Toggle sidebar visibility."""
+        if self._sidebar_visible:
+            self.hide_sidebar()
+        else:
+            self.show_sidebar()
+
+    def get_sidebar_widget(self):
+        """Return the ChatbotWidget instance (for hooks that need it)."""
+        self._ensure_sidebar()
+        return self._sidebar_widget
+
     # ── Show / Hide ──────────────────────────────────────────────────
 
     def show_for_state(self, state):
         """Show the widget and send state data to React."""
         if state == 'review':
-            self._hide()
+            # Prepare sidebar mode — hide fullscreen overlay so mw.web (custom reviewer) shows
+            self._current_mode = 'sidebar'
+            if self.web_view:
+                self.web_view.hide()
+            # Stop main polling (sidebar has its own)
+            if self.message_timer:
+                self.message_timer.stop()
+            # Hide widget — sidebar is shown by ensure_chatbot_open() in setup.py
+            self._visible = False
+            self.hide()
             return
 
+        # Non-review: fullscreen mode
+        self._current_mode = 'fullscreen'
+        self._sidebar_visible = False
+        if self._sidebar_widget:
+            self._sidebar_widget.hide()
+        self._squeeze_main_content(False)  # Restore margins from sidebar mode
+        if self.web_view:
+            self.web_view.show()
+        # Reset _visible so _show() doesn't bail (mode changed from sidebar → fullscreen)
+        self._visible = False
         self._show()
         self._pending_state = state
 
@@ -678,11 +775,13 @@ class MainViewWidget(QWidget):
         self.hide()
 
     def _position_over_main(self):
-        """Position over the ENTIRE main window (not just mw.web).
-        This ensures the overlay covers everything even when sidebars are open."""
+        """Position based on mode: fullscreen or right sidebar."""
         try:
-            # Cover the full window — the React app handles its own layout
-            self.setGeometry(0, 0, mw.width(), mw.height())
+            if self._current_mode == 'sidebar':
+                w = SIDEBAR_DEFAULT_WIDTH
+                self.setGeometry(mw.width() - w, 0, w, mw.height())
+            else:
+                self.setGeometry(0, 0, mw.width(), mw.height())
         except Exception:
             try:
                 self.setGeometry(mw.rect())

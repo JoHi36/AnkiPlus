@@ -145,7 +145,7 @@ def _notify_frontend_preview(stage, card_id):
     import json
     from ..ui import setup as ui_setup
 
-    widget = getattr(ui_setup, '_chatbot_widget', None)
+    widget = ui_setup.get_chatbot_widget()
     if widget and widget.web_view:
         if stage is None:
             payload = json.dumps({"type": "previewMode", "data": None})
@@ -189,7 +189,7 @@ def _evaluate_answer_async(data):
                         _self_mod = None
                     try:
                         from ..ui import setup as ui_setup
-                        chat_widget = getattr(ui_setup, '_chatbot_widget', None)
+                        chat_widget = ui_setup.get_chatbot_widget()
                         if chat_widget and hasattr(chat_widget, 'web_view'):
                             score = result.get('score', 0)
                             card_id = mw.reviewer.card.id if mw.reviewer and mw.reviewer.card else 0
@@ -684,7 +684,7 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                 # Send review result to chat panel for SectionDivider performance data
                 try:
                     from ..ui import setup as ui_setup
-                    chat_widget = getattr(ui_setup, '_chatbot_widget', None)
+                    chat_widget = ui_setup.get_chatbot_widget()
                     if chat_widget and hasattr(chat_widget, 'web_view'):
                         ease_labels = {1: 'Again', 2: 'Hard', 3: 'Good', 4: 'Easy'}
                         # Calculate time spent on card (approximate from card stats)
@@ -740,7 +740,7 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                         # Send cardContext to chat panel
                         try:
                             from ..ui import setup as ui_setup
-                            chat_widget = getattr(ui_setup, '_chatbot_widget', None)
+                            chat_widget = ui_setup.get_chatbot_widget()
                             if chat_widget and hasattr(chat_widget, 'card_tracker'):
                                 chat_widget.card_tracker.send_card_context(card, is_question=True)
                                 logger.info(f"CustomReviewer: ✅ cardContext sent to chat for next card {card.id}")
@@ -789,11 +789,12 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
         # Open chat panel with @Plusi prefix
         try:
             from ..ui import setup as ui_setup
-            if not (hasattr(ui_setup, '_chatbot_dock') and ui_setup._chatbot_dock and ui_setup._chatbot_dock.isVisible()):
-                if hasattr(ui_setup, 'toggle_chatbot'):
-                    ui_setup.toggle_chatbot()
+            from ..ui.main_view import get_main_view
+            mv = get_main_view()
+            if not mv._sidebar_visible:
+                ui_setup.ensure_chatbot_open()
             # Send @Plusi focus event to React
-            chat_widget = getattr(ui_setup, '_chatbot_widget', None)
+            chat_widget = ui_setup.get_chatbot_widget()
             if chat_widget and hasattr(chat_widget, 'web_view'):
                 chat_widget.web_view.page().runJavaScript(
                     "window.dispatchEvent(new CustomEvent('plusi-ask-focus', {detail: {prefix: '@Plusi '}}));"
@@ -814,11 +815,11 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
         # Reviewer asks: is the side panel open? Respond authoritatively.
         # Note: web.eval() is Qt's QWebEngineView JS execution API, not Python eval().
         try:
-            from ..ui.setup import _chatbot_dock
-            is_open = _chatbot_dock is not None and _chatbot_dock.isVisible()
+            from ..ui.main_view import get_main_view
+            is_open = get_main_view()._sidebar_visible
             if mw and mw.reviewer and mw.reviewer.web:
                 val = "true" if is_open else "false"
-                mw.reviewer.web.eval(f'if(window.setChatOpen) setChatOpen({val});')
+                mw.reviewer.web.page().runJavaScript('if(window.setChatOpen) setChatOpen(%s);' % val)
         except Exception as e:
             logger.debug("dock:query_panel_state error: %s", e)
         return (True, None)
@@ -840,11 +841,11 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
     elif message == "chat:open":
         try:
             from ..ui import setup as ui_setup
-            was_already_open = hasattr(ui_setup, '_chatbot_dock') and ui_setup._chatbot_dock and ui_setup._chatbot_dock.isVisible()
+            from ..ui.main_view import get_main_view
+            was_already_open = get_main_view()._sidebar_visible
 
             if not was_already_open:
-                if hasattr(ui_setup, 'toggle_chatbot'):
-                    ui_setup.toggle_chatbot()
+                ui_setup.ensure_chatbot_open()
 
             # Tell reviewer JS that chat is now open
             try:
@@ -857,7 +858,7 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
             from aqt.qt import QTimer
             def _focus_chat_textarea():
                 try:
-                    widget = ui_setup._chatbot_widget
+                    widget = ui_setup.get_chatbot_widget()
                     if widget and hasattr(widget, 'web_view'):
                         # Focus the webview widget itself first
                         widget.web_view.setFocus()
@@ -865,7 +866,7 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                         widget.web_view.page().runJavaScript(
                             "var ta = document.querySelector('textarea'); if (ta) { ta.focus(); }"
                         )
-                        logger.info("CustomReviewer: ✅ Chat textarea focused")
+                        logger.info("CustomReviewer: chat textarea focused")
                 except Exception as e:
                     logger.error(f"CustomReviewer: focus chat error: {e}")
             # Single delay after webview content is ready
@@ -889,7 +890,7 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                     )
                     def _send_initial(msg=initial_msg):
                         try:
-                            widget = ui_setup._chatbot_widget
+                            widget = ui_setup.get_chatbot_widget()
                             if widget and hasattr(widget, 'web_view'):
                                 widget.web_view.page().runJavaScript(
                                     f"if(window.ankiReceive) window.ankiReceive({json.dumps({'type': 'initialMessage', 'data': {'text': msg}})});"
@@ -905,10 +906,11 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
     elif message == "chat:close":
         try:
             from ..ui import setup as ui_setup
-            is_open = hasattr(ui_setup, '_chatbot_dock') and ui_setup._chatbot_dock and ui_setup._chatbot_dock.isVisible()
-            if is_open:
+            from ..ui.main_view import get_main_view
+            mv = get_main_view()
+            if mv._sidebar_visible:
                 # Hide panel without setting _panel_user_closed (auto-close on card advance)
-                ui_setup._chatbot_dock.hide()
+                mv.hide_sidebar()
                 ui_setup._notify_reviewer_chat_state(False)
             # Tell reviewer JS that chat is now closed
             try:
@@ -1058,7 +1060,7 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                         is_q = not show_answer
                         try:
                             from ..ui import setup as ui_setup
-                            chat_widget = getattr(ui_setup, '_chatbot_widget', None)
+                            chat_widget = ui_setup.get_chatbot_widget()
                             if chat_widget and hasattr(chat_widget, 'card_tracker'):
                                 chat_widget.card_tracker.send_card_context(card, is_question=is_q)
                                 logger.info(f"CustomReviewer: ✅ cardContext sent to chat for card {target_id}")
@@ -1467,9 +1469,8 @@ class CustomReviewer:
         # Inject chat panel state so interactions.js knows whether dock should be hidden.
         chat_panel_open = False
         try:
-            from ..ui.setup import _chatbot_dock
-            if _chatbot_dock is not None and _chatbot_dock.isVisible():
-                chat_panel_open = True
+            from ..ui.main_view import get_main_view
+            chat_panel_open = get_main_view()._sidebar_visible
         except Exception:
             pass
         chat_state_js = f'\n<script>window.__chatOpen = {"true" if chat_panel_open else "false"};</script>'

@@ -1,6 +1,6 @@
 """
 UI-Setup Modul
-Verwaltet Dock-Widget und UI-Initialisierung
+Sidebar via MainViewWidget (replaces QDockWidget)
 """
 
 from aqt import mw
@@ -9,138 +9,38 @@ from aqt.utils import showInfo
 from aqt import gui_hooks
 import json
 
-# WebEngine / WebChannel
-try:
-    from PyQt6.QtWebEngineWidgets import QWebEngineView
-except Exception:
-    try:
-        from PyQt5.QtWebEngineWidgets import QWebEngineView
-    except Exception:
-        QWebEngineView = None
-
-# Widget-Import
-try:
-    from .widget import ChatbotWidget
-except ImportError:
-    from ui.widget import ChatbotWidget
-
 try:
     from ..utils.logging import get_logger
 except ImportError:
     from utils.logging import get_logger
 logger = get_logger(__name__)
 
-try:
-    from .tokens_qt import get_tokens
-except ImportError:
-    from tokens_qt import get_tokens
-
-# Style-Funktionen
-def get_dock_widget_style():
-    try:
-        from .theme import get_resolved_theme
-    except ImportError:
-        from ui.theme import get_resolved_theme
-    resolved = get_resolved_theme()
-    tokens = get_tokens(resolved)
-    return f"""
-    QDockWidget {{
-        background-color: {tokens['bg_deep']};
-        color: {tokens['text_primary']};
-    }}
-    /* Minimal separator - nearly invisible, matches unified background */
-    QDockWidget::separator {{
-        background: {tokens['border_subtle']};
-        width: 1px;
-    }}
-    QDockWidget::separator:hover {{
-        background: {tokens['border_medium']};
-        width: 1px;
-    }}
-    """
-
-def show_qwebengine_warning():
-    showInfo("QWebEngine ist nicht verfügbar. Bitte installieren Sie QtWebEngine (PyQt6-WebEngine).")
-
-# Globale Variablen
-_chatbot_dock = None
-_chatbot_widget = None  # Widget-Instanz für Event-Hooks
+# Sidebar state
 _panel_user_closed = False  # True wenn User das Panel manuell geschlossen hat
 
 def _notify_reviewer_chat_state(is_open):
     """Tell the reviewer webview to show/hide its dock based on chat panel visibility."""
     val = "true" if is_open else "false"
-    js = f'if(window.setChatOpen) setChatOpen({val});'
+    js = 'if(window.setChatOpen) setChatOpen(%s);' % val
 
     def _send():
         try:
             if mw and mw.reviewer and mw.reviewer.web:
-                mw.reviewer.web.eval(js)
+                mw.reviewer.web.page().runJavaScript(js)
         except Exception:
             pass
 
     _send()
-    # Retries to cover page load timing (each wrapped in try/except)
     for delay in [200, 500, 1000]:
         QTimer.singleShot(delay, _send)
 
-def _create_chatbot_dock():
-    """Creates the chatbot dock widget (called on first use)."""
-    global _chatbot_dock, _chatbot_widget
-    if _chatbot_dock is not None:
-        return
-
-    _chatbot_dock = QDockWidget("", mw)
-    _chatbot_dock.setObjectName("chatbotDock")
-    _chatbot_dock.setTitleBarWidget(QWidget())
-    _chatbot_dock.setStyleSheet(get_dock_widget_style())
-
-    chatbot_widget = ChatbotWidget()
-    _chatbot_widget = chatbot_widget
-    _chatbot_dock.setWidget(chatbot_widget)
-    mw.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, _chatbot_dock)
-
-    DOCK_MIN_WIDTH = 350
-    DOCK_MAX_WIDTH = 800
-    DOCK_DEFAULT_WIDTH = 450
-    _chatbot_dock.setMinimumWidth(DOCK_MIN_WIDTH)
-    _chatbot_dock.setMaximumWidth(DOCK_MAX_WIDTH)
-    _chatbot_dock.resize(DOCK_DEFAULT_WIDTH, mw.height())
-
+def _get_main_view():
+    """Get MainViewWidget singleton."""
     try:
-        from .theme import get_resolved_theme
+        from .main_view import get_main_view
     except ImportError:
-        from ui.theme import get_resolved_theme
-    _resolved = get_resolved_theme()
-    _sep_tokens = get_tokens(_resolved)
-    mw.setStyleSheet(mw.styleSheet() + f"""
-        QMainWindow::separator {{
-            background: {_sep_tokens['border_subtle']};
-            width: 1px !important;
-            margin: 0px;
-            padding: 0px;
-        }}
-        QMainWindow::separator:hover {{
-            background: {_sep_tokens['border_medium']};
-            width: 1px !important;
-        }}
-        QSplitter::handle {{
-            background: {_sep_tokens['border_subtle']};
-            width: 1px !important;
-            margin: 0px;
-            padding: 0px;
-        }}
-        QSplitter::handle:hover {{
-            background: {_sep_tokens['border_medium']};
-            width: 1px !important;
-        }}
-    """)
-
-    _chatbot_dock.setFeatures(
-        QDockWidget.DockWidgetFeature.DockWidgetClosable |
-        QDockWidget.DockWidgetFeature.DockWidgetMovable |
-        QDockWidget.DockWidgetFeature.DockWidgetFloatable
-    )
+        from ui.main_view import get_main_view
+    return get_main_view()
 
 def show_settings():
     """Opens Anki's native preferences dialog."""
@@ -151,51 +51,38 @@ def show_settings():
         logger.exception("Fehler beim Öffnen der Settings: %s", e)
 
 def toggle_chatbot_panel():
-    """Öffnet oder schließt das Chatbot-Panel."""
-    global _chatbot_dock, _panel_user_closed
-    if _chatbot_dock is not None and _chatbot_dock.isVisible():
-        _chatbot_dock.hide()
+    """Toggle sidebar visibility."""
+    global _panel_user_closed
+    mv = _get_main_view()
+    if mv._sidebar_visible:
+        mv.hide_sidebar()
         _panel_user_closed = True
         _notify_reviewer_chat_state(False)
     else:
         _panel_user_closed = False
         ensure_chatbot_open()
 
-# Alias for backwards compatibility (custom_reviewer, custom_screens use this name)
+# Alias for backwards compatibility
 toggle_chatbot = toggle_chatbot_panel
 
 def close_chatbot_panel():
-    """Schließt das Dock-Panel"""
-    global _chatbot_dock, _panel_user_closed
-    if _chatbot_dock:
-        _chatbot_dock.hide()
-        _panel_user_closed = True
-        _notify_reviewer_chat_state(False)
+    """Close the sidebar."""
+    global _panel_user_closed
+    mv = _get_main_view()
+    mv.hide_sidebar()
+    _panel_user_closed = True
+    _notify_reviewer_chat_state(False)
 
 def get_chatbot_widget():
-    """Gibt die Chatbot-Widget-Instanz zurück (für Hooks)"""
-    global _chatbot_widget
-    return _chatbot_widget
+    """Return the ChatbotWidget instance (sidebar in MainViewWidget)."""
+    mv = _get_main_view()
+    return mv.get_sidebar_widget()
 
 def ensure_chatbot_open():
-    """Öffnet das Chatbot-Panel falls es noch nicht sichtbar ist. Gibt das Widget zurück."""
-    global _chatbot_dock
-    if _chatbot_dock is None:
-        _create_chatbot_dock()
-    if _chatbot_dock and not _chatbot_dock.isVisible():
-        _chatbot_dock.show()
-    # Always notify reviewer — even if dock was already visible,
-    # because reviewer HTML may have been re-injected (card navigation)
+    """Open the sidebar. Returns the ChatbotWidget."""
+    mv = _get_main_view()
+    mv.show_sidebar()
     _notify_reviewer_chat_state(True)
-    # Trigger slide-in animation in React
-    try:
-        widget = get_chatbot_widget()
-        if widget and widget.web_view:
-            widget.web_view.page().runJavaScript(
-                "window.ankiReceive && window.ankiReceive({type:'panelOpened'});"
-            )
-    except Exception:
-        pass
     # Send current deck info after short delay
     def check_and_send_deck():
         try:
@@ -219,7 +106,7 @@ def ensure_chatbot_open():
                         }
                     }
                     widget.web_view.page().runJavaScript(
-                        f"window.ankiReceive({json.dumps(payload)});"
+                        "window.ankiReceive(%s);" % json.dumps(payload)
                     )
         except Exception as e:
             logger.exception("Fehler beim Senden von deckSelected: %s", e)
@@ -325,25 +212,23 @@ def setup_ui():
 
 def on_state_did_change(new_state, old_state):
     """Wird aufgerufen, wenn sich der Anki-Status ändert"""
-    global _chatbot_dock, _panel_user_closed
+    global _panel_user_closed
     if new_state == 'review':
         # Respect user's choice — only auto-open if user hasn't manually closed it
         if not _panel_user_closed:
             ensure_chatbot_open()
         else:
-            # Panel stays closed, but still notify reviewer about panel state
             _notify_reviewer_chat_state(False)
-    elif _chatbot_dock is not None and _chatbot_dock.isVisible():
-        _chatbot_dock.hide()
-        _notify_reviewer_chat_state(False)
+    # Sidebar cleanup for non-review is handled by show_for_state() — don't call
+    # hide_sidebar() here, it would hide the fullscreen MainViewWidget too.
 
+    # Send deck update to sidebar widget (only if it exists and is initialized)
     try:
-        widget = get_chatbot_widget()
-        if widget and widget.web_view and hasattr(widget, 'bridge') and widget.bridge:
-            # Hole Deck-Daten proaktiv und sende sie an das Frontend
-            deck_json = widget.bridge.getCurrentDeck()
-            js = f"window.ankiReceive({{type: 'currentDeck', data: {deck_json}}});"
-            widget.web_view.page().runJavaScript(js)
+        mv = _get_main_view()
+        if mv._sidebar_widget and mv._sidebar_widget.web_view and hasattr(mv._sidebar_widget, 'bridge') and mv._sidebar_widget.bridge:
+            deck_json = mv._sidebar_widget.bridge.getCurrentDeck()
+            js = "window.ankiReceive({type: 'currentDeck', data: %s});" % deck_json
+            mv._sidebar_widget.web_view.page().runJavaScript(js)
             logger.debug("State Change (%s -> %s): Deck-Update gesendet", old_state, new_state)
     except Exception as e:
         logger.error("Fehler im State-Change-Hook: %s", e)

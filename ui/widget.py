@@ -1108,13 +1108,7 @@ class ChatbotWidget(QWidget):
         except Exception:
             pass
 
-        # 7. Re-apply QDockWidget stylesheet for sidebar
-        try:
-            from .setup import _chatbot_dock, get_dock_widget_style
-            if _chatbot_dock:
-                _chatbot_dock.setStyleSheet(get_dock_widget_style())
-        except Exception:
-            pass
+        # 7. QDockWidget removed — sidebar is now inside MainViewWidget
 
     def _msg_authenticate(self, data):
         if isinstance(data, dict):
