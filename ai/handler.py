@@ -464,11 +464,21 @@ class AIHandler:
                     except Exception:
                         memory_context = ''
 
+                    # Create agent-specific memory instance
+                    _agent_memory = None
+                    try:
+                        from .agent_memory import AgentMemory
+                        _agent_memory = AgentMemory(routing_result.agent)
+                    except Exception:
+                        pass
+
                     try:
                         clean_msg = routing_result.clean_message or user_message
                         agent_kwargs = dict(_agent_def.extra_kwargs)
                         if memory_context:
                             agent_kwargs['memory_context'] = memory_context
+                        if _agent_memory:
+                            agent_kwargs['memory'] = _agent_memory
                         result = _run_fn(situation=clean_msg, **agent_kwargs)
                         # Format result for streaming callback
                         text = result.get('text', '') if isinstance(result, dict) else str(result)
@@ -518,6 +528,17 @@ class AIHandler:
                     # Agent couldn't be loaded — fall through to Tutor
                     logger.info("Agent %s not loadable, falling back to Tutor",
                                 routing_result.agent)
+
+            # Initialize Tutor agent memory (available for future use)
+            _tutor_memory = None
+            try:
+                from .agent_memory import AgentMemory
+                _tutor_memory = AgentMemory('tutor')
+                # Track query count
+                _count = _tutor_memory.get('total_queries', 0)
+                _tutor_memory.set('total_queries', _count + 1)
+            except Exception:
+                pass
 
             # Continue with Tutor pipeline (existing RAG flow)
             self._emit_pipeline_step("orchestrating", "done", {
