@@ -10,11 +10,21 @@ Heavy lifting is delegated to:
 
 import json
 import time
-from ..config import (
-    get_config, RESPONSE_STYLES, is_backend_mode, get_backend_url,
-    get_auth_token, get_refresh_token, update_config
-)
-from .system_prompt import get_system_prompt
+try:
+    from ..config import (
+        get_config, RESPONSE_STYLES, is_backend_mode, get_backend_url,
+        get_auth_token, get_refresh_token, update_config
+    )
+except ImportError:
+    from config import (
+        get_config, RESPONSE_STYLES, is_backend_mode, get_backend_url,
+        get_auth_token, get_refresh_token, update_config
+    )
+
+try:
+    from .system_prompt import get_system_prompt
+except ImportError:
+    from system_prompt import get_system_prompt
 
 try:
     from .tools import registry as tool_registry
@@ -40,19 +50,40 @@ except ImportError:
 logger = get_logger(__name__)
 
 # --- Re-exports from extracted modules -------------------------------------------
-from .gemini import (
-    get_google_response, get_google_response_streaming, stream_response,
-    retry_with_backoff, get_user_friendly_error, ERROR_MESSAGES
-)
-from .rag import (
-    rag_router, rag_retrieve_cards, fix_router_queries,
-    is_standalone_question, extract_card_keywords,
-    PHASE_SEARCH, PHASE_RETRIEVAL
-)
-from .models import (
-    get_section_title as _get_section_title,
-    fetch_available_models as _fetch_available_models,
-)
+try:
+    from .gemini import (
+        get_google_response, get_google_response_streaming, stream_response,
+        retry_with_backoff, get_user_friendly_error, ERROR_MESSAGES
+    )
+except ImportError:
+    from gemini import (
+        get_google_response, get_google_response_streaming, stream_response,
+        retry_with_backoff, get_user_friendly_error, ERROR_MESSAGES
+    )
+
+try:
+    from .rag import (
+        rag_router, rag_retrieve_cards, fix_router_queries,
+        is_standalone_question, extract_card_keywords,
+        PHASE_SEARCH, PHASE_RETRIEVAL
+    )
+except ImportError:
+    from rag import (
+        rag_router, rag_retrieve_cards, fix_router_queries,
+        is_standalone_question, extract_card_keywords,
+        PHASE_SEARCH, PHASE_RETRIEVAL
+    )
+
+try:
+    from .models import (
+        get_section_title as _get_section_title,
+        fetch_available_models as _fetch_available_models,
+    )
+except ImportError:
+    from models import (
+        get_section_title as _get_section_title,
+        fetch_available_models as _fetch_available_models,
+    )
 
 # Import Anki's main window for thread-safe UI access
 try:
@@ -377,6 +408,131 @@ class AIHandler:
                     logger.warning("msg_event emit error: %s", e)
             mw.taskman.run_on_main(emit_on_main)
 
+    # ---- Consolidated agent dispatch (non-tutor) --------------------------------
+
+    def _dispatch_agent(self, agent_name, run_fn, situation, request_id,
+                        on_finished=None, extra_kwargs=None, callback=None):
+        """Consolidated agent dispatch for non-tutor agents.
+
+        NOT used for Tutor — Tutor goes through handler's inline RAG pipeline.
+        Creates AgentMemory, loads shared memory, emits v2 events,
+        calls the agent's run function with standard interface, handles result.
+
+        Args:
+            agent_name: Agent identifier ('help', 'research', 'plusi', etc.)
+            run_fn: The agent's run function (standard signature)
+            situation: User message (cleaned of @mentions)
+            request_id: Unique request ID for v2 event correlation
+            on_finished: Optional lifecycle callback(widget, agent_name, result)
+            extra_kwargs: Additional kwargs to pass to the agent
+            callback: Optional v1 streaming callback
+
+        Returns:
+            str: The agent's response text
+        """
+        extra_kwargs = extra_kwargs or {}
+
+        # Emit orchestration done
+        self._emit_pipeline_step("orchestrating", "done", {
+            'search_needed': False,
+            'retrieval_mode': 'agent:%s' % agent_name,
+            'scope': 'none',
+            'scope_label': agent_name,
+        })
+
+        # v2: Emit orchestration event
+        self._emit_msg_event("orchestration", {
+            "messageId": request_id or '',
+            "agent": agent_name,
+            "mode": "dispatch",
+            "steps": [{"step": "orchestrating", "status": "done", "data": {
+                "agent": agent_name,
+                "retrieval_mode": "agent:%s" % agent_name,
+                "search_needed": False,
+                "scope": "none",
+            }}],
+        })
+
+        # v2: Create agent cell
+        self._emit_msg_event("agent_cell", {
+            "messageId": request_id or '',
+            "agent": agent_name,
+            "status": "thinking",
+            "data": {}
+        })
+
+        # Load shared memory for context
+        memory_context = ''
+        try:
+            from .memory import load_shared_memory
+            shared_mem = load_shared_memory()
+            memory_context = shared_mem.to_context_string()
+        except Exception:
+            pass
+
+        # Create agent-specific memory instance
+        agent_memory = None
+        try:
+            from .agent_memory import AgentMemory
+            agent_memory = AgentMemory(agent_name)
+        except Exception:
+            pass
+
+        # Build the agent's emit_step callback (routes through pipeline signal)
+        def agent_emit_step(step, status, data=None):
+            self._emit_pipeline_step(step, status, data)
+
+        # Build kwargs
+        agent_kwargs = dict(extra_kwargs)
+        if memory_context:
+            agent_kwargs['memory_context'] = memory_context
+
+        # Call agent with standard interface
+        result = run_fn(
+            situation=situation,
+            emit_step=agent_emit_step,
+            memory=agent_memory,
+            **agent_kwargs,
+        )
+
+        # Extract text from result
+        text = result.get('text', '') if isinstance(result, dict) else str(result)
+
+        # v2: Emit text
+        self._emit_msg_event("text_chunk", {
+            "messageId": request_id or '',
+            "agent": agent_name,
+            "chunk": text,
+        })
+
+        # v2: Mark agent cell done
+        self._emit_msg_event("agent_cell", {
+            "messageId": request_id or '',
+            "agent": agent_name,
+            "status": "done",
+            "data": {}
+        })
+
+        # v1 callback
+        if callback:
+            callback(text, True, False,
+                     steps=self._current_request_steps,
+                     citations={},
+                     step_labels=self._current_step_labels)
+
+        # v2: Done
+        self._emit_msg_event("msg_done", {"messageId": request_id or ''})
+
+        # Lifecycle: on_finished (main thread)
+        if on_finished and self.widget:
+            _widget = self.widget
+            _result = result if isinstance(result, dict) else {}
+            if mw and mw.taskman:
+                mw.taskman.run_on_main(
+                    lambda: on_finished(_widget, agent_name, _result))
+
+        return text
+
     # ---- RAG orchestrator (stays here -- uses self.widget, self._emit_*) --------
 
     def get_response_with_rag(self, user_message, context=None, history=None,
@@ -428,104 +584,22 @@ class AIHandler:
                                        routing_result.agent, e)
 
                 if _agent_def and _run_fn:
-                    self._emit_pipeline_step("orchestrating", "done", {
-                        'search_needed': False,
-                        'retrieval_mode': 'agent:%s' % routing_result.agent,
-                        'scope': 'none',
-                        'scope_label': routing_result.agent,
-                    })
-
-                    # v2: Emit orchestration event for non-tutor agent
-                    self._emit_msg_event("orchestration", {
-                        "messageId": request_id or '',
-                        "agent": routing_result.agent,
-                        "mode": routing_result.method,
-                        "steps": [{"step": "orchestrating", "status": "done", "data": {
-                            "agent": routing_result.agent,
-                            "retrieval_mode": "agent:%s" % routing_result.agent,
-                            "search_needed": False,
-                            "scope": "none",
-                        }}],
-                    })
-
-                    # v2: Create agent cell
-                    self._emit_msg_event("agent_cell", {
-                        "messageId": request_id or '',
-                        "agent": routing_result.agent,
-                        "status": "thinking",
-                        "data": {}
-                    })
-
-                    # Load shared memory for context
-                    try:
-                        from .memory import load_shared_memory
-                        memory = load_shared_memory()
-                        memory_context = memory.to_context_string()
-                    except Exception:
-                        memory_context = ''
-
-                    # Create agent-specific memory instance
-                    _agent_memory = None
-                    try:
-                        from .agent_memory import AgentMemory
-                        _agent_memory = AgentMemory(routing_result.agent)
-                    except Exception:
-                        pass
-
                     try:
                         clean_msg = routing_result.clean_message or user_message
-                        agent_kwargs = dict(_agent_def.extra_kwargs)
-                        if memory_context:
-                            agent_kwargs['memory_context'] = memory_context
-                        if _agent_memory:
-                            agent_kwargs['memory'] = _agent_memory
-                        result = _run_fn(situation=clean_msg, **agent_kwargs)
-                        # Format result for streaming callback
-                        text = result.get('text', '') if isinstance(result, dict) else str(result)
-
-                        # v2: Emit text via msg_event (thread-safe Qt signal)
-                        self._emit_msg_event("text_chunk", {
-                            "messageId": request_id or '',
-                            "agent": routing_result.agent,
-                            "chunk": text,
-                        })
-
-                        # v2: Mark agent cell done
-                        self._emit_msg_event("agent_cell", {
-                            "messageId": request_id or '',
-                            "agent": routing_result.agent,
-                            "status": "done",
-                            "data": {}
-                        })
-
-                        # v1 callback (will be gated by v2ActiveRef in frontend)
-                        if callback:
-                            callback(text, True, False,
-                                     steps=self._current_request_steps,
-                                     citations={},
-                                     step_labels=self._current_step_labels)
-
-                        # v2: Emit msg_done (thread-safe)
-                        self._emit_msg_event("msg_done", {"messageId": request_id or ''})
-
-                        # on_finished must run on main thread — schedule via taskman
-                        if _agent_def.on_finished and self.widget:
-                            _widget = self.widget
-                            _agent_name = routing_result.agent
-                            _result = result if isinstance(result, dict) else {}
-                            _on_finished = _agent_def.on_finished
-                            if mw and mw.taskman:
-                                mw.taskman.run_on_main(
-                                    lambda: _on_finished(_widget, _agent_name, _result))
-                        return text
+                        return self._dispatch_agent(
+                            agent_name=routing_result.agent,
+                            run_fn=_run_fn,
+                            situation=clean_msg,
+                            request_id=request_id,
+                            on_finished=_agent_def.on_finished,
+                            extra_kwargs=_agent_def.extra_kwargs,
+                            callback=callback,
+                        )
                     except Exception as e:
                         logger.warning("Agent dispatch failed for %s: %s, falling back to Tutor",
                                        routing_result.agent, e)
-                        # v2: Clean up on failure
                         self._emit_msg_event("msg_done", {"messageId": request_id or ''})
-                        # Fall through to Tutor pipeline
                 else:
-                    # Agent couldn't be loaded — fall through to Tutor
                     logger.info("Agent %s not loadable, falling back to Tutor",
                                 routing_result.agent)
 

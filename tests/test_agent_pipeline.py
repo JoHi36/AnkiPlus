@@ -12,6 +12,8 @@ import sys
 import os
 import inspect
 import pytest
+from unittest.mock import patch
+import sqlite3
 
 STANDARD_PARAMS = {'situation', 'emit_step', 'memory'}
 
@@ -80,3 +82,155 @@ class TestAgentReturnContract:
         result = run_tutor(situation="test")
         assert isinstance(result, dict)
         assert 'text' in result
+
+
+class TestDispatchPipeline:
+    """Test the consolidated dispatch pipeline in handler.py."""
+
+    def test_dispatch_method_exists(self):
+        """_dispatch_agent should exist on AIHandler."""
+        from ai.handler import AIHandler
+        handler = AIHandler()
+        assert hasattr(handler, '_dispatch_agent'), "_dispatch_agent method missing"
+
+    def test_dispatch_passes_emit_step_to_agent(self):
+        """Agents should receive an emit_step callback from the dispatch pipeline."""
+        from ai.handler import AIHandler
+        handler = AIHandler()
+
+        received_kwargs = {}
+        def fake_run(situation='', emit_step=None, memory=None, **kwargs):
+            received_kwargs['emit_step'] = emit_step
+            received_kwargs['memory'] = memory
+            return {'text': 'test response'}
+
+        steps = []
+        handler._pipeline_signal_callback = lambda s, st, d: steps.append((s, st, d))
+        handler._msg_event_callback = lambda t, d: None
+
+        handler._dispatch_agent(
+            agent_name='test',
+            run_fn=fake_run,
+            situation='hello',
+            request_id='req-1',
+        )
+        assert received_kwargs['emit_step'] is not None, "emit_step not passed to agent"
+        assert callable(received_kwargs['emit_step'])
+
+    def test_dispatch_passes_agent_memory(self):
+        """Agents should receive an AgentMemory instance."""
+        from ai.handler import AIHandler
+        from ai.agent_memory import AgentMemory
+        handler = AIHandler()
+
+        received_kwargs = {}
+        def fake_run(situation='', emit_step=None, memory=None, **kwargs):
+            received_kwargs['memory'] = memory
+            return {'text': 'ok'}
+
+        handler._pipeline_signal_callback = lambda s, st, d: None
+        handler._msg_event_callback = lambda t, d: None
+
+        # Mock _get_db to use in-memory SQLite (avoids aqt.mw dependency)
+        test_db = sqlite3.connect(':memory:')
+        with patch.object(AgentMemory, '_get_db', return_value=test_db):
+            handler._dispatch_agent(
+                agent_name='test',
+                run_fn=fake_run,
+                situation='hello',
+                request_id='req-1',
+            )
+        assert isinstance(received_kwargs['memory'], AgentMemory)
+        assert received_kwargs['memory'].agent_name == 'test'
+        test_db.close()
+
+    def test_dispatch_emits_v2_events(self):
+        """Dispatch should emit orchestration -> agent_cell -> text_chunk -> msg_done."""
+        from ai.handler import AIHandler
+        handler = AIHandler()
+
+        def fake_run(situation='', emit_step=None, memory=None, **kwargs):
+            return {'text': 'response text'}
+
+        events = []
+        handler._pipeline_signal_callback = lambda s, st, d: None
+        handler._msg_event_callback = lambda t, d: events.append(t)
+
+        handler._dispatch_agent(
+            agent_name='help',
+            run_fn=fake_run,
+            situation='how do I use this?',
+            request_id='req-2',
+        )
+        assert 'orchestration' in events
+        assert 'agent_cell' in events
+        assert 'text_chunk' in events
+        assert 'msg_done' in events
+
+    def test_dispatch_collects_pipeline_steps_from_agent(self):
+        """When agent calls emit_step, those steps should appear in pipeline."""
+        from ai.handler import AIHandler
+        handler = AIHandler()
+
+        def fake_run(situation='', emit_step=None, memory=None, **kwargs):
+            if emit_step:
+                emit_step("custom_step", "active", {"detail": "working"})
+                emit_step("custom_step", "done", {"detail": "finished"})
+            return {'text': 'done'}
+
+        steps = []
+        handler._pipeline_signal_callback = lambda s, st, d: steps.append((s, st))
+        handler._msg_event_callback = lambda t, d: None
+
+        handler._dispatch_agent(
+            agent_name='test',
+            run_fn=fake_run,
+            situation='test',
+            request_id='req-3',
+        )
+        step_names = [s[0] for s in steps]
+        assert 'custom_step' in step_names
+
+    def test_dispatch_returns_text(self):
+        """Dispatch should return the text from the agent's result."""
+        from ai.handler import AIHandler
+        handler = AIHandler()
+
+        def fake_run(situation='', emit_step=None, memory=None, **kwargs):
+            return {'text': 'the answer is 42'}
+
+        handler._pipeline_signal_callback = lambda s, st, d: None
+        handler._msg_event_callback = lambda t, d: None
+
+        result = handler._dispatch_agent(
+            agent_name='test',
+            run_fn=fake_run,
+            situation='question',
+            request_id='req-4',
+        )
+        assert result == 'the answer is 42'
+
+    def test_dispatch_on_finished_not_called_without_widget(self):
+        """on_finished should NOT fire when widget is None."""
+        from ai.handler import AIHandler
+        handler = AIHandler()
+        handler.widget = None
+
+        finished_calls = []
+        def on_finished(widget, agent_name, result):
+            finished_calls.append((agent_name, result))
+
+        def fake_run(situation='', emit_step=None, memory=None, **kwargs):
+            return {'text': 'ok', 'mood': 'happy'}
+
+        handler._pipeline_signal_callback = lambda s, st, d: None
+        handler._msg_event_callback = lambda t, d: None
+
+        handler._dispatch_agent(
+            agent_name='plusi',
+            run_fn=fake_run,
+            situation='hey',
+            request_id='req-5',
+            on_finished=on_finished,
+        )
+        assert len(finished_calls) == 0
