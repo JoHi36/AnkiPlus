@@ -417,6 +417,24 @@ class AIHandler:
                     'scope_label': routing_result.agent,
                 })
 
+                # v2: Emit orchestration event for non-tutor agent
+                self._emit_msg_event("orchestration", {
+                    "messageId": request_id or '',
+                    "agent": routing_result.agent,
+                    "mode": routing_result.method,
+                    "steps": [{"step": "orchestrating", "status": "done", "data": {
+                        "agent": routing_result.agent,
+                    }}],
+                })
+
+                # v2: Create agent cell
+                self._emit_msg_event("agent_cell", {
+                    "messageId": request_id or '',
+                    "agent": routing_result.agent,
+                    "status": "thinking",
+                    "data": {}
+                })
+
                 # Load shared memory for context
                 try:
                     from .memory import load_shared_memory
@@ -426,7 +444,6 @@ class AIHandler:
                     memory_context = ''
 
                 # Dispatch to agent via widget's subagent handler
-                # The widget will handle streaming and UI updates
                 if self.widget:
                     try:
                         try:
@@ -443,17 +460,47 @@ class AIHandler:
                             result = run_fn(situation=clean_msg, **agent_kwargs)
                             # Format result for streaming callback
                             text = result.get('text', '') if isinstance(result, dict) else str(result)
+
+                            # v2: Emit text via msg_event (thread-safe Qt signal)
+                            self._emit_msg_event("text_chunk", {
+                                "messageId": request_id or '',
+                                "agent": routing_result.agent,
+                                "chunk": text,
+                            })
+
+                            # v2: Mark agent cell done
+                            self._emit_msg_event("agent_cell", {
+                                "messageId": request_id or '',
+                                "agent": routing_result.agent,
+                                "status": "done",
+                                "data": {}
+                            })
+
+                            # v1 callback (will be gated by v2ActiveRef in frontend)
                             if callback:
                                 callback(text, True, False,
                                          steps=self._current_request_steps,
                                          citations={},
                                          step_labels=self._current_step_labels)
+
+                            # v2: Emit msg_done (thread-safe)
+                            self._emit_msg_event("msg_done", {"messageId": request_id or ''})
+
+                            # on_finished must run on main thread — schedule via taskman
                             if agent_def.on_finished and self.widget:
-                                agent_def.on_finished(self.widget, routing_result.agent, result)
+                                _widget = self.widget
+                                _agent_name = routing_result.agent
+                                _result = result if isinstance(result, dict) else {}
+                                _on_finished = agent_def.on_finished
+                                if mw and mw.taskman:
+                                    mw.taskman.run_on_main(
+                                        lambda: _on_finished(_widget, _agent_name, _result))
                             return text
                     except Exception as e:
                         logger.warning("Agent dispatch failed for %s: %s, falling back to Tutor",
                                        routing_result.agent, e)
+                        # v2: Clean up on failure
+                        self._emit_msg_event("msg_done", {"messageId": request_id or ''})
                         # Fall through to Tutor pipeline
 
             # Continue with Tutor pipeline (existing RAG flow)
