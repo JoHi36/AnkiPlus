@@ -1,6 +1,6 @@
 """
-MainViewWidget — permanent fullscreen QWebEngineView for the React main app.
-Replaces custom_screens.py and overlay_chat.py.
+MainViewWidget — positioning shell for the unified React app.
+Creates ChatbotWidget as its sole child. Handles fullscreen vs sidebar positioning.
 """
 
 import os
@@ -16,468 +16,200 @@ except ImportError:
 logger = get_logger(__name__)
 
 try:
-    from PyQt6.QtWebEngineWidgets import QWebEngineView
-except ImportError:
-    try:
-        from PyQt5.QtWebEngineWidgets import QWebEngineView
-    except ImportError:
-        QWebEngineView = None
-
-try:
-    from ..storage.card_sessions import load_deck_messages, save_deck_message, clear_deck_messages
     from ..config import get_config
 except ImportError:
-    from storage.card_sessions import load_deck_messages, save_deck_message, clear_deck_messages
     from config import get_config
 
 SIDEBAR_DEFAULT_WIDTH = 450
 
 
 class MainViewWidget(QWidget):
-    """Permanent fullscreen React app covering mw.web."""
+    """Positioning shell — fullscreen (deckBrowser/overview) or sidebar (review)."""
 
     def __init__(self, parent=None):
         super().__init__(parent or mw)
-        self.web_view = None
-        self._sidebar_widget = None
+        self._chatbot = None
         self._sidebar_visible = False
-        self._current_mode = 'fullscreen'  # 'fullscreen' or 'sidebar'
-        self.message_timer = None
-        self._streaming_text = ''
+        self._current_mode = 'fullscreen'
         self._visible = False
-        self._bridge_initialized = False
-        self._freechat_was_open = False  # preserve FreeChat state across hide/show
-        self._init_action_handlers()
-        self._init_state_getters()
         self._setup_ui()
 
     def _setup_ui(self):
-        if QWebEngineView is None:
-            return
-
         self.setStyleSheet("background: transparent;")
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        self.web_view = QWebEngineView()
-        self.web_view.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
-        self.web_view.page().setBackgroundColor(QColor(0, 0, 0, 0))
+        try:
+            from .widget import ChatbotWidget
+        except ImportError:
+            from ui.widget import ChatbotWidget
 
-        html_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web", "index.html")
-        url = QUrl.fromLocalFile(html_path)
-        url.setQuery("v=%s&mode=main" % int(time.time()))
-        self.web_view.loadFinished.connect(self._init_bridge)
-        self.web_view.load(url)
-
-        layout.addWidget(self.web_view)
+        self._chatbot = ChatbotWidget()
+        layout.addWidget(self._chatbot)
         self.setLayout(layout)
         self.hide()
 
-    def _init_bridge(self):
-        """Initialize ankiBridge message queue."""
-        if self._bridge_initialized:
-            return
-        self._bridge_initialized = True
-        js = """
-        window.ankiBridge = {
-            messageQueue: [],
-            addMessage: function(type, data) {
-                this.messageQueue.push({type: type, data: data, timestamp: Date.now()});
-            },
-            getMessages: function() {
-                var msgs = this.messageQueue.slice();
-                this.messageQueue = [];
-                return msgs;
-            }
-        };
-        console.log('MainView ankiBridge initialized');
-        """
-        self.web_view.page().runJavaScript(js)
-        self.message_timer = QTimer()
-        self.message_timer.timeout.connect(self._poll_messages)
-        self.message_timer.start(100)
+    # ── Send to React ────────────────────────────────────────────
 
-    # ── Polling ──────────────────────────────────────────────────────
+    def _send_to_react(self, payload):
+        """Send payload to React through ChatbotWidget's webview."""
+        if self._chatbot and self._chatbot.web_view:
+            js = "window.ankiReceive && window.ankiReceive(%s);" % json.dumps(payload)
+            self._chatbot.web_view.page().runJavaScript(js)
 
-    def _poll_messages(self):
-        if not self.web_view or not self._visible:
-            return
-        js = """
-        (function() {
-            if (window.ankiBridge && window.ankiBridge.messageQueue.length > 0) {
-                return JSON.stringify(window.ankiBridge.getMessages());
-            }
-            return null;
-        })();
-        """
-        self.web_view.page().runJavaScript(js, self._handle_messages)
+    # ── Sidebar ──────────────────────────────────────────────────
 
-    def _handle_messages(self, result):
-        if not result:
-            return
+    def show_sidebar(self):
+        """Show as 450px right sidebar (review mode)."""
+        self._current_mode = 'sidebar'
+        self._sidebar_visible = True
+        self._squeeze_main_content(True)
+        self._position_over_main()
+        self._visible = True
+        self.show()
+        self.raise_()
+        if self.parent():
+            self.parent().installEventFilter(self)
+        # Notify React
         try:
-            messages = json.loads(result)
-            for msg in messages:
-                self._route_message(msg.get('type'), msg.get('data'))
-        except Exception as e:
-            logger.error("MainView: message parse error: %s", e)
-
-    def _init_action_handlers(self):
-        """Action Registry — domain.verb pattern. Same actions available to UI, shortcuts, and agents."""
-        self._action_handlers = {
-            # Deck actions
-            'deck.study':           self._handle_study_deck,
-            'deck.select':          self._handle_select_deck,
-            'deck.create':          self._handle_create_deck,
-            'deck.import':          self._handle_import_deck,
-            'deck.options':         self._handle_open_deck_options,
-            # View actions
-            'view.navigate':        self._handle_navigate,
-            # Chat actions
-            'chat.send':            self._handle_send_message,
-            'chat.cancel':          self._handle_cancel_request,
-            'chat.load':            self._handle_load_deck_messages,
-            'chat.save':            self._handle_save_deck_message,
-            'chat.clear':           self._handle_clear_deck_messages,
-            'chat.stateChanged':    self._handle_freechat_state,
-            # Settings & tools
-            'settings.toggle':      self._handle_toggle_settings_sidebar,
-            'stats.open':           self._handle_open_stats,
-            # Plusi
-            'plusi.ask':            self._handle_plusi_ask,
-            'plusi.settings':       self._handle_toggle_settings_sidebar,
-            # Card actions
-            'card.goTo':            self._handle_go_to_card,
-            'card.preview':         self._handle_open_preview,
-            # System
-            'system.textFieldFocus': self._handle_text_field_focus,
-            'system.upgrade':       self._handle_toggle_settings_sidebar,
-            # Legacy aliases (useFreeChat hook still uses old names)
-            'loadDeckMessages':     self._handle_load_deck_messages,
-            'saveDeckMessage':      self._handle_save_deck_message,
-            'clearDeckMessages':    self._handle_clear_deck_messages,
-            'sendMessage':          self._handle_send_message,
-            'cancelRequest':        self._handle_cancel_request,
-            'textFieldFocus':       self._handle_text_field_focus,
-            'closeOverlay':         self._handle_freechat_state,  # legacy close
-            'freeChatStateChanged': self._handle_freechat_state,
-            'goToCard':             self._handle_go_to_card,
-            'openPreview':          self._handle_open_preview,
-        }
-
-    def _init_state_getters(self):
-        """State Query Registry — domain.noun pattern. Agents can query current state."""
-        self._state_getters = {
-            'app.state':        lambda: getattr(mw, 'state', 'unknown'),
-            'deck.current':     self._get_current_deck_state,
-            'deck.dueCount':    self._get_due_count_state,
-            'chat.messageCount': lambda: len(load_deck_messages(0, limit=100)),
-            'user.premium':     self._get_premium_state,
-        }
-
-    def _get_current_deck_state(self):
-        try:
-            did = mw.col.decks.get_current_id()
-            return {'deckId': did, 'deckName': mw.col.decks.name(did)}
-        except Exception:
-            return {'deckId': 0, 'deckName': ''}
-
-    def _get_due_count_state(self):
-        try:
-            tree = mw.col.sched.deck_due_tree()
-            return {
-                'new': sum(n.new_count for n in tree.children),
-                'learning': sum(n.learn_count for n in tree.children),
-                'review': sum(n.review_count for n in tree.children),
-            }
-        except Exception:
-            return {'new': 0, 'learning': 0, 'review': 0}
-
-    def _get_premium_state(self):
-        cfg = get_config()
-        return bool(cfg.get('auth_token', '').strip()) and cfg.get('auth_validated', False)
-
-    def get_available_actions(self):
-        """Agent can discover all available actions."""
-        return list(self._action_handlers.keys())
-
-    def get_available_queries(self):
-        """Agent can discover all queryable state."""
-        return list(self._state_getters.keys())
-
-    def _route_message(self, msg_type, data):
-        """Route messages from React via Action Registry, State Queries, or executeAction."""
-        # executeAction wrapper (from Python/Agent → React-side actions)
-        if msg_type == 'executeAction':
-            try:
-                parsed = json.loads(data) if isinstance(data, str) else data
-                action_name = parsed.get('action', '')
-                action_data = parsed.get('data')
-                handler = self._action_handlers.get(action_name)
-                if handler:
-                    handler(action_data)
-                else:
-                    logger.warning("Unknown action via executeAction: %s", action_name)
-            except Exception as e:
-                logger.error("MainView: executeAction error: %s", e)
-            return
-
-        # State query (React asks for current state)
-        if msg_type == 'query':
-            try:
-                parsed = json.loads(data) if isinstance(data, str) else data
-                key = parsed.get('key', '') if isinstance(parsed, dict) else str(parsed)
-                getter = self._state_getters.get(key)
-                if getter:
-                    result = getter()
-                    self._send_to_react({
-                        "type": "queryResult",
-                        "key": key,
-                        "data": result,
-                    })
-                else:
-                    logger.warning("Unknown state query: %s", key)
-            except Exception as e:
-                logger.error("MainView: query error: %s", e)
-            return
-
-        # Direct action dispatch (domain.verb from React)
-        handler = self._action_handlers.get(msg_type)
-        if handler:
-            handler(data)
-        else:
-            logger.warning("Unknown message type: %s", msg_type)
-
-    # ── Message Handlers ─────────────────────────────────────────────
-
-    def _handle_study_deck(self, data):
-        try:
-            parsed = json.loads(data) if isinstance(data, str) else data
-            did = int(parsed.get('deckId', 0))
-            if did:
-                mw.col.decks.select(did)
-                mw.onOverview()
-                QTimer.singleShot(100, lambda: mw.overview._linkHandler('study'))
-        except Exception as e:
-            logger.error("MainView: studyDeck error: %s", e)
-
-    def _handle_select_deck(self, data):
-        try:
-            parsed = json.loads(data) if isinstance(data, str) else data
-            did = int(parsed.get('deckId', 0))
-            if did:
-                mw.col.decks.select(did)
-                mw.onOverview()
-        except Exception as e:
-            logger.error("MainView: selectDeck error: %s", e)
-
-    def _handle_navigate(self, data):
-        try:
-            state = data if isinstance(data, str) else str(data)
-            if state == 'deckBrowser':
-                mw.moveToState('deckBrowser')
-            elif state == 'overview':
-                mw.onOverview()
-        except Exception as e:
-            logger.error("MainView: navigateTo error: %s", e)
-
-    def _handle_send_message(self, data):
-        try:
-            from ..ai.request_manager import get_request_manager
-        except ImportError:
-            from ai.request_manager import get_request_manager
-
-        try:
-            msg_data = data
-            if isinstance(data, str):
-                try:
-                    msg_data = json.loads(data)
-                except (json.JSONDecodeError, ValueError):
-                    msg_data = {'text': data}
-            if not isinstance(msg_data, dict):
-                msg_data = {'text': str(msg_data) if msg_data else ''}
-            text = msg_data.get('text', '').strip()
-            if not text:
-                return
-
-            context = None  # Free chat has no card context
-            db_messages = load_deck_messages(0, limit=20)
-            history = [
-                {'role': 'assistant' if m.get('sender') == 'assistant' else 'user',
-                 'content': m.get('text', '')}
-                for m in db_messages
-            ]
-            mode = msg_data.get('mode', 'compact')
-
-            self._streaming_text = ''
-            self._send_to_react({"type": "chat.loadingChanged", "loading": True})
-
-            manager = get_request_manager()
-            manager.start_request(
-                text=text, context=context, history=history, mode=mode,
-                caller_id='main',
-                callbacks={
-                    'on_chunk': self._on_chunk,
-                    'on_finished': self._on_ai_done,
-                    'on_error': self._on_ai_error,
-                }
+            self._chatbot.web_view.page().runJavaScript(
+                "window.ankiReceive && window.ankiReceive({type:'panelOpened'});"
             )
-        except Exception as e:
-            self._send_to_react({"type": "chat.errorOccurred", "message": str(e)})
-            self._send_to_react({"type": "chat.loadingChanged", "loading": False})
+        except Exception:
+            pass
 
-    def _handle_cancel_request(self, data=None):
-        try:
-            from ..ai.request_manager import get_request_manager
-        except ImportError:
-            from ai.request_manager import get_request_manager
-        get_request_manager().cancel()
-        self._send_to_react({"type": "chat.loadingChanged", "loading": False})
+    def hide_sidebar(self):
+        """Hide sidebar. Only hides widget if still in sidebar mode."""
+        self._sidebar_visible = False
+        self._squeeze_main_content(False)
+        if self._current_mode == 'sidebar':
+            self._visible = False
+            if self.parent():
+                self.parent().removeEventFilter(self)
+            self.hide()
 
-    def _handle_load_deck_messages(self, data):
-        deck_id = int(data) if isinstance(data, (int, str)) else 0
-        try:
-            messages = load_deck_messages(deck_id, limit=50)
-            self._send_to_react({"type": "chat.messagesLoaded", "deckId": deck_id, "messages": messages})
-        except Exception as e:
-            logger.error("MainView: loadDeckMessages error: %s", e)
+    def toggle_sidebar(self):
+        if self._sidebar_visible:
+            self.hide_sidebar()
+        else:
+            self.show_sidebar()
 
-    def _handle_save_deck_message(self, data):
-        try:
-            msg_data = json.loads(data) if isinstance(data, str) else data
-            save_deck_message(int(msg_data.get('deckId', 0)), msg_data.get('message', {}))
-        except Exception as e:
-            logger.error("MainView: saveDeckMessage error: %s", e)
+    def get_sidebar_widget(self):
+        """Return the ChatbotWidget instance."""
+        return self._chatbot
 
-    def _handle_clear_deck_messages(self, data=None):
-        try:
-            count = clear_deck_messages()
-            self._send_to_react({"type": "chat.messagesCleared", "count": count})
-        except Exception as e:
-            logger.error("MainView: clearDeckMessages error: %s", e)
+    get_chatbot_widget = get_sidebar_widget
 
-    def _handle_open_stats(self, data=None):
-        try:
-            mw.onStats()
-        except Exception as e:
-            logger.warning("MainView: openStats error: %s", e)
+    # ── Show / Hide ──────────────────────────────────────────────
 
-    def _handle_open_deck_options(self, data=None):
-        try:
-            mw.overview._linkHandler('opts')
-        except Exception as e:
-            logger.warning("MainView: openDeckOptions error: %s", e)
+    def show_for_state(self, state):
+        """Position widget and send state data to React."""
+        if state == 'review':
+            # Sidebar mode — actual sidebar shown by ensure_chatbot_open()
+            self._current_mode = 'sidebar'
+            # Hide widget — sidebar shown by ensure_chatbot_open() in setup.py
+            self._visible = False
+            self.hide()
+            return
 
-    def _handle_toggle_settings_sidebar(self, data=None):
-        try:
-            from .settings_sidebar import toggle_settings_sidebar
-            toggle_settings_sidebar()
-        except Exception as e:
-            logger.warning("MainView: toggleSettingsSidebar error: %s", e)
+        # Fullscreen mode
+        self._current_mode = 'fullscreen'
+        self._sidebar_visible = False
+        self._squeeze_main_content(False)
+        self._visible = False  # Reset so _show() works
+        self._show()
+        self._pending_state = state
 
-    def _handle_text_field_focus(self, data):
+        # Send state data (with retry if not ready)
+        self._send_state_data(state)
+
+    def _send_state_data(self, state):
+        """Send state data to React. Retries if ChatbotWidget's webview not ready."""
+        if not self._chatbot or not self._chatbot.web_view:
+            QTimer.singleShot(300, lambda: self._send_state_data(state))
+            return
+
+        if state == 'deckBrowser':
+            data = self._get_deck_browser_data()
+            freechat_was_open = getattr(self._chatbot, '_freechat_was_open', False)
+            self._send_to_react({
+                "type": "app.stateChanged",
+                "state": "deckBrowser",
+                "data": data,
+                "freeChatWasOpen": freechat_was_open,
+            })
+        elif state == 'overview':
+            data = self._get_overview_data()
+            self._send_to_react({
+                "type": "app.stateChanged",
+                "state": "overview",
+                "data": data,
+            })
+
+    def _show(self):
+        if self._visible:
+            self._position_over_main()
+            return
+        self._visible = True
         try:
             from .shortcut_filter import get_shortcut_filter
             sf = get_shortcut_filter()
-            if sf:
-                parsed = json.loads(data) if isinstance(data, str) else data
-                sf.set_text_field_focus(parsed.get('focused', False), self.web_view)
-        except Exception as e:
-            logger.warning("MainView: textFieldFocus error: %s", e)
+            if sf and hasattr(sf, 'set_main_view_active'):
+                sf.set_main_view_active(True)
+        except Exception:
+            pass
+        self._position_over_main()
+        self.show()
+        self.raise_()
+        if self.parent():
+            self.parent().installEventFilter(self)
 
-    def _handle_go_to_card(self, data):
+    def _hide(self):
+        if not self._visible:
+            return
+        self._visible = False
         try:
-            card_id = int(data) if not isinstance(data, dict) else int(data.get('cardId', 0))
-            if card_id and mw.col:
-                from aqt.browser.browser import Browser
-                browser = Browser(mw)
-                browser.form.searchEdit.lineEdit().setText("cid:%s" % card_id)
-                browser.onSearchActivated()
-        except Exception as e:
-            logger.warning("MainView: goToCard error: %s", e)
+            from .shortcut_filter import get_shortcut_filter
+            sf = get_shortcut_filter()
+            if sf and hasattr(sf, 'set_main_view_active'):
+                sf.set_main_view_active(False)
+        except Exception:
+            pass
+        if self.parent():
+            self.parent().removeEventFilter(self)
+        self.hide()
 
-    def _handle_open_preview(self, data):
+    def _position_over_main(self):
+        """Position based on mode: fullscreen or right sidebar."""
         try:
-            parsed = json.loads(data) if isinstance(data, str) else data
-            card_id = int(parsed.get('cardId', 0))
-            if card_id:
-                self._send_to_react({"type": "card.previewOpened", "cardId": card_id})
-        except Exception as e:
-            logger.warning("MainView: openPreview error: %s", e)
+            if self._current_mode == 'sidebar':
+                w = SIDEBAR_DEFAULT_WIDTH
+                self.setGeometry(mw.width() - w, 0, w, mw.height())
+            else:
+                self.setGeometry(0, 0, mw.width(), mw.height())
+        except Exception:
+            try:
+                self.setGeometry(mw.rect())
+            except Exception:
+                pass
 
-    def _handle_freechat_state(self, data):
+    def _squeeze_main_content(self, make_room):
+        """Resize mw.web so custom reviewer doesn't render behind sidebar."""
         try:
-            parsed = json.loads(data) if isinstance(data, str) else data
-            self._freechat_was_open = parsed.get('open', False)
+            central = mw.centralWidget()
+            if central and central.layout():
+                right_margin = SIDEBAR_DEFAULT_WIDTH if make_room else 0
+                central.layout().setContentsMargins(0, 0, right_margin, 0)
         except Exception:
             pass
 
-    def _handle_plusi_ask(self, data):
-        try:
-            self.show_sidebar()
-        except Exception as e:
-            logger.warning("MainView: plusi.ask error: %s", e)
+    def eventFilter(self, obj, event):
+        if event.type() == event.Type.Resize and self._visible:
+            self._position_over_main()
+        return super().eventFilter(obj, event)
 
-    def _handle_create_deck(self, data):
-        try:
-            if hasattr(mw, 'onAddDeck'):
-                mw.onAddDeck()
-        except Exception as e:
-            logger.warning("MainView: deck.create error: %s", e)
-
-    def _handle_import_deck(self, data):
-        try:
-            if hasattr(mw, 'handleImport'):
-                mw.handleImport()
-            elif hasattr(mw, 'onImport'):
-                mw.onImport()
-        except Exception as e:
-            logger.warning("MainView: deck.import error: %s", e)
-
-    # ── AI Callbacks ─────────────────────────────────────────────────
-
-    def _on_chunk(self, request_id, chunk, done, is_function_call):
-        if chunk:
-            self._streaming_text += chunk
-            self._send_to_react({"type": "chat.chunkReceived", "chunk": chunk})
-
-    def _on_ai_done(self, request_id):
-        self._send_to_react({
-            "type": "chat.responseCompleted",
-            "message": self._streaming_text,
-            "citations": {}
-        })
-        self._send_to_react({"type": "chat.loadingChanged", "loading": False})
-        self._streaming_text = ''
-
-    def _on_ai_error(self, request_id, error):
-        self._send_to_react({"type": "chat.errorOccurred", "message": error})
-        self._send_to_react({"type": "chat.loadingChanged", "loading": False})
-        self._streaming_text = ''
-
-    def _build_chat_context(self):
-        import datetime
-        today = datetime.date.today().strftime('%A, %d. %B %Y')
-        lines = [
-            "Du bist ein hilfreicher Lernassistent fuer Anki-Karteikarten.",
-            "Heute ist %s." % today,
-        ]
-        try:
-            total = mw.col.card_count() if hasattr(mw.col, 'card_count') else 0
-            lines.append("Der Nutzer hat %s Karten in seiner Sammlung." % total)
-        except Exception:
-            pass
-        return "\n".join(lines)
-
-    # ── Send to React ────────────────────────────────────────────────
-
-    def _send_to_react(self, payload):
-        if self.web_view:
-            js = "window.ankiReceive && window.ankiReceive(%s);" % json.dumps(payload)
-            self.web_view.page().runJavaScript(js)
-
-    # ── Data Gathering ───────────────────────────────────────────────
+    # ── Data Gathering ───────────────────────────────────────────
 
     def _get_deck_browser_data(self):
         """Build complete deck tree data for React."""
@@ -599,199 +331,6 @@ class MainViewWidget(QWidget):
         except Exception as e:
             logger.error("MainView: getOverviewData error: %s", e)
             return {'deckId': 0, 'deckName': '', 'dueNew': 0, 'dueLearning': 0, 'dueReview': 0}
-
-    # ── Sidebar (ChatbotWidget) ─────────────────────────────────────
-
-    def _ensure_sidebar(self):
-        """Lazily create the ChatbotWidget sidebar."""
-        if self._sidebar_widget is not None:
-            return
-        try:
-            from .widget import ChatbotWidget
-        except ImportError:
-            from ui.widget import ChatbotWidget
-        self._sidebar_widget = ChatbotWidget()
-        self.layout().addWidget(self._sidebar_widget)
-        self._sidebar_widget.hide()
-        logger.info("MainView: sidebar (ChatbotWidget) created")
-
-    def show_sidebar(self):
-        """Show the sidebar (ChatbotWidget) in review mode."""
-        self._ensure_sidebar()
-        self._current_mode = 'sidebar'
-        self._sidebar_visible = True
-        if self.web_view:
-            self.web_view.hide()
-        self._sidebar_widget.show()
-        self._position_over_main()
-        self._squeeze_main_content(True)
-        self._visible = True
-        self.show()
-        self.raise_()
-        if self.parent():
-            self.parent().installEventFilter(self)
-        # Trigger panelOpened in sidebar React
-        try:
-            if self._sidebar_widget.web_view:
-                self._sidebar_widget.web_view.page().runJavaScript(
-                    "window.ankiReceive && window.ankiReceive({type:'panelOpened'});"
-                )
-        except Exception:
-            pass
-
-    def hide_sidebar(self):
-        """Hide the sidebar. Only hides the whole widget if still in sidebar mode."""
-        self._sidebar_visible = False
-        if self._sidebar_widget:
-            self._sidebar_widget.hide()
-        self._squeeze_main_content(False)
-        # Only hide entire widget if in sidebar mode — don't kill fullscreen
-        if self._current_mode == 'sidebar':
-            self._visible = False
-            if self.parent():
-                self.parent().removeEventFilter(self)
-            self.hide()
-
-    def _squeeze_main_content(self, make_room):
-        """Resize mw.web so the custom reviewer doesn't render behind the sidebar."""
-        try:
-            central = mw.centralWidget()
-            if central and central.layout():
-                right_margin = SIDEBAR_DEFAULT_WIDTH if make_room else 0
-                central.layout().setContentsMargins(0, 0, right_margin, 0)
-        except Exception:
-            pass
-
-    def toggle_sidebar(self):
-        """Toggle sidebar visibility."""
-        if self._sidebar_visible:
-            self.hide_sidebar()
-        else:
-            self.show_sidebar()
-
-    def get_sidebar_widget(self):
-        """Return the ChatbotWidget instance (for hooks that need it)."""
-        self._ensure_sidebar()
-        return self._sidebar_widget
-
-    # ── Show / Hide ──────────────────────────────────────────────────
-
-    def show_for_state(self, state):
-        """Show the widget and send state data to React."""
-        if state == 'review':
-            # Prepare sidebar mode — hide fullscreen overlay so mw.web (custom reviewer) shows
-            self._current_mode = 'sidebar'
-            if self.web_view:
-                self.web_view.hide()
-            # Stop main polling (sidebar has its own)
-            if self.message_timer:
-                self.message_timer.stop()
-            # Hide widget — sidebar is shown by ensure_chatbot_open() in setup.py
-            self._visible = False
-            self.hide()
-            return
-
-        # Non-review: fullscreen mode
-        self._current_mode = 'fullscreen'
-        self._sidebar_visible = False
-        if self._sidebar_widget:
-            self._sidebar_widget.hide()
-        self._squeeze_main_content(False)  # Restore margins from sidebar mode
-        if self.web_view:
-            self.web_view.show()
-        # Reset _visible so _show() doesn't bail (mode changed from sidebar → fullscreen)
-        self._visible = False
-        self._show()
-        self._pending_state = state
-
-        # If bridge isn't initialized yet, wait and retry
-        if not self._bridge_initialized:
-            QTimer.singleShot(500, lambda: self._send_state_data(state))
-        else:
-            self._send_state_data(state)
-
-    def _send_state_data(self, state):
-        """Send state data to React. Retries if bridge not ready."""
-        if not self._bridge_initialized:
-            QTimer.singleShot(300, lambda: self._send_state_data(state))
-            return
-
-        if state == 'deckBrowser':
-            data = self._get_deck_browser_data()
-            self._send_to_react({
-                "type": "app.stateChanged",
-                "state": "deckBrowser",
-                "data": data,
-                "freeChatWasOpen": self._freechat_was_open,
-            })
-        elif state == 'overview':
-            data = self._get_overview_data()
-            self._send_to_react({
-                "type": "app.stateChanged",
-                "state": "overview",
-                "data": data,
-            })
-
-    def _show(self):
-        if self._visible:
-            return
-        self._visible = True
-        try:
-            from .shortcut_filter import get_shortcut_filter
-            sf = get_shortcut_filter()
-            if sf and hasattr(sf, 'set_main_view_active'):
-                sf.set_main_view_active(True)
-        except Exception:
-            pass
-        self._position_over_main()
-        self.show()
-        self.raise_()
-        if self.message_timer:
-            self.message_timer.start(100)
-        if self.parent():
-            self.parent().installEventFilter(self)
-
-    def _hide(self):
-        if not self._visible:
-            return
-        self._visible = False
-        try:
-            from .shortcut_filter import get_shortcut_filter
-            sf = get_shortcut_filter()
-            if sf and hasattr(sf, 'set_main_view_active'):
-                sf.set_main_view_active(False)
-        except Exception:
-            pass
-        # Cancel any active AI request
-        try:
-            from ..ai.request_manager import get_request_manager
-        except ImportError:
-            from ai.request_manager import get_request_manager
-        get_request_manager().cancel()
-        if self.message_timer:
-            self.message_timer.stop()
-        if self.parent():
-            self.parent().removeEventFilter(self)
-        self.hide()
-
-    def _position_over_main(self):
-        """Position based on mode: fullscreen or right sidebar."""
-        try:
-            if self._current_mode == 'sidebar':
-                w = SIDEBAR_DEFAULT_WIDTH
-                self.setGeometry(mw.width() - w, 0, w, mw.height())
-            else:
-                self.setGeometry(0, 0, mw.width(), mw.height())
-        except Exception:
-            try:
-                self.setGeometry(mw.rect())
-            except Exception:
-                pass
-
-    def eventFilter(self, obj, event):
-        if event.type() == event.Type.Resize and self._visible:
-            self._position_over_main()
-        return super().eventFilter(obj, event)
 
 
 # ── Singleton ────────────────────────────────────────────────────────
