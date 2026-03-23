@@ -284,6 +284,7 @@ class ChatbotWidget(QWidget):
         self.card_tracker = None  # Card-Tracker wird später initialisiert
         self.current_card_context = None  # Aktueller Karten-Kontext
         self._active_subagent_thread = None
+        self._freechat_was_open = False  # preserve FreeChat state across state changes
         self.setup_ui()
         # Card-Tracking wird nach UI-Setup initialisiert
         if self.web_view:
@@ -493,6 +494,21 @@ class ChatbotWidget(QWidget):
             'resetPlusi': self._msg_reset_plusi,
             'textFieldFocus': self._msg_text_field_focus,
             'jsError': self._msg_js_error,
+            # Deck actions (from MainViewWidget — SP2 unification)
+            'deck.study': self._msg_study_deck,
+            'deck.select': self._msg_select_deck,
+            'deck.create': self._msg_create_deck,
+            'deck.import': self._msg_import_deck,
+            'deck.options': self._msg_open_deck_options,
+            # View actions
+            'view.navigate': self._msg_navigate,
+            # Deck-level chat (FreeChat persistence)
+            'chat.load': self._msg_load_deck_messages,
+            'chat.save': self._msg_save_deck_message,
+            'chat.clear': self._msg_clear_deck_messages,
+            'chat.stateChanged': self._msg_freechat_state,
+            # Stats
+            'stats.open': self._msg_open_stats,
         }
         return handlers.get(msg_type)
 
@@ -1662,4 +1678,215 @@ class ChatbotWidget(QWidget):
                 
         except Exception as e:
             logger.exception("Fehler in _go_to_card: %s", e)
+
+    # ── Deck/Overview Data Gathering (SP2 unification) ────────────
+
+    def _get_deck_browser_data(self):
+        """Build complete deck tree data for React."""
+        from aqt import mw
+        try:
+            all_decks = mw.col.decks.all_names_and_ids()
+
+            # Due counts
+            due_counts = {}
+            tree = mw.col.sched.deck_due_tree()
+            def traverse(node):
+                did = getattr(node, 'deck_id', None)
+                if did:
+                    due_counts[did] = {
+                        'new': getattr(node, 'new_count', 0),
+                        'learning': getattr(node, 'learn_count', 0),
+                        'review': getattr(node, 'review_count', 0),
+                    }
+                for child in getattr(node, 'children', []):
+                    traverse(child)
+            traverse(tree)
+
+            # Card distribution
+            card_dist = {}
+            try:
+                rows = mw.col.db.all("SELECT did, ivl, queue FROM cards")
+                for did, ivl, queue in rows:
+                    if did not in card_dist:
+                        card_dist[did] = [0, 0, 0, 0]
+                    card_dist[did][3] += 1
+                    if queue == 0:
+                        card_dist[did][2] += 1
+                    elif ivl >= 21:
+                        card_dist[did][0] += 1
+                    else:
+                        card_dist[did][1] += 1
+            except Exception:
+                pass
+
+            # Build tree
+            by_name = {}
+            for deck in sorted(all_decks, key=lambda d: d.name):
+                parts = deck.name.split('::')
+                due = due_counts.get(deck.id, {'new': 0, 'learning': 0, 'review': 0})
+                cd = card_dist.get(deck.id, [0, 0, 0, 0])
+                by_name[deck.name] = {
+                    'id': deck.id,
+                    'name': deck.name,
+                    'display': parts[-1],
+                    'dueNew': due['new'],
+                    'dueLearn': due['learning'],
+                    'dueReview': due['review'],
+                    'mature': cd[0],
+                    'young': cd[1],
+                    'new': cd[2],
+                    'total': cd[3],
+                    'children': [],
+                }
+
+            roots = []
+            for name, node in by_name.items():
+                parts = name.split('::')
+                if len(parts) == 1:
+                    roots.append(node)
+                else:
+                    parent = '::'.join(parts[:-1])
+                    if parent in by_name:
+                        by_name[parent]['children'].append(node)
+                    else:
+                        roots.append(node)
+
+            # Aggregate child counts upward
+            def aggregate(node):
+                for child in node['children']:
+                    aggregate(child)
+                    node['mature'] += child['mature']
+                    node['young'] += child['young']
+                    node['new'] += child['new']
+                    node['total'] += child['total']
+
+            for root in roots:
+                aggregate(root)
+
+            roots.sort(key=lambda n: n['name'])
+
+            # Total dues
+            total_new = sum(n.new_count for n in tree.children)
+            total_lrn = sum(n.learn_count for n in tree.children)
+            total_rev = sum(n.review_count for n in tree.children)
+
+            # Premium status
+            cfg = get_config()
+            is_premium = bool(cfg.get('auth_token', '').strip()) and cfg.get('auth_validated', False)
+
+            return {
+                'roots': roots,
+                'totalNew': total_new,
+                'totalLearn': total_lrn,
+                'totalReview': total_rev,
+                'totalDue': total_new + total_lrn + total_rev,
+                'isPremium': is_premium,
+            }
+        except Exception as e:
+            logger.error("_get_deck_browser_data error: %s", e)
+            return {'roots': [], 'totalNew': 0, 'totalLearn': 0, 'totalReview': 0, 'totalDue': 0, 'isPremium': False}
+
+    def _get_overview_data(self):
+        """Get data for the overview screen."""
+        from aqt import mw
+        try:
+            deck_id = mw.col.decks.get_current_id()
+            deck_name = mw.col.decks.name(deck_id)
+            counts = mw.col.sched.counts()
+            return {
+                'deckId': deck_id,
+                'deckName': deck_name,
+                'dueNew': counts[0],
+                'dueLearning': counts[1],
+                'dueReview': counts[2],
+            }
+        except Exception as e:
+            logger.error("_get_overview_data error: %s", e)
+            return {'deckId': 0, 'deckName': '', 'dueNew': 0, 'dueLearning': 0, 'dueReview': 0}
+
+    # ── Deck/Overview/FreeChat Action Handlers (SP2 unification) ──
+
+    def _msg_study_deck(self, data):
+        from aqt import mw
+        try:
+            parsed = json.loads(data) if isinstance(data, str) else data
+            did = int(parsed.get('deckId', 0))
+            if did:
+                mw.col.decks.select(did)
+                mw.onOverview()
+                QTimer.singleShot(100, lambda: mw.overview._linkHandler('study'))
+        except Exception as e:
+            logger.error("study_deck error: %s", e)
+
+    def _msg_select_deck(self, data):
+        from aqt import mw
+        try:
+            parsed = json.loads(data) if isinstance(data, str) else data
+            did = int(parsed.get('deckId', 0))
+            if did:
+                mw.col.decks.select(did)
+                mw.onOverview()
+        except Exception as e:
+            logger.error("select_deck error: %s", e)
+
+    def _msg_navigate(self, data):
+        from aqt import mw
+        try:
+            state = data if isinstance(data, str) else str(data)
+            if state == 'deckBrowser':
+                mw.moveToState('deckBrowser')
+            elif state == 'overview':
+                mw.onOverview()
+        except Exception as e:
+            logger.error("navigate error: %s", e)
+
+    def _msg_clear_deck_messages(self, data=None):
+        try:
+            try:
+                from ..storage.card_sessions import clear_deck_messages
+            except ImportError:
+                from storage.card_sessions import clear_deck_messages
+            count = clear_deck_messages()
+            self._send_to_frontend("chat.messagesCleared", {"count": count})
+        except Exception as e:
+            logger.error("clear_deck_messages error: %s", e)
+
+    def _msg_freechat_state(self, data):
+        try:
+            parsed = json.loads(data) if isinstance(data, str) else data
+            self._freechat_was_open = parsed.get('open', False)
+        except Exception:
+            pass
+
+    def _msg_create_deck(self, data=None):
+        from aqt import mw
+        try:
+            if hasattr(mw, 'onAddDeck'):
+                mw.onAddDeck()
+        except Exception as e:
+            logger.warning("create_deck error: %s", e)
+
+    def _msg_import_deck(self, data=None):
+        from aqt import mw
+        try:
+            if hasattr(mw, 'handleImport'):
+                mw.handleImport()
+            elif hasattr(mw, 'onImport'):
+                mw.onImport()
+        except Exception as e:
+            logger.warning("import_deck error: %s", e)
+
+    def _msg_open_deck_options(self, data=None):
+        from aqt import mw
+        try:
+            mw.overview._linkHandler('opts')
+        except Exception as e:
+            logger.warning("open_deck_options error: %s", e)
+
+    def _msg_open_stats(self, data=None):
+        from aqt import mw
+        try:
+            mw.onStats()
+        except Exception as e:
+            logger.warning("open_stats error: %s", e)
 
