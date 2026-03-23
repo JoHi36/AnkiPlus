@@ -414,6 +414,162 @@ Agents can filter: "Only react to user actions, not other agents" or "React to a
 
 Convention: Agents should default to `source !== self.name` unless they explicitly want to react to their own effects.
 
+## User Knowledge System — Four Memory Layers
+
+The event system generates data. But raw events are not knowledge. The platform needs layered memory that transforms events into understanding.
+
+### Layer 1: Event Log (Facts)
+What happened. Raw, objective, massive. Already designed above.
+
+### Layer 2: Agent Memory (Experiences)
+What each agent did, and whether it helped. Agents track their own interventions and outcomes. Already designed above.
+
+### Layer 3: Learner Profile (Subject Understanding)
+Per-topic knowledge: what the user understands, what they confuse, what teaching approaches work. Updated by specialized interpreters after significant pattern changes.
+
+```
+topics:
+  'Anatomie::Knie':
+    understanding: 0.65
+    weakPoints: ['Meniskus vs Kreuzband', 'Innervation']
+    confusions: [{confuses: 'Innenmeniskus', with: 'Innenband', frequency: 4}]
+    effectiveApproaches: ['images', 'comparisons']
+    ineffectiveApproaches: ['text definitions']
+    retentionRate: 0.72
+    masteredCards: 31 / 47
+```
+
+This layer is **dynamic** — it changes with every session as the user improves or encounters new difficulties.
+
+### Layer 4: User Identity (Who Is This Person)
+The overarching profile. Hard facts + psychological/learning profile. Emerges over weeks/months from the layers below.
+
+**Hard Facts** (stated or observed):
+- Study field, semester, daily card count, streak, Anki since when
+
+**Psychological / Learning Type** (derived from behavior patterns):
+- Preferred modality: visual | textual | mixed (from which explanations work)
+- Pace: quick | balanced | deep (from answer times and chat depth)
+- Motivation type: intrinsic | streak-driven | exam-driven (from usage patterns)
+- Feedback preference: encouraging | direct | minimal (from reactions to agent interventions)
+- Optimal session length, optimal time of day (from fatigue/accuracy patterns)
+- Concentration pattern: sprinter | marathoner (from accuracy curve over session)
+
+**Agent Observations** (free-text notes from agents):
+- "User understands concepts better through analogies than definitions" — Tutor
+- "Responds positively to humor, gets impatient with too much encouragement" — Plusi
+
+The exact profile structure needs further design. The key principle: the profile is not a static form the user fills out. It **emerges** from observed behavior and is continuously refined.
+
+### Who Writes Where
+
+| Layer | Writer | Frequency |
+|-------|--------|-----------|
+| Event Log | System (automatic) | Every action |
+| Agent Memory | Each agent | After each intervention |
+| Learner Profile | Specialized interpreters | After significant pattern changes |
+| User Identity | "Profiler" interpreter + user manual input | Periodically (per session or daily) |
+
+### Storage
+
+```sql
+-- Layer 3: Learner Profile
+CREATE TABLE learner_topics (
+    topic_key    TEXT PRIMARY KEY,     -- 'Anatomie::Knie'
+    data         TEXT NOT NULL,        -- JSON
+    updated_at   INTEGER NOT NULL
+);
+
+-- Layer 4: User Identity
+CREATE TABLE user_profile (
+    key          TEXT PRIMARY KEY,     -- 'facts', 'learningStyle', 'goals'
+    data         TEXT NOT NULL,        -- JSON
+    updated_at   INTEGER NOT NULL
+);
+```
+
+## Intervention System — Protecting the Flow
+
+### The Core Problem
+
+Agents observe events and want to act. But if every trigger leads to a chat message, the user gets spammed. The learning flow is sacred — interruptions must be rare and valuable.
+
+### Intervention Pyramid
+
+```
+           /\
+          /  \         5% — Direct Intervention
+         / !! \        Agent interrupts flow (chat message)
+        /------\       Only for critical moments
+       /        \
+      /  subtle  \     15% — Subtle Hint
+     /    hint    \    Small UI change, no text
+    /--------------\   (badge, color, Plusi mood, icon)
+   /                \
+  /   silent note    \ 30% — Silent Note
+ /                    \ Agent remembers, shows nothing now
+/______________________\ Becomes relevant later
+        50%
+  Agent observes, stores in profile, no UI feedback at all
+```
+
+### Intervention Channels
+
+Not everything goes through the chat. Multiple feedback channels exist:
+
+| Channel | Interrupts Flow? | Example |
+|---------|-----------------|---------|
+| **silent** | No | Agent stores observation in profile, no UI |
+| **subtle** | No | Plusi mood changes, small badge appears, color shifts |
+| **inline** | Minimal | Small hint below card answer, dismissable |
+| **toast** | Light | Brief notification, disappears after 3s |
+| **queue** | No (now), Yes (later) | Saved, shown in post-session summary |
+| **chat** | Yes | Full chat message — only for truly important interventions |
+
+### Intervention Gatekeeper
+
+A central gatekeeper evaluates all agent intervention requests before they reach the UI:
+
+```
+Agent requests intervention:
+  { agent: 'tutor', urgency: 0.7, channel: 'chat', content: '...' }
+
+Gatekeeper evaluates:
+  - Is user in flow state? (10+ correct in a row) → queue for later
+  - Did another agent intervene recently? (<60s ago) → downgrade to silent
+  - Is urgency below threshold? (<0.5) → downgrade to subtle
+  - Is this the same insight as last time? → suppress (don't repeat)
+  - All clear → allow on requested channel
+```
+
+The gatekeeper prevents: spam, redundant messages, flow interruption, agent conflicts. It is the single chokepoint between agent intelligence and user experience.
+
+### Post-Session Summary
+
+Most insights are more valuable AFTER the session than during it. Instead of interrupting with individual observations, agents contribute to a session summary that is shown when the user finishes:
+
+```
+Session Summary (30 min, 45 cards, 78% correct)
+
+  Weak spots detected:
+    - Meniskus vs Kreuzband (4x wrong)
+    - Enzyme inhibition types (3x wrong)
+
+  Suggestion: Focus session on Knee anatomy?
+    [Start focused review]  [Later]
+
+  Your best study time: 09:00-11:00
+    (today at 22:30 — accuracy 20% lower than usual)
+```
+
+This is not a chat message. It is a dedicated view — a dashboard that appears when the session ends. All agents contribute observations, but the user sees a curated summary, not 15 individual messages.
+
+### The Right Amount of Intervention
+
+The default is SILENCE. Agents observe, learn, and store — but they stay quiet. The user should feel like they're learning alone, with a subtle sense that the system understands them. Only when the system has something truly valuable to offer does it speak up.
+
+This is what separates an agentic platform from a notification machine.
+
 ## What This Is NOT
 
 - Not a plugin system (that comes later, if needed)
