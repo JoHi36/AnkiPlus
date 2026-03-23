@@ -5,6 +5,7 @@ import { useFreeChat } from './hooks/useFreeChat';
 import { useHoldToReset } from './hooks/useHoldToReset';
 import TopBar from './components/TopBar';
 import DeckBrowserView from './components/DeckBrowserView';
+import OverviewView from './components/OverviewView';
 
 /**
  * MainApp — React root for the fullscreen main view.
@@ -259,9 +260,12 @@ export default function MainApp() {
           <DeckBrowserView data={deckBrowserData} isPremium={isPremium} />
         )}
         {activeView === 'overview' && (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ds-text-muted)' }}>
-            Overview (Task 7)
-          </div>
+          <OverviewView
+            data={overviewData}
+            onStudy={() => executeAction('deck.study', { deckId: overviewData?.deckId })}
+            onBack={() => executeAction('view.navigate', 'deckBrowser')}
+            onOptions={() => bridgeAction('deck.options')}
+          />
         )}
         {showFreeChat && (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ds-text-muted)' }}>
