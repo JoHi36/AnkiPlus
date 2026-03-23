@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PersonalityGrid from './PersonalityGrid';
 import DiaryStream from './DiaryStream';
 
-export default function PlusiMenu({ bridge, onNavigateBack }) {
+export default function PlusiMenu({ agent, bridge, onNavigateBack }) {
   const [data, setData] = useState(null);
   const [activeDayIndex, setActiveDayIndex] = useState(0);
   const scrollRef = useRef(null);

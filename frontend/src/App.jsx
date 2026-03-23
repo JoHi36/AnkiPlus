@@ -27,7 +27,7 @@ import SectionDivider from './components/SectionDivider';
 import ReviewTrailIndicator from './components/ReviewTrailIndicator';
 import { BookOpen } from 'lucide-react';
 import { useFreeChat } from './hooks/useFreeChat';
-import { setRegistry, findAgent } from '@shared/config/subagentRegistry';
+import { setRegistry, findAgent, getRegistry } from '@shared/config/subagentRegistry';
 // MascotShell moved to main window (plusi_dock.py) — no longer imported
 import { useMascot } from './hooks/useMascot';
 import InsightsDashboard from './components/InsightsDashboard';
@@ -35,6 +35,7 @@ import AgentStudio from './components/AgentStudio';
 import useInsights from './hooks/useInsights';
 import PlusiMenu from './components/PlusiMenu';
 import ResearchMenu from './components/ResearchMenu';
+import StandardSubMenu from './components/StandardSubMenu';
 import TokenBudgetSlider from './components/TokenBudgetSlider';
 import SettingsSidebar from './components/SettingsSidebar';
 import AgenticCell from './components/AgenticCell';
@@ -166,7 +167,7 @@ function AppInner() {
   const cardSessionHook = useCardSession(bridge);
   const reviewTrailHook = useReviewTrail();
   const insightsHook = useInsights();
-  const [activeView, setActiveView] = useState('chat'); // 'chat' | 'agentStudio' | 'plusiMenu'
+  const [activeView, setActiveView] = useState('chat'); // 'chat' | 'agentStudio' | 'plusiMenu' | 'researchMenu' | 'subMenu:<agentName>'
   const lastProcessedCardRef = useRef(null);
   // Create a setSessions wrapper that works with SessionContext
   const setSessionsWrapper = useCallback((updater) => {
@@ -2034,6 +2035,9 @@ function AppInner() {
     }
   }, [sessionContext.currentSessionId, sessionContext.isTemporary, chatHook.messages.length, scrollToLastUserMessage]);
 
+  // Computed view state — used in JSX below
+  const isInSubmenu = activeView === 'plusiMenu' || activeView === 'researchMenu' || activeView.startsWith('subMenu:');
+
   return (
     <ErrorBoundary>
     <style>{`
@@ -2098,8 +2102,8 @@ function AppInner() {
             />
             {/* Chat Container - scrollbar */}
             <div className="flex-1 overflow-hidden relative">
-              {/* Top Fade Gradient — hidden in PlusiMenu */}
-              {activeView !== 'plusiMenu' && (
+              {/* Top Fade Gradient — hidden in sub-menus and Agent Studio */}
+              {!isInSubmenu && activeView !== 'agentStudio' && (
               <div
                 className="fixed left-0 right-0 pointer-events-none z-25"
                 style={{
@@ -2112,22 +2116,29 @@ function AppInner() {
               <div
                 ref={messagesContainerRef}
                 id="messages-container"
-                className={`h-full w-full scrollbar-thin relative z-10 ${activeView === 'plusiMenu' ? 'overflow-hidden flex flex-col px-0 pt-2 pb-0' : 'overflow-y-auto px-8 pt-20 pb-40'}`}
+                className={`h-full w-full scrollbar-thin relative z-10 ${activeView === 'chat' ? 'overflow-y-auto px-8 pt-20 pb-40' : 'overflow-hidden flex flex-col px-0 pt-2 pb-0'}`}
               >
 
                 {activeView === 'agentStudio' ? (
                   <AgentStudio
                     bridge={bridge}
-                    onNavigateToPlusi={() => setActiveView('plusiMenu')}
-                    onNavigateToResearch={() => setActiveView('researchMenu')}
+                    onNavigateToSubmenu={(view) => setActiveView(view)}
                   />
                 ) : activeView === 'plusiMenu' ? (
                   <PlusiMenu
+                    agent={[...getRegistry().values()].find(a => a.name === 'plusi')}
                     bridge={bridge}
                     onNavigateBack={() => setActiveView('agentStudio')}
                   />
                 ) : activeView === 'researchMenu' ? (
                   <ResearchMenu
+                    agent={[...getRegistry().values()].find(a => a.name === 'research')}
+                    bridge={bridge}
+                    onNavigateBack={() => setActiveView('agentStudio')}
+                  />
+                ) : activeView.startsWith('subMenu:') ? (
+                  <StandardSubMenu
+                    agent={[...getRegistry().values()].find(a => a.name === activeView.split(':')[1])}
                     bridge={bridge}
                     onNavigateBack={() => setActiveView('agentStudio')}
                   />
@@ -2503,12 +2514,12 @@ function AppInner() {
           topSlot={activeView === 'plusiMenu' ? (
             <TokenBudgetSlider value={500} />
           ) : undefined}
-          hideInput={activeView === 'plusiMenu'}
+          hideInput={isInSubmenu || activeView === 'agentStudio'}
           actionPrimary={{
-            label: activeView === 'plusiMenu' ? 'Zurück' : 'Weiter',
+            label: isInSubmenu ? 'Zurück' : 'Weiter',
             shortcut: 'SPACE',
             onClick: () => {
-              if (activeView === 'plusiMenu') {
+              if (isInSubmenu) {
                 setActiveView('agentStudio');
               } else if (activeView !== 'chat') {
                 setActiveView('chat');
@@ -2520,19 +2531,13 @@ function AppInner() {
             },
           }}
           actionSecondary={{
-            label: activeView === 'plusiMenu' ? 'Chat' : (activeView === 'agentStudio' ? 'Chat' : 'Agent Studio'),
+            label: isInSubmenu || activeView === 'agentStudio' ? 'Chat' : 'Agent Studio',
             shortcut: '↵',
             onClick: () => {
-              switch (activeView) {
-                case 'chat':
-                  setActiveView('agentStudio');
-                  break;
-                case 'agentStudio':
-                  setActiveView('chat');
-                  break;
-                case 'plusiMenu':
-                  setActiveView('chat');
-                  break;
+              if (activeView === 'chat') {
+                setActiveView('agentStudio');
+              } else {
+                setActiveView('chat');
               }
             },
           }}

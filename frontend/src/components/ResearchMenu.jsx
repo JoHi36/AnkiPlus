@@ -108,7 +108,7 @@ const SOURCES = [
   },
 ];
 
-export default function ResearchMenu({ bridge, onNavigateBack }) {
+export default function ResearchMenu({ agent, bridge, onNavigateBack }) {
   const [sources, setSources] = useState({
     perplexity: true,
     pubmed: true,
