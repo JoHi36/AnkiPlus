@@ -514,7 +514,8 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
         };
         setMessages(prev => [...prev, savedMsg]);
       }
-      // Don't return — let existing done handler also run for backwards compat
+      // v2 handles saving — skip v1 done handler to prevent duplicate messages
+      return;
     }
     if (payload.type === 'msg_error') {
       agenticMsg.cancel();

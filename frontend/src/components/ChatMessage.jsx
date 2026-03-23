@@ -1893,17 +1893,22 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                       />
                     )}
                     {/* Text content */}
-                    {cell.text && cell.status !== 'loading' && !cell.sources?.length && (
-                      <SafeMarkdownRenderer
-                        content={cell.text}
-                        MermaidDiagram={MermaidDiagram}
-                        isStreaming={cell.status === 'streaming'}
-                        citations={cell.citations || {}}
-                        citationIndices={{}}
-                        bridge={bridge}
-                        onPreviewCard={onPreviewCard}
-                      />
-                    )}
+                    {cell.text && cell.status !== 'loading' && !cell.sources?.length && (() => {
+                      // Strip HANDOFF signal from display text
+                      const cleanText = cell.text.replace(/\n?HANDOFF:?\s*\w+\s+REASON:?\s*.+?\s+QUERY:?\s*.+$/s, '').trim();
+                      if (!cleanText) return null;
+                      return (
+                        <SafeMarkdownRenderer
+                          content={cleanText}
+                          MermaidDiagram={MermaidDiagram}
+                          isStreaming={cell.status === 'streaming'}
+                          citations={cell.citations || {}}
+                          citationIndices={{}}
+                          bridge={bridge}
+                          onPreviewCard={onPreviewCard}
+                        />
+                      );
+                    })()}
                     {/* Research sources */}
                     {cell.sources && cell.sources.length > 0 && (
                       <ResearchContent

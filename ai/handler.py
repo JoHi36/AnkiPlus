@@ -384,6 +384,14 @@ class AIHandler:
         request_id = getattr(self, '_current_request_id', None)
         self._emit_msg_event("msg_start", {"messageId": request_id or ''})
 
+        # v2: Create tutor cell early so pipeline steps have a target
+        self._emit_msg_event("agent_cell", {
+            "messageId": request_id or '',
+            "agent": "tutor",
+            "status": "thinking",
+            "data": {}
+        })
+
         try:
             # Stage 0: Agent Routing
             session_context = {
@@ -608,14 +616,6 @@ class AIHandler:
                 "images": True, "diagrams": True, "molecules": False})
             insights_system_prompt = get_system_prompt(
                 mode=mode, tools=ai_tools, insights=insights)
-
-            # v2: Tutor cell enters thinking state
-            self._emit_msg_event("agent_cell", {
-                "messageId": request_id or '',
-                "agent": "tutor",
-                "status": "thinking",
-                "data": {}
-            })
 
             self._emit_pipeline_step("generating", "active")
 
