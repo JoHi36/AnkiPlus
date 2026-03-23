@@ -410,54 +410,66 @@ class AIHandler:
 
             # If routed to a non-tutor agent, dispatch and return
             if routing_result.agent != 'tutor':
-                self._emit_pipeline_step("orchestrating", "done", {
-                    'search_needed': False,
-                    'retrieval_mode': 'agent:%s' % routing_result.agent,
-                    'scope': 'none',
-                    'scope_label': routing_result.agent,
-                })
-
-                # v2: Emit orchestration event for non-tutor agent
-                self._emit_msg_event("orchestration", {
-                    "messageId": request_id or '',
-                    "agent": routing_result.agent,
-                    "mode": routing_result.method,
-                    "steps": [{"step": "orchestrating", "status": "done", "data": {
-                        "agent": routing_result.agent,
-                    }}],
-                })
-
-                # v2: Create agent cell
-                self._emit_msg_event("agent_cell", {
-                    "messageId": request_id or '',
-                    "agent": routing_result.agent,
-                    "status": "thinking",
-                    "data": {}
-                })
-
-                # Load shared memory for context
-                try:
-                    from .memory import load_shared_memory
-                    memory = load_shared_memory()
-                    memory_context = memory.to_context_string()
-                except Exception:
-                    memory_context = ''
-
-                # Dispatch to agent via widget's subagent handler
+                # Try to load agent FIRST — if it fails, fall through to Tutor
+                # without emitting v2 events that would confuse the state
+                _agent_def = None
+                _run_fn = None
                 if self.widget:
                     try:
                         try:
                             from .agents import get_agent, lazy_load_run_fn, AGENT_REGISTRY
                         except ImportError:
                             from agents import get_agent, lazy_load_run_fn, AGENT_REGISTRY
-                        agent_def = get_agent(routing_result.agent)
-                        if agent_def:
-                            clean_msg = routing_result.clean_message or user_message
-                            run_fn = lazy_load_run_fn(agent_def)
-                            agent_kwargs = dict(agent_def.extra_kwargs)
-                            if memory_context:
-                                agent_kwargs['memory_context'] = memory_context
-                            result = run_fn(situation=clean_msg, **agent_kwargs)
+                        _agent_def = get_agent(routing_result.agent)
+                        if _agent_def:
+                            _run_fn = lazy_load_run_fn(_agent_def)
+                    except Exception as e:
+                        logger.warning("Agent %s load failed: %s, falling back to Tutor",
+                                       routing_result.agent, e)
+
+                if _agent_def and _run_fn:
+                    self._emit_pipeline_step("orchestrating", "done", {
+                        'search_needed': False,
+                        'retrieval_mode': 'agent:%s' % routing_result.agent,
+                        'scope': 'none',
+                        'scope_label': routing_result.agent,
+                    })
+
+                    # v2: Emit orchestration event for non-tutor agent
+                    self._emit_msg_event("orchestration", {
+                        "messageId": request_id or '',
+                        "agent": routing_result.agent,
+                        "mode": routing_result.method,
+                        "steps": [{"step": "orchestrating", "status": "done", "data": {
+                            "agent": routing_result.agent,
+                            "retrieval_mode": "agent:%s" % routing_result.agent,
+                            "search_needed": False,
+                            "scope": "none",
+                        }}],
+                    })
+
+                    # v2: Create agent cell
+                    self._emit_msg_event("agent_cell", {
+                        "messageId": request_id or '',
+                        "agent": routing_result.agent,
+                        "status": "thinking",
+                        "data": {}
+                    })
+
+                    # Load shared memory for context
+                    try:
+                        from .memory import load_shared_memory
+                        memory = load_shared_memory()
+                        memory_context = memory.to_context_string()
+                    except Exception:
+                        memory_context = ''
+
+                    try:
+                        clean_msg = routing_result.clean_message or user_message
+                        agent_kwargs = dict(_agent_def.extra_kwargs)
+                        if memory_context:
+                            agent_kwargs['memory_context'] = memory_context
+                        result = _run_fn(situation=clean_msg, **agent_kwargs)
                             # Format result for streaming callback
                             text = result.get('text', '') if isinstance(result, dict) else str(result)
 
@@ -487,11 +499,11 @@ class AIHandler:
                             self._emit_msg_event("msg_done", {"messageId": request_id or ''})
 
                             # on_finished must run on main thread — schedule via taskman
-                            if agent_def.on_finished and self.widget:
+                            if _agent_def.on_finished and self.widget:
                                 _widget = self.widget
                                 _agent_name = routing_result.agent
                                 _result = result if isinstance(result, dict) else {}
-                                _on_finished = agent_def.on_finished
+                                _on_finished = _agent_def.on_finished
                                 if mw and mw.taskman:
                                     mw.taskman.run_on_main(
                                         lambda: _on_finished(_widget, _agent_name, _result))
@@ -502,6 +514,10 @@ class AIHandler:
                         # v2: Clean up on failure
                         self._emit_msg_event("msg_done", {"messageId": request_id or ''})
                         # Fall through to Tutor pipeline
+                else:
+                    # Agent couldn't be loaded — fall through to Tutor
+                    logger.info("Agent %s not loadable, falling back to Tutor",
+                                routing_result.agent)
 
             # Continue with Tutor pipeline (existing RAG flow)
             self._emit_pipeline_step("orchestrating", "done", {
