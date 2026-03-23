@@ -1,7 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import MainApp from './MainApp';
 import './index.css';
 import 'katex/dist/katex.min.css'; // KaTeX CSS
 
@@ -29,25 +28,14 @@ if (typeof window !== 'undefined') {
   }
 }
 
-const params = new URLSearchParams(window.location.search);
-const mode = params.get('mode');
-
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
 try {
-  if (mode === 'main') {
-    root.render(
-      <React.StrictMode>
-        <MainApp />
-      </React.StrictMode>
-    );
-  } else {
-    root.render(
-      <React.StrictMode>
-        <App />
-      </React.StrictMode>
-    );
-  }
+  root.render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
 } catch (error) {
-  console.error('❌ Fehler beim Rendern der App:', error);
+  console.error('Fehler beim Rendern der App:', error);
 }

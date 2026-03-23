@@ -27,7 +27,10 @@ import SectionDivider from './components/SectionDivider';
 import ReviewTrailIndicator from './components/ReviewTrailIndicator';
 import { BookOpen } from 'lucide-react';
 import { useFreeChat } from './hooks/useFreeChat';
+import { useHoldToReset } from './hooks/useHoldToReset';
 import { setRegistry, findAgent, getRegistry } from '@shared/config/subagentRegistry';
+import { registerAction, executeAction, bridgeAction } from './actions';
+import { emit } from './eventBus';
 // MascotShell moved to main window (plusi_dock.py) — no longer imported
 import { useMascot } from './hooks/useMascot';
 import InsightsDashboard from './components/InsightsDashboard';
@@ -39,10 +42,23 @@ import StandardSubMenu from './components/StandardSubMenu';
 import TokenBudgetSlider from './components/TokenBudgetSlider';
 import SettingsSidebar from './components/SettingsSidebar';
 import AgenticCell from './components/AgenticCell';
+import TopBar from './components/TopBar';
+import DeckBrowserView from './components/DeckBrowserView';
+import OverviewView from './components/OverviewView';
+import ContextTags from './components/ContextTags';
 
 // Stable empty references — prevent new object creation on every render
 const EMPTY_STEPS = [];
 const EMPTY_CITATIONS = {};
+
+// Map domain.past event names to useFreeChat's expected names (for fullscreen FreeChat)
+const EVENT_NAME_MAP = {
+  'chat.loadingChanged': 'loading',
+  'chat.chunkReceived': 'streaming',
+  'chat.responseCompleted': 'bot',
+  'chat.errorOccurred': 'error',
+  'chat.messagesCleared': 'deckMessagesCleared',
+};
 
 function normalizeMessages(messages) {
   return messages.map(m => ({
@@ -167,7 +183,18 @@ function AppInner() {
   const cardSessionHook = useCardSession(bridge);
   const reviewTrailHook = useReviewTrail();
   const insightsHook = useInsights();
-  const [activeView, setActiveView] = useState('chat'); // 'chat' | 'agentStudio' | 'plusiMenu' | 'researchMenu' | 'subMenu:<agentName>'
+  const [activeView, setActiveView] = useState('chat'); // 'chat' | 'agentStudio' | 'plusiMenu' | 'researchMenu' | 'subMenu:<agentName>' | 'deckBrowser' | 'overview' | 'freeChat'
+  const activeViewRef = useRef('chat');
+  useEffect(() => { activeViewRef.current = activeView; }, [activeView]);
+
+  // Fullscreen view state (merged from MainApp)
+  const [ankiState, setAnkiState] = useState('deckBrowser');
+  const [deckBrowserData, setDeckBrowserData] = useState(null);
+  const [overviewData, setOverviewData] = useState(null);
+  const [freeChatTransition, setFreeChatTransition] = useState('idle');
+  const [mainInputFocused, setMainInputFocused] = useState(false);
+  const messagesEndRef = useRef(null);
+
   const lastProcessedCardRef = useRef(null);
   // Create a setSessions wrapper that works with SessionContext
   const setSessionsWrapper = useCallback((updater) => {
@@ -319,6 +346,28 @@ function AppInner() {
   });
   const freeChatHookRef = useRef(freeChatHook);
   useEffect(() => { freeChatHookRef.current = freeChatHook; }, [freeChatHook]);
+
+  // ── Fullscreen FreeChat bridge (stable ref, delegates to bridgeAction) ──
+  const fullscreenBridge = useRef({
+    sendMessage: (data) => bridgeAction('chat.send', data),
+    cancelRequest: () => bridgeAction('chat.cancel'),
+    goToCard: (cardId) => bridgeAction('card.goTo', cardId),
+    openPreview: (cardId) => bridgeAction('card.preview', { cardId: String(cardId) }),
+  }).current;
+
+  // Hold-to-reset for fullscreen FreeChat
+  const holdToReset = useHoldToReset({
+    onReset: freeChatHook.clearMessages,
+    enabled: activeView === 'freeChat' && !mainInputFocused && !freeChatHook.isLoading,
+  });
+
+  // Stable refs for fullscreen FreeChat ankiReceive handlers
+  const fullscreenHandleDeckMessagesLoadedRef = useRef(freeChatHook.handleDeckMessagesLoaded);
+  const fullscreenHandleAnkiReceiveRef = useRef(freeChatHook.handleAnkiReceive);
+  const fullscreenLoadForDeckRef = useRef(freeChatHook.loadForDeck);
+  useEffect(() => { fullscreenHandleDeckMessagesLoadedRef.current = freeChatHook.handleDeckMessagesLoaded; }, [freeChatHook.handleDeckMessagesLoaded]);
+  useEffect(() => { fullscreenHandleAnkiReceiveRef.current = freeChatHook.handleAnkiReceive; }, [freeChatHook.handleAnkiReceive]);
+  useEffect(() => { fullscreenLoadForDeckRef.current = freeChatHook.loadForDeck; }, [freeChatHook.loadForDeck]);
 
   // ── Free Chat Push: card messages → Free Chat ──────────────────
   // When session chat saves a message, also push it to Free Chat for the chronological view
@@ -603,6 +652,51 @@ function AppInner() {
         return;
       }
       
+      // Emit through Event Bus (agents can subscribe)
+      emit(payload.type, payload);
+
+      // Fullscreen state changes (merged from MainApp)
+      if (payload.type === 'app.stateChanged' || payload.type === 'stateChanged') {
+        const { state, data, freeChatWasOpen } = payload;
+        setAnkiState(state);
+        if (state === 'deckBrowser') {
+          setDeckBrowserData(data);
+          if (freeChatWasOpen) {
+            setActiveView('freeChat');
+            setFreeChatTransition('visible');
+            fullscreenLoadForDeckRef.current(0);
+          } else {
+            if (activeViewRef.current === 'freeChat') {
+              setFreeChatTransition('idle');
+            }
+            setActiveView('deckBrowser');
+          }
+        } else if (state === 'overview') {
+          if (activeViewRef.current === 'freeChat') {
+            fullscreenBridge.cancelRequest();
+            setFreeChatTransition('idle');
+            bridgeAction('chat.stateChanged', { open: false });
+          }
+          setOverviewData(data);
+          setActiveView('overview');
+        } else if (state === 'review') {
+          setActiveView('chat');
+        }
+        return;
+      }
+
+      // Fullscreen FreeChat messages loaded
+      if (payload.type === 'chat.messagesLoaded') {
+        fullscreenHandleDeckMessagesLoadedRef.current(payload);
+        return;
+      }
+
+      // Agent/Python can trigger React-side actions
+      if (payload.type === 'executeAction') {
+        executeAction(payload.action, payload.data);
+        return;
+      }
+
       // Trigger slide-in animation when panel is opened
       if (payload.type === 'panelOpened') {
         const root = document.getElementById('chat-root');
@@ -1863,6 +1957,97 @@ function AppInner() {
   }, [sessionContext.currentSession?.deckId, freeChatHook]);
   useEffect(() => { handleFreeChatOpenRef.current = handleFreeChatOpen; }, [handleFreeChatOpen]);
 
+  // ── Fullscreen FreeChat open/close (merged from MainApp) ──────
+  const openFullscreenFreeChat = useCallback((initialText) => {
+    freeChatHook.loadForDeck(0);
+    setFreeChatTransition('mounting');
+    setTimeout(() => {
+      setFreeChatTransition('entering');
+      setTimeout(() => setFreeChatTransition('visible'), 400);
+    }, 50);
+    setActiveView('freeChat');
+    bridgeAction('chat.stateChanged', { open: true });
+    if (initialText?.trim()) {
+      setTimeout(() => freeChatHook.handleSend(initialText, 'compact'), 600);
+    }
+  }, [freeChatHook]);
+
+  const closeFullscreenFreeChat = useCallback(() => {
+    if (freeChatHook.isLoading) fullscreenBridge.cancelRequest();
+    setFreeChatTransition('exiting');
+    bridgeAction('chat.stateChanged', { open: false });
+    setTimeout(() => {
+      setActiveView('deckBrowser');
+      setFreeChatTransition('idle');
+    }, 350);
+  }, [freeChatHook.isLoading, fullscreenBridge]);
+
+  // ── Register fullscreen actions (merged from MainApp) ──────────
+  useEffect(() => {
+    registerAction('chat.open', (data) => openFullscreenFreeChat(data?.text || ''), { label: 'Chat oeffnen', description: 'Open free chat overlay' });
+    registerAction('chat.close', () => closeFullscreenFreeChat(), { label: 'Chat schliessen', description: 'Close free chat overlay' });
+    registerAction('deck.study', (data) => bridgeAction('deck.study', data), { label: 'Deck lernen', description: 'Start studying a deck' });
+    registerAction('deck.select', (data) => bridgeAction('deck.select', data), { label: 'Deck auswaehlen', description: 'Select and open a deck' });
+    registerAction('view.navigate', (data) => bridgeAction('view.navigate', data), { label: 'Navigieren', description: 'Navigate to a view' });
+    registerAction('settings.toggle', () => bridgeAction('settings.toggle'), { label: 'Einstellungen', description: 'Toggle settings sidebar' });
+    registerAction('stats.open', () => bridgeAction('stats.open'), { label: 'Statistik', description: 'Open statistics window' });
+    registerAction('plusi.ask', () => bridgeAction('plusi.ask'), { label: 'Plusi fragen', description: 'Ask Plusi' });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── TopBar tab handler (merged from MainApp) ──────────────────
+  const handleTabClick = useCallback((tab) => {
+    if (tab === 'stapel') {
+      if (activeView === 'freeChat') {
+        executeAction('chat.close');
+      } else {
+        executeAction('view.navigate', 'deckBrowser');
+      }
+    } else if (tab === 'session') {
+      executeAction('view.navigate', 'overview');
+    } else if (tab === 'statistik') {
+      executeAction('stats.open');
+    }
+  }, [activeView]);
+
+  const handleSidebarToggle = useCallback(() => {
+    executeAction('settings.toggle');
+  }, []);
+
+  // ── Keyboard shortcuts for fullscreen FreeChat (merged from MainApp) ──
+  useEffect(() => {
+    const handler = (e) => {
+      if (mainInputFocused) return;
+      if (activeView === 'freeChat') {
+        if (e.key === 'Escape' || e.key === ' ') {
+          e.preventDefault();
+          executeAction('chat.close');
+        }
+      } else if (activeView === 'deckBrowser') {
+        if (e.key === ' ') {
+          e.preventDefault();
+          executeAction('chat.open');
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [activeView, mainInputFocused]);
+
+  // Focus tracking for fullscreen FreeChat input
+  const handleMainInputFocus = useCallback(() => {
+    setMainInputFocused(true);
+    bridgeAction('system.textFieldFocus', { focused: true });
+  }, []);
+  const handleMainInputBlur = useCallback(() => {
+    setMainInputFocused(false);
+    bridgeAction('system.textFieldFocus', { focused: false });
+  }, []);
+
+  // Auto-scroll to bottom on fullscreen FreeChat messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [freeChatHook.messages, freeChatHook.streamingMessage]);
+
   // (handleTrailNavigateLeft/Right defined earlier, before the keyboard useEffect)
 
   const handleNavigateToOverview = useCallback(() => {
@@ -2037,6 +2222,153 @@ function AppInner() {
 
   // Computed view state — used in JSX below
   const isInSubmenu = activeView === 'plusiMenu' || activeView === 'researchMenu' || activeView.startsWith('subMenu:');
+
+  // ── Fullscreen views (DeckBrowser, Overview, FreeChat) — merged from MainApp ──
+  const isFreeChatAnimatingIn = freeChatTransition === 'entering' || freeChatTransition === 'visible';
+  const showFreeChat = activeView === 'freeChat' && freeChatTransition !== 'idle';
+
+  if (activeView === 'deckBrowser' || activeView === 'overview' || activeView === 'freeChat') {
+    return (
+      <div style={{
+        position: 'fixed', inset: 0,
+        display: 'flex', flexDirection: 'column',
+        background: showFreeChat && isFreeChatAnimatingIn ? 'var(--ds-bg-deep)' : 'var(--ds-bg-canvas)',
+        transition: 'background-color 400ms cubic-bezier(0.25, 0.1, 0.25, 1)',
+      }}>
+        <TopBar
+          activeView={activeView}
+          ankiState={ankiState}
+          messageCount={freeChatHook.messageCount}
+          totalDue={deckBrowserData?.totalDue || 0}
+          deckName={overviewData?.deckName || ''}
+          dueNew={ankiState === 'overview' ? (overviewData?.dueNew || 0) : (deckBrowserData?.totalNew || 0)}
+          dueLearning={ankiState === 'overview' ? (overviewData?.dueLearning || 0) : (deckBrowserData?.totalLearn || 0)}
+          dueReview={ankiState === 'overview' ? (overviewData?.dueReview || 0) : (deckBrowserData?.totalReview || 0)}
+          onTabClick={handleTabClick}
+          onSidebarToggle={handleSidebarToggle}
+          holdToResetProps={holdToReset}
+        />
+
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {activeView === 'deckBrowser' && (
+            <DeckBrowserView data={deckBrowserData} isPremium={isPremium} />
+          )}
+          {activeView === 'overview' && (
+            <OverviewView
+              data={overviewData}
+              onStudy={() => executeAction('deck.study', { deckId: overviewData?.deckId })}
+              onBack={() => executeAction('view.navigate', 'deckBrowser')}
+              onOptions={() => bridgeAction('deck.options')}
+            />
+          )}
+          {showFreeChat && (
+            <div style={{
+              flex: 1, display: 'flex', flexDirection: 'column',
+              opacity: isFreeChatAnimatingIn ? 1 : 0,
+              transform: isFreeChatAnimatingIn ? 'translateY(0)' : 'translateY(-12px)',
+              transition: 'opacity 350ms cubic-bezier(0.25, 0.1, 0.25, 1) 50ms, transform 350ms cubic-bezier(0.25, 0.1, 0.25, 1) 50ms',
+            }}>
+              {/* Messages area */}
+              <div style={{
+                flex: 1, overflowY: 'auto', padding: '20px 16px 120px',
+                maxWidth: 720, width: '100%', margin: '0 auto',
+              }}>
+                {freeChatHook.messages.length === 0 && !freeChatHook.isLoading && !freeChatHook.streamingMessage && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    height: '100%', color: 'var(--ds-text-muted)', fontSize: 13,
+                  }}>
+                    Stelle eine Frage...
+                  </div>
+                )}
+
+                {freeChatHook.messages.map((msg, idx) => (
+                  <div key={msg.id} style={{
+                    opacity: isFreeChatAnimatingIn ? 1 : 0,
+                    transform: isFreeChatAnimatingIn ? 'translateY(0)' : 'translateY(-8px)',
+                    transition: `opacity 250ms ease ${200 + Math.min(idx, 10) * 30}ms, transform 250ms ease ${200 + Math.min(idx, 10) * 30}ms`,
+                  }}>
+                    {msg.from === 'user' && (
+                      <>
+                        <div className="mb-1">
+                          <ErrorBoundary>
+                            <ChatMessage
+                              message={msg.text} from={msg.from} cardContext={null}
+                              steps={[]} citations={{}} pipelineSteps={[]}
+                              bridge={fullscreenBridge} isLastMessage={false}
+                            />
+                          </ErrorBoundary>
+                        </div>
+                        <ContextTags
+                          deckName={msg.deckName} cardFront={msg.cardFront}
+                          cardId={msg.cardId} bridge={fullscreenBridge}
+                        />
+                      </>
+                    )}
+                    {msg.from === 'bot' && (
+                      <div className="mb-6">
+                        <ErrorBoundary>
+                          <ChatMessage
+                            message={msg.text} from={msg.from} cardContext={null}
+                            steps={msg.steps || []} citations={msg.citations || {}}
+                            pipelineSteps={[]} bridge={fullscreenBridge}
+                            isLastMessage={idx === freeChatHook.messages.length - 1}
+                          />
+                        </ErrorBoundary>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {(freeChatHook.isLoading || freeChatHook.streamingMessage) && (
+                  <div className="w-full flex-none">
+                    <StreamingChatMessage
+                      message={freeChatHook.streamingMessage || ''} isStreaming={freeChatHook.isLoading}
+                      cardContext={null} steps={[]} citations={{}}
+                      pipelineSteps={[]} bridge={fullscreenBridge}
+                    />
+                  </div>
+                )}
+
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Input dock -- fixed bottom */}
+              <div style={{
+                position: 'fixed', bottom: 0, left: 0, right: 0,
+                padding: '0 16px 16px', maxWidth: 720, margin: '0 auto', width: '100%',
+                opacity: isFreeChatAnimatingIn ? 1 : 0,
+                transform: isFreeChatAnimatingIn ? 'translateY(0)' : 'translateY(8px)',
+                transition: 'opacity 250ms ease 150ms, transform 250ms ease 150ms',
+              }}>
+                <ChatInput
+                  onSend={(text) => freeChatHook.handleSend(text, 'compact')}
+                  isLoading={freeChatHook.isLoading}
+                  onStop={() => fullscreenBridge.cancelRequest()}
+                  cardContext={null}
+                  isPremium={true}
+                  onClose={() => executeAction('chat.close')}
+                  onFocus={handleMainInputFocus}
+                  onBlur={handleMainInputBlur}
+                  actionPrimary={{
+                    label: 'Schlie\u00DFen',
+                    shortcut: '\u2423',
+                    onClick: () => executeAction('chat.close'),
+                  }}
+                  actionSecondary={{
+                    label: 'Senden',
+                    shortcut: '\u21B5',
+                    onClick: () => {},
+                    disabled: freeChatHook.isLoading,
+                  }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <ErrorBoundary>
