@@ -18,8 +18,9 @@
 
 | File | Responsibility |
 |------|---------------|
-| `ui/main_view.py` | MainViewWidget — permanent QWebEngineView, message polling, state routing, AI requests |
-| `frontend/src/MainApp.jsx` | React root for `?mode=main` — view switching, state management, ankiReceive handler |
+| `ui/main_view.py` | MainViewWidget — permanent QWebEngineView, message polling, action routing via dict registry, AI requests |
+| `frontend/src/actions.js` | Action Registry — registerAction, executeAction, getAvailableActions |
+| `frontend/src/MainApp.jsx` | React root for `?mode=main` — view switching, state management, ankiReceive handler, action registration |
 | `frontend/src/components/TopBar.jsx` | Unified top bar — tabs, info left/right, adapts per view |
 | `frontend/src/components/DeckBrowserView.jsx` | Deck tree container — search bar, deck list, empty state |
 | `frontend/src/components/DeckNode.jsx` | Single deck with expand/collapse — recursive children |
@@ -102,6 +103,7 @@ class MainViewWidget(QWidget):
         self._visible = False
         self._bridge_initialized = False
         self._freechat_was_open = False  # preserve FreeChat state across hide/show
+        self._init_action_handlers()
         self._setup_ui()
 
     def _setup_ui(self):
@@ -176,74 +178,64 @@ class MainViewWidget(QWidget):
         except Exception as e:
             logger.error("MainView: message parse error: %s", e)
 
+    def _init_action_handlers(self):
+        """Action Registry — domain.verb pattern. Same actions available to UI, shortcuts, and agents."""
+        self._action_handlers = {
+            # Deck actions
+            'deck.study':           self._handle_study_deck,
+            'deck.select':          self._handle_select_deck,
+            'deck.create':          self._handle_create_deck,
+            'deck.import':          self._handle_import_deck,
+            'deck.options':         self._handle_open_deck_options,
+            # View actions
+            'view.navigate':        self._handle_navigate,
+            # Chat actions
+            'chat.send':            self._handle_send_message,
+            'chat.cancel':          self._handle_cancel_request,
+            'chat.load':            self._handle_load_deck_messages,
+            'chat.save':            self._handle_save_deck_message,
+            'chat.clear':           self._handle_clear_deck_messages,
+            'chat.stateChanged':    self._handle_freechat_state,
+            # Settings & tools
+            'settings.toggle':      self._handle_toggle_settings_sidebar,
+            'stats.open':           self._handle_open_stats,
+            # Plusi
+            'plusi.ask':            self._handle_plusi_ask,
+            'plusi.settings':       self._handle_toggle_settings_sidebar,
+            # Card actions
+            'card.goTo':            self._handle_go_to_card,
+            'card.preview':         self._handle_open_preview,
+            # System
+            'system.textFieldFocus': self._handle_text_field_focus,
+            'system.upgrade':       self._handle_toggle_settings_sidebar,
+        }
+
+    def get_available_actions(self):
+        """Agent can discover all available actions."""
+        return list(self._action_handlers.keys())
+
     def _route_message(self, msg_type, data):
-        """Route messages from React to appropriate handlers."""
-        if msg_type == 'studyDeck':
-            self._handle_study_deck(data)
-        elif msg_type == 'selectDeck':
-            self._handle_select_deck(data)
-        elif msg_type == 'navigateTo':
-            self._handle_navigate(data)
-        elif msg_type == 'sendMessage':
-            self._handle_send_message(data)
-        elif msg_type == 'cancelRequest':
-            self._handle_cancel_request()
-        elif msg_type == 'loadDeckMessages':
-            self._handle_load_deck_messages(data)
-        elif msg_type == 'saveDeckMessage':
-            self._handle_save_deck_message(data)
-        elif msg_type == 'clearDeckMessages':
-            self._handle_clear_deck_messages()
-        elif msg_type == 'openStats':
-            self._handle_open_stats()
-        elif msg_type == 'openDeckOptions':
-            self._handle_open_deck_options()
-        elif msg_type == 'toggleSettingsSidebar':
-            self._handle_toggle_settings_sidebar()
-        elif msg_type == 'textFieldFocus':
-            self._handle_text_field_focus(data)
-        elif msg_type == 'goToCard':
-            self._handle_go_to_card(data)
-        elif msg_type == 'openPreview':
-            self._handle_open_preview(data)
-        elif msg_type == 'freeChatStateChanged':
-            # Track whether FreeChat is open for state persistence
+        """Route messages from React via Action Registry."""
+        # Support both direct action calls and the executeAction wrapper
+        if msg_type == 'executeAction':
             try:
                 parsed = json.loads(data) if isinstance(data, str) else data
-                self._freechat_was_open = parsed.get('open', False)
-            except Exception:
-                pass
-        elif msg_type == 'plusiAsk':
-            # Open sidebar chat with @Plusi prefix
-            try:
-                from .setup import ensure_chatbot_open
-                ensure_chatbot_open()
-                widget = self._get_sidebar_widget()
-                if widget and widget.web_view:
-                    widget.web_view.page().runJavaScript(
-                        "window.ankiReceive && window.ankiReceive({type:'plusiAsk'});"
-                    )
+                action_name = parsed.get('action', '')
+                action_data = parsed.get('data')
+                handler = self._action_handlers.get(action_name)
+                if handler:
+                    handler(action_data)
+                else:
+                    logger.warning("Unknown action via executeAction: %s", action_name)
             except Exception as e:
-                logger.warning("MainView: plusiAsk error: %s", e)
-        elif msg_type == 'upgradeBadge':
-            try:
-                from .settings_sidebar import toggle_settings_sidebar
-                toggle_settings_sidebar()
-            except Exception as e:
-                logger.warning("MainView: upgradeBadge error: %s", e)
-        elif msg_type == 'createDeck':
-            try:
-                mw.onAddDeck() if hasattr(mw, 'onAddDeck') else None
-            except Exception as e:
-                logger.warning("MainView: createDeck error: %s", e)
-        elif msg_type == 'importDeck':
-            try:
-                if hasattr(mw, 'handleImport'):
-                    mw.handleImport()
-                elif hasattr(mw, 'onImport'):
-                    mw.onImport()
-            except Exception as e:
-                logger.warning("MainView: importDeck error: %s", e)
+                logger.error("MainView: executeAction error: %s", e)
+            return
+
+        handler = self._action_handlers.get(msg_type)
+        if handler:
+            handler(data)
+        else:
+            logger.warning("Unknown message type: %s", msg_type)
 
     # ── Message Handlers ─────────────────────────────────────────────
 
@@ -394,6 +386,36 @@ class MainViewWidget(QWidget):
                 self._send_to_react({"type": "openCardPreview", "cardId": card_id})
         except Exception as e:
             logger.warning("MainView: openPreview error: %s", e)
+
+    def _handle_freechat_state(self, data):
+        try:
+            parsed = json.loads(data) if isinstance(data, str) else data
+            self._freechat_was_open = parsed.get('open', False)
+        except Exception:
+            pass
+
+    def _handle_plusi_ask(self, data):
+        try:
+            from .setup import ensure_chatbot_open
+            ensure_chatbot_open()
+        except Exception as e:
+            logger.warning("MainView: plusi.ask error: %s", e)
+
+    def _handle_create_deck(self, data):
+        try:
+            if hasattr(mw, 'onAddDeck'):
+                mw.onAddDeck()
+        except Exception as e:
+            logger.warning("MainView: deck.create error: %s", e)
+
+    def _handle_import_deck(self, data):
+        try:
+            if hasattr(mw, 'handleImport'):
+                mw.handleImport()
+            elif hasattr(mw, 'onImport'):
+                mw.onImport()
+        except Exception as e:
+            logger.warning("MainView: deck.import error: %s", e)
 
     # ── AI Callbacks ─────────────────────────────────────────────────
 
@@ -656,24 +678,80 @@ git commit -m "feat(ui): add MainViewWidget — permanent fullscreen React shell
 
 ---
 
-### Task 2: Create `MainApp.jsx` React root
+### Task 2: Create Action Registry and `MainApp.jsx` React root
 
 **Files:**
+- Create: `frontend/src/actions.js`
 - Create: `frontend/src/MainApp.jsx`
 - Modify: `frontend/src/main.jsx` (add `mode=main` routing)
 
-- [ ] **Step 1: Create MainApp.jsx**
+- [ ] **Step 1: Create `frontend/src/actions.js` — the Action Registry**
 
-This is the React root component. It receives state changes from Python, manages view switching, and handles FreeChat. Initially renders a minimal shell — views are added in later tasks.
+```javascript
+/**
+ * Action Registry — central dispatch for all app actions.
+ * Used by: UI buttons, keyboard shortcuts, agent tools, Python bridge.
+ *
+ * Naming: domain.verb (e.g., 'deck.study', 'chat.send', 'view.switch')
+ */
+
+const ACTION_REGISTRY = new Map();
+
+/**
+ * Register an action handler.
+ * @param {string} name - domain.verb identifier
+ * @param {function} handler - (data?) => void
+ * @param {object} meta - optional metadata (label, description, shortcut)
+ */
+export function registerAction(name, handler, meta = {}) {
+  ACTION_REGISTRY.set(name, { handler, ...meta });
+}
+
+/**
+ * Execute a registered action.
+ * @param {string} name - domain.verb identifier
+ * @param {*} data - optional payload
+ */
+export function executeAction(name, data) {
+  const action = ACTION_REGISTRY.get(name);
+  if (action) {
+    action.handler(data);
+  } else {
+    console.warn('[ActionRegistry] Unknown action:', name);
+  }
+}
+
+/**
+ * Get all registered action names. Used by agents for tool discovery.
+ */
+export function getAvailableActions() {
+  return [...ACTION_REGISTRY.entries()].map(([name, { label, description }]) => ({
+    name, label, description,
+  }));
+}
+
+/**
+ * Send an action to Python via bridge.
+ * Python's MainViewWidget._route_message uses the same domain.verb names.
+ */
+export function bridgeAction(name, data) {
+  window.ankiBridge?.addMessage(name, typeof data === 'object' ? JSON.stringify(data) : (data || ''));
+}
+```
+
+- [ ] **Step 2: Create MainApp.jsx**
+
+This is the React root component. It receives state changes from Python, manages view switching, and handles FreeChat. All buttons and shortcuts use `executeAction`. Initially renders a minimal shell — views are added in later tasks.
 
 ```jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { registerAction, executeAction, bridgeAction } from './actions';
 import { useFreeChat } from './hooks/useFreeChat';
 import { useHoldToReset } from './hooks/useHoldToReset';
 
 /**
  * MainApp — React root for the fullscreen main view.
- * Renders DeckBrowser, Overview, or FreeChat based on Anki state.
+ * All UI actions go through the Action Registry (actions.js).
  * Loaded when URL has ?mode=main
  */
 export default function MainApp() {
@@ -693,10 +771,10 @@ export default function MainApp() {
   useEffect(() => { activeViewRef.current = activeView; }, [activeView]);
 
   const bridge = useRef({
-    sendMessage: (data) => window.ankiBridge?.addMessage('sendMessage', data),
-    cancelRequest: () => window.ankiBridge?.addMessage('cancelRequest', ''),
-    goToCard: (cardId) => window.ankiBridge?.addMessage('goToCard', cardId),
-    openPreview: (cardId) => window.ankiBridge?.addMessage('openPreview', { cardId: String(cardId) }),
+    sendMessage: (data) => bridgeAction('chat.send', data),
+    cancelRequest: () => bridgeAction('chat.cancel'),
+    goToCard: (cardId) => bridgeAction('card.goTo', cardId),
+    openPreview: (cardId) => bridgeAction('card.preview', { cardId: String(cardId) }),
   }).current;
 
   const freeChatHook = useFreeChat({
@@ -755,7 +833,7 @@ export default function MainApp() {
           if (activeViewRef.current === 'freeChat') {
             bridge.cancelRequest(); // cancel any in-flight AI request
             setFreeChatTransition('idle');
-            window.ankiBridge?.addMessage('freeChatStateChanged', JSON.stringify({ open: false }));
+            bridgeAction('chat.stateChanged', { open: false });
           }
           setOverviewData(data);
           setActiveView('overview');
@@ -765,6 +843,12 @@ export default function MainApp() {
 
       if (payload.type === 'deckMessagesLoaded') {
         handleDeckMessagesLoadedRef.current(payload);
+        return;
+      }
+
+      // Agent/Python can trigger React-side actions
+      if (payload.type === 'executeAction') {
+        executeAction(payload.action, payload.data);
         return;
       }
 
@@ -787,7 +871,7 @@ export default function MainApp() {
     }, 50);
     setActiveView('freeChat');
     // Notify Python for state persistence
-    window.ankiBridge?.addMessage('freeChatStateChanged', JSON.stringify({ open: true }));
+    bridgeAction('chat.stateChanged', { open: true });
     if (initialText?.trim()) {
       setTimeout(() => handleSend(initialText, 'compact'), 600);
     }
@@ -796,7 +880,7 @@ export default function MainApp() {
   const closeFreeChat = useCallback(() => {
     if (isLoading) bridge.cancelRequest();
     setFreeChatTransition('exiting');
-    window.ankiBridge?.addMessage('freeChatStateChanged', JSON.stringify({ open: false }));
+    bridgeAction('chat.stateChanged', { open: false });
     setTimeout(() => {
       setActiveView('deckBrowser');
       setFreeChatTransition('idle');
@@ -812,12 +896,12 @@ export default function MainApp() {
       if (activeView === 'freeChat') {
         if (e.key === 'Escape' || e.key === ' ') {
           e.preventDefault();
-          closeFreeChat();
+          executeAction('chat.close');
         }
       } else if (activeView === 'deckBrowser') {
         if (e.key === ' ') {
           e.preventDefault();
-          openFreeChat('');
+          executeAction('chat.open');
         }
       }
     };
@@ -828,39 +912,44 @@ export default function MainApp() {
   // Focus tracking
   const handleInputFocus = useCallback(() => {
     setInputFocused(true);
-    window.ankiBridge?.addMessage('textFieldFocus', JSON.stringify({ focused: true }));
+    bridgeAction('system.textFieldFocus', { focused: true });
   }, []);
   const handleInputBlur = useCallback(() => {
     setInputFocused(false);
-    window.ankiBridge?.addMessage('textFieldFocus', JSON.stringify({ focused: false }));
+    bridgeAction('system.textFieldFocus', { focused: false });
   }, []);
 
   // ── Navigation callbacks (passed to child components) ─────────
 
-  const handleStudyDeck = useCallback((deckId) => {
-    window.ankiBridge?.addMessage('studyDeck', JSON.stringify({ deckId }));
-  }, []);
+  // ── Register actions (once, on mount) ──────────────────────────
 
-  const handleSelectDeck = useCallback((deckId) => {
-    window.ankiBridge?.addMessage('selectDeck', JSON.stringify({ deckId }));
-  }, []);
+  useEffect(() => {
+    registerAction('chat.open', (data) => openFreeChat(data?.text || ''), { label: 'Chat öffnen', description: 'Open free chat overlay' });
+    registerAction('chat.close', () => closeFreeChat(), { label: 'Chat schließen', description: 'Close free chat overlay' });
+    registerAction('deck.study', (data) => bridgeAction('deck.study', data), { label: 'Deck lernen', description: 'Start studying a deck' });
+    registerAction('deck.select', (data) => bridgeAction('deck.select', data), { label: 'Deck auswählen', description: 'Select and open a deck' });
+    registerAction('view.navigate', (data) => bridgeAction('view.navigate', data), { label: 'Navigieren', description: 'Navigate to a view' });
+    registerAction('settings.toggle', () => bridgeAction('settings.toggle'), { label: 'Einstellungen', description: 'Toggle settings sidebar' });
+    registerAction('stats.open', () => bridgeAction('stats.open'), { label: 'Statistik', description: 'Open statistics window' });
+    registerAction('plusi.ask', () => bridgeAction('plusi.ask'), { label: 'Plusi fragen', description: 'Ask Plusi' });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTabClick = useCallback((tab) => {
     if (tab === 'stapel') {
       if (activeView === 'freeChat') {
-        closeFreeChat();
+        executeAction('chat.close');
       } else {
-        window.ankiBridge?.addMessage('navigateTo', 'deckBrowser');
+        executeAction('view.navigate', 'deckBrowser');
       }
     } else if (tab === 'session') {
-      window.ankiBridge?.addMessage('navigateTo', 'overview');
+      executeAction('view.navigate', 'overview');
     } else if (tab === 'statistik') {
-      window.ankiBridge?.addMessage('openStats', '');
+      executeAction('stats.open');
     }
-  }, [activeView, closeFreeChat]);
+  }, [activeView]);
 
   const handleSidebarToggle = useCallback(() => {
-    window.ankiBridge?.addMessage('toggleSettingsSidebar', '');
+    executeAction('settings.toggle');
   }, []);
 
   // ── Render ────────────────────────────────────────────────────
