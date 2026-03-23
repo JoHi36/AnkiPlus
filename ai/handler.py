@@ -384,14 +384,6 @@ class AIHandler:
         request_id = getattr(self, '_current_request_id', None)
         self._emit_msg_event("msg_start", {"messageId": request_id or ''})
 
-        # v2: Create tutor cell early so pipeline steps have a target
-        self._emit_msg_event("agent_cell", {
-            "messageId": request_id or '',
-            "agent": "tutor",
-            "status": "thinking",
-            "data": {}
-        })
-
         try:
             # Stage 0: Agent Routing
             session_context = {
@@ -468,6 +460,14 @@ class AIHandler:
                     "retrieval_mode": "agent:tutor",
                     "agent": "tutor",
                 }}],
+            })
+
+            # v2: Create tutor cell AFTER orchestration so it appears in correct order
+            self._emit_msg_event("agent_cell", {
+                "messageId": request_id or '',
+                "agent": "tutor",
+                "status": "thinking",
+                "data": {}
             })
 
             # Stage 1: Router
@@ -643,6 +643,8 @@ class AIHandler:
 
             def _release_done(extra_text=None):
                 """Release the buffered done signal, optionally appending extra text."""
+                logger.info("_release_done called: buffered=%s, extra=%s",
+                            _buffered_done[0] is not None, bool(extra_text))
                 if _buffered_done[0] is not None or extra_text:
                     # Include marker IN the done chunk so React processes both atomically
                     final_chunk = _buffered_done[0] or ''
@@ -676,6 +678,8 @@ class AIHandler:
 
                 # --- Handoff check ---
                 # Parse the Tutor's response for a HANDOFF signal
+                logger.info("Post-streaming: result type=%s, len=%s",
+                            type(result).__name__, len(result) if isinstance(result, str) else 'N/A')
                 if result and isinstance(result, str):
                     clean_result, handoff_req = parse_handoff(result)
                     if handoff_req:
@@ -767,6 +771,7 @@ class AIHandler:
 
                 # No handoff — release buffered done signal
                 # (_release_done already emits msg_done internally)
+                logger.info("No handoff detected, releasing done signal")
                 _release_done()
 
                 # Memory extraction (rule-based, fast)
