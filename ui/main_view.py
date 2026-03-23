@@ -148,6 +148,17 @@ class MainViewWidget(QWidget):
             # System
             'system.textFieldFocus': self._handle_text_field_focus,
             'system.upgrade':       self._handle_toggle_settings_sidebar,
+            # Legacy aliases (useFreeChat hook still uses old names)
+            'loadDeckMessages':     self._handle_load_deck_messages,
+            'saveDeckMessage':      self._handle_save_deck_message,
+            'clearDeckMessages':    self._handle_clear_deck_messages,
+            'sendMessage':          self._handle_send_message,
+            'cancelRequest':        self._handle_cancel_request,
+            'textFieldFocus':       self._handle_text_field_focus,
+            'closeOverlay':         self._handle_freechat_state,  # legacy close
+            'freeChatStateChanged': self._handle_freechat_state,
+            'goToCard':             self._handle_go_to_card,
+            'openPreview':          self._handle_open_preview,
         }
 
     def _init_state_getters(self):
@@ -273,12 +284,19 @@ class MainViewWidget(QWidget):
             from ai.request_manager import get_request_manager
 
         try:
-            msg_data = json.loads(data) if isinstance(data, str) else data
+            msg_data = data
+            if isinstance(data, str):
+                try:
+                    msg_data = json.loads(data)
+                except (json.JSONDecodeError, ValueError):
+                    msg_data = {'text': data}
+            if not isinstance(msg_data, dict):
+                msg_data = {'text': str(msg_data) if msg_data else ''}
             text = msg_data.get('text', '').strip()
             if not text:
                 return
 
-            context = self._build_chat_context()
+            context = None  # Free chat has no card context
             db_messages = load_deck_messages(0, limit=20)
             history = [
                 {'role': 'assistant' if m.get('sender') == 'assistant' else 'user',
@@ -587,6 +605,19 @@ class MainViewWidget(QWidget):
             return
 
         self._show()
+        self._pending_state = state
+
+        # If bridge isn't initialized yet, wait and retry
+        if not self._bridge_initialized:
+            QTimer.singleShot(500, lambda: self._send_state_data(state))
+        else:
+            self._send_state_data(state)
+
+    def _send_state_data(self, state):
+        """Send state data to React. Retries if bridge not ready."""
+        if not self._bridge_initialized:
+            QTimer.singleShot(300, lambda: self._send_state_data(state))
+            return
 
         if state == 'deckBrowser':
             data = self._get_deck_browser_data()
