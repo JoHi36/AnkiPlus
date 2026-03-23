@@ -130,7 +130,7 @@ Replaces the custom_reviewer HTML/CSS/JS system. Renders card content as React.
 
 ### SessionPanel (`frontend/src/components/SessionPanel.jsx`)
 
-Extracts the entire content of App.jsx's `AppInner` into a standalone component. This is a **mechanical extraction**, not a redesign.
+Extracts the content of App.jsx's `AppInner` into a standalone component. While conceptually a move-not-redesign, this is **significant refactoring work** due to the deeply entangled hook dependencies in AppInner (useChat receives 6 parameters, useDeckTracking receives 12, and the ankiReceive handler routes to 8+ hook refs).
 
 **What moves into SessionPanel:**
 - `ContextSurface` (header with pill, session navigation)
@@ -327,24 +327,48 @@ def _send_card_data(self, card, is_question=True):
     })
 ```
 
-**Review action handlers:**
+**Review action handlers (with web.js-execution swallowing):**
+
+Anki's `_showAnswer()` and `_answerCard(ease)` internally call `mw.reviewer.web`'s JS execution method to update `mw.web`'s DOM. Since `mw.web` is hidden and we render in React, these calls must be swallowed — the same pattern already proven in `custom_reviewer/__init__.py` (lines 601-613, 670-680). Note: `web.eval` here is Qt's `QWebEngineView` JS execution API, not Python's built-in — it is safe and necessary.
+
 ```python
 def _handle_flip_card(self, data=None):
-    """Show the answer side."""
-    if mw.reviewer:
-        mw.reviewer._showAnswer()
+    """Show the answer side. Swallow web JS execution to prevent mw.web DOM writes."""
+    rev = mw.reviewer
+    if not rev or not rev.web:
+        return
+    web = rev.web
+    _orig = web.eval
+    web.eval = lambda js: None  # Swallow all JS executions
+    try:
+        rev._showAnswer()
+    finally:
+        web.eval = _orig
+    # Send back HTML to React
+    if rev.card:
+        self._send_card_data(rev.card, is_question=False)
 
 def _handle_rate_card(self, data):
-    """Rate the current card."""
+    """Rate current card. Swallow web JS execution during _answerCard."""
     parsed = json.loads(data) if isinstance(data, str) else data
     ease = int(parsed.get('ease', 2))
-    if mw.reviewer:
-        mw.reviewer._answerCard(ease)
+    rev = mw.reviewer
+    if not rev or not rev.web:
+        return
+    web = rev.web
+    _orig = web.eval
+    web.eval = lambda js: None  # Swallow: _answerCard -> nextCard -> _showQuestion -> web.eval
+    try:
+        rev._answerCard(ease)
+    finally:
+        web.eval = _orig
+    # After _answerCard, rev.card is now the NEXT card — send it to React
+    if rev.card:
+        self._send_card_data(rev.card, is_question=True)
 
 def _handle_advance_card(self, data=None):
     """Advance to next card (rate Good by default)."""
-    if mw.reviewer:
-        mw.reviewer._answerCard(3)  # ease=3 = Good
+    self._handle_rate_card({'ease': 3})
 ```
 
 **MC generation + AI evaluation:**
@@ -497,38 +521,46 @@ The session panel (right side) in review state:
 
 ### Synchronous to Async Migration
 
-The biggest refactoring challenge. Current `useAnki` provides synchronous return values:
+`useAnki.js` already uses the message queue (not QWebChannel). The "synchronous" methods fire an async request AND return a cached/fallback value. This is important — the migration is less disruptive than it appears.
 
-```javascript
-// These all return values synchronously via QWebChannel:
-const config = JSON.parse(bridge.getCurrentConfig());
-const deck = JSON.parse(bridge.getCurrentDeck());
-const status = JSON.parse(bridge.getAuthStatus());
+**Already fully async** (fire-and-forget, response via ankiReceive — no changes needed):
+- `loadCardSession(cardId)` — fires request, response arrives as `cardSessionLoaded`
+- `fetchModels()` — fires request, response arrives as `modelsLoaded`
+- `getAuthToken()` — fires request, response arrives as `authTokenLoaded`
+- `sendMessage()`, `cancelRequest()`, `setModel()` — fire-and-forget
+
+**Cache-fallback pattern** (fire request + return stale cache — needs minor refactoring):
+- `getCurrentConfig()` — returns `window._cachedConfig` or empty fallback
+- `getAuthStatus()` — returns hardcoded fallback, actual status arrives via ankiReceive
+- `getCurrentDeck()` — returns cached deck info
+
+For the cache-fallback methods, `useAnkiCompat` keeps the same pattern: fire the request on mount, cache the response when it arrives via ankiReceive, return the cached value on subsequent calls. This means most hooks need **zero refactoring** — they already handle the async flow.
+
+**The real migration work** is routing the ankiReceive responses. Currently `App.jsx`'s monolithic ankiReceive handler (hundreds of lines) routes responses to hook refs. In SessionPanel, the same handler structure is needed — it receives payloads from MainApp's ankiReceive and routes to its own hooks.
+
+### Session Chat vs Free Chat Routing
+
+`chat.send` needs different handling depending on context:
+
+```python
+def _handle_send_message(self, data):
+    msg_data = json.loads(data) if isinstance(data, str) else data
+    caller = msg_data.get('caller', 'main')  # 'main' (free chat) or 'session'
+
+    if caller == 'session':
+        # Session chat: use card context, card history, full RAG pipeline
+        card_context = self._get_current_card_context()
+        history = self._load_card_history(card_context.get('cardId'))
+    else:
+        # Free chat: no card context, deck-level history
+        card_context = None
+        history = self._load_deck_history(0)
+
+    # Rest of AI request handling is the same
+    ...
 ```
 
-In the new system, these become request/response:
-
-```javascript
-// Request
-bridgeAction('config.get');
-
-// Response arrives via ankiReceive
-// MainApp routes to SessionPanel via props or context
-window.ankiReceive({type: 'config.loaded', data: {...}})
-```
-
-**Hooks affected:**
-- `useModels` — `bridge.fetchModels()`, `bridge.getCurrentConfig()` for model list
-- `useCardSession` — `bridge.loadCardSession()` returns session data
-- `useDeckTracking` — `bridge.getCurrentDeck()` for initial deck
-- Auth effects in App.jsx — `bridge.getAuthStatus()`, `bridge.getAuthToken()`
-- Theme loading — `bridge.getTheme()`
-- Config loading — `bridge.getCurrentConfig()` for mascot_enabled, tools, etc.
-
-**Pattern:** Each hook that calls `bridge.method()` synchronously gets refactored to:
-1. Call `bridgeAction('domain.verb')` on mount
-2. Listen for the response via `ankiReceive` handler in MainApp
-3. MainApp passes the data down as props or through context
+React-side: `useFreeChat` sends `{caller: 'main'}`, `useChat` sends `{caller: 'session'}`. Both use the same `bridgeAction('chat.send', data)` — Python disambiguates.
 
 ## Preview Mode
 
@@ -583,25 +615,92 @@ The `custom_reviewer/styles.css` is currently injected into `mw.web`. After migr
 
 ## Edge Cases
 
-### mw.web and Anki's scheduler
+### mw.web and Anki's Scheduler (RESOLVED)
 
-Anki's `reviewer._answerCard(ease)` may require `mw.web` to contain valid card HTML for scheduling to work correctly. If so, we let the default Anki HTML render into `mw.web` (hidden behind MainViewWidget) and only use React for display. The `webview_will_set_content` hook would NOT be intercepted — Anki renders normally into the hidden webview while React shows the custom UI.
+**Strategy: Let Anki render into mw.web (hidden), swallow web.eval on our calls.**
 
-### Card media (images, audio)
+Anki's scheduler requires `mw.web` to have valid card HTML. The `_answerCard()` and `_showAnswer()` methods internally call `web.eval()` to update `mw.web`'s DOM. Our approach:
+
+1. **Do NOT intercept** `webview_will_set_content` for reviewer context — let Anki render its default HTML into `mw.web` normally. This keeps the scheduler happy.
+2. **Swallow `web.eval`** when WE trigger `_showAnswer()` or `_answerCard()` via our action handlers (see review action handlers above). This prevents Anki from writing JS to `mw.web` when we're driving the interaction.
+3. **mw.web stays hidden** behind MainViewWidget. The user never sees it, but Anki's internals use it.
+4. When Anki itself triggers card changes (e.g., timer-based card transition), the `reviewer_did_show_question` hook fires and sends the new card data to React.
+
+This is the exact same pattern already proven in `custom_reviewer/__init__.py` (lines 601-613 for `_showAnswer`, lines 670-680 for `_answerCard`).
+
+### Audio Playback
+
+Cards with `[sound:filename.mp3]` tags trigger Anki's `av_player`, which is wired into `mw.web`'s reviewer HTML via pycmd calls. Since `mw.web` renders normally (hidden), audio playback continues to work through Anki's native system. The key: we do NOT suppress `webview_will_set_content` for the reviewer — Anki's full reviewer HTML (including audio triggers) loads into `mw.web`. React only provides the visual layer.
+
+If audio does not auto-trigger (because `mw.web` is hidden and may not fire JS), we add an explicit audio trigger in `_send_card_data`:
+
+```python
+def _send_card_data(self, card, is_question=True):
+    # ... send data to React ...
+
+    # Trigger audio playback via Anki's av_player
+    if mw.reviewer:
+        sounds = card.question_av_tags() if is_question else card.answer_av_tags()
+        if sounds:
+            from anki.sound import av_player
+            av_player.play_tags(sounds)
+```
+
+### Card Media (Images)
 
 Card HTML references images via `src="filename.jpg"` which resolves to Anki's media folder. In React's QWebEngineView, these paths need the same base URL. Since MainViewWidget loads from `web/index.html` (local file), relative media paths won't resolve. Solution: rewrite image `src` attributes to absolute paths (`file:///path/to/collection.media/filename.jpg`) before sending to React.
 
-### MathJax rendering
+```python
+import re
+media_dir = mw.col.media.dir()
+front_html = re.sub(r'src="([^":/]+)"', f'src="file://{media_dir}/\\1"', front_html)
+```
+
+### MathJax Rendering
 
 Card HTML may contain MathJax delimiters. The custom_reviewer currently relies on Anki's MathJax injection. In React, use the existing KaTeX integration (already available via react-markdown). May need a MathJax to KaTeX conversion step, or include MathJax as a script in the webview.
 
-### Subagent registry
+### Keyboard Shortcut Routing
+
+`Cmd+I` currently routes through `GlobalShortcutFilter` (`ui/shortcut_filter.py`) to `ensure_chatbot_open()`. After migration:
+
+- `shortcut_filter.py`: `Cmd+I` calls `show_main_view(mw.state)` + sends `sidebar.toggle` to React
+- `shortcut_filter.py`: `set_main_view_active(True)` is always true (MainApp is always visible)
+- Review-mode shortcuts (Space for flip, 1-4 for rate) are handled in React's ReviewerView keydown listener, NOT in GlobalShortcutFilter
+
+### Preview Mode
+
+The preview system (`custom_reviewer/__init__.py`: `open_preview`, `close_preview`) currently injects cards into `mw.reviewer` and notifies `ChatbotWidget` via `_notify_frontend_preview`. After migration:
+
+1. `open_preview(card_id)` — loads card, sends data to MainApp via `_send_to_react`
+2. React sets `previewMode` state, ReviewerView shows the preview card
+3. `close_preview()` — restores original card, sends via `_send_to_react`
+4. `_notify_frontend_preview` rewritten to use `get_main_view()._send_to_react()` instead of `_chatbot_widget.web_view`
+
+### Subagent Registry
 
 Currently pushed from Python to App.jsx via ankiReceive. After migration, the same payload goes to MainApp, which passes it down to SessionPanel.
 
 ### Settings Sidebar
 
-Currently rendered via `App.jsx` with `?view=sidebar`. After migration, `SettingsSidebar` is imported directly in MainApp or SessionPanel — no separate URL param needed.
+Currently rendered via `App.jsx` with `?view=sidebar`. After migration, `SettingsSidebar` is available in all states — imported directly in MainApp. The `settings.toggle` action shows/hides it as an overlay panel. No separate URL param needed.
+
+### AIRequestThread Migration
+
+`widget.py` contains `AIRequestThread` (QThread with streaming signals). This is already superseded by `ai/request_manager.py`'s `AIRequestManager` which `main_view.py` already uses for FreeChat. SessionPanel's chat uses the same `AIRequestManager` — no QThread migration needed. The `SubagentThread` class is also handled by `request_manager.py`.
+
+### SessionPanel ankiReceive Handler
+
+The monolithic `ankiReceive` handler in `App.jsx` (~200 lines) routes payloads to 8+ hook refs. In SessionPanel, this becomes a dedicated handler that MainApp's `ankiReceive` delegates to when in review state:
+
+```javascript
+// MainApp.jsx ankiReceive handler
+if (activeViewRef.current === 'review' && sessionPanelRef.current) {
+  sessionPanelRef.current.handleAnkiReceive(payload);
+}
+```
+
+SessionPanel exposes `handleAnkiReceive` via `useImperativeHandle` or a forwarded ref.
 
 ## Out of Scope
 
