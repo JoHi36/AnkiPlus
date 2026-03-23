@@ -225,10 +225,11 @@ def on_state_did_change(new_state, old_state):
     # Send deck update to sidebar widget (only if it exists and is initialized)
     try:
         mv = _get_main_view()
-        if mv._sidebar_widget and mv._sidebar_widget.web_view and hasattr(mv._sidebar_widget, 'bridge') and mv._sidebar_widget.bridge:
-            deck_json = mv._sidebar_widget.bridge.getCurrentDeck()
+        widget = mv.get_sidebar_widget()
+        if widget and widget.web_view and hasattr(widget, 'bridge') and widget.bridge:
+            deck_json = widget.bridge.getCurrentDeck()
             js = "window.ankiReceive({type: 'currentDeck', data: %s});" % deck_json
-            mv._sidebar_widget.web_view.page().runJavaScript(js)
+            widget.web_view.page().runJavaScript(js)
             logger.debug("State Change (%s -> %s): Deck-Update gesendet", old_state, new_state)
     except Exception as e:
         logger.error("Fehler im State-Change-Hook: %s", e)
