@@ -8,8 +8,14 @@ Three-level routing decides which agent handles each user message:
 """
 
 import re
+import json
 from dataclasses import dataclass
 from typing import Optional
+
+try:
+    import requests as _requests
+except ImportError:
+    _requests = None
 
 try:
     from ..utils.logging import get_logger
@@ -20,31 +26,43 @@ logger = get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# RoutingResult
+# UnifiedRoutingResult
 # ---------------------------------------------------------------------------
 
 @dataclass
-class RoutingResult:
-    """Result of routing a user message to an agent."""
+class UnifiedRoutingResult:
+    """Result of routing a user message — agent decision + optional search strategy."""
     agent: str                              # 'tutor', 'research', 'help', 'plusi'
     method: str                             # 'lock', 'mention', 'heuristic', 'llm', 'default'
     clean_message: Optional[str] = None     # Message with @mention stripped
-    reasoning: str = ''                     # Why this agent was chosen (for UI/debug)
+    reasoning: str = ''                     # Why this agent was chosen
+    # Search strategy (populated when agent='tutor' and method='llm')
+    search_needed: Optional[bool] = None
+    retrieval_mode: Optional[str] = None    # 'sql', 'semantic', 'both'
+    response_length: Optional[str] = None   # 'short', 'medium', 'long'
+    max_sources: Optional[str] = None       # 'low', 'medium', 'high'
+    search_scope: Optional[str] = None      # 'current_deck', 'collection'
+    precise_queries: Optional[list] = None
+    broad_queries: Optional[list] = None
+    embedding_queries: Optional[list] = None
+
+# Backwards-compatible alias
+RoutingResult = UnifiedRoutingResult
 
 
 # ---------------------------------------------------------------------------
 # Level 1 — Explicit signals (0ms, no LLM)
 # ---------------------------------------------------------------------------
 
-def _check_lock_mode(session_context: dict) -> Optional[RoutingResult]:
+def _check_lock_mode(session_context: dict) -> Optional[UnifiedRoutingResult]:
     """If user has locked to a specific agent, route there."""
     locked = session_context.get('locked_agent')
     if locked:
-        return RoutingResult(agent=locked, method='lock')
+        return UnifiedRoutingResult(agent=locked, method='lock')
     return None
 
 
-def _detect_agent_mention(user_message: str, config: dict) -> Optional[RoutingResult]:
+def _detect_agent_mention(user_message: str, config: dict) -> Optional[UnifiedRoutingResult]:
     """Detect @Name or @Label patterns at start of message."""
     try:
         from ..ai.agents import get_enabled_agents
@@ -60,7 +78,7 @@ def _detect_agent_mention(user_message: str, config: dict) -> Optional[RoutingRe
             match = regex.match(user_message)
             if match:
                 clean = user_message[match.end():].strip()
-                return RoutingResult(
+                return UnifiedRoutingResult(
                     agent=agent.name,
                     method='mention',
                     clean_message=clean or user_message,
@@ -81,101 +99,160 @@ _HELP_PATTERNS = [
 ]
 
 
-def _check_heuristics(user_message: str, session_context: dict, config: dict) -> Optional[RoutingResult]:
+def _check_heuristics(user_message: str, session_context: dict, config: dict) -> Optional[UnifiedRoutingResult]:
     """Keyword-based routing for clear-cut cases."""
     msg_lower = user_message.lower().strip()
 
     # Help agent patterns (settings, app navigation)
     if config.get('help_enabled') and any(p in msg_lower for p in _HELP_PATTERNS):
-        return RoutingResult(
+        return UnifiedRoutingResult(
             agent='help',
             method='heuristic',
             reasoning='App/settings keyword detected',
         )
 
-    # Note: Plusi heuristic is deliberately NOT here.
-    # Emotional messages often contain factual questions too.
-    # Plusi routing should only happen via @mention or LLM routing.
+    # Plusi: direct name mention at start of message (not embedded in a question)
+    if re.match(r'^(?:hey\s+)?plusi\b', msg_lower):
+        return UnifiedRoutingResult(
+            agent='plusi',
+            method='heuristic',
+            reasoning='Plusi name at start of message',
+        )
 
     return None
 
 
 # ---------------------------------------------------------------------------
-# Level 3 — LLM routing (~300ms)
+# Level 3 — Unified LLM routing (~300ms)
 # ---------------------------------------------------------------------------
 
-_LLM_TIMEOUT_SECONDS = 5
+_LLM_TIMEOUT_SECONDS = 10
 
 
-def _llm_route(user_message: str, session_context: dict, config: dict) -> RoutingResult:
-    """Use Gemini Flash to classify ambiguous messages.
+def unified_route(user_message: str, session_context: dict, config: dict,
+                  card_context=None, chat_history=None) -> UnifiedRoutingResult:
+    """Level 3: Unified LLM routing — agent selection + search strategy in one call."""
+    if _requests is None:
+        return UnifiedRoutingResult(agent='tutor', method='default',
+                                    reasoning='requests module not available')
 
-    Returns RoutingResult — always succeeds (defaults to tutor on failure).
-    """
-    try:
-        import requests as _requests
-    except ImportError:
-        return RoutingResult(agent='tutor', method='default',
-                             reasoning='requests module not available')
-
-    # Only attempt if we have an API key
     api_key = config.get('api_key', '')
     if not api_key:
-        return RoutingResult(agent='tutor', method='default',
-                             reasoning='No API key for LLM routing')
+        return UnifiedRoutingResult(agent='tutor', method='default',
+                                    reasoning='No API key')
 
     router_model = config.get('router_model', 'gemini-2.5-flash')
 
-    # Build agent descriptions for the prompt
+    # Build agent descriptions
     try:
         from ..ai.agents import get_non_default_agents
     except ImportError:
         from ai.agents import get_non_default_agents
 
     enabled = get_non_default_agents(config)
-    if not enabled:
-        return RoutingResult(agent='tutor', method='default',
-                             reasoning='No non-default agents enabled')
-
     agent_descriptions = '\n'.join(
         '- %s: %s' % (a.name, a.router_hint) for a in enabled if a.router_hint
     )
 
+    # Build card context string
+    card_str = 'Keine Karte aktiv.'
+    if card_context and card_context.get('cardId'):
+        q = card_context.get('question') or card_context.get('frontField') or ''
+        a = card_context.get('answer') or ''
+        q_clean = re.sub(r'<[^>]+>', ' ', q).strip()[:500]
+        a_clean = re.sub(r'<[^>]+>', ' ', a).strip()[:500]
+        deck = card_context.get('deckName', '')
+        tags = ', '.join(card_context.get('tags', [])) or 'keine'
+        card_str = (
+            'Aktuelle Karte:\n'
+            '- Frage: %s\n'
+            '- Antwort: %s\n'
+            '- Deck: %s\n'
+            '- Tags: %s'
+        ) % (q_clean or 'LEER', a_clean or 'LEER', deck or 'unbekannt', tags)
+
+    # Build chat history string (last 4 messages)
+    history_str = 'Kein Chatverlauf.'
+    if chat_history:
+        recent = chat_history[-4:]
+        lines = []
+        for msg in recent:
+            role = msg.get('role', 'user')
+            text = (msg.get('content') or msg.get('text') or '')[:200]
+            if text:
+                lines.append('%s: %s' % (role, text))
+        if lines:
+            history_str = 'Letzter Chatverlauf:\n' + '\n'.join(lines)
+
     mode = session_context.get('mode', 'free_chat')
     deck_name = session_context.get('deck_name', '')
-    has_card = session_context.get('has_card', False)
 
-    prompt = (
-        'Du bist der Router eines agentischen Lernsystems.\n'
-        'Entscheide welcher Agent diese Nachricht bearbeiten soll.\n'
-        '\n'
-        'Verfügbare Agenten:\n'
-        '- tutor: Default. Beantwortet Lernfragen basierend auf Anki-Karten. '
-        'Wähle tutor wenn unklar.\n'
-        '%s\n'
-        '\n'
-        'Aktueller Kontext:\n'
-        '- Modus: %s\n'
-        '- Deck: %s\n'
-        '- Karte aktiv: %s\n'
-        '\n'
-        'Regeln:\n'
-        '1. Tutor ist der Default. Wähle einen anderen Agent NUR wenn klar ist, '
-        'dass die Anfrage NICHT ins Lerngebiet fällt.\n'
-        '2. Research NUR wenn User explizit nach Quellen/Papers fragt.\n'
-        '3. Help NUR für App-Bedienung und Einstellungen.\n'
-        '4. Plusi NUR für persönliche/emotionale Interaktion ohne Fachfrage.\n'
-        '5. Im Zweifel: tutor.\n'
-        '\n'
-        'Antworte mit EXAKT einer Zeile:\n'
-        'AGENT: <name>\n'
-        '\n'
-        'Nachricht: "%s"'
-    ) % (
+    prompt = '''Du bist der Router eines agentischen Lernsystems. Du triffst ZWEI Entscheidungen in einer Antwort:
+1. Welcher Agent bearbeitet die Nachricht?
+2. Falls Tutor: Welche Suchstrategie und Queries?
+
+Verfuegbare Agenten:
+- tutor: Default. Beantwortet Lernfragen basierend auf Anki-Karten. Waehle tutor wenn unklar.
+%s
+
+Aktuelle Situation:
+- Modus: %s
+- Deck: %s
+%s
+
+%s
+
+Nachricht: "%s"
+
+AGENT-REGELN:
+1. Tutor ist der Default. Waehle einen anderen Agent NUR wenn klar ist, dass die Anfrage NICHT ins Lerngebiet faellt.
+2. Research NUR wenn User explizit nach externen Quellen/Papers/Recherche fragt.
+3. Help NUR fuer App-Bedienung und Einstellungen.
+4. Plusi NUR fuer persoenliche/emotionale Interaktion ohne Fachfrage.
+5. Im Zweifel: tutor.
+
+SUCH-REGELN (nur relevant wenn agent=tutor):
+Entscheide ob und wie die Kartensammlung durchsucht werden soll.
+
+DECISION TREE:
+1. Smalltalk, Dank, Begruessung, Meta-Frage ueber die App? -> search_needed=false
+2. Faktische/Lernfrage? -> search_needed=true (weiter unten)
+3. Kann die aktuelle Karte ALLEIN die Frage beantworten? -> search_needed=false (selten)
+
+KONTEXT-ERKENNUNG:
+Bestimme zuerst: Bezieht sich die Frage auf die aktuelle Karte/Konversation oder ist es ein eigenstaendiges Thema?
+
+Kontextabhaengige Signale: "was bedeutet das", "erklaer das", "ich verstehe nicht", Pronomen ("das", "es", "dieser")
+-> Verwende Karten-Keywords + letzten Response fuer spezifische Queries.
+  embedding_queries MUESSEN die Schluesselwoerter der Karte aus VERSCHIEDENEN Perspektiven enthalten.
+
+Eigenstaendige Signale: Enthaelt Fachbegriffe die NICHT auf der Karte stehen.
+-> Ignoriere Kartenkontext, erstelle Queries nur aus der Frage.
+
+QUERY-REGELN:
+- embedding_queries: 2-3 semantische Suchtexte aus VERSCHIEDENEN Perspektiven. NIEMALS die Nutzerfrage woertlich kopieren. Immer zu fachspezifischen Suchbegriffen erweitern.
+- precise_queries: 2-3 AND-Queries aus relevanten Keywords
+- broad_queries: 2-3 OR-Queries fuer breitere Suche
+- search_scope: "current_deck" bei kartenbezogenen Fragen, "collection" bei fachuebergreifenden
+- retrieval_mode: "both" als Default, "sql" fuer exakte Fakten/Namen, "semantic" fuer konzeptuelle Fragen
+- max_sources: "low" (3-5, einfache Fakten), "medium" (8-10, Erklaerungen), "high" (bis 15, Vergleiche)
+- response_length: "short" fuer einfache Fakten, "medium" fuer Erklaerungen, "long" fuer Vergleiche
+
+Antworte mit JSON:
+
+Wenn agent=tutor UND search_needed=true:
+{"agent":"tutor","reasoning":"...","search_needed":true,"retrieval_mode":"both","response_length":"medium","max_sources":"medium","search_scope":"collection","precise_queries":["..."],"broad_queries":["..."],"embedding_queries":["..."]}
+
+Wenn agent=tutor UND search_needed=false:
+{"agent":"tutor","reasoning":"...","search_needed":false}
+
+Wenn agent!=tutor:
+{"agent":"plusi","reasoning":"..."}''' % (
         agent_descriptions,
         mode,
         deck_name or 'keins',
-        'ja' if has_card else 'nein',
+        card_str,
+        history_str,
         user_message[:500],
     )
 
@@ -187,8 +264,9 @@ def _llm_route(user_message: str, session_context: dict, config: dict) -> Routin
         data = {
             'contents': [{'role': 'user', 'parts': [{'text': prompt}]}],
             'generationConfig': {
-                'temperature': 0.0,
-                'maxOutputTokens': 50,
+                'temperature': 0.1,
+                'maxOutputTokens': 1024,
+                'responseMimeType': 'application/json',
             },
         }
         response = _requests.post(
@@ -200,53 +278,63 @@ def _llm_route(user_message: str, session_context: dict, config: dict) -> Routin
         response.raise_for_status()
         result = response.json()
 
-        # Parse response
         text = ''
         if 'candidates' in result and result['candidates']:
             parts = result['candidates'][0].get('content', {}).get('parts', [])
             if parts:
                 text = parts[0].get('text', '').strip()
 
-        # Extract agent name from "AGENT: <name>" format
-        match = re.search(r'AGENT:\s*(\w+)', text, re.IGNORECASE)
-        if match:
-            agent_name = match.group(1).lower()
-            # Validate agent exists and is enabled
-            try:
-                from ..ai.agents import get_agent
-            except ImportError:
-                from ai.agents import get_agent
+        if not text:
+            logger.warning("Unified router: empty LLM response")
+            return UnifiedRoutingResult(agent='tutor', method='default',
+                                        reasoning='Empty LLM response')
 
-            agent = get_agent(agent_name)
-            if agent and (agent.is_default or config.get(agent.enabled_key, False)):
-                return RoutingResult(
-                    agent=agent_name,
-                    method='llm',
-                    reasoning='LLM routed to %s' % agent_name,
-                )
+        parsed = json.loads(text)
+        agent = parsed.get('agent', 'tutor').lower()
 
-        # LLM response didn't parse -> default to tutor
-        logger.warning("Router LLM response unparseable: %s", text[:100])
-        return RoutingResult(agent='tutor', method='default',
-                             reasoning='LLM response unparseable')
+        # Validate agent
+        try:
+            from ..ai.agents import get_agent
+        except ImportError:
+            from ai.agents import get_agent
+
+        agent_def = get_agent(agent)
+        if not agent_def:
+            agent = 'tutor'
+
+        return UnifiedRoutingResult(
+            agent=agent,
+            method='llm',
+            reasoning=parsed.get('reasoning', ''),
+            search_needed=parsed.get('search_needed'),
+            retrieval_mode=parsed.get('retrieval_mode'),
+            response_length=parsed.get('response_length'),
+            max_sources=parsed.get('max_sources'),
+            search_scope=parsed.get('search_scope'),
+            precise_queries=parsed.get('precise_queries'),
+            broad_queries=parsed.get('broad_queries'),
+            embedding_queries=parsed.get('embedding_queries'),
+        )
 
     except Exception as e:
-        logger.warning("Router LLM call failed: %s", e)
-        return RoutingResult(agent='tutor', method='default',
-                             reasoning='LLM routing failed: %s' % e)
+        logger.warning("Unified router LLM call failed: %s", e)
+        return UnifiedRoutingResult(agent='tutor', method='default',
+                                    reasoning='LLM routing failed: %s' % e)
 
 
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
-def route_message(user_message: str, session_context: dict, config: dict) -> RoutingResult:
+def route_message(user_message: str, session_context: dict, config: dict,
+                  card_context=None, chat_history=None) -> UnifiedRoutingResult:
     """Route a user message to the appropriate agent.
 
     Three-level routing:
       Level 1: Explicit signals (0ms, no LLM) -- @mentions, lock mode
       Level 2: State-based heuristics (0ms, no LLM) -- keyword patterns
-      Level 3: LLM routing (~300ms) -- Gemini Flash for ambiguous messages
+      Level 3: Unified LLM routing (~300ms) -- Gemini Flash for ambiguous messages
+        Decides agent selection AND search strategy in one call.
 
     Default: Tutor (if nothing matches)
 
@@ -258,9 +346,11 @@ def route_message(user_message: str, session_context: dict, config: dict) -> Rou
             - deck_name: str
             - has_card: bool
         config: The full config dict.
+        card_context: Optional card data dict (cardId, question, answer, deckName, tags).
+        chat_history: Optional list of recent message dicts (role, content).
 
     Returns:
-        RoutingResult with agent name, routing method, and optional metadata.
+        UnifiedRoutingResult with agent name, routing method, and optional search strategy.
     """
     # Level 1: Lock mode
     result = _check_lock_mode(session_context)
@@ -277,18 +367,17 @@ def route_message(user_message: str, session_context: dict, config: dict) -> Rou
     if result:
         return result
 
-    # Level 3: LLM routing (only for non-trivial cases)
-    # Skip LLM routing if only Tutor is enabled (no other agents to route to)
+    # Level 3: Unified LLM routing (agent + search strategy)
     try:
         from ..ai.agents import get_non_default_agents
     except ImportError:
         from ai.agents import get_non_default_agents
 
     if get_non_default_agents(config):
-        result = _llm_route(user_message, session_context, config)
-        if result.agent != 'tutor':
-            return result
-        # LLM said tutor -> fall through to default
+        result = unified_route(user_message, session_context, config,
+                               card_context=card_context,
+                               chat_history=chat_history)
+        return result
 
-    # Default: Tutor
-    return RoutingResult(agent='tutor', method='default')
+    # Default: Tutor (no non-default agents enabled)
+    return UnifiedRoutingResult(agent='tutor', method='default')
