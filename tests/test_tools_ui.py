@@ -33,6 +33,7 @@ def test_tool_definition_ui_defaults():
     )
     assert t.label == ''
     assert t.ui_description == ''
+    assert t.category == ''
     assert t.default_enabled is True
     assert t.configurable is True
 

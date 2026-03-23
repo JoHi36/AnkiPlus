@@ -99,7 +99,7 @@ class ToolDefinition:
     name: str
     schema: Dict[str, Any]
     execute_fn: Callable[[Dict[str, Any]], Any]
-    category: str = "content"
+    category: str = ''
     config_key: Optional[str] = None
     agent: str = "tutor"
     disabled_modes: List[str] = field(default_factory=list)
