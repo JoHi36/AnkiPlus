@@ -15,6 +15,7 @@ import WebCitationBadge from './WebCitationBadge';
 import ThoughtStream from './ThoughtStream';
 import ToolWidgetRenderer from './ToolWidgetRenderer';
 import AgenticCell from './AgenticCell';
+import ResearchContent from './ResearchContent';
 import mermaid from 'mermaid';
 // SmilesDrawer wird dynamisch importiert, da es CommonJS ist und Vite-Probleme verursachen kann
 
@@ -1244,7 +1245,16 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
  * ChatMessage Komponente - INTENT BASED RENDERING
  * Analysiert JSON-Daten oder Intents und rendert die entsprechende High-End Card.
  */
-function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, isStreaming = false, isLastMessage = false, steps = [], citations = {}, pipelineSteps = [], bridge = null, onPreviewCard, onPerformanceCapture, webSources: webSourcesProp = null }) {
+function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, isStreaming = false, isLastMessage = false, steps = [], citations = {}, pipelineSteps = [], bridge = null, onPreviewCard, onPerformanceCapture, webSources: webSourcesProp = null, agentCells, orchestration, status: msgStatus, pipelineGeneration: msgPipelineGeneration }) {
+  // v2: Structured message detection
+  const message_prop = {
+    agentCells: agentCells || null,
+    orchestration: orchestration || null,
+    status: msgStatus || 'done',
+    pipelineGeneration: msgPipelineGeneration || 0,
+  };
+  const hasV2Data = message_prop.agentCells && message_prop.agentCells.length > 0;
+
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [answerFeedback, setAnswerFeedback] = useState(null);
   const [score, setScore] = useState(null);
@@ -1419,6 +1429,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
         }
 
         // 5. Tool markers ([[TOOL:{...}]]) → generic toolWidgets array
+        if (!hasV2Data) {
         const toolMarkers = [...fixedMessage.matchAll(/\[\[TOOL:(\{.*?\})\]\]/g)];
         if (toolMarkers.length > 0) {
             setToolWidgets(prev => {
@@ -1450,8 +1461,9 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                 return updated;
             });
         }
+        } // end !hasV2Data guard
     }
-  }, [fixedMessage, isUser]);
+  }, [fixedMessage, isUser, hasV2Data]);
 
   // Capture text evaluation performance data for SectionDivider
   useEffect(() => {
@@ -1597,7 +1609,9 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
   // This must happen AFTER citationIndices is calculated, so we have the correct index numbers
   // Use a ref to store the processed message with citations replaced
   const processedMessageWithCitations = React.useMemo(() => {
-    let message = processedMessage;
+    // Strip HANDOFF signals from displayed text (handoff is processed server-side)
+    let message = processedMessage.replace(/\n?HANDOFF:?\s*\w+\s+REASON:?\s*.+?\s+QUERY:?\s*.+$/s, '').trim();
+    if (!message) message = processedMessage; // Fallback if regex removes everything
     if (citations && Object.keys(citations).length > 0) {
       const citationPattern = /\[\[\s*(?:CardID:\s*)?(\d+)\s*\]\]/gi;
       let replacementCount = 0;
@@ -1740,37 +1754,49 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
     return hasSteps || hasPipelineData || hasCitations;
   }, [isUser, isStreaming, steps.length, generateFallbackSteps.length, pipelineSteps, citations]);
 
+  // Detect agent name from pipeline data (retrieval_mode: 'subagent:help' or 'agent:help')
+  const detectedAgentName = React.useMemo(() => {
+    if (!pipelineSteps || pipelineSteps.length === 0) return 'tutor';
+    for (const step of pipelineSteps) {
+      const rm = step.data?.retrieval_mode || '';
+      const match = rm.match(/^(?:subagent|agent):(\w+)$/);
+      if (match) return match[1];
+      if (step.data?.agent) return step.data.agent;
+    }
+    return 'tutor';
+  }, [pipelineSteps]);
+
+  // Split pipeline: orchestrating steps (router decision) vs agent-internal steps (RAG, search, etc.)
+  const routerSteps = React.useMemo(() => {
+    if (!pipelineSteps) return [];
+    return pipelineSteps.filter(s => s.step === 'orchestrating');
+  }, [pipelineSteps]);
+
+  const agentSteps = React.useMemo(() => {
+    if (!pipelineSteps) return [];
+    return pipelineSteps.filter(s => s.step !== 'orchestrating');
+  }, [pipelineSteps]);
+
+  const showRouterThoughtStream = !isUser && !isStreaming && routerSteps.length > 0;
+  const showAgentThoughtStream = React.useMemo(() => {
+    if (isUser || isStreaming) return false;
+    return agentSteps.length > 0 || steps.length > 0 || generateFallbackSteps.length > 0 || Object.keys(citations).length > 0;
+  }, [isUser, isStreaming, agentSteps, steps, generateFallbackSteps, citations]);
+
   // === RENDER RETURN ===
   return (
     <div className="flex flex-col mb-10 animate-in slide-in-from-left-4 duration-500" ref={messageRef}>
         {/* Content area - Full width for bot messages, no icon column */}
         <div className="w-full min-w-0">
-            {/* 0. ThoughtStream - Shows during loading and after completion */}
-            {shouldRenderThoughtStream ? (
-                <>
-                  <ThoughtStream
-                      pipelineSteps={pipelineSteps || []}
-                      steps={generateFallbackSteps}
-                      citations={citations}
-                      message={message}
-                  />
-                </>
-            ) : (
-                /* Simple divider for saved bot messages without steps — only for pure text replies (no Plusi, no ReviewCard) */
-                !isUser && toolWidgets.length === 0 && !reviewData && message && message.trim().length > 0 && (
-                  <div className="h-px my-2" style={{ background: 'var(--ds-border-subtle)' }} />
-                )
-            )}
-            
             {/* 1. Review Card (Highest Priority) */}
             {reviewData && (
                 <ReviewResult data={reviewData} onAutoFlip={onAutoFlip} />
             )}
 
-            {/* Tool Widgets (Plusi, Cards, Stats, etc.) */}
-            {toolWidgets.length > 0 && (
+            {/* Tool Widgets (Plusi, Cards, Stats, etc.) — excludes agent_handoff which renders after text */}
+            {toolWidgets.filter(tw => tw.name !== 'agent_handoff').length > 0 && (
                 <ToolWidgetRenderer
-                    toolWidgets={toolWidgets}
+                    toolWidgets={toolWidgets.filter(tw => tw.name !== 'agent_handoff')}
                     bridge={bridge}
                     isStreaming={isStreaming}
                     isLastMessage={isLastMessage}
@@ -1784,11 +1810,11 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
 
             {/* 2. Multiple Choice Card */}
             {hasMultipleChoice && mcOptions && (
-                <MultipleChoiceCard 
+                <MultipleChoiceCard
                     question={quizData?.question}
-                    options={mcOptions} 
-                    onSelect={handleAnswerClick} 
-                    onRetry={handleRetry} 
+                    options={mcOptions}
+                    onSelect={handleAnswerClick}
+                    onRetry={handleRetry}
                 />
             )}
 
@@ -1820,18 +1846,129 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                     </span>
                 );
             })()}
-            {processedMessageWithCitations && !isUser && (
-                <AgenticCell agentName="tutor">
+            {/* Router ThoughtStream — BEFORE AgenticCell (routing decision) */}
+            {showRouterThoughtStream && (
+                <ThoughtStream
+                    pipelineSteps={routerSteps}
+                    steps={[]}
+                    citations={{}}
+                    message=""
+                    variant="router"
+                />
+            )}
+            {/* ── v2: Structured Agent Cells ── */}
+            {hasV2Data && !isUser && (
+              <>
+                {/* Router ThoughtStream */}
+                {message_prop.orchestration && (
+                  <ThoughtStream
+                    variant="router"
+                    pipelineSteps={message_prop.orchestration.steps}
+                    isStreaming={message_prop.status !== 'done'}
+                    agentColor={'var(--ds-text-muted)'}
+                    citations={{}}
+                    message=""
+                    steps={[]}
+                  />
+                )}
+                {/* Agent Cells — ordered blocks */}
+                {message_prop.agentCells.map((cell, i) => (
+                  <AgenticCell
+                    key={`${cell.agent}-${i}`}
+                    agentName={cell.agent}
+                    isLoading={cell.status === 'loading'}
+                    loadingHint={cell.loadingHint || ''}
+                  >
+                    {/* Tutor-style ThoughtStream */}
+                    {cell.pipelineSteps && cell.pipelineSteps.length > 0 && (
+                      <ThoughtStream
+                        pipelineSteps={cell.pipelineSteps}
+                        pipelineGeneration={message_prop.pipelineGeneration}
+                        citations={cell.citations || {}}
+                        isStreaming={cell.status === 'streaming' || cell.status === 'thinking'}
+                        bridge={bridge}
+                        onPreviewCard={onPreviewCard}
+                        message={cell.text || ''}
+                        steps={[]}
+                      />
+                    )}
+                    {/* Text content */}
+                    {cell.text && cell.status !== 'loading' && !cell.sources?.length && (
+                      <SafeMarkdownRenderer
+                        content={cell.text}
+                        MermaidDiagram={MermaidDiagram}
+                        isStreaming={cell.status === 'streaming'}
+                        citations={cell.citations || {}}
+                        citationIndices={{}}
+                        bridge={bridge}
+                        onPreviewCard={onPreviewCard}
+                      />
+                    )}
+                    {/* Research sources */}
+                    {cell.sources && cell.sources.length > 0 && (
+                      <ResearchContent
+                        sources={cell.sources}
+                        answer={cell.text || ''}
+                      />
+                    )}
+                    {/* Tool widgets (Plusi, Cards, Stats) */}
+                    {cell.toolWidgets && cell.toolWidgets.length > 0 && (
+                      <ToolWidgetRenderer
+                        toolWidgets={cell.toolWidgets}
+                        bridge={bridge}
+                        isStreaming={cell.status === 'streaming'}
+                        isLastMessage={isLastMessage}
+                      />
+                    )}
+                    {/* Generating skeleton — inside cell, after steps all done */}
+                    {cell.status === 'thinking' && cell.pipelineSteps?.length > 0 && cell.pipelineSteps.every(s => s.status === 'done') && (
+                      <div style={{ padding: '8px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {[0.92, 0.76, 0.58].map((w, idx) => (
+                          <div key={idx} style={{ height: 12, borderRadius: 6, width: `${w * 100}%`, background: 'linear-gradient(90deg, var(--ds-hover-tint), var(--ds-active-tint), var(--ds-hover-tint))', backgroundSize: '200% 100%', animation: `ts-shimmerWave 2s ease-in-out infinite ${idx * 0.15}s` }} />
+                        ))}
+                      </div>
+                    )}
+                  </AgenticCell>
+                ))}
+              </>
+            )}
+            {!hasV2Data && processedMessageWithCitations && !isUser && (
+                <AgenticCell agentName={detectedAgentName}>
+                    {/* Agent ThoughtStream — INSIDE AgenticCell (search, retrieval, etc.) */}
+                    {showAgentThoughtStream ? (
+                      <ThoughtStream
+                          pipelineSteps={agentSteps}
+                          steps={generateFallbackSteps}
+                          citations={citations}
+                          message={message}
+                      />
+                    ) : (
+                      /* Simple divider for pure text bot messages */
+                      !showRouterThoughtStream && toolWidgets.length === 0 && !reviewData && message && message.trim().length > 0 && (
+                        <div className="h-px my-2" style={{ background: 'var(--ds-border-subtle)' }} />
+                      )
+                    )}
                     <SafeMarkdownRenderer
                         content={processedMessageWithCitations}
                         MermaidDiagram={MermaidDiagram}
                         isStreaming={isStreaming}
                         citations={citations}
-                        citationIndices={citationIndices} // PASS INDICES
+                        citationIndices={citationIndices}
                         bridge={bridge}
                         onPreviewCard={onPreviewCard}
                     />
                 </AgenticCell>
+            )}
+            {/* Agent Handoff Widget — renders AFTER the agent's text, flush against it */}
+            {!hasV2Data && toolWidgets.filter(tw => tw.name === 'agent_handoff').length > 0 && (
+                <div style={{ marginTop: -8 }}>
+                  <ToolWidgetRenderer
+                      toolWidgets={toolWidgets.filter(tw => tw.name === 'agent_handoff')}
+                      bridge={bridge}
+                      isStreaming={isStreaming}
+                      isLastMessage={isLastMessage}
+                  />
+                </div>
             )}
             {processedMessageWithCitations && isUser && (
                 <SafeMarkdownRenderer
@@ -1860,7 +1997,11 @@ const MemoizedChatMessage = React.memo(ChatMessage, (prevProps, nextProps) => {
          prevProps.cardContext === nextProps.cardContext &&
          prevProps.steps === nextProps.steps &&
          prevProps.citations === nextProps.citations &&
-         prevProps.webSources === nextProps.webSources;
+         prevProps.webSources === nextProps.webSources &&
+         prevProps.agentCells === nextProps.agentCells &&
+         prevProps.orchestration === nextProps.orchestration &&
+         prevProps.status === nextProps.status &&
+         prevProps.pipelineGeneration === nextProps.pipelineGeneration;
 });
 
 MemoizedChatMessage.displayName = 'ChatMessage';
