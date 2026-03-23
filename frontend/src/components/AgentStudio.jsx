@@ -76,7 +76,7 @@ export default function AgentStudio({ bridge, onNavigateToSubmenu }) {
   return (
     <div style={{
       flex: 1, display: 'flex', flexDirection: 'column',
-      padding: '0 12px', overflow: 'hidden',
+      padding: '0 20px', overflow: 'hidden',
     }}>
       <SystemIntelligenceBox bridge={bridge} />
 
