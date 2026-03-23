@@ -564,11 +564,223 @@ Session Summary (30 min, 45 cards, 78% correct)
 
 This is not a chat message. It is a dedicated view — a dashboard that appears when the session ends. All agents contribute observations, but the user sees a curated summary, not 15 individual messages.
 
-### The Right Amount of Intervention
+### Intelligence Lives in the Agent, Not in a Filter
 
-The default is SILENCE. Agents observe, learn, and store — but they stay quiet. The user should feel like they're learning alone, with a subtle sense that the system understands them. Only when the system has something truly valuable to offer does it speak up.
+There is no central "Intervention Gatekeeper" that filters agent output. If an agent decides to write to the chat, it writes to the chat. The intelligence is in the agent itself — its system prompt defines how active or reserved it is. A Tutor agent writes to chat when it has something valuable. An Observer agent writes only to memory. This is configured per agent in the Creator Studio, not enforced by infrastructure.
 
-This is what separates an agentic platform from a notification machine.
+The variety of available actions (not just chat) naturally distributes agent output across channels. An agent with access to `memory.write`, `ui.showHint`, `silent.observe`, AND `chat.send` will use chat less often than one that only has `chat.send`.
+
+## Agent Architecture
+
+### Agent = Container of Tools
+
+An agent is not a single function. It is a container with:
+- **Role Prompt** (overarching personality and instructions)
+- **Available Actions** (which actions this agent can use)
+- **Tools** (multiple, each with a trigger and logic)
+- **Memory** (persistent, private to this agent)
+- **Visual Identity** (color, icon — for UI display)
+
+### Tool = Trigger + Logic + Action(s)
+
+Each tool within an agent has:
+- **Trigger** (which event activates it)
+- **Logic** (one of three types — see below)
+- **Tool Prompt** (optional, specific instructions for this tool)
+
+### Three Connection Types
+
+**Type 1: Trigger → Action (direct, no AI)**
+
+Simplest case. Event fires, action executes. Deterministic, no AI call needed.
+
+```
+TRIGGER: card.answered {ease: 1}
+  → ACTION: memory.write({cardId, weakness: true})
+```
+
+Use for: Logging, counting, simple state updates. Runs instantly, no cost.
+
+**Type 2: Trigger → Agent → Action (agent fills a specific action)**
+
+Agent receives trigger data as input and generates the CONTENT for a predetermined action. The agent decides HOW, not WHAT.
+
+```
+TRIGGER: card.struggled {cardId, wrongCount: 3}
+  → AGENT receives: trigger data + learner profile + agent memory
+  → AGENT generates: explanation text
+  → OUTPUT goes to: chat.send(generated text)
+```
+
+Use for: Content generation where the output channel is known. The tool prompt can say "Explain in 2 sentences using an analogy."
+
+**Type 3: Trigger → Agent → Action Selection (agent chooses + fills)**
+
+Agent receives trigger data AND a list of available actions. Agent decides WHAT to do and fills the chosen action.
+
+```
+TRIGGER: review.fatigue {accuracy: 0.45, duration: 40min}
+  → AGENT receives: trigger data + available actions
+    [chat.send, ui.showHint, memory.write, silent.observe]
+  → AGENT decides: ui.showHint("Kurze Pause?")
+  → OR: silent.observe() (decides it's not worth interrupting)
+```
+
+Use for: Complex situations where the right response depends on context. The agent's role prompt guides the decision.
+
+### Prompt Hierarchy
+
+```
+Agent Role Prompt (always active):
+  "Du bist ein Anatomie-Tutor. Visueller Stil, direkte Sprache.
+   Bevorzuge Bilder und Vergleiche. Schreibe nur in den Chat
+   wenn du wirklich etwas Wertvolles beizutragen hast."
+
+Tool-specific Prompt (optional, per tool):
+  Tool 2: "Erkläre das Konzept in max 2 Sätzen mit einer Analogie."
+  Tool 3: "Entscheide basierend auf der Tageszeit und Konzentration."
+```
+
+The role prompt is the agent's personality. Tool prompts are task-specific instructions. Both are sent to the AI model when the agent makes decisions (Type 2 and Type 3).
+
+### Example: Complete Agent Definition
+
+```
+AGENT: "Anatomie-Coach"
+  Role Prompt: "Du bist ein Anatomie-Tutor..."
+  Color: #0A84FF
+  Icon: stethoscope
+  Available Actions: [chat.send, memory.write, ui.showHint,
+                      card.addNote, profile.update, silent.observe]
+
+  TOOL 1: "Schwäche tracken" (Type 1 — direct)
+    Trigger: card.answered {ease ≤ 1}
+    → memory.write({cardId, topic, ease, timestamp})
+
+  TOOL 2: "Erklärung geben" (Type 2 — agent fills action)
+    Trigger: card.struggled {wrongCount ≥ 3}
+    Tool Prompt: "Erkläre in 2 Sätzen mit Analogie"
+    → Agent generates → chat.send(generated)
+
+  TOOL 3: "Lern-Coaching" (Type 3 — agent chooses)
+    Trigger: review.fatigue
+    → Agent sees: [chat.send, ui.showHint, silent.observe]
+    → Agent decides based on context
+
+  TOOL 4: "Session-Zusammenfassung" (Type 1 — chain)
+    Trigger: review.ended
+    → memory.write(sessionStats)
+    → profile.update(accuracyTrend)
+```
+
+## Creator Studio Vision
+
+The Creator Studio is the visual builder for agents. It serves three purposes:
+1. **Build** — Create and configure agents with a visual interface
+2. **Monitor** — See live what agents are doing (events, decisions, actions)
+3. **Debug** — Understand why an agent made a specific decision
+
+### Builder Interface
+
+```
+┌─ Creator Studio ─────────────────────────────────────┐
+│                                                       │
+│  ┌─ Agent ──────────────────────────────────────────┐│
+│  │  Name: [Anatomie-Coach      ]  Color: [●]  Icon: ││
+│  │                                                   ││
+│  │  Role Prompt:                                     ││
+│  │  [Du bist ein Anatomie-Tutor. Visueller Stil,   ]││
+│  │  [direkte Sprache. Bevorzuge Bilder...          ]││
+│  │                                                   ││
+│  │  Available Actions:                               ││
+│  │  ☑ chat.send    ☑ memory.write   ☑ ui.showHint   ││
+│  │  ☐ card.rate    ☑ profile.update ☑ silent.observe ││
+│  └───────────────────────────────────────────────────┘│
+│                                                       │
+│  ┌─ Tools ───────────────────────────────────────────┐│
+│  │                                                    ││
+│  │  ┌─ Tool 1 ─────────────────────────────────────┐ ││
+│  │  │ "Schwäche tracken"              [Type 1: ▼]  │ ││
+│  │  │ Trigger: [card.answered     ▼] wenn ease ≤ 1 │ ││
+│  │  │ → Action: [memory.write     ▼]               │ ││
+│  │  │   Data: {cardId, topic, ease, timestamp}      │ ││
+│  │  └───────────────────────────────────────────────┘ ││
+│  │                                                    ││
+│  │  ┌─ Tool 2 ─────────────────────────────────────┐ ││
+│  │  │ "Erklärung geben"              [Type 2: ▼]  │ ││
+│  │  │ Trigger: [card.struggled   ▼] wrongCount ≥ 3 │ ││
+│  │  │ Tool Prompt: [Erkläre in 2 Sätzen...]        │ ││
+│  │  │ → Agent fills → [chat.send  ▼]               │ ││
+│  │  └───────────────────────────────────────────────┘ ││
+│  │                                                    ││
+│  │  [+ Tool hinzufügen]                              ││
+│  └────────────────────────────────────────────────────┘│
+│                                                       │
+│  ┌─ Live Monitor ────────────────────────────────────┐│
+│  │  12:31:05  card.answered {ease:1}                  ││
+│  │    → Tool 1 triggered → memory.write ✓             ││
+│  │  12:33:22  card.struggled {wrongCount:3}           ││
+│  │    → Tool 2 triggered → Agent thinking...          ││
+│  │    → chat.send ✓ "Der Meniskus ist..."             ││
+│  │  12:45:00  review.fatigue {accuracy:0.45}          ││
+│  │    → Tool 3 triggered → Agent chose: silent.observe││
+│  └────────────────────────────────────────────────────┘│
+│                                                       │
+│  [Agent testen]  [Speichern]  [Aktivieren]            │
+└───────────────────────────────────────────────────────┘
+```
+
+### Vibe Coding Mode
+
+Within the Creator Studio, a conversational AI assistant helps build agents:
+
+```
+User: "Ich möchte, dass wenn der Nutzer frustriert ist,
+       ein ermutigender Hinweis kommt"
+
+Assistant suggests 3 trigger options:
+  A) card.struggled (3x wrong on same card)
+     → Concrete frustration with a specific card
+  B) review.fatigue (accuracy drops >20%)
+     → General concentration decline
+  C) Composite: card.struggled + review.fatigue within 5 min
+     → Both signals together = high confidence frustration
+
+User picks C, assistant generates:
+  Tool "Frustrations-Erkennung" (Type 3)
+  Trigger: composite(card.struggled, review.fatigue, window: 5min)
+  Actions: [chat.send, ui.showHint, plusi.react]
+  Tool Prompt: "Der Nutzer ist frustriert. Reagiere ermutigend
+               aber nicht herablassend. Kurz halten."
+```
+
+The Vibe Coding mode makes the event catalog and action registry accessible to non-technical users. Instead of knowing that `card.struggled` exists, you describe what you want in natural language and the assistant maps it to the right triggers and actions.
+
+### Dashboard View
+
+The Creator Studio also serves as an overview of the entire agent ecosystem:
+
+```
+┌─ Agent Dashboard ────────────────────────────────────┐
+│                                                       │
+│  Active Agents                                        │
+│                                                       │
+│  ● Tutor          4 tools   23 triggers today   [▸]  │
+│  ● Plusi          2 tools    8 triggers today   [▸]  │
+│  ● Research       1 tool     0 triggers today   [▸]  │
+│  ○ Exam-Coach     3 tools   (inactive)          [▸]  │
+│                                                       │
+│  Event Flow (last hour)                               │
+│  ████████████████░░░░  card.answered (142)            │
+│  ███░░░░░░░░░░░░░░░░  card.struggled (12)            │
+│  █░░░░░░░░░░░░░░░░░░  chat.sent (4)                  │
+│  █░░░░░░░░░░░░░░░░░░  review.fatigue (1)             │
+│                                                       │
+│  [+ Neuen Agent erstellen]                            │
+└───────────────────────────────────────────────────────┘
+```
+
+This view answers: What agents exist? What are they doing? How active are they? It is the control center for the agentic platform.
 
 ## What This Is NOT
 
@@ -576,3 +788,4 @@ This is what separates an agentic platform from a notification machine.
 - Not an abstraction layer over Anki (we still use Anki APIs directly in Python)
 - Not a framework (it's three Maps/dicts with a naming convention)
 - Not extra work (it's a structural decision, not a feature)
+- The Creator Studio is a future UI project — the underlying architecture (registries, event bus, agent definition format) comes first
