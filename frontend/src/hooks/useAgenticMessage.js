@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 
 /**
  * useAgenticMessage — builds a structured BotMessage from backend events.
@@ -27,7 +28,11 @@ export default function useAgenticMessage() {
       id: payload.messageId || `msg-${Date.now()}`,
       from: 'bot',
       status: 'routing',
-      orchestration: null,
+      orchestration: {
+        agent: null,
+        mode: null,
+        steps: [{ step: 'orchestrating', status: 'active', data: {}, timestamp: Date.now() }],
+      },
       agentCells: [],
     });
   }, []);
@@ -35,13 +40,19 @@ export default function useAgenticMessage() {
   const handleOrchestration = useCallback((payload) => {
     setCurrentMessage(prev => {
       if (!prev) return prev;
+      // Merge incoming steps with the existing active orchestrating step (now done)
+      const finalSteps = payload.steps || [];
+      // Ensure the orchestrating step is marked done
+      if (!finalSteps.some(s => s.step === 'orchestrating')) {
+        finalSteps.unshift({ step: 'orchestrating', status: 'done', data: payload.steps?.[0]?.data || {}, timestamp: Date.now() });
+      }
       return {
         ...prev,
         status: 'thinking',
         orchestration: {
           agent: payload.agent,
           mode: payload.mode || 'direkt',
-          steps: payload.steps || [],
+          steps: finalSteps,
         },
       };
     });
@@ -117,17 +128,20 @@ export default function useAgenticMessage() {
   }, []);
 
   const finalize = useCallback(() => {
-    // Use functional updater to get the LATEST pending state
-    // (ref might be stale if agent_cell updates are batched with msg_done)
+    // flushSync forces React to process all pending state updates synchronously,
+    // ensuring the updater runs immediately (not deferred by React 18 auto-batching).
+    // This is critical because ankiReceive is a non-React context.
     let finalMsg = null;
-    setCurrentMessage(prev => {
-      if (!prev) return null;
-      finalMsg = {
-        ...prev,
-        status: 'done',
-        agentCells: prev.agentCells.map(c => ({ ...c, status: 'done' })),
-      };
-      return null; // Clear currentMessage
+    flushSync(() => {
+      setCurrentMessage(prev => {
+        if (!prev) return null;
+        finalMsg = {
+          ...prev,
+          status: 'done',
+          agentCells: prev.agentCells.map(c => ({ ...c, status: 'done' })),
+        };
+        return null;
+      });
     });
     return finalMsg;
   }, []);

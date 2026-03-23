@@ -501,6 +501,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     }
     if (payload.type === 'msg_done') {
       // Finalize: move currentMessage → messages array
+      // finalize() uses flushSync internally to guarantee synchronous execution
       const finalMsg = agenticMsg.finalize();
       if (finalMsg) {
         const primaryCell = finalMsg.agentCells[0];
@@ -516,17 +517,26 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
         };
         setMessages(prev => [...prev, savedMsg]);
       }
-      // v2 handles saving — skip v1 done handler to prevent duplicate messages
+      // Clean up v1 loading state — critical: without this the UI stays in loading forever
+      setIsLoading(false);
+      setStreamingMessage('');
+      updatePipelineSteps([]);
       v2ActiveRef.current = false;
       return;
     }
     if (payload.type === 'msg_error') {
       agenticMsg.cancel();
+      setIsLoading(false);
+      setStreamingMessage('');
+      updatePipelineSteps([]);
       v2ActiveRef.current = false;
       return;
     }
     if (payload.type === 'msg_cancelled') {
       agenticMsg.cancel();
+      setIsLoading(false);
+      setStreamingMessage('');
+      updatePipelineSteps([]);
       v2ActiveRef.current = false;
       return;
     }

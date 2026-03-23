@@ -1253,7 +1253,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
     status: msgStatus || 'done',
     pipelineGeneration: msgPipelineGeneration || 0,
   };
-  const hasV2Data = message_prop.agentCells && message_prop.agentCells.length > 0;
+  const hasV2Data = (message_prop.agentCells && message_prop.agentCells.length > 0) || message_prop.orchestration;
 
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [answerFeedback, setAnswerFeedback] = useState(null);
@@ -1872,7 +1872,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                   />
                 )}
                 {/* Agent Cells — ordered blocks */}
-                {message_prop.agentCells.map((cell, i) => (
+                {(message_prop.agentCells || []).map((cell, i) => (
                   <AgenticCell
                     key={`${cell.agent}-${i}`}
                     agentName={cell.agent}

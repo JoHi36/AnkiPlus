@@ -76,6 +76,7 @@ class AIHandler:
         self._current_request_steps = []  # Track steps for the current request
         self._current_request_id = None
         self._pipeline_signal_callback = None
+        self._msg_event_callback = None
         self._current_step_labels = []
 
     def _refresh_config(self):
@@ -151,6 +152,7 @@ class AIHandler:
         return _fetch_available_models(provider, api_key)
 
     def _rag_router(self, user_message, context=None):
+        """DEPRECATED: Only used as fallback when unified router didn't provide search params."""
         return rag_router(
             user_message, context=context,
             config=self.config,
@@ -352,7 +354,14 @@ class AIHandler:
             mw.taskman.run_on_main(emit_on_main)
 
     def _emit_msg_event(self, event_type, data):
-        """Emit a structured message event to the frontend (v2 protocol)."""
+        """Emit a structured message event to the frontend (v2 protocol).
+        Uses Qt signal callback (set by AIRequestThread) for synchronous delivery,
+        falling back to taskman for events emitted outside the thread context."""
+        cb = getattr(self, '_msg_event_callback', None)
+        if cb:
+            cb(event_type, data)
+            return
+        # Fallback: direct JS injection via taskman (e.g., events outside AI thread)
         if not self.widget or not self.widget.web_view:
             return
         payload = {"type": event_type}
@@ -384,6 +393,9 @@ class AIHandler:
         request_id = getattr(self, '_current_request_id', None)
         self._emit_msg_event("msg_start", {"messageId": request_id or ''})
 
+        # Show orchestrating step immediately (before router LLM call)
+        self._emit_pipeline_step("orchestrating", "active")
+
         try:
             # Stage 0: Agent Routing
             session_context = {
@@ -392,7 +404,8 @@ class AIHandler:
                 'deck_name': (context or {}).get('deckName', ''),
                 'has_card': bool(context and context.get('cardId')),
             }
-            routing_result = route_message(user_message, session_context, self.config)
+            routing_result = route_message(user_message, session_context, self.config,
+                                            card_context=context, chat_history=history)
             logger.info("Router: agent=%s, method=%s", routing_result.agent, routing_result.method)
 
             # If routed to a non-tutor agent, dispatch and return
@@ -446,9 +459,11 @@ class AIHandler:
             # Continue with Tutor pipeline (existing RAG flow)
             self._emit_pipeline_step("orchestrating", "done", {
                 'agent': 'tutor',
-                'retrieval_mode': 'agent:tutor',
+                'retrieval_mode': routing_result.retrieval_mode or 'agent:tutor',
                 'method': routing_result.method,
-                'search_needed': True,
+                'search_needed': routing_result.search_needed if routing_result.search_needed is not None else True,
+                'scope_label': routing_result.search_scope or '',
+                'response_length': routing_result.response_length or 'medium',
             })
 
             # v2: Emit orchestration event
@@ -470,8 +485,22 @@ class AIHandler:
                 "data": {}
             })
 
-            # Stage 1: Router
-            router_result = self._rag_router(user_message, context=context)
+            # Stage 1: Router — use unified routing result if available
+            if routing_result.search_needed is not None:
+                # Unified router already determined search strategy
+                router_result = {
+                    'search_needed': routing_result.search_needed,
+                    'retrieval_mode': routing_result.retrieval_mode or 'both',
+                    'response_length': routing_result.response_length or 'medium',
+                    'max_sources': routing_result.max_sources or 'medium',
+                    'search_scope': routing_result.search_scope or 'current_deck',
+                    'precise_queries': routing_result.precise_queries or [],
+                    'broad_queries': routing_result.broad_queries or [],
+                    'embedding_queries': routing_result.embedding_queries or [],
+                }
+            else:
+                # Fallback: heuristic/lock routing without search params
+                router_result = self._rag_router(user_message, context=context)
 
             rag_context = None
             if router_result and router_result.get("search_needed"):

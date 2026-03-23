@@ -187,7 +187,10 @@ def fix_router_queries(router_result, user_message, context):
 
 
 def rag_router(user_message, context=None, config=None, emit_step=None):
-    """
+    """DEPRECATED: Use unified_route() in router.py instead.
+    Kept as fallback for Level 1/2 routing (lock/heuristic) where search
+    strategy is not included in the routing result.
+
     Stage 1: Router - Analysiert die Anfrage und entscheidet ob und wie gesucht werden soll.
 
     Args:

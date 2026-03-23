@@ -87,7 +87,7 @@ class EmbeddingManager:
                 headers = {**self._auth_headers_fn(), "Content-Type": "application/json"}
                 body = {"texts": [t[:2000] for t in texts]}
 
-                response = http_requests.post(embed_url, json=body, headers=headers, timeout=30)
+                response = http_requests.post(embed_url, json=body, headers=headers, timeout=5)
                 response.raise_for_status()
                 data = response.json()
                 return data.get("embeddings", [])
