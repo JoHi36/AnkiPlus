@@ -3,6 +3,7 @@ import { registerAction, executeAction, bridgeAction } from './actions';
 import { emit } from './eventBus';
 import { useFreeChat } from './hooks/useFreeChat';
 import { useHoldToReset } from './hooks/useHoldToReset';
+import TopBar from './components/TopBar';
 
 /**
  * MainApp — React root for the fullscreen main view.
@@ -237,8 +238,19 @@ export default function MainApp() {
       background: showFreeChat && isFreeChatAnimatingIn ? 'var(--ds-bg-deep)' : 'var(--ds-bg-canvas)',
       transition: 'background-color 400ms cubic-bezier(0.25, 0.1, 0.25, 1)',
     }}>
-      {/* TopBar — placeholder, replaced in Task 3 */}
-      <div style={{ height: 56, flexShrink: 0 }} />
+      <TopBar
+        activeView={activeView}
+        ankiState={ankiState}
+        messageCount={messageCount}
+        totalDue={deckBrowserData?.totalDue || 0}
+        deckName={overviewData?.deckName || ''}
+        dueNew={ankiState === 'overview' ? (overviewData?.dueNew || 0) : (deckBrowserData?.totalNew || 0)}
+        dueLearning={ankiState === 'overview' ? (overviewData?.dueLearning || 0) : (deckBrowserData?.totalLearn || 0)}
+        dueReview={ankiState === 'overview' ? (overviewData?.dueReview || 0) : (deckBrowserData?.totalReview || 0)}
+        onTabClick={handleTabClick}
+        onSidebarToggle={handleSidebarToggle}
+        holdToResetProps={holdToReset}
+      />
 
       {/* View content — placeholder divs, replaced in Tasks 4-7 */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
