@@ -61,16 +61,9 @@ def run_tutor(situation, emit_step=None, memory=None,
         except Exception:
             pass
 
-    # For now, return a signal that the handler should use its inline
-    # RAG pipeline. This is a transitional pattern.
-    #
-    # When the handler dispatches to 'tutor' via lazy_load_run_fn(),
-    # it currently falls through to the inline RAG code because Tutor
-    # was not loadable. With this file, Tutor IS loadable, so we need
-    # to tell the handler "use your RAG pipeline for this."
-    #
-    # We return a special sentinel that handler.py checks.
+    # Tutor delegates to handler's inline RAG pipeline (transitional).
     return {
+        'text': '',
         '_use_rag_pipeline': True,
         'situation': situation,
         'card_context': card_context,

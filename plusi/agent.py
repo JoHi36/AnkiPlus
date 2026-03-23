@@ -21,13 +21,16 @@ try:
                            persist_internal_state, build_relationship_context,
                            compute_integrity, get_plusi_params, record_resonance_interaction,
                            record_friendship_delta, set_memory, get_memory)
+except ImportError:
+    from plusi.storage import (save_interaction, load_history, build_memory_context,
+                                apply_friendship_delta, get_friendship_data, build_internal_state_context,
+                                persist_internal_state, build_relationship_context,
+                                compute_integrity, get_plusi_params, record_resonance_interaction,
+                                record_friendship_delta, set_memory, get_memory)
+
+try:
     from ..config import get_config, is_backend_mode, get_backend_url, get_auth_token
 except ImportError:
-    from storage import (save_interaction, load_history, build_memory_context,
-                          apply_friendship_delta, get_friendship_data, build_internal_state_context,
-                          persist_internal_state, build_relationship_context,
-                          compute_integrity, get_plusi_params, record_resonance_interaction,
-                          record_friendship_delta, set_memory, get_memory)
     from config import get_config, is_backend_mode, get_backend_url, get_auth_token
 
 PLUSI_MODEL = 'gemini-3-flash-preview'
@@ -772,18 +775,21 @@ def _execute_chat_action(action, action_query, next_wake, config):
     logger.info("plusi action dispatched: %s (background)", action)
 
 
-def run_plusi(situation, deck_id=None):
+def run_plusi(situation, emit_step=None, memory=None, **kwargs):
     """
     Run the Plusi sub-agent.
 
     Args:
         situation: Context string from the main AI describing what happened
-        deck_id: Optional deck ID for context
+        emit_step: Callback for pipeline visualization (step_name, status).
+        memory: AgentMemory instance for persistent state.
+        **kwargs: Additional keyword arguments (e.g. deck_id).
 
     Returns:
         dict: {"mood": "...", "text": "...", "error": False}
         On failure: {"mood": "neutral", "text": "", "error": True}
     """
+    deck_id = kwargs.get('deck_id')
     config = get_config()
     api_key = config.get("api_key", "")
 

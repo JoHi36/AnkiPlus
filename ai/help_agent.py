@@ -66,17 +66,19 @@ REGELN:
 HELP_MODEL = 'gemini-2.5-flash'
 
 
-def run_help(situation: str = '', memory_context: str = '', **kwargs) -> dict:
+def run_help(situation: str = '', emit_step=None, memory=None, **kwargs) -> dict:
     """Run the Help agent.
 
     Args:
         situation: The user's message/question about the app.
-        memory_context: Optional user profile context from SharedMemory.
-        **kwargs: Additional keyword arguments (ignored, required by lazy_load_run_fn pattern).
+        emit_step: Callback for pipeline visualization (step_name, status).
+        memory: AgentMemory instance for persistent state.
+        **kwargs: Additional keyword arguments (e.g. memory_context).
 
     Returns:
         Dict with 'text' (response) and optionally 'error'.
     """
+    memory_context = kwargs.get('memory_context', '')
     try:
         try:
             from ..config import get_config, is_backend_mode, get_backend_url, get_auth_token

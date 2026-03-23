@@ -9,12 +9,11 @@ except ImportError:
 logger = get_logger(__name__)
 
 
-def run_research(query: str = '', **kwargs) -> dict:
+def run_research(situation: str = '', emit_step=None, memory=None, **kwargs) -> dict:
     """Entry point called by the sub-agent system."""
     from .search import search
 
-    if not query and kwargs.get('situation'):
-        query = kwargs['situation']
+    query = situation or kwargs.get('query', '')
 
     config = get_config()
     api_key = config.get('openrouter_api_key', '')
