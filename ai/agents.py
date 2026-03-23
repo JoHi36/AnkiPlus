@@ -307,7 +307,7 @@ register_agent(AgentDefinition(
     # Configuration
     enabled_key='tutor_enabled',
     is_default=True,
-    # Execution (Phase 3 placeholder — ai/tutor.py does not exist yet)
+    # Execution
     run_module='ai.tutor',
     run_function='run_tutor',
     # Tools
@@ -400,7 +400,7 @@ register_agent(AgentDefinition(
     badge_logo='',
     # Configuration
     enabled_key='help_enabled',
-    # Execution (Phase 3 placeholder — ai/help_agent.py does not exist yet)
+    # Execution
     run_module='ai.help_agent',
     run_function='run_help',
     # Tools
