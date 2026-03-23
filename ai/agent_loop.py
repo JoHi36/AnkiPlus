@@ -201,7 +201,7 @@ def run_agent_loop(
         contents = _prune_contents(contents)
 
         # Rebuild data for next iteration
-        max_tokens = 8192 if model and "gemini-3-flash-preview" in model.lower() else 2000
+        max_tokens = 8192 if model and "gemini-3-flash-preview" in model.lower() else 4096
         data = {
             "contents": contents,
             "generationConfig": {"temperature": 0.7, "maxOutputTokens": max_tokens}

@@ -585,7 +585,7 @@ export default function AgentStudio({ bridge, onNavigateToPlusi, onNavigateToRes
                         onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                       >
                         <span style={{ fontSize: 12, color: 'var(--ds-text-secondary, rgba(255,255,255,0.45))' }}>
-                          Sub-Agent-Men\u00FC
+                          Sub-Agent-Menü
                         </span>
                         <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="var(--ds-text-tertiary, rgba(255,255,255,0.18))" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="9 18 15 12 9 6"/>

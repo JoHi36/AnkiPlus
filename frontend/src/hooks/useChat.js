@@ -64,6 +64,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
 
   // v2: Structured message state
   const agenticMsg = useAgenticMessage();
+  const v2ActiveRef = useRef(false); // Ref for stale-closure-safe check in streaming handler
   // Generation counter — increments on each new pipeline to signal ThoughtStream to reset refs
   const [pipelineGeneration, setPipelineGeneration] = useState(0);
 
@@ -483,6 +484,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     // ── v2 Structured Message Events ──
     if (payload.type === 'msg_start') {
       agenticMsg.handleMsgStart(payload);
+      v2ActiveRef.current = true; // Mark v2 active for stale-closure-safe checks
       // Don't return — let existing 'loading' handler also process if it follows
     }
     if (payload.type === 'orchestration') {
@@ -515,14 +517,17 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
         setMessages(prev => [...prev, savedMsg]);
       }
       // v2 handles saving — skip v1 done handler to prevent duplicate messages
+      v2ActiveRef.current = false;
       return;
     }
     if (payload.type === 'msg_error') {
       agenticMsg.cancel();
+      v2ActiveRef.current = false;
       return;
     }
     if (payload.type === 'msg_cancelled') {
       agenticMsg.cancel();
+      v2ActiveRef.current = false;
       return;
     }
 
@@ -672,6 +677,11 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       }
       console.log('📡 useChat: Streaming-Chunk erhalten:', payload.chunk?.substring(0, 30) + '...', 'done:', payload.done, 'isFunctionCall:', payload.isFunctionCall);
 
+      // v2: Skip v1 chunk processing when structured message system is active
+      if (v2ActiveRef.current) {
+        return;
+      }
+
       // Zeige Function Call Indikator wenn nötig
       if (payload.isFunctionCall && !streamingMessage) {
         console.log('🔧 useChat: Function Call erkannt - zeige Indikator');
@@ -702,6 +712,11 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       }
       
       if (payload.done) {
+        // v2: Skip v1 save when structured message system is active
+        if (v2ActiveRef.current) {
+          console.log('📡 useChat: v1 streaming done SKIPPED (v2 active)');
+          return;
+        }
         // Extract token usage info if present
         if (payload.tokens) {
           setTokenInfo(payload.tokens);

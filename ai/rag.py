@@ -179,8 +179,10 @@ def fix_router_queries(router_result, user_message, context):
     else:
         router_result['embedding_queries'] = [' '.join(top_kw)]
     router_result['search_scope'] = 'current_deck'
+    # Force hybrid retrieval since we're adding keyword queries
+    router_result['retrieval_mode'] = 'both'
 
-    logger.info("Router-Fix: precise=%s, broad=%s, embedding_queries=%s", precise, broad, router_result['embedding_queries'])
+    logger.info("Router-Fix: precise=%s, broad=%s, embedding_queries=%s, mode=both", precise, broad, router_result['embedding_queries'])
     return router_result
 
 
@@ -213,17 +215,7 @@ def rag_router(user_message, context=None, config=None, emit_step=None):
         router_model = "gemini-2.5-flash"
         fallback_model = "gemini-3-flash-preview"
 
-        # Get subagent options for router
-        try:
-            try:
-                from ..ai.subagents import get_router_subagent_prompt
-            except ImportError:
-                from ai.subagents import get_router_subagent_prompt
-            subagent_prompt = get_router_subagent_prompt(config or {})
-            if subagent_prompt:
-                subagent_prompt = "\n\n" + subagent_prompt
-        except Exception:
-            subagent_prompt = ""
+        # Subagent routing removed — handled by ai/router.py in Stage 0
 
         # Emit pipeline step
         if emit_step:
@@ -321,8 +313,7 @@ Respond with JSON ONLY:
 
 DECISION TREE (follow in order):
 1. Is this small talk, thanks, greeting, or a meta-question about the app? → search_needed=false
-2. Does this match a subagent's domain EXCLUSIVELY (see below)? → retrieval_mode="subagent:<name>"
-3. Does the user ask a factual/learning question? → search_needed=true (continue below)
+2. Does the user ask a factual/learning question? → search_needed=true (continue below)
 4. Can the current card ALONE fully answer the question? → search_needed=false (rare — only if the card text obviously contains the complete answer)
 
 CONTEXT DETECTION (CRITICAL):
@@ -346,7 +337,7 @@ QUERY RULES:
 - search_scope: "current_deck" by default, "collection" only for cross-subject questions
 - retrieval_mode: "both" by default, "sql" for exact facts/names, "semantic" for conceptual questions
 - max_sources: "low" (3-5, simple fact questions), "medium" (8-10, standard explanations), "high" (up to 15, comparisons/overviews)
-- response_length: "short" for simple facts, "medium" for explanations, "long" for detailed comparisons{subagent_prompt}"""
+- response_length: "short" for simple facts, "medium" for explanations, "long" for detailed comparisons"""
 
         # Backend-Modus: Router über Cloud Function (API-Key serverseitig)
         if use_backend:
@@ -389,20 +380,9 @@ QUERY RULES:
         if use_backend and 'router_result' in locals() and router_result and router_result.get("search_needed") is not None:
             # Validierung des Backend-Ergebnisses
             retrieval_mode = router_result.get('retrieval_mode', 'both')
-            if retrieval_mode not in ('sql', 'semantic', 'both') and not retrieval_mode.startswith('subagent:'):
+            if retrieval_mode not in ('sql', 'semantic', 'both'):
                 retrieval_mode = 'both'
             router_result['retrieval_mode'] = retrieval_mode
-
-            # Handle subagent delegation from router
-            if retrieval_mode.startswith('subagent:'):
-                router_result['search_needed'] = False
-                if emit_step:
-                    emit_step('router', 'done', {
-                        'search_needed': False,
-                        'retrieval_mode': retrieval_mode,
-                        'scope': 'none',
-                        'scope_label': '',
-                    })
 
             precise_queries = router_result.get("precise_queries", [])
             broad_queries = router_result.get("broad_queries", [])
@@ -417,16 +397,14 @@ QUERY RULES:
             router_result["precise_queries"] = precise_queries[:3]
             router_result["broad_queries"] = broad_queries[:3]
 
-            # Emit pipeline done (skip if subagent already emitted)
-            if not retrieval_mode.startswith('subagent:'):
-                scope_label = ""
-                if deck_name:
-                    scope_label = deck_name.split("::")[-1]
-                if emit_step:
-                    emit_step("router", "done", {
-                        "search_needed": router_result.get("search_needed", True),
-                        "retrieval_mode": retrieval_mode,
-                        "scope": router_result.get("search_scope", "current_deck"),
+            scope_label = ""
+            if deck_name:
+                scope_label = deck_name.split("::")[-1]
+            if emit_step:
+                emit_step("router", "done", {
+                    "search_needed": router_result.get("search_needed", True),
+                    "retrieval_mode": retrieval_mode,
+                    "scope": router_result.get("search_scope", "current_deck"),
                         "scope_label": scope_label,
                         "max_sources": router_result.get("max_sources", "medium"),
                         "response_length": router_result.get("response_length", "medium")
@@ -556,20 +534,9 @@ QUERY RULES:
                             if "search_needed" in router_result:
                                 # Extract and validate retrieval_mode
                                 retrieval_mode = router_result.get('retrieval_mode', 'both')
-                                if retrieval_mode not in ('sql', 'semantic', 'both') and not retrieval_mode.startswith('subagent:'):
+                                if retrieval_mode not in ('sql', 'semantic', 'both'):
                                     retrieval_mode = 'both'
                                 router_result['retrieval_mode'] = retrieval_mode
-
-                                # Handle subagent delegation from router
-                                if retrieval_mode.startswith('subagent:'):
-                                    router_result['search_needed'] = False
-                                    if emit_step:
-                                        emit_step('router', 'done', {
-                                            'search_needed': False,
-                                            'retrieval_mode': retrieval_mode,
-                                            'scope': 'none',
-                                            'scope_label': '',
-                                        })
 
                                 # Extract embedding_queries (array) with backward compat for embedding_query (string)
                                 embedding_queries = router_result.get("embedding_queries", [])
@@ -706,13 +673,11 @@ QUERY RULES:
 
                                     logger.info("Router: Validierung abgeschlossen: %s precise, %s broad", len([q for q in corrected_precise if q]), len([q for q in corrected_broad if q]))
 
-                                # Emit pipeline done (skip if subagent already emitted)
-                                if not retrieval_mode.startswith('subagent:'):
-                                    scope_label = ""
-                                    if deck_name:
-                                        scope_label = deck_name.split("::")[-1]
-                                    if emit_step:
-                                        emit_step("router", "done", {
+                                scope_label = ""
+                                if deck_name:
+                                    scope_label = deck_name.split("::")[-1]
+                                if emit_step:
+                                    emit_step("router", "done", {
                                             "search_needed": router_result.get("search_needed", True),
                                             "retrieval_mode": retrieval_mode,
                                             "scope": router_result.get("search_scope", "current_deck"),

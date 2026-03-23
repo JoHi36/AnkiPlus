@@ -70,6 +70,8 @@ export interface ThoughtStreamProps {
   message?: string;
   steps?: any[];
   intent?: string | null;
+  /** 'router' = orchestrating section, 'agent' = agent-internal tools (default) */
+  variant?: 'router' | 'agent';
 }
 
 /* ── Constants ── */
@@ -82,7 +84,7 @@ const MODE_LABELS: Record<string, string> = {
 
 const STEP_NAMES: Record<string, string> = {
   router: 'Analyse',
-  orchestrating: 'Orchestrating',
+  orchestrating: 'Routing',
   sql_search: 'Keyword-Suche',
   semantic_search: 'Semantische Suche',
   merge: 'Zusammenführung',
@@ -91,7 +93,7 @@ const STEP_NAMES: Record<string, string> = {
 
 const ACTIVE_TITLES: Record<string, string> = {
   router: 'Suchstrategie wird festgelegt...',
-  orchestrating: 'Suchstrategie wird festgelegt...',
+  orchestrating: 'Agent wird ausgewählt...',
   sql_search: 'Durchsuche Karten...',
   semantic_search: 'Semantische Suche...',
   merge: 'Kombiniere Quellen...',
@@ -104,8 +106,8 @@ function getDoneLabel(step: string, data: Record<string, any>, status: string): 
     case 'router':
     case 'orchestrating': {
       const rm = data.retrieval_mode || '';
-      if (rm.startsWith('subagent:')) {
-        return 'Routing abgeschlossen';
+      if (rm.startsWith('subagent:') || rm.startsWith('agent:')) {
+        return 'Aufgabe zugewiesen';
       }
       const mode = MODE_LABELS[rm] || rm || '';
       const scope = data.scope_label || '';
@@ -263,12 +265,12 @@ function RouterDetails({ data, agentColor }: { data: Record<string, any>; agentC
   };
 
   const retrievalMode = data.retrieval_mode || '';
-  const isSubagent = retrievalMode.startsWith('subagent:');
-  const subagentName = isSubagent ? retrievalMode.split(':')[1] : '';
+  const isAgentRoute = retrievalMode.startsWith('subagent:') || retrievalMode.startsWith('agent:');
+  const agentId = isAgentRoute ? retrievalMode.split(':')[1] : '';
 
-  // Subagent routing — show agent-specific tags with distinct icons
-  if (isSubagent) {
-    const agentLabel = subagentName.charAt(0).toUpperCase() + subagentName.slice(1);
+  // Agent routing — show agent-specific tags with distinct icons
+  if (isAgentRoute) {
+    const agentLabel = agentId.charAt(0).toUpperCase() + agentId.slice(1);
     const isDirect = data.scope === 'none' || !data.scope;
 
     // SVG icon paths (16x16 viewBox)
@@ -280,7 +282,7 @@ function RouterDetails({ data, agentColor }: { data: Record<string, any>; agentC
     const modusIcon = isDirect ? 'M8 2l-3 6h6l-3 6' : 'M2 4h5l3 4-3 4h5';
 
     const tags = [
-      { label: 'Routing', value: 'Subagent', icon: routingIcon, color: undefined as string | undefined },
+      { label: 'Routing', value: 'Agent', icon: routingIcon, color: undefined as string | undefined },
       { label: 'Agent', value: agentLabel, icon: agentIcon, color: agentColor },
       { label: 'Modus', value: isDirect ? 'Direkt' : 'Router', icon: modusIcon, color: undefined as string | undefined },
     ];
@@ -584,8 +586,8 @@ function PhaseRow({ step, data, status, isActive, isFirst = false, animate = tru
     title = ACTIVE_TITLES[step] || 'Verarbeite...';
   } else if (step === 'router' || step === 'orchestrating') {
     const rm = data.retrieval_mode || '';
-    if (rm.startsWith('subagent:')) {
-      title = 'Routing abgeschlossen';
+    if (rm.startsWith('subagent:') || rm.startsWith('agent:')) {
+      title = 'Aufgabe zugewiesen';
     } else if (rm === 'plusi') {
       title = 'Plusi';
     } else if (!data.search_needed) {
@@ -775,7 +777,9 @@ export default function ThoughtStream({
   message = '',
   steps = [],
   intent = null,
+  variant = 'agent',
 }: ThoughtStreamProps) {
+  const isRouterVariant = variant === 'router';
   // Inject keyframes once
   useEffect(() => {
     if (typeof document !== 'undefined' && !document.getElementById('ts-keyframes-v6')) {
@@ -804,11 +808,17 @@ export default function ThoughtStream({
 
   // Auto-collapse: when streaming message text appears, collapse immediately
   // No delay — the moment text starts streaming, the pipeline collapses
+  // For router variant: collapse when all steps are done (orchestrating finished)
+  const allStepsDone = displaySteps.length > 0 && displaySteps.every(ds => ds.status === 'done');
   useEffect(() => {
     if (hasText && !isCollapsed && !userExpandedRef.current) {
       setIsCollapsed(true);
     }
-  }, [hasText, isCollapsed]);
+    // Router variant: auto-collapse once orchestrating step completes
+    if (isRouterVariant && allStepsDone && !isCollapsed && !userExpandedRef.current) {
+      setIsCollapsed(true);
+    }
+  }, [hasText, isCollapsed, isRouterVariant, allStepsDone]);
 
   // Expand when new pipeline starts — reset user override
   useEffect(() => {
@@ -861,7 +871,7 @@ export default function ThoughtStream({
         >
           <ChevronRight />
           <span style={{ fontSize: 11, color: 'var(--ds-text-tertiary)' }}>
-            {totalSteps} Schritt{totalSteps !== 1 ? 'e' : ''}
+            {isRouterVariant ? 'Orchestrierung' : `${totalSteps} Schritt${totalSteps !== 1 ? 'e' : ''}`}
             {hasCitations ? ` · ${citationCount} Quellen` : ''}
           </span>
           <ExtendingLine />
@@ -881,7 +891,7 @@ export default function ThoughtStream({
               return (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0', marginBottom: 4, opacity: 0.5 }}>
                   <ChevronDownIcon />
-                  <span style={{ fontSize: 11, color: 'var(--ds-text-tertiary)' }}>Schritte</span>
+                  <span style={{ fontSize: 11, color: 'var(--ds-text-tertiary)' }}>{isRouterVariant ? 'Orchestrierung' : 'Schritte'}</span>
                   <ExtendingLine />
                 </div>
               );
@@ -911,7 +921,7 @@ export default function ThoughtStream({
                 >
                   <ChevronDownIcon />
                   <span style={{ fontSize: 11, color: 'var(--ds-text-tertiary)' }}>
-                    {totalSteps} Schritt{totalSteps !== 1 ? 'e' : ''}
+                    {isRouterVariant ? 'Orchestrierung' : `${totalSteps} Schritt${totalSteps !== 1 ? 'e' : ''}`}
                   </span>
                   <ExtendingLine />
                 </button>

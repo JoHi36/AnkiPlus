@@ -180,28 +180,49 @@ def get_main_model_subagent_prompt(config: dict) -> str:
 # SVG Constants
 # ---------------------------------------------------------------------------
 
-RADAR_ICON_SVG = (
+# — Tutor: Graduation cap
+TUTOR_ICON_SVG = (
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
-    '<circle cx="12" cy="12" r="10"/>'
-    '<line x1="12" y1="12" x2="12" y2="2"/>'
-    '<path d="M12 12 L16.24 7.76" stroke-width="2.5"/>'
-    '<circle cx="12" cy="12" r="6" opacity="0.4"/>'
-    '<circle cx="12" cy="12" r="2" fill="#00D084" stroke="none"/>'
+    'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M12 3L2 9l10 6 10-6-10-6z"/>'
+    '<path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5"/>'
+    '<path d="M20 9v7"/>'
     '</svg>'
 )
 
-LIFEBUOY_ICON_SVG = (
+# — Research: Globe with search
+RESEARCH_ICON_SVG = (
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
-    '<circle cx="12" cy="12" r="10"/>'
-    '<circle cx="12" cy="12" r="4"/>'
-    '<line x1="4.93" y1="4.93" x2="9.17" y2="9.17"/>'
-    '<line x1="14.83" y1="14.83" x2="19.07" y2="19.07"/>'
-    '<line x1="14.83" y1="9.17" x2="19.07" y2="4.93"/>'
-    '<line x1="4.93" y1="19.07" x2="9.17" y2="14.83"/>'
+    'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+    '<circle cx="11" cy="11" r="8"/>'
+    '<path d="M11 3a15 15 0 0 1 4 8 15 15 0 0 1-4 8"/>'
+    '<path d="M11 3a15 15 0 0 0-4 8 15 15 0 0 0 4 8"/>'
+    '<path d="M3 11h16"/>'
+    '<line x1="21" y1="21" x2="16.65" y2="16.65" stroke-width="2"/>'
     '</svg>'
 )
+
+# — Help: Question mark circle
+HELP_ICON_SVG = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+    '<circle cx="12" cy="12" r="10"/>'
+    '<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>'
+    '<circle cx="12" cy="17" r="0.5" fill="currentColor" stroke="none"/>'
+    '</svg>'
+)
+
+# — Auto: Sparkles (router decides)
+AUTO_ICON_SVG = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z"/>'
+    '</svg>'
+)
+
+# Backward compat aliases
+RADAR_ICON_SVG = RESEARCH_ICON_SVG
+LIFEBUOY_ICON_SVG = HELP_ICON_SVG
 
 
 # ---------------------------------------------------------------------------
@@ -267,9 +288,9 @@ register_agent(AgentDefinition(
     label='Tutor',
     description='KI-Tutor fuer kartenbasiertes Lernen mit RAG und Tools',
     # Visual
-    color='transparent',
-    icon_type='none',
-    icon_svg='',
+    color='#8E8E93',
+    icon_type='svg',
+    icon_svg=TUTOR_ICON_SVG,
     badge_logo='anki',
     # Configuration
     enabled_key='tutor_enabled',
@@ -309,7 +330,7 @@ register_agent(AgentDefinition(
     # Visual
     color='#00D084',
     icon_type='svg',
-    icon_svg=RADAR_ICON_SVG,
+    icon_svg=RESEARCH_ICON_SVG,
     badge_logo='',
     # Configuration
     enabled_key='research_enabled',
@@ -352,7 +373,7 @@ register_agent(AgentDefinition(
     # Visual
     color='#FF9500',
     icon_type='svg',
-    icon_svg=LIFEBUOY_ICON_SVG,
+    icon_svg=HELP_ICON_SVG,
     badge_logo='',
     # Configuration
     enabled_key='help_enabled',

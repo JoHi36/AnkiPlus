@@ -41,13 +41,20 @@ class HybridRetrieval:
         # SQL retrieval
         if mode in ('sql', 'both'):
             try:
-                self.ai._emit_pipeline_step("sql_search", "active")
+                # Pre-fill queries from router result so UI shows them immediately
+                all_queries = (router_result.get('precise_queries', []) +
+                               router_result.get('broad_queries', []))
+                preview_queries = [{"text": q, "hits": None} for q in all_queries if q]
+                self.ai._emit_pipeline_step("sql_search", "active", {
+                    "queries": preview_queries
+                })
                 sql_data = self.ai._rag_retrieve_cards(
                     precise_queries=router_result.get('precise_queries'),
                     broad_queries=router_result.get('broad_queries'),
                     search_scope=router_result.get('search_scope', 'current_deck'),
                     context=context,
-                    max_notes=max_notes
+                    max_notes=max_notes,
+                    suppress_event=True,
                 )
                 sql_citations = sql_data.get('citations', {})
                 sql_total = len(sql_citations)
@@ -76,14 +83,19 @@ class HybridRetrieval:
         # Semantic retrieval — use embedding_queries (multi-query) from router
         if mode in ('semantic', 'both') and self.emb:
             try:
-                self.ai._emit_pipeline_step("semantic_search", "active")
-
                 # Support multi-query: embedding_queries (array) or legacy embedding_query (string)
                 embedding_queries = router_result.get('embedding_queries', [])
                 if not embedding_queries:
                     legacy = router_result.get('embedding_query', user_message)
                     embedding_queries = [legacy] if legacy else [user_message]
                 embedding_queries = [q for q in embedding_queries if q and q.strip()][:3]
+
+                # Pre-fill embedding queries so UI shows them immediately
+                preview_chunks = [{"score": None, "snippet": eq} for eq in embedding_queries]
+                self.ai._emit_pipeline_step("semantic_search", "active", {
+                    "chunks": preview_chunks,
+                    "embedding_queries": embedding_queries
+                })
 
                 exclude = []
                 if context and context.get('cardId'):

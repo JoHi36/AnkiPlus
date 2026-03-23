@@ -20,10 +20,11 @@ class HandoffRequest:
 
 
 # Regex patterns for handoff signal at end of response
+# Very flexible: works with or without colons, newlines or spaces between fields
 _HANDOFF_PATTERN = re.compile(
-    r'\nHANDOFF:\s*(\w+)\s*\n'
-    r'REASON:\s*(.+?)\s*\n'
-    r'QUERY:\s*(.+?)\s*$',
+    r'HANDOFF:?\s*(\w+)\s+'
+    r'REASON:?\s*(.+?)\s+'
+    r'QUERY:?\s*(.+?)\s*$',
     re.DOTALL
 )
 

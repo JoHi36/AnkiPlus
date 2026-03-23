@@ -42,6 +42,9 @@ export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, i
         if (tw.name === 'spawn_plusi' && tw.displayType === 'loading') {
           return <AgenticCell key={`loading-${i}`} agentName="plusi" isLoading />;
         }
+        if (tw.name === 'agent_handoff' && tw.displayType === 'loading') {
+          return <AgenticCell key={`loading-${i}`} agentName="research" isLoading loadingHint={tw.loadingHint} />;
+        }
         if (tw.displayType === 'loading') {
           return <ToolLoadingPlaceholder key={`loading-${i}`} toolName={tw.name} />;
         }
@@ -98,6 +101,17 @@ export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, i
               return <ImageWidget key={`media-${i}`} data={tw.result} toolName="show_card_media" />;
             case 'search_image':
               return <ImageWidget key={`img-${i}`} data={tw.result} toolName="search_image" />;
+            case 'agent_handoff': {
+              const handoffAgent = tw.result.agent || 'research';
+              return (
+                <AgenticCell key={`handoff-${i}`} agentName={handoffAgent}>
+                  <ResearchContent
+                    sources={tw.result.sources || []}
+                    answer={tw.result.text || ''}
+                  />
+                </AgenticCell>
+              );
+            }
             case 'compact':
               return (
                 <CompactWidget

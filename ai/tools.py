@@ -388,10 +388,12 @@ SEARCH_DECK_SCHEMA = {
     "name": "search_deck",
     "description": (
         "Search the user's entire deck and display a scrollable card list. "
-        "USE ONLY WHEN: user explicitly wants to browse their card collection, e.g. "
+        "USE ONLY WHEN: user EXPLICITLY asks to browse or list their cards, e.g. "
         "'show me all my pharmacology cards', 'how many cards do I have about X?'. "
-        "DO NOT USE: when user wants to see ONE specific card (use show_card with note_id from LERNMATERIAL), "
-        "or when you already have matching cards in LERNMATERIAL context."
+        "NEVER USE to find information or answer questions — the RAG pipeline ALREADY searched cards "
+        "and provided results in LERNMATERIAL above. Using search_deck to look up facts is WRONG. "
+        "DO NOT USE: when answering knowledge questions, when you already have LERNMATERIAL context, "
+        "or when user wants to see ONE specific card (use show_card with note_id from LERNMATERIAL)."
     ),
     "parameters": {
         "type": "object",
@@ -782,6 +784,8 @@ SEARCH_IMAGE_SCHEMA = {
     "description": (
         "Search the internet (Wikimedia Commons, PubChem) for an image and display it in chat. "
         "USE ONLY AS A SUPPLEMENT to a textual explanation — NEVER send just an image without text. "
+        "ONLY USE when the question is directly related to the user's study material (Lernmaterial) — "
+        "NEVER for off-topic, casual, or general-knowledge questions. "
         "ALWAYS CHECK show_card_media FIRST — if the user's cards already contain a relevant image, use that instead. "
         "Good for: molecular structures, anatomical diagrams, scientific illustrations NOT found in cards. "
         "Molecules automatically use PubChem, other images use Wikimedia Commons."

@@ -82,7 +82,7 @@ function MentionAgentIcon({ name, svg, color, label }: { name: string; svg: stri
       </div>
     );
   }
-  return <div ref={ref} style={{ width: 20, height: 20, flexShrink: 0 }} />;
+  return <div ref={ref} style={{ width: 20, height: 20, flexShrink: 0, color }} />;
 }
 
 export default function ChatInput({
@@ -117,19 +117,34 @@ export default function ChatInput({
   const [mentionFilter, setMentionFilter] = useState('');
   const [mentionIndex, setMentionIndex] = useState(0);
 
+  // Auto mode entry — router decides which agent handles the message
+  const AUTO_ENTRY = React.useMemo(() => ({
+    name: 'auto',
+    label: 'Auto',
+    color: '#A78BFA',
+    enabled: true,
+    isDefault: false,
+    isAuto: true,
+    description: 'Router entscheidet automatisch',
+    iconType: 'svg',
+    iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z"/></svg>',
+  }), []);
+
   // Build filtered agent list for autocomplete
   const mentionAgents = React.useMemo(() => {
     const registry = getRegistry();
     const FALLBACK_AGENTS = [
       { name: 'plusi', label: 'Plusi', color: '#0A84FF', pipelineLabel: 'Plusi', enabled: true },
     ];
-    const agents = registry.size > 0
+    const registryAgents = registry.size > 0
       ? [...registry.values()].filter(a => a.enabled)
       : (plusiEnabled ? FALLBACK_AGENTS : []);
+    // Auto first, then all agents
+    const agents = [AUTO_ENTRY, ...registryAgents];
     if (!mentionFilter) return agents;
     const lower = mentionFilter.toLowerCase();
     return agents.filter(a => a.name.includes(lower) || a.label.toLowerCase().includes(lower));
-  }, [mentionFilter, plusiEnabled]);
+  }, [mentionFilter, plusiEnabled, AUTO_ENTRY]);
 
   // Detect @ trigger
   useEffect(() => {
@@ -145,9 +160,16 @@ export default function ChatInput({
   }, [input, activeAgentTag]);
 
   const selectMentionAgent = useCallback((agent: any) => {
-    setInput(`@${agent.label} `);
-    setShowMentionMenu(false);
-    setActiveAgentTag({ name: agent.name, label: agent.label, color: agent.color });
+    if (agent.isAuto) {
+      // Auto mode: clear any @tag, let the router decide
+      setInput('');
+      setShowMentionMenu(false);
+      setActiveAgentTag(null);
+    } else {
+      setInput(`@${agent.label} `);
+      setShowMentionMenu(false);
+      setActiveAgentTag({ name: agent.name, label: agent.label, color: agent.color });
+    }
     setTimeout(() => textareaRef.current?.focus(), 20);
   }, []);
 
@@ -292,7 +314,7 @@ export default function ChatInput({
     <div className="w-full relative">
       <div
         className="ds-input-dock relative overflow-visible transition-all duration-300"
-        style={hasAgentTag ? { borderColor: `${agentTagColor}66` } : undefined}
+        style={hasAgentTag ? { borderColor: `${agentTagColor}66`, background: `${agentTagColor}0D` } : undefined}
       >
         {/* Animated snake border — blue on focus or @Plusi tag */}
         <div
@@ -312,7 +334,7 @@ export default function ChatInput({
           }}
         />
 
-        {/* @-mention autocomplete dropdown — compact, left-anchored */}
+        {/* @-mention autocomplete dropdown */}
         {showMentionMenu && mentionAgents.length > 0 && (
           <div style={{
             position: 'absolute',
@@ -323,53 +345,70 @@ export default function ChatInput({
             backdropFilter: 'blur(20px)',
             WebkitBackdropFilter: 'blur(20px)',
             border: '1px solid var(--ds-border-subtle)',
-            borderRadius: 12,
+            borderRadius: 14,
             overflow: 'hidden',
-            boxShadow: '0 -4px 24px rgba(0,0,0,0.25)',
+            boxShadow: '0 -4px 24px rgba(0,0,0,0.3)',
             zIndex: 50,
-            minWidth: 180,
+            minWidth: 200,
           }}>
             {mentionAgents.map((agent, i) => {
               const isSelected = i === mentionIndex;
-              // Render icon via ref to avoid dangerouslySetInnerHTML
+              const displayColor = (!agent.color || agent.color === 'transparent') ? 'var(--ds-text-secondary)' : agent.color;
+              const isAuto = (agent as any).isAuto;
+              // Separator before first real agent (after Auto)
+              const showSeparator = i > 0 && mentionAgents[i - 1] && (mentionAgents[i - 1] as any).isAuto;
               return (
-                <div
-                  key={agent.name}
-                  onClick={() => selectMentionAgent(agent)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    padding: '7px 12px',
-                    cursor: 'pointer',
-                    background: isSelected ? `${agent.color}12` : 'transparent',
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={() => setMentionIndex(i)}
-                >
-                  {/* Agent icon — createPlusi for Plusi, registry SVG for others */}
-                  <MentionAgentIcon name={agent.name} svg={(agent as any).iconSvg || ''} color={agent.color} label={agent.label} />
-                  {/* Agent name as colored pill */}
-                  <span style={{
-                    fontSize: 12, fontWeight: 600,
-                    color: agent.color,
-                    background: `${agent.color}15`,
-                    padding: '1px 8px',
-                    borderRadius: 5,
-                    border: `1px solid ${agent.color}20`,
-                  }}>
-                    @{agent.label}
-                  </span>
-                  {/* Keyboard hint */}
-                  {isSelected && (
-                    <span style={{
-                      fontSize: 9, color: 'var(--ds-text-muted)',
-                      marginLeft: 'auto',
-                    }}>
-                      Tab ↵
-                    </span>
+                <React.Fragment key={agent.name}>
+                  {showSeparator && (
+                    <div style={{ height: 1, margin: '2px 12px', background: 'var(--ds-border-subtle)' }} />
                   )}
-                </div>
+                  <div
+                    onClick={() => selectMentionAgent(agent)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '8px 14px',
+                      cursor: 'pointer',
+                      background: isSelected ? `${displayColor}12` : 'transparent',
+                      transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={() => setMentionIndex(i)}
+                  >
+                    {/* Agent icon */}
+                    <MentionAgentIcon name={agent.name} svg={(agent as any).iconSvg || ''} color={displayColor} label={agent.label} />
+                    {/* Agent label + description */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: 13, fontWeight: 600,
+                        color: displayColor,
+                      }}>
+                        {isAuto ? agent.label : `@${agent.label}`}
+                      </div>
+                      {(agent as any).description && (
+                        <div style={{
+                          fontSize: 10,
+                          color: 'var(--ds-text-muted)',
+                          marginTop: 1,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}>
+                          {(agent as any).description}
+                        </div>
+                      )}
+                    </div>
+                    {/* Keyboard hint */}
+                    {isSelected && (
+                      <span style={{
+                        fontSize: 9, color: 'var(--ds-text-muted)',
+                        flexShrink: 0,
+                      }}>
+                        Tab ↵
+                      </span>
+                    )}
+                  </div>
+                </React.Fragment>
               );
             })}
           </div>
