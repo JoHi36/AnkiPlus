@@ -18,9 +18,10 @@
 
 | File | Responsibility |
 |------|---------------|
-| `ui/main_view.py` | MainViewWidget — permanent QWebEngineView, message polling, action routing via dict registry, AI requests |
-| `frontend/src/actions.js` | Action Registry — registerAction, executeAction, getAvailableActions |
-| `frontend/src/MainApp.jsx` | React root for `?mode=main` — view switching, state management, ankiReceive handler, action registration |
+| `ui/main_view.py` | MainViewWidget — permanent QWebEngineView, message polling, action routing via dict registry, state getters, AI requests |
+| `frontend/src/actions.js` | Action Registry — registerAction, executeAction, bridgeAction, getAvailableActions |
+| `frontend/src/eventBus.js` | Event Bus — on, off, emit. All ankiReceive events flow through here |
+| `frontend/src/MainApp.jsx` | React root for `?mode=main` — view switching, state management, ankiReceive→eventBus dispatch, action registration |
 | `frontend/src/components/TopBar.jsx` | Unified top bar — tabs, info left/right, adapts per view |
 | `frontend/src/components/DeckBrowserView.jsx` | Deck tree container — search bar, deck list, empty state |
 | `frontend/src/components/DeckNode.jsx` | Single deck with expand/collapse — recursive children |
@@ -104,6 +105,7 @@ class MainViewWidget(QWidget):
         self._bridge_initialized = False
         self._freechat_was_open = False  # preserve FreeChat state across hide/show
         self._init_action_handlers()
+        self._init_state_getters()
         self._setup_ui()
 
     def _setup_ui(self):
@@ -210,13 +212,49 @@ class MainViewWidget(QWidget):
             'system.upgrade':       self._handle_toggle_settings_sidebar,
         }
 
+    def _init_state_getters(self):
+        """State Query Registry — domain.noun pattern. Agents can query current state."""
+        self._state_getters = {
+            'app.state':        lambda: getattr(mw, 'state', 'unknown'),
+            'deck.current':     self._get_current_deck_state,
+            'deck.dueCount':    self._get_due_count_state,
+            'chat.messageCount': lambda: len(load_deck_messages(0, limit=100)),
+            'user.premium':     self._get_premium_state,
+        }
+
+    def _get_current_deck_state(self):
+        try:
+            did = mw.col.decks.get_current_id()
+            return {'deckId': did, 'deckName': mw.col.decks.name(did)}
+        except Exception:
+            return {'deckId': 0, 'deckName': ''}
+
+    def _get_due_count_state(self):
+        try:
+            tree = mw.col.sched.deck_due_tree()
+            return {
+                'new': sum(n.new_count for n in tree.children),
+                'learning': sum(n.learn_count for n in tree.children),
+                'review': sum(n.review_count for n in tree.children),
+            }
+        except Exception:
+            return {'new': 0, 'learning': 0, 'review': 0}
+
+    def _get_premium_state(self):
+        cfg = get_config()
+        return bool(cfg.get('auth_token', '').strip()) and cfg.get('auth_validated', False)
+
     def get_available_actions(self):
         """Agent can discover all available actions."""
         return list(self._action_handlers.keys())
 
+    def get_available_queries(self):
+        """Agent can discover all queryable state."""
+        return list(self._state_getters.keys())
+
     def _route_message(self, msg_type, data):
-        """Route messages from React via Action Registry."""
-        # Support both direct action calls and the executeAction wrapper
+        """Route messages from React via Action Registry, State Queries, or executeAction."""
+        # executeAction wrapper (from Python/Agent → React-side actions)
         if msg_type == 'executeAction':
             try:
                 parsed = json.loads(data) if isinstance(data, str) else data
@@ -231,6 +269,26 @@ class MainViewWidget(QWidget):
                 logger.error("MainView: executeAction error: %s", e)
             return
 
+        # State query (React asks for current state)
+        if msg_type == 'query':
+            try:
+                parsed = json.loads(data) if isinstance(data, str) else data
+                key = parsed.get('key', '') if isinstance(parsed, dict) else str(parsed)
+                getter = self._state_getters.get(key)
+                if getter:
+                    result = getter()
+                    self._send_to_react({
+                        "type": "queryResult",
+                        "key": key,
+                        "data": result,
+                    })
+                else:
+                    logger.warning("Unknown state query: %s", key)
+            except Exception as e:
+                logger.error("MainView: query error: %s", e)
+            return
+
+        # Direct action dispatch (domain.verb from React)
         handler = self._action_handlers.get(msg_type)
         if handler:
             handler(data)
@@ -292,7 +350,7 @@ class MainViewWidget(QWidget):
             mode = msg_data.get('mode', 'compact')
 
             self._streaming_text = ''
-            self._send_to_react({"type": "loading", "loading": True})
+            self._send_to_react({"type": "chat.loadingChanged", "loading": True})
 
             manager = get_request_manager()
             manager.start_request(
@@ -305,8 +363,8 @@ class MainViewWidget(QWidget):
                 }
             )
         except Exception as e:
-            self._send_to_react({"type": "error", "message": str(e)})
-            self._send_to_react({"type": "loading", "loading": False})
+            self._send_to_react({"type": "chat.errorOccurred", "message": str(e)})
+            self._send_to_react({"type": "chat.loadingChanged", "loading": False})
 
     def _handle_cancel_request(self):
         try:
@@ -314,13 +372,13 @@ class MainViewWidget(QWidget):
         except ImportError:
             from ai.request_manager import get_request_manager
         get_request_manager().cancel()
-        self._send_to_react({"type": "loading", "loading": False})
+        self._send_to_react({"type": "chat.loadingChanged", "loading": False})
 
     def _handle_load_deck_messages(self, data):
         deck_id = int(data) if isinstance(data, (int, str)) else 0
         try:
             messages = load_deck_messages(deck_id, limit=50)
-            self._send_to_react({"type": "deckMessagesLoaded", "deckId": deck_id, "messages": messages})
+            self._send_to_react({"type": "chat.messagesLoaded", "deckId": deck_id, "messages": messages})
         except Exception as e:
             logger.error("MainView: loadDeckMessages error: %s", e)
 
@@ -334,7 +392,7 @@ class MainViewWidget(QWidget):
     def _handle_clear_deck_messages(self):
         try:
             count = clear_deck_messages()
-            self._send_to_react({"type": "deckMessagesCleared", "count": count})
+            self._send_to_react({"type": "chat.messagesCleared", "count": count})
         except Exception as e:
             logger.error("MainView: clearDeckMessages error: %s", e)
 
@@ -383,7 +441,7 @@ class MainViewWidget(QWidget):
             parsed = json.loads(data) if isinstance(data, str) else data
             card_id = int(parsed.get('cardId', 0))
             if card_id:
-                self._send_to_react({"type": "openCardPreview", "cardId": card_id})
+                self._send_to_react({"type": "card.previewOpened", "cardId": card_id})
         except Exception as e:
             logger.warning("MainView: openPreview error: %s", e)
 
@@ -422,20 +480,20 @@ class MainViewWidget(QWidget):
     def _on_chunk(self, request_id, chunk, done, is_function_call):
         if chunk:
             self._streaming_text += chunk
-            self._send_to_react({"type": "streaming", "chunk": chunk})
+            self._send_to_react({"type": "chat.chunkReceived", "chunk": chunk})
 
     def _on_ai_done(self, request_id):
         self._send_to_react({
-            "type": "bot",
+            "type": "chat.responseCompleted",
             "message": self._streaming_text,
             "citations": {}
         })
-        self._send_to_react({"type": "loading", "loading": False})
+        self._send_to_react({"type": "chat.loadingChanged", "loading": False})
         self._streaming_text = ''
 
     def _on_ai_error(self, request_id, error):
-        self._send_to_react({"type": "error", "message": error})
-        self._send_to_react({"type": "loading", "loading": False})
+        self._send_to_react({"type": "chat.errorOccurred", "message": error})
+        self._send_to_react({"type": "chat.loadingChanged", "loading": False})
         self._streaming_text = ''
 
     def _build_chat_context(self):
@@ -595,7 +653,7 @@ class MainViewWidget(QWidget):
         if state == 'deckBrowser':
             data = self._get_deck_browser_data()
             self._send_to_react({
-                "type": "stateChanged",
+                "type": "app.stateChanged",
                 "state": "deckBrowser",
                 "data": data,
                 "freeChatWasOpen": self._freechat_was_open,
@@ -603,7 +661,7 @@ class MainViewWidget(QWidget):
         elif state == 'overview':
             data = self._get_overview_data()
             self._send_to_react({
-                "type": "stateChanged",
+                "type": "app.stateChanged",
                 "state": "overview",
                 "data": data,
             })
@@ -739,13 +797,62 @@ export function bridgeAction(name, data) {
 }
 ```
 
-- [ ] **Step 2: Create MainApp.jsx**
+- [ ] **Step 2: Create `frontend/src/eventBus.js` — minimal event dispatcher**
 
-This is the React root component. It receives state changes from Python, manages view switching, and handles FreeChat. All buttons and shortcuts use `executeAction`. Initially renders a minimal shell — views are added in later tasks.
+```javascript
+/**
+ * Event Bus — central event dispatcher.
+ * All ankiReceive events flow through here before being processed.
+ * Agents can subscribe to events via on()/off().
+ *
+ * Naming: domain.past (e.g., 'app.stateChanged', 'chat.responseCompleted')
+ */
+
+const listeners = new Map();
+
+export function on(event, callback) {
+  if (!listeners.has(event)) listeners.set(event, new Set());
+  listeners.get(event).add(callback);
+}
+
+export function off(event, callback) {
+  listeners.get(event)?.delete(callback);
+}
+
+export function emit(event, data) {
+  listeners.get(event)?.forEach(cb => {
+    try { cb(data); } catch (e) { console.error('[EventBus]', event, e); }
+  });
+  // Wildcard listeners (subscribe to all events)
+  listeners.get('*')?.forEach(cb => {
+    try { cb({ event, data }); } catch (e) { console.error('[EventBus] wildcard', e); }
+  });
+}
+
+export function getRegisteredEvents() {
+  return [...listeners.keys()].filter(k => k !== '*');
+}
+```
+
+- [ ] **Step 3: Create MainApp.jsx**
+
+This is the React root component. It receives state changes from Python, manages view switching, and handles FreeChat. All buttons and shortcuts use `executeAction`. The ankiReceive handler emits every event through the Event Bus before processing. Initially renders a minimal shell — views are added in later tasks.
+
+**Event naming in ankiReceive** (domain.past pattern):
+- `stateChanged` → `app.stateChanged`
+- `deckMessagesLoaded` → `chat.messagesLoaded`
+- `loading` → `chat.loadingChanged`
+- `streaming` → `chat.chunkReceived`
+- `bot` → `chat.responseCompleted`
+- `error` → `chat.errorOccurred`
+- `deckMessagesCleared` → `chat.messagesCleared`
+- `queryResult` → `system.queryResult`
+- `executeAction` → `system.actionRequested`
 
 ```jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { registerAction, executeAction, bridgeAction } from './actions';
+import { emit } from './eventBus';
 import { useFreeChat } from './hooks/useFreeChat';
 import { useHoldToReset } from './hooks/useHoldToReset';
 
@@ -810,7 +917,10 @@ export default function MainApp() {
     window.ankiReceive = (payload) => {
       if (!payload || !payload.type) return;
 
-      if (payload.type === 'stateChanged') {
+      // Emit through Event Bus before processing (agents can subscribe)
+      emit(payload.type, payload);
+
+      if (payload.type === 'app.stateChanged' || payload.type === 'stateChanged') {
         const { state, data, freeChatWasOpen } = payload;
         setAnkiState(state);
 
@@ -841,7 +951,7 @@ export default function MainApp() {
         return;
       }
 
-      if (payload.type === 'deckMessagesLoaded') {
+      if (payload.type === 'chat.messagesLoaded') {
         handleDeckMessagesLoadedRef.current(payload);
         return;
       }
