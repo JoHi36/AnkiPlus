@@ -341,9 +341,11 @@ def _handle_flip_card(self, data=None):
     _orig = web.eval
     web.eval = lambda js: None  # Swallow all JS executions
     try:
-        rev._showAnswer()
+        rev._showAnswer()  # Note: _showAnswer triggers av_player internally for answer audio
     finally:
         web.eval = _orig
+    # Restore focus to MainViewWidget's webview (Qt ops during _showAnswer can steal focus)
+    QTimer.singleShot(150, lambda: self.web_view.setFocus() if self.web_view else None)
     # Send back HTML to React
     if rev.card:
         self._send_card_data(rev.card, is_question=False)
@@ -362,7 +364,10 @@ def _handle_rate_card(self, data):
         rev._answerCard(ease)
     finally:
         web.eval = _orig
+    # Restore focus (same pattern as _handle_flip_card)
+    QTimer.singleShot(150, lambda: self.web_view.setFocus() if self.web_view else None)
     # After _answerCard, rev.card is now the NEXT card — send it to React
+    # Note: Do NOT call _initWeb() — React renders the next card directly
     if rev.card:
         self._send_card_data(rev.card, is_question=True)
 
@@ -632,18 +637,22 @@ This is the exact same pattern already proven in `custom_reviewer/__init__.py` (
 
 Cards with `[sound:filename.mp3]` tags trigger Anki's `av_player`, which is wired into `mw.web`'s reviewer HTML via pycmd calls. Since `mw.web` renders normally (hidden), audio playback continues to work through Anki's native system. The key: we do NOT suppress `webview_will_set_content` for the reviewer — Anki's full reviewer HTML (including audio triggers) loads into `mw.web`. React only provides the visual layer.
 
-If audio does not auto-trigger (because `mw.web` is hidden and may not fire JS), we add an explicit audio trigger in `_send_card_data`:
+**Important:** `_showAnswer()` and `_answerCard()` already trigger `av_player` internally for card audio. Do NOT add explicit `av_player.play_tags()` calls in `_send_card_data` — this would cause double playback. If audio does not work because `mw.web` is hidden, add explicit playback ONLY for question audio on new cards (since `_answerCard` handles the transition audio already):
 
 ```python
 def _send_card_data(self, card, is_question=True):
     # ... send data to React ...
 
-    # Trigger audio playback via Anki's av_player
-    if mw.reviewer:
-        sounds = card.question_av_tags() if is_question else card.answer_av_tags()
-        if sounds:
-            from anki.sound import av_player
-            av_player.play_tags(sounds)
+    # Only trigger audio for question side if Anki's internal trigger didn't fire
+    # (answer audio is handled by _showAnswer/_answerCard)
+    if is_question and mw.reviewer:
+        try:
+            sounds = card.question_av_tags()
+            if sounds:
+                from anki.sound import av_player
+                av_player.play_tags(sounds)
+        except Exception:
+            pass
 ```
 
 ### Card Media (Images)
