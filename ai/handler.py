@@ -159,7 +159,7 @@ class AIHandler:
 
     def _rag_retrieve_cards(self, precise_queries=None, broad_queries=None,
                             search_scope="current_deck", context=None,
-                            max_notes=10):
+                            max_notes=10, suppress_event=False):
         return rag_retrieve_cards(
             precise_queries=precise_queries,
             broad_queries=broad_queries,
@@ -167,7 +167,7 @@ class AIHandler:
             context=context,
             max_notes=max_notes,
             emit_state=self._emit_ai_state,
-            emit_event=self._emit_ai_event,
+            emit_event=None if suppress_event else self._emit_ai_event,
         )
 
     def _fix_router_queries(self, router_result, user_message, context):
@@ -351,6 +351,23 @@ class AIHandler:
                     logger.warning("Fehler beim Senden von AI-Event: %s", e)
             mw.taskman.run_on_main(emit_on_main)
 
+    def _emit_msg_event(self, event_type, data):
+        """Emit a structured message event to the frontend (v2 protocol)."""
+        if not self.widget or not self.widget.web_view:
+            return
+        payload = {"type": event_type}
+        payload.update(data)
+        payload_str = json.dumps(payload)
+        if mw and mw.taskman:
+            def emit_on_main():
+                try:
+                    self.widget.web_view.page().runJavaScript(
+                        "window.ankiReceive(" + payload_str + ");"
+                    )
+                except Exception as e:
+                    logger.warning("msg_event emit error: %s", e)
+            mw.taskman.run_on_main(emit_on_main)
+
     # ---- RAG orchestrator (stays here -- uses self.widget, self._emit_*) --------
 
     def get_response_with_rag(self, user_message, context=None, history=None,
@@ -362,6 +379,10 @@ class AIHandler:
         self._current_step_labels = []
         self._fallback_in_progress = False
         citations = {}
+
+        # v2: Emit msg_start for structured message system
+        request_id = getattr(self, '_current_request_id', None)
+        self._emit_msg_event("msg_start", {"messageId": request_id or ''})
 
         try:
             # Stage 0: Agent Routing
@@ -423,6 +444,23 @@ class AIHandler:
                         # Fall through to Tutor pipeline
 
             # Continue with Tutor pipeline (existing RAG flow)
+            self._emit_pipeline_step("orchestrating", "done", {
+                'agent': 'tutor',
+                'retrieval_mode': 'agent:tutor',
+                'method': routing_result.method,
+                'search_needed': True,
+            })
+
+            # v2: Emit orchestration event
+            self._emit_msg_event("orchestration", {
+                "messageId": request_id or '',
+                "agent": "tutor",
+                "mode": routing_result.method if hasattr(routing_result, 'method') else 'default',
+                "steps": [{"step": "orchestrating", "status": "done", "data": {
+                    "retrieval_mode": "agent:tutor",
+                    "agent": "tutor",
+                }}],
+            })
 
             # Stage 1: Router
             router_result = self._rag_router(user_message, context=context)
@@ -511,6 +549,16 @@ class AIHandler:
                         }
                         logger.debug("RAG: %s Karten fuer Kontext verwendet, %s Citations",
                                      len(formatted_cards), len(citations))
+                        # Re-emit rag_sources with complete citations (including current card)
+                        self._emit_ai_event("rag_sources", citations)
+
+                        # v2: Fold citations into agent_cell update
+                        self._emit_msg_event("agent_cell", {
+                            "messageId": request_id or '',
+                            "agent": "tutor",
+                            "status": "thinking",
+                            "data": {"citations": citations}
+                        })
                     else:
                         logger.debug("RAG: Keine Karten gefunden")
 
@@ -561,9 +609,18 @@ class AIHandler:
             insights_system_prompt = get_system_prompt(
                 mode=mode, tools=ai_tools, insights=insights)
 
+            # v2: Tutor cell enters thinking state
+            self._emit_msg_event("agent_cell", {
+                "messageId": request_id or '',
+                "agent": "tutor",
+                "status": "thinking",
+                "data": {}
+            })
+
             self._emit_pipeline_step("generating", "active")
 
             _generating_done_emitted = False
+            _buffered_done = [None]  # Buffer done signal for handoff check
 
             def enhanced_callback(chunk, done, is_function_call=False):
                 nonlocal _generating_done_emitted
@@ -571,14 +628,33 @@ class AIHandler:
                     if not _generating_done_emitted:
                         self._emit_pipeline_step("generating", "done")
                         _generating_done_emitted = True
-                    if callback:
-                        callback(chunk, done, is_function_call,
-                                 steps=self._current_request_steps,
-                                 citations=citations,
-                                 step_labels=getattr(self, '_current_step_labels', []))
+                    # Buffer done signal — released after handoff check
+                    _buffered_done[0] = chunk
                 else:
                     if callback:
                         callback(chunk, done, is_function_call)
+                    # v2: Emit text_chunk for structured messages
+                    if chunk and not is_function_call:
+                        self._emit_msg_event("text_chunk", {
+                            "messageId": request_id or '',
+                            "agent": "tutor",
+                            "chunk": chunk,
+                        })
+
+            def _release_done(extra_text=None):
+                """Release the buffered done signal, optionally appending extra text."""
+                if _buffered_done[0] is not None or extra_text:
+                    # Include marker IN the done chunk so React processes both atomically
+                    final_chunk = _buffered_done[0] or ''
+                    if extra_text:
+                        final_chunk = ('\n' + extra_text) if not final_chunk else final_chunk
+                    if callback:
+                        callback(final_chunk, True, False,
+                                 steps=self._current_request_steps,
+                                 citations=citations,
+                                 step_labels=getattr(self, '_current_step_labels', []))
+                    # v2: Emit msg_done
+                    self._emit_msg_event("msg_done", {"messageId": request_id or ''})
 
             try:
                 if callback:
@@ -608,27 +684,43 @@ class AIHandler:
                             logger.info("Executing handoff: tutor -> %s (query: %s)",
                                         handoff_req.to, handoff_req.query[:50])
 
+                            marker = None
+                            # Send loading indicator IMMEDIATELY before agent runs
+                            import json as _json
+                            loading_marker = '[[TOOL:%s]]' % _json.dumps({
+                                'name': 'agent_handoff',
+                                'displayType': 'loading',
+                                'loadingHint': handoff_req.reason,
+                            }, ensure_ascii=False)
+                            # Send clean text + loading marker as a chunk so user sees it instantly
+                            if callback:
+                                callback('\n' + loading_marker, False, False)
+
+                            # v2: Emit loading state for target agent
+                            self._emit_msg_event("agent_cell", {
+                                "messageId": request_id or '',
+                                "agent": handoff_req.to,
+                                "status": "loading",
+                                "data": {"loadingHint": handoff_req.reason}
+                            })
+
                             # Execute the target agent
                             try:
                                 from .agents import get_agent, lazy_load_run_fn
                                 target_def = get_agent(handoff_req.to)
                                 if target_def:
                                     run_fn = lazy_load_run_fn(target_def)
-                                    # Pass the handoff query as the situation
                                     target_result = run_fn(
                                         situation=handoff_req.query,
                                         **target_def.extra_kwargs
                                     )
 
-                                    # Emit the target agent's result
                                     if isinstance(target_result, dict):
-                                        target_text = target_result.get('text', '')
+                                        target_text = target_result.get('text', '') or target_result.get('answer', '')
                                     else:
                                         target_text = str(target_result)
 
-                                    if target_text and callback:
-                                        # Send a tool marker so the frontend renders
-                                        # the target agent in its own AgenticCell
+                                    if target_text:
                                         import json as _json
                                         marker = '[[TOOL:%s]]' % _json.dumps({
                                             'name': 'agent_handoff',
@@ -640,7 +732,18 @@ class AIHandler:
                                                 'sources': target_result.get('sources', []) if isinstance(target_result, dict) else [],
                                             }
                                         }, ensure_ascii=False)
-                                        callback(marker, False, True)
+
+                                        # v2: Emit target agent result
+                                        self._emit_msg_event("agent_cell", {
+                                            "messageId": request_id or '',
+                                            "agent": handoff_req.to,
+                                            "status": "done",
+                                            "data": {
+                                                "text": target_text,
+                                                "sources": target_result.get('sources', []) if isinstance(target_result, dict) else [],
+                                                "toolUsed": target_result.get('tool_used', '') if isinstance(target_result, dict) else '',
+                                            }
+                                        })
 
                                     # Run on_finished if defined
                                     if target_def.on_finished and self.widget:
@@ -656,9 +759,17 @@ class AIHandler:
                             except Exception as e:
                                 logger.warning("Handoff execution failed: %s", e)
 
+                            # Release done with handoff marker included
+                            _release_done(marker)
                             return clean_result
                         else:
                             logger.info("Handoff rejected, returning original response")
+
+                # No handoff — release buffered done signal
+                _release_done()
+
+                # v2: Emit msg_done for non-handoff responses
+                self._emit_msg_event("msg_done", {"messageId": request_id or ''})
 
                 # Memory extraction (rule-based, fast)
                 try:
@@ -691,9 +802,10 @@ class AIHandler:
                         fallback_rag_context["cards"] = rag_context["cards"][:3]
 
                 logger.info("Versuche Fallback mit gemini-2.5-flash (mit RAG)...")
+                self._fallback_in_progress = True
                 try:
                     if callback:
-                        return self._get_google_response_streaming(
+                        fallback_result = self._get_google_response_streaming(
                             user_message, fallback_model, api_key,
                             context=context, history=fallback_history, mode=mode,
                             callback=enhanced_callback,
@@ -702,12 +814,49 @@ class AIHandler:
                             system_prompt_override=insights_system_prompt,
                         )
                     else:
-                        return self._get_google_response(
+                        fallback_result = self._get_google_response(
                             user_message, fallback_model, api_key,
                             context=context, history=fallback_history, mode=mode,
                             rag_context=fallback_rag_context,
                             system_prompt_override=insights_system_prompt,
                         )
+                    # Check fallback result for handoff signal
+                    fb_marker = None
+                    if fallback_result and isinstance(fallback_result, str):
+                        clean_fb, fb_handoff = parse_handoff(fallback_result)
+                        if fb_handoff and validate_handoff(fb_handoff, 'tutor', ['tutor'], self.config):
+                            logger.info("Fallback handoff: tutor -> %s", fb_handoff.to)
+                            try:
+                                from .agents import get_agent, lazy_load_run_fn
+                                target_def = get_agent(fb_handoff.to)
+                                if target_def:
+                                    run_fn = lazy_load_run_fn(target_def)
+                                    target_result = run_fn(
+                                        situation=fb_handoff.query,
+                                        **target_def.extra_kwargs
+                                    )
+                                    if isinstance(target_result, dict):
+                                        target_text = target_result.get('text', '') or target_result.get('answer', '')
+                                    else:
+                                        target_text = str(target_result)
+                                    if target_text:
+                                        import json as _json
+                                        fb_marker = '[[TOOL:%s]]' % _json.dumps({
+                                            'name': 'agent_handoff',
+                                            'displayType': 'widget',
+                                            'result': {
+                                                'agent': fb_handoff.to,
+                                                'text': target_text,
+                                                'reason': fb_handoff.reason,
+                                                'sources': target_result.get('sources', []) if isinstance(target_result, dict) else [],
+                                            }
+                                        }, ensure_ascii=False)
+                                    _release_done(fb_marker)
+                                    return clean_fb
+                            except Exception as he:
+                                logger.warning("Fallback handoff failed: %s", he)
+                    _release_done()
+                    return fallback_result
                 except Exception as fallback_e:
                     logger.warning("Fallback mit RAG gescheitert: %s", fallback_e)
                     logger.info("Letzter Versuch: Fallback OHNE RAG...")
