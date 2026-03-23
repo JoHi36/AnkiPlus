@@ -130,12 +130,17 @@ def _msg_set_theme(theme):
     except Exception as e:
         logger.warning("Could not apply global theme: %s", e)
 
-    # 2. Refresh custom screens (deck browser / overview)
+    # 2. Refresh MainViewWidget (deck browser / overview) to pick up theme change
     try:
-        from ..ui.custom_screens import refresh_current_screen
-        refresh_current_screen()
+        from ..ui.main_view import get_main_view
+        view = get_main_view()
+        if view and view.web_view:
+            payload = json.dumps({"type": "themeChanged", "data": {"theme": theme}})
+            view.web_view.page().runJavaScript(
+                f"window.ankiReceive && window.ankiReceive({payload});"
+            )
     except Exception as e:
-        logger.warning("Could not refresh custom screens: %s", e)
+        logger.warning("Could not refresh main view: %s", e)
 
     # 3. Update chat panel theme
     try:

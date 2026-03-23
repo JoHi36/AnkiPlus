@@ -1,7 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import FreeChatApp from './FreeChatApp';
 import MainApp from './MainApp';
 import './index.css';
 import 'katex/dist/katex.min.css'; // KaTeX CSS
@@ -40,12 +39,6 @@ try {
     root.render(
       <React.StrictMode>
         <MainApp />
-      </React.StrictMode>
-    );
-  } else if (mode === 'freechat') {
-    root.render(
-      <React.StrictMode>
-        <FreeChatApp />
       </React.StrictMode>
     );
   } else {
