@@ -105,6 +105,11 @@ class ToolDefinition:
     disabled_modes: List[str] = field(default_factory=list)
     display_type: str = "markdown"     # "markdown" | "widget" | "silent"
     timeout_seconds: int = 30          # Per-tool timeout in seconds
+    # UI fields for Agent Studio
+    label: str = ''                # Display name (auto-generated from name if empty)
+    ui_description: str = ''       # One-line description for Agent Studio
+    default_enabled: bool = True
+    configurable: bool = True      # Can user toggle this in sub-menu?
 
 
 # ---------------------------------------------------------------------------
@@ -211,6 +216,47 @@ class ToolRegistry:
             if tool.agent == agent
         ]
 
+    # ------------------------------------------------------------------
+    # Frontend UI data
+    # ------------------------------------------------------------------
+
+    def get_tools_for_frontend(self, tool_names: List[str], config: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Return UI-relevant tool data for given tool names.
+
+        Args:
+            tool_names: List of tool names to retrieve UI data for.
+            config: Addon config dict (must contain 'ai_tools' sub-dict).
+
+        Returns:
+            List of dicts with UI-relevant fields for each tool.
+        """
+        ai_tools = config.get('ai_tools', {})
+        result = []
+        for name in tool_names:
+            t = self._tools.get(name)
+            if not t:
+                result.append({
+                    'name': name,
+                    'label': name.replace('_', ' ').title(),
+                    'description': '',
+                    'category': '',
+                    'configurable': False,
+                    'configKey': '',
+                    'enabled': True,
+                })
+                continue
+            enabled = ai_tools.get(t.config_key, t.default_enabled) if t.config_key else t.default_enabled
+            result.append({
+                'name': t.name,
+                'label': t.label or t.name.replace('_', ' ').title(),
+                'description': t.ui_description,
+                'category': t.category,
+                'configurable': t.configurable,
+                'configKey': t.config_key or '',
+                'enabled': enabled,
+            })
+        return result
+
 
 # ---------------------------------------------------------------------------
 # Global registry instance
@@ -229,6 +275,8 @@ registry.register(
         disabled_modes=["compact"],
         display_type="markdown",
         timeout_seconds=10,
+        label='Diagramme',
+        ui_description='Mermaid-Diagramme erstellen',
     )
 )
 
@@ -293,11 +341,14 @@ registry.register(ToolDefinition(
     name="spawn_plusi",
     schema=PLUSI_SCHEMA,
     execute_fn=execute_plusi,
-    category='content',
+    category='meta',
     config_key='plusi',
     agent='tutor',
     display_type="widget",
     timeout_seconds=30,
+    label='Plusi rufen',
+    ui_description='Plusi-Begleiter aktivieren',
+    configurable=False,
 ))
 
 
@@ -372,11 +423,13 @@ registry.register(ToolDefinition(
     name="show_card",
     schema=SHOW_CARD_SCHEMA,
     execute_fn=execute_show_card,
-    category="content",
+    category="learning",
     config_key="cards",
     agent="tutor",
     display_type="widget",
     timeout_seconds=10,
+    label='Karte anzeigen',
+    ui_description='Einzelne Karte im Chat anzeigen',
 ))
 
 
@@ -488,11 +541,13 @@ registry.register(ToolDefinition(
     name="search_deck",
     schema=SEARCH_DECK_SCHEMA,
     execute_fn=execute_search_deck,
-    category="content",
+    category="learning",
     config_key="cards",
     agent="tutor",
     display_type="widget",
     timeout_seconds=15,
+    label='Kartensuche',
+    ui_description='Karten aus dem Deck suchen',
 ))
 
 
@@ -655,11 +710,13 @@ registry.register(ToolDefinition(
     name="get_learning_stats",
     schema=LEARNING_STATS_SCHEMA,
     execute_fn=execute_learning_stats,
-    category="content",
+    category="learning",
     config_key="stats",
     agent="tutor",
     display_type="widget",
     timeout_seconds=10,
+    label='Statistiken',
+    ui_description='Streak, Heatmap, Deck-Überblick',
 ))
 
 
@@ -772,6 +829,8 @@ registry.register(ToolDefinition(
     agent="tutor",
     display_type="widget",
     timeout_seconds=10,
+    label='Bilder',
+    ui_description='Bilder aus Karten und Internet',
 ))
 
 
@@ -920,6 +979,8 @@ registry.register(ToolDefinition(
     agent="tutor",
     display_type="widget",
     timeout_seconds=15,
+    label='Bildsuche',
+    ui_description='Bilder im Internet suchen',
 ))
 
 
@@ -970,11 +1031,13 @@ registry.register(ToolDefinition(
     name='search_web',
     schema=SEARCH_WEB_SCHEMA,
     execute_fn=execute_search_web,
-    category='content',
+    category='research',
     config_key='research',
     agent='tutor',
     display_type='widget',
     timeout_seconds=15,
+    label='Websuche',
+    ui_description='Internet nach Quellen durchsuchen',
 ))
 
 
@@ -1013,11 +1076,13 @@ registry.register(
         name="compact",
         schema=COMPACT_SCHEMA,
         execute_fn=execute_compact,
-        category="meta",
+        category="learning",
         config_key="compact",
         agent="tutor",
         disabled_modes=[],
         display_type="widget",
         timeout_seconds=1,
+        label='Zusammenfassen',
+        ui_description='Chat-Erkenntnisse extrahieren',
     )
 )
