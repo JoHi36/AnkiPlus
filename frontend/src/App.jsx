@@ -1026,7 +1026,7 @@ function AppInner() {
 
             // Build pipeline_data for persisted ThoughtStream
             const subagentPipelineData = [{
-              step: 'router', status: 'done',
+              step: 'orchestrating', status: 'done',
               data: { search_needed: false, retrieval_mode: `subagent:${agentName}` },
               timestamp: Date.now()
             }];
@@ -1044,8 +1044,8 @@ function AppInner() {
                 _chatForAgent.appendMessageRef.current(
                   widgetMarker, 'bot', [], {}, null, [], subagentPipelineData
                 );
-              } else if (payload.text) {
-                // Plusi and other agents: use spawn_plusi widget
+              } else if (agentName === 'plusi' && payload.text) {
+                // Plusi: use spawn_plusi widget with mood/friendship
                 widgetMarker = `[[TOOL:${JSON.stringify({
                   name: 'spawn_plusi',
                   displayType: 'widget',
@@ -1058,6 +1058,11 @@ function AppInner() {
                 })}]]`;
                 _chatForAgent.appendMessageRef.current(
                   widgetMarker, 'bot', [], {}, null, [], subagentPipelineData
+                );
+              } else if (payload.text) {
+                // Help and other agents: render as plain text
+                _chatForAgent.appendMessageRef.current(
+                  payload.text, 'bot', [], {}, null, [], subagentPipelineData
                 );
               }
             }
@@ -2325,68 +2330,127 @@ function AppInner() {
                                                                 onPerformanceCapture={(perfData) => {
                                                                   handlePerformanceCapture(nextMsg.sectionId || lastUserMessage.sectionId, perfData);
                                                                 }}
+                                                                agentCells={nextMsg.agentCells}
+                                                                orchestration={nextMsg.orchestration}
+                                                                status="done"
                                                               />
                                                             </ErrorBoundary>
                                                           </div>
-                                                        )}                        
+                                                        )}
+                        {/* ── v2: Live message (structured, single renderer) ── */}
+                        {chatHook.currentMessage && !(nextMsg && nextMsg.from === 'bot' && nextMsg.text) && (
+                          <div className="w-full flex-none">
+                            <ChatMessage
+                              message={chatHook.currentMessage.agentCells?.[0]?.text || ''}
+                              from="bot"
+                              cardContext={cardContextHook.cardContext}
+                              agentCells={chatHook.currentMessage.agentCells}
+                              orchestration={chatHook.currentMessage.orchestration}
+                              status={chatHook.currentMessage.status}
+                              pipelineGeneration={chatHook.pipelineGenerationV2}
+                              bridge={bridge}
+                              isStreaming={true}
+                              isLastMessage={true}
+                              onPreviewCard={handlePreviewCard}
+                            />
+                          </div>
+                        )}
                         {/* Streaming Message - handles both Loading (Thinking) and Generating phases */}
                         {/* CRITICAL: Only render StreamingChatMessage if no saved bot message exists yet */}
                         {/* This prevents double-rendering when message is saved but timeout hasn't cleared streamingMessage */}
                         {/* Robust: Text-Vergleich verhindert Dopplung auch bei Race Conditions */}
-                        {/* Pipeline ThoughtStream — rendered directly during loading */}
-                        {chatHook.isLoading && (
-                          <div className="w-full flex-none mb-2">
-                            {/* ThoughtStream divider — v5 no longer renders sources */}
-                            <ThoughtStream
-                              pipelineSteps={chatHook.pipelineSteps || []}
-                              pipelineGeneration={chatHook.pipelineGeneration}
-                              agentColor={activeAgentColor}
-                              citations={chatHook.currentCitations || {}}
-                              isStreaming={true}
-                              bridge={bridge}
-                              onPreviewCard={handlePreviewCard}
-                              message={chatHook.streamingMessage || ''}
-                              steps={[]}
-                            />
-
+                        {/* Pipeline ThoughtStream — Router + Agent split */}
+                        {chatHook.isLoading && !chatHook.currentMessage && !(nextMsg && nextMsg.from === 'bot' && nextMsg.text) && (() => {
+                          const allSteps = chatHook.pipelineSteps || [];
+                          const rSteps = allSteps.filter(s => s.step === 'orchestrating');
+                          const aSteps = allSteps.filter(s => s.step !== 'orchestrating');
+                          // Detect agent name from orchestrating step data
+                          const liveAgentName = (() => {
+                            for (const s of rSteps) {
+                              const rm = s.data?.retrieval_mode || '';
+                              const m = rm.match(/^(?:subagent|agent):(\w+)$/);
+                              if (m) return m[1];
+                              if (s.data?.agent) return s.data.agent;
+                            }
+                            return activeAgentName || 'tutor';
+                          })();
+                          return (
+                            <div className="w-full flex-none mb-2">
+                              {/* Router ThoughtStream (before agent) */}
+                              {rSteps.length > 0 && (
+                                <ThoughtStream
+                                  pipelineSteps={rSteps}
+                                  agentColor={activeAgentColor}
+                                  citations={{}}
+                                  isStreaming={true}
+                                  message=""
+                                  steps={[]}
+                                  variant="router"
+                                />
+                              )}
+                              {/* Agent ThoughtStream inside AgenticCell */}
+                              {(aSteps.length > 0 || chatHook.streamingMessage) && (
+                                <AgenticCell agentName={liveAgentName} isLoading={aSteps.length === 0 && !chatHook.streamingMessage}>
+                                  {aSteps.length > 0 && (
+                                    <ThoughtStream
+                                      pipelineSteps={aSteps}
+                                      pipelineGeneration={chatHook.pipelineGeneration}
+                                      agentColor={activeAgentColor}
+                                      citations={chatHook.currentCitations || {}}
+                                      isStreaming={true}
+                                      bridge={bridge}
+                                      onPreviewCard={handlePreviewCard}
+                                      message={chatHook.streamingMessage || ''}
+                                      steps={[]}
+                                    />
+                                  )}
+                                  {/* Generating skeleton INSIDE AgenticCell — after all steps done, before text */}
+                                  {!chatHook.streamingMessage && aSteps.length > 0 && aSteps.every(s => s.status === 'done') && (
+                                    <div style={{ padding: '8px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                      {[0.92, 0.76, 0.58].map((w, i) => (
+                                        <div key={i} style={{ height: 12, borderRadius: 6, width: `${w * 100}%`, background: 'linear-gradient(90deg, var(--ds-hover-tint), var(--ds-active-tint), var(--ds-hover-tint))', backgroundSize: '200% 100%', animation: `ts-shimmerWave 2s ease-in-out infinite ${i * 0.15}s` }} />
+                                      ))}
+                                    </div>
+                                  )}
+                                </AgenticCell>
+                              )}
+                            </div>
+                          );
+                        })()}
+                        {/* Initial routing skeleton — only before any pipeline steps arrive */}
+                        {chatHook.isLoading && !chatHook.currentMessage && !chatHook.streamingMessage && (chatHook.pipelineSteps || []).length === 0 && !(nextMsg && nextMsg.from === 'bot' && nextMsg.text) && (
+                          <div className="w-full flex-none mb-2" style={{ padding: '0 4px' }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                              {[
+                                { label: 'Routing Agent', width: 60 },
+                                { label: 'Agent', width: 52 },
+                                { label: 'Modus', width: 48 },
+                              ].map((tag, i) => (
+                                <div
+                                  key={tag.label}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 5,
+                                    fontSize: 11,
+                                    padding: '3px 8px',
+                                    borderRadius: 5,
+                                    background: 'var(--ds-hover-tint)',
+                                    animation: `ts-phaseReveal 0.3s ease-out ${i * 0.1}s both`,
+                                  }}
+                                >
+                                  <span style={{ color: 'var(--ds-text-muted)' }}>{tag.label}</span>
+                                  <div style={{ width: tag.width, height: 10, borderRadius: 3, background: 'linear-gradient(90deg, var(--ds-hover-tint), var(--ds-active-tint), var(--ds-hover-tint))', backgroundSize: '200% 100%', animation: 'ts-shimmerWave 2s ease-in-out infinite' }} />
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
-                        {/* Generating skeleton — shows after pipeline completes, before first chunk */}
-                        {chatHook.isLoading && !chatHook.streamingMessage && (chatHook.pipelineSteps || []).length > 0 && !(chatHook.pipelineSteps || []).some(s => s.status === 'active') && (
-                          activeAgentName ? (
-                            /* Agent-specific loading: show AgenticCell with loading hint */
-                            <div className="w-full flex-none mb-2">
-                              <AgenticCell agentName={activeAgentName} isLoading />
-                            </div>
-                          ) : (
-                            /* Generic loading: shimmer bars for main agent */
-                            <div className="w-full flex-none mb-2" style={{ padding: '0 4px' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                {[0.92, 0.76, 0.58].map((w, i) => (
-                                  <div
-                                    key={i}
-                                    style={{
-                                      height: 12,
-                                      borderRadius: 6,
-                                      width: `${w * 100}%`,
-                                      background: 'linear-gradient(90deg, var(--ds-hover-tint), var(--ds-active-tint), var(--ds-hover-tint))',
-                                      backgroundSize: '200% 100%',
-                                      animation: `ts-shimmerWave 2s ease-in-out infinite ${i * 0.15}s`,
-                                    }}
-                                  />
-                                ))}
-                              </div>
-                            </div>
-                          )
-                        )}
-                        {(chatHook.isLoading || chatHook.streamingMessage) && !(
+                        {(chatHook.isLoading || chatHook.streamingMessage) && !chatHook.currentMessage && !(
                           nextMsg &&
                           nextMsg.from === 'bot' &&
                           typeof nextMsg.text === 'string' &&
-                          nextMsg.text &&
-                          chatHook.streamingMessage &&
-                          typeof chatHook.streamingMessage === 'string' &&
-                          (chatHook.streamingMessage.trim() === nextMsg.text.trim())
+                          nextMsg.text
                         ) && (
                           <div className="w-full flex-none">
                             <StreamingChatMessage
