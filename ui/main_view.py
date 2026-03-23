@@ -111,6 +111,12 @@ class MainViewWidget(QWidget):
             # Hide widget — sidebar shown by ensure_chatbot_open() in setup.py
             self._visible = False
             self.hide()
+            # Tell React we're in review → switches activeView to 'chat'
+            self._send_to_react({
+                "type": "app.stateChanged",
+                "state": "review",
+                "data": {},
+            })
             return
 
         # Fullscreen mode
