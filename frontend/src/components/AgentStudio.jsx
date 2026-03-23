@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getRegistry } from '@shared/config/agentRegistry';
+import { getRegistry } from '@shared/config/subagentRegistry';
 
 /* ── Hardcoded Plusi icon (special mascot -- not an SVG from the registry) ── */
 function PlusiIcon({ size = 28, color = '#0a84ff' }) {
