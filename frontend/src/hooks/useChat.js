@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, startTransition } from 'react';
 import { updateSession, updateSessionSections, createSession, findSessionByDeck } from '../utils/sessions';
-import { getDirectCallPattern, findAgent } from '@shared/config/subagentRegistry';
+import { getDirectCallPattern, findAgent, getDefaultAgent } from '@shared/config/subagentRegistry';
+import useAgenticMessage from './useAgenticMessage';
 
 // REMOVED: Auto-scroll helper functions - no longer needed with Interaction Container approach
 
@@ -60,6 +61,9 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
   const [pipelineSteps, setPipelineSteps] = useState([]);
   // Each: { step: 'orchestrating'|'sql_search'|..., status: 'active'|'done'|'error', data: {}, timestamp: number }
   const pipelineStepsRef = useRef([]);
+
+  // v2: Structured message state
+  const agenticMsg = useAgenticMessage();
   // Generation counter — increments on each new pipeline to signal ThoughtStream to reset refs
   const [pipelineGeneration, setPipelineGeneration] = useState(0);
 
@@ -383,7 +387,9 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     if (directMatch) {
       const agentName = directMatch[1].toLowerCase();
       const agent = findAgent(agentName);
-      if (agent) {
+      // Default agent (Tutor) goes through normal sendMessage → handler.py routing
+      // Only non-default agents use subagentDirect
+      if (agent && !agent.isDefault) {
         console.log(`@${agent.label} detected, emitting synthetic pipeline`);
         // Emit synthetic orchestrating-active immediately
         updatePipelineSteps([{ step: 'orchestrating', status: 'active', data: {}, timestamp: Date.now() }]);
@@ -474,6 +480,51 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
   
   // Verarbeite ankiReceive Events für Chat
   const handleAnkiReceive = useCallback((payload) => {
+    // ── v2 Structured Message Events ──
+    if (payload.type === 'msg_start') {
+      agenticMsg.handleMsgStart(payload);
+      // Don't return — let existing 'loading' handler also process if it follows
+    }
+    if (payload.type === 'orchestration') {
+      agenticMsg.handleOrchestration(payload);
+      return;
+    }
+    if (payload.type === 'agent_cell') {
+      agenticMsg.handleAgentCell(payload);
+      return;
+    }
+    if (payload.type === 'text_chunk') {
+      agenticMsg.handleTextChunk(payload);
+      return;
+    }
+    if (payload.type === 'msg_done') {
+      // Finalize: move currentMessage → messages array
+      const finalMsg = agenticMsg.finalize();
+      if (finalMsg) {
+        const primaryCell = finalMsg.agentCells[0];
+        const savedMsg = {
+          id: finalMsg.id,
+          text: primaryCell?.text || '',
+          from: 'bot',
+          steps: primaryCell?.pipelineSteps?.map(s => ({ state: s.data?.label || s.step, timestamp: s.timestamp })) || [],
+          citations: primaryCell?.citations || {},
+          pipeline_data: primaryCell?.pipelineSteps || [],
+          agentCells: finalMsg.agentCells,
+          orchestration: finalMsg.orchestration,
+        };
+        setMessages(prev => [...prev, savedMsg]);
+      }
+      // Don't return — let existing done handler also run for backwards compat
+    }
+    if (payload.type === 'msg_error') {
+      agenticMsg.cancel();
+      return;
+    }
+    if (payload.type === 'msg_cancelled') {
+      agenticMsg.cancel();
+      return;
+    }
+
     if (payload.type === 'loading') {
       console.log('⏳ useChat: Loading-Indikator aktiviert');
       setIsLoading(true);
@@ -502,6 +553,8 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
         }
         return [...prev, newStep];
       });
+      // v2: Also forward to structured message hook
+      agenticMsg.handlePipelineStep(payload);
       return;
     } else if (payload.type === 'ai_state') {
       // ai_state events are suppressed by the backend when pipeline is active.
@@ -564,6 +617,8 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
           
           return prev;
         });
+        // v2: Forward citations to structured message hook
+        agenticMsg.handleCitations({ data: payload.data });
       }
     } else if (payload.type === 'metadata') {
       // Handle metadata payloads (steps/citations from backend)
@@ -843,6 +898,10 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     handleRetry,  // NEW: Retry function
     clearError,  // NEW: Clear error function
     handleAnkiReceive,
-    tokenInfo
+    tokenInfo,
+    // v2 structured message
+    currentMessage: agenticMsg.currentMessage,
+    pipelineGenerationV2: agenticMsg.pipelineGeneration,
+    cancelCurrentMessage: agenticMsg.cancel,
   };
 }
