@@ -124,28 +124,44 @@ class MainViewWidget(QWidget):
         # Send state data (with retry if not ready)
         self._send_state_data(state)
 
-    def _send_state_data(self, state):
-        """Send state data to React. Retries if ChatbotWidget's webview not ready."""
-        if not self._chatbot or not self._chatbot.web_view:
-            QTimer.singleShot(300, lambda: self._send_state_data(state))
+    def _send_state_data(self, state, _retries=0):
+        """Send state data to React. Waits for ankiReceive to be available."""
+        if not self._chatbot or not self._chatbot.web_view or _retries > 20:
+            if _retries <= 20:
+                QTimer.singleShot(300, lambda: self._send_state_data(state, _retries + 1))
             return
 
+        # Build payload
         if state == 'deckBrowser':
             data = self._get_deck_browser_data()
             freechat_was_open = getattr(self._chatbot, '_freechat_was_open', False)
-            self._send_to_react({
+            payload = {
                 "type": "app.stateChanged",
                 "state": "deckBrowser",
                 "data": data,
                 "freeChatWasOpen": freechat_was_open,
-            })
+            }
         elif state == 'overview':
             data = self._get_overview_data()
-            self._send_to_react({
+            payload = {
                 "type": "app.stateChanged",
                 "state": "overview",
                 "data": data,
-            })
+            }
+        else:
+            return
+
+        # Check if ankiReceive exists (page may not have loaded yet)
+        def _on_check(is_ready):
+            if is_ready:
+                self._send_to_react(payload)
+            else:
+                QTimer.singleShot(300, lambda: self._send_state_data(state, _retries + 1))
+
+        self._chatbot.web_view.page().runJavaScript(
+            "typeof window.ankiReceive === 'function'",
+            _on_check
+        )
 
     def _show(self):
         if self._visible:
