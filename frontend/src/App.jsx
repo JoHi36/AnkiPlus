@@ -2059,8 +2059,8 @@ function AppInner() {
           onSelectSession={handleSelectSession}
           bridge={bridge}
         />
-        {/* Fade mask — chat content fades out behind the pill (hidden in PlusiMenu) */}
-        {activeView !== 'plusiMenu' && (
+        {/* Fade mask — chat content fades out behind the pill (hidden in sub-menus/studio) */}
+        {activeView === 'chat' && (
         <div
           aria-hidden="true"
           style={{

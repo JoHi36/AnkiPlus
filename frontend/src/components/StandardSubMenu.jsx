@@ -106,11 +106,19 @@ export default function StandardSubMenu({ agent, bridge, onNavigateBack }) {
     });
   }, [bridge]);
 
-  // Resolve tools from registry
+  // Resolve tools from registry — fallback to formatted name if registry empty
   const toolRegistry = getToolRegistry();
-  const agentTools = (agent?.tools || [])
-    .map((name) => toolRegistry.get(name))
-    .filter(Boolean);
+  const agentTools = (agent?.tools || []).map((name) => {
+    const reg = toolRegistry.get(name);
+    return reg || {
+      name,
+      label: name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+      description: '',
+      configurable: true,
+      configKey: name,
+      enabled: true,
+    };
+  });
 
   const toolsConfigurable = !!agent?.toolsConfigurable;
 

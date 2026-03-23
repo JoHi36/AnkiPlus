@@ -93,11 +93,16 @@ function ToolChips({ toolNames }) {
   if (!toolNames || toolNames.length === 0) return null;
 
   const toolRegistry = getToolRegistry();
-  const tools = toolNames
-    .map(name => toolRegistry.get(name))
-    .filter(Boolean);
 
-  if (tools.length === 0) return null;
+  // Build tool display data — use registry if available, fallback to formatted name
+  const tools = toolNames.map(name => {
+    const reg = toolRegistry.get(name);
+    return reg || {
+      name,
+      label: name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+      enabled: true,
+    };
+  });
 
   return (
     <div style={{
