@@ -113,6 +113,170 @@ This is the fundamental loop of any autonomous agent. The three registries make 
 4. **Discoverable** — An agent can call `getAvailableActions()` and `getAvailableEvents()` to understand what it can do. No hardcoding of capabilities
 5. **Incremental** — Each phase adds to the registry without changing existing entries. New actions, events, and queries are additive
 
+## Event System Deep Dive
+
+### Core Rule: Every Action Emits an Event
+
+When `executeAction('card.flip', data)` runs, two things happen automatically:
+1. The action handler executes (card flips)
+2. An event is emitted (`card.flipped`, with data)
+
+No action without an event. This means the event bus is comprehensive by default — everything that happens in the app is observable.
+
+### Two Event Layers
+
+**Layer 1: Raw Events** — factual, objective, always emitted
+
+These are 1:1 with actions. Every UI interaction, every state change produces a raw event.
+
+| Domain | Raw Events | Data |
+|--------|-----------|------|
+| **card** | `card.shown`, `card.flipped`, `card.answered`, `card.skipped` | cardId, deckId, ease, timeMs, timestamp |
+| **deck** | `deck.opened`, `deck.selected`, `deck.created` | deckId, deckName |
+| **review** | `review.started`, `review.cardCompleted`, `review.ended` | deckId, totalCards, totalTimeMs, count, remaining |
+| **chat** | `chat.opened`, `chat.closed`, `chat.messageSent`, `chat.responseCompleted` | text, hasCardContext, tokens, source |
+| **view** | `view.switched`, `view.navigated` | from, to |
+| **session** | `session.started`, `session.idle`, `session.resumed` | timestamp, idleDurationMs |
+| **settings** | `settings.changed` | key, oldValue, newValue |
+
+Raw events are cheap. Emit everything. An agent or interpreter can always ignore what it doesn't need.
+
+**Layer 2: Interpreted Events** — derived, stateful, meaningful
+
+Interpreters watch raw events, maintain state, and emit higher-level events when patterns are detected.
+
+| Interpreted Event | Derived From | Rule |
+|-------------------|-------------|------|
+| `card.struggled` | `card.answered` | Same card, ease=1, 3+ times |
+| `card.mastered` | `card.answered` | Same card, ease>=3, 3+ times in a row |
+| `card.guessed` | `card.flipped` + `card.answered` | Flip time <2s but ease>=3 (too fast to have known) |
+| `card.tooSlow` | `card.answered` | timeMs > 2x running average |
+| `review.fatigue` | `card.answered` (rolling window) | Accuracy drops >20% over last 10 cards |
+| `review.streakBroken` | `card.answered` | 5+ correct, then incorrect |
+| `review.flowState` | `card.answered` (rolling window) | 10+ correct in a row, avg time <5s |
+| `review.milestone` | `review.cardCompleted` | count reaches 50, 100, 200 |
+| `deck.completed` | `review.ended` + state query | All due cards = 0 for this deck |
+| `deck.neglected` | `session.started` + state query | Deck not opened in >7 days, has due cards |
+| `chat.deepDive` | `chat.messageSent` | 5+ messages on same topic |
+
+### Interpreter Architecture
+
+Each interpreter is a self-contained module with a standard interface:
+
+```javascript
+// interpreters/cardStruggle.js
+export default {
+  name: 'card.struggled',
+  description: 'Emits when a card is answered wrong 3+ times',
+  subscribesTo: ['card.answered'],
+
+  // Internal state (per interpreter instance)
+  state: {},
+
+  // Called for each matching raw event
+  evaluate(event) {
+    const { cardId, ease } = event.data;
+
+    // Reset on correct answer
+    if (ease > 1) {
+      this.state[cardId] = 0;
+      return null;  // no interpreted event
+    }
+
+    // Track wrong answers
+    this.state[cardId] = (this.state[cardId] || 0) + 1;
+
+    // Emit interpreted event after 3 wrong
+    if (this.state[cardId] >= 3) {
+      return {
+        type: 'card.struggled',
+        data: { cardId, wrongCount: this.state[cardId] }
+      };
+    }
+
+    return null;  // not yet
+  },
+
+  // Reset state (e.g., on new session)
+  reset() {
+    this.state = {};
+  }
+}
+```
+
+Interpreters are registered in a central registry:
+
+```javascript
+// interpreterRegistry.js
+import cardStruggle from './interpreters/cardStruggle';
+import reviewFatigue from './interpreters/reviewFatigue';
+import flowState from './interpreters/flowState';
+import deckCompleted from './interpreters/deckCompleted';
+
+const INTERPRETERS = [
+  cardStruggle,
+  reviewFatigue,
+  flowState,
+  deckCompleted,
+  // ... add new interpreters here
+];
+
+export function initInterpreters(eventBus) {
+  for (const interpreter of INTERPRETERS) {
+    for (const eventType of interpreter.subscribesTo) {
+      eventBus.on(eventType, (event) => {
+        const result = interpreter.evaluate(event);
+        if (result) {
+          eventBus.emit(result.type, result.data);
+        }
+      });
+    }
+  }
+}
+```
+
+Adding a new interpreter = adding one file + one line in the registry. No core changes.
+
+### Agent Subscription
+
+Agents subscribe to raw or interpreted events — their choice:
+
+```javascript
+// A simple agent that reacts to interpreted events (easy):
+eventBus.on('card.struggled', (event) => {
+  executeAction('chat.open', { text: `Du tust dich schwer mit dieser Karte...` });
+});
+
+// A sophisticated agent that interprets raw events itself (flexible):
+eventBus.on('card.answered', (event) => {
+  // Agent maintains its own model of user performance
+  // and decides when/how to intervene
+});
+```
+
+### Event Data Contract
+
+Every event carries a standardized payload:
+
+```javascript
+{
+  type: 'card.answered',          // domain.past name
+  timestamp: 1711234567890,       // when it happened
+  data: {                         // domain-specific payload
+    cardId: 12345,
+    deckId: 67,
+    ease: 1,
+    timeMs: 4200,
+  },
+  source: 'user',                 // 'user' | 'agent' | 'system'
+  layer: 'raw',                   // 'raw' | 'interpreted'
+}
+```
+
+The `source` field is important: when an agent executes `card.rate`, the resulting `card.answered` event has `source: 'agent'`. This prevents infinite loops (agent reacts to its own action) and lets other agents distinguish user behavior from agent behavior.
+
+The `layer` field distinguishes raw from interpreted events, so an agent can filter for only one layer.
+
 ## What This Is NOT
 
 - Not a plugin system (that comes later, if needed)
