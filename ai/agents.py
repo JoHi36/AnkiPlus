@@ -53,6 +53,12 @@ class AgentDefinition:
     router_hint: str = ''
     can_handoff_to: List[str] = field(default_factory=list)
 
+    # Agent Studio UI
+    widget_type: str = ''           # 'embeddings', 'budget', '' (empty = no widget)
+    submenu_label: str = ''         # 'Tutor konfigurieren' (auto-generated if empty)
+    submenu_component: str = ''     # 'PlusiMenu', 'ResearchMenu', '' (empty = standard)
+    tools_configurable: bool = True # Whether tools can be toggled in sub-menu
+
     # Lifecycle
     on_finished: Optional[Callable] = None
     loading_hint_template: str = '{label} arbeitet...'
@@ -105,15 +111,17 @@ def get_non_default_agents(config: dict) -> List[AgentDefinition]:
 
 
 def get_registry_for_frontend(config: dict) -> List[dict]:
-    """Return enabled agents as dicts for JSON serialization to frontend."""
-    enabled = get_enabled_agents(config)
-    return [
-        {
+    """Return ALL registered agents as dicts for JSON serialization to frontend."""
+    result = []
+    for a in AGENT_REGISTRY.values():
+        is_enabled = a.is_default or config.get(a.enabled_key, False)
+        submenu_label = a.submenu_label or f'{a.label} konfigurieren'
+        result.append({
             'name': a.name,
             'label': a.label,
             'description': a.description,
             'color': a.color,
-            'enabled': True,
+            'enabled': is_enabled,
             'isDefault': a.is_default,
             'pipelineLabel': a.pipeline_label,
             'iconType': a.icon_type,
@@ -122,9 +130,13 @@ def get_registry_for_frontend(config: dict) -> List[dict]:
             'loadingHintTemplate': a.loading_hint_template,
             'tools': a.tools,
             'canHandoffTo': a.can_handoff_to,
-        }
-        for a in enabled
-    ]
+            # New fields
+            'widgetType': a.widget_type,
+            'submenuLabel': submenu_label,
+            'submenuComponent': a.submenu_component,
+            'toolsConfigurable': a.tools_configurable,
+        })
+    return result
 
 
 def lazy_load_run_fn(agent: AgentDefinition) -> Callable:
@@ -303,6 +315,7 @@ register_agent(AgentDefinition(
         'search_deck',
         'show_card',
         'show_card_media',
+        'search_image',
         'create_mermaid_diagram',
         'get_learning_stats',
         'compact',
@@ -317,6 +330,11 @@ register_agent(AgentDefinition(
     # Labels
     pipeline_label='Tutor',
     loading_hint_template='Suche in deinen Karten...',
+    # Agent Studio UI
+    widget_type='embeddings',
+    submenu_label='Tutor konfigurieren',
+    submenu_component='',
+    tools_configurable=True,
 ))
 
 
@@ -360,6 +378,11 @@ register_agent(AgentDefinition(
     # Labels
     pipeline_label='Research',
     loading_hint_template='Durchsuche Quellen zu {query}...',
+    # Agent Studio UI
+    widget_type='',
+    submenu_label='Quellen konfigurieren',
+    submenu_component='researchMenu',
+    tools_configurable=True,
 ))
 
 
@@ -393,6 +416,11 @@ register_agent(AgentDefinition(
     # Labels
     pipeline_label='Help',
     loading_hint_template='Schaue nach...',
+    # Agent Studio UI
+    widget_type='',
+    submenu_label='Help konfigurieren',
+    submenu_component='',
+    tools_configurable=True,
 ))
 
 
@@ -439,4 +467,9 @@ register_agent(AgentDefinition(
     # Labels
     pipeline_label='Plusi',
     loading_hint_template='Plusi denkt nach...',
+    # Agent Studio UI
+    widget_type='budget',
+    submenu_label='Persönlichkeit & Tagebuch',
+    submenu_component='plusiMenu',
+    tools_configurable=False,
 ))

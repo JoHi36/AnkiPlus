@@ -57,6 +57,7 @@ DEFAULT_CONFIG = {
     "default_interaction_mode": "auto",  # 'auto', 'tutor', 'research', 'help', 'plusi'
     "router_model": "gemini-2.5-flash",  # Router model selection
     "max_chain_depth": 2,            # Max agents in a handoff chain
+    "system_quality": "standard",    # Response quality tier: 'standard', 'high'
 }
 
 # Standard Backend URL
