@@ -2379,6 +2379,19 @@ function AppInner() {
       }
     `}</style>
     <div id="chat-root" className="flex flex-col h-screen overflow-hidden" style={{ backgroundColor: 'var(--ds-bg-deep)', color: 'var(--ds-text-primary)' }}>
+      {/* Unified TopBar — same header across all views */}
+      <TopBar
+        activeView={activeView}
+        ankiState={ankiState}
+        messageCount={freeChatHook.messageCount}
+        totalDue={deckBrowserData?.totalDue || 0}
+        deckName={overviewData?.deckName || sessionContext?.currentSession?.deckName || ''}
+        dueNew={overviewData?.dueNew || deckBrowserData?.totalNew || 0}
+        dueLearning={overviewData?.dueLearning || deckBrowserData?.totalLearn || 0}
+        dueReview={overviewData?.dueReview || deckBrowserData?.totalReview || 0}
+        onTabClick={handleTabClick}
+        onSidebarToggle={handleSidebarToggle}
+      />
       {/* Header — ContextSurface (fixiert oben) */}
       <div ref={headerRef} className="fixed top-0 left-0 right-0 z-40" style={{ overflow: 'visible' }}>
         <ContextSurface
