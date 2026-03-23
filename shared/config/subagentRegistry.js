@@ -1,10 +1,14 @@
 /**
- * @deprecated Use agentRegistry.js instead.
- * This file re-exports from agentRegistry.js for backward compatibility.
+ * Re-exports from subagentRegistry.ts for JS consumers.
+ * The .ts file is the canonical source; Vite resolves it directly.
  */
 export {
   getRegistry,
   setRegistry,
   getDirectCallPattern,
   findAgent,
-} from './agentRegistry.js';
+  getDefaultAgent,
+  getNonDefaultAgents,
+  getToolRegistry,
+  setToolRegistry,
+} from './subagentRegistry.ts';
