@@ -4,6 +4,7 @@ import { emit } from './eventBus';
 import { useFreeChat } from './hooks/useFreeChat';
 import { useHoldToReset } from './hooks/useHoldToReset';
 import TopBar from './components/TopBar';
+import DeckBrowserView from './components/DeckBrowserView';
 
 /**
  * MainApp — React root for the fullscreen main view.
@@ -255,9 +256,7 @@ export default function MainApp() {
       {/* View content — placeholder divs, replaced in Tasks 4-7 */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {activeView === 'deckBrowser' && (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ds-text-muted)' }}>
-            DeckBrowser (Task 4)
-          </div>
+          <DeckBrowserView data={deckBrowserData} isPremium={isPremium} />
         )}
         {activeView === 'overview' && (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ds-text-muted)' }}>
