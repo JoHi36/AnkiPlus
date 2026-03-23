@@ -766,10 +766,8 @@ class AIHandler:
                             logger.info("Handoff rejected, returning original response")
 
                 # No handoff — release buffered done signal
+                # (_release_done already emits msg_done internally)
                 _release_done()
-
-                # v2: Emit msg_done for non-handoff responses
-                self._emit_msg_event("msg_done", {"messageId": request_id or ''})
 
                 # Memory extraction (rule-based, fast)
                 try:

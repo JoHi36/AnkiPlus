@@ -117,14 +117,18 @@ export default function useAgenticMessage() {
   }, []);
 
   const finalize = useCallback(() => {
-    const msg = currentMessageRef.current;
-    if (!msg) return null;
-    const finalMsg = {
-      ...msg,
-      status: 'done',
-      agentCells: msg.agentCells.map(c => ({ ...c, status: 'done' })),
-    };
-    setCurrentMessage(null);
+    // Use functional updater to get the LATEST pending state
+    // (ref might be stale if agent_cell updates are batched with msg_done)
+    let finalMsg = null;
+    setCurrentMessage(prev => {
+      if (!prev) return null;
+      finalMsg = {
+        ...prev,
+        status: 'done',
+        agentCells: prev.agentCells.map(c => ({ ...c, status: 'done' })),
+      };
+      return null; // Clear currentMessage
+    });
     return finalMsg;
   }, []);
 
