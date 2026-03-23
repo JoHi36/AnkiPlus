@@ -1473,3 +1473,21 @@ class WebBridge(QObject):
             logger.exception("getSubagentRegistry error: %s", e)
             return '[]'
 
+    @pyqtSlot(str, result=str)
+    def saveSystemQuality(self, quality):
+        """Save system quality mode (standard/deep)."""
+        try:
+            try:
+                from ..config import get_config, save_config
+            except ImportError:
+                from config import get_config, save_config
+            config = get_config()
+            if quality in ('standard', 'deep'):
+                config['system_quality'] = quality
+                save_config(config)
+                return json.dumps({"success": True})
+            return json.dumps({"error": "Invalid quality value"})
+        except Exception as e:
+            logger.exception("saveSystemQuality error: %s", e)
+            return json.dumps({"error": str(e)})
+

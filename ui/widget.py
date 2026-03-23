@@ -76,6 +76,7 @@ class AIRequestThread(QThread):
     finished_signal = pyqtSignal(str)  # requestId
     metadata_signal = pyqtSignal(str, object, object, object)  # requestId, steps, citations, step_labels
     pipeline_signal = pyqtSignal(str, str, str, object)  # requestId, step, status, data
+    msg_event_signal = pyqtSignal(str, str, object)  # requestId, eventType, data
 
     def __init__(self, ai_handler, text, widget_ref, history=None, mode='compact', request_id=None, insights=None):
         super().__init__()
@@ -133,6 +134,14 @@ class AIRequestThread(QThread):
 
             self.ai_handler._pipeline_signal_callback = pipeline_callback
 
+            # Give the AI handler a callback to emit v2 msg events via Qt signal
+            def msg_event_callback(event_type, data):
+                if self._cancelled:
+                    return
+                self.msg_event_signal.emit(self.request_id, event_type, data or {})
+
+            self.ai_handler._msg_event_callback = msg_event_callback
+
             def stream_callback(chunk, done, is_function_call=False, steps=None, citations=None, step_labels=None):
                 if self._cancelled:
                     return
@@ -154,6 +163,7 @@ class AIRequestThread(QThread):
                 self.error_signal.emit(self.request_id, str(e))
         finally:
             self.ai_handler._pipeline_signal_callback = None
+            self.ai_handler._msg_event_callback = None
 
 
 class SubagentThread(QThread):
@@ -461,6 +471,8 @@ class ChatbotWidget(QWidget):
             'savePlusiAutonomy': self._msg_save_plusi_autonomy,
             'saveTheme': self._msg_save_theme,
             'getTheme': self._msg_get_theme,
+            'saveSystemQuality': self._msg_save_system_quality,
+            'getToolRegistry': self._msg_get_tool_registry,
             # Auth
             'authenticate': self._msg_authenticate,
             'getAuthStatus': lambda d: self._send_to_frontend("authStatusLoaded", json.loads(self.bridge.getAuthStatus())),
@@ -998,6 +1010,32 @@ class ChatbotWidget(QWidget):
         stored = config.get("theme", "dark")
         self._send_to_frontend("themeLoaded", {"theme": stored, "resolvedTheme": resolved})
 
+    def _msg_save_system_quality(self, data):
+        """Save system quality mode (standard/deep)."""
+        quality = data.get('quality', 'standard') if isinstance(data, dict) else data
+        self.bridge.saveSystemQuality(quality if isinstance(quality, str) else 'standard')
+
+    def _msg_get_tool_registry(self, data):
+        """Return all tools from all agents for the frontend registry."""
+        try:
+            try:
+                from ..ai.tools import registry as tool_registry
+                from ..ai.agents import AGENT_REGISTRY
+            except ImportError:
+                from ai.tools import registry as tool_registry
+                from ai.agents import AGENT_REGISTRY
+            config = get_config()
+            all_tools = set()
+            for agent in AGENT_REGISTRY.values():
+                all_tools.update(agent.tools)
+            tools_data = tool_registry.get_tools_for_frontend(list(all_tools), config)
+            payload = json.dumps(tools_data)
+            self.web_view.page().runJavaScript(
+                f"window.ankiReceive({{type:'ankiToolRegistryLoaded', data:{payload}}});"
+            )
+        except Exception as e:
+            logger.exception("getToolRegistry error: %s", e)
+
     def _apply_theme_to_webview(self):
         """Push the current theme to ALL active webviews and refresh Qt stylesheet."""
         try:
@@ -1464,12 +1502,20 @@ class ChatbotWidget(QWidget):
             self._ai_thread.error_signal.connect(self.on_streaming_error)
             self._ai_thread.metadata_signal.connect(self.on_streaming_metadata)
             self._ai_thread.pipeline_signal.connect(self.on_pipeline_step)
+            self._ai_thread.msg_event_signal.connect(self.on_msg_event)
             self._ai_thread.start()
 
     def _send_to_js(self, payload):
         """Send a JSON payload to the frontend via ankiReceive."""
         js_code = f"window.ankiReceive({json.dumps(payload)});"
         self.web_view.page().runJavaScript(js_code)
+
+    def on_msg_event(self, request_id, event_type, data):
+        """Handle v2 structured message events from the AI thread — delivered via Qt signal."""
+        payload = {"type": event_type}
+        if isinstance(data, dict):
+            payload.update(data)
+        self._send_to_js(payload)
 
     def on_pipeline_step(self, request_id, step, status, data):
         """Handle pipeline step events from the AI thread — delivered via Qt signal for real-time UI."""
