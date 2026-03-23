@@ -6,6 +6,11 @@ import { useHoldToReset } from './hooks/useHoldToReset';
 import TopBar from './components/TopBar';
 import DeckBrowserView from './components/DeckBrowserView';
 import OverviewView from './components/OverviewView';
+import ChatMessage from './components/ChatMessage';
+import StreamingChatMessage from './components/StreamingChatMessage';
+import ChatInput from './components/ChatInput';
+import ErrorBoundary from './components/ErrorBoundary';
+import ContextTags from './components/ContextTags';
 
 /**
  * MainApp — React root for the fullscreen main view.
@@ -32,6 +37,7 @@ export default function MainApp() {
   // View state (React-internal)
   const [activeView, setActiveView] = useState('deckBrowser'); // deckBrowser | overview | freeChat
   const activeViewRef = useRef('deckBrowser'); // ref for use in ankiReceive closure
+  const messagesEndRef = useRef(null);
   const [freeChatTransition, setFreeChatTransition] = useState('idle');
   const [inputFocused, setInputFocused] = useState(false);
 
@@ -135,6 +141,11 @@ export default function MainApp() {
     queued.forEach(p => window.ankiReceive(p));
     return () => { window.ankiReceive = null; };
   }, []);
+
+  // Auto-scroll to bottom on new messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, streamingMessage]);
 
   // -- FreeChat open/close --
 
@@ -268,8 +279,107 @@ export default function MainApp() {
           />
         )}
         {showFreeChat && (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ds-text-muted)' }}>
-            FreeChat (Task 8)
+          <div style={{
+            flex: 1, display: 'flex', flexDirection: 'column',
+            opacity: isFreeChatAnimatingIn ? 1 : 0,
+            transform: isFreeChatAnimatingIn ? 'translateY(0)' : 'translateY(-12px)',
+            transition: 'opacity 350ms cubic-bezier(0.25, 0.1, 0.25, 1) 50ms, transform 350ms cubic-bezier(0.25, 0.1, 0.25, 1) 50ms',
+          }}>
+            {/* Messages area */}
+            <div style={{
+              flex: 1, overflowY: 'auto', padding: '20px 16px 120px',
+              maxWidth: 720, width: '100%', margin: '0 auto',
+            }}>
+              {messages.length === 0 && !isLoading && !streamingMessage && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  height: '100%', color: 'var(--ds-text-muted)', fontSize: 13,
+                }}>
+                  Stelle eine Frage...
+                </div>
+              )}
+
+              {messages.map((msg, idx) => (
+                <div key={msg.id} style={{
+                  opacity: isFreeChatAnimatingIn ? 1 : 0,
+                  transform: isFreeChatAnimatingIn ? 'translateY(0)' : 'translateY(-8px)',
+                  transition: `opacity 250ms ease ${200 + Math.min(idx, 10) * 30}ms, transform 250ms ease ${200 + Math.min(idx, 10) * 30}ms`,
+                }}>
+                  {msg.from === 'user' && (
+                    <>
+                      <div className="mb-1">
+                        <ErrorBoundary>
+                          <ChatMessage
+                            message={msg.text} from={msg.from} cardContext={null}
+                            steps={[]} citations={{}} pipelineSteps={[]}
+                            bridge={bridge} isLastMessage={false}
+                          />
+                        </ErrorBoundary>
+                      </div>
+                      <ContextTags
+                        deckName={msg.deckName} cardFront={msg.cardFront}
+                        cardId={msg.cardId} bridge={bridge}
+                      />
+                    </>
+                  )}
+                  {msg.from === 'bot' && (
+                    <div className="mb-6">
+                      <ErrorBoundary>
+                        <ChatMessage
+                          message={msg.text} from={msg.from} cardContext={null}
+                          steps={msg.steps || []} citations={msg.citations || {}}
+                          pipelineSteps={[]} bridge={bridge}
+                          isLastMessage={idx === messages.length - 1}
+                        />
+                      </ErrorBoundary>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {(isLoading || streamingMessage) && (
+                <div className="w-full flex-none">
+                  <StreamingChatMessage
+                    message={streamingMessage || ''} isStreaming={isLoading}
+                    cardContext={null} steps={[]} citations={{}}
+                    pipelineSteps={[]} bridge={bridge}
+                  />
+                </div>
+              )}
+
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input dock -- fixed bottom */}
+            <div style={{
+              position: 'fixed', bottom: 0, left: 0, right: 0,
+              padding: '0 16px 16px', maxWidth: 720, margin: '0 auto', width: '100%',
+              opacity: isFreeChatAnimatingIn ? 1 : 0,
+              transform: isFreeChatAnimatingIn ? 'translateY(0)' : 'translateY(8px)',
+              transition: 'opacity 250ms ease 150ms, transform 250ms ease 150ms',
+            }}>
+              <ChatInput
+                onSend={(text) => handleSend(text, 'compact')}
+                isLoading={isLoading}
+                onStop={() => bridge.cancelRequest()}
+                cardContext={null}
+                isPremium={true}
+                onClose={() => executeAction('chat.close')}
+                onFocus={handleInputFocus}
+                onBlur={handleInputBlur}
+                actionPrimary={{
+                  label: 'Schließen',
+                  shortcut: '\u2423',
+                  onClick: () => executeAction('chat.close'),
+                }}
+                actionSecondary={{
+                  label: 'Senden',
+                  shortcut: '\u21B5',
+                  onClick: () => {},
+                  disabled: isLoading,
+                }}
+              />
+            </div>
           </div>
         )}
       </div>

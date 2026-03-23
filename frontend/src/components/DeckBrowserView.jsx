@@ -1,6 +1,6 @@
 import React from 'react';
 import DeckSearchBar from './DeckSearchBar';
-import DeckNode from './DeckNode';
+import { DeckNode } from './DeckNode';
 import AccountBadge from './AccountBadge';
 import PlusiDock from './PlusiDock';
 import { useDeckTree } from '../hooks/useDeckTree';
