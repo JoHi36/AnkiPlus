@@ -277,6 +277,143 @@ The `source` field is important: when an agent executes `card.rate`, the resulti
 
 The `layer` field distinguishes raw from interpreted events, so an agent can filter for only one layer.
 
+## Event Store — Persistent Memory
+
+### Why Needed
+
+Interpreters need history. "3x wrong in a row" needs the last few minutes. "Optimal study time" needs 30 days of data. "Deck neglected" needs to know when a deck was last opened. Without persistent storage, all intelligence resets when Anki closes.
+
+### Two Layers of Memory
+
+**Short-term (in-process):** Ring buffer of last ~200 events. Lives in JavaScript memory. Used by fast interpreters (streak detection, fatigue, flow state). Resets on app restart — that's fine, these patterns are session-scoped.
+
+**Long-term (SQLite):** Every event persisted to disk. Used by analytical interpreters (optimal time, accuracy trends, deck neglect). Survives restarts. Cleaned up after 90 days.
+
+### Schema
+
+```sql
+-- Raw event log
+CREATE TABLE event_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    type        TEXT NOT NULL,           -- 'card.answered'
+    layer       TEXT NOT NULL,           -- 'raw' | 'interpreted'
+    source      TEXT NOT NULL,           -- 'user' | 'agent' | 'interpreter'
+    source_id   TEXT,                    -- which agent or interpreter
+    data        TEXT NOT NULL,           -- JSON payload
+    timestamp   INTEGER NOT NULL,        -- Unix ms
+    session_id  TEXT                     -- groups events per Anki session
+);
+
+CREATE INDEX idx_event_type ON event_log(type);
+CREATE INDEX idx_event_time ON event_log(timestamp);
+CREATE INDEX idx_event_session ON event_log(session_id);
+
+-- Pre-computed aggregates for fast interpreter queries
+CREATE TABLE event_aggregates (
+    key         TEXT PRIMARY KEY,        -- 'card:12345:wrongCount'
+    value       TEXT NOT NULL,           -- JSON
+    updated_at  INTEGER NOT NULL
+);
+```
+
+### Query Patterns
+
+Interpreters query the event store through a standard API:
+
+```javascript
+// "How many times was this card answered wrong?"
+eventStore.aggregate('card:12345:wrongCount')  // → 7 (instant, from cache)
+
+// "Average accuracy by hour of day, last 30 days"
+eventStore.query({
+  type: 'card.answered',
+  timeRange: { days: 30 },
+  groupBy: 'hourOfDay',
+  metric: 'avgEase'
+})
+
+// "When was deck Anatomie last studied?"
+eventStore.query({
+  type: 'deck.studied',
+  filter: { deckId: 67 },
+  orderBy: 'timestamp DESC',
+  limit: 1
+})
+```
+
+### Aggregate Updates
+
+When a raw event is stored, relevant aggregates are updated automatically:
+
+```
+Event: card.answered {cardId: 123, ease: 1}
+  → UPDATE event_aggregates SET value = value + 1
+    WHERE key = 'card:123:wrongCount'
+  → UPDATE event_aggregates SET value = json(...)
+    WHERE key = 'card:123:recentEases'  -- rolling window of last 10
+  → UPDATE event_aggregates SET value = json(...)
+    WHERE key = 'review:session:accuracy'  -- running session accuracy
+```
+
+This means interpreters never scan the raw event log during normal operation. They read pre-computed aggregates. The raw log exists for historical analysis and debugging.
+
+### Cleanup
+
+A periodic job (on Anki startup or daily) prunes old events:
+
+```sql
+DELETE FROM event_log WHERE timestamp < (now - 90 days)
+-- Keep aggregates indefinitely (they're small)
+```
+
+### Implementation Phase
+
+The event store is **not needed for SP1-SP3**. During those phases, interpreters use in-memory state only (sufficient for session-scoped patterns). The persistent event store is built in **SP4** when the full agent integration happens. The interpreter interface stays the same — only the data source changes from in-memory to SQLite.
+
+## Emergent Agent Cooperation
+
+The three pillars (Actions, Events, Queries) enable agents to cooperate without knowing about each other:
+
+```
+User answers card wrong (3rd time)
+  → Raw event: card.answered {ease: 1, cardId: 123}
+  → Interpreter: card.struggled {cardId: 123, wrongCount: 3}
+
+Tutor-Agent (subscribes to card.struggled):
+  → query('card.current') → gets card content
+  → execute('chat.open', "Let me explain this differently...")
+  → Raw event: chat.opened {source: 'agent', sourceAgent: 'tutor'}
+
+Research-Agent (subscribes to chat.opened where source='agent'):
+  → query('card.current') → same card
+  → Searches knowledge base
+  → execute('chat.send', "Here's a relevant source: ...")
+
+Plusi-Agent (subscribes to card.struggled):
+  → execute('plusi.react', {mood: 'encouraging'})
+```
+
+Three agents, zero coordination code. Each subscribes to events, queries context, and executes actions. The behavior emerges from the architecture.
+
+### Source Tracking Prevents Loops
+
+Every event carries `source` and `sourceId`:
+
+```javascript
+{
+  type: 'card.previewed',
+  source: 'agent',           // not 'user'
+  sourceId: 'tutor',         // which agent
+  data: { cardId: 456 }
+}
+```
+
+Agents can filter: "Only react to user actions, not other agents" or "React to any source except myself." This prevents:
+- Agent A triggers action → emits event → Agent A reacts → triggers action → infinite loop
+- Two agents ping-ponging actions back and forth
+
+Convention: Agents should default to `source !== self.name` unless they explicitly want to react to their own effects.
+
 ## What This Is NOT
 
 - Not a plugin system (that comes later, if needed)
