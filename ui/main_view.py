@@ -678,16 +678,16 @@ class MainViewWidget(QWidget):
         self.hide()
 
     def _position_over_main(self):
-        """Position over mw.web."""
+        """Position over the ENTIRE main window (not just mw.web).
+        This ensures the overlay covers everything even when sidebars are open."""
         try:
-            web = mw.web if hasattr(mw, 'web') else None
-            if web:
-                pos = web.mapTo(mw, QPoint(0, 0))
-                self.setGeometry(pos.x(), pos.y(), web.width(), web.height())
-            else:
-                self.setGeometry(mw.rect())
+            # Cover the full window — the React app handles its own layout
+            self.setGeometry(0, 0, mw.width(), mw.height())
         except Exception:
-            self.setGeometry(mw.rect())
+            try:
+                self.setGeometry(mw.rect())
+            except Exception:
+                pass
 
     def eventFilter(self, obj, event):
         if event.type() == event.Type.Resize and self._visible:
