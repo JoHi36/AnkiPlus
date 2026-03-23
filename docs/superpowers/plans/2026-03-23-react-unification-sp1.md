@@ -213,6 +213,37 @@ class MainViewWidget(QWidget):
                 self._freechat_was_open = parsed.get('open', False)
             except Exception:
                 pass
+        elif msg_type == 'plusiAsk':
+            # Open sidebar chat with @Plusi prefix
+            try:
+                from .setup import ensure_chatbot_open
+                ensure_chatbot_open()
+                widget = self._get_sidebar_widget()
+                if widget and widget.web_view:
+                    widget.web_view.page().runJavaScript(
+                        "window.ankiReceive && window.ankiReceive({type:'plusiAsk'});"
+                    )
+            except Exception as e:
+                logger.warning("MainView: plusiAsk error: %s", e)
+        elif msg_type == 'upgradeBadge':
+            try:
+                from .settings_sidebar import toggle_settings_sidebar
+                toggle_settings_sidebar()
+            except Exception as e:
+                logger.warning("MainView: upgradeBadge error: %s", e)
+        elif msg_type == 'createDeck':
+            try:
+                mw.onAddDeck() if hasattr(mw, 'onAddDeck') else None
+            except Exception as e:
+                logger.warning("MainView: createDeck error: %s", e)
+        elif msg_type == 'importDeck':
+            try:
+                if hasattr(mw, 'handleImport'):
+                    mw.handleImport()
+                elif hasattr(mw, 'onImport'):
+                    mw.onImport()
+            except Exception as e:
+                logger.warning("MainView: importDeck error: %s", e)
 
     # ── Message Handlers ─────────────────────────────────────────────
 
@@ -654,8 +685,12 @@ export default function MainApp() {
 
   // View state (React-internal)
   const [activeView, setActiveView] = useState('deckBrowser'); // deckBrowser | overview | freeChat
+  const activeViewRef = useRef('deckBrowser'); // ref for use in ankiReceive closure
   const [freeChatTransition, setFreeChatTransition] = useState('idle');
   const [inputFocused, setInputFocused] = useState(false);
+
+  // Keep ref in sync
+  useEffect(() => { activeViewRef.current = activeView; }, [activeView]);
 
   const bridge = useRef({
     sendMessage: (data) => window.ankiBridge?.addMessage('sendMessage', data),
@@ -706,11 +741,22 @@ export default function MainApp() {
           setIsPremium(data?.isPremium || false);
           if (freeChatWasOpen) {
             setActiveView('freeChat');
+            setFreeChatTransition('visible');
             loadForDeckRef.current(0);
           } else {
+            // If FreeChat was active, close it cleanly
+            if (activeViewRef.current === 'freeChat') {
+              setFreeChatTransition('idle');
+            }
             setActiveView('deckBrowser');
           }
         } else if (state === 'overview') {
+          // Force-exit FreeChat if active (Python changed state)
+          if (activeViewRef.current === 'freeChat') {
+            bridge.cancelRequest(); // cancel any in-flight AI request
+            setFreeChatTransition('idle');
+            window.ankiBridge?.addMessage('freeChatStateChanged', JSON.stringify({ open: false }));
+          }
           setOverviewData(data);
           setActiveView('overview');
         }
@@ -1198,19 +1244,26 @@ git commit -m "feat(ui): add DeckNode recursive component and useDeckTree expand
 
 ---
 
-### Task 6: Create `DeckBrowserView` and `AccountBadge`
+### Task 6: Create `DeckBrowserView`, `AccountBadge`, and `PlusiDock`
 
 **Files:**
 - Create: `frontend/src/components/DeckBrowserView.jsx`
 - Create: `frontend/src/components/AccountBadge.jsx`
+- Create: `frontend/src/components/PlusiDock.jsx`
 
 - [ ] **Step 1: Create AccountBadge**
 
 Simple badge replacing the 534-line `_account_widget()`. Shows "AnkiPlus" + "Free" or "Pro" badge. Fixed bottom-right. Clickable → toggle settings sidebar.
 
-- [ ] **Step 2: Create DeckBrowserView**
+- [ ] **Step 2: Create PlusiDock**
 
-Container that composes: Anki.plus wordmark, DeckSearchBar, DeckNode tree, AccountBadge. Receives `deckBrowserData` as prop. Uses `useDeckTree` for expand state.
+The Plusi mascot at bottom-left. Uses the shared `plusi-renderer.js` SVG system. Currently rendered by `_get_plusi_dock_html()` in custom_screens. This is a **required** component — without it, Plusi disappears from the main view (regression).
+
+The PlusiDock component renders the Plusi SVG at fixed bottom-left (same position as current). Clickable → sends `plusiAsk` bridge message. The SVG rendering can use the existing shared renderer or embed the SVG directly.
+
+- [ ] **Step 3: Create DeckBrowserView**
+
+Container that composes: Anki.plus wordmark, DeckSearchBar, DeckNode tree, AccountBadge, PlusiDock. Receives `deckBrowserData` as prop. Uses `useDeckTree` for expand state.
 
 Layout: centered content (max-width 720px), wordmark at top, search bar below, deck list below that. Same layout as current custom_screens.
 
@@ -1331,9 +1384,14 @@ No dock changes needed (sidebar stays). But remove any overlay_chat imports if p
 
 - [ ] **Step 3: Update shortcut filter**
 
-In `ui/shortcut_filter.py`, the `_overlay_visible` flag should now be controlled by MainViewWidget. Update if needed — but since MainViewWidget is always visible (except in review), the Space shortcut from the filter can be simplified or removed (React handles it internally now).
+In `ui/shortcut_filter.py`:
 
-Actually, when MainViewWidget is visible, keyboard events go to its QWebEngineView where React handles them. The GlobalShortcutFilter should **not** intercept Space/R when MainViewWidget is active. Add a `_main_view_active` flag.
+1. **Remove** the Space-in-deckBrowser overlay toggle block (the one that imports `overlay_chat`). React handles Space internally now.
+2. **Remove** the R-key passthrough for overlay. React handles R internally.
+3. **Remove** the `_overlay_visible` flag and `set_overlay_visible()` method — no longer needed.
+4. **Add** a `_main_view_active` flag. When True, the filter should pass through Space, R, Enter, and Escape to the MainViewWidget's QWebEngineView (don't intercept). Set this flag from MainViewWidget's `_show()`/`_hide()`.
+5. **Keep** Cmd+K (toggle focus) and Cmd+I (toggle sidebar) — these still work.
+6. The `textFieldFocus` messages from MainViewWidget will set `_text_field_has_focus` as before — no change needed there.
 
 - [ ] **Step 4: Build frontend, test in Anki**
 
