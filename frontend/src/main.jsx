@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import FreeChatApp from './FreeChatApp';
+import MainApp from './MainApp';
 import './index.css';
 import 'katex/dist/katex.min.css'; // KaTeX CSS
 
@@ -35,7 +36,13 @@ const mode = params.get('mode');
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
 try {
-  if (mode === 'freechat') {
+  if (mode === 'main') {
+    root.render(
+      <React.StrictMode>
+        <MainApp />
+      </React.StrictMode>
+    );
+  } else if (mode === 'freechat') {
     root.render(
       <React.StrictMode>
         <FreeChatApp />
