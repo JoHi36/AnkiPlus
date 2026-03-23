@@ -304,7 +304,7 @@ class MainViewWidget(QWidget):
             self._send_to_react({"type": "chat.errorOccurred", "message": str(e)})
             self._send_to_react({"type": "chat.loadingChanged", "loading": False})
 
-    def _handle_cancel_request(self):
+    def _handle_cancel_request(self, data=None):
         try:
             from ..ai.request_manager import get_request_manager
         except ImportError:
@@ -327,26 +327,26 @@ class MainViewWidget(QWidget):
         except Exception as e:
             logger.error("MainView: saveDeckMessage error: %s", e)
 
-    def _handle_clear_deck_messages(self):
+    def _handle_clear_deck_messages(self, data=None):
         try:
             count = clear_deck_messages()
             self._send_to_react({"type": "chat.messagesCleared", "count": count})
         except Exception as e:
             logger.error("MainView: clearDeckMessages error: %s", e)
 
-    def _handle_open_stats(self):
+    def _handle_open_stats(self, data=None):
         try:
             mw.onStats()
         except Exception as e:
             logger.warning("MainView: openStats error: %s", e)
 
-    def _handle_open_deck_options(self):
+    def _handle_open_deck_options(self, data=None):
         try:
             mw.overview._linkHandler('opts')
         except Exception as e:
             logger.warning("MainView: openDeckOptions error: %s", e)
 
-    def _handle_toggle_settings_sidebar(self):
+    def _handle_toggle_settings_sidebar(self, data=None):
         try:
             from .settings_sidebar import toggle_settings_sidebar
             toggle_settings_sidebar()
