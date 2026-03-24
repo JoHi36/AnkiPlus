@@ -252,14 +252,22 @@ class GlobalShortcutFilter(QObject):
             self._toggle_text_field_focus()
             return True
 
-        # --- Cmd+I: Toggle chatbot panel ---
+        # --- Cmd+I: Toggle AnkiPlus ON/OFF (show/hide MainViewWidget overlay) ---
         if (event.key() == Qt.Key.Key_I and
                 event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier)):
             try:
-                from .setup import toggle_chatbot_panel
-                toggle_chatbot_panel()
+                from .main_view import get_main_view
+                mv = get_main_view()
+                if mv._visible:
+                    mv._hide()
+                    logger.info("AnkiPlus OFF (Cmd+I)")
+                else:
+                    from aqt import mw
+                    state = mw.state if mw else 'deckBrowser'
+                    mv.show_for_state(state)
+                    logger.info("AnkiPlus ON (Cmd+I)")
             except Exception as e:
-                logger.warning("Could not toggle chatbot panel: %s", e)
+                logger.warning("Could not toggle AnkiPlus: %s", e)
             return True
 
         # When MainViewWidget is active, forward keys directly to React webview
@@ -327,6 +335,10 @@ class GlobalShortcutFilter(QObject):
                     return super().eventFilter(obj, event)
                 self._send_chat_message()
                 return True
+
+            # Tab: pass through to WebView for ghost autocomplete
+            if event.key() == Qt.Key.Key_Tab:
+                return False  # Let the event propagate to the WebView
 
             return super().eventFilter(obj, event)
 
