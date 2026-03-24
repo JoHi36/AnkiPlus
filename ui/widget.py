@@ -426,7 +426,8 @@ class ChatbotWidget(QWidget):
             # Panel & Navigation
             'closePanel': self._msg_close_panel,
             'advanceCard': self._msg_advance_card,
-            'openSettings': lambda d: None,
+            'openSettings': self._msg_toggle_settings,
+            'settings.toggle': self._msg_toggle_settings,
             'setModel': lambda d: self.set_model_from_ui(d) if isinstance(d, str) else None,
             # Card Operations
             'previewCard': self._msg_preview_card,
@@ -1889,4 +1890,11 @@ class ChatbotWidget(QWidget):
             mw.onStats()
         except Exception as e:
             logger.warning("open_stats error: %s", e)
+
+    def _msg_toggle_settings(self, data=None):
+        try:
+            from .settings_sidebar import toggle_settings_sidebar
+            toggle_settings_sidebar()
+        except Exception as e:
+            logger.warning("toggle_settings error: %s", e)
 
