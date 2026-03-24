@@ -83,19 +83,11 @@ export default function ReviewerView({
         scrollbarWidth: 'none',
       }}>
         <div style={{ maxWidth: 720, width: '100%', margin: '0 auto' }}>
-          {/* Front */}
-          <div dangerouslySetInnerHTML={{ __html: cardData.frontHtml || '' }} />
-
-          {/* Back (after flip) */}
-          {showBack && cardData.backHtml && (
-            <div style={{ marginTop: 24 }}>
-              <div style={{
-                height: 1, margin: '28px 0',
-                background: 'linear-gradient(90deg, transparent, var(--ds-border-medium) 20%, var(--ds-border-medium) 80%, transparent)',
-              }} />
-              <div dangerouslySetInnerHTML={{ __html: cardData.backHtml }} />
-            </div>
-          )}
+          {/* Show front OR back — Anki's answer() includes the question already */}
+          {showBack
+            ? <div dangerouslySetInnerHTML={{ __html: cardData.backHtml || '' }} />
+            : <div dangerouslySetInnerHTML={{ __html: cardData.frontHtml || '' }} />
+          }
         </div>
       </div>
 
