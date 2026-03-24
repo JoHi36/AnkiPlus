@@ -2456,6 +2456,8 @@ function AppInner() {
         maxWidth: activeView === 'review' ? 450 : undefined,
         borderLeft: activeView === 'review' ? '1px solid var(--ds-border-subtle)' : 'none',
         height: '100vh',
+        position: 'relative',
+        transform: 'translateZ(0)', // Creates containing block — fixed children stay inside this panel
       }}>
       {/* Header — ContextSurface (fixiert oben) */}
       <div ref={headerRef} className="fixed top-0 left-0 right-0 z-40" style={{ overflow: 'visible' }}>
@@ -2470,7 +2472,7 @@ function AppInner() {
           bridge={bridge}
         />
         {/* Fade mask — chat content fades out behind the pill (hidden in sub-menus/studio) */}
-        {activeView === 'chat' && (
+        {(activeView === 'chat' || activeView === 'review') && (
         <div
           aria-hidden="true"
           style={{

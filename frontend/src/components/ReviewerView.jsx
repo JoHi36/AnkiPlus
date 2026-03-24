@@ -265,36 +265,6 @@ export default function ReviewerView({
             dangerouslySetInnerHTML={{ __html: cardData?.frontHtml || '' }}
           />
 
-          {/* Text answer input */}
-          {reviewState === 'question' && (
-            <div style={{ marginTop: 24 }}>
-              <textarea
-                ref={textareaRef}
-                value={textAnswer}
-                onChange={(e) => setTextAnswer(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && textAnswer.trim()) {
-                    e.preventDefault();
-                    onSubmitAnswer?.({
-                      question: stripHtml(cardData?.frontHtml),
-                      userAnswer: textAnswer,
-                      correctAnswer: stripHtml(cardData?.backHtml),
-                    });
-                    setTextAnswer('');
-                  }
-                }}
-                placeholder="Antwort eingeben..."
-                style={{
-                  width: '100%', padding: '12px 16px', borderRadius: 12,
-                  border: '1px solid var(--ds-border-subtle)',
-                  background: 'var(--ds-bg-canvas)', color: 'var(--ds-text-primary)',
-                  fontSize: 15, resize: 'none', minHeight: 44, maxHeight: 120,
-                  outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
-                }}
-              />
-            </div>
-          )}
-
           {/* Divider + Card back — trusted Anki card template output */}
           {showBack && cardData?.backHtml && (
             <div style={{ marginTop: 24, animation: 'reviewerFadeUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}>
