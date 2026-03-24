@@ -176,3 +176,40 @@
 }
 
 /* Future: .cloze-blank for unrevealed clozes (Tab-to-reveal) */
+
+/* =============================================================================
+   Section 5: Deck Metadata Fade
+   AMBOSS/AnKing cards include metadata bars (Tags, Note ID, Errata).
+   Fade them out by default, reveal on hover. No functionality lost.
+   ============================================================================= */
+
+.card-renderer .tags,
+.card-renderer #tags,
+.card-renderer .field--tags,
+.card-renderer .errata,
+.card-renderer #errata,
+.card-renderer .note-id,
+.card-renderer #note-id,
+.card-renderer .ankihub-tags {
+  font-size: 10px;
+  opacity: 0.2;
+  transition: opacity 0.25s ease;
+  pointer-events: auto;
+}
+
+.card-renderer .tags:hover,
+.card-renderer #tags:hover,
+.card-renderer .field--tags:hover,
+.card-renderer .errata:hover,
+.card-renderer #errata:hover,
+.card-renderer .note-id:hover,
+.card-renderer #note-id:hover,
+.card-renderer .ankihub-tags:hover {
+  opacity: 0.8;
+}
+
+/* Hide the horizontal rule that typically separates metadata from content */
+.card-renderer .tags + hr,
+.card-renderer #tags + hr {
+  opacity: 0.1;
+}

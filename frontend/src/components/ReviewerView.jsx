@@ -15,6 +15,20 @@ function hasVisibleContent(html) {
   return stripped.length > 0;
 }
 
+/**
+ * Strip background declarations from embedded <style> tags.
+ * Card CSS often sets backgrounds (e.g. AMBOSS: .card { background: #EEEEEE !important })
+ * which conflicts with our dark/light theme. We control backgrounds — cards shouldn't.
+ * Preserves all other styles (colors, fonts, layout).
+ */
+function sanitizeCardHtml(html) {
+  if (!html) return '';
+  return html.replace(/<style([\s\S]*?)<\/style>/gi, (match, content) => {
+    const cleaned = content.replace(/background(?:-color)?\s*:[^;]+;?/gi, '');
+    return '<style' + cleaned + '</style>';
+  });
+}
+
 const MC_LETTERS = ['A', 'B', 'C', 'D', 'E'];
 
 function MCOptions({ options, selected, isResult, onSelect }) {
@@ -72,12 +86,12 @@ export default function ReviewerView({ cardData, reviewer }) {
           {showBack
             ? <div className="card-renderer">
                 <div className="card-content" dangerouslySetInnerHTML={{ __html:
-                  hasVisibleContent(cardData.backHtml) ? cardData.backHtml : (cardData.backField || cardData.backHtml || '')
+                  sanitizeCardHtml(hasVisibleContent(cardData.backHtml) ? cardData.backHtml : (cardData.backField || cardData.backHtml || ''))
                 }} />
               </div>
             : <div className="card-renderer">
                 <div className="card-content" dangerouslySetInnerHTML={{ __html:
-                  hasVisibleContent(cardData.frontHtml) ? cardData.frontHtml : (cardData.frontField || cardData.frontHtml || '')
+                  sanitizeCardHtml(hasVisibleContent(cardData.frontHtml) ? cardData.frontHtml : (cardData.frontField || cardData.frontHtml || ''))
                 }} />
               </div>
           }
