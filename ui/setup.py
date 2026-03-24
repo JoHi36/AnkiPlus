@@ -214,11 +214,9 @@ def on_state_did_change(new_state, old_state):
     """Wird aufgerufen, wenn sich der Anki-Status ändert"""
     global _panel_user_closed
     if new_state == 'review':
-        # Respect user's choice — only auto-open if user hasn't manually closed it
-        if not _panel_user_closed:
-            ensure_chatbot_open()
-        else:
-            _notify_reviewer_chat_state(False)
+        # ReviewerView runs fullscreen in React — no sidebar needed
+        # Chat is rendered as right panel inside the React layout
+        pass
     # Sidebar cleanup for non-review is handled by show_for_state() — don't call
     # hide_sidebar() here, it would hide the fullscreen MainViewWidget too.
 
