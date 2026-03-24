@@ -482,6 +482,144 @@ class TestTutorRealAgent:
         assert 'Fehler' in result['text'] or 'API timeout' in result['text']
 
 
+class TestTutorFallback:
+    """Test the 3-level fallback chain in the Tutor agent."""
+
+    def test_tutor_has_fallback_logic(self):
+        """Tutor should handle model errors with fallback chain."""
+        import inspect
+        from ai.tutor import run_tutor
+        source = inspect.getsource(run_tutor)
+        assert 'fallback' in source.lower()
+
+    def test_tutor_accepts_fallback_model(self):
+        """Tutor should accept fallback_model from kwargs."""
+        from ai.tutor import run_tutor
+        # Should not crash even with empty config
+        result = run_tutor(
+            situation="test",
+            config={'api_key': ''},
+            model='primary-model',
+            fallback_model='fallback-model',
+        )
+        assert isinstance(result, dict)
+
+    def test_fallback_on_primary_failure(self):
+        """When primary model fails, fallback model should be tried."""
+        from ai.tutor import run_tutor
+
+        routing = MagicMock()
+        routing.search_needed = False
+
+        call_args = []
+
+        def fake_streaming(msg, model, api_key, **kw):
+            call_args.append(model)
+            if model == 'primary-model':
+                raise Exception("Primary model overloaded")
+            return "fallback answer"
+
+        with patch('ai.tutor.get_google_response_streaming', side_effect=fake_streaming):
+            result = run_tutor(
+                situation="test",
+                config={'api_key': 'fake-key'},
+                routing_result=routing,
+                model='primary-model',
+                fallback_model='fallback-model',
+            )
+        assert 'fallback-model' in call_args
+        assert result['text'] == 'fallback answer'
+
+    def test_fallback_thins_rag_on_400_error(self):
+        """400 errors should trigger thin RAG (top 3 cards) for fallback."""
+        from ai.tutor import run_tutor
+
+        routing = MagicMock()
+        routing.search_needed = True
+        routing.retrieval_mode = 'sql'
+        routing.precise_queries = ['test']
+        routing.broad_queries = []
+        routing.embedding_queries = []
+        routing.search_scope = 'current_deck'
+        routing.max_sources = 'medium'
+
+        rag_calls = {}
+
+        def fake_streaming(msg, model, api_key, **kw):
+            rag_calls[model] = kw.get('rag_context')
+            if model == 'primary-model':
+                err = Exception("400 Request payload size exceeds the limit")
+                raise err
+            return "thin answer"
+
+        many_cards = ['card_%d' % i for i in range(10)]
+
+        with patch('ai.tutor.retrieve_rag_context') as mock_rag:
+            from ai.rag_pipeline import RagResult
+            mock_rag.return_value = RagResult(
+                rag_context={'cards': many_cards, 'citations': {}, 'reasoning': ''},
+                citations={}, cards_found=10)
+            with patch('ai.tutor.get_google_response_streaming', side_effect=fake_streaming):
+                result = run_tutor(
+                    situation="test",
+                    config={'api_key': 'fake-key'},
+                    routing_result=routing,
+                    model='primary-model',
+                    fallback_model='fallback-model',
+                )
+
+        # Fallback model should have received thinned RAG (max 3 cards)
+        fallback_rag = rag_calls.get('fallback-model')
+        assert fallback_rag is not None
+        assert len(fallback_rag['cards']) <= 3
+
+    def test_level3_no_rag_on_double_failure(self):
+        """When both primary and fallback+RAG fail, try without RAG."""
+        from ai.tutor import run_tutor
+
+        routing = MagicMock()
+        routing.search_needed = False
+
+        call_count = [0]
+
+        def fake_streaming(msg, model, api_key, **kw):
+            call_count[0] += 1
+            if call_count[0] <= 2:
+                raise Exception("model error %d" % call_count[0])
+            return "last resort answer"
+
+        with patch('ai.tutor.get_google_response_streaming', side_effect=fake_streaming):
+            result = run_tutor(
+                situation="test",
+                config={'api_key': 'fake-key'},
+                routing_result=routing,
+                model='primary-model',
+                fallback_model='fallback-model',
+            )
+        assert result['text'] == 'last resort answer'
+        assert call_count[0] == 3
+
+    def test_all_levels_fail_returns_error(self):
+        """When all 3 levels fail, return a user-friendly error."""
+        from ai.tutor import run_tutor
+
+        routing = MagicMock()
+        routing.search_needed = False
+
+        with patch('ai.tutor.get_google_response_streaming',
+                   side_effect=Exception("always fails")):
+            result = run_tutor(
+                situation="test",
+                config={'api_key': 'fake-key'},
+                routing_result=routing,
+                model='primary-model',
+                fallback_model='fallback-model',
+            )
+        assert isinstance(result, dict)
+        assert 'text' in result
+        assert 'Fehler' in result['text']
+
+
 class TestHelpPipeline:
     """Test that the Help agent integrates with the dispatch system."""
 
@@ -993,6 +1131,73 @@ class TestRagPipeline:
 # ---------------------------------------------------------------------------
 # All Agents Streaming-Ready Tests
 # ---------------------------------------------------------------------------
+
+class TestTutorHandoff:
+    """Test handoff detection in the Tutor agent."""
+
+    def test_tutor_has_handoff_logic(self):
+        """Tutor should import and use parse_handoff."""
+        import inspect
+        from ai.tutor import run_tutor
+        source = inspect.getsource(run_tutor)
+        assert 'parse_handoff' in source
+
+    def test_handoff_parsing_in_tutor(self):
+        """Tutor should strip handoff signals from response text."""
+        from ai.handoff import parse_handoff
+        text = "Here is the answer.\nHANDOFF: research\nREASON: needs sources\nQUERY: What is ATP?"
+        clean, req = parse_handoff(text)
+        assert req is not None
+        assert req.to == 'research'
+        assert 'Here is the answer' in clean
+
+    def test_tutor_strips_handoff_from_result(self):
+        """When Tutor response contains a handoff signal, it should be stripped from result text."""
+        from ai.tutor import run_tutor
+
+        handoff_response = (
+            "Here is a partial answer.\n"
+            "HANDOFF: research\n"
+            "REASON: needs external sources\n"
+            "QUERY: What is ATP synthesis?"
+        )
+
+        routing = MagicMock()
+        routing.search_needed = False
+
+        with patch('ai.tutor._call_generation', return_value=handoff_response):
+            # Mock the handoff execution to avoid import errors
+            with patch('ai.tutor.parse_handoff') as mock_parse:
+                from ai.handoff import HandoffRequest
+                mock_parse.return_value = (
+                    "Here is a partial answer.",
+                    HandoffRequest(to='research', reason='needs external sources',
+                                   query='What is ATP synthesis?')
+                )
+                with patch('ai.tutor.validate_handoff', return_value=False):
+                    result = run_tutor(
+                        situation="What is ATP?",
+                        config={'api_key': 'fake-key'},
+                        routing_result=routing,
+                    )
+            # Even if handoff is rejected, the signal should be stripped
+            assert 'HANDOFF' not in result.get('text', '')
+
+    def test_tutor_without_handoff_returns_full_text(self):
+        """When no handoff signal, Tutor returns the full text unmodified."""
+        from ai.tutor import run_tutor
+
+        routing = MagicMock()
+        routing.search_needed = False
+
+        with patch('ai.tutor._call_generation', return_value='ATP is energy currency.'):
+            result = run_tutor(
+                situation="What is ATP?",
+                config={'api_key': 'fake-key'},
+                routing_result=routing,
+            )
+        assert result['text'] == 'ATP is energy currency.'
+
 
 class TestAllAgentsStreamingReady:
     """Every agent must accept stream_callback for streaming support."""
