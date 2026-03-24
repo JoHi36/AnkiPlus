@@ -204,9 +204,15 @@ function AppInner() {
   const reviewChatWasOpenRef = useRef(false); // remember across tab switches
   const [viewTransition, setViewTransition] = useState(false); // crossfade during tab switches
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [dockPulse, setDockPulse] = useState(0); // increment to re-trigger animation
-  const triggerDockPulse = useCallback(() => setDockPulse(n => n + 1), []);
-  const reviewer = useReviewerState(cardData, triggerDockPulse);
+  const dockPulseRef = useRef(null);
+  const triggerDockPulse = useCallback(() => {
+    const el = dockPulseRef.current;
+    if (!el) return;
+    el.classList.remove('dock-pulse');
+    void el.offsetWidth; // force reflow to restart animation
+    el.classList.add('dock-pulse');
+  }, []);
+  const reviewer = useReviewerState(cardData, triggerDockPulse, useCallback(() => setReviewChatOpen(true), []));
 
   const lastProcessedCardRef = useRef(null);
   // Create a setSessions wrapper that works with SessionContext
@@ -714,7 +720,10 @@ function AppInner() {
         return;
       }
       if (payload.type === 'card.answerShown') {
-        setCardData(prev => prev ? {...prev, ...payload.data, isQuestion: false} : {...payload.data, isQuestion: false});
+        setCardData(prev => {
+          if (prev && !prev.isQuestion) return prev; // already flipped — ignore duplicate
+          return prev ? {...prev, ...payload.data, isQuestion: false} : {...payload.data, isQuestion: false};
+        });
         return;
       }
 
@@ -1277,6 +1286,7 @@ function AppInner() {
         // Subagent registry push from Python
         if (payload.type === 'subagent_registry') {
           setRegistry(payload.agents || []);
+          window.dispatchEvent(new Event('subagent_registry_updated'));
           return;
         }
 
@@ -1314,7 +1324,10 @@ function AppInner() {
           } else if (payload.type === 'card.shown') {
             setCardData({...payload.data, isQuestion: true});
           } else if (payload.type === 'card.answerShown') {
-            setCardData(prev => prev ? {...prev, ...payload.data, isQuestion: false} : {...payload.data, isQuestion: false});
+            setCardData(prev => {
+          if (prev && !prev.isQuestion) return prev; // already flipped — ignore duplicate
+          return prev ? {...prev, ...payload.data, isQuestion: false} : {...payload.data, isQuestion: false};
+        });
           } else if (payload.type?.startsWith('reviewer.')) {
             // Forward reviewer events (evaluationResult, mcOptions, aiStep) as CustomEvents
             window.dispatchEvent(new CustomEvent(payload.type, { detail: payload.data }));
@@ -3100,7 +3113,7 @@ function AppInner() {
           : { left: `calc(${sOff} + var(--ds-space-lg))`, width: `calc(100% - ${sOff} - 2 * var(--ds-space-lg))`, bottom: 'var(--ds-space-lg)' };
 
       return (
-        <div key={dockPulse} className={dockPulse > 0 ? 'dock-pulse' : ''} style={{
+        <div ref={dockPulseRef} style={{
           position: 'fixed', zIndex: 60,
           ...posStyle,
           transition: 'left 0.3s cubic-bezier(0.25, 1, 0.5, 1), right 0.3s cubic-bezier(0.25, 1, 0.5, 1), width 0.3s cubic-bezier(0.25, 1, 0.5, 1), bottom 0.3s cubic-bezier(0.25, 1, 0.5, 1)',

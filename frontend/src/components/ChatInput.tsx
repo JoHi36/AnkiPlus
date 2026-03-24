@@ -107,6 +107,14 @@ export default function ChatInput({
     return () => window.removeEventListener('plusi-ask-focus', handler);
   }, [plusiEnabled, onStickyAgentChange]);
 
+  // Re-render when registry updates (Python pushes agents asynchronously)
+  const [registryVersion, setRegistryVersion] = useState(0);
+  useEffect(() => {
+    const handler = () => setRegistryVersion(v => v + 1);
+    window.addEventListener('subagent_registry_updated', handler);
+    return () => window.removeEventListener('subagent_registry_updated', handler);
+  }, []);
+
   // Build ghost suggestion list from registry
   const ghostAgents = React.useMemo(() => {
     const registry = getRegistry();
@@ -114,13 +122,13 @@ export default function ChatInput({
       ? [...registry.values()].filter((a: any) => a.enabled).sort((a: any, b: any) => a.label.localeCompare(b.label))
       : [];
 
-    const settingsEntry = { name: 'agenten-anpassen', label: 'Agenten anpassen', isSettings: true };
+    const settingsEntry = { name: 'agenten', label: 'Agenten', isSettings: true };
     const all: any[] = [settingsEntry, ...registryAgents];
 
     if (!ghostFilter) return all;
     const lower = ghostFilter.toLowerCase();
     return all.filter((a: any) => a.name.includes(lower) || a.label.toLowerCase().includes(lower));
-  }, [ghostFilter]);
+  }, [ghostFilter, registryVersion]);
 
   const currentGhost = ghostAgents[ghostIndex] || null;
 
@@ -359,9 +367,20 @@ export default function ChatInput({
                     lineHeight: textareaRef.current
                       ? window.getComputedStyle(textareaRef.current).lineHeight
                       : undefined,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
                   }}
                 >
                   {suffix}
+                  <kbd style={{
+                    fontSize: 10, fontWeight: 500,
+                    color: 'var(--ds-text-muted)',
+                    background: 'var(--ds-bg-overlay)',
+                    borderRadius: 4, padding: '1px 5px',
+                    fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+                    verticalAlign: 'middle',
+                  }}>↑↓</kbd>
                 </span>
               );
             })()}
@@ -385,24 +404,9 @@ export default function ChatInput({
               </kbd>
             )}
 
-            {/* ↑↓ badge — visible during ghost autocomplete */}
-            {ghostVisible && (
-              <kbd style={{
-                position: 'absolute',
-                right: 8,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                fontSize: 10,
-                fontWeight: 500,
-                color: 'var(--ds-text-muted)',
-                background: 'var(--ds-bg-overlay)',
-                borderRadius: 4,
-                padding: '1px 5px',
-                pointerEvents: 'none',
-                fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
-              }}>
-                ↑↓
-              </kbd>
+            {/* ↑↓ badge is now inline with ghost text (rendered inside the ghost span) */}
+            {false && (
+              <kbd>↑↓</kbd>
             )}
           </div>
           {/* Send button — appears when text present */}
