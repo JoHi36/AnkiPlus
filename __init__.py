@@ -345,39 +345,19 @@ def init_addon():
             QTimer.singleShot(200, _fix_db_margins)
 
         # Custom reviewer disabled — ReviewerView in React replaces it
-        if False and use_custom_reviewer:
-            custom_reviewer.enable()
-            logger.info("Custom Reviewer: Enabled on addon init")
+        # custom_reviewer.enable() not called — React renders cards now
 
-            # Patch Reviewer to prevent bottom bar from ever showing
-            # This eliminates the flash completely
-            try:
-                from aqt.reviewer import Reviewer
-                _orig_bottom_html = getattr(Reviewer, '_bottomHTML', None)
-                def _patched_bottom_html(self):
-                    # Return empty bottom — our custom dock replaces it
-                    return ""
-                Reviewer._bottomHTML = _patched_bottom_html
-
-                # Also patch _showAnswerButton to prevent bottom bar updates
-                _orig_show_answer = getattr(Reviewer, '_showAnswerButton', None)
-                def _patched_show_answer(self):
-                    pass  # No-op — our custom UI handles this
-                Reviewer._showAnswerButton = _patched_show_answer
-
-                # CRITICAL: Disable Anki's native Qt keyboard shortcuts
-                # Anki registers Space, Enter, 1-4 etc. as QShortcuts which fire
-                # BEFORE JavaScript keydown events, stealing all key presses.
-                # Our custom JS handles all keyboard interaction.
-                _orig_shortcut_keys = getattr(Reviewer, '_shortcutKeys', None)
-                def _patched_shortcut_keys(self):
-                    # Only keep Ctrl+Z (undo) at Qt level, everything else handled by JS
-                    return []
-                Reviewer._shortcutKeys = _patched_shortcut_keys
-
-                logger.info("✅ Reviewer bottom bar + shortcuts patched (no flash, JS handles keys)")
-            except Exception as e:
-                logger.error(f"⚠️ Could not patch reviewer bottom: {e}")
+        # CRITICAL: Disable Anki's native Qt keyboard shortcuts
+        # Anki registers Space, Enter, 1-4 as QShortcuts which fire
+        # BEFORE our event filter. React handles all keyboard interaction.
+        try:
+            from aqt.reviewer import Reviewer
+            Reviewer._shortcutKeys = lambda self: []
+            Reviewer._bottomHTML = lambda self: ""
+            Reviewer._showAnswerButton = lambda self: None
+            logger.info("Reviewer shortcuts + bottom bar patched for React ReviewerView")
+        except Exception as e:
+            logger.error("Could not patch reviewer: %s", e)
 
             # Class-level patches (DeckBrowser._drawButtons, Toolbar.draw/redraw)
             # are already applied at module import time above.
