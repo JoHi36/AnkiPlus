@@ -186,6 +186,9 @@ class MainViewWidget(QWidget):
         self._position_over_main()
         self.show()
         self.raise_()
+        # Set focus on ChatbotWidget's webview so keyboard events reach React
+        if self._chatbot and self._chatbot.web_view:
+            QTimer.singleShot(200, lambda: self._chatbot.web_view.setFocus())
         if self.parent():
             self.parent().installEventFilter(self)
 
