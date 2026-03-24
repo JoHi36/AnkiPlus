@@ -222,8 +222,8 @@ export default function ChatInput({
   }, [input, handleSubmit]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Tab on empty input → insert @ and activate ghost
-    if (e.key === 'Tab' && !input && !chipAgent && !ghostVisible) {
+    // Tab on empty input → insert @ and activate ghost (works with or without existing chip)
+    if (e.key === 'Tab' && !input && !ghostVisible) {
       e.preventDefault();
       setInput('@');
       return;
@@ -419,8 +419,8 @@ export default function ChatInput({
                 </span>
               );
             })()}
-            {/* Tab badge — visible when focused + empty + no chip */}
-            {isFocused && !input && !chipAgent && !ghostVisible && (
+            {/* Tab badge — visible when focused + empty (with or without chip) */}
+            {isFocused && !input && !ghostVisible && (
               <kbd style={{
                 position: 'absolute',
                 right: 8,
