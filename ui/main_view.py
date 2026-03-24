@@ -106,17 +106,13 @@ class MainViewWidget(QWidget):
     def show_for_state(self, state):
         """Position widget and send state data to React."""
         if state == 'review':
-            # Sidebar mode — actual sidebar shown by ensure_chatbot_open()
-            self._current_mode = 'sidebar'
-            # Hide widget — sidebar shown by ensure_chatbot_open() in setup.py
-            self._visible = False
-            self.hide()
-            # Tell React we're in review → switches activeView to 'chat'
-            self._send_to_react({
-                "type": "app.stateChanged",
-                "state": "review",
-                "data": {},
-            })
+            # Fullscreen — React handles the reviewer + sidebar split layout
+            self._current_mode = 'fullscreen'
+            self._squeeze_main_content(False)
+            self._sidebar_visible = False
+            self._visible = False  # Reset so _show() works
+            self._show()
+            self._send_state_data(state)
             return
 
         # Fullscreen mode
@@ -153,6 +149,15 @@ class MainViewWidget(QWidget):
                 "type": "app.stateChanged",
                 "state": "overview",
                 "data": data,
+            }
+        elif state == 'review':
+            payload = {
+                "type": "app.stateChanged",
+                "state": "review",
+                "data": {
+                    "deckId": mw.col.decks.get_current_id() if mw.col else 0,
+                    "deckName": mw.col.decks.name(mw.col.decks.get_current_id()) if mw.col else '',
+                },
             }
         else:
             return
