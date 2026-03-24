@@ -344,7 +344,8 @@ def init_addon():
                     pass
             QTimer.singleShot(200, _fix_db_margins)
 
-        if use_custom_reviewer:
+        # Custom reviewer disabled — ReviewerView in React replaces it
+        if False and use_custom_reviewer:
             custom_reviewer.enable()
             logger.info("Custom Reviewer: Enabled on addon init")
 
@@ -536,8 +537,15 @@ def on_reviewer_did_show_question(card):
     if config.get("use_custom_reviewer", True):
         hide_native_bottom_bar()
 
-    # Deck-Event senden (nur wenn Widget existiert)
+    # Send card data to React ReviewerView
     widget = get_chatbot_widget()
+    if widget and hasattr(widget, '_send_card_data'):
+        try:
+            widget._send_card_data(card, is_question=True)
+        except Exception as e:
+            logger.error("reviewer_did_show_question card send error: %s", e)
+
+    # Deck-Event senden (nur wenn Widget existiert)
     if widget and widget.bridge and widget.web_view:
         try:
             deck_info = widget.bridge.getCurrentDeck()

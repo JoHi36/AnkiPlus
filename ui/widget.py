@@ -510,6 +510,9 @@ class ChatbotWidget(QWidget):
             'chat.stateChanged': self._msg_freechat_state,
             # Stats
             'stats.open': self._msg_open_stats,
+            # Card review (React ReviewerView)
+            'card.flip': self._msg_flip_card,
+            'card.rate': self._msg_rate_card,
         }
         return handlers.get(msg_type)
 
@@ -1897,4 +1900,67 @@ class ChatbotWidget(QWidget):
             toggle_settings_sidebar()
         except Exception as e:
             logger.warning("toggle_settings error: %s", e)
+
+    # ── Card Review Handlers (React ReviewerView) ─────────────────────
+
+    def _send_card_data(self, card, is_question=True):
+        """Send card HTML + metadata to React."""
+        import re
+        try:
+            front_html = card.question()
+            back_html = card.answer()
+            media_dir = mw.col.media.dir()
+            front_html = re.sub(r'src="([^":/]+)"', 'src="file://%s/\\1"' % media_dir, front_html)
+            back_html = re.sub(r'src="([^":/]+)"', 'src="file://%s/\\1"' % media_dir, back_html)
+            event_type = "card.shown" if is_question else "card.answerShown"
+            self._send_to_frontend(event_type, {
+                "cardId": card.id,
+                "frontHtml": front_html,
+                "backHtml": back_html,
+                "deckId": card.did,
+                "deckName": mw.col.decks.name(card.did),
+                "isQuestion": is_question,
+            })
+        except Exception as e:
+            logger.error("_send_card_data error: %s", e)
+
+    def _msg_flip_card(self, data=None):
+        """Show answer side. Swallow web.eval to prevent mw.web DOM writes."""
+        try:
+            rev = mw.reviewer
+            if not rev or not rev.card:
+                logger.warning("flip_card: no reviewer or card")
+                return
+            if rev.web:
+                _orig = rev.web.eval
+                rev.web.eval = lambda js: None
+            try:
+                rev._showAnswer()
+            finally:
+                if rev.web:
+                    rev.web.eval = _orig
+            self._send_card_data(rev.card, is_question=False)
+        except Exception as e:
+            logger.exception("flip_card error: %s", e)
+
+    def _msg_rate_card(self, data):
+        """Rate current card and advance to next."""
+        try:
+            parsed = json.loads(data) if isinstance(data, str) else data
+            ease = int(parsed.get('ease', 2)) if isinstance(parsed, dict) else 2
+            rev = mw.reviewer
+            if not rev or not rev.card:
+                return
+            if rev.web:
+                _orig = rev.web.eval
+                rev.web.eval = lambda js: None
+            try:
+                rev._answerCard(ease)
+            finally:
+                if rev.web:
+                    rev.web.eval = _orig
+            if rev.card:
+                self._send_card_data(rev.card, is_question=True)
+        except Exception as e:
+            logger.exception("rate_card error: %s", e)
 

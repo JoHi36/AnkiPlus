@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAnki } from './hooks/useAnki';
+import ReviewerView from './components/ReviewerView';
 import { useChat } from './hooks/useChat';
 import { updateSessionSections } from './utils/sessions';
 import { useDeckTracking } from './hooks/useDeckTracking';
@@ -194,6 +195,9 @@ function AppInner() {
   const [freeChatTransition, setFreeChatTransition] = useState('idle');
   const [mainInputFocused, setMainInputFocused] = useState(false);
   const messagesEndRef = useRef(null);
+
+  // Card reviewer state
+  const [cardData, setCardData] = useState(null);
 
   const lastProcessedCardRef = useRef(null);
   // Create a setSessions wrapper that works with SessionContext
@@ -680,8 +684,18 @@ function AppInner() {
           setOverviewData(data);
           setActiveView('overview');
         } else if (state === 'review') {
-          setActiveView('chat');
+          setActiveView('review');
         }
+        return;
+      }
+
+      // Card reviewer events
+      if (payload.type === 'card.shown') {
+        setCardData({...payload.data, isQuestion: true});
+        return;
+      }
+      if (payload.type === 'card.answerShown') {
+        setCardData(prev => prev ? {...prev, backHtml: payload.data.backHtml, isQuestion: false} : {...payload.data, isQuestion: false});
         return;
       }
 
@@ -2378,9 +2392,35 @@ function AppInner() {
         to   { transform: translateX(0);    opacity: 1; }
       }
     `}</style>
-    <div id="chat-root" className="flex flex-col h-screen overflow-hidden" style={{ backgroundColor: 'var(--ds-bg-deep)', color: 'var(--ds-text-primary)' }}>
-      {/* Unified TopBar — same header across all views */}
-      <TopBar
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      {/* Left: ReviewerView — only in review mode */}
+      {activeView === 'review' && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--ds-bg-canvas)' }}>
+          <TopBar
+            activeView="review" ankiState="review"
+            messageCount={0} totalDue={deckBrowserData?.totalDue || 0}
+            deckName={cardData?.deckName || ''} dueNew={0} dueLearning={0} dueReview={0}
+            onTabClick={handleTabClick} onSidebarToggle={handleSidebarToggle}
+          />
+          <ReviewerView
+            cardData={cardData}
+            onFlip={() => bridgeAction('card.flip')}
+            onRate={(ease) => bridgeAction('card.rate', { ease })}
+          />
+        </div>
+      )}
+      {/* Right: Session Chat (always rendered, sidebar width in review) */}
+      <div id="chat-root" className="flex flex-col overflow-hidden" style={{
+        backgroundColor: 'var(--ds-bg-deep)', color: 'var(--ds-text-primary)',
+        width: activeView === 'review' ? 450 : '100%',
+        minWidth: activeView === 'review' ? 450 : undefined,
+        borderLeft: activeView === 'review' ? '1px solid var(--ds-border-subtle)' : 'none',
+        height: '100vh',
+        position: 'relative',
+        transform: 'translateZ(0)',
+      }}>
+      {/* Unified TopBar — same header across all views (hidden in review, shown in reviewer panel) */}
+      {activeView !== 'review' && <TopBar
         activeView={activeView}
         ankiState={ankiState}
         messageCount={freeChatHook.messageCount}
@@ -2391,7 +2431,7 @@ function AppInner() {
         dueReview={overviewData?.dueReview || deckBrowserData?.totalReview || 0}
         onTabClick={handleTabClick}
         onSidebarToggle={handleSidebarToggle}
-      />
+      />}
       {/* Header — ContextSurface (fixiert oben) */}
       <div ref={headerRef} className="fixed top-0 left-0 right-0 z-40" style={{ overflow: 'visible' }}>
         <ContextSurface
@@ -2898,6 +2938,7 @@ function AppInner() {
         isOpen={showPaywall}
         onClose={() => setShowPaywall(false)}
       />
+    </div>
     </div>
     </ErrorBoundary>
   );
