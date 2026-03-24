@@ -46,6 +46,7 @@ import TopBar from './components/TopBar';
 import DeckBrowserView from './components/DeckBrowserView';
 import OverviewView from './components/OverviewView';
 import ContextTags from './components/ContextTags';
+import ReviewerView from './components/ReviewerView';
 
 // Stable empty references — prevent new object creation on every render
 const EMPTY_STEPS = [];
@@ -194,6 +195,13 @@ function AppInner() {
   const [freeChatTransition, setFreeChatTransition] = useState('idle');
   const [mainInputFocused, setMainInputFocused] = useState(false);
   const messagesEndRef = useRef(null);
+
+  // Card reviewer state
+  const [cardData, setCardData] = useState(null);
+  const [reviewState, setReviewState] = useState('question');
+  const [mcOptions, setMcOptions] = useState(null);
+  const [evaluationResult, setEvaluationResult] = useState(null);
+  const [aiSteps, setAiSteps] = useState([]);
 
   const lastProcessedCardRef = useRef(null);
   // Create a setSessions wrapper that works with SessionContext
@@ -680,8 +688,37 @@ function AppInner() {
           setOverviewData(data);
           setActiveView('overview');
         } else if (state === 'review') {
-          setActiveView('chat');
+          setActiveView('review');
         }
+        return;
+      }
+
+      // Card reviewer events
+      if (payload.type === 'card.shown') {
+        setCardData(payload.data);
+        setReviewState('question');
+        setMcOptions(null);
+        setEvaluationResult(null);
+        setAiSteps([]);
+        return;
+      }
+      if (payload.type === 'card.answerShown') {
+        setCardData(prev => prev ? {...prev, backHtml: payload.data.backHtml, isQuestion: false} : payload.data);
+        setReviewState('answer');
+        return;
+      }
+      if (payload.type === 'card.mcGenerated') {
+        setMcOptions(payload.data);
+        setReviewState('mc_active');
+        return;
+      }
+      if (payload.type === 'card.evaluated') {
+        setEvaluationResult(payload.data);
+        setReviewState('evaluated');
+        return;
+      }
+      if (payload.type === 'card.aiStep') {
+        setAiSteps(prev => [...prev, payload.data]);
         return;
       }
 
@@ -2227,7 +2264,7 @@ function AppInner() {
   const isFreeChatAnimatingIn = freeChatTransition === 'entering' || freeChatTransition === 'visible';
   const showFreeChat = activeView === 'freeChat' && freeChatTransition !== 'idle';
 
-  if (activeView === 'deckBrowser' || activeView === 'overview' || activeView === 'freeChat') {
+  if (activeView === 'deckBrowser' || activeView === 'overview' || activeView === 'freeChat' || activeView === 'review') {
     return (
       <div style={{
         position: 'fixed', inset: 0,
@@ -2260,6 +2297,48 @@ function AppInner() {
               onBack={() => executeAction('view.navigate', 'deckBrowser')}
               onOptions={() => bridgeAction('deck.options')}
             />
+          )}
+          {activeView === 'review' && (
+            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+              {/* Left: Card Reviewer */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <ReviewerView
+                  cardData={cardData}
+                  reviewState={reviewState}
+                  mcOptions={mcOptions}
+                  evaluationResult={evaluationResult}
+                  aiSteps={aiSteps}
+                  onFlip={() => bridgeAction('card.flip')}
+                  onRate={(ease) => bridgeAction('card.rate', { ease })}
+                  onRequestMC={(data) => bridgeAction('card.requestMC', JSON.stringify(data))}
+                  onSubmitAnswer={(data) => bridgeAction('card.submitAnswer', JSON.stringify(data))}
+                  onAdvance={() => bridgeAction('card.rate', { ease: 3 })}
+                  onOpenChat={() => {
+                    // Could toggle sidebar visibility or scroll to chat
+                  }}
+                />
+              </div>
+              {/* Right: Session Chat Sidebar */}
+              <div style={{
+                width: 450, minWidth: 450,
+                borderLeft: '1px solid var(--ds-border-subtle)',
+                display: 'flex', flexDirection: 'column',
+                background: 'var(--ds-bg-deep)',
+                overflow: 'hidden',
+              }}>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                  <div style={{
+                    padding: '16px',
+                    fontSize: 13,
+                    color: 'var(--ds-text-muted)',
+                    textAlign: 'center',
+                    marginTop: 60,
+                  }}>
+                    Session Chat
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
           {showFreeChat && (
             <div style={{

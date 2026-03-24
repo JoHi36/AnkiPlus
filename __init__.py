@@ -344,48 +344,11 @@ def init_addon():
                     pass
             QTimer.singleShot(200, _fix_db_margins)
 
-        if use_custom_reviewer:
-            custom_reviewer.enable()
-            logger.info("Custom Reviewer: Enabled on addon init")
-
-            # Patch Reviewer to prevent bottom bar from ever showing
-            # This eliminates the flash completely
-            try:
-                from aqt.reviewer import Reviewer
-                _orig_bottom_html = getattr(Reviewer, '_bottomHTML', None)
-                def _patched_bottom_html(self):
-                    # Return empty bottom — our custom dock replaces it
-                    return ""
-                Reviewer._bottomHTML = _patched_bottom_html
-
-                # Also patch _showAnswerButton to prevent bottom bar updates
-                _orig_show_answer = getattr(Reviewer, '_showAnswerButton', None)
-                def _patched_show_answer(self):
-                    pass  # No-op — our custom UI handles this
-                Reviewer._showAnswerButton = _patched_show_answer
-
-                # CRITICAL: Disable Anki's native Qt keyboard shortcuts
-                # Anki registers Space, Enter, 1-4 etc. as QShortcuts which fire
-                # BEFORE JavaScript keydown events, stealing all key presses.
-                # Our custom JS handles all keyboard interaction.
-                _orig_shortcut_keys = getattr(Reviewer, '_shortcutKeys', None)
-                def _patched_shortcut_keys(self):
-                    # Only keep Ctrl+Z (undo) at Qt level, everything else handled by JS
-                    return []
-                Reviewer._shortcutKeys = _patched_shortcut_keys
-
-                logger.info("✅ Reviewer bottom bar + shortcuts patched (no flash, JS handles keys)")
-            except Exception as e:
-                logger.error(f"⚠️ Could not patch reviewer bottom: {e}")
-
-            # Class-level patches (DeckBrowser._drawButtons, Toolbar.draw/redraw)
-            # are already applied at module import time above.
-            # Just hide the Qt widgets as backup for anything already rendered.
-            hide_native_bottom_bar()
-            hide_native_toolbar()
-            
-            # NOTE: Toolbar hiding moved to state_did_change hook
-            # to only hide in review state, not globally
+        # Custom reviewer disabled — ReviewerView in React replaces it
+        # if use_custom_reviewer:
+        #     custom_reviewer.enable()
+        if False:
+            pass
         else:
             logger.info("Custom Reviewer: Disabled by config")
             # Ensure native bottom bar is visible if custom reviewer is off
@@ -531,6 +494,14 @@ def _emit_deck_selected(widget, deck_id, deck_name):
 
 def on_reviewer_did_show_question(card):
     """Wird aufgerufen, wenn eine Karte im Reviewer angezeigt wird"""
+    # Send card data to React via ChatbotWidget
+    try:
+        widget = get_chatbot_widget()
+        if widget and hasattr(widget, '_send_card_data'):
+            widget._send_card_data(card, is_question=True)
+    except Exception as e:
+        logger.error("reviewer_did_show_question card send error: %s", e)
+
     # Ensure native bottom bar stays suppressed
     config = mw.addonManager.getConfig(__name__) or {}
     if config.get("use_custom_reviewer", True):
