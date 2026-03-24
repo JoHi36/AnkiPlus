@@ -99,6 +99,7 @@ export default function ChatInput({
   const [ghostVisible, setGhostVisible] = useState(false);
   const [ghostIndex, setGhostIndex] = useState(0);
   const [ghostFilter, setGhostFilter] = useState('');
+  const [ghostInteracted, setGhostInteracted] = useState(false); // true after user types or arrows
 
   // Sync chip from parent prop (e.g. after send resets input)
   useEffect(() => {
@@ -170,15 +171,19 @@ export default function ChatInput({
   useEffect(() => {
     const atMatch = input.match(/@(\w*)$/);
     if (atMatch) {
-      setGhostFilter(atMatch[1]);
+      const filter = atMatch[1];
+      setGhostFilter(filter);
       setGhostVisible(true);
       setGhostIndex(0);
+      if (filter.length > 0) setGhostInteracted(true);
     } else if (input === '@') {
       setGhostFilter('');
       setGhostVisible(true);
       setGhostIndex(0);
+      setGhostInteracted(false); // fresh @ — show both options
     } else {
       setGhostVisible(false);
+      setGhostInteracted(false);
     }
   }, [input]);
 
@@ -232,11 +237,13 @@ export default function ChatInput({
     if (ghostVisible && ghostAgents.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
+        setGhostInteracted(true);
         setGhostIndex(prev => (prev + 1) % ghostAgents.length);
         return;
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault();
+        setGhostInteracted(true);
         setGhostIndex(prev => (prev - 1 + ghostAgents.length) % ghostAgents.length);
         return;
       }
@@ -416,6 +423,26 @@ export default function ChatInput({
                     fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
                     verticalAlign: 'middle',
                   }}>{ghostAgents.filter((a: any) => !a.isSettings).length <= 1 ? 'Tab' : '↑↓'}</kbd>
+                  {/* Second option: "Agenten" settings link — only on initial @ before interaction */}
+                  {!ghostInteracted && !(currentGhost as any)?.isSettings && (
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      marginLeft: 8,
+                      color: 'var(--ds-text-muted)',
+                      opacity: 0.5,
+                      fontSize: 12,
+                    }}>
+                      ·
+                      <span style={{ marginLeft: 2 }}>Agenten</span>
+                      <kbd style={{
+                        fontSize: 9, fontWeight: 500,
+                        color: 'var(--ds-text-muted)',
+                        background: 'var(--ds-bg-overlay)',
+                        borderRadius: 3, padding: '0px 4px',
+                        fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+                      }}>⌘</kbd>
+                    </span>
+                  )}
                 </span>
               );
             })()}
