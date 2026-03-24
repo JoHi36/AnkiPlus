@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-03-24-streaming-pipeline-tutor-migration-design.md`
 
+**Safety:** Git tag `pre-tutor-migration` before Task 6. If anything breaks: `git reset --hard pre-tutor-migration`.
+
 ---
 
 ## File Structure
@@ -18,7 +20,7 @@
 |--------|------|----------------|
 | Modify | `ai/agents.py` | Add 3 model fields to AgentDefinition, update registrations |
 | Modify | `ai/handler.py` | Add streaming to `_dispatch_agent()`, then slim `get_response_with_rag()` to pure dispatcher |
-| Modify | `ai/retrieval.py` | Refactor HybridRetrieval: accept `emit_step` callback instead of `ai_handler` |
+| Modify | `ai/retrieval.py` | Refactor HybridRetrieval: accept callbacks + RetrievalState instead of handler |
 | Create | `ai/rag_pipeline.py` | Extracted RAG retrieval logic (from handler.py lines 644-787) |
 | Rewrite | `ai/tutor.py` | From sentinel wrapper to real agent with RAG + streaming + handoff |
 | Modify | `ai/help_agent.py` | Accept `stream_callback`, use `model` from kwargs |
@@ -93,7 +95,7 @@ In `ai/agents.py`, add after the `max_history` field (~line 72):
     fallback_model: str = ''       # Fallback when primary model fails
 ```
 
-- [ ] **Step 4: Update 4 agent registrations with model values**
+- [ ] **Step 4: Update 4 agent registrations**
 
 Tutor: `premium_model='gemini-3-flash-preview', fast_model='gemini-2.5-flash', fallback_model='gemini-2.5-flash'`
 Research: all three empty (uses external APIs)
@@ -104,7 +106,7 @@ Plusi: `premium_model='claude-sonnet', fast_model='gemini-2.5-flash', fallback_m
 
 Add to the result dict: `'premiumModel': a.premium_model, 'fastModel': a.fast_model, 'fallbackModel': a.fallback_model`
 
-- [ ] **Step 6: Run tests, verify pass, commit**
+- [ ] **Step 6: Run tests, verify pass, run full suite, commit**
 
 ```
 feat(agents): add premium_model/fast_model/fallback_model to AgentDefinition
@@ -206,10 +208,12 @@ class TestStreamingDispatch:
 
 - [ ] **Step 3: Implement streaming + model selection in `_dispatch_agent()`**
 
-Add `agent_def=None` parameter. Before calling `run_fn`, add model selection and streaming callback:
+Add `agent_def=None` parameter to `_dispatch_agent()`.
+
+Before calling `run_fn`, add:
 
 ```python
-        # Model selection
+        # Model selection from agent_def + global mode
         if agent_def:
             mode = (self.config or {}).get('model_mode', 'premium')
             if mode == 'fast':
@@ -236,11 +240,21 @@ Add `agent_def=None` parameter. Before calling `run_fn`, add model selection and
                 })
 ```
 
-Pass `stream_callback=_stream_callback` to `run_fn`. After agent returns, only emit full text if agent didn't stream.
+Pass `stream_callback=_stream_callback` to `run_fn`. After return, only emit full text if not streamed:
 
-Also update the non-tutor dispatch call site to pass `agent_def=_agent_def`.
+```python
+        used_streaming = result.get('_used_streaming', False) if isinstance(result, dict) else False
+        if not _used_streaming and not used_streaming:
+            self._emit_msg_event("text_chunk", {
+                "messageId": request_id or '',
+                "agent": agent_name,
+                "chunk": text,
+            })
+```
 
-- [ ] **Step 4: Run tests, verify pass, commit**
+Also update the non-tutor dispatch call site (~line 588) to pass `agent_def=_agent_def`.
+
+- [ ] **Step 4: Run tests, verify pass, run full suite, commit**
 
 ```
 feat(pipeline): add streaming support and model selection to _dispatch_agent()
@@ -248,7 +262,7 @@ feat(pipeline): add streaming support and model selection to _dispatch_agent()
 
 ---
 
-### Task 3: Refactor HybridRetrieval to accept callbacks
+### Task 3: Refactor HybridRetrieval to accept callbacks + RetrievalState
 
 **Files:**
 - Modify: `ai/retrieval.py:14-17` — change `__init__` signature
@@ -256,10 +270,18 @@ feat(pipeline): add streaming support and model selection to _dispatch_agent()
 - Modify: `ai/handler.py:686` — update construction site
 - Test: `tests/test_agent_pipeline.py`
 
-- [ ] **Step 1: Write test**
+**Critical context:** HybridRetrieval currently modifies two handler state variables:
+- `self.ai._fallback_in_progress` (set True/False during collection-retry fallback) — handler's `_emit_pipeline_step` checks this to suppress duplicate UI events
+- `self.ai._current_step_labels` (truncated to `[:1]` before retry) — handler sends this to frontend
+
+These MUST be preserved. Solution: a shared `RetrievalState` object.
+
+- [ ] **Step 1: Write tests**
 
 ```python
 class TestHybridRetrievalCallbacks:
+    """Test that HybridRetrieval uses callbacks + state object instead of handler."""
+
     def test_no_handler_dependency(self):
         """retrieval.py should not reference self.ai anywhere."""
         import os
@@ -269,34 +291,110 @@ class TestHybridRetrievalCallbacks:
             source = f.read()
         assert 'self.ai.' not in source, \
             "retrieval.py should use callbacks, not self.ai references"
+
+    def test_retrieval_state_class_exists(self):
+        """RetrievalState should be importable."""
+        from ai.retrieval import RetrievalState
+        state = RetrievalState()
+        assert hasattr(state, 'fallback_in_progress')
+        assert hasattr(state, 'step_labels')
+        assert state.fallback_in_progress is False
+        assert state.step_labels == []
+
+    def test_hybrid_retrieval_modifies_state(self):
+        """HybridRetrieval should write fallback_in_progress on the state object."""
+        from ai.retrieval import RetrievalState
+        state = RetrievalState()
+        # Verify state is mutable
+        state.fallback_in_progress = True
+        assert state.fallback_in_progress is True
+        state.step_labels = ['router label']
+        assert state.step_labels == ['router label']
 ```
 
-- [ ] **Step 2: Run test — expect failure**
+- [ ] **Step 2: Run tests — expect failure**
 
-- [ ] **Step 3: Refactor HybridRetrieval**
+- [ ] **Step 3: Add `RetrievalState` class to retrieval.py**
 
-Change `__init__` from `(self, embedding_manager, ai_handler)` to `(self, embedding_manager, emit_step=None, rag_retrieve_fn=None)`.
+Add at the top of `ai/retrieval.py`:
 
-Replace all 15 `self.ai.*` references:
-- `self.ai._emit_pipeline_step(...)` becomes `self.emit_step(...)`
-- `self.ai._rag_retrieve_cards(...)` becomes `self.rag_retrieve_fn(...)`
-- `self.ai._emit_ai_event(...)` — remove (caller handles rag_sources emission)
-- `self.ai._current_step_labels` — remove (not needed in retrieval)
-- `self.ai._fallback_in_progress` — remove (not needed in retrieval)
-- `self.ai._current_request_steps` — remove (not needed in retrieval)
+```python
+class RetrievalState:
+    """Shared mutable state between retrieval and pipeline.
 
-- [ ] **Step 4: Update handler.py construction**
+    HybridRetrieval modifies these during execution:
+    - fallback_in_progress: suppresses duplicate pipeline events during retry
+    - step_labels: accumulates step labels, truncated before retry
+    """
+    def __init__(self):
+        self.fallback_in_progress = False
+        self.step_labels = []
+```
+
+- [ ] **Step 4: Refactor HybridRetrieval constructor**
+
+Change from:
+```python
+class HybridRetrieval:
+    def __init__(self, embedding_manager, ai_handler):
+        self.emb = embedding_manager
+        self.ai = ai_handler
+```
+
+To:
+```python
+class HybridRetrieval:
+    def __init__(self, embedding_manager, emit_step=None, rag_retrieve_fn=None, state=None):
+        self.emb = embedding_manager
+        self.emit_step = emit_step or (lambda step, status, data=None: None)
+        self.rag_retrieve_fn = rag_retrieve_fn
+        self.state = state or RetrievalState()
+```
+
+- [ ] **Step 5: Replace all `self.ai.*` references**
+
+| Old | New |
+|-----|-----|
+| `self.ai._emit_pipeline_step(step, status, data)` | `self.emit_step(step, status, data)` |
+| `self.ai._rag_retrieve_cards(...)` | `self.rag_retrieve_fn(...)` |
+| `self.ai._current_step_labels = ...` | `self.state.step_labels = ...` |
+| `self.ai._current_step_labels[:1]` | `self.state.step_labels[:1]` |
+| `self.ai._fallback_in_progress = True` | `self.state.fallback_in_progress = True` |
+| `self.ai._fallback_in_progress = False` | `self.state.fallback_in_progress = False` |
+| `self.ai._emit_ai_event("rag_sources", merged)` | Remove — caller handles this |
+| `for step in self.ai._current_request_steps:` | `for step in self.state.step_labels:` (or remove if only reading step metadata that's not available) |
+
+**Important:** Read each reference carefully. Some read, some write. Check lines 48, 51, 65, 75, 81, 95, 134, 141, 145, 155, 158, 161, 165, 181, 190.
+
+- [ ] **Step 6: Update handler.py construction**
 
 Change `HybridRetrieval(_emb_mgr, self)` to:
+
 ```python
-HybridRetrieval(_emb_mgr, emit_step=self._emit_pipeline_step,
-                rag_retrieve_fn=self._rag_retrieve_cards)
+_retrieval_state = RetrievalState()
+_retrieval_state.step_labels = self._current_step_labels
+
+hybrid = HybridRetrieval(
+    _emb_mgr,
+    emit_step=self._emit_pipeline_step,
+    rag_retrieve_fn=self._rag_retrieve_cards,
+    state=_retrieval_state,
+)
+
+retrieval_result = hybrid.retrieve(...)
+
+# Sync state back
+self._current_step_labels = _retrieval_state.step_labels
+self._fallback_in_progress = _retrieval_state.fallback_in_progress
 ```
 
-- [ ] **Step 5: Run tests, verify pass, commit**
+- [ ] **Step 7: Run tests, verify pass, run full suite, commit**
 
 ```
-refactor(retrieval): HybridRetrieval accepts callbacks instead of handler
+refactor(retrieval): HybridRetrieval accepts callbacks + RetrievalState
+
+Removes dependency on AIHandler. Uses emit_step callback, rag_retrieve_fn,
+and shared RetrievalState for fallback_in_progress and step_labels.
 ```
 
 ---
@@ -308,13 +406,20 @@ refactor(retrieval): HybridRetrieval accepts callbacks instead of handler
 - Modify: `ai/handler.py` — replace inline retrieval with function call
 - Test: `tests/test_agent_pipeline.py`
 
-- [ ] **Step 1: Write test**
+- [ ] **Step 1: Write tests**
 
 ```python
 class TestRagPipeline:
+    """Test the extracted RAG pipeline module."""
+
     def test_module_exists(self):
         from ai.rag_pipeline import retrieve_rag_context, RagResult
         assert callable(retrieve_rag_context)
+
+    def test_rag_result_dataclass(self):
+        from ai.rag_pipeline import RagResult
+        r = RagResult(rag_context=None, citations={}, cards_found=0)
+        assert r.cards_found == 0
 
     def test_no_search_returns_empty(self):
         from ai.rag_pipeline import retrieve_rag_context
@@ -325,28 +430,71 @@ class TestRagPipeline:
             user_message='hello', context=None, config={},
             routing_result=routing)
         assert result.cards_found == 0
+        assert result.rag_context is None
 ```
 
-- [ ] **Step 2: Run test — expect failure**
+- [ ] **Step 2: Run tests — expect failure**
 
 - [ ] **Step 3: Create `ai/rag_pipeline.py`**
 
-Extract handler.py lines 644-787 into `retrieve_rag_context()`. The function:
-1. Parses search params from `routing_result`
-2. Loads embedding manager if not provided
-3. Calls `HybridRetrieval.retrieve()` (refactored in Task 3)
-4. Falls back to SQL-only retrieval
-5. Formats context string and citations
-6. Injects current card if not in results
-7. Returns `RagResult(rag_context, citations, cards_found)`
+Extract handler.py lines ~644-787 into `retrieve_rag_context()`.
 
-Uses `emit_step` callback for pipeline visualization. Does NOT emit v2 msg_events.
+```python
+"""RAG Pipeline — Tutor's card retrieval orchestration.
 
-- [ ] **Step 4: Wire handler.py to call `retrieve_rag_context()`**
+Extracts and ranks Anki cards for the Tutor agent's context.
+This is the Tutor's internal reasoning process, extracted
+because it's too large for tutor.py.
+"""
+from dataclasses import dataclass
+from typing import Optional
 
-Replace handler.py lines 644-787 with call to new function. Handler still emits v2 events (rag_sources, agent_cell citations) based on the returned RagResult.
+try:
+    from ..utils.logging import get_logger
+except ImportError:
+    from utils.logging import get_logger
+logger = get_logger(__name__)
 
-- [ ] **Step 5: Run tests, verify pass, commit**
+
+@dataclass
+class RagResult:
+    """Result from RAG retrieval."""
+    rag_context: Optional[dict]   # {cards, citations, reasoning} or None
+    citations: dict               # noteId -> card info
+    cards_found: int
+
+
+def retrieve_rag_context(user_message, context, config, routing_result,
+                         emit_step=None, embedding_manager=None) -> RagResult:
+    """Orchestrate card retrieval based on router decision.
+
+    Handles: query preparation, HybridRetrieval or SQL-only fallback,
+    context formatting, current card injection.
+
+    Does NOT emit v2 msg_events (agent_cell, rag_sources).
+    The caller handles those based on the returned RagResult.
+    """
+    emit = emit_step or (lambda step, status, data=None: None)
+
+    if not getattr(routing_result, 'search_needed', None):
+        return RagResult(rag_context=None, citations={}, cards_found=0)
+
+    # ... Extract the logic from handler.py lines 644-787
+    # The implementer must:
+    # 1. Read handler.py lines 644-787 carefully
+    # 2. Move query preparation (precise_queries, broad_queries)
+    # 3. Move HybridRetrieval call (using refactored API from Task 3)
+    # 4. Move SQL-only fallback (_rag_retrieve_cards equivalent)
+    # 5. Move context formatting (context_string, citations)
+    # 6. Move current card injection (lines 760-787)
+    # 7. Return RagResult instead of modifying handler state
+```
+
+- [ ] **Step 4: Wire handler.py to use `retrieve_rag_context()`**
+
+Replace handler.py lines ~644-787 with a call to the new function. Handler still emits v2 events (rag_sources, agent_cell) based on the returned RagResult.
+
+- [ ] **Step 5: Run tests, verify pass, run full suite, commit**
 
 ```
 refactor(rag): extract RAG pipeline to ai/rag_pipeline.py
@@ -354,21 +502,25 @@ refactor(rag): extract RAG pipeline to ai/rag_pipeline.py
 
 ---
 
-### Task 5: Rewrite Tutor as real agent
+### Task 5a: Rewrite Tutor — basic RAG + streaming (no handoff, no fallback)
 
 **Files:**
-- Rewrite: `ai/tutor.py`
+- Rewrite: `ai/tutor.py` — basic agent with RAG + generation + streaming
 - Test: `tests/test_agent_pipeline.py`
 
-This is the largest task. Read handler.py lines 788-970 (generation + handoff + fallback) and move that logic into `run_tutor()`.
+This is step 1 of 3 for the Tutor migration. Only the happy path: RAG retrieval, system prompt, streaming generation. Returns error string on any failure.
 
 - [ ] **Step 1: Write tests**
 
 ```python
 class TestTutorRealAgent:
+    """Test the migrated Tutor as a real agent."""
+
     def test_no_sentinel_return(self):
+        """run_tutor should NOT return _use_rag_pipeline anymore."""
         from ai.tutor import run_tutor
         result = run_tutor(situation="test", config={'api_key': ''})
+        assert isinstance(result, dict)
         assert '_use_rag_pipeline' not in result
 
     def test_accepts_stream_callback(self):
@@ -382,41 +534,181 @@ class TestTutorRealAgent:
         result = run_tutor(situation="Was ist ATP?", config={'api_key': ''})
         assert isinstance(result, dict)
         assert 'text' in result
+
+    def test_accepts_model_from_kwargs(self):
+        """Tutor should accept model from kwargs, not hardcode it."""
+        import inspect
+        from ai.tutor import run_tutor
+        source = inspect.getsource(run_tutor)
+        # Should get model from kwargs
+        assert "kwargs" in source
 ```
 
-- [ ] **Step 2: Run tests — expect failure**
+- [ ] **Step 2: Run tests — expect failure (sentinel still returned)**
 
-- [ ] **Step 3: Rewrite `ai/tutor.py`**
+- [ ] **Step 3: Rewrite `ai/tutor.py` — basic path only**
 
-New `run_tutor()` handles:
-1. RAG retrieval via `retrieve_rag_context()`
-2. System prompt construction via `get_system_prompt()`
-3. Streaming generation via `get_google_response_streaming()` with `stream_callback` relay
-4. Handoff detection via `parse_handoff()` + `validate_handoff()`
-5. 3-level error fallback (primary model, fallback with thin RAG, fallback without RAG)
-6. Memory tracking via AgentMemory
+New `run_tutor()`:
+1. Extract params from kwargs (config, context, history, routing_result, model, mode, insights)
+2. Call `retrieve_rag_context()` from `ai/rag_pipeline.py`
+3. Call `get_system_prompt()` from `ai/system_prompt.py`
+4. Call `get_google_response_streaming()` from `ai/gemini.py`, relaying chunks through `stream_callback`
+5. Track memory
+6. Return `{'text': response, 'citations': ..., '_used_streaming': True}`
+7. On ANY error: return `{'text': error_message}`
 
-Gets `model`, `fallback_model`, `config`, `context`, `history`, `routing_result` from `**kwargs`.
+**NO handoff detection. NO fallback chain.** Those come in 5b and 5c.
+
+- [ ] **Step 4: Run tests, verify pass, run full suite, commit**
+
+```
+feat(tutor): basic Tutor agent with RAG + streaming (no handoff/fallback yet)
+```
+
+---
+
+### Task 5b: Add handoff detection to Tutor
+
+**Files:**
+- Modify: `ai/tutor.py` — add handoff parsing after generation
+- Test: `tests/test_agent_pipeline.py`
+
+- [ ] **Step 1: Write test**
+
+```python
+class TestTutorHandoff:
+    def test_tutor_imports_handoff(self):
+        """Tutor should use parse_handoff and validate_handoff."""
+        import inspect
+        from ai.tutor import run_tutor
+        source = inspect.getsource(run_tutor)
+        assert 'parse_handoff' in source
+```
+
+- [ ] **Step 2: Run test — expect failure**
+
+- [ ] **Step 3: Add handoff logic to `run_tutor()`**
+
+After streaming generation completes, add:
+
+```python
+    # Handoff check
+    try:
+        from .handoff import parse_handoff, validate_handoff
+    except ImportError:
+        from handoff import parse_handoff, validate_handoff
+
+    if response_text and isinstance(response_text, str):
+        clean_text, handoff_req = parse_handoff(response_text)
+        if handoff_req and validate_handoff(handoff_req, 'tutor', ['tutor'], config):
+            # Load and execute target agent
+            try:
+                from .agents import get_agent, lazy_load_run_fn
+            except ImportError:
+                from agents import get_agent, lazy_load_run_fn
+
+            target_def = get_agent(handoff_req.to)
+            if target_def:
+                target_fn = lazy_load_run_fn(target_def)
+                target_result = target_fn(
+                    situation=handoff_req.query,
+                    **target_def.extra_kwargs
+                )
+                # Build handoff marker for frontend
+                # (extract from handler.py lines 870-914)
+                ...
+            response_text = clean_text
+```
+
+Move the handoff marker building from handler.py (lines ~870-914).
 
 - [ ] **Step 4: Run tests, verify pass, commit**
 
 ```
-feat(tutor): migrate Tutor to real agent with RAG + streaming + handoff
+feat(tutor): add handoff detection (Tutor -> Research delegation)
+```
+
+---
+
+### Task 5c: Add 3-level fallback chain to Tutor
+
+**Files:**
+- Modify: `ai/tutor.py` — wrap generation in try/except with fallback
+- Test: `tests/test_agent_pipeline.py`
+
+- [ ] **Step 1: Write test**
+
+```python
+class TestTutorFallback:
+    def test_tutor_has_fallback_logic(self):
+        """Tutor should handle model errors with fallback chain."""
+        import inspect
+        from ai.tutor import run_tutor
+        source = inspect.getsource(run_tutor)
+        assert 'fallback' in source.lower()
+```
+
+- [ ] **Step 2: Run test — expect failure**
+
+- [ ] **Step 3: Add fallback chain**
+
+Wrap the generation call in a 3-level try/except:
+
+```python
+    # Level 1: Primary model with full RAG
+    try:
+        response_text = _generate_streaming(...)
+    except Exception as e:
+        logger.warning("Primary model failed: %s, trying fallback", e)
+        # Level 2: Fallback model with thin RAG (top 3 cards, no history)
+        try:
+            response_text = _generate_streaming(
+                ..., model=fallback_model, history=[], rag_context=thin_rag)
+        except Exception as e2:
+            logger.warning("Fallback with RAG failed: %s, trying without RAG", e2)
+            # Level 3: Fallback model without RAG
+            try:
+                response_text = _generate_streaming(
+                    ..., model=fallback_model, rag_context=None)
+            except Exception as e3:
+                logger.exception("All models failed: %s", e3)
+                return {'text': 'Es ist ein Fehler aufgetreten. Bitte versuche es erneut.'}
+```
+
+Extract from handler.py lines ~975-1072.
+
+- [ ] **Step 4: Run tests, verify pass, run full suite, commit**
+
+```
+feat(tutor): add 3-level fallback chain (primary -> fallback+RAG -> fallback-only)
 ```
 
 ---
 
 ### Task 6: Slim handler.py to pure dispatcher
 
+**SAFETY:** Before starting this task:
+```bash
+git tag pre-tutor-migration
+```
+If anything breaks after this task: `git reset --hard pre-tutor-migration`
+
 **Files:**
 - Modify: `ai/handler.py`
 - Test: `tests/test_agent_pipeline.py`
 
-- [ ] **Step 1: Write test**
+- [ ] **Step 1: Create safety tag**
+
+```bash
+git tag pre-tutor-migration
+```
+
+- [ ] **Step 2: Write test**
 
 ```python
 class TestHandlerPureDispatcher:
     def test_no_tutor_special_case(self):
+        """Handler should NOT have Tutor-specific branching."""
         import inspect
         from ai.handler import AIHandler
         source = inspect.getsource(AIHandler.get_response_with_rag)
@@ -424,18 +716,103 @@ class TestHandlerPureDispatcher:
         assert '_use_rag_pipeline' not in source
 ```
 
-- [ ] **Step 2: Run test — expect failure**
+- [ ] **Step 3: Run test — expect failure**
 
-- [ ] **Step 3: Replace `get_response_with_rag()` with ~50-line dispatcher**
+- [ ] **Step 4: Replace `get_response_with_rag()` with ~50-line dispatcher**
 
-Route message, load agent, call `_dispatch_agent()`. No if/else for Tutor. Pass `routing_result`, `context`, `history`, `mode`, `insights` as extra_kwargs.
+```python
+    def get_response_with_rag(self, user_message, context=None, history=None,
+                              mode='compact', callback=None, insights=None):
+        """Dispatch user message to the appropriate agent."""
+        self._current_request_steps = []
+        self._current_step_labels = []
+        request_id = getattr(self, '_current_request_id', None)
 
-Remove old Tutor inline code, `_rag_router()`, `_rag_retrieve_cards()` wrappers (keep them if still used by rag_pipeline.py, otherwise remove).
+        self._emit_msg_event("msg_start", {"messageId": request_id or ''})
+        self._emit_pipeline_step("orchestrating", "active")
 
-- [ ] **Step 4: Run tests, verify pass, commit**
+        try:
+            session_context = {
+                'locked_agent': None,
+                'mode': 'card_session' if context and context.get('cardId') else 'free_chat',
+                'deck_name': (context or {}).get('deckName', ''),
+                'has_card': bool(context and context.get('cardId')),
+            }
+            routing_result = route_message(user_message, session_context, self.config,
+                                            card_context=context, chat_history=history)
+            logger.info("Router: agent=%s, method=%s", routing_result.agent, routing_result.method)
+
+            try:
+                from .agents import get_agent, get_default_agent, lazy_load_run_fn
+            except ImportError:
+                from agents import get_agent, get_default_agent, lazy_load_run_fn
+
+            agent_def = get_agent(routing_result.agent)
+            if not agent_def:
+                agent_def = get_default_agent()
+                logger.info("Agent %s not found, using default", routing_result.agent)
+
+            run_fn = lazy_load_run_fn(agent_def)
+            clean_msg = routing_result.clean_message or user_message
+
+            return self._dispatch_agent(
+                agent_name=agent_def.name,
+                run_fn=run_fn,
+                situation=clean_msg,
+                request_id=request_id,
+                on_finished=agent_def.on_finished,
+                extra_kwargs={
+                    'context': context,
+                    'history': history,
+                    'mode': mode,
+                    'insights': insights,
+                    'routing_result': routing_result,
+                    'callback': callback,
+                    **agent_def.extra_kwargs,
+                },
+                callback=callback,
+                agent_def=agent_def,
+            )
+
+        except Exception as e:
+            logger.exception("get_response_with_rag error: %s", e)
+            error_msg = "Ein Fehler ist aufgetreten. Bitte versuche es erneut."
+            if callback:
+                callback(error_msg, True, False)
+            self._emit_msg_event("msg_done", {"messageId": request_id or ''})
+            return error_msg
+```
+
+Remove old inline Tutor code (~lines 605-970+), `_rag_router()` wrapper, and any other methods only used by the old Tutor path. Keep: `_emit_pipeline_step`, `_emit_msg_event`, `_emit_ai_event`, `_dispatch_agent`, `is_configured`, `_refresh_config`, `_get_auth_headers`, `_get_google_response_streaming` (needed by tutor.py), `_get_google_response`.
+
+- [ ] **Step 5: Update `_dispatch_agent()` orchestration to handle Tutor routing data**
+
+```python
+        routing_result = extra_kwargs.get('routing_result')
+        if routing_result and hasattr(routing_result, 'search_needed') and routing_result.search_needed is not None:
+            orch_data = {
+                'search_needed': routing_result.search_needed,
+                'retrieval_mode': routing_result.retrieval_mode or 'agent:%s' % agent_name,
+                'scope': 'none',
+                'scope_label': routing_result.search_scope or agent_name,
+            }
+        else:
+            orch_data = {
+                'search_needed': False,
+                'retrieval_mode': 'agent:%s' % agent_name,
+                'scope': 'none',
+                'scope_label': agent_name,
+            }
+        self._emit_pipeline_step("orchestrating", "done", orch_data)
+```
+
+- [ ] **Step 6: Run tests, verify pass, run full suite, commit**
 
 ```
-refactor(handler): slim get_response_with_rag to pure dispatcher (~50 lines)
+refactor(handler): slim get_response_with_rag to pure dispatcher
+
+Removes ~480 lines of Tutor-specific inline code. All agents including
+Tutor now go through _dispatch_agent(). Safety tag: pre-tutor-migration.
 ```
 
 ---
@@ -474,12 +851,9 @@ class TestAllAgentsStreamingReady:
 
 - [ ] **Step 2: Run tests — expect failure**
 
-- [ ] **Step 3: Add `stream_callback=None` to all three agents**
+- [ ] **Step 3: Add `stream_callback=None` to all three agents + model from kwargs for Help**
 
-Help: also change model selection to `model = kwargs.get('model') or HELP_MODEL`
-Research and Plusi: just add the parameter, no other changes needed.
-
-- [ ] **Step 4: Run tests, verify pass, commit**
+- [ ] **Step 4: Run tests, verify pass, run full suite, commit**
 
 ```
 feat(agents): add stream_callback to Help, Research, Plusi
@@ -487,7 +861,7 @@ feat(agents): add stream_callback to Help, Research, Plusi
 
 ---
 
-### Task 8: Final verification and cleanup
+### Task 8: Final verification
 
 - [ ] **Step 1: Run complete test suite**
 
@@ -505,4 +879,8 @@ Run: `grep -n "_use_rag_pipeline\|_rag_router\|_rag_retrieve" ai/handler.py`
 
 Run: `python3 run_tests.py -v -k "Signature or StreamingReady or ModelSlots"`
 
-- [ ] **Step 5: Commit if cleanup needed**
+- [ ] **Step 5: Remove safety tag if everything works**
+
+```bash
+git tag -d pre-tutor-migration
+```
