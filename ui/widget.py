@@ -1927,6 +1927,7 @@ class ChatbotWidget(QWidget):
 
     def _msg_flip_card(self, data=None):
         """Show answer side. Swallow web.eval to prevent mw.web DOM writes."""
+        from aqt import mw
         try:
             rev = mw.reviewer
             if not rev or not rev.card:
@@ -1946,6 +1947,7 @@ class ChatbotWidget(QWidget):
 
     def _msg_rate_card(self, data):
         """Rate current card and advance to next."""
+        from aqt import mw
         try:
             parsed = json.loads(data) if isinstance(data, str) else data
             ease = int(parsed.get('ease', 2)) if isinstance(parsed, dict) else 2
