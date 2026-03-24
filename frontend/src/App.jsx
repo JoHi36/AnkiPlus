@@ -2017,7 +2017,8 @@ function AppInner() {
         executeAction('view.navigate', 'deckBrowser');
       }
     } else if (tab === 'session') {
-      executeAction('view.navigate', 'overview');
+      // Resume active review if possible, otherwise show overview
+      bridgeAction('view.navigate', 'review');
     } else if (tab === 'statistik') {
       executeAction('stats.open');
     }

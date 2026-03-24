@@ -1841,6 +1841,11 @@ class ChatbotWidget(QWidget):
                 mw.moveToState('deckBrowser')
             elif state == 'overview':
                 mw.onOverview()
+            elif state == 'review':
+                if mw.reviewer and mw.reviewer.card:
+                    mw.moveToState('review')
+                else:
+                    mw.onOverview()
         except Exception as e:
             logger.error("navigate error: %s", e)
 
