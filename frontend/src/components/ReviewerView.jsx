@@ -16,22 +16,36 @@ function hasVisibleContent(html) {
 }
 
 /**
- * Strip background declarations from card HTML.
- * 1. From <style> blocks (e.g. AMBOSS: .card { background: #EEEEEE !important })
- * 2. From inline style="" attributes (e.g. style="background-color: #fff")
- * We control backgrounds — cards shouldn't. Preserves colors, fonts, layout.
+ * Regex matching background properties (background, background-color, etc.)
+ * Used to strip deck backgrounds — we control all backgrounds via theme.
+ */
+const BG_RE = /background(?:-color)?\s*:[^;]+;?/gi;
+
+/**
+ * Regex matching black/near-black color declarations.
+ * Targets: color: black, color: #000, color: #333, color: rgb(0,0,0), etc.
+ * Does NOT match semantic colors (red, blue, green, named colors with hue).
+ */
+const BLACK_COLOR_RE = /(?:^|;)\s*color\s*:\s*(?:black|#0{3,6}|#1[0-9a-f]{2,5}|#2[0-9a-f]{2,5}|#3[0-9a-f]{2,5}|rgb\(\s*0[\s,]+0[\s,]+0\s*\)|rgba\(\s*0[\s,]+0[\s,]+0[\s,])(?:\s*!important)?\s*;?/gi;
+
+/**
+ * Sanitize card HTML for our renderer.
+ * 1. Strip backgrounds from <style> blocks and inline style attributes
+ * 2. Strip black/near-black text colors from <style> blocks (they break dark mode)
+ * Preserves semantic colors (red, green, blue for coding), fonts, and layout.
  */
 function sanitizeCardHtml(html) {
   if (!html) return '';
-  // Strip from <style> blocks
+  // Strip from <style> blocks: backgrounds + black text colors
   let result = html.replace(/<style([\s\S]*?)<\/style>/gi, (match, content) => {
-    const cleaned = content.replace(/background(?:-color)?\s*:[^;]+;?/gi, '');
+    let cleaned = content.replace(BG_RE, '');
+    cleaned = cleaned.replace(BLACK_COLOR_RE, ';');
     return '<style' + cleaned + '</style>';
   });
-  // Strip from inline style="" attributes
-  result = result.replace(/style="([^"]*)"/gi, (match, styleContent) => {
-    const cleaned = styleContent.replace(/background(?:-color)?\s*:[^;]+;?/gi, '').trim();
-    return cleaned ? 'style="' + cleaned + '"' : '';
+  // Strip backgrounds from inline style="" and style='' attributes
+  result = result.replace(/style=(["'])([^"']*?)\1/gi, (match, quote, styleContent) => {
+    const cleaned = styleContent.replace(BG_RE, '').trim();
+    return cleaned ? 'style=' + quote + cleaned + quote : '';
   });
   return result;
 }
