@@ -219,19 +219,10 @@ export default function CardPreviewModal({ card, isOpen, onClose, bridge }) {
                     {currentSide === 'front' ? (
                         <div>
                             {details?.front ? (
-                                <div 
-                                    className="prose prose-lg max-w-none text-lg leading-relaxed select-text
-                                               [&_*]:font-inherit [&_*]:leading-inherit
-                                               [&_strong]:font-semibold [&_em]:italic [&_u]:underline
-                                               [&_code]:px-1.5 [&_code]:rounded [&_code]:text-sm
-                                               [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto
-                                               [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:space-y-2
-                                               [&_ol]:list-decimal [&_ol]:ml-6 [&_ol]:space-y-2
-                                               [&_table]:border-collapse [&_table]:w-full [&_table]:my-4
-                                               [&_th]:border [&_th]:p-2 [&_td]:border [&_td]:p-2"
-                                    style={{ color: 'var(--ds-text-primary)', '--tw-prose-body': 'var(--ds-text-primary)' }}
-                                    dangerouslySetInnerHTML={createMarkup(details.front)}
-                                />
+                                <div className="card-renderer">
+                                    <div className="card-content"
+                                        dangerouslySetInnerHTML={createMarkup(details.front)} />
+                                </div>
                             ) : (
                                 <div className="text-center py-8" style={{ color: 'var(--ds-text-secondary)' }}>Keine Daten verfügbar</div>
                             )}
@@ -239,19 +230,10 @@ export default function CardPreviewModal({ card, isOpen, onClose, bridge }) {
                     ) : (
                         <div>
                             {details?.back ? (
-                                <div 
-                                    className="prose prose-lg max-w-none text-lg leading-relaxed select-text
-                                               [&_*]:font-inherit [&_*]:leading-inherit
-                                               [&_strong]:font-semibold [&_em]:italic [&_u]:underline
-                                               [&_code]:px-1.5 [&_code]:rounded [&_code]:text-sm
-                                               [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto
-                                               [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:space-y-2
-                                               [&_ol]:list-decimal [&_ol]:ml-6 [&_ol]:space-y-2
-                                               [&_table]:border-collapse [&_table]:w-full [&_table]:my-4
-                                               [&_th]:border [&_th]:p-2 [&_td]:border [&_td]:p-2"
-                                    style={{ color: 'var(--ds-text-primary)', '--tw-prose-body': 'var(--ds-text-primary)' }}
-                                    dangerouslySetInnerHTML={createMarkup(details.back)}
-                                />
+                                <div className="card-renderer">
+                                    <div className="card-content"
+                                        dangerouslySetInnerHTML={createMarkup(details.back)} />
+                                </div>
                             ) : (
                                 <div className="text-center py-8" style={{ color: 'var(--ds-text-secondary)' }}>Keine Daten verfügbar</div>
                             )}

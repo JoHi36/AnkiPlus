@@ -34,6 +34,7 @@ import { useHoldToReset } from './hooks/useHoldToReset';
 import { setRegistry, findAgent, getRegistry } from '@shared/config/subagentRegistry';
 import { registerAction, executeAction, bridgeAction } from './actions';
 import { emit } from './eventBus';
+import { classifyCard } from './utils/cardClassifier';
 // MascotShell moved to main window (plusi_dock.py) — no longer imported
 import { useMascot } from './hooks/useMascot';
 import InsightsDashboard from './components/InsightsDashboard';
@@ -717,6 +718,9 @@ function AppInner() {
       if (payload.type === 'card.shown') {
         setCardData({...payload.data, isQuestion: true});
         setReviewChatOpen(false); // Close sidebar on new card
+        // Classify card and emit for agents
+        const classification = classifyCard(payload.data.frontHtml, payload.data.backHtml);
+        emit('card.classified', { cardId: payload.data.cardId, deckName: payload.data.deckName, ...classification });
         return;
       }
       if (payload.type === 'card.answerShown') {
@@ -724,6 +728,9 @@ function AppInner() {
           if (prev && !prev.isQuestion) return prev; // already flipped — ignore duplicate
           return prev ? {...prev, ...payload.data, isQuestion: false} : {...payload.data, isQuestion: false};
         });
+        // Re-classify with answer side for complete metadata
+        const classification = classifyCard(payload.data.frontHtml, payload.data.backHtml);
+        emit('card.classified', { cardId: payload.data.cardId, deckName: payload.data.deckName, ...classification, isAnswer: true });
         return;
       }
 

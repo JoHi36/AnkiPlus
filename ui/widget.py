@@ -1940,7 +1940,7 @@ class ChatbotWidget(QWidget):
             front_html = re.sub(r'src="([^":/]+)"', 'src="file://%s/\\1"' % media_dir, front_html)
             back_html = re.sub(r'src="([^":/]+)"', 'src="file://%s/\\1"' % media_dir, back_html)
 
-            # Clean scripts, styles, tag metadata from both
+            # Strip <script> tags (keeps <style> — they carry card formatting)
             front_html = self._clean_card_html(front_html)
             back_html = self._clean_card_html(back_html)
 

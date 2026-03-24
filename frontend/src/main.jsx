@@ -2,7 +2,9 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import ComponentViewer from './ComponentViewer';
+import GlassLab from './GlassLab';
 import './index.css';
+import './styles/card-enhancement.css';
 import 'katex/dist/katex.min.css'; // KaTeX CSS
 
 if (typeof window !== 'undefined') {
@@ -40,6 +42,13 @@ try {
     root.render(
       <React.StrictMode>
         <ComponentViewer />
+      </React.StrictMode>
+    );
+  } else if (view === 'glass') {
+    // Glass Lab — localhost:3000?view=glass
+    root.render(
+      <React.StrictMode>
+        <GlassLab />
       </React.StrictMode>
     );
   } else {
