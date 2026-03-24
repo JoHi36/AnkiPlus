@@ -409,20 +409,51 @@ export default function ReviewerView({
 
           {/* QUESTION dock */}
           {reviewState === 'question' && (
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              <DockButton
-                label="Show Answer" shortcut="SPACE"
-                onClick={onFlip} primary
-              />
-              <DockDivider />
-              <DockButton
-                label="Multiple Choice" shortcut="&#8629;"
-                onClick={() => onRequestMC?.({
-                  question: stripHtml(cardData?.frontHtml),
-                  correctAnswer: stripHtml(cardData?.backHtml),
-                  cardId: cardData?.cardId,
-                })}
-              />
+            <div>
+              {/* Text answer input */}
+              <div style={{ padding: '8px 12px 4px' }}>
+                <textarea
+                  ref={textareaRef}
+                  value={textAnswer}
+                  onChange={(e) => setTextAnswer(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey && textAnswer.trim()) {
+                      e.preventDefault();
+                      onSubmitAnswer?.({
+                        question: stripHtml(cardData?.frontHtml),
+                        userAnswer: textAnswer,
+                        correctAnswer: stripHtml(cardData?.backHtml),
+                      });
+                      setTextAnswer('');
+                    }
+                  }}
+                  placeholder="Antwort eingeben..."
+                  rows={1}
+                  style={{
+                    width: '100%', padding: '8px 12px', borderRadius: 8,
+                    border: 'none', background: 'transparent',
+                    color: 'var(--ds-text-primary)', fontSize: 14,
+                    resize: 'none', outline: 'none', fontFamily: 'inherit',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+              {/* Action buttons */}
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <DockButton
+                  label="Show Answer" shortcut="SPACE"
+                  onClick={onFlip} primary
+                />
+                <DockDivider />
+                <DockButton
+                  label="Multiple Choice" shortcut="&#8629;"
+                  onClick={() => onRequestMC?.({
+                    question: stripHtml(cardData?.frontHtml),
+                    correctAnswer: stripHtml(cardData?.backHtml),
+                    cardId: cardData?.cardId,
+                  })}
+                />
+              </div>
             </div>
           )}
 

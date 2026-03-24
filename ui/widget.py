@@ -1938,21 +1938,30 @@ class ChatbotWidget(QWidget):
     def _msg_flip_card(self, data=None):
         """Show the answer side. Swallow web.eval to prevent mw.web DOM writes."""
         from aqt import mw
+        logger.info("_msg_flip_card called")
         try:
             rev = mw.reviewer
-            if not rev or not rev.web:
+            if not rev:
+                logger.error("_msg_flip_card: no reviewer")
                 return
-            web = rev.web
-            _orig = web.eval
-            web.eval = lambda js: None
+            if not rev.card:
+                logger.error("_msg_flip_card: no card")
+                return
+            # Swallow web.eval calls during _showAnswer
+            if rev.web:
+                _orig_eval = rev.web.eval
+                rev.web.eval = lambda js: None
             try:
                 rev._showAnswer()
+                logger.info("_msg_flip_card: _showAnswer completed, state=%s", getattr(rev, 'state', '?'))
             finally:
-                web.eval = _orig
-            if rev.card:
-                self._send_card_data(rev.card, is_question=False)
+                if rev.web:
+                    rev.web.eval = _orig_eval
+            # Send back HTML to React
+            self._send_card_data(rev.card, is_question=False)
+            logger.info("_msg_flip_card: card data sent (answerShown)")
         except Exception as e:
-            logger.error("flip_card error: %s", e)
+            logger.exception("flip_card error: %s", e)
 
     def _msg_rate_card(self, data):
         """Rate current card and advance to next."""
