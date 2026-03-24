@@ -1773,7 +1773,7 @@ function AppInner() {
   useEffect(() => {
     const handleKeyDown = (e) => {
       // Skip remaining shortcuts if in input/textarea
-      const tag = e.target.tagName.toLowerCase();
+      const tag = (e.target?.tagName || '').toLowerCase();
       if (tag === 'textarea' || tag === 'input' || e.target.isContentEditable) return;
 
       // ESC closes the chat panel
@@ -1874,13 +1874,13 @@ function AppInner() {
   // Report text field focus state to Python for global shortcut routing
   useEffect(() => {
     const onFocusIn = (e) => {
-      const tag = e.target.tagName.toLowerCase();
+      const tag = (e.target?.tagName || '').toLowerCase();
       if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) {
         window.ankiBridge?.addMessage('textFieldFocus', { focused: true });
       }
     };
     const onFocusOut = (e) => {
-      const tag = e.target.tagName.toLowerCase();
+      const tag = (e.target?.tagName || '').toLowerCase();
       if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) {
         window.ankiBridge?.addMessage('textFieldFocus', { focused: false });
       }
