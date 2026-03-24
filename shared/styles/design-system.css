@@ -69,6 +69,23 @@
   --ds-green-tint:  rgba(48, 209, 88, 0.08);
   --ds-red-tint:    rgba(255, 69, 58, 0.05);
 
+  /* ── Semantic Color Tints (for quiz/review states) ── */
+  --ds-accent-10:  color-mix(in srgb, var(--ds-accent) 10%, transparent);
+  --ds-accent-20:  color-mix(in srgb, var(--ds-accent) 20%, transparent);
+  --ds-accent-50:  color-mix(in srgb, var(--ds-accent) 50%, transparent);
+  --ds-green-5:    color-mix(in srgb, var(--ds-green) 5%, transparent);
+  --ds-green-10:   color-mix(in srgb, var(--ds-green) 10%, transparent);
+  --ds-green-20:   color-mix(in srgb, var(--ds-green) 20%, transparent);
+  --ds-green-30:   color-mix(in srgb, var(--ds-green) 30%, transparent);
+  --ds-green-50:   color-mix(in srgb, var(--ds-green) 50%, transparent);
+  --ds-red-5:      color-mix(in srgb, var(--ds-red) 5%, transparent);
+  --ds-red-10:     color-mix(in srgb, var(--ds-red) 10%, transparent);
+  --ds-red-20:     color-mix(in srgb, var(--ds-red) 20%, transparent);
+  --ds-red-50:     color-mix(in srgb, var(--ds-red) 50%, transparent);
+  --ds-yellow-5:   color-mix(in srgb, var(--ds-yellow) 5%, transparent);
+  --ds-yellow-10:  color-mix(in srgb, var(--ds-yellow) 10%, transparent);
+  --ds-yellow-20:  color-mix(in srgb, var(--ds-yellow) 20%, transparent);
+
   /* ── Rating Aliases — var() refs so light mode overrides work ── */
   --ds-rate-again: var(--ds-red);
   --ds-rate-hard:  var(--ds-yellow);
@@ -85,6 +102,10 @@
   --ds-space-lg:  16px;
   --ds-space-xl:  24px;
   --ds-space-2xl: 32px;
+
+  /* Layout widths */
+  --ds-dock-width: 520px;                                          /* ChatInput dock max-width */
+  --ds-sidebar-width: calc(var(--ds-dock-width) + 2 * var(--ds-space-xl)); /* Chat sidebar = dock + padding */
 
 
   /* ─────────────────────────────────────────────────────────

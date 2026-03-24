@@ -1,136 +1,79 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import ChatInput from './ChatInput';
+import React from 'react';
 
 /**
- * ReviewerView — Card reviewer as React component.
- * Step 1: FLIP mode only. Shows card front, flips to show back, rates.
- * Uses ChatInput (the shared component) for the dock.
+ * ReviewerView — Pure display component for the card viewer.
+ * State machine lives in useReviewerState hook (used by App.jsx).
+ * ChatInput lives at App level (unified, animated between positions).
+ *
+ * This component only renders: card HTML + MC options.
  */
-export default function ReviewerView({
-  cardData,       // {cardId, frontHtml, backHtml, deckName, isQuestion}
-  onFlip,         // () => void — show answer
-  onRate,         // (ease: number) => void — rate and advance
-}) {
-  const [showBack, setShowBack] = useState(false);
-  const [selectedRating, setSelectedRating] = useState(3); // default Good
 
-  // Reset when new card arrives
-  useEffect(() => {
-    if (cardData?.isQuestion) {
-      setShowBack(false);
-      setSelectedRating(3);
-    }
-  }, [cardData?.cardId, cardData?.isQuestion]);
+const MC_LETTERS = ['A', 'B', 'C', 'D', 'E'];
 
-  // When answer is shown, reveal back
-  useEffect(() => {
-    if (cardData && !cardData.isQuestion) {
-      setShowBack(true);
-    }
-  }, [cardData?.isQuestion]);
+function MCOptions({ options, selected, isResult, onSelect }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 24 }}>
+      {options.map((opt, i) => {
+        const correct = opt.correct || opt.isCorrect || false;
+        const sel = selected[i];
+        let cls = 'ds-mc-option';
+        if (isResult && correct) cls += ' correct';
+        else if (sel === 'wrong') cls += ' wrong';
+        else if (sel === 'correct') cls += ' correct';
+        return (
+          <button key={i} className={cls} disabled={isResult || sel === 'wrong'}
+            onClick={() => { if (!isResult && sel !== 'wrong') onSelect(i, correct); }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: 24, height: 24, borderRadius: 4,
+              fontSize: 12, fontWeight: 700, fontFamily: 'var(--ds-font-mono)',
+              background: 'var(--ds-hover-tint)', color: 'var(--ds-text-secondary)', flexShrink: 0,
+            }}>{MC_LETTERS[i]}</span>
+            <span>{opt.text}</span>
+          </button>
+        );
+      })}
+      {isResult && options.map((opt, i) => {
+        if (!(opt.correct || opt.isCorrect) || !opt.explanation) return null;
+        return (
+          <div key={`x${i}`} className="ds-review-result correct" style={{ marginTop: 8 }}>
+            <span className="ds-result-label">Erklärung</span>
+            <span className="ds-result-body">{opt.explanation}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
-  // Keyboard shortcuts — ReviewerView OWNS Space/Enter/1-4 in review
-  useEffect(() => {
-    const handler = (e) => {
-      // Don't capture if typing in textarea/input
-      if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
-
-      if (e.key === ' ') {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!showBack) {
-          onFlip?.();
-        } else {
-          onRate?.(selectedRating);
-        }
-      }
-
-      // 1-4 for rating when answer shown
-      if (showBack && ['1','2','3','4'].includes(e.key)) {
-        setSelectedRating(parseInt(e.key));
-      }
-    };
-    window.addEventListener('keydown', handler, true); // capture phase
-    return () => window.removeEventListener('keydown', handler, true);
-  }, [showBack, selectedRating, onFlip, onRate]);
-
+export default function ReviewerView({ cardData, reviewer }) {
   if (!cardData) {
     return (
-      <div style={{
-        height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: 'var(--ds-text-muted)', fontSize: 14,
-      }}>
+      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ds-text-muted)', fontSize: 14, background: 'var(--ds-bg-canvas)' }}>
         Warte auf Karte...
       </div>
     );
   }
 
-  const RATING_LABELS = { 1: 'Again', 2: 'Hard', 3: 'Good', 4: 'Easy' };
-  const RATING_COLORS = {
-    1: 'var(--ds-red)', 2: 'var(--ds-yellow)',
-    3: 'var(--ds-green)', 4: 'var(--ds-accent)',
-  };
+  const { state, showBack, handleMCSelect } = reviewer;
 
+  // Card content uses note fields (clean, no template garbage)
   return (
-    <div style={{
-      height: '100%', display: 'flex', flexDirection: 'column',
-      background: 'var(--ds-bg-canvas)', overflow: 'hidden',
-    }}>
-      {/* Card content */}
-      <div style={{
-        flex: 1, overflowY: 'auto', overflowX: 'hidden',
-        padding: '40px 24px 160px',
-        scrollbarWidth: 'none',
-      }}>
-        <div style={{ maxWidth: 720, width: '100%', margin: '0 auto' }}>
-          {/* Show front OR back — Anki's answer() includes the question already */}
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--ds-bg-canvas)', overflow: 'hidden' }}>
+      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 'var(--ds-space-2xl) var(--ds-space-xl) 160px', scrollbarWidth: 'none' }}>
+        <div style={{ maxWidth: 'var(--ds-dock-width)', width: '100%', margin: '0 auto' }}>
           {showBack
-            ? <div dangerouslySetInnerHTML={{ __html: cardData.backHtml || '' }} />
-            : <div dangerouslySetInnerHTML={{ __html: cardData.frontHtml || '' }} />
+            ? <div dangerouslySetInnerHTML={{ __html: cardData.backField || cardData.backHtml || '' }} />
+            : <div dangerouslySetInnerHTML={{ __html: cardData.frontField || cardData.frontHtml || '' }} />
           }
-        </div>
-      </div>
-
-      {/* Dock — reuses ChatInput with different actions */}
-      <div style={{
-        position: 'sticky', bottom: 0,
-        padding: '0 20px 20px',
-        display: 'flex', justifyContent: 'center',
-      }}>
-        <div style={{ maxWidth: 520, width: '100%' }}>
-          <ChatInput
-            onSend={() => {}} // not used in flip mode
-            isLoading={false}
-            onStop={() => {}}
-            cardContext={null}
-            isPremium={true}
-            hideInput={!showBack} // hide textarea when question shown, show when answer (for follow-up)
-            placeholder={showBack ? 'Nachfragen...' : 'Antwort eingeben...'}
-            actionPrimary={showBack
-              ? {
-                  label: `${RATING_LABELS[selectedRating]}`,
-                  shortcut: 'SPACE',
-                  onClick: () => onRate?.(selectedRating),
-                }
-              : {
-                  label: 'Show Answer',
-                  shortcut: 'SPACE',
-                  onClick: () => onFlip?.(),
-                }
-            }
-            actionSecondary={showBack
-              ? {
-                  label: 'Nachfragen',
-                  shortcut: '↵',
-                  onClick: () => {}, // TODO: open chat with context
-                }
-              : {
-                  label: 'Multiple Choice',
-                  shortcut: '↵',
-                  onClick: () => {}, // TODO: MC mode
-                }
-            }
-          />
+          {(state.mode === 'mc_active' || state.mode === 'mc_result') && state.mcOptions && (
+            <MCOptions
+              options={state.mcOptions}
+              selected={state.mcSelected}
+              isResult={state.mode === 'mc_result'}
+              onSelect={handleMCSelect}
+            />
+          )}
         </div>
       </div>
     </div>

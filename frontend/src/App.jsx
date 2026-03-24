@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAnki } from './hooks/useAnki';
 import ReviewerView from './components/ReviewerView';
+import useReviewerState from './hooks/useReviewerState';
+import { DockLoading, DockEvalResult, DockTimer, DockStars } from './components/ReviewerDock';
 import { useChat } from './hooks/useChat';
 import { updateSessionSections } from './utils/sessions';
 import { useDeckTracking } from './hooks/useDeckTracking';
@@ -198,6 +200,10 @@ function AppInner() {
 
   // Card reviewer state
   const [cardData, setCardData] = useState(null);
+  const [reviewChatOpen, setReviewChatOpen] = useState(false);
+  const reviewChatWasOpenRef = useRef(false); // remember across tab switches
+  const [viewTransition, setViewTransition] = useState(false); // crossfade during tab switches
+  const reviewer = useReviewerState(cardData);
 
   const lastProcessedCardRef = useRef(null);
   // Create a setSessions wrapper that works with SessionContext
@@ -685,6 +691,11 @@ function AppInner() {
           setActiveView('overview');
         } else if (state === 'review') {
           setActiveView('review');
+          // Restore sidebar if it was open before tab switch
+          if (reviewChatWasOpenRef.current) {
+            reviewChatWasOpenRef.current = false;
+            setTimeout(() => setReviewChatOpen(true), 100); // slight delay for smooth entrance
+          }
         }
         return;
       }
@@ -692,10 +703,17 @@ function AppInner() {
       // Card reviewer events
       if (payload.type === 'card.shown') {
         setCardData({...payload.data, isQuestion: true});
+        setReviewChatOpen(false); // Close sidebar on new card
         return;
       }
       if (payload.type === 'card.answerShown') {
-        setCardData(prev => prev ? {...prev, backHtml: payload.data.backHtml, isQuestion: false} : {...payload.data, isQuestion: false});
+        setCardData(prev => prev ? {...prev, ...payload.data, isQuestion: false} : {...payload.data, isQuestion: false});
+        return;
+      }
+
+      // Reviewer inline events (evaluation, MC, AI steps) → forward as CustomEvents
+      if (payload.type && payload.type.startsWith('reviewer.')) {
+        window.dispatchEvent(new CustomEvent(payload.type, { detail: payload.data }));
         return;
       }
 
@@ -1673,8 +1691,9 @@ function AppInner() {
    * 
    * App.jsx muss nur noch den Kontext übergeben.
    */
-  const handleSend = (text, options = {}) => {
-    if (activeView !== 'chat') {
+  const handleSend = (text, options) => {
+    options = options || {};
+    if (activeView !== 'chat' && activeView !== 'review') {
       setActiveView('chat');
     }
 
@@ -2010,19 +2029,22 @@ function AppInner() {
 
   // ── TopBar tab handler (merged from MainApp) ──────────────────
   const handleTabClick = useCallback((tab) => {
+    // Remember sidebar state when leaving review
+    if (activeView === 'review' && tab !== 'session') {
+      if (reviewChatOpen) reviewChatWasOpenRef.current = true;
+      setReviewChatOpen(false);
+    }
+
+    // Instant navigation
     if (tab === 'stapel') {
-      if (activeView === 'freeChat') {
-        executeAction('chat.close');
-      } else {
-        executeAction('view.navigate', 'deckBrowser');
-      }
+      if (activeView === 'freeChat') executeAction('chat.close');
+      else executeAction('view.navigate', 'deckBrowser');
     } else if (tab === 'session') {
-      // Resume active review if possible, otherwise show overview
       bridgeAction('view.navigate', 'review');
     } else if (tab === 'statistik') {
       executeAction('stats.open');
     }
-  }, [activeView]);
+  }, [activeView, reviewChatOpen]);
 
   const handleSidebarToggle = useCallback(() => {
     executeAction('settings.toggle');
@@ -2031,6 +2053,12 @@ function AppInner() {
   // ── Keyboard shortcuts for fullscreen FreeChat (merged from MainApp) ──
   useEffect(() => {
     const handler = (e) => {
+      // ESC closes review chat sidebar
+      if (e.key === 'Escape' && activeView === 'review' && reviewChatOpen) {
+        e.preventDefault();
+        setReviewChatOpen(false);
+        return;
+      }
       if (mainInputFocused) return;
       if (activeView === 'freeChat') {
         if (e.key === 'Escape' || e.key === ' ') {
@@ -2046,7 +2074,7 @@ function AppInner() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [activeView, mainInputFocused]);
+  }, [activeView, mainInputFocused, reviewChatOpen]);
 
   // Focus tracking for fullscreen FreeChat input
   const handleMainInputFocus = useCallback(() => {
@@ -2392,35 +2420,50 @@ function AppInner() {
         from { transform: translateX(30px); opacity: 0; }
         to   { transform: translateX(0);    opacity: 1; }
       }
+      @keyframes viewEnter {
+        from { opacity: 0; transform: translateY(6px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      .view-enter { animation: viewEnter 0.25s cubic-bezier(0.25, 1, 0.5, 1) both; }
+      .view-enter-delay-1 { animation-delay: 0.04s; }
+      .view-enter-delay-2 { animation-delay: 0.08s; }
+      .view-enter-delay-3 { animation-delay: 0.12s; }
     `}</style>
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      {/* Left: ReviewerView — only in review mode */}
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--ds-bg-canvas)' }}>
+      {/* LEFT: Card viewer — only in review mode */}
       {activeView === 'review' && (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--ds-bg-canvas)' }}>
+        <div key="review" className="view-enter" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--ds-bg-canvas)', minWidth: 0 }}>
           <TopBar
             activeView="review" ankiState="review"
             messageCount={0} totalDue={deckBrowserData?.totalDue || 0}
             deckName={cardData?.deckName || ''} dueNew={0} dueLearning={0} dueReview={0}
             onTabClick={handleTabClick} onSidebarToggle={handleSidebarToggle}
           />
-          <ReviewerView
-            cardData={cardData}
-            onFlip={() => bridgeAction('card.flip')}
-            onRate={(ease) => bridgeAction('card.rate', { ease })}
-          />
+          <ReviewerView cardData={cardData} reviewer={reviewer} />
         </div>
       )}
-      {/* Right: Session Chat (always rendered, sidebar width in review) */}
-      <div id="chat-root" className="flex flex-col overflow-hidden" style={{
+      {/* RIGHT: Chat panel — hidden in review until "Nachfragen", full width in other modes */}
+      {/* RIGHT: Chat sidebar — slides in from right (transform, not width — keeps text stable) */}
+      <div style={{
+        ...(activeView === 'review'
+          ? {
+              width: 'var(--ds-sidebar-width)', minWidth: 'var(--ds-sidebar-width)',
+              marginRight: reviewChatOpen ? 0 : 'calc(-1 * var(--ds-sidebar-width))',
+              transition: 'margin-right 0.3s cubic-bezier(0.25, 1, 0.5, 1)',
+            }
+          : { width: 0, minWidth: 0, display: 'none' }
+        ),
+        height: '100vh', flexShrink: 0, position: 'relative',
+      }}>
+      <div id="chat-root" className={`flex flex-col overflow-hidden ${activeView !== 'review' ? 'view-enter' : ''}`} key={activeView === 'review' ? 'chat-sidebar' : `chat-main-${activeView}`} style={{
         backgroundColor: 'var(--ds-bg-deep)', color: 'var(--ds-text-primary)',
-        width: activeView === 'review' ? 450 : '100%',
-        minWidth: activeView === 'review' ? 450 : undefined,
+        width: activeView === 'review' ? 'var(--ds-sidebar-width)' : '100%',
         borderLeft: activeView === 'review' ? '1px solid var(--ds-border-subtle)' : 'none',
         height: '100vh',
-        position: 'relative',
-        transform: 'translateZ(0)',
+        position: activeView === 'review' ? 'absolute' : 'relative',
+        top: 0, right: 0,
       }}>
-      {/* Unified TopBar — same header across all views (hidden in review, shown in reviewer panel) */}
+      {/* Unified TopBar — same header across all views (hidden in review) */}
       {activeView !== 'review' && <TopBar
         activeView={activeView}
         ankiState={ankiState}
@@ -2433,8 +2476,8 @@ function AppInner() {
         onTabClick={handleTabClick}
         onSidebarToggle={handleSidebarToggle}
       />}
-      {/* Header — ContextSurface (fixiert oben) */}
-      <div ref={headerRef} className="fixed top-0 left-0 right-0 z-40" style={{ overflow: 'visible' }}>
+      {/* Header — ContextSurface (fixiert oben, hidden in review) */}
+      <div ref={headerRef} className="fixed top-0 left-0 right-0 z-40" style={{ overflow: 'visible', display: activeView === 'review' ? 'none' : undefined }}>
         <ContextSurface
           onNavigateToOverview={handleNavigateToOverview}
           showSessionOverview={showSessionOverview}
@@ -2735,10 +2778,16 @@ function AppInner() {
                                                           </div>
                                                         )}
                         {/* ── v2: Live message (structured, single renderer) ── */}
-                        {chatHook.currentMessage && !(nextMsg && nextMsg.from === 'bot' && nextMsg.text) && (
+                        {chatHook.currentMessage && !(nextMsg && nextMsg.from === 'bot' && nextMsg.text) && (() => {
+                          const v2Text = chatHook.currentMessage.agentCells?.[0]?.text || '';
+                          const fallback = chatHook.streamingMessage || '';
+                          const renderText = v2Text || fallback || '';
+                          console.error('[v2-render] RENDERING: v2TextLen=' + v2Text.length + ' fallbackLen=' + fallback.length + ' cells=' + chatHook.currentMessage.agentCells?.length + ' status=' + chatHook.currentMessage.status);
+                          return true;
+                        })() && (
                           <div className="w-full flex-none">
                             <ChatMessage
-                              message={chatHook.currentMessage.agentCells?.[0]?.text || ''}
+                              message={chatHook.currentMessage.agentCells?.[0]?.text || chatHook.streamingMessage || ''}
                               from="bot"
                               cardContext={cardContextHook.cardContext}
                               agentCells={chatHook.currentMessage.agentCells}
@@ -2884,51 +2933,7 @@ function AppInner() {
 
       {!showSessionOverview && (
         <>
-          {/* Chat Input — full-width dock at bottom */}
-          <div className="fixed bottom-0 left-0 right-0 z-50 px-4 pb-4">
-        <ChatInput
-          onSend={handleSend}
-          isLoading={chatHook.isLoading}
-          onStop={chatHook.handleStopRequest}
-          cardContext={cardContextHook.cardContext}
-          isPremium={isPremium}
-          onShowPaywall={() => setShowPaywall(true)}
-          authStatus={authStatus}
-          currentAuthToken={currentAuthToken}
-          onClose={handleClose}
-          plusiEnabled={mascotEnabled}
-          topSlot={activeView === 'plusiMenu' ? (
-            <TokenBudgetSlider value={500} />
-          ) : undefined}
-          hideInput={isInSubmenu || activeView === 'agentStudio'}
-          actionPrimary={{
-            label: isInSubmenu ? 'Zurück' : 'Weiter',
-            shortcut: 'SPACE',
-            onClick: () => {
-              if (isInSubmenu) {
-                setActiveView('agentStudio');
-              } else if (activeView !== 'chat') {
-                setActiveView('chat');
-              } else if (bridge?.advanceCard) {
-                bridge.advanceCard();
-              } else {
-                handleClose();
-              }
-            },
-          }}
-          actionSecondary={{
-            label: isInSubmenu || activeView === 'agentStudio' ? 'Chat' : 'Agent Studio',
-            shortcut: '↵',
-            onClick: () => {
-              if (activeView === 'chat') {
-                setActiveView('agentStudio');
-              } else {
-                setActiveView('chat');
-              }
-            },
-          }}
-        />
-          </div>
+          {/* Old chat input removed — unified ChatInput is rendered below */}
         </>
       )}
 
@@ -2940,7 +2945,115 @@ function AppInner() {
         onClose={() => setShowPaywall(false)}
       />
     </div>
+    </div>{/* close sidebar wrapper */}
     </div>
+
+    {/* ── Unified ChatInput — ONE input, animated between positions ── */}
+    {(() => {
+      const isReview = activeView === 'review';
+      const isReviewCenter = isReview && !reviewChatOpen;
+      const isReviewSidebar = isReview && reviewChatOpen;
+
+      // Build reviewer dock topSlot
+      let reviewTopSlot = null;
+      if (isReview && reviewer) {
+        const s = reviewer.state;
+        if (reviewer.isLoading) reviewTopSlot = <DockLoading steps={s.aiSteps} />;
+        else if (s.mode === 'evaluated') reviewTopSlot = <DockEvalResult result={s.evalResult} />;
+        else if (s.mode === 'answer') reviewTopSlot = <DockTimer frozenElapsed={s.frozenElapsed} rating={s.selectedRating} onCycleRating={reviewer.handleCycleRating} />;
+        else if (s.mode === 'mc_active' || s.mode === 'mc_result') reviewTopSlot = <DockStars stars={s.mcStars} rating={s.selectedRating} isResult={s.mode === 'mc_result'} />;
+      }
+
+      // Build actions based on position
+      let actionPrimary, actionSecondary, onSend, hideInput, placeholder, topSlot;
+
+      if (isReviewCenter) {
+        // Center dock — reviewer actions
+        const s = reviewer.state;
+        topSlot = reviewTopSlot;
+        hideInput = s.mode !== 'question';
+        placeholder = 'Antwort eingeben...';
+        onSend = (text) => {
+          if (s.mode === 'question') reviewer.handleEvaluate(text);
+          else if (reviewer.isRateable) { setReviewChatOpen(true); if (text) handleSend(text); }
+        };
+        if (s.mode === 'question') {
+          actionPrimary = { label: 'Show Answer', shortcut: 'SPACE', onClick: reviewer.handleFlip };
+          actionSecondary = { label: 'Multiple Choice', shortcut: '\u21b5', onClick: reviewer.handleStartMC };
+        } else if (reviewer.isLoading) {
+          actionPrimary = { label: 'Abbrechen', shortcut: '', onClick: () => reviewer.dispatch({ type: 'RESET' }) };
+          actionSecondary = { label: '', shortcut: '', onClick: () => {} };
+        } else if (s.mode === 'mc_active') {
+          actionPrimary = { label: 'Aufl\u00f6sen', shortcut: 'SPACE', onClick: reviewer.handleFlip };
+          actionSecondary = { label: 'Nachfragen', shortcut: '\u21b5', onClick: () => setReviewChatOpen(true) };
+        } else if (reviewer.isRateable) {
+          actionPrimary = { label: 'Weiter', shortcut: 'SPACE', onClick: () => reviewer.handleRate(s.selectedRating) };
+          actionSecondary = { label: 'Nachfragen', shortcut: '\u21b5', onClick: () => setReviewChatOpen(true) };
+        }
+      } else if (isReviewSidebar) {
+        // Sidebar — chat mode with close action
+        topSlot = undefined;
+        hideInput = false;
+        placeholder = 'Frage stellen...';
+        onSend = handleSend;
+        actionPrimary = { label: 'Schließen', shortcut: 'ESC', onClick: () => setReviewChatOpen(false) };
+        actionSecondary = { label: '', shortcut: '', onClick: () => {} };
+      } else {
+        // Normal chat mode (non-review)
+        topSlot = activeView === 'plusiMenu' ? <TokenBudgetSlider value={500} /> : undefined;
+        hideInput = isInSubmenu || activeView === 'agentStudio';
+        placeholder = undefined;
+        onSend = handleSend;
+        actionPrimary = {
+          label: isInSubmenu ? 'Zurück' : 'Weiter', shortcut: 'SPACE',
+          onClick: () => {
+            if (isInSubmenu) setActiveView('agentStudio');
+            else if (activeView !== 'chat') setActiveView('chat');
+            else if (bridge?.advanceCard) bridge.advanceCard();
+            else handleClose();
+          },
+        };
+        actionSecondary = {
+          label: isInSubmenu || activeView === 'agentStudio' ? 'Chat' : 'Agent Studio', shortcut: '↵',
+          onClick: () => setActiveView(activeView === 'chat' ? 'agentStudio' : 'chat'),
+        };
+      }
+
+      // Position styles — animated transitions
+      // All positions use left + width only (no right/auto) so CSS can animate smoothly
+      const posStyle = isReviewCenter
+        ? { left: 'calc(50% - var(--ds-dock-width) / 2)', width: 'var(--ds-dock-width)', bottom: 'var(--ds-space-xl)' }
+        : isReviewSidebar
+          ? { left: 'calc(100% - var(--ds-sidebar-width) + var(--ds-space-xl))', width: 'var(--ds-dock-width)', bottom: 'var(--ds-space-xl)' }
+          : { left: 'var(--ds-space-lg)', width: 'calc(100% - 2 * var(--ds-space-lg))', bottom: 'var(--ds-space-lg)' };
+
+      return (
+        <div style={{
+          position: 'fixed', zIndex: 60,
+          ...posStyle,
+          transition: 'left 0.3s cubic-bezier(0.25, 1, 0.5, 1), right 0.3s cubic-bezier(0.25, 1, 0.5, 1), width 0.3s cubic-bezier(0.25, 1, 0.5, 1), bottom 0.3s cubic-bezier(0.25, 1, 0.5, 1)',
+        }}>
+          <ChatInput
+            onSend={onSend}
+            isLoading={isReview ? false : chatHook.isLoading}
+            onStop={isReview ? () => {} : chatHook.handleStopRequest}
+            cardContext={isReview ? null : cardContextHook.cardContext}
+            isPremium={isPremium}
+            onShowPaywall={() => setShowPaywall(true)}
+            authStatus={authStatus}
+            currentAuthToken={currentAuthToken}
+            onClose={handleClose}
+            plusiEnabled={isReview ? false : mascotEnabled}
+            topSlot={topSlot}
+            hideInput={hideInput}
+            placeholder={placeholder}
+            actionPrimary={actionPrimary}
+            actionSecondary={actionSecondary}
+          />
+        </div>
+      );
+    })()}
+
     </ErrorBoundary>
   );
 }

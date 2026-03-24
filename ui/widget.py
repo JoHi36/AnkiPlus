@@ -513,6 +513,8 @@ class ChatbotWidget(QWidget):
             # Card review (React ReviewerView)
             'card.flip': self._msg_flip_card,
             'card.rate': self._msg_rate_card,
+            'card.evaluate': self._msg_evaluate_answer,
+            'card.mc.generate': self._msg_generate_mc,
         }
         return handlers.get(msg_type)
 
@@ -1909,6 +1911,20 @@ class ChatbotWidget(QWidget):
 
     # ── Card Review Handlers (React ReviewerView) ─────────────────────
 
+    @staticmethod
+    def _clean_card_html(html):
+        """Strip script tags and Anki template JS from card HTML.
+
+        Note: <style> tags are intentionally kept — they carry card formatting.
+        For clean display content, use note fields (frontField/backField) instead.
+        """
+        import re
+        # Remove <script>...</script> blocks
+        html = re.sub(r'<script[^>]*>[\s\S]*?</script>', '', html, flags=re.IGNORECASE)
+        # Remove inline JS that Anki card templates sometimes leave as text
+        html = re.sub(r'//\s*BUTTON SHORTCUTS[\s\S]*?(?=<|$)', '', html)
+        return html
+
     def _send_card_data(self, card, is_question=True):
         """Send card HTML + metadata to React."""
         import re
@@ -1916,14 +1932,34 @@ class ChatbotWidget(QWidget):
         try:
             front_html = card.question()
             back_html = card.answer()
+
+            # Strip content before <hr id=answer> from back (Anki answer includes question)
+            back_html = re.sub(r'^[\s\S]*?<hr[^>]*id\s*=\s*["\']?answer["\']?[^>]*>', '', back_html, count=1)
+
             media_dir = mw.col.media.dir()
             front_html = re.sub(r'src="([^":/]+)"', 'src="file://%s/\\1"' % media_dir, front_html)
             back_html = re.sub(r'src="([^":/]+)"', 'src="file://%s/\\1"' % media_dir, back_html)
+
+            # Clean scripts, styles, tag metadata from both
+            front_html = self._clean_card_html(front_html)
+            back_html = self._clean_card_html(back_html)
+
+            # Read raw note fields — clean content without template garbage
+            # Used for display (no Tags/Errata/NoteID) and for evaluate/MC text
+            note = card.note()
+            front_field = note.fields[0] if note and note.fields else ''
+            back_field = note.fields[1] if note and len(note.fields) > 1 else ''
+            # Resolve media paths in fields too (they can contain <img> tags)
+            front_field = re.sub(r'src="([^":/]+)"', 'src="file://%s/\\1"' % media_dir, front_field)
+            back_field = re.sub(r'src="([^":/]+)"', 'src="file://%s/\\1"' % media_dir, back_field)
+
             event_type = "card.shown" if is_question else "card.answerShown"
             self._send_to_frontend(event_type, {
                 "cardId": card.id,
                 "frontHtml": front_html,
                 "backHtml": back_html,
+                "frontField": front_field,
+                "backField": back_field,
                 "deckId": card.did,
                 "deckName": mw.col.decks.name(card.did),
                 "isQuestion": is_question,
@@ -1972,4 +2008,123 @@ class ChatbotWidget(QWidget):
                 self._send_card_data(rev.card, is_question=True)
         except Exception as e:
             logger.exception("rate_card error: %s", e)
+
+    # --- Reviewer: Text Evaluation & MC Generation ---
+
+    def _send_reviewer_step(self, phase, label):
+        """Send a ThoughtStream step to the React ReviewerView (from background thread)."""
+        import time
+        import threading as _threading
+        try:
+            done = _threading.Event()
+            def _inject():
+                try:
+                    self._send_to_frontend('reviewer.aiStep', {"phase": phase, "label": label})
+                finally:
+                    done.set()
+            from aqt import mw
+            mw.taskman.run_on_main(_inject)
+            done.wait(timeout=2.0)
+            time.sleep(0.5)
+        except Exception:
+            pass
+
+    def _msg_evaluate_answer(self, data):
+        """Evaluate user's text answer against correct answer via AI."""
+        import threading
+        try:
+            parsed = json.loads(data) if isinstance(data, str) else data
+            question = parsed.get('question', '')
+            user_answer = parsed.get('userAnswer', '')
+            correct_answer = parsed.get('correctAnswer', '')
+
+            def _run():
+                try:
+                    self._send_reviewer_step('analyzing', 'Analysiere Antwort…')
+                    self._send_reviewer_step('comparing', 'Vergleiche mit korrekter Antwort…')
+                    self._send_reviewer_step('evaluating', 'KI bewertet…')
+
+                    from ..custom_reviewer import _call_ai_evaluation
+                    result = _call_ai_evaluation(question, user_answer, correct_answer)
+
+                    self._send_reviewer_step('done', 'Bewertung abgeschlossen')
+
+                    def _inject():
+                        self._send_to_frontend('reviewer.evaluationResult', result)
+                    from aqt import mw
+                    mw.taskman.run_on_main(_inject)
+                except Exception as e:
+                    logger.exception("evaluate_answer thread error: %s", e)
+                    def _error():
+                        self._send_to_frontend('reviewer.evaluationResult', {
+                            "score": 50, "feedback": "Fehler bei der Bewertung."
+                        })
+                    from aqt import mw
+                    mw.taskman.run_on_main(_error)
+
+            threading.Thread(target=_run, daemon=True).start()
+        except Exception as e:
+            logger.exception("_msg_evaluate_answer error: %s", e)
+
+    def _msg_generate_mc(self, data):
+        """Generate multiple choice options via AI."""
+        import threading
+        from aqt import mw
+        try:
+            parsed = json.loads(data) if isinstance(data, str) else data
+            question = parsed.get('question', '')
+            correct_answer = parsed.get('correctAnswer', '')
+            card_id = parsed.get('cardId', None)
+
+            # Get deck context on main thread (Anki collection is not thread-safe)
+            from ..custom_reviewer import _get_deck_context_answers_sync
+            deck_answers = _get_deck_context_answers_sync(card_id)
+
+            def _run():
+                try:
+                    self._send_reviewer_step('cache', 'Prüfe gespeicherte Optionen…')
+
+                    # Check cache
+                    from ..storage.mc_cache import get_cached_mc, save_mc_cache
+                    cached = get_cached_mc(card_id, question, correct_answer) if card_id else None
+                    if cached:
+                        self._send_reviewer_step('done', 'Aus Cache geladen')
+                        def _inject():
+                            self._send_to_frontend('reviewer.mcOptions', cached)
+                        mw.taskman.run_on_main(_inject)
+                        return
+
+                    self._send_reviewer_step('generating', 'Generiere Multiple-Choice-Optionen…')
+
+                    from ..custom_reviewer import _call_ai_mc_generation
+                    result = _call_ai_mc_generation(question, correct_answer, deck_answers)
+
+                    # Cache (skip fallbacks)
+                    is_fallback = any(
+                        opt.get('text', '') in (
+                            'Keine der genannten Optionen',
+                            'Alle genannten Optionen sind richtig',
+                            'Die Frage kann nicht beantwortet werden',
+                        ) for opt in result
+                    )
+                    if card_id and result and len(result) >= 4 and not is_fallback:
+                        save_mc_cache(card_id, question, correct_answer, result)
+
+                    import random
+                    random.shuffle(result)
+
+                    self._send_reviewer_step('done', 'Optionen erstellt')
+
+                    def _inject():
+                        self._send_to_frontend('reviewer.mcOptions', result)
+                    mw.taskman.run_on_main(_inject)
+                except Exception as e:
+                    logger.exception("generate_mc thread error: %s", e)
+                    def _error():
+                        self._send_to_frontend('reviewer.mcOptions', [])
+                    mw.taskman.run_on_main(_error)
+
+            threading.Thread(target=_run, daemon=True).start()
+        except Exception as e:
+            logger.exception("_msg_generate_mc error: %s", e)
 

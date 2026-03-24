@@ -2,9 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Working With The User
+
+**Architecture verification is mandatory.** Before building anything, verify that the current architecture matches the user's stated goal. If something seems contradictory (e.g. building a sidebar widget when the goal is fullscreen), STOP and ask. The user needs proactive architectural explanations — don't assume they know the current technical state. If you see a discrepancy between what exists and what was planned, flag it immediately instead of silently working around it.
+
+**The user is a designer/product person, not a Qt/Python expert.** Explain architectural constraints in plain terms. When Anki/Qt limitations affect what's possible in React, explain WHY before proposing solutions. Never let the user discover architectural mismatches through broken builds.
+
 ## Overview
 
-This is an Anki addon that provides AI-powered learning assistance through a chat interface. The addon integrates a modern React frontend (built with Vite) into Anki using PyQt6's QWebEngineView, creating a seamless side panel experience within the Anki desktop application.
+This is an Anki addon that provides AI-powered learning assistance through a chat interface. The addon integrates a modern React frontend (built with Vite) into Anki using PyQt6's QWebEngineView. **The goal is a fullscreen React app that replaces Anki's native UI entirely** — no native Anki views visible. Currently the React app's QWebEngineView covers the full window via setCentralWidget, hiding Anki's native web view.
 
 ## Development Commands
 
@@ -106,7 +112,7 @@ AnkiPlus_main/
 ├── shared/                  # Cross-context shared resources
 │   ├── styles/design-system.css  # Design token source of truth (CSS vars)
 │   ├── config/tailwind.preset.js # Tailwind ↔ design token mapping
-│   ├── components/          # Shared TypeScript components (10 files)
+│   ├── components/          # Design system primitives (7 files, Anki-agnostic)
 │   ├── plusi-renderer.js    # Unified Plusi SVG mood renderer
 │   └── utils/constants.ts   # Shared constants
 ├── custom_reviewer/         # Custom reviewer (HTML/CSS/JS replacement)
@@ -299,7 +305,13 @@ The addon uses **Google Gemini** as its AI provider (Gemini 3 Flash). The AI mod
 
 3. Handle response in `ui/widget.py`'s `_handle_js_message()` if needed
 
-### Design System & Styling
+### Design System & Styling — "Invisible Addiction"
+
+**BEFORE creating or modifying ANY UI component**, review the Component Viewer (`npm run dev` → `localhost:3000/?view=components`) to absorb the design language. The system has two guiding philosophies:
+1. **Invisible**: clean, minimal, premium, professional — the interface disappears behind the content
+2. **Addiction**: smooth, magical, novel, fascinating — every interaction should feel inevitable
+
+The Component Viewer IS the design system — not documentation about it. Match its quality bar. If a new component feels generic or template-like, it doesn't belong.
 
 **CRITICAL: ALL colors MUST use CSS custom properties from the design system. NEVER use hardcoded hex values (`#0A84FF`), rgba literals (`rgba(255,255,255,0.5)`), or any raw color value in React components, inline styles, or CSS. This applies to backgrounds, text colors, borders, shadows, and opacity values. The design system tokens automatically handle dark/light mode — hardcoded colors break light mode. If you write `rgba(255, 255, 255, ...)` anywhere in a `.jsx` file, it is a bug.**
 
@@ -337,7 +349,14 @@ The addon uses **Google Gemini** as its AI provider (Gemini 3 Flash). The AI mod
 5. Inline styles in JSX: use `var(--ds-text-primary)` not `rgba(255,255,255,0.9)`, use `var(--ds-bg-overlay)` not `#3A3A3C`
 6. Spec: `docs/superpowers/specs/2026-03-20-unified-design-system.md`
 7. Every new component MUST be added to the Component Viewer (`frontend/src/ComponentViewer.jsx`) with all variants
-8. Reuse shared components (`shared/components/`) — NEVER rebuild what already exists. ChatInput is THE input dock for everything (reviewer, chat, freechat) via different action props.
+8. Reuse components — NEVER rebuild what already exists. ChatInput (in `frontend/src/components/`) is THE input dock for everything (reviewer, chat, freechat) via different action props.
+9. Full design reference: `docs/reference/DESIGN.md`
+10. Component Viewer: `npm run dev` → `http://localhost:3000/?view=components`
+
+**Shared/Product boundary:**
+- `shared/components/` = design system primitives (Button, Card, TreeList, MultipleChoiceCard, QuizCard, ResponsiveContainer, ReviewResult). MUST be Anki-agnostic. No bridge, no cardContext, no deckName, no sessions. Props are generic.
+- `frontend/src/components/` = product components. Import and compose shared primitives. May use bridge, hooks, Anki-specific state.
+- Before adding a component to `shared/`, verify it has zero Anki imports or props. When a second consumer needs the same pattern, extract the generic part to shared.
 9. Full design reference: `docs/reference/DESIGN.md`
 10. Component Viewer: `npm run dev` → `http://localhost:3000/?view=components`
 
