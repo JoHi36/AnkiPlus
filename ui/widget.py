@@ -1842,9 +1842,10 @@ class ChatbotWidget(QWidget):
             elif state == 'overview':
                 mw.onOverview()
             elif state == 'review':
-                if mw.reviewer and mw.reviewer.card:
+                # Always try to enter review — Anki will resume or start fresh
+                try:
                     mw.moveToState('review')
-                else:
+                except Exception:
                     mw.onOverview()
         except Exception as e:
             logger.error("navigate error: %s", e)
