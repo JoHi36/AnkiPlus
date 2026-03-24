@@ -321,17 +321,12 @@ class TestAgentMemory:
 class TestTutorPipeline:
     """Test that the Tutor agent integrates with the dispatch system."""
 
-    def test_tutor_returns_rag_sentinel(self):
-        """Tutor's run function returns _use_rag_pipeline signal."""
+    def test_tutor_returns_dict_without_sentinel(self):
+        """run_tutor should NOT return _use_rag_pipeline anymore."""
         from ai.tutor import run_tutor
-        steps = []
-        def fake_emit(step, status, data=None):
-            steps.append((step, status))
-
-        result = run_tutor(situation="Was ist ATP?", emit_step=fake_emit)
-        assert result.get('_use_rag_pipeline') is True
-        assert 'text' in result
-        assert len(steps) >= 1
+        result = run_tutor(situation="test", config={'api_key': ''})
+        assert isinstance(result, dict)
+        assert '_use_rag_pipeline' not in result
 
     def test_tutor_tracks_query_count_in_memory(self):
         """Tutor increments total_queries in AgentMemory."""
@@ -343,23 +338,148 @@ class TestTutorPipeline:
             mem = AgentMemory('tutor')
         mem._get_db = lambda: db
 
-        run_tutor(situation="test 1", memory=mem)
+        run_tutor(situation="test 1", memory=mem, config={'api_key': ''})
         assert mem.get('total_queries') == 1
 
-        run_tutor(situation="test 2", memory=mem)
+        run_tutor(situation="test 2", memory=mem, config={'api_key': ''})
         assert mem.get('total_queries') == 2
 
     def test_tutor_works_without_emit_step(self):
         """Tutor should not crash when emit_step is None."""
         from ai.tutor import run_tutor
-        result = run_tutor(situation="test")
+        result = run_tutor(situation="test", config={'api_key': ''})
         assert isinstance(result, dict)
 
     def test_tutor_works_without_memory(self):
         """Tutor should not crash when memory is None."""
         from ai.tutor import run_tutor
-        result = run_tutor(situation="test", memory=None)
+        result = run_tutor(situation="test", memory=None, config={'api_key': ''})
         assert isinstance(result, dict)
+
+
+class TestTutorRealAgent:
+    """Test the rewritten Tutor as a real agent with RAG + streaming."""
+
+    def test_no_sentinel_return(self):
+        """run_tutor should NOT return _use_rag_pipeline anymore."""
+        from ai.tutor import run_tutor
+        result = run_tutor(situation="test", config={'api_key': ''})
+        assert isinstance(result, dict)
+        assert '_use_rag_pipeline' not in result
+
+    def test_accepts_stream_callback(self):
+        import inspect
+        from ai.tutor import run_tutor
+        sig = inspect.signature(run_tutor)
+        assert 'stream_callback' in sig.parameters
+
+    def test_returns_error_without_api_key(self):
+        from ai.tutor import run_tutor
+        result = run_tutor(situation="Was ist ATP?", config={'api_key': ''})
+        assert isinstance(result, dict)
+        assert 'text' in result
+        # Should contain an error message, not crash
+        assert len(result['text']) > 0
+
+    def test_tutor_uses_model_from_kwargs(self):
+        """Tutor should get model from kwargs, not hardcode it."""
+        import inspect
+        from ai.tutor import run_tutor
+        source = inspect.getsource(run_tutor)
+        assert "kwargs.get('model')" in source or "model = kwargs" in source
+
+    def test_tutor_calls_rag_pipeline(self):
+        """Tutor should call retrieve_rag_context when routing says search is needed."""
+        from ai.tutor import run_tutor
+
+        routing = MagicMock()
+        routing.search_needed = True
+        routing.retrieval_mode = 'sql'
+        routing.precise_queries = ['ATP']
+        routing.broad_queries = []
+        routing.embedding_queries = []
+        routing.search_scope = 'current_deck'
+        routing.max_sources = 'medium'
+
+        with patch('ai.tutor.retrieve_rag_context') as mock_rag:
+            from ai.rag_pipeline import RagResult
+            mock_rag.return_value = RagResult(
+                rag_context={'cards': ['test'], 'citations': {}, 'reasoning': ''},
+                citations={}, cards_found=1)
+            with patch('ai.tutor.get_google_response_streaming', return_value='answer'):
+                result = run_tutor(
+                    situation="Was ist ATP?",
+                    config={'api_key': 'fake-key'},
+                    routing_result=routing,
+                )
+            mock_rag.assert_called_once()
+
+    def test_tutor_calls_streaming_generation(self):
+        """Tutor should call get_google_response_streaming with stream_callback."""
+        from ai.tutor import run_tutor
+
+        chunks = []
+        def fake_stream(chunk, done):
+            chunks.append((chunk, done))
+
+        routing = MagicMock()
+        routing.search_needed = False
+
+        with patch('ai.tutor.get_google_response_streaming', return_value='streamed result') as mock_gen:
+            result = run_tutor(
+                situation="Erkläre ATP",
+                config={'api_key': 'fake-key'},
+                routing_result=routing,
+                stream_callback=fake_stream,
+            )
+            mock_gen.assert_called_once()
+            # stream_callback should have been signalled done
+            assert any(d for _, d in chunks)
+
+    def test_tutor_returns_citations_from_rag(self):
+        """Tutor should return citations from the RAG pipeline."""
+        from ai.tutor import run_tutor
+
+        routing = MagicMock()
+        routing.search_needed = True
+        routing.retrieval_mode = 'sql'
+        routing.precise_queries = ['ATP']
+        routing.broad_queries = []
+        routing.embedding_queries = []
+        routing.search_scope = 'current_deck'
+        routing.max_sources = 'medium'
+
+        test_citations = {'123': {'noteId': 123, 'question': 'ATP?'}}
+
+        with patch('ai.tutor.retrieve_rag_context') as mock_rag:
+            from ai.rag_pipeline import RagResult
+            mock_rag.return_value = RagResult(
+                rag_context={'cards': ['test'], 'citations': test_citations, 'reasoning': ''},
+                citations=test_citations, cards_found=1)
+            with patch('ai.tutor.get_google_response_streaming', return_value='answer'):
+                result = run_tutor(
+                    situation="Was ist ATP?",
+                    config={'api_key': 'fake-key'},
+                    routing_result=routing,
+                )
+        assert result.get('citations') == test_citations
+
+    def test_tutor_error_handling(self):
+        """Tutor should catch exceptions and return error dict."""
+        from ai.tutor import run_tutor
+
+        routing = MagicMock()
+        routing.search_needed = False
+
+        with patch('ai.tutor.get_google_response_streaming', side_effect=Exception('API timeout')):
+            result = run_tutor(
+                situation="test",
+                config={'api_key': 'fake-key'},
+                routing_result=routing,
+            )
+        assert isinstance(result, dict)
+        assert 'text' in result
+        assert 'Fehler' in result['text'] or 'API timeout' in result['text']
 
 
 class TestHelpPipeline:
