@@ -336,6 +336,10 @@ The addon uses **Google Gemini** as its AI provider (Gemini 3 Flash). The AI mod
 4. Every new React component MUST be tested in both dark and light mode
 5. Inline styles in JSX: use `var(--ds-text-primary)` not `rgba(255,255,255,0.9)`, use `var(--ds-bg-overlay)` not `#3A3A3C`
 6. Spec: `docs/superpowers/specs/2026-03-20-unified-design-system.md`
+7. Every new component MUST be added to the Component Viewer (`frontend/src/ComponentViewer.jsx`) with all variants
+8. Reuse shared components (`shared/components/`) — NEVER rebuild what already exists. ChatInput is THE input dock for everything (reviewer, chat, freechat) via different action props.
+9. Full design reference: `docs/reference/DESIGN.md`
+10. Component Viewer: `npm run dev` → `http://localhost:3000/?view=components`
 
 Global Qt theme styles are in `ui/global_theme.py` (imports from `ui/tokens_qt.py`).
 
