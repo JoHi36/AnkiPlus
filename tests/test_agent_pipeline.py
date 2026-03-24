@@ -479,3 +479,42 @@ class TestPlusiPipeline:
         assert 'emit_step' in sig.parameters
         assert 'memory' in sig.parameters
         assert 'situation' in sig.parameters
+
+
+# ---------------------------------------------------------------------------
+# Model Slots on AgentDefinition
+# ---------------------------------------------------------------------------
+
+class TestModelSlots:
+    def test_agent_definition_has_model_fields(self):
+        from ai.agents import AgentDefinition
+        a = AgentDefinition(
+            name='test', label='Test', description='test',
+            premium_model='gemini-3-flash', fast_model='gemini-2.5-flash',
+            fallback_model='gemini-2.5-flash',
+        )
+        assert a.premium_model == 'gemini-3-flash'
+        assert a.fast_model == 'gemini-2.5-flash'
+        assert a.fallback_model == 'gemini-2.5-flash'
+
+    def test_model_fields_default_empty(self):
+        from ai.agents import AgentDefinition
+        a = AgentDefinition(name='min', label='Min', description='minimal')
+        assert a.premium_model == ''
+        assert a.fast_model == ''
+        assert a.fallback_model == ''
+
+    def test_tutor_has_model_slots(self):
+        from ai.agents import get_agent
+        tutor = get_agent('tutor')
+        assert tutor is not None
+        assert tutor.premium_model != ''
+        assert tutor.fallback_model != ''
+
+    def test_registry_for_frontend_includes_models(self):
+        from ai.agents import get_registry_for_frontend
+        result = get_registry_for_frontend({})
+        tutor = next(a for a in result if a['name'] == 'tutor')
+        assert 'premiumModel' in tutor
+        assert 'fastModel' in tutor
+        assert 'fallbackModel' in tutor

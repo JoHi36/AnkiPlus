@@ -71,6 +71,11 @@ class AgentDefinition:
     # Limits
     max_history: int = 20
 
+    # Model configuration
+    premium_model: str = ''
+    fast_model: str = ''
+    fallback_model: str = ''
+
 
 # ---------------------------------------------------------------------------
 # Registry
@@ -135,6 +140,10 @@ def get_registry_for_frontend(config: dict) -> List[dict]:
             'submenuLabel': submenu_label,
             'submenuComponent': a.submenu_component,
             'toolsConfigurable': a.tools_configurable,
+            # Model slots
+            'premiumModel': a.premium_model,
+            'fastModel': a.fast_model,
+            'fallbackModel': a.fallback_model,
         })
     return result
 
@@ -335,6 +344,10 @@ register_agent(AgentDefinition(
     submenu_label='Tutor konfigurieren',
     submenu_component='',
     tools_configurable=True,
+    # Model slots
+    premium_model='gemini-3-flash-preview',
+    fast_model='gemini-2.5-flash',
+    fallback_model='gemini-2.5-flash',
 ))
 
 
@@ -421,6 +434,10 @@ register_agent(AgentDefinition(
     submenu_label='Help konfigurieren',
     submenu_component='',
     tools_configurable=True,
+    # Model slots
+    premium_model='gemini-2.5-flash',
+    fast_model='gemini-2.5-flash',
+    fallback_model='gemini-2.5-flash',
 ))
 
 
@@ -472,4 +489,8 @@ register_agent(AgentDefinition(
     submenu_label='Persönlichkeit & Tagebuch',
     submenu_component='plusiMenu',
     tools_configurable=False,
+    # Model slots
+    premium_model='claude-sonnet',
+    fast_model='gemini-2.5-flash',
+    fallback_model='gemini-2.5-flash',
 ))
