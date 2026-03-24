@@ -8,6 +8,13 @@ import React from 'react';
  * This component only renders: card HTML + MC options.
  */
 
+/** Check if HTML has visible content (not just style tags / whitespace) */
+function hasVisibleContent(html) {
+  if (!html) return false;
+  const stripped = html.replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]*>/g, '').trim();
+  return stripped.length > 0;
+}
+
 const MC_LETTERS = ['A', 'B', 'C', 'D', 'E'];
 
 function MCOptions({ options, selected, isResult, onSelect }) {
@@ -57,14 +64,22 @@ export default function ReviewerView({ cardData, reviewer }) {
 
   const { state, showBack, handleMCSelect } = reviewer;
 
-  // Card content uses note fields (clean, no template garbage)
+  // Card content uses template-rendered HTML (includes Note Type CSS)
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--ds-bg-canvas)', overflow: 'hidden' }}>
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 'var(--ds-space-2xl) var(--ds-space-xl) 160px', scrollbarWidth: 'none' }}>
         <div style={{ maxWidth: 'var(--ds-dock-width)', width: '100%', margin: '0 auto' }}>
           {showBack
-            ? <div dangerouslySetInnerHTML={{ __html: cardData.backField || cardData.backHtml || '' }} />
-            : <div dangerouslySetInnerHTML={{ __html: cardData.frontField || cardData.frontHtml || '' }} />
+            ? <div className="card-renderer">
+                <div className="card-content" dangerouslySetInnerHTML={{ __html:
+                  hasVisibleContent(cardData.backHtml) ? cardData.backHtml : (cardData.backField || cardData.backHtml || '')
+                }} />
+              </div>
+            : <div className="card-renderer">
+                <div className="card-content" dangerouslySetInnerHTML={{ __html:
+                  hasVisibleContent(cardData.frontHtml) ? cardData.frontHtml : (cardData.frontField || cardData.frontHtml || '')
+                }} />
+              </div>
           }
           {(state.mode === 'mc_active' || state.mode === 'mc_result') && state.mcOptions && (
             <MCOptions
