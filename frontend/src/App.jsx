@@ -2264,7 +2264,7 @@ function AppInner() {
   const isFreeChatAnimatingIn = freeChatTransition === 'entering' || freeChatTransition === 'visible';
   const showFreeChat = activeView === 'freeChat' && freeChatTransition !== 'idle';
 
-  if (activeView === 'deckBrowser' || activeView === 'overview' || activeView === 'freeChat' || activeView === 'review') {
+  if (activeView === 'deckBrowser' || activeView === 'overview' || activeView === 'freeChat') {
     return (
       <div style={{
         position: 'fixed', inset: 0,
@@ -2297,48 +2297,6 @@ function AppInner() {
               onBack={() => executeAction('view.navigate', 'deckBrowser')}
               onOptions={() => bridgeAction('deck.options')}
             />
-          )}
-          {activeView === 'review' && (
-            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-              {/* Left: Card Reviewer */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                <ReviewerView
-                  cardData={cardData}
-                  reviewState={reviewState}
-                  mcOptions={mcOptions}
-                  evaluationResult={evaluationResult}
-                  aiSteps={aiSteps}
-                  onFlip={() => bridgeAction('card.flip')}
-                  onRate={(ease) => bridgeAction('card.rate', { ease })}
-                  onRequestMC={(data) => bridgeAction('card.requestMC', JSON.stringify(data))}
-                  onSubmitAnswer={(data) => bridgeAction('card.submitAnswer', JSON.stringify(data))}
-                  onAdvance={() => bridgeAction('card.rate', { ease: 3 })}
-                  onOpenChat={() => {
-                    // Could toggle sidebar visibility or scroll to chat
-                  }}
-                />
-              </div>
-              {/* Right: Session Chat Sidebar */}
-              <div style={{
-                width: 450, minWidth: 450,
-                borderLeft: '1px solid var(--ds-border-subtle)',
-                display: 'flex', flexDirection: 'column',
-                background: 'var(--ds-bg-deep)',
-                overflow: 'hidden',
-              }}>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                  <div style={{
-                    padding: '16px',
-                    fontSize: 13,
-                    color: 'var(--ds-text-muted)',
-                    textAlign: 'center',
-                    marginTop: 60,
-                  }}>
-                    Session Chat
-                  </div>
-                </div>
-              </div>
-            </div>
           )}
           {showFreeChat && (
             <div style={{
@@ -2449,6 +2407,8 @@ function AppInner() {
     );
   }
 
+  const isReviewMode = activeView === 'review' || activeView === 'chat' || activeView === 'agentStudio' || activeView === 'plusiMenu' || activeView.startsWith('subMenu:');
+
   return (
     <ErrorBoundary>
     <style>{`
@@ -2457,20 +2417,46 @@ function AppInner() {
         to   { transform: translateX(0);    opacity: 1; }
       }
     `}</style>
-    <div id="chat-root" className="flex flex-col h-screen overflow-hidden" style={{ backgroundColor: 'var(--ds-bg-deep)', color: 'var(--ds-text-primary)' }}>
-      {/* Unified TopBar — same header across all views */}
-      <TopBar
-        activeView={activeView}
-        ankiState={ankiState}
-        messageCount={freeChatHook.messageCount}
-        totalDue={deckBrowserData?.totalDue || 0}
-        deckName={overviewData?.deckName || sessionContext?.currentSession?.deckName || ''}
-        dueNew={overviewData?.dueNew || deckBrowserData?.totalNew || 0}
-        dueLearning={overviewData?.dueLearning || deckBrowserData?.totalLearn || 0}
-        dueReview={overviewData?.dueReview || deckBrowserData?.totalReview || 0}
-        onTabClick={handleTabClick}
-        onSidebarToggle={handleSidebarToggle}
-      />
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      {/* Left: ReviewerView — only in review mode */}
+      {activeView === 'review' && cardData && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--ds-bg-canvas)' }}>
+          <TopBar
+            activeView={activeView}
+            ankiState={ankiState}
+            messageCount={freeChatHook.messageCount}
+            totalDue={deckBrowserData?.totalDue || 0}
+            deckName={overviewData?.deckName || sessionContext?.currentSession?.deckName || ''}
+            dueNew={overviewData?.dueNew || deckBrowserData?.totalNew || 0}
+            dueLearning={overviewData?.dueLearning || deckBrowserData?.totalLearn || 0}
+            dueReview={overviewData?.dueReview || deckBrowserData?.totalReview || 0}
+            onTabClick={handleTabClick}
+            onSidebarToggle={handleSidebarToggle}
+          />
+          <ReviewerView
+            cardData={cardData}
+            reviewState={reviewState}
+            mcOptions={mcOptions}
+            evaluationResult={evaluationResult}
+            aiSteps={aiSteps}
+            onFlip={() => bridgeAction('card.flip')}
+            onRate={(ease) => bridgeAction('card.rate', { ease })}
+            onRequestMC={(data) => bridgeAction('card.requestMC', JSON.stringify(data))}
+            onSubmitAnswer={(data) => bridgeAction('card.submitAnswer', JSON.stringify(data))}
+            onAdvance={() => bridgeAction('card.rate', { ease: 3 })}
+            onOpenChat={() => {}}
+          />
+        </div>
+      )}
+      {/* Right: Session Chat (always rendered, full width if no reviewer) */}
+      <div id="chat-root" className="flex flex-col overflow-hidden" style={{
+        backgroundColor: 'var(--ds-bg-deep)', color: 'var(--ds-text-primary)',
+        width: activeView === 'review' ? 450 : '100%',
+        minWidth: activeView === 'review' ? 450 : undefined,
+        maxWidth: activeView === 'review' ? 450 : undefined,
+        borderLeft: activeView === 'review' ? '1px solid var(--ds-border-subtle)' : 'none',
+        height: '100vh',
+      }}>
       {/* Header — ContextSurface (fixiert oben) */}
       <div ref={headerRef} className="fixed top-0 left-0 right-0 z-40" style={{ overflow: 'visible' }}>
         <ContextSurface
@@ -2977,6 +2963,7 @@ function AppInner() {
         isOpen={showPaywall}
         onClose={() => setShowPaywall(false)}
       />
+    </div>
     </div>
     </ErrorBoundary>
   );
