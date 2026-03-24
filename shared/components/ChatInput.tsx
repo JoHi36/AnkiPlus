@@ -296,7 +296,7 @@ export default function ChatInput({
     // Space (when not typing) → advance card
     if (e.code === 'Space' && !input.trim() && document.activeElement !== textareaRef.current) {
       e.preventDefault();
-      actionPrimary.onClick();
+      actionPrimary?.onClick();
       return;
     }
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -503,7 +503,7 @@ export default function ChatInput({
         </div>}
 
         {/* Split action row — primary (left) | divider | secondary (right) */}
-        <div className="ds-split-actions">
+        {actionPrimary && <div className="ds-split-actions">
           <button
             type="button"
             onClick={actionPrimary.onClick}
@@ -518,7 +518,7 @@ export default function ChatInput({
 
           <div className="ds-split-divider" />
 
-          <button
+          {actionSecondary && <button
             type="button"
             onClick={actionSecondary.onClick}
             disabled={actionSecondary.disabled}
@@ -529,8 +529,8 @@ export default function ChatInput({
             {!isFocused && actionSecondary.shortcut && (
               <span className="ds-kbd">{actionSecondary.shortcut}</span>
             )}
-          </button>
-        </div>
+          </button>}
+        </div>}
       </div>
     </div>
   );
