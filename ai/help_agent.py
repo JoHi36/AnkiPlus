@@ -66,7 +66,7 @@ REGELN:
 HELP_MODEL = 'gemini-2.5-flash'
 
 
-def run_help(situation: str = '', emit_step=None, memory=None, **kwargs) -> dict:
+def run_help(situation: str = '', emit_step=None, memory=None, stream_callback=None, **kwargs) -> dict:
     """Run the Help agent.
 
     Args:
@@ -78,6 +78,7 @@ def run_help(situation: str = '', emit_step=None, memory=None, **kwargs) -> dict
     Returns:
         Dict with 'text' (response) and optionally 'error'.
     """
+    model = kwargs.get('model') or HELP_MODEL
     memory_context = kwargs.get('memory_context', '')
     try:
         try:
@@ -129,7 +130,7 @@ def run_help(situation: str = '', emit_step=None, memory=None, **kwargs) -> dict
             }
             payload = {
                 "message": situation,
-                "model": HELP_MODEL,
+                "model": model,
                 "systemPrompt": system_prompt,
             }
             response = requests.post(url, json=payload, headers=headers, timeout=15)
@@ -141,7 +142,7 @@ def run_help(situation: str = '', emit_step=None, memory=None, **kwargs) -> dict
             import requests
             url = (
                 f"https://generativelanguage.googleapis.com/v1beta/models/"
-                f"{HELP_MODEL}:generateContent?key={api_key}"
+                f"{model}:generateContent?key={api_key}"
             )
             headers = {"Content-Type": "application/json"}
             response = requests.post(url, json=data, headers=headers, timeout=15)

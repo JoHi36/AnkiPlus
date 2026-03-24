@@ -9,7 +9,7 @@ except ImportError:
 logger = get_logger(__name__)
 
 
-def run_research(situation: str = '', emit_step=None, memory=None, **kwargs) -> dict:
+def run_research(situation: str = '', emit_step=None, memory=None, stream_callback=None, **kwargs) -> dict:
     """Entry point called by the sub-agent system."""
     from .search import search
 

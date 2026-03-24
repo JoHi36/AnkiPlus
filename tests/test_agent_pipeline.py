@@ -641,3 +641,32 @@ class TestHybridRetrievalCallbacks:
         assert 'emit_step' in params
         assert 'rag_retrieve_fn' in params
         assert 'state' in params
+
+
+# ---------------------------------------------------------------------------
+# All Agents Streaming-Ready Tests
+# ---------------------------------------------------------------------------
+
+class TestAllAgentsStreamingReady:
+    """Every agent must accept stream_callback for streaming support."""
+
+    def test_help_accepts_stream_callback(self):
+        import inspect
+        from ai.help_agent import run_help
+        assert 'stream_callback' in inspect.signature(run_help).parameters
+
+    def test_research_accepts_stream_callback(self):
+        import inspect
+        from research import run_research
+        assert 'stream_callback' in inspect.signature(run_research).parameters
+
+    def test_plusi_accepts_stream_callback(self):
+        import inspect
+        from plusi.agent import run_plusi
+        assert 'stream_callback' in inspect.signature(run_plusi).parameters
+
+    def test_help_uses_model_from_kwargs(self):
+        import inspect
+        from ai.help_agent import run_help
+        source = inspect.getsource(run_help)
+        assert "kwargs.get('model')" in source or "model = kwargs" in source

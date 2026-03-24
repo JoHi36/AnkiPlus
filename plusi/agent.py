@@ -775,7 +775,7 @@ def _execute_chat_action(action, action_query, next_wake, config):
     logger.info("plusi action dispatched: %s (background)", action)
 
 
-def run_plusi(situation, emit_step=None, memory=None, **kwargs):
+def run_plusi(situation, emit_step=None, memory=None, stream_callback=None, **kwargs):
     """
     Run the Plusi sub-agent.
 
