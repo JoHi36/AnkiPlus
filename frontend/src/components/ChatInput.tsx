@@ -74,16 +74,25 @@ export default function ChatInput({
   const [isFocused, setIsFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const [chipAgent, setChipAgent] = useState<{ name: string; label: string } | null>(stickyAgentProp);
+
+  // Sync chip from parent prop (e.g. after send resets input)
+  useEffect(() => {
+    setChipAgent(stickyAgentProp);
+  }, [stickyAgentProp]);
+
   // Listen for "Plusi fragen" from MascotShell context menu
   useEffect(() => {
     if (!plusiEnabled) return;
-    const handler = (_e: any) => {
-      // chipAgent state will be added in Task 3, for now just focus
+    const handler = (e: any) => {
+      const agent = { name: 'plusi', label: 'Plusi' };
+      setChipAgent(agent);
+      onStickyAgentChange?.(agent);
       setTimeout(() => textareaRef.current?.focus(), 50);
     };
     window.addEventListener('plusi-ask-focus', handler);
     return () => window.removeEventListener('plusi-ask-focus', handler);
-  }, [plusiEnabled]);
+  }, [plusiEnabled, onStickyAgentChange]);
 
   // Auto-Grow textarea
   useEffect(() => {
@@ -125,6 +134,13 @@ export default function ChatInput({
   }, [input, handleSubmit]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Backspace at position 0 with chip → delete chip
+    if (e.key === 'Backspace' && chipAgent && textareaRef.current?.selectionStart === 0 && textareaRef.current?.selectionEnd === 0) {
+      e.preventDefault();
+      setChipAgent(null);
+      onStickyAgentChange?.(null);
+      return;
+    }
     if (e.key === 'Escape') {
       e.preventDefault();
       if (onClose) onClose();
@@ -173,24 +189,55 @@ export default function ChatInput({
 
         {/* Textarea area */}
         {!hideInput && <div style={{ display: 'grid', position: 'relative' }}>
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onFocus={() => { setIsFocused(true); onFocusProp?.(); }}
-            onBlur={() => { setIsFocused(false); onBlurProp?.(); }}
-            placeholder={placeholderProp || "Stelle eine Frage..."}
-            data-chat-input="true"
-            rows={1}
-            style={{
-              gridArea: '1 / 1',
-              minHeight: '24px',
-              maxHeight: '120px',
-              paddingRight: '40px',
-              caretColor: 'var(--ds-text-primary)',
-            }}
-          />
+          {/* Chip + Textarea wrapper */}
+          <div style={{
+            gridArea: '1 / 1',
+            position: 'relative',
+            display: 'flex',
+            alignItems: 'flex-start',
+            padding: 'var(--ds-space-md) var(--ds-space-lg)',
+            paddingRight: '40px',
+            gap: 0,
+          }}>
+            {/* Agent chip */}
+            {chipAgent && (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center',
+                padding: '1px 8px', borderRadius: 6, marginRight: 5,
+                fontSize: 13, fontWeight: 600, flexShrink: 0,
+                background: 'var(--ds-accent)', color: 'white',
+                lineHeight: '20px', userSelect: 'none', cursor: 'default',
+                marginTop: 2,
+              }}>
+                {chipAgent.label}
+              </span>
+            )}
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onFocus={() => { setIsFocused(true); onFocusProp?.(); }}
+              onBlur={() => { setIsFocused(false); onBlurProp?.(); }}
+              placeholder={chipAgent ? 'Frage stellen...' : (placeholderProp || 'Stelle eine Frage...')}
+              data-chat-input="true"
+              rows={1}
+              style={{
+                flex: 1,
+                minHeight: '24px',
+                maxHeight: '120px',
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                resize: 'none',
+                color: 'var(--ds-text-primary)',
+                fontFamily: 'var(--ds-font-sans)',
+                fontSize: 'var(--ds-text-lg)',
+                padding: 0,
+                caretColor: 'var(--ds-text-primary)',
+              }}
+            />
+          </div>
           {/* Send button — appears when text present */}
           {isLoading ? (
             <button
