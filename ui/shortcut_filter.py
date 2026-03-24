@@ -262,9 +262,22 @@ class GlobalShortcutFilter(QObject):
                 logger.warning("Could not toggle chatbot panel: %s", e)
             return True
 
-        # When MainViewWidget is active (not in review), let all keys pass through
-        # to the React app — it handles Space, Enter, Escape, R internally
+        # When MainViewWidget is active, forward keys directly to React webview
+        # (Qt focus might be on mw.web, so we can't rely on normal event dispatch)
         if self._main_view_active:
+            qt_key = event.key()
+            mapping = QT_KEY_TO_JS.get(qt_key)
+            if mapping and not self._text_field_has_focus:
+                code, key = mapping
+                try:
+                    from .main_view import get_main_view
+                    mv = get_main_view()
+                    if mv._chatbot and mv._chatbot.web_view:
+                        js = "window.dispatchEvent(new KeyboardEvent('keydown', {key: '%s', code: '%s', bubbles: true}));" % (key, code)
+                        mv._chatbot.web_view.page().runJavaScript(js)
+                        return True  # Consume event — don't let mw.web see it
+                except Exception:
+                    pass
             return super().eventFilter(obj, event)
 
         # --- Cmd+Z: Always forward to reviewer (undo card) ---
