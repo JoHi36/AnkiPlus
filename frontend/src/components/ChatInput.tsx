@@ -84,6 +84,17 @@ export default function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [chipAgent, setChipAgent] = useState<{ name: string; label: string } | null>(stickyAgentProp);
+  const chipRef = useRef<HTMLSpanElement>(null);
+  const [chipWidth, setChipWidth] = useState(0);
+
+  // Measure chip width for text-indent
+  useEffect(() => {
+    if (chipRef.current) {
+      setChipWidth(chipRef.current.offsetWidth);
+    } else {
+      setChipWidth(0);
+    }
+  }, [chipAgent]);
 
   const [ghostVisible, setGhostVisible] = useState(false);
   const [ghostIndex, setGhostIndex] = useState(0);
@@ -310,22 +321,25 @@ export default function ChatInput({
 
         {/* Textarea area */}
         {!hideInput && <div style={{ display: 'grid', position: 'relative' }}>
-          {/* Chip + Textarea wrapper — inline flow so text wraps naturally */}
+          {/* Chip + Textarea wrapper */}
           <div style={{
             gridArea: '1 / 1',
             position: 'relative',
             padding: 'var(--ds-space-md) var(--ds-space-lg)',
             paddingRight: '40px',
           }}>
-            {/* Agent chip — inline so text flows beside and below it naturally */}
+            {/* Agent chip — overlay on first line, textarea indented to make room */}
             {chipAgent && (
-              <span style={{
-                display: 'inline-block',
-                padding: '1px 8px', borderRadius: 6, marginRight: 4,
+              <span ref={chipRef} style={{
+                position: 'absolute',
+                top: 'var(--ds-space-md)',
+                left: 'var(--ds-space-lg)',
+                display: 'inline-flex', alignItems: 'center',
+                padding: '1px 8px', borderRadius: 6,
                 fontSize: 13, fontWeight: 600,
                 background: 'var(--ds-accent)', color: 'white',
                 lineHeight: '22px', userSelect: 'none', cursor: 'default',
-                verticalAlign: 'baseline',
+                zIndex: 1,
               }}>
                 {chipAgent.label}
               </span>
@@ -341,7 +355,7 @@ export default function ChatInput({
               data-chat-input="true"
               rows={1}
               style={{
-                width: chipAgent ? `calc(100% - ${chipAgent.label.length * 8 + 20}px)` : '100%',
+                width: '100%',
                 minHeight: '24px',
                 maxHeight: '120px',
                 background: 'transparent',
@@ -353,8 +367,7 @@ export default function ChatInput({
                 fontSize: 'var(--ds-text-lg)',
                 padding: 0,
                 caretColor: 'var(--ds-text-primary)',
-                verticalAlign: 'top',
-                display: 'inline-block',
+                textIndent: chipAgent ? `${chipWidth + 8}px` : 0,
               }}
             />
             {/* Ghost autocomplete text */}
@@ -402,7 +415,7 @@ export default function ChatInput({
                     borderRadius: 4, padding: '1px 5px',
                     fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
                     verticalAlign: 'middle',
-                  }}>↑↓</kbd>
+                  }}>{ghostAgents.filter((a: any) => !a.isSettings).length <= 1 ? 'Tab' : '↑↓'}</kbd>
                 </span>
               );
             })()}
