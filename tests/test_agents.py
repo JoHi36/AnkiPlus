@@ -1,4 +1,4 @@
-"""Tests for ai/subagents.py — subagent registry."""
+"""Tests for ai/agents.py — agent registry."""
 import pytest
 import sys
 import os
@@ -7,44 +7,44 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-class TestSubagentRegistry:
+class TestAgentRegistry:
     def setup_method(self):
         """Clear registry before each test."""
-        from ai.subagents import SUBAGENT_REGISTRY
-        SUBAGENT_REGISTRY.clear()
+        from ai.agents import AGENT_REGISTRY
+        AGENT_REGISTRY.clear()
 
     def _make_agent(self, name='test', enabled_key='test_on', **kwargs):
-        from ai.subagents import SubagentDefinition
+        from ai.agents import AgentDefinition
         defaults = dict(
             name=name, label=name.title(), description='Test agent',
             color='#FF0000', enabled_key=enabled_key, pipeline_label=name.title(),
             run_module='json', run_function='dumps', router_hint='For testing.',
         )
         defaults.update(kwargs)
-        return SubagentDefinition(**defaults)
+        return AgentDefinition(**defaults)
 
     def test_register_and_lookup(self):
-        from ai.subagents import SUBAGENT_REGISTRY, register_subagent
+        from ai.agents import AGENT_REGISTRY, register_agent
         agent = self._make_agent('alpha')
-        register_subagent(agent)
-        assert 'alpha' in SUBAGENT_REGISTRY
-        assert SUBAGENT_REGISTRY['alpha'].label == 'Alpha'
+        register_agent(agent)
+        assert 'alpha' in AGENT_REGISTRY
+        assert AGENT_REGISTRY['alpha'].label == 'Alpha'
 
-    def test_get_enabled_subagents_filters(self):
-        from ai.subagents import register_subagent, get_enabled_subagents
-        register_subagent(self._make_agent('a', enabled_key='a_on'))
-        register_subagent(self._make_agent('b', enabled_key='b_on'))
-        enabled = get_enabled_subagents({'a_on': True, 'b_on': False})
+    def test_get_non_default_agents_filters(self):
+        from ai.agents import register_agent, get_non_default_agents
+        register_agent(self._make_agent('a', enabled_key='a_on'))
+        register_agent(self._make_agent('b', enabled_key='b_on'))
+        enabled = get_non_default_agents({'a_on': True, 'b_on': False})
         assert len(enabled) == 1
         assert enabled[0].name == 'a'
 
-    def test_get_enabled_subagents_empty(self):
-        from ai.subagents import get_enabled_subagents
-        assert get_enabled_subagents({}) == []
+    def test_get_non_default_agents_empty(self):
+        from ai.agents import get_non_default_agents
+        assert get_non_default_agents({}) == []
 
     def test_router_prompt_includes_agent(self):
-        from ai.subagents import register_subagent, get_router_subagent_prompt
-        register_subagent(self._make_agent('plusi', enabled_key='mascot_enabled',
+        from ai.agents import register_agent, get_router_subagent_prompt
+        register_agent(self._make_agent('plusi', enabled_key='mascot_enabled',
                                             router_hint='Use for casual chat.'))
         prompt = get_router_subagent_prompt({'mascot_enabled': True})
         assert 'subagent:plusi' in prompt
@@ -52,21 +52,21 @@ class TestSubagentRegistry:
         assert 'Use for casual chat.' in prompt
 
     def test_router_prompt_empty_when_disabled(self):
-        from ai.subagents import register_subagent, get_router_subagent_prompt
-        register_subagent(self._make_agent('plusi', enabled_key='mascot_enabled'))
+        from ai.agents import register_agent, get_router_subagent_prompt
+        register_agent(self._make_agent('plusi', enabled_key='mascot_enabled'))
         assert get_router_subagent_prompt({'mascot_enabled': False}) == ""
         assert get_router_subagent_prompt({}) == ""
 
     def test_lazy_load_run_fn(self):
-        from ai.subagents import lazy_load_run_fn
+        from ai.agents import lazy_load_run_fn
         agent = self._make_agent(run_module='json', run_function='dumps')
         fn = lazy_load_run_fn(agent)
         import json
         assert fn is json.dumps
 
     def test_get_registry_for_frontend(self):
-        from ai.subagents import register_subagent, get_registry_for_frontend
-        register_subagent(self._make_agent('plusi', enabled_key='on', color='#A78BFA',
+        from ai.agents import register_agent, get_registry_for_frontend
+        register_agent(self._make_agent('plusi', enabled_key='on', color='#A78BFA',
                                             pipeline_label='Plusi'))
         result = get_registry_for_frontend({'on': True})
         assert len(result) == 1
@@ -76,14 +76,14 @@ class TestSubagentRegistry:
         assert result[0]['enabled'] is True
 
     def test_on_finished_callback_stored(self):
-        from ai.subagents import register_subagent, SUBAGENT_REGISTRY
+        from ai.agents import register_agent, AGENT_REGISTRY
         def my_callback(widget, name, result): pass
-        register_subagent(self._make_agent('x', on_finished=my_callback))
-        assert SUBAGENT_REGISTRY['x'].on_finished is my_callback
+        register_agent(self._make_agent('x', on_finished=my_callback))
+        assert AGENT_REGISTRY['x'].on_finished is my_callback
 
     def test_router_prompt_uses_router_hint_not_description(self):
-        from ai.subagents import register_subagent, get_router_subagent_prompt
-        register_subagent(self._make_agent('web', enabled_key='web_on',
+        from ai.agents import register_agent, get_router_subagent_prompt
+        register_agent(self._make_agent('web', enabled_key='web_on',
                                             description='Searches the internet',
                                             router_hint='Only when user explicitly asks for web search.'))
         prompt = get_router_subagent_prompt({'web_on': True})
@@ -91,22 +91,22 @@ class TestSubagentRegistry:
         assert 'Searches the internet' not in prompt  # description NOT in router prompt
 
     def test_main_model_prompt_uses_main_model_hint(self):
-        from ai.subagents import register_subagent, get_main_model_subagent_prompt
-        register_subagent(self._make_agent('plusi', enabled_key='on',
+        from ai.agents import register_agent, get_main_model_subagent_prompt
+        register_agent(self._make_agent('plusi', enabled_key='on',
                                             main_model_hint='Use spawn_plusi for personal chat.'))
         prompt = get_main_model_subagent_prompt({'on': True})
         assert 'spawn_plusi' in prompt
         assert 'Plusi' in prompt
 
     def test_main_model_prompt_empty_without_hint(self):
-        from ai.subagents import register_subagent, get_main_model_subagent_prompt
-        register_subagent(self._make_agent('x', enabled_key='on'))  # no main_model_hint
+        from ai.agents import register_agent, get_main_model_subagent_prompt
+        register_agent(self._make_agent('x', enabled_key='on'))  # no main_model_hint
         prompt = get_main_model_subagent_prompt({'on': True})
         assert prompt == ""
 
-    def test_subagent_definition_new_fields(self):
-        from ai.subagents import SubagentDefinition
-        d = SubagentDefinition(
+    def test_agent_definition_new_fields(self):
+        from ai.agents import AgentDefinition
+        d = AgentDefinition(
             name='test', label='Test', description='desc', color='#FF0000',
             enabled_key='test_enabled', pipeline_label='Test',
             run_module='test', run_function='run_test', router_hint='hint'
@@ -116,9 +116,9 @@ class TestSubagentRegistry:
         assert d.loading_hint_template == '{label} arbeitet...'
 
     def test_registry_for_frontend_includes_new_fields(self):
-        from ai.subagents import SubagentDefinition, register_subagent, get_registry_for_frontend, SUBAGENT_REGISTRY
-        SUBAGENT_REGISTRY.clear()
-        register_subagent(SubagentDefinition(
+        from ai.agents import AgentDefinition, register_agent, get_registry_for_frontend, AGENT_REGISTRY
+        AGENT_REGISTRY.clear()
+        register_agent(AgentDefinition(
             name='test', label='Test Agent', description='d', color='#00FF00',
             enabled_key='test_on', pipeline_label='Test',
             run_module='test', run_function='run', router_hint='h',

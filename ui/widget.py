@@ -766,9 +766,9 @@ class ChatbotWidget(QWidget):
         # Also push subagent registry (frontend is guaranteed ready at this point)
         try:
             try:
-                from ..ai.subagents import get_registry_for_frontend
+                from ..ai.agents import get_registry_for_frontend
             except ImportError:
-                from ai.subagents import get_registry_for_frontend
+                from ai.agents import get_registry_for_frontend
             registry_payload = {
                 'type': 'subagent_registry',
                 'agents': get_registry_for_frontend(config)
@@ -849,10 +849,10 @@ class ChatbotWidget(QWidget):
             enabled = bool(data.get('enabled', False)) if isinstance(data, dict) else False
             # Map subagent name to its config enabled_key
             try:
-                from ..ai.subagents import SUBAGENT_REGISTRY
+                from ..ai.agents import AGENT_REGISTRY
             except ImportError:
-                from ai.subagents import SUBAGENT_REGISTRY
-            agent = SUBAGENT_REGISTRY.get(name)
+                from ai.agents import AGENT_REGISTRY
+            agent = AGENT_REGISTRY.get(name)
             if agent:
                 update_config(**{agent.enabled_key: enabled})
                 self.config = get_config(force_reload=True)
@@ -1206,10 +1206,10 @@ class ChatbotWidget(QWidget):
     def _handle_subagent_direct(self, agent_name, text, extra=None):
         """Route @Name messages to the appropriate subagent in a background thread."""
         try:
-            from ..ai.subagents import SUBAGENT_REGISTRY, lazy_load_run_fn
+            from ..ai.agents import AGENT_REGISTRY, lazy_load_run_fn
         except ImportError:
-            from ai.subagents import SUBAGENT_REGISTRY, lazy_load_run_fn
-        agent = SUBAGENT_REGISTRY.get(agent_name)
+            from ai.agents import AGENT_REGISTRY, lazy_load_run_fn
+        agent = AGENT_REGISTRY.get(agent_name)
         if not agent:
             logger.warning("Unknown subagent: %s", agent_name)
             return
@@ -1244,10 +1244,10 @@ class ChatbotWidget(QWidget):
             )
             # Run agent-specific post-processing (mood sync, panel notify, etc.)
             try:
-                from ..ai.subagents import SUBAGENT_REGISTRY
+                from ..ai.agents import AGENT_REGISTRY
             except ImportError:
-                from ai.subagents import SUBAGENT_REGISTRY
-            agent = SUBAGENT_REGISTRY.get(agent_name)
+                from ai.agents import AGENT_REGISTRY
+            agent = AGENT_REGISTRY.get(agent_name)
             if agent and agent.on_finished:
                 try:
                     agent.on_finished(self, agent_name, result)
@@ -1367,9 +1367,9 @@ class ChatbotWidget(QWidget):
         # Push subagent registry to frontend
         try:
             try:
-                from ..ai.subagents import get_registry_for_frontend
+                from ..ai.agents import get_registry_for_frontend
             except ImportError:
-                from ai.subagents import get_registry_for_frontend
+                from ai.agents import get_registry_for_frontend
             registry_payload = {
                 'type': 'subagent_registry',
                 'agents': get_registry_for_frontend(self.config)

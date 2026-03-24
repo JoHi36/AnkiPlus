@@ -1464,9 +1464,9 @@ class WebBridge(QObject):
         """Return enabled subagents as JSON for frontend registry."""
         try:
             try:
-                from ..ai.subagents import get_registry_for_frontend
+                from ..ai.agents import get_registry_for_frontend
             except ImportError:
-                from ai.subagents import get_registry_for_frontend
+                from ai.agents import get_registry_for_frontend
             config = self.widget.config
             return json.dumps(get_registry_for_frontend(config))
         except Exception as e:
