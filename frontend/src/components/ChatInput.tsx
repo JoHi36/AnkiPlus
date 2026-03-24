@@ -138,6 +138,23 @@ export default function ChatInput({
 
   const currentGhost = ghostAgents[ghostIndex] || null;
 
+  // Auto-select when only one non-settings agent matches and name is fully typed
+  useEffect(() => {
+    if (!ghostVisible || !ghostFilter) return;
+    const nonSettings = ghostAgents.filter((a: any) => !a.isSettings);
+    if (nonSettings.length === 1) {
+      const agent = nonSettings[0];
+      if (agent.label.toLowerCase() === ghostFilter.toLowerCase()) {
+        // Exact match, auto-select
+        const newAgent = { name: agent.name, label: agent.label };
+        setChipAgent(newAgent);
+        onStickyAgentChange?.(newAgent);
+        setInput(input.replace(/@\w*$/, '').trimStart());
+        setGhostVisible(false);
+      }
+    }
+  }, [ghostAgents, ghostFilter, ghostVisible]);
+
   // Detect @ in input → activate ghost
   useEffect(() => {
     const atMatch = input.match(/@(\w*)$/);
@@ -293,25 +310,22 @@ export default function ChatInput({
 
         {/* Textarea area */}
         {!hideInput && <div style={{ display: 'grid', position: 'relative' }}>
-          {/* Chip + Textarea wrapper */}
+          {/* Chip + Textarea wrapper — inline flow so text wraps naturally */}
           <div style={{
             gridArea: '1 / 1',
             position: 'relative',
-            display: 'flex',
-            alignItems: 'flex-start',
             padding: 'var(--ds-space-md) var(--ds-space-lg)',
             paddingRight: '40px',
-            gap: 0,
           }}>
-            {/* Agent chip */}
+            {/* Agent chip — inline so text flows beside and below it naturally */}
             {chipAgent && (
               <span style={{
-                display: 'inline-flex', alignItems: 'center',
-                padding: '1px 8px', borderRadius: 6, marginRight: 5,
-                fontSize: 13, fontWeight: 600, flexShrink: 0,
+                display: 'inline-block',
+                padding: '1px 8px', borderRadius: 6, marginRight: 4,
+                fontSize: 13, fontWeight: 600,
                 background: 'var(--ds-accent)', color: 'white',
-                lineHeight: '20px', userSelect: 'none', cursor: 'default',
-                marginTop: 2,
+                lineHeight: '22px', userSelect: 'none', cursor: 'default',
+                verticalAlign: 'baseline',
               }}>
                 {chipAgent.label}
               </span>
@@ -327,7 +341,7 @@ export default function ChatInput({
               data-chat-input="true"
               rows={1}
               style={{
-                flex: 1,
+                width: chipAgent ? `calc(100% - ${chipAgent.label.length * 8 + 20}px)` : '100%',
                 minHeight: '24px',
                 maxHeight: '120px',
                 background: 'transparent',
@@ -339,6 +353,8 @@ export default function ChatInput({
                 fontSize: 'var(--ds-text-lg)',
                 padding: 0,
                 caretColor: 'var(--ds-text-primary)',
+                verticalAlign: 'top',
+                display: 'inline-block',
               }}
             />
             {/* Ghost autocomplete text */}
