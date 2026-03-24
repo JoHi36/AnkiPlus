@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import ComponentViewer from './ComponentViewer';
 import './index.css';
 import 'katex/dist/katex.min.css'; // KaTeX CSS
 
@@ -28,14 +29,26 @@ if (typeof window !== 'undefined') {
   }
 }
 
+const params = new URLSearchParams(window.location.search);
+const view = params.get('view');
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
 try {
-  root.render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>
-  );
+  if (view === 'components') {
+    // Design System Viewer — localhost:3000?view=components
+    root.render(
+      <React.StrictMode>
+        <ComponentViewer />
+      </React.StrictMode>
+    );
+  } else {
+    root.render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>
+    );
+  }
 } catch (error) {
   console.error('Fehler beim Rendern der App:', error);
 }
