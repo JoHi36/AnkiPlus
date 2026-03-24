@@ -1906,6 +1906,7 @@ class ChatbotWidget(QWidget):
     def _send_card_data(self, card, is_question=True):
         """Send card HTML + metadata to React."""
         import re
+        from aqt import mw
         try:
             front_html = card.question()
             back_html = card.answer()
