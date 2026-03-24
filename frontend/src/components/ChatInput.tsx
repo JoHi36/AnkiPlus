@@ -47,6 +47,15 @@ export interface ChatInputProps {
 }
 
 
+function getTextWidth(text: string, textarea: HTMLTextAreaElement): number {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return 0;
+  const style = window.getComputedStyle(textarea);
+  ctx.font = `${style.fontSize} ${style.fontFamily}`;
+  return ctx.measureText(text).width;
+}
+
 export default function ChatInput({
   onSend,
   onOpenSettings,
@@ -76,6 +85,10 @@ export default function ChatInput({
 
   const [chipAgent, setChipAgent] = useState<{ name: string; label: string } | null>(stickyAgentProp);
 
+  const [ghostVisible, setGhostVisible] = useState(false);
+  const [ghostIndex, setGhostIndex] = useState(0);
+  const [ghostFilter, setGhostFilter] = useState('');
+
   // Sync chip from parent prop (e.g. after send resets input)
   useEffect(() => {
     setChipAgent(stickyAgentProp);
@@ -93,6 +106,39 @@ export default function ChatInput({
     window.addEventListener('plusi-ask-focus', handler);
     return () => window.removeEventListener('plusi-ask-focus', handler);
   }, [plusiEnabled, onStickyAgentChange]);
+
+  // Build ghost suggestion list from registry
+  const ghostAgents = React.useMemo(() => {
+    const registry = getRegistry();
+    const registryAgents = registry.size > 0
+      ? [...registry.values()].filter((a: any) => a.enabled).sort((a: any, b: any) => a.label.localeCompare(b.label))
+      : [];
+
+    const settingsEntry = { name: 'agenten-anpassen', label: 'Agenten anpassen', isSettings: true };
+    const all: any[] = [settingsEntry, ...registryAgents];
+
+    if (!ghostFilter) return all;
+    const lower = ghostFilter.toLowerCase();
+    return all.filter((a: any) => a.name.includes(lower) || a.label.toLowerCase().includes(lower));
+  }, [ghostFilter]);
+
+  const currentGhost = ghostAgents[ghostIndex] || null;
+
+  // Detect @ in input → activate ghost
+  useEffect(() => {
+    const atMatch = input.match(/@(\w*)$/);
+    if (atMatch) {
+      setGhostFilter(atMatch[1]);
+      setGhostVisible(true);
+      setGhostIndex(0);
+    } else if (input === '@') {
+      setGhostFilter('');
+      setGhostVisible(true);
+      setGhostIndex(0);
+    } else {
+      setGhostVisible(false);
+    }
+  }, [input]);
 
   // Auto-Grow textarea
   useEffect(() => {
@@ -134,6 +180,44 @@ export default function ChatInput({
   }, [input, handleSubmit]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Ghost autocomplete navigation
+    if (ghostVisible && ghostAgents.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setGhostIndex(prev => (prev + 1) % ghostAgents.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setGhostIndex(prev => (prev - 1 + ghostAgents.length) % ghostAgents.length);
+        return;
+      }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        if (currentGhost) {
+          if ((currentGhost as any).isSettings) {
+            // Open Agent Studio
+            setInput(input.replace(/@\w*$/, ''));
+            setGhostVisible(false);
+            onOpenAgentStudio?.();
+          } else {
+            // Create chip, remove @text from input
+            const newAgent = { name: currentGhost.name, label: currentGhost.label };
+            setChipAgent(newAgent);
+            onStickyAgentChange?.(newAgent);
+            setInput(input.replace(/@\w*$/, '').trimStart());
+            setGhostVisible(false);
+          }
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setInput(input.replace(/@\w*$/, ''));
+        setGhostVisible(false);
+        return;
+      }
+    }
     // Backspace at position 0 with chip → delete chip
     if (e.key === 'Backspace' && chipAgent && textareaRef.current?.selectionStart === 0 && textareaRef.current?.selectionEnd === 0) {
       e.preventDefault();
@@ -237,6 +321,44 @@ export default function ChatInput({
                 caretColor: 'var(--ds-text-primary)',
               }}
             />
+            {/* Ghost autocomplete text */}
+            {ghostVisible && currentGhost && (() => {
+              const atMatch = input.match(/@(\w*)$/);
+              const typed = atMatch ? atMatch[1] : '';
+              const ghostLabel = currentGhost.label;
+              // Show the suffix that completes what the user typed
+              const suffix = ghostLabel.toLowerCase().startsWith(typed.toLowerCase()) && typed.length > 0
+                ? ghostLabel.slice(typed.length)
+                : ghostLabel;
+
+              if (!suffix) return null;
+
+              return (
+                <span
+                  aria-hidden="true"
+                  style={{
+                    position: 'absolute',
+                    left: textareaRef.current
+                      ? textareaRef.current.offsetLeft + getTextWidth(input, textareaRef.current)
+                      : 0,
+                    top: textareaRef.current
+                      ? textareaRef.current.offsetTop
+                      : 0,
+                    color: 'var(--ds-text-placeholder)',
+                    fontSize: 'var(--ds-text-lg)',
+                    fontFamily: 'var(--ds-font-sans)',
+                    pointerEvents: 'none',
+                    userSelect: 'none',
+                    whiteSpace: 'pre',
+                    lineHeight: textareaRef.current
+                      ? window.getComputedStyle(textareaRef.current).lineHeight
+                      : undefined,
+                  }}
+                >
+                  {suffix}
+                </span>
+              );
+            })()}
           </div>
           {/* Send button — appears when text present */}
           {isLoading ? (
