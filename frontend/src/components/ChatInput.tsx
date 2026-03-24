@@ -423,24 +423,23 @@ export default function ChatInput({
                     fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
                     verticalAlign: 'middle',
                   }}>{ghostAgents.filter((a: any) => !a.isSettings).length <= 1 ? 'Tab' : '↑↓'}</kbd>
-                  {/* Second option: "Agenten" settings link — only on initial @ before interaction */}
+                  {/* Second hint: "Studio Tab" — only on initial @ before any interaction */}
                   {!ghostInteracted && !(currentGhost as any)?.isSettings && (
                     <span style={{
                       display: 'inline-flex', alignItems: 'center', gap: 4,
-                      marginLeft: 8,
+                      marginLeft: 6,
                       color: 'var(--ds-text-muted)',
-                      opacity: 0.5,
-                      fontSize: 12,
+                      opacity: 0.45,
                     }}>
-                      ·
-                      <span style={{ marginLeft: 2 }}>Agenten</span>
+                      <span style={{ fontSize: 11 }}>·</span>
+                      <span style={{ fontSize: 12 }}>Studio</span>
                       <kbd style={{
                         fontSize: 9, fontWeight: 500,
                         color: 'var(--ds-text-muted)',
                         background: 'var(--ds-bg-overlay)',
                         borderRadius: 3, padding: '0px 4px',
                         fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
-                      }}>⌘</kbd>
+                      }}>Tab</kbd>
                     </span>
                   )}
                 </span>
