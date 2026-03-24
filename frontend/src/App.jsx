@@ -203,7 +203,10 @@ function AppInner() {
   const [reviewChatOpen, setReviewChatOpen] = useState(false);
   const reviewChatWasOpenRef = useRef(false); // remember across tab switches
   const [viewTransition, setViewTransition] = useState(false); // crossfade during tab switches
-  const reviewer = useReviewerState(cardData);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [dockPulse, setDockPulse] = useState(0); // increment to re-trigger animation
+  const triggerDockPulse = useCallback(() => setDockPulse(n => n + 1), []);
+  const reviewer = useReviewerState(cardData, triggerDockPulse);
 
   const lastProcessedCardRef = useRef(null);
   // Create a setSessions wrapper that works with SessionContext
@@ -421,6 +424,7 @@ function AppInner() {
 
   const [activeAgentColor, setActiveAgentColor] = useState(null);
   const [activeAgentName, setActiveAgentName] = useState(null);
+  const [stickyAgent, setStickyAgent] = useState(null);
 
   // Detect subagent routing from pipeline steps (covers both direct @Name and router delegation)
   useEffect(() => {
@@ -675,6 +679,9 @@ function AppInner() {
             setActiveView('freeChat');
             setFreeChatTransition('visible');
             fullscreenLoadForDeckRef.current(0);
+          } else if (activeViewRef.current === 'review') {
+            // State bounce protection: Anki briefly fires deckBrowser during card advance.
+            // Ignore deckBrowser if we're in review — wait for explicit user navigation.
           } else {
             if (activeViewRef.current === 'freeChat') {
               setFreeChatTransition('idle');
@@ -1286,21 +1293,17 @@ function AppInner() {
       ankiReceiveRef.current = true;
     }
     
-    // Function to process queued messages
+    // Function to process queued messages (only init/deckSelected — rest handled live by ankiReceive)
     const processQueue = () => {
       if (window._ankiReceiveQueue && window._ankiReceiveQueue.length > 0) {
         console.error('🔵 DEBUG App.jsx: Processing queued messages', window._ankiReceiveQueue.length);
         const queued = window._ankiReceiveQueue.splice(0);
         queued.forEach(payload => {
           console.error('🔵 DEBUG App.jsx: Processing queued payload', payload?.type);
-          // Process ALL queued messages, not just 'init'
           if (payload.type === 'deckSelected') {
-          console.error('🔵 DEBUG App.jsx: Processing queued deckSelected', payload.data);
-          // Handle deckSelected from queue - dispatch event for SessionContext
-          window.dispatchEvent(new CustomEvent('deckSelected', { 
-            detail: payload.data 
-          }));
-        } else if (payload.type === 'init') {
+            console.error('🔵 DEBUG App.jsx: Processing queued deckSelected', payload.data);
+            window.dispatchEvent(new CustomEvent('deckSelected', { detail: payload.data }));
+          } else if (payload.type === 'init') {
             modelsHookRef.current.handleAnkiReceive(payload);
             if (payload.currentDeck) {
               deckTrackingHookRef.current.setCurrentDeck(payload.currentDeck);
@@ -1308,6 +1311,19 @@ function AppInner() {
             }
             if (payload.theme) setTheme(payload.theme);
             if (payload.resolvedTheme) setResolvedTheme(payload.resolvedTheme);
+          } else if (payload.type === 'card.shown') {
+            setCardData({...payload.data, isQuestion: true});
+          } else if (payload.type === 'card.answerShown') {
+            setCardData(prev => prev ? {...prev, ...payload.data, isQuestion: false} : {...payload.data, isQuestion: false});
+          } else if (payload.type?.startsWith('reviewer.')) {
+            // Forward reviewer events (evaluationResult, mcOptions, aiStep) as CustomEvents
+            window.dispatchEvent(new CustomEvent(payload.type, { detail: payload.data }));
+          } else if (payload.type === 'app.stateChanged' || payload.type === 'stateChanged') {
+            const state = payload.state || payload.data?.state;
+            if (state === 'review') {
+              setActiveView('review');
+              activeViewRef.current = 'review';
+            }
           }
         });
       }
@@ -1697,6 +1713,12 @@ function AppInner() {
       setActiveView('chat');
     }
 
+    // Prepend @AgentLabel prefix when a sticky agent is active,
+    // so the backend router dispatches to the correct subagent.
+    if (stickyAgent && !text.startsWith('@')) {
+      text = `@${stickyAgent.label} ${text}`;
+    }
+
     // @Subagent intercept is now handled inside useChat.handleSend() via registry-based detection.
     // No App.jsx-level interception needed — useChat routes via bridge.subagentDirect().
 
@@ -2029,17 +2051,23 @@ function AppInner() {
 
   // ── TopBar tab handler (merged from MainApp) ──────────────────
   const handleTabClick = useCallback((tab) => {
-    // Remember sidebar state when leaving review
+    // Close chat sidebar on tab switch (settings stays open — it's a global layer)
     if (activeView === 'review' && tab !== 'session') {
       if (reviewChatOpen) reviewChatWasOpenRef.current = true;
       setReviewChatOpen(false);
     }
 
-    // Instant navigation
+    // Instant navigation — set activeView + ref synchronously so bounce protection works
     if (tab === 'stapel') {
       if (activeView === 'freeChat') executeAction('chat.close');
-      else executeAction('view.navigate', 'deckBrowser');
+      else {
+        setActiveView('deckBrowser');
+        activeViewRef.current = 'deckBrowser';
+        executeAction('view.navigate', 'deckBrowser');
+      }
     } else if (tab === 'session') {
+      setActiveView('review');
+      activeViewRef.current = 'review';
       bridgeAction('view.navigate', 'review');
     } else if (tab === 'statistik') {
       executeAction('stats.open');
@@ -2047,7 +2075,7 @@ function AppInner() {
   }, [activeView, reviewChatOpen]);
 
   const handleSidebarToggle = useCallback(() => {
-    executeAction('settings.toggle');
+    setSettingsOpen(prev => !prev);
   }, []);
 
   // ── Keyboard shortcuts for fullscreen FreeChat (merged from MainApp) ──
@@ -2270,6 +2298,21 @@ function AppInner() {
   const isFreeChatAnimatingIn = freeChatTransition === 'entering' || freeChatTransition === 'visible';
   const showFreeChat = activeView === 'freeChat' && freeChatTransition !== 'idle';
 
+  // Settings panel — rendered as fixed overlay, visible on ALL views
+  const settingsPanel = (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, zIndex: 70,
+      width: 'var(--ds-settings-width)', height: '100vh',
+      background: 'var(--ds-bg-deep)',
+      borderRight: '1px solid var(--ds-border-subtle)',
+      display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      transform: settingsOpen ? 'translateX(0)' : 'translateX(-100%)',
+      transition: 'transform 0.35s cubic-bezier(0.25, 1, 0.5, 1)',
+    }}>
+      <SettingsSidebar />
+    </div>
+  );
+
   if (activeView === 'deckBrowser' || activeView === 'overview' || activeView === 'freeChat') {
     return (
       <div style={{
@@ -2277,7 +2320,10 @@ function AppInner() {
         display: 'flex', flexDirection: 'column',
         background: showFreeChat && isFreeChatAnimatingIn ? 'var(--ds-bg-deep)' : 'var(--ds-bg-canvas)',
         transition: 'background-color 400ms cubic-bezier(0.25, 0.1, 0.25, 1)',
+        marginLeft: settingsOpen ? 'var(--ds-settings-width)' : 0,
+        transition: `background-color 400ms cubic-bezier(0.25, 0.1, 0.25, 1), margin-left 0.35s cubic-bezier(0.25, 1, 0.5, 1)`,
       }}>
+        {settingsPanel}
         <TopBar
           activeView={activeView}
           ankiState={ankiState}
@@ -2288,7 +2334,7 @@ function AppInner() {
           dueLearning={ankiState === 'overview' ? (overviewData?.dueLearning || 0) : (deckBrowserData?.totalLearn || 0)}
           dueReview={ankiState === 'overview' ? (overviewData?.dueReview || 0) : (deckBrowserData?.totalReview || 0)}
           onTabClick={handleTabClick}
-          onSidebarToggle={handleSidebarToggle}
+          onSidebarToggle={handleSidebarToggle} settingsOpen={settingsOpen}
           holdToResetProps={holdToReset}
         />
 
@@ -2393,6 +2439,9 @@ function AppInner() {
                   onClose={() => executeAction('chat.close')}
                   onFocus={handleMainInputFocus}
                   onBlur={handleMainInputBlur}
+                  stickyAgent={stickyAgent}
+                  onStickyAgentChange={setStickyAgent}
+                  onOpenAgentStudio={() => setActiveView('agentStudio')}
                   actionPrimary={{
                     label: 'Schlie\u00DFen',
                     shortcut: '\u2423',
@@ -2428,18 +2477,35 @@ function AppInner() {
       .view-enter-delay-1 { animation-delay: 0.04s; }
       .view-enter-delay-2 { animation-delay: 0.08s; }
       .view-enter-delay-3 { animation-delay: 0.12s; }
+      @keyframes dockPulse {
+        0%   { transform: scale(1); }
+        40%  { transform: scale(1.012); }
+        100% { transform: scale(1); }
+      }
+      .dock-pulse { animation: dockPulse 0.3s cubic-bezier(0.25, 1, 0.5, 1); }
     `}</style>
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--ds-bg-canvas)' }}>
+      {settingsPanel}
+      {/* Spacer — pushes content right when settings is open */}
+      <div style={{
+        width: settingsOpen ? 'var(--ds-settings-width)' : 0,
+        minWidth: settingsOpen ? 'var(--ds-settings-width)' : 0,
+        transition: 'width 0.35s cubic-bezier(0.25, 1, 0.5, 1), min-width 0.35s cubic-bezier(0.25, 1, 0.5, 1)',
+        flexShrink: 0,
+      }} />
+
       {/* LEFT: Card viewer — only in review mode */}
       {activeView === 'review' && (
-        <div key="review" className="view-enter" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--ds-bg-canvas)', minWidth: 0 }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--ds-bg-canvas)', minWidth: 0 }}>
           <TopBar
             activeView="review" ankiState="review"
             messageCount={0} totalDue={deckBrowserData?.totalDue || 0}
             deckName={cardData?.deckName || ''} dueNew={0} dueLearning={0} dueReview={0}
-            onTabClick={handleTabClick} onSidebarToggle={handleSidebarToggle}
+            onTabClick={handleTabClick} onSidebarToggle={handleSidebarToggle} settingsOpen={settingsOpen}
           />
-          <ReviewerView cardData={cardData} reviewer={reviewer} />
+          <div key="review-content" className="view-enter" style={{ flex: 1, overflow: 'hidden' }}>
+            <ReviewerView cardData={cardData} reviewer={reviewer} />
+          </div>
         </div>
       )}
       {/* RIGHT: Chat panel — hidden in review until "Nachfragen", full width in other modes */}
@@ -2450,12 +2516,14 @@ function AppInner() {
               width: 'var(--ds-sidebar-width)', minWidth: 'var(--ds-sidebar-width)',
               marginRight: reviewChatOpen ? 0 : 'calc(-1 * var(--ds-sidebar-width))',
               transition: 'margin-right 0.3s cubic-bezier(0.25, 1, 0.5, 1)',
+              flexShrink: 0,
+              pointerEvents: reviewChatOpen ? 'auto' : 'none',
             }
-          : { width: 0, minWidth: 0, display: 'none' }
+          : { flex: 1, minWidth: 0 }
         ),
-        height: '100vh', flexShrink: 0, position: 'relative',
+        height: '100vh', position: 'relative',
       }}>
-      <div id="chat-root" className={`flex flex-col overflow-hidden ${activeView !== 'review' ? 'view-enter' : ''}`} key={activeView === 'review' ? 'chat-sidebar' : `chat-main-${activeView}`} style={{
+      <div id="chat-root" className="flex flex-col overflow-hidden" style={{
         backgroundColor: 'var(--ds-bg-deep)', color: 'var(--ds-text-primary)',
         width: activeView === 'review' ? 'var(--ds-sidebar-width)' : '100%',
         borderLeft: activeView === 'review' ? '1px solid var(--ds-border-subtle)' : 'none',
@@ -2474,7 +2542,7 @@ function AppInner() {
         dueLearning={overviewData?.dueLearning || deckBrowserData?.totalLearn || 0}
         dueReview={overviewData?.dueReview || deckBrowserData?.totalReview || 0}
         onTabClick={handleTabClick}
-        onSidebarToggle={handleSidebarToggle}
+        onSidebarToggle={handleSidebarToggle} settingsOpen={settingsOpen}
       />}
       {/* Header — ContextSurface (fixiert oben, hidden in review) */}
       <div ref={headerRef} className="fixed top-0 left-0 right-0 z-40" style={{ overflow: 'visible', display: activeView === 'review' ? 'none' : undefined }}>
@@ -2503,7 +2571,7 @@ function AppInner() {
 
       <TokenBar tokenInfo={chatHook.tokenInfo} />
 
-      <main className="flex-1 overflow-hidden relative flex flex-col min-h-0" style={{ height: '100%' }}>
+      <main key={activeView === 'review' ? 'main-review' : `main-${activeView}`} className={`flex-1 overflow-hidden relative flex flex-col min-h-0 ${activeView !== 'review' ? 'view-enter' : ''}`} style={{ height: '100%' }}>
         {showSessionOverview ? (
           /* Deck Browser — flex column container for in-place chat transformation */
           <div style={{ position: 'relative', flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -2531,8 +2599,8 @@ function AppInner() {
             />
             {/* Chat Container - scrollbar */}
             <div className="flex-1 overflow-hidden relative">
-              {/* Top Fade Gradient — hidden in sub-menus and Agent Studio */}
-              {!isInSubmenu && activeView !== 'agentStudio' && (
+              {/* Top Fade Gradient — hidden in review, sub-menus and Agent Studio */}
+              {!isInSubmenu && activeView !== 'agentStudio' && activeView !== 'review' && (
               <div
                 className="fixed left-0 right-0 pointer-events-none z-25"
                 style={{
@@ -2977,18 +3045,20 @@ function AppInner() {
           if (s.mode === 'question') reviewer.handleEvaluate(text);
           else if (reviewer.isRateable) { setReviewChatOpen(true); if (text) handleSend(text); }
         };
+        // Wrap all actions with dock pulse for subtle material feedback
+        const pulse = (fn) => () => { triggerDockPulse(); fn(); };
         if (s.mode === 'question') {
-          actionPrimary = { label: 'Show Answer', shortcut: 'SPACE', onClick: reviewer.handleFlip };
-          actionSecondary = { label: 'Multiple Choice', shortcut: '\u21b5', onClick: reviewer.handleStartMC };
+          actionPrimary = { label: 'Show Answer', shortcut: 'SPACE', onClick: pulse(reviewer.handleFlip) };
+          actionSecondary = { label: 'Multiple Choice', shortcut: '\u21b5', onClick: pulse(reviewer.handleStartMC) };
         } else if (reviewer.isLoading) {
-          actionPrimary = { label: 'Abbrechen', shortcut: '', onClick: () => reviewer.dispatch({ type: 'RESET' }) };
+          actionPrimary = { label: 'Abbrechen', shortcut: '', onClick: pulse(() => reviewer.dispatch({ type: 'RESET' })) };
           actionSecondary = { label: '', shortcut: '', onClick: () => {} };
         } else if (s.mode === 'mc_active') {
-          actionPrimary = { label: 'Aufl\u00f6sen', shortcut: 'SPACE', onClick: reviewer.handleFlip };
-          actionSecondary = { label: 'Nachfragen', shortcut: '\u21b5', onClick: () => setReviewChatOpen(true) };
+          actionPrimary = { label: 'Aufl\u00f6sen', shortcut: 'SPACE', onClick: pulse(reviewer.handleFlip) };
+          actionSecondary = { label: 'Nachfragen', shortcut: '\u21b5', onClick: pulse(() => setReviewChatOpen(true)) };
         } else if (reviewer.isRateable) {
-          actionPrimary = { label: 'Weiter', shortcut: 'SPACE', onClick: () => reviewer.handleRate(s.selectedRating) };
-          actionSecondary = { label: 'Nachfragen', shortcut: '\u21b5', onClick: () => setReviewChatOpen(true) };
+          actionPrimary = { label: 'Weiter', shortcut: 'SPACE', onClick: pulse(() => reviewer.handleRate(s.selectedRating)) };
+          actionSecondary = { label: 'Nachfragen', shortcut: '\u21b5', onClick: pulse(() => setReviewChatOpen(true)) };
         }
       } else if (isReviewSidebar) {
         // Sidebar — chat mode with close action
@@ -3021,14 +3091,16 @@ function AppInner() {
 
       // Position styles — animated transitions
       // All positions use left + width only (no right/auto) so CSS can animate smoothly
+      // Settings offset shifts everything right when settings panel is open
+      const sOff = settingsOpen ? 'var(--ds-settings-width)' : '0px';
       const posStyle = isReviewCenter
-        ? { left: 'calc(50% - var(--ds-dock-width) / 2)', width: 'var(--ds-dock-width)', bottom: 'var(--ds-space-xl)' }
+        ? { left: `calc(${sOff} + (100% - ${sOff}) / 2 - var(--ds-dock-width) / 2)`, width: 'var(--ds-dock-width)', bottom: 'var(--ds-space-xl)' }
         : isReviewSidebar
           ? { left: 'calc(100% - var(--ds-sidebar-width) + var(--ds-space-xl))', width: 'var(--ds-dock-width)', bottom: 'var(--ds-space-xl)' }
-          : { left: 'var(--ds-space-lg)', width: 'calc(100% - 2 * var(--ds-space-lg))', bottom: 'var(--ds-space-lg)' };
+          : { left: `calc(${sOff} + var(--ds-space-lg))`, width: `calc(100% - ${sOff} - 2 * var(--ds-space-lg))`, bottom: 'var(--ds-space-lg)' };
 
       return (
-        <div style={{
+        <div key={dockPulse} className={dockPulse > 0 ? 'dock-pulse' : ''} style={{
           position: 'fixed', zIndex: 60,
           ...posStyle,
           transition: 'left 0.3s cubic-bezier(0.25, 1, 0.5, 1), right 0.3s cubic-bezier(0.25, 1, 0.5, 1), width 0.3s cubic-bezier(0.25, 1, 0.5, 1), bottom 0.3s cubic-bezier(0.25, 1, 0.5, 1)',
@@ -3044,6 +3116,9 @@ function AppInner() {
             currentAuthToken={currentAuthToken}
             onClose={handleClose}
             plusiEnabled={isReview ? false : mascotEnabled}
+            stickyAgent={stickyAgent}
+            onStickyAgentChange={setStickyAgent}
+            onOpenAgentStudio={() => setActiveView('agentStudio')}
             topSlot={topSlot}
             hideInput={hideInput}
             placeholder={placeholder}
