@@ -234,3 +234,81 @@ class TestDispatchPipeline:
             on_finished=on_finished,
         )
         assert len(finished_calls) == 0
+
+
+class TestAgentMemory:
+    """Test AgentMemory persistent key-value storage."""
+
+    def _make_memory(self, agent_name='test_agent', db=None):
+        """Create an AgentMemory backed by a temporary in-memory DB."""
+        from ai.agent_memory import AgentMemory
+
+        if db is None:
+            db = sqlite3.connect(':memory:')
+        self._test_db = db
+
+        with patch.object(AgentMemory, '_get_db', return_value=db):
+            memory = AgentMemory(agent_name)
+        memory._get_db = lambda: db
+        return memory
+
+    def test_set_and_get(self):
+        mem = self._make_memory()
+        mem.set('key1', 'value1')
+        assert mem.get('key1') == 'value1'
+
+    def test_get_default(self):
+        mem = self._make_memory()
+        assert mem.get('missing') is None
+        assert mem.get('missing', 'fallback') == 'fallback'
+
+    def test_set_overwrites(self):
+        mem = self._make_memory()
+        mem.set('k', 'old')
+        mem.set('k', 'new')
+        assert mem.get('k') == 'new'
+
+    def test_delete(self):
+        mem = self._make_memory()
+        mem.set('k', 'v')
+        mem.delete('k')
+        assert mem.get('k') is None
+
+    def test_get_all(self):
+        mem = self._make_memory()
+        mem.set('a', 1)
+        mem.set('b', 2)
+        all_data = mem.get_all()
+        assert all_data == {'a': 1, 'b': 2}
+
+    def test_clear(self):
+        mem = self._make_memory()
+        mem.set('a', 1)
+        mem.set('b', 2)
+        mem.clear()
+        assert mem.get_all() == {}
+
+    def test_isolation_between_agents(self):
+        """Different agent names have independent storage."""
+        db = sqlite3.connect(':memory:')
+        mem_a = self._make_memory('agent_a', db=db)
+        mem_b = self._make_memory('agent_b', db=db)
+
+        mem_a.set('shared_key', 'value_a')
+        mem_b.set('shared_key', 'value_b')
+
+        assert mem_a.get('shared_key') == 'value_a'
+        assert mem_b.get('shared_key') == 'value_b'
+
+    def test_json_serialization(self):
+        """Complex types (lists, dicts, nested) round-trip correctly."""
+        mem = self._make_memory()
+        mem.set('list', [1, 2, 3])
+        mem.set('dict', {'nested': {'deep': True}})
+        mem.set('bool', False)
+        mem.set('null', None)
+
+        assert mem.get('list') == [1, 2, 3]
+        assert mem.get('dict') == {'nested': {'deep': True}}
+        assert mem.get('bool') is False
+        assert mem.get('null') is None
