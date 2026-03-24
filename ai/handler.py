@@ -411,7 +411,8 @@ class AIHandler:
     # ---- Consolidated agent dispatch (non-tutor) --------------------------------
 
     def _dispatch_agent(self, agent_name, run_fn, situation, request_id,
-                        on_finished=None, extra_kwargs=None, callback=None):
+                        on_finished=None, extra_kwargs=None, callback=None,
+                        agent_def=None):
         """Consolidated agent dispatch for non-tutor agents.
 
         NOT used for Tutor — Tutor goes through handler's inline RAG pipeline.
@@ -426,6 +427,7 @@ class AIHandler:
             on_finished: Optional lifecycle callback(widget, agent_name, result)
             extra_kwargs: Additional kwargs to pass to the agent
             callback: Optional v1 streaming callback
+            agent_def: Optional AgentDefinition for model selection
 
         Returns:
             str: The agent's response text
@@ -487,23 +489,52 @@ class AIHandler:
         if memory_context:
             agent_kwargs['memory_context'] = memory_context
 
+        # Model selection from agent_def + global mode
+        if agent_def:
+            mode = (self.config or {}).get('model_mode', 'premium')
+            if mode == 'fast':
+                model = agent_def.fast_model or agent_def.premium_model
+            else:
+                model = agent_def.premium_model or agent_def.fast_model
+            fallback = agent_def.fallback_model or model
+            if model:
+                agent_kwargs['model'] = model
+            if fallback:
+                agent_kwargs['fallback_model'] = fallback
+
+        # Build streaming callback
+        _used_streaming = []
+        def _stream_callback(chunk, done):
+            if done:
+                return
+            if chunk:
+                _used_streaming.append(True)
+                self._emit_msg_event("text_chunk", {
+                    "messageId": request_id or '',
+                    "agent": agent_name,
+                    "chunk": chunk,
+                })
+
         # Call agent with standard interface
         result = run_fn(
             situation=situation,
             emit_step=agent_emit_step,
             memory=agent_memory,
+            stream_callback=_stream_callback,
             **agent_kwargs,
         )
 
         # Extract text from result
         text = result.get('text', '') if isinstance(result, dict) else str(result)
 
-        # v2: Emit text
-        self._emit_msg_event("text_chunk", {
-            "messageId": request_id or '',
-            "agent": agent_name,
-            "chunk": text,
-        })
+        # Only emit full text if agent didn't stream
+        used_streaming = result.get('_used_streaming', False) if isinstance(result, dict) else False
+        if not _used_streaming and not used_streaming:
+            self._emit_msg_event("text_chunk", {
+                "messageId": request_id or '',
+                "agent": agent_name,
+                "chunk": text,
+            })
 
         # v2: Mark agent cell done
         self._emit_msg_event("agent_cell", {
@@ -594,6 +625,7 @@ class AIHandler:
                             on_finished=_agent_def.on_finished,
                             extra_kwargs=_agent_def.extra_kwargs,
                             callback=callback,
+                            agent_def=_agent_def,
                         )
                     except Exception as e:
                         logger.warning("Agent dispatch failed for %s: %s, falling back to Tutor",

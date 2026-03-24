@@ -518,3 +518,94 @@ class TestModelSlots:
         assert 'premiumModel' in tutor
         assert 'fastModel' in tutor
         assert 'fallbackModel' in tutor
+
+
+# ---------------------------------------------------------------------------
+# Streaming Dispatch Tests
+# ---------------------------------------------------------------------------
+
+class TestStreamingDispatch:
+    """Test streaming support and model selection in _dispatch_agent."""
+
+    def test_dispatch_passes_stream_callback_to_agent(self):
+        from ai.handler import AIHandler
+        handler = AIHandler()
+        received = {}
+
+        def fake_run(situation='', emit_step=None, memory=None,
+                     stream_callback=None, **kwargs):
+            received['stream_callback'] = stream_callback
+            return {'text': 'ok'}
+
+        handler._pipeline_signal_callback = lambda s, st, d: None
+        handler._msg_event_callback = lambda t, d: None
+        handler._dispatch_agent(agent_name='test', run_fn=fake_run,
+                                situation='hello', request_id='req-1')
+        assert received['stream_callback'] is not None
+        assert callable(received['stream_callback'])
+
+    def test_streaming_agent_emits_chunks(self):
+        from ai.handler import AIHandler
+        handler = AIHandler()
+
+        def streaming_agent(situation='', emit_step=None, memory=None,
+                            stream_callback=None, **kwargs):
+            if stream_callback:
+                stream_callback('Hello ', False)
+                stream_callback('world!', False)
+                stream_callback('', True)
+            return {'text': 'Hello world!', '_used_streaming': True}
+
+        events = []
+        handler._pipeline_signal_callback = lambda s, st, d: None
+        handler._msg_event_callback = lambda t, d: events.append((t, d))
+        handler._dispatch_agent(agent_name='test', run_fn=streaming_agent,
+                                situation='hi', request_id='req-2')
+        text_chunks = [(t, d) for t, d in events if t == 'text_chunk']
+        assert len(text_chunks) == 2
+        assert text_chunks[0][1]['chunk'] == 'Hello '
+        assert text_chunks[1][1]['chunk'] == 'world!'
+
+    def test_non_streaming_agent_still_works(self):
+        from ai.handler import AIHandler
+        handler = AIHandler()
+
+        def non_streaming(situation='', emit_step=None, memory=None,
+                          stream_callback=None, **kwargs):
+            return {'text': 'complete response'}
+
+        events = []
+        handler._pipeline_signal_callback = lambda s, st, d: None
+        handler._msg_event_callback = lambda t, d: events.append((t, d))
+        result = handler._dispatch_agent(agent_name='test', run_fn=non_streaming,
+                                         situation='hi', request_id='req-3')
+        assert result == 'complete response'
+        text_chunks = [d for t, d in events if t == 'text_chunk']
+        assert len(text_chunks) == 1
+        assert text_chunks[0]['chunk'] == 'complete response'
+
+    def test_dispatch_selects_model_from_mode(self):
+        from ai.handler import AIHandler
+        from ai.agents import AgentDefinition
+        handler = AIHandler()
+        handler.config = {'model_mode': 'fast'}
+        received = {}
+
+        def fake_run(situation='', emit_step=None, memory=None,
+                     stream_callback=None, **kwargs):
+            received['model'] = kwargs.get('model')
+            received['fallback_model'] = kwargs.get('fallback_model')
+            return {'text': 'ok'}
+
+        handler._pipeline_signal_callback = lambda s, st, d: None
+        handler._msg_event_callback = lambda t, d: None
+        agent_def = AgentDefinition(
+            name='test', label='Test', description='test',
+            premium_model='gemini-3-flash', fast_model='gemini-2.5-flash',
+            fallback_model='gemini-2.5-flash',
+        )
+        handler._dispatch_agent(agent_name='test', run_fn=fake_run,
+                                situation='hello', request_id='req-4',
+                                agent_def=agent_def)
+        assert received['model'] == 'gemini-2.5-flash'
+        assert received['fallback_model'] == 'gemini-2.5-flash'
