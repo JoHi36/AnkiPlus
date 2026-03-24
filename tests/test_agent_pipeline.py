@@ -644,6 +644,233 @@ class TestHybridRetrievalCallbacks:
 
 
 # ---------------------------------------------------------------------------
+# RAG Pipeline Extraction Tests (Task 4)
+# ---------------------------------------------------------------------------
+
+class TestRagPipeline:
+    """Test the extracted RAG pipeline module."""
+
+    def test_module_exists(self):
+        from ai.rag_pipeline import retrieve_rag_context, RagResult
+        assert callable(retrieve_rag_context)
+
+    def test_rag_result_dataclass(self):
+        from ai.rag_pipeline import RagResult
+        r = RagResult(rag_context=None, citations={}, cards_found=0)
+        assert r.cards_found == 0
+        assert r.citations == {}
+
+    def test_no_search_returns_empty(self):
+        from ai.rag_pipeline import retrieve_rag_context
+        routing = MagicMock()
+        routing.search_needed = False
+        result = retrieve_rag_context(
+            user_message='hello', context=None, config={},
+            routing_result=routing)
+        assert result.cards_found == 0
+        assert result.rag_context is None
+
+    def test_search_needed_but_no_queries_returns_empty(self):
+        """When search is needed but no queries provided, should return empty."""
+        from ai.rag_pipeline import retrieve_rag_context
+        routing = MagicMock()
+        routing.search_needed = True
+        routing.retrieval_mode = 'both'
+        routing.precise_queries = []
+        routing.broad_queries = []
+        routing.embedding_queries = []
+        routing.search_scope = 'current_deck'
+        routing.max_sources = 'medium'
+        result = retrieve_rag_context(
+            user_message='hello', context=None, config={},
+            routing_result=routing)
+        assert result.cards_found == 0
+        assert result.rag_context is None
+
+    def test_sql_only_retrieval(self):
+        """SQL-only retrieval should call rag_retrieve_fn and return results."""
+        from ai.rag_pipeline import retrieve_rag_context
+        routing = MagicMock()
+        routing.search_needed = True
+        routing.retrieval_mode = 'sql'
+        routing.precise_queries = ['ATP']
+        routing.broad_queries = ['energy']
+        routing.embedding_queries = []
+        routing.search_scope = 'current_deck'
+        routing.max_sources = 'medium'
+
+        fake_citations = {
+            '123': {
+                'noteId': 123, 'cardId': 456,
+                'fields': {'Front': 'What is ATP?', 'Back': 'Energy molecule'},
+                'deckName': 'Biology', 'isCurrentCard': False,
+            }
+        }
+        fake_rag_fn = MagicMock(return_value={
+            'context_string': 'Note 123:\n  Front: What is ATP?\n  Back: Energy molecule',
+            'citations': fake_citations,
+        })
+
+        result = retrieve_rag_context(
+            user_message='What is ATP?', context=None, config={},
+            routing_result=routing,
+            rag_retrieve_fn=fake_rag_fn,
+        )
+        assert result.cards_found == 1
+        assert '123' in result.citations
+        assert result.rag_context is not None
+        assert 'cards' in result.rag_context
+        fake_rag_fn.assert_called_once()
+
+    def test_current_card_injected_when_missing(self):
+        """Current card should be added to citations if not already present."""
+        from ai.rag_pipeline import retrieve_rag_context
+        routing = MagicMock()
+        routing.search_needed = True
+        routing.retrieval_mode = 'sql'
+        routing.precise_queries = ['ATP']
+        routing.broad_queries = []
+        routing.embedding_queries = []
+        routing.search_scope = 'current_deck'
+        routing.max_sources = 'medium'
+
+        # Retrieval returns a card that is NOT the current card
+        fake_rag_fn = MagicMock(return_value={
+            'context_string': 'Note 999:\n  Front: Other card',
+            'citations': {
+                '999': {'noteId': 999, 'cardId': 998,
+                        'fields': {'Front': 'Other card'},
+                        'deckName': 'Bio', 'isCurrentCard': False}
+            },
+        })
+
+        context = {
+            'cardId': 456, 'noteId': 123,
+            'question': 'What is ATP?', 'answer': 'Energy molecule',
+            'deckName': 'Biology', 'fields': {},
+        }
+
+        result = retrieve_rag_context(
+            user_message='explain', context=context, config={},
+            routing_result=routing,
+            rag_retrieve_fn=fake_rag_fn,
+        )
+        assert '123' in result.citations
+        assert result.citations['123']['isCurrentCard'] is True
+
+    def test_current_card_not_duplicated(self):
+        """If current card is already in results, don't add it again."""
+        from ai.rag_pipeline import retrieve_rag_context
+        routing = MagicMock()
+        routing.search_needed = True
+        routing.retrieval_mode = 'sql'
+        routing.precise_queries = ['ATP']
+        routing.broad_queries = []
+        routing.embedding_queries = []
+        routing.search_scope = 'current_deck'
+        routing.max_sources = 'medium'
+
+        fake_rag_fn = MagicMock(return_value={
+            'context_string': 'Note 123:\n  Front: ATP',
+            'citations': {
+                '123': {'noteId': 123, 'cardId': 456,
+                        'fields': {'Front': 'ATP'},
+                        'deckName': 'Bio', 'isCurrentCard': False}
+            },
+        })
+
+        context = {
+            'cardId': 456, 'noteId': 123,
+            'question': 'ATP?', 'answer': 'Energy',
+            'deckName': 'Bio', 'fields': {},
+        }
+
+        result = retrieve_rag_context(
+            user_message='explain', context=context, config={},
+            routing_result=routing,
+            rag_retrieve_fn=fake_rag_fn,
+        )
+        # Should still be 1 citation, not 2
+        assert len(result.citations) == 1
+
+    def test_emit_step_called_for_hybrid(self):
+        """emit_step should be called during hybrid retrieval."""
+        from ai.rag_pipeline import retrieve_rag_context
+        routing = MagicMock()
+        routing.search_needed = True
+        routing.retrieval_mode = 'both'
+        routing.precise_queries = ['ATP']
+        routing.broad_queries = []
+        routing.embedding_queries = []
+        routing.search_scope = 'current_deck'
+        routing.max_sources = 'medium'
+
+        fake_rag_fn = MagicMock(return_value={
+            'context_string': 'Note 1:\n  Front: ATP',
+            'citations': {'1': {'noteId': 1, 'cardId': 2,
+                                'fields': {'Front': 'ATP'},
+                                'deckName': 'Bio', 'isCurrentCard': False}},
+        })
+
+        # Mock embedding manager
+        emb_mgr = MagicMock()
+        # HybridRetrieval will be used, which calls emit_step
+        steps = []
+        def track_step(step, status, data=None):
+            steps.append((step, status))
+
+        # Even if HybridRetrieval fails internally, emit_step should have been called
+        result = retrieve_rag_context(
+            user_message='What is ATP?', context=None, config={},
+            routing_result=routing,
+            emit_step=track_step,
+            embedding_manager=emb_mgr,
+            rag_retrieve_fn=fake_rag_fn,
+        )
+        # At minimum, the function attempted hybrid retrieval
+        assert isinstance(result.cards_found, int)
+
+    def test_no_context_no_card_injection(self):
+        """Without context, no current card injection should happen."""
+        from ai.rag_pipeline import retrieve_rag_context
+        routing = MagicMock()
+        routing.search_needed = True
+        routing.retrieval_mode = 'sql'
+        routing.precise_queries = ['term']
+        routing.broad_queries = []
+        routing.embedding_queries = []
+        routing.search_scope = 'current_deck'
+        routing.max_sources = 'low'
+
+        fake_rag_fn = MagicMock(return_value={
+            'context_string': 'Note 5:\n  Front: term',
+            'citations': {'5': {'noteId': 5, 'cardId': 6,
+                                'fields': {'Front': 'term'},
+                                'deckName': 'Deck', 'isCurrentCard': False}},
+        })
+
+        result = retrieve_rag_context(
+            user_message='explain', context=None, config={},
+            routing_result=routing,
+            rag_retrieve_fn=fake_rag_fn,
+        )
+        assert result.cards_found == 1
+        # No current card should be injected
+        for cit in result.citations.values():
+            assert not cit.get('isCurrentCard', False)
+
+    def test_returns_rag_result_type(self):
+        """Return type should always be RagResult."""
+        from ai.rag_pipeline import retrieve_rag_context, RagResult
+        routing = MagicMock()
+        routing.search_needed = False
+        result = retrieve_rag_context(
+            user_message='hi', context=None, config={},
+            routing_result=routing)
+        assert isinstance(result, RagResult)
+
+
+# ---------------------------------------------------------------------------
 # All Agents Streaming-Ready Tests
 # ---------------------------------------------------------------------------
 

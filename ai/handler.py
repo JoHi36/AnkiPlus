@@ -692,125 +692,54 @@ class AIHandler:
                 # Fallback: heuristic/lock routing without search params
                 router_result = self._rag_router(user_message, context=context)
 
+            # Stage 2: Retrieval (delegated to rag_pipeline module)
             rag_context = None
             if router_result and router_result.get("search_needed"):
-                # Stage 2: Retrieval
-                search_scope = router_result.get("search_scope", "current_deck")
-                max_sources_level = router_result.get("max_sources", "medium")
-                max_notes = {"low": 5, "medium": 10, "high": 15}.get(max_sources_level, 10)
-                logger.debug("RAG: max_sources=%s -> max_notes=%s", max_sources_level, max_notes)
+                try:
+                    from .rag_pipeline import retrieve_rag_context
+                except ImportError:
+                    from rag_pipeline import retrieve_rag_context
 
-                precise_queries = [q for q in router_result.get("precise_queries", []) if q and q.strip()]
-                broad_queries = [q for q in router_result.get("broad_queries", []) if q and q.strip()]
+                # Load embedding manager for semantic search
+                _emb_mgr = None
+                try:
+                    from .. import get_embedding_manager
+                    _emb_mgr = get_embedding_manager()
+                except Exception:
+                    pass
 
-                if precise_queries or broad_queries:
-                    _emb_mgr = None
-                    try:
-                        from .. import get_embedding_manager
-                        _emb_mgr = get_embedding_manager()
-                    except Exception:
-                        pass
+                rag_result = retrieve_rag_context(
+                    user_message=user_message,
+                    context=context,
+                    config=self.config,
+                    routing_result=router_result,
+                    emit_step=self._emit_pipeline_step,
+                    embedding_manager=_emb_mgr,
+                    rag_retrieve_fn=self._rag_retrieve_cards,
+                    request_steps_ref=self._current_request_steps,
+                )
 
-                    retrieval_mode = router_result.get('retrieval_mode', 'both')
+                # Sync RetrievalState back from pipeline
+                if rag_result.retrieval_state:
+                    self._current_step_labels = rag_result.retrieval_state.step_labels
+                    self._fallback_in_progress = rag_result.retrieval_state.fallback_in_progress
 
-                    if _emb_mgr and retrieval_mode in ('semantic', 'both'):
-                        try:
-                            try:
-                                from .retrieval import HybridRetrieval, RetrievalState
-                            except ImportError:
-                                from retrieval import HybridRetrieval, RetrievalState
+                if rag_result.cards_found > 0:
+                    rag_context = rag_result.rag_context
+                    citations = rag_result.citations
+                    logger.debug("RAG: %s Citations via rag_pipeline", len(citations))
+                    # Re-emit rag_sources with complete citations (including current card)
+                    self._emit_ai_event("rag_sources", citations)
 
-                            _retrieval_state = RetrievalState()
-                            _retrieval_state.step_labels = list(self._current_step_labels)
-                            _retrieval_state.request_steps = list(self._current_request_steps)
-
-                            # Wrap rag_retrieve_fn to capture new steps
-                            _orig_rag = self._rag_retrieve_cards
-                            def _tracking_rag(**kwargs):
-                                result = _orig_rag(**kwargs)
-                                _retrieval_state.request_steps = list(
-                                    self._current_request_steps)
-                                return result
-
-                            hybrid = HybridRetrieval(
-                                _emb_mgr,
-                                emit_step=self._emit_pipeline_step,
-                                rag_retrieve_fn=_tracking_rag,
-                                state=_retrieval_state,
-                            )
-                            retrieval_result = hybrid.retrieve(
-                                user_message, router_result, context,
-                                max_notes=max_notes)
-
-                            # Sync state back from retrieval
-                            self._current_step_labels = _retrieval_state.step_labels
-                            self._fallback_in_progress = _retrieval_state.fallback_in_progress
-                        except Exception as e:
-                            logger.debug("Hybrid retrieval failed, falling back to SQL: %s", e)
-                            retrieval_result = self._rag_retrieve_cards(
-                                precise_queries=precise_queries,
-                                broad_queries=broad_queries,
-                                search_scope=search_scope,
-                                context=context,
-                                max_notes=max_notes,
-                            )
-                    else:
-                        retrieval_result = self._rag_retrieve_cards(
-                            precise_queries=precise_queries,
-                            broad_queries=broad_queries,
-                            search_scope=search_scope,
-                            context=context,
-                            max_notes=max_notes,
-                        )
-
-                    if retrieval_result and retrieval_result.get("context_string"):
-                        context_string = retrieval_result["context_string"]
-                        citations = retrieval_result.get("citations", {})
-
-                        if context and context.get('cardId'):
-                            current_note_id = str(context.get('noteId', context['cardId']))
-                            if current_note_id not in citations:
-                                import re as _re
-                                _q = context.get('question') or context.get('frontField') or ''
-                                _a = context.get('answer') or ''
-                                _q_clean = _re.sub(r'<[^>]+>', ' ', _q).strip()[:200]
-                                _a_clean = _re.sub(r'<[^>]+>', ' ', _a).strip()[:200]
-                                citations[current_note_id] = {
-                                    'noteId': context.get('noteId', context['cardId']),
-                                    'cardId': context['cardId'],
-                                    'question': _q_clean,
-                                    'answer': _a_clean,
-                                    'fields': context.get('fields', {}),
-                                    'deckName': context.get('deckName', ''),
-                                    'isCurrentCard': True,
-                                    'sources': ['current'],
-                                }
-                                context_string = (
-                                    f"Note {current_note_id} (aktuelle Karte):\n"
-                                    f"  Frage: {_q_clean}\n  Antwort: {_a_clean}\n"
-                                    f"{context_string}"
-                                )
-
-                        formatted_cards = [line for line in context_string.split("\n") if line.strip()]
-                        rag_context = {
-                            "cards": formatted_cards,
-                            "reasoning": router_result.get("reasoning", ""),
-                            "citations": citations,
-                        }
-                        logger.debug("RAG: %s Karten fuer Kontext verwendet, %s Citations",
-                                     len(formatted_cards), len(citations))
-                        # Re-emit rag_sources with complete citations (including current card)
-                        self._emit_ai_event("rag_sources", citations)
-
-                        # v2: Fold citations into agent_cell update
-                        self._emit_msg_event("agent_cell", {
-                            "messageId": request_id or '',
-                            "agent": "tutor",
-                            "status": "thinking",
-                            "data": {"citations": citations}
-                        })
-                    else:
-                        logger.debug("RAG: Keine Karten gefunden")
+                    # v2: Fold citations into agent_cell update
+                    self._emit_msg_event("agent_cell", {
+                        "messageId": request_id or '',
+                        "agent": "tutor",
+                        "status": "thinking",
+                        "data": {"citations": citations}
+                    })
+                else:
+                    logger.debug("RAG: Keine Karten gefunden")
 
             # Even without search, include current card as context for the AI
             if not rag_context and context and context.get('cardId'):
