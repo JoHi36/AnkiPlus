@@ -262,6 +262,7 @@ export default function ReviewerView({
           {/* Card front — trusted Anki card template output */}
           <div
             className="card-front"
+            style={{ background: 'transparent' }}
             dangerouslySetInnerHTML={{ __html: cardData?.frontHtml || '' }}
           />
 

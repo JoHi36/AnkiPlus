@@ -17,7 +17,7 @@ export default function TopBar({
   onSidebarToggle,
   holdToResetProps = {},
 }) {
-  const activeTab = ankiState === 'overview' ? 'session' : 'stapel';
+  const activeTab = (ankiState === 'overview' || ankiState === 'review') ? 'session' : 'stapel';
 
   // Plus button
   const plusButton = (

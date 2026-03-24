@@ -2051,9 +2051,11 @@ function AppInner() {
   }, []);
 
   // ── Keyboard shortcuts for fullscreen FreeChat (merged from MainApp) ──
+  // Note: ReviewerView handles its own SPACE/ENTER shortcuts in review mode
   useEffect(() => {
     const handler = (e) => {
       if (mainInputFocused) return;
+      if (activeView === 'review') return; // ReviewerView owns keyboard in review
       if (activeView === 'freeChat') {
         if (e.key === 'Escape' || e.key === ' ') {
           e.preventDefault();
