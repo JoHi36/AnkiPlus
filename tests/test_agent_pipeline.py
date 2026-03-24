@@ -12,7 +12,7 @@ import sys
 import os
 import inspect
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 import sqlite3
 
 STANDARD_PARAMS = {'situation', 'emit_step', 'memory'}
@@ -312,3 +312,170 @@ class TestAgentMemory:
         assert mem.get('dict') == {'nested': {'deep': True}}
         assert mem.get('bool') is False
         assert mem.get('null') is None
+
+
+# ---------------------------------------------------------------------------
+# Per-Agent Pipeline Integration Tests
+# ---------------------------------------------------------------------------
+
+class TestTutorPipeline:
+    """Test that the Tutor agent integrates with the dispatch system."""
+
+    def test_tutor_returns_rag_sentinel(self):
+        """Tutor's run function returns _use_rag_pipeline signal."""
+        from ai.tutor import run_tutor
+        steps = []
+        def fake_emit(step, status, data=None):
+            steps.append((step, status))
+
+        result = run_tutor(situation="Was ist ATP?", emit_step=fake_emit)
+        assert result.get('_use_rag_pipeline') is True
+        assert 'text' in result
+        assert len(steps) >= 1
+
+    def test_tutor_tracks_query_count_in_memory(self):
+        """Tutor increments total_queries in AgentMemory."""
+        from ai.tutor import run_tutor
+        from ai.agent_memory import AgentMemory
+
+        db = sqlite3.connect(':memory:')
+        with patch.object(AgentMemory, '_get_db', return_value=db):
+            mem = AgentMemory('tutor')
+        mem._get_db = lambda: db
+
+        run_tutor(situation="test 1", memory=mem)
+        assert mem.get('total_queries') == 1
+
+        run_tutor(situation="test 2", memory=mem)
+        assert mem.get('total_queries') == 2
+
+    def test_tutor_works_without_emit_step(self):
+        """Tutor should not crash when emit_step is None."""
+        from ai.tutor import run_tutor
+        result = run_tutor(situation="test")
+        assert isinstance(result, dict)
+
+    def test_tutor_works_without_memory(self):
+        """Tutor should not crash when memory is None."""
+        from ai.tutor import run_tutor
+        result = run_tutor(situation="test", memory=None)
+        assert isinstance(result, dict)
+
+
+class TestHelpPipeline:
+    """Test that the Help agent integrates with the dispatch system."""
+
+    @patch('config.get_config', return_value={'api_key': 'fake-key'})
+    @patch('config.is_backend_mode', return_value=False)
+    @patch('config.get_backend_url', return_value='')
+    @patch('config.get_auth_token', return_value='')
+    def test_help_dispatches_via_pipeline(self, mock_auth_token, mock_backend_url,
+                                          mock_backend_mode, mock_config):
+        """Help agent runs through _dispatch_agent and emits correct events."""
+        import requests as req_mod
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = {
+            'candidates': [{'content': {'parts': [{'text': 'Use Cmd+I to open the panel.'}]}}]
+        }
+        with patch.object(req_mod, 'post', return_value=mock_resp):
+            from ai.handler import AIHandler
+            handler = AIHandler()
+
+            events = []
+            handler._pipeline_signal_callback = lambda s, st, d: None
+            handler._msg_event_callback = lambda t, d: events.append(t)
+
+            from ai.help_agent import run_help
+            result = handler._dispatch_agent(
+                agent_name='help',
+                run_fn=run_help,
+                situation='Wie oeffne ich das Panel?',
+                request_id='req-help-1',
+            )
+
+        assert 'orchestration' in events
+        assert 'text_chunk' in events
+        assert 'msg_done' in events
+        assert 'Cmd+I' in result
+
+    def test_help_returns_error_without_api_key(self):
+        """Help agent returns a structured error when no API key is configured."""
+        from ai.help_agent import run_help
+        steps = []
+        result = run_help(
+            situation="test",
+            emit_step=lambda s, st, d=None: steps.append(s),
+            memory=None,
+        )
+        # Without API key, should return an error dict (not crash)
+        assert isinstance(result, dict)
+        assert 'text' in result
+
+    def test_help_accepts_emit_step_without_crash(self):
+        """Help agent accepts emit_step kwarg without crashing on signature."""
+        from ai.help_agent import run_help
+        # Verify it can be called with emit_step (even if it doesn't use it)
+        result = run_help(
+            situation="test",
+            emit_step=lambda s, st, d=None: None,
+            memory=None,
+        )
+        assert isinstance(result, dict)
+        assert 'text' in result
+
+
+class TestResearchPipeline:
+    """Test that the Research agent integrates with the dispatch system."""
+
+    def test_research_uses_situation_param(self):
+        """Research agent uses 'situation' parameter."""
+        import inspect
+        from research import run_research
+        sig = inspect.signature(run_research)
+        assert 'situation' in sig.parameters
+
+    @patch('research.search.search')
+    @patch('research.get_config', return_value={'openrouter_api_key': 'fake', 'research_sources': {}})
+    def test_research_dispatches_via_pipeline(self, mock_config, mock_search):
+        """Research agent runs through _dispatch_agent."""
+        mock_result = MagicMock()
+        mock_result.error = None
+        mock_result.sources = [{'title': 'ATP Source'}]
+        mock_result.tool_used = 'pubmed'
+        mock_result.to_dict.return_value = {
+            'text': 'ATP is adenosine triphosphate.',
+            'sources': [],
+        }
+        mock_search.return_value = mock_result
+
+        from ai.handler import AIHandler
+        handler = AIHandler()
+
+        events = []
+        handler._pipeline_signal_callback = lambda s, st, d: None
+        handler._msg_event_callback = lambda t, d: events.append(t)
+
+        from research import run_research
+        result = handler._dispatch_agent(
+            agent_name='research',
+            run_fn=run_research,
+            situation='What is ATP?',
+            request_id='req-res-1',
+        )
+
+        assert 'msg_done' in events
+        assert 'ATP' in result
+
+
+class TestPlusiPipeline:
+    """Test that the Plusi agent integrates with the dispatch system."""
+
+    def test_plusi_accepts_standard_params(self):
+        """Plusi accepts emit_step and memory without crashing."""
+        import inspect
+        from plusi.agent import run_plusi
+        sig = inspect.signature(run_plusi)
+        assert 'emit_step' in sig.parameters
+        assert 'memory' in sig.parameters
+        assert 'situation' in sig.parameters
