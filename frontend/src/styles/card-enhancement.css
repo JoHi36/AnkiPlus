@@ -180,9 +180,12 @@
 /* =============================================================================
    Section 5: Deck Metadata Fade
    AMBOSS/AnKing cards include metadata bars (Tags, Note ID, Errata).
+   These are typically <button> elements with onclick handlers, or divs
+   containing pipe-separated labels, placed before an <hr> separator.
    Fade them out by default, reveal on hover. No functionality lost.
    ============================================================================= */
 
+/* Target by known class names */
 .card-renderer .tags,
 .card-renderer #tags,
 .card-renderer .field--tags,
@@ -192,9 +195,8 @@
 .card-renderer #note-id,
 .card-renderer .ankihub-tags {
   font-size: 10px;
-  opacity: 0.2;
+  opacity: 0.15;
   transition: opacity 0.25s ease;
-  pointer-events: auto;
 }
 
 .card-renderer .tags:hover,
@@ -208,8 +210,29 @@
   opacity: 0.8;
 }
 
-/* Hide the horizontal rule that typically separates metadata from content */
-.card-renderer .tags + hr,
-.card-renderer #tags + hr {
-  opacity: 0.1;
+/* AMBOSS metadata buttons — template uses <button onclick="..."> for Tags/NoteID/Errata */
+.card-renderer button[onclick] {
+  font-size: 10px;
+  opacity: 0.15;
+  border-color: var(--ds-border-subtle) !important;
+  transition: opacity 0.25s ease;
+}
+
+.card-renderer button[onclick]:hover {
+  opacity: 0.8;
+}
+
+/* Fade the entire first-child row if it contains metadata (before <hr>) */
+.card-renderer .card > div:first-child,
+.card-renderer .card-content > div:first-child,
+.card-renderer #qa > div:first-child {
+  /* Only fade if followed by an <hr> — metadata rows precede separators */
+}
+
+/* Horizontal rules separating metadata from content */
+.card-renderer hr {
+  border: none;
+  border-top: 1px solid var(--ds-border-subtle);
+  opacity: 0.3;
+  margin: 8px 0;
 }

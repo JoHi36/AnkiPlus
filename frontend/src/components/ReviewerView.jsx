@@ -16,17 +16,24 @@ function hasVisibleContent(html) {
 }
 
 /**
- * Strip background declarations from embedded <style> tags.
- * Card CSS often sets backgrounds (e.g. AMBOSS: .card { background: #EEEEEE !important })
- * which conflicts with our dark/light theme. We control backgrounds — cards shouldn't.
- * Preserves all other styles (colors, fonts, layout).
+ * Strip background declarations from card HTML.
+ * 1. From <style> blocks (e.g. AMBOSS: .card { background: #EEEEEE !important })
+ * 2. From inline style="" attributes (e.g. style="background-color: #fff")
+ * We control backgrounds — cards shouldn't. Preserves colors, fonts, layout.
  */
 function sanitizeCardHtml(html) {
   if (!html) return '';
-  return html.replace(/<style([\s\S]*?)<\/style>/gi, (match, content) => {
+  // Strip from <style> blocks
+  let result = html.replace(/<style([\s\S]*?)<\/style>/gi, (match, content) => {
     const cleaned = content.replace(/background(?:-color)?\s*:[^;]+;?/gi, '');
     return '<style' + cleaned + '</style>';
   });
+  // Strip from inline style="" attributes
+  result = result.replace(/style="([^"]*)"/gi, (match, styleContent) => {
+    const cleaned = styleContent.replace(/background(?:-color)?\s*:[^;]+;?/gi, '').trim();
+    return cleaned ? 'style="' + cleaned + '"' : '';
+  });
+  return result;
 }
 
 const MC_LETTERS = ['A', 'B', 'C', 'D', 'E'];
@@ -70,7 +77,7 @@ function MCOptions({ options, selected, isResult, onSelect }) {
 export default function ReviewerView({ cardData, reviewer }) {
   if (!cardData) {
     return (
-      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ds-text-muted)', fontSize: 14, background: 'var(--ds-bg-canvas)' }}>
+      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ds-text-muted)', fontSize: 14, background: 'transparent' }}>
         Warte auf Karte...
       </div>
     );
@@ -80,7 +87,7 @@ export default function ReviewerView({ cardData, reviewer }) {
 
   // Card content uses template-rendered HTML (includes Note Type CSS)
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--ds-bg-canvas)', overflow: 'hidden' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'transparent', overflow: 'hidden' }}>
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 'var(--ds-space-2xl) var(--ds-space-xl) 160px', scrollbarWidth: 'none' }}>
         <div style={{ maxWidth: 'var(--ds-dock-width)', width: '100%', margin: '0 auto' }}>
           {showBack
