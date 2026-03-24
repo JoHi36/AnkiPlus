@@ -180,6 +180,12 @@ export default function ChatInput({
   }, [input, handleSubmit]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Tab on empty input → insert @ and activate ghost
+    if (e.key === 'Tab' && !input && !chipAgent && !ghostVisible) {
+      e.preventDefault();
+      setInput('@');
+      return;
+    }
     // Ghost autocomplete navigation
     if (ghostVisible && ghostAgents.length > 0) {
       if (e.key === 'ArrowDown') {
@@ -359,6 +365,45 @@ export default function ChatInput({
                 </span>
               );
             })()}
+            {/* Tab badge — visible when focused + empty + no chip */}
+            {isFocused && !input && !chipAgent && !ghostVisible && (
+              <kbd style={{
+                position: 'absolute',
+                right: 8,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                fontSize: 10,
+                fontWeight: 500,
+                color: 'var(--ds-text-muted)',
+                background: 'var(--ds-bg-overlay)',
+                borderRadius: 4,
+                padding: '1px 5px',
+                pointerEvents: 'none',
+                fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+              }}>
+                Tab
+              </kbd>
+            )}
+
+            {/* ↑↓ badge — visible during ghost autocomplete */}
+            {ghostVisible && (
+              <kbd style={{
+                position: 'absolute',
+                right: 8,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                fontSize: 10,
+                fontWeight: 500,
+                color: 'var(--ds-text-muted)',
+                background: 'var(--ds-bg-overlay)',
+                borderRadius: 4,
+                padding: '1px 5px',
+                pointerEvents: 'none',
+                fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+              }}>
+                ↑↓
+              </kbd>
+            )}
           </div>
           {/* Send button — appears when text present */}
           {isLoading ? (
