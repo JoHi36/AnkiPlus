@@ -11,8 +11,8 @@ The Tutor is a REAL agent that:
 4. Detects HANDOFF signals and delegates to target agents (e.g. Research)
 5. Tracks usage in AgentMemory
 
-As of Task 6, handler.py is a pure dispatcher — ALL messages including
-Tutor queries route through _dispatch_agent() which calls this module.
+The old Tutor path in handler.py still exists and is still active —
+this new agent won't be wired in until Task 6.
 """
 import re
 
