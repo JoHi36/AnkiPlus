@@ -1222,3 +1222,15 @@ class TestAllAgentsStreamingReady:
         from ai.help_agent import run_help
         source = inspect.getsource(run_help)
         assert "kwargs.get('model')" in source or "model = kwargs" in source
+
+
+class TestHandlerPureDispatcher:
+    """Handler should be a thin dispatcher — no Tutor-specific branching."""
+
+    def test_no_tutor_special_case(self):
+        """Handler should NOT have Tutor-specific branching."""
+        import inspect
+        from ai.handler import AIHandler
+        source = inspect.getsource(AIHandler.get_response_with_rag)
+        assert "!= 'tutor'" not in source, "Handler should not have Tutor special case"
+        assert '_use_rag_pipeline' not in source, "Handler should not check sentinel"
