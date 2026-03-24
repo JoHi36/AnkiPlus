@@ -609,3 +609,35 @@ class TestStreamingDispatch:
                                 agent_def=agent_def)
         assert received['model'] == 'gemini-2.5-flash'
         assert received['fallback_model'] == 'gemini-2.5-flash'
+
+
+# ---------------------------------------------------------------------------
+# HybridRetrieval Callback Decoupling Tests
+# ---------------------------------------------------------------------------
+
+class TestHybridRetrievalCallbacks:
+    def test_no_handler_dependency(self):
+        """retrieval.py should not reference self.ai anywhere."""
+        filepath = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                                'ai', 'retrieval.py')
+        with open(filepath) as f:
+            source = f.read()
+        assert 'self.ai.' not in source, \
+            "retrieval.py should use callbacks, not self.ai references"
+
+    def test_retrieval_state_class_exists(self):
+        from ai.retrieval import RetrievalState
+        state = RetrievalState()
+        assert hasattr(state, 'fallback_in_progress')
+        assert hasattr(state, 'step_labels')
+        assert state.fallback_in_progress is False
+        assert state.step_labels == []
+
+    def test_hybrid_retrieval_accepts_callbacks(self):
+        """HybridRetrieval should accept emit_step and rag_retrieve_fn."""
+        from ai.retrieval import HybridRetrieval
+        sig = inspect.signature(HybridRetrieval.__init__)
+        params = list(sig.parameters.keys())
+        assert 'emit_step' in params
+        assert 'rag_retrieve_fn' in params
+        assert 'state' in params

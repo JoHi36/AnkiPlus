@@ -716,12 +716,35 @@ class AIHandler:
                     if _emb_mgr and retrieval_mode in ('semantic', 'both'):
                         try:
                             try:
-                                from .retrieval import HybridRetrieval
+                                from .retrieval import HybridRetrieval, RetrievalState
                             except ImportError:
-                                from retrieval import HybridRetrieval
-                            hybrid = HybridRetrieval(_emb_mgr, self)
+                                from retrieval import HybridRetrieval, RetrievalState
+
+                            _retrieval_state = RetrievalState()
+                            _retrieval_state.step_labels = list(self._current_step_labels)
+                            _retrieval_state.request_steps = list(self._current_request_steps)
+
+                            # Wrap rag_retrieve_fn to capture new steps
+                            _orig_rag = self._rag_retrieve_cards
+                            def _tracking_rag(**kwargs):
+                                result = _orig_rag(**kwargs)
+                                _retrieval_state.request_steps = list(
+                                    self._current_request_steps)
+                                return result
+
+                            hybrid = HybridRetrieval(
+                                _emb_mgr,
+                                emit_step=self._emit_pipeline_step,
+                                rag_retrieve_fn=_tracking_rag,
+                                state=_retrieval_state,
+                            )
                             retrieval_result = hybrid.retrieve(
-                                user_message, router_result, context, max_notes=max_notes)
+                                user_message, router_result, context,
+                                max_notes=max_notes)
+
+                            # Sync state back from retrieval
+                            self._current_step_labels = _retrieval_state.step_labels
+                            self._fallback_in_progress = _retrieval_state.fallback_in_progress
                         except Exception as e:
                             logger.debug("Hybrid retrieval failed, falling back to SQL: %s", e)
                             retrieval_result = self._rag_retrieve_cards(

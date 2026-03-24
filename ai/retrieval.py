@@ -11,10 +11,26 @@ except ImportError:
 logger = get_logger(__name__)
 
 
+class RetrievalState:
+    """Shared mutable state between retrieval and pipeline.
+
+    HybridRetrieval modifies these during execution:
+    - fallback_in_progress: suppresses duplicate pipeline events during retry
+    - step_labels: accumulates step labels, truncated before retry
+    - request_steps: collects emitted AI state steps (for query hit parsing)
+    """
+    def __init__(self):
+        self.fallback_in_progress = False
+        self.step_labels = []
+        self.request_steps = []
+
+
 class HybridRetrieval:
-    def __init__(self, embedding_manager, ai_handler):
+    def __init__(self, embedding_manager, emit_step=None, rag_retrieve_fn=None, state=None):
         self.emb = embedding_manager
-        self.ai = ai_handler
+        self.emit_step = emit_step or (lambda step, status, data=None: None)
+        self.rag_retrieve_fn = rag_retrieve_fn
+        self.state = state or RetrievalState()
 
     def retrieve(self, user_message, router_result, context=None, max_notes=10):
         """
@@ -45,10 +61,10 @@ class HybridRetrieval:
                 all_queries = (router_result.get('precise_queries', []) +
                                router_result.get('broad_queries', []))
                 preview_queries = [{"text": q, "hits": None} for q in all_queries if q]
-                self.ai._emit_pipeline_step("sql_search", "active", {
+                self.emit_step("sql_search", "active", {
                     "queries": preview_queries
                 })
-                sql_data = self.ai._rag_retrieve_cards(
+                sql_data = self.rag_retrieve_fn(
                     precise_queries=router_result.get('precise_queries'),
                     broad_queries=router_result.get('broad_queries'),
                     search_scope=router_result.get('search_scope', 'current_deck'),
@@ -59,26 +75,26 @@ class HybridRetrieval:
                 sql_citations = sql_data.get('citations', {})
                 sql_total = len(sql_citations)
 
-                # Build query result data for UI from _current_request_steps
+                # Build query result data for UI from request_steps captured in state
                 query_data = []
                 import re as _re
-                for step in self.ai._current_request_steps:
-                    state = step.get('state', '')
-                    if 'Ergebnis:' in state:
-                        m = _re.match(r'Ergebnis:\s*(\d+)\s*Treffer\s*für\s*\'(.*?)\'', state)
+                for step in self.state.request_steps:
+                    state_msg = step.get('state', '')
+                    if 'Ergebnis:' in state_msg:
+                        m = _re.match(r'Ergebnis:\s*(\d+)\s*Treffer\s*für\s*\'(.*?)\'', state_msg)
                         if m:
                             query_data.append({"text": m.group(2), "hits": int(m.group(1))})
 
                 # total_hits = number of unique notes found (not sum of query hits)
                 # But display the sum of individual query hits for better UX
                 query_hits_sum = sum(q.get('hits', 0) for q in query_data) if query_data else sql_total
-                self.ai._emit_pipeline_step("sql_search", "done", {
+                self.emit_step("sql_search", "done", {
                     "queries": query_data,
                     "total_hits": query_hits_sum or sql_total
                 })
             except Exception as e:
-                logger.warning("⚠️ HybridRetrieval: SQL retrieval failed: %s", e)
-                self.ai._emit_pipeline_step("sql_search", "error", {"message": str(e)})
+                logger.warning("HybridRetrieval: SQL retrieval failed: %s", e)
+                self.emit_step("sql_search", "error", {"message": str(e)})
 
         # Semantic retrieval — use embedding_queries (multi-query) from router
         if mode in ('semantic', 'both') and self.emb:
@@ -92,7 +108,7 @@ class HybridRetrieval:
 
                 # Pre-fill embedding queries so UI shows them immediately
                 preview_chunks = [{"score": None, "snippet": eq} for eq in embedding_queries]
-                self.ai._emit_pipeline_step("semantic_search", "active", {
+                self.emit_step("semantic_search", "active", {
                     "chunks": preview_chunks,
                     "embedding_queries": embedding_queries
                 })
@@ -131,18 +147,18 @@ class HybridRetrieval:
                         snippet = (raw or "")[:60]
                     chunks.append({"score": round(score, 3), "snippet": snippet})
 
-                self.ai._emit_pipeline_step("semantic_search", "done", {
+                self.emit_step("semantic_search", "done", {
                     "chunks": chunks,
                     "total_hits": semantic_total,
                     "embedding_queries": embedding_queries
                 })
             except Exception as e:
-                logger.warning("⚠️ HybridRetrieval: Semantic retrieval failed: %s", e)
-                self.ai._emit_pipeline_step("semantic_search", "error", {"message": str(e)})
+                logger.warning("HybridRetrieval: Semantic retrieval failed: %s", e)
+                self.emit_step("semantic_search", "error", {"message": str(e)})
 
         # Merge results
         if mode == 'both' and (sql_citations or semantic_results):
-            self.ai._emit_pipeline_step("merge", "active")
+            self.emit_step("merge", "active")
 
         merged = self._merge_results(sql_citations, semantic_results, context, max_notes)
 
@@ -152,17 +168,17 @@ class HybridRetrieval:
         total_results = len(merged)
         if total_results < 2 and router_result.get('search_scope') == 'current_deck' and not router_result.get('_fallback_used'):
             # Keep only the router label, remove search/merge labels before retry
-            self.ai._current_step_labels = self.ai._current_step_labels[:1]
+            self.state.step_labels = self.state.step_labels[:1]
 
             # Suppress duplicate step emissions during fallback
-            self.ai._fallback_in_progress = True
+            self.state.fallback_in_progress = True
             fallback_router = {**router_result, 'search_scope': 'collection', '_fallback_used': True}
             result = self.retrieve(user_message, fallback_router, context, max_notes)
-            self.ai._fallback_in_progress = False
+            self.state.fallback_in_progress = False
 
             # Update router step with new scope
             scope_label = "Alle Stapel"
-            self.ai._emit_pipeline_step("router", "done", {
+            self.emit_step("router", "done", {
                 "search_needed": True,
                 "retrieval_mode": router_result.get('retrieval_mode', 'both'),
                 "response_length": router_result.get('response_length', 'medium'),
@@ -178,16 +194,15 @@ class HybridRetrieval:
             total = len(merged)
             weight = semantic_count / (keyword_count + semantic_count) if (keyword_count + semantic_count) > 0 else 0.5
 
-            self.ai._emit_pipeline_step("merge", "done", {
+            self.emit_step("merge", "done", {
                 "keyword_count": keyword_count,
                 "semantic_count": semantic_count,
                 "total": total,
                 "weight_position": round(weight, 2)
             })
 
-        # Emit sources for SourcesCarousel
-        if merged:
-            self.ai._emit_ai_event("rag_sources", merged)
+        # NOTE: rag_sources emission removed — caller (handler.py) handles it
+        # after enriching citations with current card data.
 
         return {"context_string": context_string, "citations": merged}
 
@@ -270,7 +285,7 @@ class HybridRetrieval:
                 'deckName': deck_name
             }
         except Exception as e:
-            logger.warning("⚠️ HybridRetrieval: Failed to load card %s: %s", card_id, e)
+            logger.warning("HybridRetrieval: Failed to load card %s: %s", card_id, e)
             return None
 
     def _build_context_string(self, merged):
