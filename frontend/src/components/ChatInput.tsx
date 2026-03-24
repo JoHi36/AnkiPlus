@@ -118,16 +118,22 @@ export default function ChatInput({
   // Build ghost suggestion list from registry
   const ghostAgents = React.useMemo(() => {
     const registry = getRegistry();
+    const FALLBACK_AGENTS = [
+      { name: 'tutor', label: 'Tutor', enabled: true },
+      { name: 'research', label: 'Research', enabled: true },
+      { name: 'help', label: 'Help', enabled: true },
+      { name: 'plusi', label: 'Plusi', enabled: true },
+    ];
     const registryAgents = registry.size > 0
       ? [...registry.values()].filter((a: any) => a.enabled).sort((a: any, b: any) => a.label.localeCompare(b.label))
-      : [];
+      : FALLBACK_AGENTS;
 
     const settingsEntry = { name: 'agenten', label: 'Agenten', isSettings: true };
     const all: any[] = [settingsEntry, ...registryAgents];
 
     if (!ghostFilter) return all;
     const lower = ghostFilter.toLowerCase();
-    return all.filter((a: any) => a.name.includes(lower) || a.label.toLowerCase().includes(lower));
+    return all.filter((a: any) => a.name.toLowerCase().startsWith(lower) || a.label.toLowerCase().startsWith(lower));
   }, [ghostFilter, registryVersion]);
 
   const currentGhost = ghostAgents[ghostIndex] || null;
