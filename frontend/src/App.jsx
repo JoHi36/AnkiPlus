@@ -34,7 +34,7 @@ import { setRegistry, findAgent, getRegistry } from '@shared/config/subagentRegi
 import { registerAction, executeAction, bridgeAction } from './actions';
 import { emit } from './eventBus';
 import { classifyCard } from './utils/cardClassifier';
-// MascotShell moved to main window (plusi_dock.py) — no longer imported
+import MascotShell from './components/MascotShell';
 import { useMascot } from './hooks/useMascot';
 import InsightsDashboard from './components/InsightsDashboard';
 import useInsights from './hooks/useInsights';
@@ -48,6 +48,11 @@ import OverviewView from './components/OverviewView';
 import StatistikView from './components/StatistikView';
 import ContextTags from './components/ContextTags';
 import ResizeHandle, { loadPersistedWidth, applyWidth } from './components/ResizeHandle';
+import ReasoningStream from './reasoning/ReasoningStream';
+import { registerDefaultRenderers } from './reasoning/defaultRenderers';
+
+// Register step renderers once at module load time
+registerDefaultRenderers();
 
 // Stable empty references — prevent new object creation on every render
 const EMPTY_STEPS = [];
@@ -278,6 +283,9 @@ function AppInner() {
   });
   // Ref für messages container (für Auto-Scroll)
   const messagesContainerRef = useRef(null);
+  // Buffer last live v2 message to prevent flicker during finalize transition
+  const lastLiveMsgRef = useRef(null);
+  if (chatHook.currentMessage) lastLiveMsgRef.current = chatHook.currentMessage;
   // Ref für Header-Höhe (für sticky section headers)
   const headerRef = useRef(null);
   const [headerHeight, setHeaderHeight] = useState(60); // Default fallback
@@ -2342,6 +2350,20 @@ function AppInner() {
     />
   );
 
+  // Plusi mascot — rendered at app level so it persists across all views.
+  // z-index 60 (below sidebar at 70) — sidebar slides in front of Plusi.
+  const mascotElement = mascotEnabled && (
+    <MascotShell
+      mood={mood}
+      onPlusiAsk={() => {
+        // Focus chat with @Plusi
+        setStickyAgent('plusi');
+      }}
+      onEvent={eventTriggerRef}
+      enabled={mascotEnabled}
+    />
+  );
+
   if (activeView === 'deckBrowser' || activeView === 'overview' || activeView === 'freeChat' || activeView === 'statistik') {
     return (
       <div className={showFreeChat && isFreeChatAnimatingIn ? '' : 'ds-canvas-surface'} style={{
@@ -2352,6 +2374,7 @@ function AppInner() {
         transition: `background-color 400ms cubic-bezier(0.25, 0.1, 0.25, 1), margin-left 0.35s cubic-bezier(0.25, 1, 0.5, 1)`,
       }}>
         {settingsPanel}
+        {mascotElement}
         {persistentTopBar}
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -2504,6 +2527,7 @@ function AppInner() {
     `}</style>
     <div className="ds-canvas-surface" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       {settingsPanel}
+      {mascotElement}
       {/* Spacer — pushes content right when settings is open */}
       <div style={{
         width: settingsOpen ? 'var(--ds-settings-width)' : 0,
@@ -2616,7 +2640,7 @@ function AppInner() {
               <div
                 ref={messagesContainerRef}
                 id="messages-container"
-                className={`h-full w-full scrollbar-thin relative z-10 ${activeView === 'chat' ? 'overflow-y-auto px-8 pt-20 pb-40' : 'overflow-hidden flex flex-col px-8 pt-2 pb-0'}`}
+                className={`h-full w-full scrollbar-thin relative z-10 ${activeView === 'chat' ? 'overflow-y-auto px-8 pt-20 pb-40' : 'overflow-y-auto flex flex-col px-8 pt-2 pb-40'}`}
               >
 
                 {chatHook.messages.length === 0 && !chatHook.isLoading && !chatHook.streamingMessage ? (
@@ -2790,8 +2814,8 @@ function AppInner() {
                                                           </div>
                                                         )}
                                                         
-                                                        {/* AI Response or Loading - flex-none verhindert Dehnung */}
-                                                        {nextMsg && nextMsg.from === 'bot' && typeof nextMsg.text === 'string' && nextMsg.text && (
+                                                        {/* AI Response (v1 only — v2 messages with orchestration are rendered below) */}
+                                                        {nextMsg && nextMsg.from === 'bot' && typeof nextMsg.text === 'string' && nextMsg.text && !nextMsg.orchestration && (
                                                           <div className="w-full flex-none">
                                                             <ErrorBoundary>
                                                               <ChatMessage
@@ -2825,30 +2849,39 @@ function AppInner() {
                                                             </ErrorBoundary>
                                                           </div>
                                                         )}
-                        {/* ── v2: Live message (structured, single renderer) ── */}
-                        {chatHook.currentMessage && !(nextMsg && nextMsg.from === 'bot' && nextMsg.text) && (() => {
-                          const v2Text = chatHook.currentMessage.agentCells?.[0]?.text || '';
-                          const fallback = chatHook.streamingMessage || '';
-                          const renderText = v2Text || fallback || '';
-                          console.error('[v2-render] RENDERING: v2TextLen=' + v2Text.length + ' fallbackLen=' + fallback.length + ' cells=' + chatHook.currentMessage.agentCells?.length + ' status=' + chatHook.currentMessage.status);
-                          return true;
-                        })() && (
-                          <div className="w-full flex-none">
-                            <ChatMessage
-                              message={chatHook.currentMessage.agentCells?.[0]?.text || chatHook.streamingMessage || ''}
-                              from="bot"
-                              cardContext={cardContextHook.cardContext}
-                              agentCells={chatHook.currentMessage.agentCells}
-                              orchestration={chatHook.currentMessage.orchestration}
-                              status={chatHook.currentMessage.status}
-                              pipelineGeneration={chatHook.pipelineGenerationV2}
-                              bridge={bridge}
-                              isStreaming={true}
-                              isLastMessage={true}
-                              onPreviewCard={handlePreviewCard}
-                            />
-                          </div>
-                        )}
+                        {/* ── v2: Unified message renderer (live OR saved) ── */}
+                        {/* Renders at a SINGLE DOM position to prevent flicker during
+                            currentMessage → savedMessage transition. Uses live data when
+                            streaming, seamlessly switches to saved data when finalized. */}
+                        {(() => {
+                          // Priority: live > buffered > saved v2 message
+                          const liveMsg = chatHook.currentMessage || lastLiveMsgRef.current;
+                          const savedV2 = nextMsg && nextMsg.from === 'bot' && nextMsg.orchestration ? nextMsg : null;
+                          const v2Msg = liveMsg || savedV2;
+                          if (!v2Msg) return null;
+                          // Clear buffer once we're rendering the saved version
+                          if (savedV2 && !liveMsg) lastLiveMsgRef.current = null;
+                          const isLive = !!chatHook.currentMessage;
+                          return (
+                            <div className="w-full flex-none">
+                              <ChatMessage
+                                message={v2Msg.agentCells?.[0]?.text || (isLive ? chatHook.streamingMessage : '') || v2Msg.text || ''}
+                                from="bot"
+                                cardContext={cardContextHook.cardContext}
+                                agentCells={v2Msg.agentCells}
+                                orchestration={v2Msg.orchestration}
+                                status={isLive ? v2Msg.status : 'done'}
+                                pipelineGeneration={chatHook.pipelineGenerationV2}
+                                citations={v2Msg.agentCells?.[0]?.citations || v2Msg.citations || {}}
+                                pipelineSteps={v2Msg.agentCells?.[0]?.pipelineSteps || v2Msg.pipeline_data || []}
+                                bridge={bridge}
+                                isStreaming={isLive}
+                                isLastMessage={true}
+                                onPreviewCard={handlePreviewCard}
+                              />
+                            </div>
+                          );
+                        })()}
                         {/* Streaming Message - handles both Loading (Thinking) and Generating phases */}
                         {/* CRITICAL: Only render StreamingChatMessage if no saved bot message exists yet */}
                         {/* This prevents double-rendering when message is saved but timeout hasn't cleared streamingMessage */}
