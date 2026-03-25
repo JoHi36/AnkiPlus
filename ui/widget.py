@@ -286,6 +286,124 @@ class InsightExtractionThread(QThread):
                 self.error_signal.emit(self.card_id, str(e))
 
 
+class KGDefinitionThread(QThread):
+    """Background thread for generating Knowledge Graph term definitions via LLM."""
+    result_signal = pyqtSignal(str)  # JSON result string
+
+    def __init__(self, term, widget_ref):
+        super().__init__()
+        self.term = term
+        self._widget_ref = weakref.ref(widget_ref) if widget_ref is not None else None
+
+    def run(self):
+        try:
+            try:
+                from ..storage.kg_store import get_definition, get_term_card_ids, save_definition, get_connected_terms
+                from .. import get_embedding_manager
+            except ImportError:
+                from storage.kg_store import get_definition, get_term_card_ids, save_definition, get_connected_terms
+                from __init__ import get_embedding_manager
+
+            # Check cache first
+            cached = get_definition(self.term)
+            if cached:
+                cached["connectedTerms"] = get_connected_terms(self.term)
+                self.result_signal.emit(json.dumps({
+                    "type": "graph.termDefinition",
+                    "data": cached
+                }))
+                return
+
+            # Use existing search() method for finding relevant cards
+            emb_mgr = get_embedding_manager()
+            if emb_mgr is None:
+                self.result_signal.emit(json.dumps({
+                    "type": "graph.termDefinition",
+                    "data": {"term": self.term, "error": "Embedding-Manager nicht verfügbar"}
+                }))
+                return
+
+            query = "Was ist %s? Definition" % self.term
+            query_emb = emb_mgr.embed_texts([query])
+            if not query_emb:
+                self.result_signal.emit(json.dumps({
+                    "type": "graph.termDefinition",
+                    "data": {"term": self.term, "error": "Embedding fehlgeschlagen"}
+                }))
+                return
+
+            # Find top cards by similarity, filtered to this term's cards
+            card_ids_set = set(get_term_card_ids(self.term))
+            all_results = emb_mgr.search(query_emb[0], top_k=50)
+            top_cards = [(cid, score) for cid, score in all_results if cid in card_ids_set][:8]
+
+            if len(top_cards) < 2:
+                connected = get_connected_terms(self.term)
+                self.result_signal.emit(json.dumps({
+                    "type": "graph.termDefinition",
+                    "data": {"term": self.term, "error": "Nicht genug Quellen", "connectedTerms": connected}
+                }))
+                return
+
+            # Get card texts (must happen on main thread)
+            import threading
+            try:
+                from ..utils.anki import run_on_main_thread
+            except ImportError:
+                from utils.anki import run_on_main_thread
+            card_texts = []
+            event = threading.Event()
+
+            def _fetch_texts():
+                try:
+                    from aqt import mw
+                    for cid, _ in top_cards:
+                        try:
+                            card = mw.col.get_card(cid)
+                            note = card.note()
+                            fields = note.fields
+                            card_texts.append({
+                                "question": fields[0] if fields else "",
+                                "answer": fields[1] if len(fields) > 1 else "",
+                            })
+                        except Exception:
+                            pass
+                finally:
+                    event.set()
+
+            run_on_main_thread(_fetch_texts)
+            event.wait(timeout=10)
+
+            # Generate definition via Gemini Flash
+            try:
+                from ..ai.gemini import generate_definition
+            except ImportError:
+                from ai.gemini import generate_definition
+            definition = generate_definition(self.term, card_texts)
+
+            # Cache
+            source_ids = [cid for cid, _ in top_cards]
+            save_definition(self.term, definition, source_ids, "llm")
+
+            connected = get_connected_terms(self.term)
+            self.result_signal.emit(json.dumps({
+                "type": "graph.termDefinition",
+                "data": {
+                    "term": self.term,
+                    "definition": definition,
+                    "sourceCount": len(source_ids),
+                    "generatedBy": "llm",
+                    "connectedTerms": connected,
+                }
+            }))
+        except Exception as e:
+            logger.exception("KG definition generation failed for %s", self.term)
+            self.result_signal.emit(json.dumps({
+                "type": "graph.termDefinition",
+                "data": {"term": self.term, "error": str(e)}
+            }))
+
+
 class ChatbotWidget(QWidget):
     """Web-basierte Chat-UI über QWebEngineView"""
 
@@ -552,6 +670,9 @@ class ChatbotWidget(QWidget):
             'getTermCards': self._msg_get_term_cards,
             'getGraphStatus': self._msg_get_graph_status,
             'getCardKGTerms': self._msg_get_card_kg_terms,
+            'getTermDefinition': self._msg_get_term_definition,
+            'searchGraph': self._msg_search_graph,
+            'startTermStack': self._msg_start_term_stack,
         }
         return handlers.get(msg_type)
 
@@ -2242,6 +2363,88 @@ class ChatbotWidget(QWidget):
         except Exception:
             logger.exception("getCardKGTerms failed")
             self._send_to_js({"type": "kg.cardTerms", "data": {"terms": []}})
+
+    def _msg_get_term_definition(self, data):
+        """Check cache first; if miss, launch QThread to generate definition."""
+        try:
+            term = data.get("term", "") if isinstance(data, dict) else str(data)
+            try:
+                from ..storage.kg_store import get_definition, get_connected_terms
+            except ImportError:
+                from storage.kg_store import get_definition, get_connected_terms
+            cached = get_definition(term)
+            if cached:
+                cached["connectedTerms"] = get_connected_terms(term)
+                self._send_to_js({"type": "graph.termDefinition", "data": cached})
+                return
+            self._start_kg_definition(term)
+        except Exception:
+            logger.exception("getTermDefinition handler failed")
+
+    def _msg_search_graph(self, data):
+        """Exact match → immediate. Semantic search not yet implemented."""
+        try:
+            query = data.get("query", "") if isinstance(data, dict) else str(data)
+            try:
+                from ..storage.kg_store import search_terms_exact
+            except ImportError:
+                from storage.kg_store import search_terms_exact
+            results = search_terms_exact(query)
+            self._send_to_js({
+                "type": "graph.searchResult",
+                "data": {"matchedTerms": results, "isQuestion": False}
+            })
+        except Exception:
+            logger.exception("searchGraph handler failed")
+
+    def _msg_start_term_stack(self, data):
+        """Create filtered deck from card IDs and enter reviewer."""
+        try:
+            term = data.get("term", "KG Stack") if isinstance(data, dict) else "KG Stack"
+            card_ids_str = data.get("cardIds", "[]") if isinstance(data, dict) else "[]"
+            card_ids = json.loads(card_ids_str)
+            if not card_ids:
+                return
+            try:
+                from ..utils.anki import run_on_main_thread
+            except ImportError:
+                from utils.anki import run_on_main_thread
+
+            def _create_stack():
+                try:
+                    from aqt import mw
+                    # Clean up old KG filtered decks
+                    for d in mw.col.decks.all_names_and_ids():
+                        if d.name.startswith("KG: "):
+                            mw.col.decks.remove([d.id])
+                    # Create filtered deck
+                    search = " OR ".join("cid:%d" % cid for cid in card_ids[:100])
+                    did = mw.col.decks.new_filtered("KG: %s" % term)
+                    deck = mw.col.decks.get(did)
+                    deck["terms"] = [{"search": search, "limit": len(card_ids), "order": 0}]
+                    mw.col.decks.save(deck)
+                    mw.col.sched.rebuild_filtered_deck(did)
+                    mw.moveToState("review")
+                except Exception:
+                    logger.exception("Failed to create KG stack")
+
+            run_on_main_thread(_create_stack)
+        except Exception:
+            logger.exception("startTermStack handler failed")
+
+    def _start_kg_definition(self, term):
+        """Launch background thread for definition generation."""
+        self._kg_def_thread = KGDefinitionThread(term, self)
+        self._kg_def_thread.result_signal.connect(self._on_kg_result)
+        self._kg_def_thread.start()
+
+    def _on_kg_result(self, result_json):
+        """Handle KG thread result — push to frontend."""
+        try:
+            payload = json.loads(result_json)
+            self._send_to_js(payload)
+        except Exception:
+            logger.exception("Failed to send KG result to frontend")
 
     def _msg_flip_card(self, data=None):
         """Show answer side. Swallow web.eval to prevent mw.web DOM writes."""
