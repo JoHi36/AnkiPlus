@@ -378,9 +378,10 @@ export default function ReasoningStream({
         if (collapseTimerRef.current) clearTimeout(collapseTimerRef.current);
         setIsCollapsed(true);
       }
-      // Agent: collapse after MIN_STEP_INTERVAL when all displaySteps are done and no text yet
-      // This ensures the last step is visible for at least 800ms before collapsing
-      if (allStepsDone && !hasText && !isCollapsed && !isProcessing) {
+      // Agent: collapse after MIN_STEP_INTERVAL when all displaySteps are done and no text yet.
+      // No isProcessing guard — the queue already gave each step its 800ms display time.
+      // 4 steps = 3200ms total, then collapse immediately after one more MIN_STEP_INTERVAL.
+      if (allStepsDone && !hasText && !isCollapsed) {
         if (!collapseTimerRef.current) {
           collapseTimerRef.current = setTimeout(() => {
             collapseTimerRef.current = null;
@@ -395,7 +396,7 @@ export default function ReasoningStream({
         collapseTimerRef.current = null;
       }
     };
-  }, [isRouterVariant, allStepsDone, hasText, isCollapsed, isProcessing]);
+  }, [isRouterVariant, allStepsDone, hasText, isCollapsed]);
 
   // Expand when new pipeline starts — reset user override
   useEffect(() => {
@@ -407,6 +408,11 @@ export default function ReasoningStream({
 
   const hasCitations = Object.keys(citations).length > 0;
   const citationCount = Object.keys(citations).length;
+
+  // Sources appear simultaneously with the sources_ready step.
+  // The 800ms queue already handles timing — no extra delay needed.
+  const sourcesReady = hasCitations && displaySteps.some(d => d.step === 'sources_ready');
+
   // Show when processing, has data, OR when streaming started but no events yet
   const showLoadingBox = isStreaming && !isProcessing && displaySteps.length === 0 && pipelineSteps.length === 0;
   // hasContent: true if we have anything to show (steps, loading, or raw data waiting for effect)
@@ -465,7 +471,10 @@ export default function ReasoningStream({
       )}
 
       {/* ── Expanded view ── */}
-      {(!isCollapsed || showLoadingBox || (isStreaming && pipelineSteps.length > 0 && displaySteps.length === 0)) && (
+      {/* isProcessing keeps expanded view visible during the gap between
+          auto-collapse (hasText) and the 200ms isProcessing timeout,
+          preventing both views from being hidden simultaneously. */}
+      {(!isCollapsed || isProcessing || showLoadingBox || (isStreaming && pipelineSteps.length > 0 && displaySteps.length === 0)) && (
         <div style={{ animation: isStreaming ? 'ts-phaseReveal 0.2s ease-out both' : undefined }}>
           {/* Header row — always visible in expanded view */}
           {(() => {
@@ -531,8 +540,8 @@ export default function ReasoningStream({
               />
             ))}
 
-            {/* Source cards — show after all pipeline steps done */}
-            {hasCitations && !displaySteps.some(d => d.status === 'active') && (
+            {/* Source cards — 800ms after all steps done (streaming) or instant (saved) */}
+            {sourcesReady && (
               <SourcesCarousel
                 citations={citations}
                 citationIndices={citationIndices}

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 /**
  * useAgenticMessage — builds a structured BotMessage from backend events.
@@ -8,6 +8,12 @@ import { useState, useRef, useCallback } from 'react';
  * AND a synchronous ref (for finalize). This is necessary because Qt fires
  * multiple runJavaScript calls in rapid succession, React 18 batches them,
  * and finalize() needs the latest state synchronously before React renders.
+ *
+ * TRANSITION DESIGN: finalize() does NOT clear currentMessage to null.
+ * Instead it marks status='done' and keeps the data alive for one more render.
+ * A cleanup useEffect clears it afterward. This guarantees there is never a
+ * frame where both currentMessage and the saved message in messages[] are
+ * absent — eliminating the flicker on live→saved transition.
  */
 export default function useAgenticMessage() {
   const [currentMessage, setCurrentMessage] = useState(null);
@@ -15,7 +21,8 @@ export default function useAgenticMessage() {
   // Synchronous mirror of currentMessage — updated in every handler
   const msgRef = useRef(null);
 
-  const isLoading = currentMessage !== null;
+  // 'done' messages are kept alive briefly for smooth transition — not "loading"
+  const isLoading = currentMessage !== null && currentMessage.status !== 'done';
 
   // Helper: update both state and ref SYNCHRONOUSLY.
   // msgRef.current is the single source of truth — updated immediately so
@@ -154,6 +161,16 @@ export default function useAgenticMessage() {
     });
   }, [updateMsg]);
 
+  // Cleanup: after finalize marks currentMessage as 'done', clear it on the
+  // next render. This guarantees the render cycle ALWAYS has data — either
+  // currentMessage (done) or the saved message in messages[].
+  // The functional updater ensures a racing msg_start is never clobbered.
+  useEffect(() => {
+    if (currentMessage?.status === 'done') {
+      setCurrentMessage(prev => prev?.status === 'done' ? null : prev);
+    }
+  }, [currentMessage?.status]);
+
   const finalize = useCallback(() => {
     // Read from synchronous ref — guaranteed to have latest state
     // even if React hasn't rendered pending updates yet.
@@ -170,9 +187,10 @@ export default function useAgenticMessage() {
     };
     // Clear ref immediately (for subsequent event handlers)
     msgRef.current = null;
-    // Clear React state — caller ensures setMessages is called in the same
-    // synchronous handler, so React 18 batches both updates into one render.
-    setCurrentMessage(null);
+    // DON'T clear currentMessage to null — keep the done version alive for
+    // one more render to bridge the live→saved transition without flicker.
+    // The cleanup useEffect above will clear it on the next cycle.
+    setCurrentMessage(finalMsg);
     return finalMsg;
   }, []);
 

@@ -2,14 +2,12 @@ import React, { useRef, useEffect, useCallback, useState } from 'react';
 import ForceGraph3D from '3d-force-graph';
 import { Search } from 'lucide-react';
 import useKnowledgeGraph from '../hooks/useKnowledgeGraph';
+import { executeAction } from '../actions';
 
 const QUESTION_WORDS = /\b(was|wie|warum|erkläre|welche|wozu|wann|what|how|why|explain|which|when|describe)\b/i;
+const MAX_W = 'var(--ds-content-width)';
 
-function isQuestion(query) {
-  return QUESTION_WORDS.test(query) || query.trim().endsWith('?');
-}
-
-export default function GraphView({ onToggleView }) {
+export default function GraphView({ onToggleView, isPremium }) {
   const containerRef = useRef(null);
   const graphRef = useRef(null);
   const debounceRef = useRef(null);
@@ -55,7 +53,7 @@ export default function GraphView({ onToggleView }) {
 
     graph
       .graphData({ nodes: graphData.nodes, links })
-      .backgroundColor('#0a0a0c')
+      .backgroundColor('rgba(0,0,0,0)')
       .nodeColor(node => node.deckColor || '#0A84FF')
       .nodeVal(node => Math.max(1, (node.frequency || 1) / 2))
       .nodeLabel(node => `${node.label} (${node.frequency || 0} Karten)`)
@@ -73,7 +71,8 @@ export default function GraphView({ onToggleView }) {
       .onNodeClick(handleNodeClick)
       .enableNodeDrag(false)
       .d3AlphaDecay(0.04)
-      .d3VelocityDecay(0.4);
+      .d3VelocityDecay(0.4)
+      .showNavInfo(false);
 
     // Auto-rotate
     if (graph.controls()) {
@@ -87,13 +86,13 @@ export default function GraphView({ onToggleView }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [graphData]);
 
-  // Keep the click handler current after re-renders without rebuilding the graph
+  // Keep the click handler current
   useEffect(() => {
     if (!graphRef.current) return;
     graphRef.current.onNodeClick(handleNodeClick);
   }, [handleNodeClick]);
 
-  // Search highlighting — dim non-matching nodes
+  // Search highlighting
   useEffect(() => {
     if (!graphRef.current) return;
     const matched = new Set(searchResult?.matchedTerms || []);
@@ -106,7 +105,7 @@ export default function GraphView({ onToggleView }) {
     );
   }, [searchResult]);
 
-  // Debounced search input handler
+  // Debounced search
   const handleSearchChange = useCallback((e) => {
     const query = e.target.value;
     setSearchQuery(query);
@@ -116,7 +115,6 @@ export default function GraphView({ onToggleView }) {
       if (query.trim()) {
         searchGraph(query.trim());
       } else {
-        // Clear highlighting when search is empty
         if (graphRef.current) {
           graphRef.current.nodeColor(node => node.deckColor || '#0A84FF');
         }
@@ -124,139 +122,60 @@ export default function GraphView({ onToggleView }) {
     }, 300);
   }, [searchGraph]);
 
+  const hasGraph = graphData?.nodes?.length > 0;
+
   return (
-    <div
-      style={{
-        position: 'absolute',
-        inset: 0,
-        background: 'var(--ds-bg-deep)',
-        overflow: 'hidden',
-      }}
-    >
-      {/* 3D graph container — fills entire space */}
-      <div
-        ref={containerRef}
-        style={{ width: '100%', height: '100%' }}
-      />
-
-      {/* Loading state */}
-      {loading && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 12,
-            color: 'var(--ds-text-secondary)',
-            fontSize: 14,
-            pointerEvents: 'none',
-          }}
-        >
-          <div
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: '50%',
-              border: '2px solid var(--ds-border-subtle)',
-              borderTopColor: 'var(--ds-accent)',
-              animation: 'spin 0.8s linear infinite',
-            }}
-          />
-          <span>Wissensgraph wird geladen…</span>
+    <div style={{
+      flex: 1, overflow: 'hidden',
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      position: 'relative',
+    }}>
+      {/* === HEADER: Anki.plus wordmark (same as DeckBrowserView) === */}
+      <div style={{
+        flexShrink: 0, paddingTop: 64,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        gap: 10, marginBottom: 16, width: '100%', maxWidth: MAX_W,
+        position: 'relative', padding: '64px 20px 0',
+        zIndex: 10,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'baseline' }}>
+          <span style={{
+            fontFamily: '-apple-system, "SF Pro Display", system-ui, sans-serif',
+            fontSize: 46, fontWeight: 700, letterSpacing: '-1.8px',
+            color: 'var(--ds-text-primary)', lineHeight: 1,
+          }}>Anki</span>
+          <span style={{
+            fontFamily: '-apple-system, "SF Pro Display", system-ui, sans-serif',
+            fontSize: 46, fontWeight: 300, letterSpacing: '-1px',
+            color: 'var(--ds-text-muted)', lineHeight: 1,
+          }}>.plus</span>
         </div>
-      )}
-
-      {/* Empty state */}
-      {!loading && !graphData?.nodes?.length && (
-        <div
+        <span
           style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            color: 'var(--ds-text-tertiary)',
-            fontSize: 14,
-            pointerEvents: 'none',
+            fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
+            padding: '4px 9px', borderRadius: 7, alignSelf: 'center',
+            marginTop: 4, cursor: 'pointer', whiteSpace: 'nowrap',
+            ...(isPremium
+              ? { background: 'var(--ds-accent-10)', border: '1px solid var(--ds-accent-20)', color: 'var(--ds-accent)' }
+              : { background: 'var(--ds-hover-tint)', border: '1px solid var(--ds-border-medium)', color: 'var(--ds-text-placeholder)' }),
           }}
+          onClick={() => executeAction('settings.toggle')}
         >
-          <span style={{ fontSize: 32, opacity: 0.3 }}>◎</span>
-          <span>Noch keine Begriffe extrahiert</span>
-          <span style={{ fontSize: 12 }}>Lerne mehr Karten, um den Graphen zu füllen</span>
-        </div>
-      )}
+          {isPremium ? 'Pro' : 'Free'}
+        </span>
 
-      {/* Top overlay: search bar + deck list toggle */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 16,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          zIndex: 10,
-          width: '100%',
-          maxWidth: 480,
-          padding: '0 16px',
-        }}
-      >
-        {/* Search input */}
-        <div
-          className="ds-frosted"
-          style={{
-            flex: 1,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '8px 12px',
-            borderRadius: 12,
-            border: '1px solid var(--ds-border-subtle)',
-          }}
-        >
-          <Search
-            size={14}
-            style={{ color: 'var(--ds-text-tertiary)', flexShrink: 0 }}
-          />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={handleSearchChange}
-            placeholder="Begriff suchen oder Frage stellen…"
-            style={{
-              flex: 1,
-              background: 'transparent',
-              border: 'none',
-              outline: 'none',
-              color: 'var(--ds-text-primary)',
-              fontSize: 13,
-              fontFamily: 'var(--ds-font-sans)',
-            }}
-          />
-        </div>
-
-        {/* Deck list toggle button */}
+        {/* Deck list toggle */}
         {onToggleView && (
           <button
             onClick={onToggleView}
             style={{
+              position: 'absolute', right: 20, bottom: 0,
               background: 'var(--ds-hover-tint)',
               border: '1px solid var(--ds-border)',
-              borderRadius: 8,
-              padding: '6px 14px',
+              borderRadius: 8, padding: '6px 14px',
               color: 'var(--ds-text-secondary)',
-              fontSize: 12,
-              fontWeight: 500,
-              cursor: 'pointer',
+              fontSize: 12, fontWeight: 500, cursor: 'pointer',
               fontFamily: 'inherit',
-              flexShrink: 0,
-              whiteSpace: 'nowrap',
               transition: 'color 0.15s, background 0.15s',
             }}
             onMouseEnter={e => {
@@ -273,34 +192,89 @@ export default function GraphView({ onToggleView }) {
         )}
       </div>
 
-      {/* Selected term badge — bottom center hint */}
-      {selectedTerm && (
+      {/* === SEARCH BAR === */}
+      <div style={{
+        flexShrink: 0, width: '100%', maxWidth: MAX_W,
+        padding: '0 20px', marginBottom: 16, zIndex: 10,
+      }}>
         <div
+          className="ds-frosted"
           style={{
-            position: 'absolute',
-            bottom: 80,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            padding: '4px 12px',
-            borderRadius: 20,
-            background: 'var(--ds-accent-10)',
-            border: '1px solid var(--ds-accent-20)',
-            color: 'var(--ds-accent)',
-            fontSize: 12,
-            fontWeight: 500,
-            pointerEvents: 'none',
-            zIndex: 10,
-            whiteSpace: 'nowrap',
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '12px 16px', borderRadius: 12,
+            border: '1px solid var(--ds-border-subtle)',
           }}
         >
-          {selectedTerm}
+          <Search size={16} style={{ color: 'var(--ds-accent)', flexShrink: 0 }} />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={handleSearchChange}
+            placeholder="Fachbegriff suchen oder Frage stellen..."
+            style={{
+              flex: 1, background: 'transparent', border: 'none', outline: 'none',
+              color: 'var(--ds-text-primary)', fontSize: 15,
+              fontFamily: 'var(--ds-font-sans)',
+            }}
+          />
+          <span style={{ color: 'var(--ds-text-placeholder)', fontSize: 12, fontWeight: 500 }}>⌘K</span>
         </div>
-      )}
+      </div>
 
-      {/* Spin keyframe — injected once */}
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}</style>
+      {/* === 3D GRAPH CANVAS (fills remaining space) === */}
+      <div style={{
+        flex: 1, width: '100%', position: 'relative', overflow: 'hidden',
+      }}>
+        <div
+          ref={containerRef}
+          style={{ width: '100%', height: '100%' }}
+        />
+
+        {/* Loading state */}
+        {loading && (
+          <div style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            gap: 12, color: 'var(--ds-text-secondary)', fontSize: 14, pointerEvents: 'none',
+          }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: '50%',
+              border: '2px solid var(--ds-border-subtle)',
+              borderTopColor: 'var(--ds-accent)',
+              animation: 'spin 0.8s linear infinite',
+            }} />
+            <span>Wissensgraph wird geladen...</span>
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!loading && !hasGraph && (
+          <div style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            gap: 8, color: 'var(--ds-text-tertiary)', fontSize: 14, pointerEvents: 'none',
+          }}>
+            <span style={{ fontSize: 32, opacity: 0.3 }}>◎</span>
+            <span>Noch keine Begriffe extrahiert</span>
+            <span style={{ fontSize: 12 }}>Starte ein Embedding, um den Graphen aufzubauen</span>
+          </div>
+        )}
+
+        {/* Selected term badge */}
+        {selectedTerm && (
+          <div style={{
+            position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+            padding: '4px 12px', borderRadius: 20,
+            background: 'var(--ds-accent-10)', border: '1px solid var(--ds-accent-20)',
+            color: 'var(--ds-accent)', fontSize: 12, fontWeight: 500,
+            pointerEvents: 'none', zIndex: 10, whiteSpace: 'nowrap',
+          }}>
+            {selectedTerm}
+          </div>
+        )}
+      </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

@@ -502,8 +502,9 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       return;
     }
     if (payload.type === 'msg_done') {
-      // Finalize: build saved message from live state, then atomic transition.
-      // finalize() clears msgRef but NOT currentMessage (to prevent flicker).
+      // Finalize: build saved message from live state, then smooth transition.
+      // finalize() marks currentMessage as 'done' (keeps it alive for one render)
+      // while setMessages adds the saved version. A cleanup effect clears it later.
       const finalMsg = agenticMsg.finalize();
       if (finalMsg) {
         const primaryCell = finalMsg.agentCells[0];
@@ -520,7 +521,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
         // Add saved message FIRST, then clear live message in same batch
         setMessages(prev => [...prev, savedMsg]);
       }
-      // currentMessage was already cleared by finalize() — React batches it with setMessages
+      // currentMessage stays alive (status='done') — cleanup effect clears it next render
       // Clean up v1 loading state
       setIsLoading(false);
       setStreamingMessage('');

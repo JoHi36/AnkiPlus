@@ -307,8 +307,14 @@ class BackgroundEmbeddingThread(QThread):
 
             # KG term extraction (runs for every card, independent of embedding status)
             try:
-                from .term_extractor import TermExtractor
-                from ..storage.kg_store import save_card_terms
+                try:
+                    from .term_extractor import TermExtractor
+                except ImportError:
+                    from ai.term_extractor import TermExtractor
+                try:
+                    from ..storage.kg_store import save_card_terms
+                except ImportError:
+                    from storage.kg_store import save_card_terms
                 if not hasattr(self, '_term_extractor'):
                     self._term_extractor = TermExtractor()
                 terms = self._term_extractor.extract(text)
@@ -348,8 +354,14 @@ class BackgroundEmbeddingThread(QThread):
 
         # KG graph build (runs after all cards are processed)
         try:
-            from .term_extractor import compute_collocations
-            from .kg_builder import GraphIndexBuilder
+            try:
+                from .term_extractor import compute_collocations
+            except ImportError:
+                from ai.term_extractor import compute_collocations
+            try:
+                from .kg_builder import GraphIndexBuilder
+            except ImportError:
+                from ai.kg_builder import GraphIndexBuilder
 
             all_texts = [self.manager._card_to_text(c) for c in all_cards]
             collocations = compute_collocations(all_texts)
@@ -364,7 +376,10 @@ class BackgroundEmbeddingThread(QThread):
 
         # Embed unembedded KG terms
         try:
-            from ..storage.kg_store import get_unembedded_terms, save_term_embedding
+            try:
+                from ..storage.kg_store import get_unembedded_terms, save_term_embedding
+            except ImportError:
+                from storage.kg_store import get_unembedded_terms, save_term_embedding
             unembedded = get_unembedded_terms()
             if unembedded and self.manager:
                 BATCH = 50

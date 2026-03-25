@@ -12,7 +12,7 @@ const ROUTER_MODEL = 'gemini-2.5-flash';
 
 export async function routerHandler(req: Request, res: Response): Promise<void> {
   try {
-    const { message, cardContext, lastAssistantMessage, mode, agentDescriptions } = req.body;
+    const { message, cardContext, lastAssistantMessage: _lastAssistantMessage, mode, agentDescriptions } = req.body;
 
     if (!message) {
       res.status(400).json({ error: 'message required' });
