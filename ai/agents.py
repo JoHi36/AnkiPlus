@@ -6,6 +6,8 @@ Architecture: router-orchestrated agent platform with AgentDefinition dataclass.
 from dataclasses import dataclass, field
 from typing import Optional, Callable, List
 
+from ai.workflows import Workflow, Slot
+
 try:
     from ..utils.logging import get_logger
 except ImportError:
@@ -77,6 +79,22 @@ class AgentDefinition:
     fast_model: str = ''
     fallback_model: str = ''
 
+    # Workflows (new — parallel to tools, replaces tools as source of truth later)
+    workflows: list = field(default_factory=list)
+
+    @property
+    def active_tools(self) -> list:
+        """Collects unique non-off tool refs from active (non-off) workflows."""
+        seen = set()
+        result = []
+        for wf in self.workflows:
+            if wf.mode != 'off':
+                for slot in wf.tools:
+                    if slot.mode != 'off' and slot.ref not in seen:
+                        seen.add(slot.ref)
+                        result.append(slot.ref)
+        return result
+
 
 # ---------------------------------------------------------------------------
 # Registry
@@ -118,6 +136,7 @@ def get_non_default_agents(config: dict) -> List[AgentDefinition]:
 
 def get_registry_for_frontend(config: dict) -> List[dict]:
     """Return ALL registered agents as dicts for JSON serialization to frontend."""
+    from ai.capabilities import capability_registry as cap_reg
     result = []
     for a in AGENT_REGISTRY.values():
         is_enabled = a.is_default or config.get(a.enabled_key, False)
@@ -146,6 +165,8 @@ def get_registry_for_frontend(config: dict) -> List[dict]:
             'premiumModel': a.premium_model,
             'fastModel': a.fast_model,
             'fallbackModel': a.fallback_model,
+            # Workflows
+            'workflows': [wf.to_dict(cap_reg) for wf in a.workflows],
         })
     return result
 

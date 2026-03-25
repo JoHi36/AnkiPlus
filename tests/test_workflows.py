@@ -91,3 +91,30 @@ class TestWorkflowSchema(unittest.TestCase):
         self.assertEqual(d['triggers'][0]['mode'], 'locked')
         self.assertEqual(d['tools'][0]['mode'], 'on')
         self.assertEqual(d['outputs'][0]['mode'], 'off')
+
+
+class TestAgentWorkflowIntegration(unittest.TestCase):
+    def test_active_tools_collects_from_workflows(self):
+        from ai.agents import AgentDefinition
+        from ai.workflows import Workflow, Slot
+        agent = AgentDefinition(
+            name='test', label='Test', description='', color='#fff',
+            workflows=[
+                Workflow(name='wf1', label='WF1', description='',
+                    tools=[Slot(ref='tool_a'), Slot(ref='tool_b', mode='off')]),
+                Workflow(name='wf2', label='WF2', description='', mode='off',
+                    tools=[Slot(ref='tool_c')]),
+                Workflow(name='wf3', label='WF3', description='',
+                    tools=[Slot(ref='tool_a'), Slot(ref='tool_d', mode='locked')]),
+            ],
+        )
+        # wf1: tool_a (on), tool_b (off → excluded)
+        # wf2: off workflow → excluded entirely
+        # wf3: tool_a (dedup), tool_d (locked → included)
+        tools = agent.active_tools
+        self.assertEqual(tools, ['tool_a', 'tool_d'])
+
+    def test_active_tools_empty_when_no_workflows(self):
+        from ai.agents import AgentDefinition
+        agent = AgentDefinition(name='test', label='Test', description='', color='#fff')
+        self.assertEqual(agent.active_tools, [])
