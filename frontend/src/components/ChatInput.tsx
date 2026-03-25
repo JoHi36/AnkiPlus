@@ -423,8 +423,8 @@ export default function ChatInput({
                     fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
                     verticalAlign: 'middle',
                   }}>{ghostAgents.filter((a: any) => !a.isSettings).length <= 1 ? 'Tab' : '↑↓'}</kbd>
-                  {/* Second hint: "Studio Tab" — only on initial @ before any interaction */}
-                  {!ghostInteracted && !(currentGhost as any)?.isSettings && (
+                  {/* Second hint: "· Studio Tab" — only when ghost is "Agenten" (settings entry) and user hasn't navigated yet */}
+                  {!ghostInteracted && (currentGhost as any)?.isSettings && (
                     <span style={{
                       display: 'inline-flex', alignItems: 'center', gap: 4,
                       marginLeft: 6,
