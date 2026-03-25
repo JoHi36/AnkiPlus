@@ -53,6 +53,7 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
   const [searchQuery, setSearchQuery] = useState('');
 
   const {
+    crossLinks,
     selectedTerm,
     setSelectedTerm,
     searchResult,
@@ -61,8 +62,15 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
 
   const graphData = useMemo(() => {
     if (!deckData?.roots?.length) return null;
-    return deckTreeToGraph(deckData.roots);
-  }, [deckData]);
+    const { nodes, links } = deckTreeToGraph(deckData.roots);
+    // Merge cross-links (only if both endpoints exist as nodes)
+    const nodeIds = new Set(nodes.map(n => n.id));
+    const allLinks = [
+      ...links,
+      ...crossLinks.filter(cl => nodeIds.has(cl.source) && nodeIds.has(cl.target)),
+    ];
+    return { nodes, links: allLinks };
+  }, [deckData, crossLinks]);
 
   // Handle node click — fly camera to node
   const handleNodeClick = useCallback((node) => {
@@ -343,16 +351,42 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
         </div>
       )}
 
-      {/* Selected term badge */}
+      {/* Selected term badge with Stapel starten action */}
       {selectedTerm && (
         <div style={{
           position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          padding: '4px 12px', borderRadius: 20,
-          background: 'var(--ds-accent-10)', border: '1px solid var(--ds-accent-20)',
-          color: 'var(--ds-accent)', fontSize: 12, fontWeight: 500,
-          pointerEvents: 'none', zIndex: 10, whiteSpace: 'nowrap',
+          padding: '8px 20px', borderRadius: 14,
+          background: 'var(--ds-bg-frosted)', backdropFilter: 'blur(20px)',
+          border: '1px solid var(--ds-border-subtle)',
+          color: 'var(--ds-text-primary)', fontSize: 14, fontWeight: 500,
+          zIndex: 10, whiteSpace: 'nowrap',
+          display: 'flex', alignItems: 'center', gap: 12,
+          boxShadow: 'var(--ds-shadow-md)',
+          pointerEvents: 'auto',
         }}>
-          {selectedTerm}
+          <span>{selectedTerm}</span>
+          <button
+            onClick={() => {
+              const node = graphData?.nodes?.find(n => n.label === selectedTerm);
+              if (node) executeAction('deck.study', { deckId: parseInt(node.id) });
+            }}
+            style={{
+              background: 'var(--ds-accent)', color: 'var(--ds-text-on-accent, white)', border: 'none',
+              borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600,
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            Stapel starten
+          </button>
+          <button
+            onClick={() => setSelectedTerm(null)}
+            style={{
+              background: 'none', border: 'none', color: 'var(--ds-text-tertiary)',
+              cursor: 'pointer', fontSize: 16, padding: '0 4px', fontFamily: 'inherit',
+            }}
+          >
+            ×
+          </button>
         </div>
       )}
 
