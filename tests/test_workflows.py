@@ -43,3 +43,51 @@ class TestCapabilityRegistry(unittest.TestCase):
         self.assertEqual(result[0]['name'], 'timer')
         self.assertEqual(result[0]['label'], 'Timer')
         self.assertEqual(result[0]['category'], 'trigger')
+
+
+class TestWorkflowSchema(unittest.TestCase):
+    def test_slot_defaults(self):
+        from ai.workflows import Slot
+        s = Slot(ref='search_deck')
+        self.assertEqual(s.mode, 'on')
+
+    def test_slot_locked(self):
+        from ai.workflows import Slot
+        s = Slot(ref='timer', mode='locked')
+        self.assertEqual(s.mode, 'locked')
+
+    def test_workflow_defaults(self):
+        from ai.workflows import Workflow, Slot
+        wf = Workflow(
+            name='quiz',
+            label='Quiz & Abfrage',
+            description='Test',
+            triggers=[Slot(ref='card_question_shown', mode='locked')],
+            tools=[Slot(ref='ask_question')],
+            outputs=[Slot(ref='chat_response')],
+        )
+        self.assertEqual(wf.mode, 'on')
+        self.assertEqual(wf.status, 'active')
+        self.assertEqual(wf.context_prompt, '')
+
+    def test_workflow_soon_status(self):
+        from ai.workflows import Workflow
+        wf = Workflow(name='exam', label='Exam', description='', triggers=[], tools=[], outputs=[], status='soon', mode='off')
+        self.assertEqual(wf.status, 'soon')
+        self.assertEqual(wf.mode, 'off')
+
+    def test_workflow_to_dict(self):
+        from ai.workflows import Workflow, Slot
+        wf = Workflow(
+            name='quiz', label='Quiz', description='Desc',
+            triggers=[Slot(ref='chat', mode='locked')],
+            tools=[Slot(ref='search_deck')],
+            outputs=[Slot(ref='widget', mode='off')],
+        )
+        d = wf.to_dict()
+        self.assertEqual(d['name'], 'quiz')
+        self.assertEqual(len(d['triggers']), 1)
+        self.assertEqual(d['triggers'][0]['ref'], 'chat')
+        self.assertEqual(d['triggers'][0]['mode'], 'locked')
+        self.assertEqual(d['tools'][0]['mode'], 'on')
+        self.assertEqual(d['outputs'][0]['mode'], 'off')
