@@ -107,9 +107,11 @@
   --ds-space-2xl: 32px;
 
   /* Layout widths */
-  --ds-dock-width: 520px;                                          /* ChatInput dock max-width */
-  --ds-sidebar-width: calc(var(--ds-dock-width) + 2 * var(--ds-space-xl)); /* Chat sidebar = dock + padding */
-  --ds-settings-width: 280px;                                      /* Settings panel — compact, ~1/2 dock */
+  --ds-content-width: 680px;                                       /* Optimal reading measure (~65 chars at 15px) */
+  --ds-sidebar-width: 568px;                                       /* Chat sidebar (resizable via drag handle) */
+  --ds-dock-width: calc(var(--ds-sidebar-width) - 2 * var(--ds-space-2xl)); /* ChatInput dock = sidebar - 2×32px */
+  --ds-sidebar-tab-width: 44px;                                    /* Sidebar tab bar — vertical icon strip */
+  --ds-settings-width: 324px;                                      /* 280px content + 44px tab bar */
 
 
   /* ─────────────────────────────────────────────────────────
