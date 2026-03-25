@@ -1,24 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getToolRegistry } from '@shared/config/subagentRegistry';
 
-/* ── Back arrow SVG ──────────────────────────────────────────────────────── */
-function BackArrow() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="18"
-      height="18"
-      fill="none"
-      stroke="var(--ds-text-secondary)"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <polyline points="15 18 9 12 15 6" />
-    </svg>
-  );
-}
-
 /* ── iOS-style toggle ────────────────────────────────────────────────────── */
 function Toggle({ on, onChange }) {
   return (
@@ -47,7 +29,7 @@ function Toggle({ on, onChange }) {
           borderRadius: '50%',
           background: '#fff',
           transition: 'left 0.2s',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+          boxShadow: 'var(--ds-shadow-sm)',
         }}
       />
     </button>
@@ -74,7 +56,7 @@ function AlwaysOnBadge() {
 }
 
 /* ── StandardSubMenu ─────────────────────────────────────────────────────── */
-export default function StandardSubMenu({ agent, bridge, onNavigateBack }) {
+export default function StandardSubMenu({ agent, bridge, onNavigateBack = null }) {
   const [toolStates, setToolStates] = useState({});
 
   // Load tool states from bridge on mount
@@ -135,51 +117,29 @@ export default function StandardSubMenu({ agent, bridge, onNavigateBack }) {
       {/* ── Header ── */}
       <div
         style={{
-          padding: '16px 0',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 8,
+          padding: '20px 0 16px',
         }}
       >
-        {/* Back row */}
-        <button
-          onClick={onNavigateBack}
+        <div
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: 0,
-            color: 'var(--ds-text-secondary)',
-            alignSelf: 'flex-start',
+            fontSize: 15,
+            fontWeight: 600,
+            color: 'var(--ds-text-primary)',
           }}
         >
-          <BackArrow />
-          <span
-            style={{
-              fontSize: 13,
-              fontWeight: 500,
-              color: 'var(--ds-text-secondary)',
-            }}
-          >
-            {agent?.label || agent?.name || 'Agent'}
-          </span>
-        </button>
-
-        {/* Description */}
+          {agent?.label || agent?.name || 'Agent'}
+        </div>
         {agent?.description && (
-          <p
+          <div
             style={{
-              fontSize: 12,
-              color: 'var(--ds-text-muted)',
-              margin: 0,
+              fontSize: 11,
+              color: 'var(--ds-text-tertiary)',
+              marginTop: 2,
               lineHeight: 1.5,
             }}
           >
             {agent.description}
-          </p>
+          </div>
         )}
       </div>
 
