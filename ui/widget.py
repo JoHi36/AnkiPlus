@@ -6,6 +6,7 @@ Verwaltet das Web-basierte Chat-UI über QWebEngineView
 import os
 import json
 import uuid
+import weakref
 from aqt.qt import *
 from aqt.utils import showInfo
 
@@ -80,9 +81,9 @@ class AIRequestThread(QThread):
 
     def __init__(self, ai_handler, text, widget_ref, history=None, mode='compact', request_id=None, insights=None):
         super().__init__()
-        self.ai_handler = ai_handler
+        self._handler_ref = weakref.ref(ai_handler) if ai_handler is not None else None
+        self._widget_ref = weakref.ref(widget_ref) if widget_ref is not None else None
         self.text = text
-        self.widget_ref = widget_ref
         self.history = history
         self.mode = mode
         self.request_id = request_id or str(uuid.uuid4())
@@ -94,8 +95,13 @@ class AIRequestThread(QThread):
         self._cancelled = True
 
     def run(self):
+        handler = self._handler_ref() if self._handler_ref is not None else None
+        widget = self._widget_ref() if self._widget_ref is not None else None
+        if handler is None:
+            logger.warning("AIRequestThread: ai_handler was destroyed before run, aborting")
+            return
         try:
-            context = self.widget_ref.current_card_context if self.widget_ref else None
+            context = widget.current_card_context if widget is not None else None
             if context:
                 logger.debug("🔍 AIRequestThread.run: context=has cardId=%s, question='%s'", context.get('cardId'), (context.get('frontField') or context.get('question') or '')[:60])
             else:
@@ -132,7 +138,7 @@ class AIRequestThread(QThread):
                     return
                 self.pipeline_signal.emit(self.request_id, step, status, data or {})
 
-            self.ai_handler._pipeline_signal_callback = pipeline_callback
+            handler._pipeline_signal_callback = pipeline_callback
 
             # Give the AI handler a callback to emit v2 msg events via Qt signal
             def msg_event_callback(event_type, data):
@@ -140,7 +146,7 @@ class AIRequestThread(QThread):
                     return
                 self.msg_event_signal.emit(self.request_id, event_type, data or {})
 
-            self.ai_handler._msg_event_callback = msg_event_callback
+            handler._msg_event_callback = msg_event_callback
 
             def stream_callback(chunk, done, is_function_call=False, steps=None, citations=None, step_labels=None):
                 if self._cancelled:
@@ -149,7 +155,7 @@ class AIRequestThread(QThread):
                 if done and (steps or citations or step_labels):
                     self.metadata_signal.emit(self.request_id, steps or [], citations or [], step_labels or [])
 
-            bot_msg = self.ai_handler.get_response_with_rag(
+            bot_msg = handler.get_response_with_rag(
                 self.text, context=context, history=card_history,
                 mode=self.mode, callback=stream_callback,
                 insights=self.insights
@@ -162,8 +168,9 @@ class AIRequestThread(QThread):
                 logger.exception("AIRequestThread: Exception: %s", str(e))
                 self.error_signal.emit(self.request_id, str(e))
         finally:
-            self.ai_handler._pipeline_signal_callback = None
-            self.ai_handler._msg_event_callback = None
+            if handler is not None:
+                handler._pipeline_signal_callback = None
+                handler._msg_event_callback = None
 
 
 class SubagentThread(QThread):
@@ -199,7 +206,7 @@ class InsightExtractionThread(QThread):
         self.messages = messages
         self.existing_insights = existing_insights
         self.performance_data = performance_data
-        self.ai_handler = ai_handler  # kept for fallback compatibility
+        self._handler_ref = weakref.ref(ai_handler) if ai_handler is not None else None
         self._cancelled = False
 
     def cancel(self):
