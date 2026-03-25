@@ -356,7 +356,7 @@ def _search_cards(query, top_k=10):
                 if query_embeddings:
                     semantic_results = emb.search(query_embeddings[0], top_k=top_k)
             except Exception as e:
-                logger.error(f"plusi search semantic error: {e}")
+                logger.error("plusi search semantic error: %s", e)
 
         # ── SQL keyword search ──
         sql_card_ids = set()
@@ -371,7 +371,7 @@ def _search_cards(query, top_k=10):
                 except Exception:
                     continue
         except Exception as e:
-            logger.error(f"plusi search sql error: {e}")
+            logger.error("plusi search sql error: %s", e)
 
         # ── Merge results (semantic score + SQL presence bonus) ──
         card_scores = {}
@@ -413,10 +413,10 @@ def _search_cards(query, top_k=10):
             except Exception:
                 continue
 
-        logger.debug(f"plusi search: {len(semantic_results)} semantic + {len(sql_card_ids)} sql -> {len(cards)} merged")
+        logger.debug("plusi search: %s semantic + %s sql -> %s merged", len(semantic_results), len(sql_card_ids), len(cards))
         return cards
     except Exception as e:
-        logger.error(f"plusi _search_cards error: {e}")
+        logger.error("plusi _search_cards error: %s", e)
         return []
 
 
@@ -438,7 +438,7 @@ def self_reflect():
     try:
         # Step 1: Generate search query
         raw_step1 = _call_plusi_api(system_prompt, SELF_REFLECT_STEP1, api_key, max_tokens=64, temperature=0.9)
-        logger.debug(f"plusi reflect step1 raw: {raw_step1[:100]}")
+        logger.debug("plusi reflect step1 raw: %s", raw_step1[:100])
 
         query = ""
         try:
@@ -459,7 +459,7 @@ def self_reflect():
                 from storage import get_memory
             query = get_memory('state', 'obsession', 'Medizin Biologie')
 
-        logger.debug(f"plusi reflect: searching cards for '{query}'")
+        logger.debug("plusi reflect: searching cards for '%s'", query)
 
         # Step 2a: Search cards
         card_tuples = _search_cards(query, top_k=10)
@@ -471,7 +471,7 @@ def self_reflect():
         # Step 2b: Reflect with found cards
         step2_prompt = SELF_REFLECT_STEP2.replace("{cards_context}", cards_context)
         raw_step2 = _call_plusi_api(system_prompt, step2_prompt, api_key, max_tokens=768, temperature=0.9)
-        logger.debug(f"plusi reflect step2 raw: {raw_step2[:100]}")
+        logger.debug("plusi reflect step2 raw: %s", raw_step2[:100])
 
         mood, text, internal, _, diary_raw, discoveries, _, _, _, _ = parse_plusi_response(raw_step2)
         if internal:
@@ -504,11 +504,11 @@ def self_reflect():
             history_type='reflect',
         )
 
-        logger.debug(f"plusi reflect done: obsession={internal.get('obsession', '?')}, energy={internal.get('energy', '?')}")
+        logger.debug("plusi reflect done: obsession=%s, energy=%s", internal.get('obsession', '?'), internal.get('energy', '?'))
         return internal
 
     except Exception as e:
-        logger.exception(f"plusi self-reflect error: {e}")
+        logger.exception("plusi self-reflect error: %s", e)
         return None
 
 
@@ -578,7 +578,7 @@ def parse_plusi_response(raw_text):
         text = clean[text_start + 1:].strip() if text_start > 0 else ""
         if not text or text.startswith('"'):
             text = ""
-        logger.debug(f"plusi_agent: recovered from truncated JSON: mood={mood}, delta={delta}")
+        logger.debug("plusi_agent: recovered from truncated JSON: mood=%s, delta=%s", mood, delta)
         return mood, text, {}, delta, None, [], None, None, None, None
 
     return "neutral", raw_text.strip(), {}, 0, None, [], None, None, None, None
@@ -935,7 +935,7 @@ def run_plusi(situation, emit_step=None, memory=None, stream_callback=None, **kw
         }
 
     except Exception as e:
-        logger.exception(f"plusi_agent: Error: {e}")
+        logger.exception("plusi_agent: Error: %s", e)
         return {"mood": "neutral", "text": "", "error": True}
 
 

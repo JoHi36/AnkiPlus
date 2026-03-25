@@ -80,7 +80,7 @@ def _search_pubchem(query):
                 if cid:
                     return f"https://pubchem.ncbi.nlm.nih.gov/image/imgsrv.fcgi?cid={cid}&t=l"
     except Exception as e:
-        logger.error(f"_search_pubchem: Fehler bei PubChem-Suche: {e}")
+        logger.error("_search_pubchem: Fehler bei PubChem-Suche: %s", e)
 
     return None
 
@@ -116,7 +116,7 @@ def _search_wikimedia_commons(query):
                     filename_encoded = requests.utils.quote(filename.replace(' ', '_'))
                     return f"https://commons.wikimedia.org/wiki/Special:FilePath/{filename_encoded}?width=800"
     except Exception as e:
-        logger.error(f"_search_wikimedia_commons: Fehler bei Wikimedia-Suche: {e}")
+        logger.error("_search_wikimedia_commons: Fehler bei Wikimedia-Suche: %s", e)
 
     return None
 
@@ -133,7 +133,7 @@ def _normalize_wikimedia_url(url):
 
         return f"https://upload.wikimedia.org/wikipedia/commons/{md5_hash[0]}/{md5_hash[:2]}/{filename}"
     except Exception as e:
-        logger.error(f"fetchImage: Fehler bei URL-Normalisierung: {e}, verwende Original-URL")
+        logger.error("fetchImage: Fehler bei URL-Normalisierung: %s, verwende Original-URL", e)
         return url
 
 

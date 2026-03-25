@@ -570,7 +570,7 @@ def _handle_panel_message(msg_type, msg_data=None):
                 browser.search_for(f"cid:{card_id}")
                 browser.show()
             except Exception as e:
-                logger.error(f"plusi panel goToCard error: {e}")
+                logger.error("plusi panel goToCard error: %s", e)
 
 
 def _send_diary_data():
@@ -599,7 +599,7 @@ def _send_diary_data():
             f"window.diaryReceive({json.dumps(payload)});"
         )
     except Exception as e:
-        logger.error(f"[PlusiPanel] Error loading diary: {e}")
+        logger.error("[PlusiPanel] Error loading diary: %s", e)
 
 
 def _open_settings():

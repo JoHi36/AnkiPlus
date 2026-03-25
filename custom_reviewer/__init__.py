@@ -212,9 +212,9 @@ def _evaluate_answer_async(data):
                             chat_js = f"if(window.ankiReceive) window.ankiReceive({json.dumps(eval_payload)});"
                             chat_widget.web_view.page().runJavaScript(chat_js)
                     except Exception as e:
-                        logger.error(f"CustomReviewer: ⚠️ Could not send eval result to chat: {e}")
+                        logger.error("CustomReviewer: ⚠️ Could not send eval result to chat: %s", e)
             except Exception as e:
-                logger.error(f"CustomReviewer: Error injecting eval result: {e}")
+                logger.error("CustomReviewer: Error injecting eval result: %s", e)
 
         mw.taskman.run_on_main(inject)
 
@@ -319,7 +319,7 @@ def _get_deck_context_answers_sync(card_id=None, max_answers=8):
 
         return answers[:max_answers]
     except Exception as e:
-        logger.error(f"CustomReviewer: Error getting deck context: {e}")
+        logger.error("CustomReviewer: Error getting deck context: %s", e)
         return []
 
 
@@ -337,14 +337,14 @@ def _generate_mc_async(data, deck_answers=None):
         from ..storage.mc_cache import get_cached_mc, save_mc_cache
         cached = get_cached_mc(card_id, question, correct_answer) if card_id else None
         if cached:
-            logger.debug(f"CustomReviewer: MC cache hit for card {card_id}")
+            logger.debug("CustomReviewer: MC cache hit for card %s", card_id)
             _inject_ai_step('done', 'Aus Cache geladen')
             def inject_cached():
                 try:
                     if mw and mw.reviewer and mw.reviewer.web:
                         mw.reviewer.web.eval(f'window.onMCOptions({json.dumps(cached)});')
                 except Exception as e:
-                    logger.error(f"CustomReviewer: Error injecting cached MC: {e}")
+                    logger.error("CustomReviewer: Error injecting cached MC: %s", e)
             mw.taskman.run_on_main(inject_cached)
             return
 
@@ -356,7 +356,7 @@ def _generate_mc_async(data, deck_answers=None):
 
         # Step 3: Generate via AI
         _inject_ai_step('generating', 'Generiere Multiple-Choice-Optionen…')
-        logger.debug(f"CustomReviewer: MC gen input — question_len={len(question)}, answer_len={len(correct_answer)}, deck_answers={len(deck_answers) if deck_answers else 0}")
+        logger.debug("CustomReviewer: MC gen input — question_len=%s, answer_len=%s, deck_answers=%s", len(question), len(correct_answer), len(deck_answers) if deck_answers else 0)
         result = _call_ai_mc_generation(question, correct_answer, deck_answers)
 
         # Check if result is fallback (detect by checking if any option text matches fallback patterns)
@@ -370,7 +370,7 @@ def _generate_mc_async(data, deck_answers=None):
         # Step 5: Cache result (but NOT fallback results)
         if card_id and result and len(result) >= 4 and not is_fallback:
             save_mc_cache(card_id, question, correct_answer, result)
-            logger.debug(f"CustomReviewer: MC cached for card {card_id}")
+            logger.debug("CustomReviewer: MC cached for card %s", card_id)
 
         # Shuffle before sending to frontend
         import random as _rand
@@ -382,7 +382,7 @@ def _generate_mc_async(data, deck_answers=None):
                     js = f'window.onMCOptions({json.dumps(result)});'
                     mw.reviewer.web.eval(js)
             except Exception as e:
-                logger.error(f"CustomReviewer: Error injecting MC options: {e}")
+                logger.error("CustomReviewer: Error injecting MC options: %s", e)
 
         mw.taskman.run_on_main(inject)
 
@@ -403,13 +403,13 @@ def _ai_get_response_sync(prompt):
     from ..ai.handler import get_ai_handler
     ai = get_ai_handler()
 
-    logger.debug(f"CustomReviewer: _ai_get_response_sync called, is_configured={ai.is_configured()}")
+    logger.debug("CustomReviewer: _ai_get_response_sync called, is_configured=%s", ai.is_configured())
 
     collected = []
     errors = []
 
     def _collector(chunk, is_done, is_function_call=False, **kwargs):
-        logger.debug(f"CustomReviewer: _collector chunk={repr(chunk[:80]) if chunk else None}, is_done={is_done}")
+        logger.debug("CustomReviewer: _collector chunk=%s, is_done=%s", repr(chunk[:80]) if chunk else None, is_done)
         if chunk:
             collected.append(chunk)
         if is_done and not collected:
@@ -417,21 +417,21 @@ def _ai_get_response_sync(prompt):
 
     try:
         result = ai.get_response(prompt, callback=_collector)
-        logger.debug(f"CustomReviewer: get_response returned, collected {len(collected)} chunks, result_len={len(result) if result else 0}")
+        logger.debug("CustomReviewer: get_response returned, collected %s chunks, result_len=%s", len(collected), len(result) if result else 0)
     except Exception as e:
-        logger.exception(f"CustomReviewer: AI response error: {e}")
+        logger.exception("CustomReviewer: AI response error: %s", e)
 
     if errors:
-        logger.error(f"CustomReviewer: Callback errors: {errors}")
+        logger.error("CustomReviewer: Callback errors: %s", errors)
 
     full = ''.join(collected) if collected else None
     if full:
-        logger.debug(f"CustomReviewer: AI response ({len(full)} chars): {full[:200]}...")
+        logger.debug("CustomReviewer: AI response (%s chars): %s...", len(full), full[:200])
         # Detect error messages returned as text (not real AI responses)
         error_patterns = ['Bitte verbinden', 'Bitte konfigurieren', 'Fehler bei', 'Quota überschritten', 'nicht konfiguriert']
         for pattern in error_patterns:
             if pattern in full:
-                logger.error(f"CustomReviewer: AI response looks like an error message: {full[:100]}")
+                logger.error("CustomReviewer: AI response looks like an error message: %s", full[:100])
                 _inject_ai_step('error', full[:80])
                 return None
     else:
@@ -479,10 +479,10 @@ Antworte NUR mit JSON: {{"score": 0-100, "feedback": "..."}}"""
             }
 
     except json.JSONDecodeError as e:
-        logger.error(f"CustomReviewer: JSON parse error in evaluation: {e}")
+        logger.error("CustomReviewer: JSON parse error in evaluation: %s", e)
         return {"score": 50, "feedback": "Bewertung konnte nicht vollständig durchgeführt werden."}
     except Exception as e:
-        logger.error(f"CustomReviewer: AI evaluation error: {e}")
+        logger.error("CustomReviewer: AI evaluation error: %s", e)
 
     # Fallback: simple text comparison
     return _fallback_evaluation(user_answer, correct_answer)
@@ -564,17 +564,17 @@ Antworte NUR mit JSON-Array:
                 for opt in options:
                     if 'explanation' not in opt:
                         opt['explanation'] = ''
-                logger.info(f"CustomReviewer: AI MC generation SUCCESS — {len(options)} options")
+                logger.info("CustomReviewer: AI MC generation SUCCESS — %s options", len(options))
                 return options[:4]
             else:
-                logger.debug(f"CustomReviewer: AI returned invalid options list (len={len(options) if isinstance(options, list) else 'not-list'})")
+                logger.debug("CustomReviewer: AI returned invalid options list (len=%s)", len(options) if isinstance(options, list) else 'not-list')
         else:
             logger.debug("CustomReviewer: AI returned no response for MC generation")
 
     except json.JSONDecodeError as e:
-        logger.error(f"CustomReviewer: JSON parse error in MC generation: {e}")
+        logger.error("CustomReviewer: JSON parse error in MC generation: %s", e)
     except Exception as e:
-        logger.error(f"CustomReviewer: AI MC generation error: {e}")
+        logger.error("CustomReviewer: AI MC generation error: %s", e)
 
     # Fallback: generate simple options from correct answer
     return _fallback_mc_generation(correct_answer)
@@ -635,7 +635,7 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
 
                 logger.error("CustomReviewer: ✅ ans intercepted (internal state updated, no DOM change)")
         except Exception as e:
-            logger.error(f"CustomReviewer: ans intercept error: {e}")
+            logger.error("CustomReviewer: ans intercept error: %s", e)
             # Fallback: at minimum set state
             try:
                 if mw and mw.reviewer:
@@ -657,7 +657,7 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
         # webview_will_set_content hook fires again with the next card.
         try:
             ease_num = int(message[4:])
-            logger.debug(f"CustomReviewer: ease{ease_num} received")
+            logger.debug("CustomReviewer: ease%s received", ease_num)
             if mw and mw.reviewer:
                 rev = mw.reviewer
                 rev.state = "answer"
@@ -686,7 +686,7 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                 finally:
                     web.eval = _orig_eval
 
-                logger.info(f"CustomReviewer: ✅ Card answered ease={ease_num}")
+                logger.info("CustomReviewer: ✅ Card answered ease=%s", ease_num)
 
                 # Send review result to chat panel for SectionDivider performance data
                 try:
@@ -711,9 +711,9 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                         }
                         js = f"if(window.ankiReceive) window.ankiReceive({json.dumps(review_payload)});"
                         chat_widget.web_view.page().runJavaScript(js)
-                        logger.debug(f"CustomReviewer: 📊 Review result sent to chat: ease={ease_num}")
+                        logger.debug("CustomReviewer: 📊 Review result sent to chat: ease=%s", ease_num)
                 except Exception as e:
-                    logger.error(f"CustomReviewer: ⚠️ Could not send review result to chat: {e}")
+                    logger.error("CustomReviewer: ⚠️ Could not send review result to chat: %s", e)
 
                 # After _answerCard, rev.card is now the NEXT card
                 # (set internally by nextCard() → sched.getCard()).
@@ -736,7 +736,7 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                     if not getattr(rev.card, 'timer_started', None):
                         rev.card.timer_started = _time.time()
                     next_card = rev.card
-                    logger.debug(f"CustomReviewer: 🔄 Loading next card {next_card.id}...")
+                    logger.debug("CustomReviewer: 🔄 Loading next card %s...", next_card.id)
 
                     # Defer _initWeb to avoid Qt re-entrancy SEGFAULT
                     def _do_show_next(rev=rev, card=next_card):
@@ -750,9 +750,9 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                             chat_widget = ui_setup.get_chatbot_widget()
                             if chat_widget and hasattr(chat_widget, 'card_tracker'):
                                 chat_widget.card_tracker.send_card_context(card, is_question=True)
-                                logger.info(f"CustomReviewer: ✅ cardContext sent to chat for next card {card.id}")
+                                logger.info("CustomReviewer: ✅ cardContext sent to chat for next card %s", card.id)
                         except Exception as ctx_e:
-                            logger.error(f"CustomReviewer: ⚠️ Could not send cardContext after ease: {ctx_e}")
+                            logger.error("CustomReviewer: ⚠️ Could not send cardContext after ease: %s", ctx_e)
 
                     from aqt.qt import QTimer
                     QTimer.singleShot(0, _do_show_next)
@@ -762,7 +762,7 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
             else:
                 logger.error("CustomReviewer: ❌ No mw or reviewer available")
         except Exception as e:
-            logger.exception(f"CustomReviewer: ❌ ease rating error: {e}")
+            logger.exception("CustomReviewer: ❌ ease rating error: %s", e)
         return (True, None)
 
     elif message == "toggle-sidebar":
@@ -807,7 +807,7 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                     "window.dispatchEvent(new CustomEvent('plusi-ask-focus', {detail: {prefix: '@Plusi '}}));"
                 )
         except Exception as e:
-            logger.error(f"plusi:ask error: {e}")
+            logger.error("plusi:ask error: %s", e)
         return (True, None)
 
     elif message == "plusi:settings":
@@ -875,11 +875,11 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                         )
                         logger.info("CustomReviewer: chat textarea focused")
                 except Exception as e:
-                    logger.error(f"CustomReviewer: focus chat error: {e}")
+                    logger.error("CustomReviewer: focus chat error: %s", e)
             # Single delay after webview content is ready
             QTimer.singleShot(400, _focus_chat_textarea)
         except Exception as e:
-            logger.error(f"CustomReviewer: Error opening chat: {e}")
+            logger.error("CustomReviewer: Error opening chat: %s", e)
 
         # If MC mode with wrong picks, auto-send initial message explaining the error
         try:
@@ -903,10 +903,10 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                                     f"if(window.ankiReceive) window.ankiReceive({json.dumps({'type': 'initialMessage', 'data': {'text': msg}})});"
                                 )
                         except Exception as e:
-                            logger.error(f"CustomReviewer: Error sending initial MC message: {e}")
+                            logger.error("CustomReviewer: Error sending initial MC message: %s", e)
                     QTimer.singleShot(800, _send_initial)
         except Exception as e:
-            logger.error(f"CustomReviewer: Error preparing initial MC message: {e}")
+            logger.error("CustomReviewer: Error preparing initial MC message: %s", e)
 
         return (True, None)
 
@@ -936,7 +936,7 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                     pass
             QTimer.singleShot(100, _refocus_reviewer)
         except Exception as e:
-            logger.error(f"CustomReviewer: Error closing chat: {e}")
+            logger.error("CustomReviewer: Error closing chat: %s", e)
         return (True, None)
 
     elif message.startswith("chat:context:"):
@@ -946,9 +946,9 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
             # Store in a global that the chat widget can access
             import builtins
             builtins._anki_card_context = data
-            logger.debug(f"CustomReviewer: Card context stored for chat")
+            logger.debug("CustomReviewer: Card context stored for chat")
         except Exception as e:
-            logger.error(f"CustomReviewer: Error storing chat context: {e}")
+            logger.error("CustomReviewer: Error storing chat context: %s", e)
         return (True, None)
 
     elif message.startswith("evaluate:"):
@@ -957,9 +957,9 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
             data = json.loads(message[9:])
             thread = threading.Thread(target=_evaluate_answer_async, args=(data,), daemon=True)
             thread.start()
-            logger.debug(f"CustomReviewer: Evaluation started in background")
+            logger.debug("CustomReviewer: Evaluation started in background")
         except Exception as e:
-            logger.error(f"CustomReviewer: Error starting evaluation: {e}")
+            logger.error("CustomReviewer: Error starting evaluation: %s", e)
             # Fallback: show answer
             if mw and mw.reviewer and mw.reviewer.web:
                 mw.reviewer.web.eval('window.onEvaluationResult({"error": "Parse error"});')
@@ -973,9 +973,9 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
             deck_answers = _get_deck_context_answers_sync(data.get('cardId'))
             thread = threading.Thread(target=_generate_mc_async, args=(data, deck_answers), daemon=True)
             thread.start()
-            logger.debug(f"CustomReviewer: MC generation started in background (deck_answers={len(deck_answers)})")
+            logger.debug("CustomReviewer: MC generation started in background (deck_answers=%s)", len(deck_answers))
         except Exception as e:
-            logger.error(f"CustomReviewer: Error starting MC generation: {e}")
+            logger.error("CustomReviewer: Error starting MC generation: %s", e)
             if mw and mw.reviewer and mw.reviewer.web:
                 mw.reviewer.web.eval('window.onMCOptions([]);')
         return (True, None)
@@ -1061,7 +1061,7 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                             rev._initWeb()
                         finally:
                             handle_custom_pycmd._is_navigating = False
-                        logger.debug(f"CustomReviewer: Navigated to card {target_id} (trail {handle_custom_pycmd._trail_index + 1}/{len(handle_custom_pycmd._review_trail)}, answered={show_answer})")
+                        logger.debug("CustomReviewer: Navigated to card %s (trail %s/%s, answered=%s)", target_id, handle_custom_pycmd._trail_index + 1, len(handle_custom_pycmd._review_trail), show_answer)
 
                         # Send cardContext to chat panel after webview is ready
                         is_q = not show_answer
@@ -1070,9 +1070,9 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                             chat_widget = ui_setup.get_chatbot_widget()
                             if chat_widget and hasattr(chat_widget, 'card_tracker'):
                                 chat_widget.card_tracker.send_card_context(card, is_question=is_q)
-                                logger.info(f"CustomReviewer: ✅ cardContext sent to chat for card {target_id}")
+                                logger.info("CustomReviewer: ✅ cardContext sent to chat for card %s", target_id)
                         except Exception as nav_e:
-                            logger.error(f"CustomReviewer: ⚠️ Could not send cardContext after navigate: {nav_e}")
+                            logger.error("CustomReviewer: ⚠️ Could not send cardContext after navigate: %s", nav_e)
 
                         # For history cards: load and inject stored performance result
                         if show_answer:
@@ -1101,14 +1101,14 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                                         from aqt.qt import QTimer as _QT
                                         _QT.singleShot(300, _inject_perf)
                             except Exception as perf_e:
-                                logger.error(f"CustomReviewer: ⚠️ Could not load performance for card {target_id}: {perf_e}")
+                                logger.error("CustomReviewer: ⚠️ Could not load performance for card %s: %s", target_id, perf_e)
 
                     from aqt.qt import QTimer
                     QTimer.singleShot(0, _do_navigate)
                 else:
-                    logger.debug(f"CustomReviewer: Card {target_card_id} not found")
+                    logger.debug("CustomReviewer: Card %s not found", target_card_id)
         except Exception as e:
-            logger.exception(f"CustomReviewer: Error navigating: {e}")
+            logger.exception("CustomReviewer: Error navigating: %s", e)
         return (True, None)
 
     return handled
@@ -1208,7 +1208,7 @@ class CustomReviewer:
 
         # Only modify if context is the Reviewer
         if not isinstance(context, Reviewer):
-            logger.info(f"CustomReviewer: Hook called but context is {type(context).__name__}, not Reviewer")
+            logger.info("CustomReviewer: Hook called but context is %s, not Reviewer", type(context).__name__)
             return
 
         # Get current card from the reviewer
@@ -1240,9 +1240,9 @@ class CustomReviewer:
                 handle_custom_pycmd._show_answered = False  # Reset flag
             custom_html = self._build_reviewer_html(card, context, show_answered=show_answered)
             web_content.body = custom_html
-            logger.info(f"CustomReviewer: ✅ Injected custom HTML for card {card.id} (trail {handle_custom_pycmd._trail_index + 1}/{len(handle_custom_pycmd._review_trail)})")
+            logger.info("CustomReviewer: ✅ Injected custom HTML for card %s (trail %s/%s)", card.id, handle_custom_pycmd._trail_index + 1, len(handle_custom_pycmd._review_trail))
         except Exception as e:
-            logger.exception(f"CustomReviewer: ❌ Error in hook: {e}")
+            logger.exception("CustomReviewer: ❌ Error in hook: %s", e)
             # Don't modify web_content on error - let native UI show
 
     def _load_css(self) -> str:
@@ -1308,7 +1308,7 @@ class CustomReviewer:
                 return ["Again", "Hard", "Good", "Easy"]
 
         except Exception as e:
-            logger.error(f"CustomReviewer: Error getting button labels: {e}")
+            logger.error("CustomReviewer: Error getting button labels: %s", e)
             return ["Again", "Hard", "Good", "Easy"]
 
     def _get_progress_info(self, reviewer) -> dict:
@@ -1339,7 +1339,7 @@ class CustomReviewer:
                 "review": review_count
             }
         except Exception as e:
-            logger.error(f"CustomReviewer: Error getting progress: {e}")
+            logger.error("CustomReviewer: Error getting progress: %s", e)
             return {"done": 0, "total": 0, "remaining": 0, "new": 0, "learning": 0, "review": 0}
 
     def _get_card_info(self, card) -> dict:
@@ -1370,7 +1370,7 @@ class CustomReviewer:
                 "ease": card.factor
             }
         except Exception as e:
-            logger.error(f"CustomReviewer: Error getting card info: {e}")
+            logger.error("CustomReviewer: Error getting card info: %s", e)
             return {}
 
     def _build_reviewer_html(self, card, reviewer, show_answered=False) -> str:

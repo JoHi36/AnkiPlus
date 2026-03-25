@@ -175,24 +175,24 @@ def load_config():
 def save_config(config):
     """Speichert die Konfiguration in die Datei"""
     config_path = get_config_path()
-    logger.debug(f"save_config: Versuche zu speichern nach: {config_path}")
-    logger.debug(f"save_config: Config enthält api_key mit Länge: {len(config.get('api_key', ''))}")
+    logger.debug("save_config: Versuche zu speichern nach: %s", config_path)
+    logger.debug("save_config: Config enthält api_key mit Länge: %s", len(config.get('api_key', '')))
     try:
         # Stelle sicher, dass das Verzeichnis existiert
         os.makedirs(os.path.dirname(config_path), exist_ok=True)
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
-        logger.info(f"save_config: ✓ Erfolgreich gespeichert nach: {config_path}")
+        logger.info("save_config: ✓ Erfolgreich gespeichert nach: %s", config_path)
         
         # Verifiziere durch Zurücklesen
         with open(config_path, 'r', encoding='utf-8') as f:
             verify_config = json.load(f)
-            logger.debug(f"save_config: Verifizierung - API-Key Länge in Datei: {len(verify_config.get('api_key', ''))}")
+            logger.debug("save_config: Verifizierung - API-Key Länge in Datei: %s", len(verify_config.get('api_key', '')))
         
         return True
     except Exception as e:
         error_msg = f"Fehler beim Speichern der Konfiguration: {str(e)}"
-        logger.error(f"save_config: ✗ FEHLER: {error_msg}")
+        logger.error("save_config: ✗ FEHLER: %s", error_msg)
         showInfo(error_msg)
         return False
 
@@ -203,7 +203,7 @@ def get_config(force_reload=False):
     try:
         if force_reload or not hasattr(mw, '_chatbot_config') or mw._chatbot_config is None:
             mw._chatbot_config = load_config()
-            logger.info(f"Config geladen. API-Key vorhanden: {'Ja' if mw._chatbot_config.get('api_key') else 'Nein'} (Länge: {len(mw._chatbot_config.get('api_key', ''))})")
+            logger.info("Config geladen. API-Key vorhanden: %s (Länge: %s)", 'Ja' if mw._chatbot_config.get('api_key') else 'Nein', len(mw._chatbot_config.get('api_key', '')))
         return mw._chatbot_config
     except (RuntimeError, AttributeError):
         # Thread-safety: mw may not be accessible from worker threads
@@ -212,24 +212,24 @@ def get_config(force_reload=False):
 def update_config(mascot_enabled=None, **kwargs):
     """Aktualisiert die Konfiguration"""
     config = get_config()
-    logger.debug(f"update_config aufgerufen mit: {list(kwargs.keys())}")
+    logger.debug("update_config aufgerufen mit: %s", list(kwargs.keys()))
     
     # Trimme API-Key falls vorhanden (entferne Whitespace)
     if 'api_key' in kwargs:
         kwargs['api_key'] = kwargs['api_key'].strip() if kwargs['api_key'] else ""
-        logger.debug(f"update_config: API-Key getrimmt, neue Länge: {len(kwargs['api_key'])}")
+        logger.debug("update_config: API-Key getrimmt, neue Länge: %s", len(kwargs['api_key']))
         if len(kwargs['api_key']) > 50:
-            logger.warning(f"⚠️ WARNUNG: API-Key ist sehr lang ({len(kwargs['api_key'])} Zeichen)!")
+            logger.warning("⚠️ WARNUNG: API-Key ist sehr lang (%s Zeichen)!", len(kwargs['api_key']))
     
     # Trimme Auth-Token falls vorhanden
     if 'auth_token' in kwargs:
         kwargs['auth_token'] = kwargs['auth_token'].strip() if kwargs['auth_token'] else ""
-        logger.debug(f"update_config: Auth-Token getrimmt, neue Länge: {len(kwargs['auth_token'])}")
+        logger.debug("update_config: Auth-Token getrimmt, neue Länge: %s", len(kwargs['auth_token']))
     
     # Trimme Refresh-Token falls vorhanden
     if 'refresh_token' in kwargs:
         kwargs['refresh_token'] = kwargs['refresh_token'].strip() if kwargs['refresh_token'] else ""
-        logger.debug(f"update_config: Refresh-Token getrimmt, neue Länge: {len(kwargs['refresh_token'])}")
+        logger.debug("update_config: Refresh-Token getrimmt, neue Länge: %s", len(kwargs['refresh_token']))
     
     # Setze Backend-URL falls nicht gesetzt
     if 'backend_url' in kwargs:
@@ -287,7 +287,7 @@ def get_or_create_device_id():
         device_id = str(uuid.uuid4())
         config['device_id'] = device_id
         save_config(config)
-        logger.debug(f"Device-ID generiert: {device_id}")
+        logger.debug("Device-ID generiert: %s", device_id)
     
     return device_id
 

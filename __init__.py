@@ -242,9 +242,9 @@ def _init_embedding_manager():
 
         QTimer.singleShot(EMBEDDING_INIT_DELAY_MS, lambda: _embedding_manager.start_background_embedding(get_all_cards))
 
-        logger.info(f"EmbeddingManager initialized")
+        logger.info("EmbeddingManager initialized")
     except Exception as e:
-        logger.error(f"EmbeddingManager initialization failed: {e}")
+        logger.error("EmbeddingManager initialization failed: %s", e)
         _embedding_manager = None
 
 
@@ -258,7 +258,7 @@ def init_addon():
         from .storage.card_sessions import migrate_from_json
         migrate_from_json()
     except Exception as e:
-        logger.error(f"Card sessions migration skipped: {e}")
+        logger.error("Card sessions migration skipped: %s", e)
 
     # Proaktiver Token-Refresh beim Startup + periodischer Refresh
     def _startup_token_refresh():
@@ -457,7 +457,7 @@ def on_profile_loaded():
         """Schedule the next reflection window with random 30-60 min interval."""
         interval_ms = random.randint(30, 60) * 60 * 1000
         interval_min = interval_ms // 60000
-        logger.debug(f"plusi reflect: next window in {interval_min} min")
+        logger.debug("plusi reflect: next window in %s min", interval_min)
         QTimer.singleShot(interval_ms, _open_reflect_window)
 
     def check_and_trigger_reflect():
@@ -516,9 +516,9 @@ def _emit_deck_selected(widget, deck_id, deck_name):
         }})();
         """
         widget.web_view.page().runJavaScript(js_code)
-        logger.info(f"📚 Hook: deckSelected Event gesendet - Deck: {deck_name}, Cards: {total_cards}")
+        logger.info("📚 Hook: deckSelected Event gesendet - Deck: %s, Cards: %s", deck_name, total_cards)
     except Exception as e:
-        logger.exception(f"Fehler beim Senden von deckSelected Event: {e}")
+        logger.exception("Fehler beim Senden von deckSelected Event: %s", e)
 
 def on_reviewer_did_show_question(card):
     """Wird aufgerufen, wenn eine Karte im Reviewer angezeigt wird"""
@@ -549,7 +549,7 @@ def on_reviewer_did_show_question(card):
                     deck_data["deckName"]
                 )
         except Exception as e:
-            logger.exception(f"Fehler beim Senden von Deck-Event: {e}")
+            logger.exception("Fehler beim Senden von Deck-Event: %s", e)
 
 # Alte Logik entfernt - User fügt Token manuell in Profil-Dialog ein
 
@@ -588,7 +588,7 @@ def on_reviewer_did_answer_card(reviewer, card, ease):
         except Exception:
             pass
     except Exception as e:
-        logger.error(f"cardResult emission error: {e}")
+        logger.error("cardResult emission error: %s", e)
 
 
 def on_state_will_change(new_state, old_state):
@@ -603,7 +603,7 @@ def on_state_will_change(new_state, old_state):
             close_preview(notify_frontend=True)
             # Don't return — let normal state_will_change logic run
     except Exception as e:
-        logger.error(f"Preview state check error: {e}")
+        logger.error("Preview state check error: %s", e)
 
     # Update MainViewWidget for the new state
     try:
@@ -649,9 +649,9 @@ def on_state_will_change(new_state, old_state):
                 if new_state == "review":
                     hide_native_bottom_bar()
 
-                logger.debug(f"🎨 State: {new_state} → Toolbar hidden")
+                logger.debug("🎨 State: %s → Toolbar hidden", new_state)
             except Exception as e:
-                logger.error(f"⚠️ Error hiding toolbar: {e}")
+                logger.error("⚠️ Error hiding toolbar: %s", e)
         # Hide chat panel when leaving review state
         if new_state != "review":
             # Skip chat panel close if we're in a preview transition
@@ -686,7 +686,7 @@ def on_state_will_change(new_state, old_state):
 
                 logger.debug("State: %s -> Toolbar restored", new_state)
             except Exception as e:
-                logger.error(f"⚠️ Error restoring toolbar: {e}")
+                logger.error("⚠️ Error restoring toolbar: %s", e)
     
     # Original deck-event logic
     widget = get_chatbot_widget()
@@ -706,7 +706,7 @@ def on_state_will_change(new_state, old_state):
                                 deck_data["deckName"]
                             )
                     except Exception as e:
-                        logger.error(f"Fehler beim Senden von deckSelected in state_will_change: {e}")
+                        logger.error("Fehler beim Senden von deckSelected in state_will_change: %s", e)
                 
                 QTimer.singleShot(STATE_CHANGE_DECK_DELAY_MS, send_deck_selected)
             
@@ -716,7 +716,7 @@ def on_state_will_change(new_state, old_state):
                 widget.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
                 logger.info("📚 Hook: State zu deckBrowser gewechselt, deckExited Event gesendet")
         except Exception as e:
-            logger.exception(f"Fehler beim Senden von State-Change-Event: {e}")
+            logger.exception("Fehler beim Senden von State-Change-Event: %s", e)
 
 def cleanup_addon():
     """Cleanup when addon is disabled or Anki closes"""
@@ -738,7 +738,7 @@ def cleanup_addon():
         show_native_toolbar()
         logger.debug("Addon cleanup: Native UI restored")
     except Exception as e:
-        logger.error(f"Cleanup error: {e}")
+        logger.error("Cleanup error: %s", e)
 
 # Hook registrieren (mit Fallback falls Hooks nicht verfügbar sind)
 if mw is not None:
