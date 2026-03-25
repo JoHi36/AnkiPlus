@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import TermPopup from './TermPopup';
 
 /**
  * ReviewerView — Pure display component for the card viewer.
@@ -125,6 +126,9 @@ function MCOptions({ options, selected, isResult, onSelect }) {
 function applyPhraseMarkers(containerEl, phrases, source) {
   if (!containerEl || !phrases || typeof phrases !== 'object') return;
 
+  // Derive CSS class from source
+  const markerClass = source === 'knowledge-graph' ? 'kg-marker' : 'amboss-marker';
+
   // Filter: skip branding terms and very short terms
   const SKIP_TERMS = new Set(['amboss', 'meditricks', 'ankihub']);
   const terms = Object.entries(phrases)
@@ -150,7 +154,9 @@ function applyPhraseMarkers(containerEl, phrases, source) {
     const parent = node.parentElement;
     if (!parent) continue;
     const tag = parent.tagName;
-    if (tag === 'SCRIPT' || tag === 'STYLE' || parent.classList.contains('amboss-marker')) continue;
+    if (tag === 'SCRIPT' || tag === 'STYLE' ||
+        parent.classList.contains('amboss-marker') ||
+        parent.classList.contains('kg-marker')) continue;
     if (regex.test(node.textContent)) {
       textNodes.push(node);
       regex.lastIndex = 0;  // reset after test()
@@ -168,7 +174,7 @@ function applyPhraseMarkers(containerEl, phrases, source) {
       const phraseId = phraseMap[part.toLowerCase()];
       if (phraseId) {
         const span = document.createElement('span');
-        span.className = 'amboss-marker';
+        span.className = markerClass;
         span.setAttribute('data-phrase-group-id', phraseId);
         span.setAttribute('data-source', source || 'addon');
         span.textContent = part;
@@ -185,6 +191,8 @@ function applyPhraseMarkers(containerEl, phrases, source) {
 export default function ReviewerView({ cardData, reviewer }) {
   const cardContentRef = useRef(null);
   const [tooltip, setTooltip] = React.useState(null); // { html, x, y }
+  const [kgPopup, setKgPopup] = useState(null);       // { term, x, y }
+  const [kgDefinition, setKgDefinition] = useState(null);
 
   // Listen for addon phrase annotations and apply them to the card DOM
   useEffect(() => {
@@ -196,6 +204,34 @@ export default function ReviewerView({ cardData, reviewer }) {
     };
     window.addEventListener('addon.phrases', phraseHandler);
     return () => window.removeEventListener('addon.phrases', phraseHandler);
+  }, []);
+
+  // Load KG terms for the current card and apply .kg-marker spans
+  const cardId = cardData?.id;
+  useEffect(() => {
+    if (!cardId || !cardContentRef.current) return;
+
+    window.ankiBridge?.addMessage('getCardKGTerms', { cardId: String(cardId) });
+
+    const handler = (e) => {
+      const { terms } = e.detail || {};
+      if (terms && terms.length > 0 && cardContentRef.current) {
+        const termMap = {};
+        terms.forEach(t => { termMap[t] = 'kg-' + t.toLowerCase().replace(/\s+/g, '-'); });
+        applyPhraseMarkers(cardContentRef.current, termMap, 'knowledge-graph');
+      }
+    };
+    window.addEventListener('kg.cardTerms', handler);
+    return () => window.removeEventListener('kg.cardTerms', handler);
+  }, [cardId]);
+
+  // Listen for KG term definition results
+  useEffect(() => {
+    const handler = (e) => {
+      setKgDefinition(e.detail);
+    };
+    window.addEventListener('graph.termDefinition', handler);
+    return () => window.removeEventListener('graph.termDefinition', handler);
   }, []);
 
   // Listen for tooltip content from AMBOSS
@@ -222,6 +258,18 @@ export default function ReviewerView({ cardData, reviewer }) {
    * Handle clicks on links and addon markers inside card HTML.
    */
   const handleCardClick = useCallback((e) => {
+    // Handle KG marker clicks → show TermPopup
+    const kgMarker = e.target.closest('.kg-marker');
+    if (kgMarker) {
+      e.preventDefault();
+      e.stopPropagation();
+      const term = kgMarker.textContent;
+      setKgPopup({ term, x: e.clientX, y: e.clientY });
+      setKgDefinition(null);
+      window.ankiBridge?.addMessage('getTermDefinition', { term });
+      return;
+    }
+
     // Handle AMBOSS marker clicks → request tooltip from AMBOSS Python
     const marker = e.target.closest('.amboss-marker');
     if (marker) {
@@ -308,6 +356,33 @@ export default function ReviewerView({ cardData, reviewer }) {
           )}
         </div>
       </div>
+
+      {/* Knowledge Graph term popup */}
+      {kgPopup && (
+        <TermPopup
+          term={kgPopup.term}
+          mode="overlay"
+          x={kgPopup.x}
+          y={kgPopup.y}
+          onClose={() => { setKgPopup(null); setKgDefinition(null); }}
+          onTermClick={(t) => {
+            setKgPopup({ ...kgPopup, term: t });
+            setKgDefinition(null);
+            window.ankiBridge?.addMessage('getTermDefinition', { term: t });
+          }}
+          onStartStack={(cardIds) => {
+            window.ankiBridge?.addMessage('startTermStack', { term: kgPopup.term, cardIds: JSON.stringify(cardIds) });
+          }}
+          definition={kgDefinition?.definition || null}
+          sourceCount={kgDefinition?.sourceCount || 0}
+          generatedBy={kgDefinition?.generatedBy || 'llm'}
+          connectedTerms={kgDefinition?.connectedTerms || []}
+          cardCount={0}
+          deckNames={[]}
+          loading={kgDefinition?.loading || false}
+          error={kgDefinition?.error || null}
+        />
+      )}
 
       {/* Addon tooltip (AMBOSS article popup) */}
       {tooltip && (
