@@ -48,6 +48,7 @@ import AgenticCell from './components/AgenticCell';
 import TopBar from './components/TopBar';
 import DeckBrowserView from './components/DeckBrowserView';
 import OverviewView from './components/OverviewView';
+import StatistikView from './components/StatistikView';
 import ContextTags from './components/ContextTags';
 
 // Stable empty references — prevent new object creation on every render
@@ -2068,7 +2069,8 @@ function AppInner() {
         bridgeAction('view.navigate', 'review');
         bridgeAction('card.requestCurrent');
       } else if (target === 'statistik') {
-        executeAction('stats.open');
+        setActiveView('statistik');
+        activeViewRef.current = 'statistik';
       }
     };
 
@@ -2335,7 +2337,7 @@ function AppInner() {
     </div>
   );
 
-  if (activeView === 'deckBrowser' || activeView === 'overview' || activeView === 'freeChat') {
+  if (activeView === 'deckBrowser' || activeView === 'overview' || activeView === 'freeChat' || activeView === 'statistik') {
     return (
       <div className={showFreeChat && isFreeChatAnimatingIn ? '' : 'ds-canvas-surface'} style={{
         position: 'fixed', inset: 0,
@@ -2370,6 +2372,9 @@ function AppInner() {
               onBack={() => executeAction('view.navigate', 'deckBrowser')}
               onOptions={() => bridgeAction('deck.options')}
             />
+          )}
+          {activeView === 'statistik' && (
+            <StatistikView />
           )}
           {showFreeChat && (
             <div style={{

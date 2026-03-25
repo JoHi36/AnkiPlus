@@ -18,7 +18,9 @@ export default function TopBar({
   settingsOpen = false,
   holdToResetProps = {},
 }) {
-  const activeTab = (ankiState === 'overview' || ankiState === 'review') ? 'session' : 'stapel';
+  const activeTab = activeView === 'statistik' ? 'statistik'
+    : (ankiState === 'overview' || ankiState === 'review') ? 'session'
+    : 'stapel';
 
   // Plus/Close button — morphs between + and × via CSS rotation
   const plusButton = (
