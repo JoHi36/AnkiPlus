@@ -37,26 +37,27 @@ from unittest.mock import patch, MagicMock
 from ai.router import unified_route
 
 
-def _mock_gemini_response(json_text):
+def _mock_backend_response(json_dict):
+    """Mock a backend /router response (returns parsed JSON directly)."""
     mock_resp = MagicMock()
     mock_resp.raise_for_status = MagicMock()
-    mock_resp.json.return_value = {
-        'candidates': [{'content': {'parts': [{'text': json_text}]}}]
-    }
+    mock_resp.json.return_value = json_dict
     return mock_resp
 
 
+@patch('ai.router.get_auth_token', return_value='test-token')
+@patch('ai.router.get_backend_url', return_value='https://backend.example.com')
 @patch('ai.router._requests')
-def test_unified_route_tutor_with_search(mock_requests):
-    mock_requests.post.return_value = _mock_gemini_response(
-        '{"agent":"tutor","search_needed":true,"retrieval_mode":"both",'
-        '"response_length":"medium","max_sources":"medium","search_scope":"collection",'
-        '"precise_queries":["a AND b"],"broad_queries":["a OR b"],"embedding_queries":["concept"]}'
-    )
+def test_unified_route_tutor_with_search(mock_requests, mock_url, mock_token):
+    mock_requests.post.return_value = _mock_backend_response({
+        'agent': 'tutor', 'search_needed': True, 'retrieval_mode': 'both',
+        'response_length': 'medium', 'max_sources': 'medium', 'search_scope': 'collection',
+        'precise_queries': ['a AND b'], 'broad_queries': ['a OR b'], 'embedding_queries': ['concept'],
+    })
     result = unified_route(
         user_message='warum ist die banane krumm',
         session_context={'mode': 'free_chat', 'deck_name': '', 'has_card': False},
-        config={'api_key': 'test-key'},
+        config={},
         card_context=None,
         chat_history=[],
     )
@@ -65,15 +66,17 @@ def test_unified_route_tutor_with_search(mock_requests):
     assert result.precise_queries == ['a AND b']
 
 
+@patch('ai.router.get_auth_token', return_value='test-token')
+@patch('ai.router.get_backend_url', return_value='https://backend.example.com')
 @patch('ai.router._requests')
-def test_unified_route_plusi(mock_requests):
-    mock_requests.post.return_value = _mock_gemini_response(
-        '{"agent":"plusi","reasoning":"Persoenliche Ansprache"}'
-    )
+def test_unified_route_plusi(mock_requests, mock_url, mock_token):
+    mock_requests.post.return_value = _mock_backend_response({
+        'agent': 'plusi', 'reasoning': 'Persoenliche Ansprache',
+    })
     result = unified_route(
         user_message='hey plusi wie gehts',
         session_context={'mode': 'free_chat', 'deck_name': '', 'has_card': False},
-        config={'api_key': 'test-key'},
+        config={},
         card_context=None,
         chat_history=[],
     )
@@ -81,13 +84,15 @@ def test_unified_route_plusi(mock_requests):
     assert result.search_needed is None
 
 
+@patch('ai.router.get_auth_token', return_value='test-token')
+@patch('ai.router.get_backend_url', return_value='https://backend.example.com')
 @patch('ai.router._requests')
-def test_unified_route_fallback_on_error(mock_requests):
+def test_unified_route_fallback_on_error(mock_requests, mock_url, mock_token):
     mock_requests.post.side_effect = Exception('API error')
     result = unified_route(
         user_message='some question',
         session_context={'mode': 'free_chat', 'deck_name': '', 'has_card': False},
-        config={'api_key': 'test-key'},
+        config={},
         card_context=None,
         chat_history=[],
     )
@@ -153,17 +158,21 @@ def test_route_none_query():
         pass  # Acceptable: explicit exception from None.lower() is a clear error
 
 
+@patch('ai.router.get_auth_token', return_value='test-token')
+@patch('ai.router.get_backend_url', return_value='https://backend.example.com')
 @patch('ai.router._requests')
-def test_route_malformed_json_response(mock_requests):
-    """If the LLM returns malformed JSON, unified_route falls back to tutor."""
-    mock_requests.post.return_value = _mock_gemini_response('this is { not valid json !!!')
+def test_route_malformed_json_response(mock_requests, mock_url, mock_token):
+    """If the backend returns invalid JSON, unified_route falls back to tutor."""
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.json.side_effect = ValueError('Invalid JSON')
+    mock_requests.post.return_value = mock_resp
     result = unified_route(
         user_message='what is mitosis',
         session_context={'mode': 'card_session', 'deck_name': 'Bio', 'has_card': True},
-        config={'api_key': 'test-key'},
+        config={},
         card_context=None,
         chat_history=[],
     )
     assert result.agent == 'tutor'
-    # method is 'llm' because the LLM was called (returned garbage, router recovered)
-    assert result.method in ('default', 'llm')
+    assert result.method == 'default'
