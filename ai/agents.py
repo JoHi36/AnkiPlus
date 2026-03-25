@@ -376,6 +376,58 @@ register_agent(AgentDefinition(
     premium_model='gemini-3-flash-preview',
     fast_model='gemini-2.5-flash',
     fallback_model='gemini-2.5-flash',
+    # Workflows
+    workflows=[
+        Workflow(
+            name='quiz',
+            label='Quiz & Abfrage',
+            description='Testet dein Wissen mit Fragen und Multiple Choice bevor du die Antwort siehst',
+            mode='locked',
+            triggers=[Slot(ref='card_question_shown', mode='locked')],
+            tools=[Slot(ref='ask_question', mode='locked'), Slot(ref='multiple_choice', mode='on')],
+            outputs=[Slot(ref='chat_response', mode='locked'), Slot(ref='mc_widget', mode='on')],
+            context_prompt='Die Karte ist verdeckt. Stelle eine Frage oder generiere Multiple Choice.',
+        ),
+        Workflow(
+            name='explain',
+            label='Erklären & Vertiefen',
+            description='Erklärt Konzepte, zeigt Zusammenhänge und vertieft nach dem Aufdecken der Karte',
+            mode='on',
+            triggers=[Slot(ref='card_answer_shown', mode='locked'), Slot(ref='chat', mode='on')],
+            tools=[
+                Slot(ref='search_deck', mode='locked'),
+                Slot(ref='search_image', mode='on'),
+                Slot(ref='create_mermaid_diagram', mode='on'),
+                Slot(ref='get_learning_stats', mode='on'),
+                Slot(ref='compact', mode='on'),
+            ],
+            outputs=[Slot(ref='chat_response', mode='locked'), Slot(ref='widget', mode='on')],
+        ),
+        Workflow(
+            name='free_chat',
+            label='Freies Gespräch',
+            description='Alle Tools verfügbar für offene Fragen ohne Kartenbezug',
+            mode='on',
+            triggers=[Slot(ref='chat', mode='locked')],
+            tools=[
+                Slot(ref='search_deck', mode='locked'),
+                Slot(ref='search_image', mode='on'),
+                Slot(ref='create_mermaid_diagram', mode='on'),
+                Slot(ref='get_learning_stats', mode='on'),
+                Slot(ref='show_card', mode='on'),
+                Slot(ref='compact', mode='on'),
+            ],
+            outputs=[Slot(ref='chat_response', mode='locked'), Slot(ref='widget', mode='on')],
+        ),
+        Workflow(
+            name='exam',
+            label='Prüfungsmodus',
+            description='Simuliert Prüfungsbedingungen mit Zeitlimit und Auswertung',
+            status='soon',
+            mode='off',
+            triggers=[], tools=[], outputs=[],
+        ),
+    ],
 ))
 
 
@@ -428,6 +480,30 @@ register_agent(AgentDefinition(
     submenu_label='Quellen konfigurieren',
     submenu_component='researchMenu',
     tools_configurable=True,
+    # Workflows
+    workflows=[
+        Workflow(
+            name='web_research',
+            label='Web-Recherche',
+            description='Recherchiert über Perplexity, PubMed und Wikipedia',
+            mode='locked',
+            triggers=[Slot(ref='mention_research', mode='locked'), Slot(ref='router', mode='on')],
+            tools=[
+                Slot(ref='search_perplexity', mode='locked'),
+                Slot(ref='search_pubmed', mode='on'),
+                Slot(ref='search_wikipedia', mode='on'),
+            ],
+            outputs=[Slot(ref='chat_response', mode='locked'), Slot(ref='widget', mode='on')],
+        ),
+        Workflow(
+            name='vocab_definition',
+            label='Wort-Definition',
+            description='Definiert Fachbegriffe bei Klick auf ein Wort',
+            status='soon',
+            mode='off',
+            triggers=[], tools=[], outputs=[],
+        ),
+    ],
 ))
 
 
@@ -470,6 +546,23 @@ register_agent(AgentDefinition(
     premium_model='gemini-2.5-flash',
     fast_model='gemini-2.5-flash',
     fallback_model='gemini-2.5-flash',
+    # Workflows
+    workflows=[
+        Workflow(
+            name='app_help',
+            label='App-Hilfe',
+            description='Beantwortet Fragen zur App und hilft bei Einstellungen',
+            mode='locked',
+            triggers=[Slot(ref='chat', mode='locked')],
+            tools=[
+                Slot(ref='change_theme', mode='locked'),
+                Slot(ref='change_setting', mode='locked'),
+                Slot(ref='navigate_to', mode='locked'),
+                Slot(ref='explain_feature', mode='locked'),
+            ],
+            outputs=[Slot(ref='chat_response', mode='locked')],
+        ),
+    ],
 ))
 
 
@@ -525,4 +618,35 @@ register_agent(AgentDefinition(
     premium_model='claude-sonnet',
     fast_model='gemini-2.5-flash',
     fallback_model='gemini-2.5-flash',
+    # Workflows
+    workflows=[
+        Workflow(
+            name='autonomous',
+            label='Autonomes Denken',
+            description='Plusi denkt eigenständig nach, reflektiert und entwickelt sich weiter',
+            mode='locked',
+            triggers=[Slot(ref='timer', mode='locked'), Slot(ref='mention_plusi', mode='on'), Slot(ref='mood_event', mode='on')],
+            tools=[
+                Slot(ref='reflect', mode='locked'),
+                Slot(ref='research', mode='on'),
+                Slot(ref='sleep', mode='on'),
+                Slot(ref='do_nothing', mode='on'),
+            ],
+            outputs=[
+                Slot(ref='emotion', mode='locked'),
+                Slot(ref='memory', mode='locked'),
+                Slot(ref='diary_write', mode='on'),
+                Slot(ref='set_timer', mode='on'),
+            ],
+        ),
+        Workflow(
+            name='chat_companion',
+            label='Chat-Begleitung',
+            description='Reagiert auf Chat-Nachrichten mit Persönlichkeit und Humor',
+            mode='locked',
+            triggers=[Slot(ref='mention_plusi', mode='locked'), Slot(ref='chat', mode='on')],
+            tools=[Slot(ref='respond', mode='locked'), Slot(ref='humor', mode='on')],
+            outputs=[Slot(ref='chat_response', mode='locked'), Slot(ref='emotion', mode='on')],
+        ),
+    ],
 ))
