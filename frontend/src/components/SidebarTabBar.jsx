@@ -176,6 +176,7 @@ export default function SidebarTabBar({ activeTab, onTabChange, agents = [] }) {
       )}
 
       {/* ── Agent tabs ──────────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {agents.map(agent => {
         const isActive   = activeTab === agent.name;
         const agentColor = agent.color || 'var(--ds-text-secondary)';
@@ -196,6 +197,7 @@ export default function SidebarTabBar({ activeTab, onTabChange, agents = [] }) {
           </TabButton>
         );
       })}
+      </div>
     </div>
   );
 }
