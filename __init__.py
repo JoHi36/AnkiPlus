@@ -746,7 +746,7 @@ if mw is not None:
     # Must be registered BEFORE profile_did_open so it captures from first reviewer load
     try:
         from .ui.addon_proxy import get_capture
-        gui_hooks.webview_will_set_content.append(get_capture().on_webview_content)
+        gui_hooks.webview_will_set_content.append(get_capture().on_webview_will_set_content)
         logger.info("Addon proxy: content capture hook registered")
     except Exception as e:
         logger.warning("Addon proxy registration failed: %s", e)
