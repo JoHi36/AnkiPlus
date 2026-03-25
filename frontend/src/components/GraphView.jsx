@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import ForceGraph3D from '3d-force-graph';
 import { Search } from 'lucide-react';
 import { executeAction } from '../actions';
