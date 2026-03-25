@@ -301,22 +301,68 @@ class SearchCardsThread(QThread):
         try:
             import re as _re
 
-            # Embed the query
+            # === HYBRID SEARCH: Vector + SQL Keyword ===
+
+            # 1. Vector search (semantic similarity)
+            vector_ids = set()
+            scores = {}
             query_embs = self.emb_mgr.embed_texts([self.query])
-            if not query_embs or not query_embs[0]:
+            if query_embs and query_embs[0]:
+                results = self.emb_mgr.search(query_embs[0], top_k=self.top_k * 2)
+                for cid, score in (results or []):
+                    vector_ids.add(cid)
+                    scores[cid] = score
+
+            # 2. SQL keyword search (exact matches)
+            sql_ids = set()
+            try:
+                try:
+                    from ..storage.kg_store import _get_db as kg_get_db
+                except ImportError:
+                    from storage.kg_store import _get_db as kg_get_db
+                db = kg_get_db()
+                # Search card text via kg_card_terms (terms contain keywords)
+                keywords = [w for w in self.query.split() if len(w) >= 3]
+                for kw in keywords:
+                    rows = db.execute(
+                        "SELECT DISTINCT card_id FROM kg_card_terms WHERE term LIKE ?",
+                        (f"%{kw}%",)
+                    ).fetchall()
+                    for r in rows:
+                        sql_ids.add(r[0])
+            except Exception as e:
+                logger.debug("SQL keyword search failed (non-critical): %s", e)
+
+            # 3. Merge: dual-match cards first, then vector-only, then sql-only
+            dual = vector_ids & sql_ids
+            vector_only = vector_ids - sql_ids
+            sql_only = sql_ids - vector_ids
+
+            # Score: dual matches get boosted, sql-only get base score
+            for cid in dual:
+                scores[cid] = scores.get(cid, 0.5) + 0.2  # boost
+            for cid in sql_only:
+                scores[cid] = 0.4  # base relevance for keyword matches
+
+            # Rank all candidates by score, take top-K
+            all_candidates = list(dual) + sorted(vector_only, key=lambda c: scores.get(c, 0), reverse=True) + sorted(sql_only, key=lambda c: scores.get(c, 0), reverse=True)
+            card_ids = list(dict.fromkeys(all_candidates))[:self.top_k]  # dedupe, limit
+
+            if not card_ids:
                 self.result_signal.emit(json.dumps({"type": "graph.searchCards", "data": {
-                    "cards": [], "edges": [], "error": "Embedding fehlgeschlagen — API nicht erreichbar"}}))
+                    "cards": [], "edges": [], "query": self.query,
+                    "error": "Keine Karten gefunden" if not query_embs or not query_embs[0] else None}}))
                 return
 
-            # Search top-K cards by cosine similarity
-            results = self.emb_mgr.search(query_embs[0], top_k=self.top_k)
-            if not results:
-                self.result_signal.emit(json.dumps({"type": "graph.searchCards", "data": {
-                    "cards": [], "edges": [], "query": self.query}}))
-                return
-
-            card_ids = [cid for cid, score in results]
-            scores = {cid: score for cid, score in results}
+            # Tag source for each card
+            sources = {}
+            for cid in card_ids:
+                if cid in dual:
+                    sources[cid] = 'both'
+                elif cid in vector_ids:
+                    sources[cid] = 'semantic'
+                else:
+                    sources[cid] = 'keyword'
 
             # Get card details from Anki (must run on main thread)
             import threading
@@ -346,6 +392,7 @@ class SearchCardsThread(QThread):
                                 "deck": deck_name.split("::")[-1],
                                 "deckFull": deck_name,
                                 "score": round(scores.get(cid, 0), 3),
+                                "source": sources.get(cid, "semantic"),
                             })
                         except Exception:
                             pass
