@@ -74,7 +74,7 @@ class EmbeddingManager:
 
     # ── Embedding API ──
 
-    # OpenRouter embedding model (same family as our existing embeddings)
+    # OpenRouter embedding model
     OPENROUTER_EMBED_MODEL = "google/gemini-embedding-001"
 
     def embed_texts(self, texts):
@@ -82,15 +82,14 @@ class EmbeddingManager:
             return []
 
         import requests as http_requests
-
-        # Try 1: OpenRouter Embedding API (primary)
         try:
             from ..config import get_config
         except ImportError:
             from config import get_config
         config = get_config()
-        or_key = config.get("dev_openrouter_key", "")
 
+        # Try 1: Dev mode — direct OpenRouter with dev_openrouter_key
+        or_key = config.get("dev_openrouter_key", "")
         if or_key and not getattr(self, '_skip_openrouter', False):
             try:
                 response = http_requests.post(
@@ -111,38 +110,40 @@ class EmbeddingManager:
                 if embeddings:
                     return embeddings
             except Exception as e:
-                logger.warning("EmbeddingManager: OpenRouter embed error: %s, trying fallbacks", e)
+                logger.warning("EmbeddingManager: OpenRouter error: %s", e)
                 self._skip_openrouter = True
 
-        # Try 2: Backend Cloud Function (legacy)
-        if self._backend_url and self._auth_headers_fn and not getattr(self, '_skip_backend', False):
+        # Try 2: Production — Backend with auth_token
+        try:
+            from ..config import get_backend_url, get_auth_token
+        except ImportError:
             try:
-                embed_url = f"{self._backend_url}/embed"
-                headers = {**self._auth_headers_fn(), "Content-Type": "application/json"}
-                body = {"texts": [t[:2000] for t in texts]}
-                response = http_requests.post(embed_url, json=body, headers=headers, timeout=5)
+                from config import get_backend_url, get_auth_token
+            except ImportError:
+                get_backend_url = lambda: config.get("backend_url", "")
+                get_auth_token = lambda: config.get("auth_token", "")
+
+        backend_url = get_backend_url()
+        auth_token = get_auth_token()
+        if backend_url and auth_token and not getattr(self, '_skip_backend', False):
+            try:
+                response = http_requests.post(
+                    f"{backend_url}/embed",
+                    headers={
+                        "Authorization": f"Bearer {auth_token}",
+                        "Content-Type": "application/json",
+                    },
+                    json={"texts": [t[:2000] for t in texts]},
+                    timeout=10,
+                )
                 response.raise_for_status()
                 data = response.json()
                 result = data.get("embeddings", [])
                 if result:
                     return result
             except Exception as e:
-                logger.warning("EmbeddingManager: Backend error: %s", e)
+                logger.warning("EmbeddingManager: Backend embed error: %s", e)
                 self._skip_backend = True
-
-        # Try 3: Direct Google Generative AI Embedding API
-        api_key = config.get("google_api_key", "")
-        if api_key:
-            try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.MODEL}:batchEmbedContents?key={api_key}"
-                requests_body = [{"model": f"models/{self.MODEL}", "content": {"parts": [{"text": t[:2000]}]}} for t in texts]
-                response = http_requests.post(url, json={"requests": requests_body}, timeout=30)
-                response.raise_for_status()
-                data = response.json()
-                embeddings = [item["values"] for item in data.get("embeddings", [])]
-                return embeddings
-            except Exception as e:
-                logger.warning("EmbeddingManager: Direct Google API also failed: %s", e)
 
         logger.warning("EmbeddingManager: All embedding providers failed")
         return []
