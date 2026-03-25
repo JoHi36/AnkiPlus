@@ -194,12 +194,7 @@ def search(query: str, api_key: str = '', enabled_sources: dict = None) -> Resea
         except (ImportError, KeyError, ValueError) as e:
             logger.warning("Wikipedia search failed, falling back: %s", e)
 
-    # Default: Perplexity Sonar via OpenRouter
-    if not api_key:
-        return ResearchResult(query=query,
-                              error='Kein OpenRouter API-Key konfiguriert. '
-                                    'Gehe zu openrouter.ai um einen zu erstellen.')
-
+    # Default: Perplexity Sonar via backend
     try:
         from .openrouter import search_via_openrouter
         result = search_via_openrouter(query, api_key, model='perplexity/sonar')
