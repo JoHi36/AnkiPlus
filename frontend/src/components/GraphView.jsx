@@ -80,7 +80,17 @@ export default function GraphView({ onToggleView, isPremium }) {
       graph.controls().autoRotateSpeed = 0.3;
     }
 
+    // Resize observer — keep canvas in sync with window size
+    const ro = new ResizeObserver(() => {
+      if (containerRef.current && graphRef.current) {
+        const { clientWidth, clientHeight } = containerRef.current;
+        graphRef.current.width(clientWidth).height(clientHeight);
+      }
+    });
+    ro.observe(containerRef.current);
+
     return () => {
+      ro.disconnect();
       if (graph._destructor) graph._destructor();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
