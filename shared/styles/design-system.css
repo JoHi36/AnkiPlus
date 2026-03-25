@@ -250,22 +250,22 @@
 .ds-frosted {
   background:
     linear-gradient(165deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%),
-    rgba(28,28,30,0.65);
+    rgba(28,28,30,0.82);
   backdrop-filter: blur(40px) saturate(1.8);
   -webkit-backdrop-filter: blur(40px) saturate(1.8);
   border: 1px solid rgba(255,255,255,0.10);
   box-shadow:
-    inset 0 1px 0 0 rgba(255,255,255,0.22),
-    inset 1px 0 0 0 rgba(255,255,255,0.10),
+    inset 0 1px 0 0 rgba(255,255,255,0.20),
+    inset 1px 0 0 0 rgba(255,255,255,0.08),
     inset 0 -1px 0 0 rgba(0,0,0,0.06),
     inset -1px 0 0 0 rgba(0,0,0,0.04),
-    0 4px 20px rgba(0,0,0,0.18);
+    0 4px 24px rgba(0,0,0,0.25);
   border-radius: var(--ds-radius-lg);
 }
 [data-theme="light"] .ds-frosted {
   background:
-    linear-gradient(165deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.30) 100%),
-    rgba(240,240,244,0.65);
+    linear-gradient(165deg, rgba(255,255,255,0.60) 0%, rgba(255,255,255,0.35) 100%),
+    rgba(240,240,244,0.78);
   backdrop-filter: blur(40px) saturate(1.4);
   -webkit-backdrop-filter: blur(40px) saturate(1.4);
   border: 1px solid rgba(0,0,0,0.08);
@@ -291,26 +291,26 @@
 .ds-input-dock {
   display: flex;
   flex-direction: column;
-  /* Inherit frosted glass material */
+  /* Same frosted glass material as .ds-frosted */
   background:
     linear-gradient(165deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%),
-    rgba(28,28,30,0.65);
+    rgba(28,28,30,0.82);
   backdrop-filter: blur(40px) saturate(1.8);
   -webkit-backdrop-filter: blur(40px) saturate(1.8);
   border: 1px solid rgba(255,255,255,0.10);
   box-shadow:
-    inset 0 1px 0 0 rgba(255,255,255,0.22),
-    inset 1px 0 0 0 rgba(255,255,255,0.10),
+    inset 0 1px 0 0 rgba(255,255,255,0.20),
+    inset 1px 0 0 0 rgba(255,255,255,0.08),
     inset 0 -1px 0 0 rgba(0,0,0,0.06),
     inset -1px 0 0 0 rgba(0,0,0,0.04),
-    0 4px 20px rgba(0,0,0,0.18);
+    0 4px 24px rgba(0,0,0,0.25);
   border-radius: var(--ds-radius-lg);
   overflow: hidden;
 }
 [data-theme="light"] .ds-input-dock {
   background:
-    linear-gradient(165deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.30) 100%),
-    rgba(240,240,244,0.65);
+    linear-gradient(165deg, rgba(255,255,255,0.60) 0%, rgba(255,255,255,0.35) 100%),
+    rgba(240,240,244,0.78);
   backdrop-filter: blur(40px) saturate(1.4);
   -webkit-backdrop-filter: blur(40px) saturate(1.4);
   border: 1px solid rgba(0,0,0,0.08);
