@@ -26,10 +26,10 @@ export default function CardRefChip({ cardId, cardFront, bridge }) {
         gap: 4,
         padding: '2px 8px',
         marginTop: 4,
-        background: 'rgba(107, 140, 255, 0.1)',
-        border: '1px solid rgba(107, 140, 255, 0.2)',
+        background: 'var(--ds-accent-10)',
+        border: '1px solid var(--ds-accent-20)',
         borderRadius: 10,
-        color: 'rgba(107, 140, 255, 0.7)',
+        color: 'var(--ds-accent-50)',
         fontSize: 11,
         cursor: 'pointer',
         maxWidth: '100%',
@@ -39,12 +39,12 @@ export default function CardRefChip({ cardId, cardFront, bridge }) {
         transition: 'background 0.15s, color 0.15s',
       }}
       onMouseEnter={e => {
-        e.currentTarget.style.background = 'rgba(107, 140, 255, 0.18)';
-        e.currentTarget.style.color = 'rgba(107, 140, 255, 0.9)';
+        e.currentTarget.style.background = 'var(--ds-accent-20)';
+        e.currentTarget.style.color = 'var(--ds-accent)';
       }}
       onMouseLeave={e => {
-        e.currentTarget.style.background = 'rgba(107, 140, 255, 0.1)';
-        e.currentTarget.style.color = 'rgba(107, 140, 255, 0.7)';
+        e.currentTarget.style.background = 'var(--ds-accent-10)';
+        e.currentTarget.style.color = 'var(--ds-accent-50)';
       }}
     >
       <FileText size={10} />

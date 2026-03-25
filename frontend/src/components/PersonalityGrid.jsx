@@ -16,9 +16,9 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
 
   // Use currentColor trick: set color via CSS var on parent, SVG inherits
   // Grid lines use explicit colors with fallbacks for both themes
-  const lineColor = 'rgba(128,128,128,0.15)';
-  const lineMinor = 'rgba(128,128,128,0.08)';
-  const labelColor = 'rgba(128,128,128,0.4)';
+  const lineColor = 'var(--ds-border-medium)';
+  const lineMinor = 'var(--ds-border-subtle)';
+  const labelColor = 'var(--ds-text-muted)';
   const dotColor = 'currentColor'; // inherits from parent's color
 
   return (
@@ -93,13 +93,13 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
 
       {/* Current dot */}
       <circle cx={sx} cy={sy} r="5" fill="none"
-        stroke="rgba(128,128,128,0.3)" strokeWidth="0.5" />
+        stroke="var(--ds-border-medium)" strokeWidth="0.5" />
       <circle cx={sx} cy={sy} r="2.5"
-        fill="rgba(128,128,128,0.7)" opacity={confident ? 0.85 : 0.35} />
+        fill="var(--ds-text-muted)" opacity={confident ? 0.85 : 0.35} />
 
       {/* Coordinate label at the dot */}
       <text x={sx + 9} y={sy - 4} fontSize="5.5"
-        fill="rgba(128,128,128,0.4)"
+        fill="var(--ds-text-muted)"
         fontFamily="-apple-system,system-ui"
         fontVariantNumeric="tabular-nums">{energy} · {orient}</text>
     </svg>

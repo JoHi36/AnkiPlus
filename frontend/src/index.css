@@ -239,8 +239,8 @@ header *,
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: white;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  background: var(--ds-text-primary);
+  box-shadow: 0 1px 4px var(--ds-shadow-sm);
   cursor: pointer;
   border: none;
   margin-top: -5px;
@@ -249,8 +249,8 @@ header *,
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: white;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  background: var(--ds-text-primary);
+  box-shadow: 0 1px 4px var(--ds-shadow-sm);
   cursor: pointer;
   border: none;
 }

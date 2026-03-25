@@ -63,6 +63,9 @@
   --ds-stat-learning: rgba(255, 159, 10, 0.85);
   --ds-stat-review:   rgba(48, 209, 88, 0.85);
 
+  /* ── Canvas Grid ── */
+  --ds-grid-dot: rgba(255, 255, 255, 0.04);   /* Dot grid on canvas — barely visible */
+
   /* ── Interaction Tints ── */
   --ds-hover-tint:  rgba(255, 255, 255, 0.04);
   --ds-active-tint: rgba(255, 255, 255, 0.08);
@@ -106,6 +109,7 @@
   /* Layout widths */
   --ds-dock-width: 520px;                                          /* ChatInput dock max-width */
   --ds-sidebar-width: calc(var(--ds-dock-width) + 2 * var(--ds-space-xl)); /* Chat sidebar = dock + padding */
+  --ds-settings-width: 280px;                                      /* Settings panel — compact, ~1/2 dock */
 
 
   /* ─────────────────────────────────────────────────────────
@@ -179,6 +183,8 @@
   --ds-stat-learning: rgba(255, 159, 10, 0.85);
   --ds-stat-review:   rgba(52, 199, 89, 0.85);
 
+  --ds-grid-dot: rgba(0, 0, 0, 0.04);
+
   --ds-hover-tint:  rgba(0, 0, 0, 0.03);
   --ds-active-tint: rgba(0, 0, 0, 0.06);
   --ds-green-tint:  rgba(52, 199, 89, 0.08);
@@ -197,17 +203,76 @@
    All properties reference tokens only — no hardcoded colors.
    ───────────────────────────────────────────────────────── */
 
-/* ── Frosted Glass Container ── */
-.ds-frosted {
-  background: var(--ds-bg-frosted);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--ds-border-medium);
-  box-shadow: var(--ds-shadow-md);
+/* ── Deep Material ──
+   Deepest surface — where AI lives. Chat panel, diary, ThoughtStream.
+   Pure color, no decoration. Recedes behind everything. */
+.ds-deep {
+  background: var(--ds-bg-deep);
   border-radius: var(--ds-radius-lg);
 }
 
-/* ── Borderless Content Container ── */
+/* ── Canvas Material ──
+   Neutral working surface with dot grid texture.
+   Content lives here: cards, deck lists, session history.
+   The grid is subtle — felt, not seen. */
+.ds-canvas {
+  background: var(--ds-bg-canvas);
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: var(--ds-radius-lg);
+  position: relative;
+}
+.ds-canvas::before,
+.ds-canvas-surface::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1; /* below content, above parent bg (thanks to isolation: isolate) */
+  border-radius: inherit;
+  background-image: radial-gradient(circle, var(--ds-grid-dot) 1px, transparent 1px);
+  background-size: 16px 16px;
+  background-position: center center;
+  pointer-events: none;
+  mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black 20%, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black 20%, transparent 70%);
+}
+
+/* Fullscreen canvas surface — no border, no radius, fills its container */
+.ds-canvas-surface {
+  background: var(--ds-bg-canvas);
+  position: relative;
+  isolation: isolate; /* stacking context so ::before z-index:-1 stays above bg */
+}
+
+/* ── Frosted Glass Material ──
+   Real glass material: gradient overlay + strong blur + inset edge highlights.
+   Transparent enough for content to shimmer through, opaque enough to read on. */
+.ds-frosted {
+  background: linear-gradient(165deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.07) 100%);
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255,255,255,0.25),
+    inset 1px 0 0 0 rgba(255,255,255,0.12),
+    inset 0 -1px 0 0 rgba(0,0,0,0.06),
+    inset -1px 0 0 0 rgba(0,0,0,0.04),
+    0 4px 16px rgba(0,0,0,0.12);
+  border-radius: var(--ds-radius-lg);
+}
+[data-theme="light"] .ds-frosted {
+  background: linear-gradient(165deg, rgba(240,240,244,0.92) 0%, rgba(228,228,234,0.88) 100%);
+  backdrop-filter: blur(40px) saturate(1.4);
+  -webkit-backdrop-filter: blur(40px) saturate(1.4);
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255,255,255,0.90),
+    inset 1px 0 0 0 rgba(255,255,255,0.40),
+    inset 0 -1px 0 0 rgba(0,0,0,0.06),
+    inset -1px 0 0 0 rgba(0,0,0,0.03),
+    0 2px 12px rgba(0,0,0,0.07);
+}
+
+/* ── Borderless Content Container (legacy alias for .ds-canvas without dot grid) ── */
 .ds-borderless {
   background: var(--ds-bg-canvas);
   border: 1px solid var(--ds-border-subtle);
@@ -217,15 +282,34 @@
 /* ── Input Dock ──
    Full-width dock housing a textarea + action row + send button.
    The textarea and action buttons are transparent children;
-   the dock itself owns the surface and border.               */
+   the dock itself owns the frosted glass surface.               */
 .ds-input-dock {
   display: flex;
   flex-direction: column;
-  background: var(--ds-bg-frosted);
-  border: 1px solid var(--ds-border-medium);
+  background: linear-gradient(165deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.07) 100%);
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255,255,255,0.25),
+    inset 1px 0 0 0 rgba(255,255,255,0.12),
+    inset 0 -1px 0 0 rgba(0,0,0,0.06),
+    inset -1px 0 0 0 rgba(0,0,0,0.04),
+    0 4px 16px rgba(0,0,0,0.12);
   border-radius: var(--ds-radius-lg);
-  box-shadow: var(--ds-shadow-md);
   overflow: hidden;
+}
+[data-theme="light"] .ds-input-dock {
+  background: linear-gradient(165deg, rgba(240,240,244,0.92) 0%, rgba(228,228,234,0.88) 100%);
+  backdrop-filter: blur(40px) saturate(1.4);
+  -webkit-backdrop-filter: blur(40px) saturate(1.4);
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255,255,255,0.90),
+    inset 1px 0 0 0 rgba(255,255,255,0.40),
+    inset 0 -1px 0 0 rgba(0,0,0,0.06),
+    inset -1px 0 0 0 rgba(0,0,0,0.03),
+    0 2px 12px rgba(0,0,0,0.07);
 }
 
 .ds-input-dock textarea {

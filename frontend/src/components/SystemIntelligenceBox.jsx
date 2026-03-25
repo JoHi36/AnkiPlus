@@ -22,7 +22,7 @@ function NodeIcon() {
           position: 'absolute',
           inset: 0,
           borderRadius: '50%',
-          border: '1.5px solid rgba(255,214,10,0.25)',
+          border: '1.5px solid color-mix(in srgb, var(--ds-yellow) 25%, transparent)',
           animation: 'nodeRing 4s ease-in-out infinite',
           pointerEvents: 'none',
         }}
@@ -34,14 +34,14 @@ function NodeIcon() {
           width: 30,
           height: 30,
           borderRadius: '50%',
-          border: '1.5px solid rgba(255,214,10,0.25)',
-          background: 'rgba(255,214,10,0.04)',
+          border: '1.5px solid color-mix(in srgb, var(--ds-yellow) 25%, transparent)',
+          background: 'var(--ds-yellow-5)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#FFD60A" strokeWidth="1.4">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--ds-yellow)" strokeWidth="1.4">
           <circle cx="12" cy="12" r="3" />
           <circle cx="12" cy="12" r="7" strokeDasharray="3 3" />
           <circle cx="12" cy="12" r="10.5" strokeDasharray="2 4" opacity="0.5" />
@@ -58,8 +58,8 @@ function ProBadge() {
       style={{
         fontSize: 8,
         fontWeight: 700,
-        background: 'rgba(255,214,10,0.15)',
-        color: 'rgba(255,214,10,0.8)',
+        background: 'var(--ds-yellow-10)',
+        color: 'color-mix(in srgb, var(--ds-yellow) 80%, transparent)',
         padding: '1px 5px',
         borderRadius: 3,
         lineHeight: 1,
@@ -74,8 +74,8 @@ function ProBadge() {
 /* ── Segmented control button ── */
 function SegmentButton({ label, subtitle, isActive, isDeep, onClick }) {
   const activeBackground = isDeep
-    ? 'rgba(255,214,10,0.12)'
-    : 'rgba(255,255,255,0.08)';
+    ? 'color-mix(in srgb, var(--ds-yellow) 12%, transparent)'
+    : 'var(--ds-border-subtle)';
   const activeColor = isDeep ? 'var(--ds-yellow)' : 'var(--ds-text-primary)';
 
   return (
@@ -141,7 +141,7 @@ export default function SystemIntelligenceBox({ bridge, initialQuality = 'standa
         style={{
           borderRadius: 12,
           padding: 1,
-          background: 'linear-gradient(160deg, rgba(255,214,10,0.25), rgba(255,214,10,0.03) 60%, rgba(255,214,10,0.15))',
+          background: 'linear-gradient(160deg, color-mix(in srgb, var(--ds-yellow) 25%, transparent), var(--ds-yellow-5) 60%, var(--ds-yellow-10))',
           position: 'relative',
           overflow: 'hidden',
         }}
@@ -154,7 +154,7 @@ export default function SystemIntelligenceBox({ bridge, initialQuality = 'standa
             right: 0,
             width: 80,
             height: 60,
-            background: 'radial-gradient(ellipse at top right, rgba(255,214,10,0.08) 0%, transparent 70%)',
+            background: 'radial-gradient(ellipse at top right, var(--ds-yellow-10) 0%, transparent 70%)',
             pointerEvents: 'none',
           }}
         />
@@ -163,7 +163,7 @@ export default function SystemIntelligenceBox({ bridge, initialQuality = 'standa
         <div
           style={{
             borderRadius: 11,
-            background: 'rgba(255,214,10,0.015)',
+            background: 'var(--ds-yellow-5)',
             padding: '12px 14px',
             display: 'flex',
             flexDirection: 'column',
@@ -200,7 +200,7 @@ export default function SystemIntelligenceBox({ bridge, initialQuality = 'standa
           <div
             style={{
               display: 'flex',
-              background: 'rgba(255,255,255,0.04)',
+              background: 'var(--ds-hover-tint)',
               borderRadius: 8,
               padding: 2,
               gap: 2,

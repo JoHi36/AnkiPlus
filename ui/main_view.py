@@ -156,6 +156,13 @@ class MainViewWidget(QWidget):
                 "state": "review",
                 "data": {},
             }
+            # Also send current card data so React has it immediately
+            try:
+                widget = self.get_sidebar_widget()
+                if widget and mw.reviewer and mw.reviewer.card:
+                    widget._send_card_data(mw.reviewer.card, is_question=True)
+            except Exception:
+                pass
         else:
             return
 

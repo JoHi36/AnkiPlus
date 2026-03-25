@@ -12,7 +12,7 @@ const PHRASES = [
 
 const PLACEHOLDER_INTERVAL_MS = 6000;
 const PLACEHOLDER_FADE_MS = 400;
-const RADIUS = 14;
+const RADIUS = 16;
 const BORDER = 1.5;
 
 /**
@@ -94,36 +94,32 @@ export default function DeckSearchBar({ onSubmit, onOpenEmpty }) {
   const showCmdK = !hasText && !isFocused;
 
   return (
-    <div style={{ maxWidth: 520, margin: '0 auto 20px', padding: '0 4px' }}>
-      {/* Snake-border outer ring — gradient fills this, inner div covers center */}
+    <div>
+      {/* Snake-border outer ring — ::before pseudo renders the gradient, content stays visible */}
       <div
         className={`deck-search-snake-ring${isFocused ? ' active' : ''}`}
         style={{
           position: 'relative',
           borderRadius: RADIUS,
-          padding: isFocused ? BORDER : 1,
-          background: isFocused ? undefined : 'var(--ds-border-subtle)',
-          transition: 'padding 0.15s',
+          padding: BORDER,
           overflow: 'hidden',
         }}
       >
-        {/* Input surface */}
-        <div style={{
+        {/* Input surface — glass gradient with frosted backdrop */}
+        <div className="ds-frosted deck-search-surface" style={{
           position: 'relative',
-          background: 'var(--ds-bg-frosted)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
           borderRadius: RADIUS - BORDER,
           display: 'flex',
           alignItems: 'center',
-          padding: '10px 14px 10px 38px',
+          padding: '12px 16px 12px 42px',
+          minHeight: 46,
           gap: 8,
         }}>
           {/* Sparkle icon */}
           <span style={{
             position: 'absolute',
-            left: 13,
-            color: 'var(--ds-accent)',
+            left: 16,
+            color: 'color-mix(in srgb, var(--ds-accent) 65%, transparent)',
             fontSize: 14,
             lineHeight: 1,
             userSelect: 'none',
@@ -221,17 +217,44 @@ export default function DeckSearchBar({ onSubmit, onOpenEmpty }) {
       </div>
 
       <style>{`
-        /* Snake border: always-rotating gradient, only visible (via active class) on focus */
+        /* Default: subtle border */
+        .deck-search-snake-ring {
+          background: var(--ds-border-subtle);
+        }
+        /* On focus: hide default border, show snake pseudo */
         .deck-search-snake-ring.active {
+          background: transparent;
+        }
+        /* Snake as ::before — masked to 1.5px ring, content unaffected */
+        .deck-search-snake-ring::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          padding: 1.5px;
           background:
             conic-gradient(
               from var(--deck-search-snake-angle, 0deg),
-              transparent 0deg, transparent 55%,
-              var(--ds-accent) 60%, var(--ds-purple) 72%,
-              #38bdf8 81%, var(--ds-accent) 86%,
-              transparent 92%
+              color-mix(in srgb, var(--ds-accent)  0%, transparent)   0deg,
+              color-mix(in srgb, var(--ds-accent) 55%, transparent)  60deg,
+              color-mix(in srgb, var(--ds-accent) 12%, transparent) 120deg,
+              color-mix(in srgb, var(--ds-accent)  0%, transparent) 180deg,
+              color-mix(in srgb, var(--ds-accent) 12%, transparent) 240deg,
+              color-mix(in srgb, var(--ds-accent) 55%, transparent) 300deg,
+              color-mix(in srgb, var(--ds-accent)  0%, transparent) 360deg
             );
-          animation: deck-search-snake-rotate 2.5s linear infinite;
+          -webkit-mask:
+            linear-gradient(#fff 0 0) content-box,
+            linear-gradient(#fff 0 0);
+          -webkit-mask-composite: xor;
+          mask-composite: exclude;
+          pointer-events: none;
+          opacity: 0;
+          transition: opacity 0.2s;
+        }
+        .deck-search-snake-ring.active::before {
+          opacity: 1;
+          animation: deck-search-snake-rotate 4s linear infinite;
         }
         @keyframes deck-search-snake-rotate {
           from { --deck-search-snake-angle: 0deg; }

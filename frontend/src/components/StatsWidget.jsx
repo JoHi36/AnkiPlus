@@ -13,7 +13,7 @@ function StreakModule({ current, best, is_record }) {
         fontSize: 48, fontWeight: 700,
         color: is_record ? 'var(--ds-accent)' : 'var(--ds-text-primary)',
         letterSpacing: -2, lineHeight: 1,
-        textShadow: is_record ? '0 0 30px rgba(10,132,255,0.3)' : 'none',
+        textShadow: is_record ? '0 0 30px var(--ds-accent-20)' : 'none',
       }}>
         {current}{is_record && <span style={{ fontSize: 20, marginLeft: 4 }}>🔥</span>}
       </div>
@@ -38,10 +38,10 @@ function StreakModule({ current, best, is_record }) {
 function HeatmapModule({ days, period }) {
   const levels = [
     'var(--ds-hover-tint)',
-    'rgba(10,132,255,0.15)',
-    'rgba(10,132,255,0.30)',
-    'rgba(10,132,255,0.50)',
-    'rgba(10,132,255,0.75)',
+    'var(--ds-accent-10)',
+    'var(--ds-accent-20)',
+    'var(--ds-accent-50)',
+    'color-mix(in srgb, var(--ds-accent) 75%, transparent)',
   ];
   return (
     <div>
@@ -54,7 +54,7 @@ function HeatmapModule({ days, period }) {
           <div key={i} style={{
             aspectRatio: '1', borderRadius: 3,
             background: levels[level] || levels[0],
-            boxShadow: i === days.length - 1 ? '0 0 0 1.5px rgba(10,132,255,0.6)' : 'none',
+            boxShadow: i === days.length - 1 ? '0 0 0 1.5px var(--ds-accent-50)' : 'none',
           }} />
         ))}
       </div>

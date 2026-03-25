@@ -483,6 +483,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
   const handleAnkiReceive = useCallback((payload) => {
     // ── v2 Structured Message Events ──
     if (payload.type === 'msg_start') {
+      console.error('[v2-router] msg_start received, calling handleMsgStart');
       agenticMsg.handleMsgStart(payload);
       v2ActiveRef.current = true; // Mark v2 active for stale-closure-safe checks
       // Don't return — let existing 'loading' handler also process if it follows
@@ -496,6 +497,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       return;
     }
     if (payload.type === 'text_chunk') {
+      console.error('[v2-router] text_chunk → handleTextChunk, v2Active:', v2ActiveRef.current, 'agent:', payload.agent);
       agenticMsg.handleTextChunk(payload);
       return;
     }
@@ -687,8 +689,12 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       }
       console.log('📡 useChat: Streaming-Chunk erhalten:', payload.chunk?.substring(0, 30) + '...', 'done:', payload.done, 'isFunctionCall:', payload.isFunctionCall);
 
-      // v2: Skip v1 chunk processing when structured message system is active
+      // v2: Skip most v1 chunk processing when structured message system is active
+      // BUT still accumulate text in streamingMessage as a fallback for rendering
       if (v2ActiveRef.current) {
+        if (!payload.done && payload.chunk && !payload.isFunctionCall) {
+          setStreamingMessage(prev => (prev || '') + payload.chunk);
+        }
         return;
       }
 

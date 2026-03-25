@@ -57,7 +57,7 @@ function Toggle({ on, onChange, locked = false }) {
         position: 'relative', border: 'none',
         cursor: locked ? 'default' : 'pointer',
         transition: 'background 0.2s',
-        background: on ? 'var(--ds-accent)' : 'rgba(255,255,255,0.08)',
+        background: on ? 'var(--ds-accent)' : 'var(--ds-hover-tint)',
         opacity: locked ? 0.6 : 1,
         flexShrink: 0, padding: 0,
       }}

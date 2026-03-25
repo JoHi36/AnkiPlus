@@ -85,7 +85,7 @@ function getPlainText(cd, field) {
 
 export { S, getPlainText };
 
-export default function useReviewerState(cardData) {
+export default function useReviewerState(cardData, onPulse, onFollowUpKey) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const cardIdRef = useRef(null);
 
@@ -154,13 +154,32 @@ export default function useReviewerState(cardData) {
   useEffect(() => {
     const handler = (e) => {
       if (e.target?.tagName === 'TEXTAREA' || e.target?.tagName === 'INPUT') return;
+
       if (e.key === ' ') {
         e.preventDefault(); e.stopPropagation();
-        if (state.mode === S.QUESTION) handleFlip();
-        else if ([S.ANSWER, S.EVALUATED, S.MC_RESULT].includes(state.mode)) handleRate(state.selectedRating);
+        onPulse?.();
+        if (state.mode === S.QUESTION) {
+          const charCount = cardData ? getPlainText(cardData, 'front').length : 50;
+          dispatch({ type: 'FLIP', charCount });
+          handleFlip();
+        } else if ([S.ANSWER, S.EVALUATED, S.MC_RESULT].includes(state.mode)) {
+          handleRate(state.selectedRating);
+        }
       }
+
+      if (e.key === 'Enter') {
+        e.preventDefault(); e.stopPropagation();
+        onPulse?.();
+        if (state.mode === S.QUESTION) {
+          handleStartMC();
+        } else if ([S.ANSWER, S.EVALUATED, S.MC_RESULT].includes(state.mode)) {
+          onFollowUpKey?.();
+        }
+      }
+
       if ([S.ANSWER, S.EVALUATED, S.MC_RESULT].includes(state.mode) && '1234'.includes(e.key))
         dispatch({ type: 'SET_RATING', rating: +e.key });
+
       if (state.mode === S.MC_ACTIVE && state.mcOptions) {
         const idx = 'abcd'.indexOf(e.key.toLowerCase());
         if (idx >= 0 && idx < state.mcOptions.length && !state.mcSelected[idx])
@@ -169,7 +188,7 @@ export default function useReviewerState(cardData) {
     };
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
-  }, [state.mode, state.selectedRating, state.mcOptions, state.mcSelected, handleFlip, handleRate, handleMCSelect]);
+  }, [state.mode, state.selectedRating, state.mcOptions, state.mcSelected, cardData, handleFlip, handleRate, handleStartMC, handleMCSelect]);
 
   // Derived
   const showBack = [S.ANSWER, S.EVALUATING, S.EVALUATED].includes(state.mode);

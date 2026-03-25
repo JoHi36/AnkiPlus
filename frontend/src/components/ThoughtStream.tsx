@@ -447,7 +447,7 @@ function SqlTags({ data, isDone, animate = true }: { data: Record<string, any>; 
               style={{
                 fontFamily: 'monospace',
                 fontSize: 10,
-                color: q.hits > 0 ? 'rgba(20,184,166,0.6)' : 'var(--ds-text-muted)',
+                color: q.hits > 0 ? 'color-mix(in srgb, var(--ds-green) 60%, transparent)' : 'var(--ds-text-muted)',
               }}
             >
               {q.hits}
@@ -489,7 +489,7 @@ function SemanticChunks({ data, isDone, animate = true }: { data: Record<string,
                 height: '100%',
                 width: '40%',
                 left: '-40%',
-                background: 'linear-gradient(90deg, transparent, rgba(10,132,255,0.08), transparent)',
+                background: 'linear-gradient(90deg, transparent, color-mix(in srgb, var(--ds-accent) 8%, transparent), transparent)',
                 animation: 'ts-scanGlow 2s ease-in-out infinite',
                 pointerEvents: 'none',
               }}
@@ -538,7 +538,7 @@ function MergeBar({ data }: { data: Record<string, any> }) {
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-      <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'rgba(10,132,255,0.6)', fontWeight: 600 }}>
+      <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'color-mix(in srgb, var(--ds-accent) 60%, transparent)', fontWeight: 600 }}>
         {kw}K
       </span>
       {/* Track */}
@@ -550,7 +550,7 @@ function MergeBar({ data }: { data: Record<string, any> }) {
             right: 0,
             height: 1.5,
             borderRadius: 1,
-            background: `linear-gradient(90deg, rgba(10,132,255,0.3) 0%, rgba(10,132,255,0.4) ${wpPct}, rgba(20,184,166,0.4) ${wpPct}, rgba(20,184,166,0.3) 100%)`,
+            background: `linear-gradient(90deg, color-mix(in srgb, var(--ds-accent) 30%, transparent) 0%, color-mix(in srgb, var(--ds-accent) 40%, transparent) ${wpPct}, color-mix(in srgb, var(--ds-green) 40%, transparent) ${wpPct}, var(--ds-green-30) 100%)`,
           }}
         />
         <div
@@ -562,11 +562,11 @@ function MergeBar({ data }: { data: Record<string, any> }) {
             height: 6,
             borderRadius: '50%',
             background: 'var(--ds-accent)',
-            boxShadow: '0 0 6px rgba(10,132,255,0.4)',
+            boxShadow: '0 0 6px color-mix(in srgb, var(--ds-accent) 40%, transparent)',
           }}
         />
       </div>
-      <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'rgba(20,184,166,0.6)', fontWeight: 600 }}>
+      <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'color-mix(in srgb, var(--ds-green) 60%, transparent)', fontWeight: 600 }}>
         {sem}S
       </span>
     </div>
@@ -623,7 +623,7 @@ function PhaseRow({ step, data, status, isActive, isFirst = false, animate = tru
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {/* Dot */}
         {isDone ? (
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: agentColor ? `${agentColor}80` : 'rgba(20,184,166,0.5)', flexShrink: 0, willChange: 'transform, opacity', contain: 'layout style' }} />
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: agentColor ? `${agentColor}80` : 'var(--ds-green-50)', flexShrink: 0, willChange: 'transform, opacity', contain: 'layout style' }} />
         ) : (
           <div
             style={{

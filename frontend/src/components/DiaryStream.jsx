@@ -102,11 +102,11 @@ function renderEntryText(text, cipherParts = []) {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 const TAG_CONFIG = {
-  gemerkt:     { color: '#6ee7b7', bg: 'rgba(52,211,153,0.08)',  tip: 'Während eines Gesprächs entstanden' },
-  reflektiert: { color: '#a78bfa', bg: 'rgba(167,139,250,0.08)', tip: 'Plusi war allein aktiv und hat selbstständig nachgedacht' },
-  entdeckt:    { color: '#fbbf24', bg: 'rgba(251,191,36,0.08)',  tip: 'Plusi hat eigenständig Karten durchsucht und Verbindungen gefunden' },
-  forscht:     { color: '#fbbf24', bg: 'rgba(251,191,36,0.08)',  tip: 'Plusi hat eigenständig Karten durchsucht und Verbindungen gefunden' },
-  'geträumt':  { color: '#60a5fa', bg: 'rgba(96,165,250,0.08)', tip: 'Plusi hat im Schlaf geträumt — automatisch, ohne gesteuert zu werden' },
+  gemerkt:     { color: 'var(--ds-green)',  bg: 'var(--ds-green-10)',  tip: 'Während eines Gesprächs entstanden' },
+  reflektiert: { color: 'var(--ds-purple)', bg: 'var(--ds-purple-10)', tip: 'Plusi war allein aktiv und hat selbstständig nachgedacht' },
+  entdeckt:    { color: 'var(--ds-yellow)', bg: 'var(--ds-yellow-10)', tip: 'Plusi hat eigenständig Karten durchsucht und Verbindungen gefunden' },
+  forscht:     { color: 'var(--ds-yellow)', bg: 'var(--ds-yellow-10)', tip: 'Plusi hat eigenständig Karten durchsucht und Verbindungen gefunden' },
+  'geträumt':  { color: 'var(--ds-accent)', bg: 'var(--ds-accent-10)', tip: 'Plusi hat im Schlaf geträumt — automatisch, ohne gesteuert zu werden' },
 };
 
 function CategoryTag({ category }) {
@@ -180,7 +180,7 @@ function CategoryTag({ category }) {
             lineHeight: 1.4,
             whiteSpace: 'nowrap',
             zIndex: 20,
-            boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
+            boxShadow: 'var(--ds-shadow-sm)',
             pointerEvents: 'none',
           }}>
             {cfg.tip}

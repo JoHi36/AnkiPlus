@@ -313,7 +313,17 @@ The addon uses **Google Gemini** as its AI provider (Gemini 3 Flash). The AI mod
 
 The Component Viewer IS the design system — not documentation about it. Match its quality bar. If a new component feels generic or template-like, it doesn't belong.
 
-**CRITICAL: ALL colors MUST use CSS custom properties from the design system. NEVER use hardcoded hex values (`#0A84FF`), rgba literals (`rgba(255,255,255,0.5)`), or any raw color value in React components, inline styles, or CSS. This applies to backgrounds, text colors, borders, shadows, and opacity values. The design system tokens automatically handle dark/light mode — hardcoded colors break light mode. If you write `rgba(255, 255, 255, ...)` anywhere in a `.jsx` file, it is a bug.**
+**CRITICAL — ZERO TOLERANCE: The "Invisible Addiction" design system MUST be used everywhere. No exceptions.**
+
+**Color tokens:** NEVER use hardcoded `#hex`, `rgba()`, `rgb()`, or named colors (`white`, `black`) in any `.jsx`, `.tsx`, or `.css` file. EVERY color must come from `var(--ds-*)` tokens. This includes backgrounds, text, borders, shadows, gradients, and opacity values. Hardcoded colors break light mode and create maintenance debt.
+
+**Materials:** Use `.ds-deep`, `.ds-canvas`, `.ds-frosted` CSS classes for surfaces. NEVER rebuild frosted glass with inline rgba gradients — the class handles everything including light mode.
+
+**Shadows:** Use `var(--ds-shadow-sm)`, `var(--ds-shadow-md)`, `var(--ds-shadow-lg)`. Never write `box-shadow: 0 4px 24px rgba(0,0,0,0.35)` inline.
+
+**Tints:** Use `var(--ds-hover-tint)`, `var(--ds-active-tint)`, `var(--ds-green-tint)`, `var(--ds-red-tint)`, or the numbered tint tokens (`var(--ds-accent-10)`, `var(--ds-green-20)`, etc.) for transparent color overlays.
+
+**If you find existing code with hardcoded colors while modifying a file, fix them.** Every touch should leave the file more compliant, not less.
 
 **Source of truth:** `shared/styles/design-system.css` — defines ALL colors, typography, spacing, and component classes as CSS custom properties.
 

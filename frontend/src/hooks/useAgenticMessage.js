@@ -27,6 +27,7 @@ export default function useAgenticMessage() {
   }, []);
 
   const handleMsgStart = useCallback((payload) => {
+    console.error('[v2] handleMsgStart:', payload.messageId);
     setPipelineGeneration(g => g + 1);
     const msg = {
       id: payload.messageId || `msg-${Date.now()}`,
@@ -63,6 +64,7 @@ export default function useAgenticMessage() {
   }, [updateMsg]);
 
   const handleAgentCell = useCallback((payload) => {
+    console.error('[v2] handleAgentCell:', payload.agent, payload.status);
     updateMsg(prev => {
       if (!prev) return prev;
       const cells = prev.agentCells.map(c =>
@@ -107,14 +109,21 @@ export default function useAgenticMessage() {
   }, [updateMsg]);
 
   const handleTextChunk = useCallback((payload) => {
+    console.error('[v2] handleTextChunk CALLED: agent=' + payload.agent + ' chunkLen=' + (payload.chunk?.length || 0) + ' chunk=' + (payload.chunk?.substring(0, 40) || ''));
     updateMsg(prev => {
-      if (!prev) return prev;
+      if (!prev) { console.error('[v2] handleTextChunk: prev is NULL — text_chunk LOST!'); return prev; }
       const targetAgent = payload.agent;
+      const cellCount = prev.agentCells.length;
+      const matched = prev.agentCells.filter(c => c.agent === targetAgent).length;
+      console.error(`[v2] handleTextChunk updater: agent=${targetAgent}, cells=${cellCount}, matched=${matched}, prevStatus=${prev.status}, cell0TextLen=${prev.agentCells[0]?.text?.length || 0}`);
+      if (cellCount === 0) { console.error('[v2] handleTextChunk: NO CELLS! text_chunk arrived before agent_cell — chunk LOST!'); }
       const cells = prev.agentCells.map(c => {
         if (targetAgent && c.agent !== targetAgent) return c;
         if (!targetAgent && c !== prev.agentCells[prev.agentCells.length - 1]) return c;
         return { ...c, text: (c.text || '') + payload.chunk, status: 'streaming' };
       });
+      const newTextLen = cells[0]?.text?.length || 0;
+      console.error(`[v2] handleTextChunk result: newTextLen=${newTextLen}`);
       return { ...prev, agentCells: cells, status: 'streaming' };
     });
   }, [updateMsg]);
@@ -134,7 +143,11 @@ export default function useAgenticMessage() {
     // Read from synchronous ref — guaranteed to have latest state
     // even if React hasn't rendered pending updates yet.
     const prev = msgRef.current;
-    if (!prev) return null;
+    if (!prev) { console.error('[v2] finalize: msgRef is NULL!'); return null; }
+    const primaryText = prev.agentCells?.[0]?.text || '';
+    const cellCount = prev.agentCells?.length || 0;
+    console.error(`[v2] finalize: cells=${cellCount}, primaryTextLen=${primaryText.length}, status=${prev.status}, agents=[${prev.agentCells.map(c=>c.agent).join(',')}]`);
+    if (primaryText.length === 0) { console.error('[v2] finalize: PRIMARY CELL HAS NO TEXT! All cells text:', prev.agentCells.map(c => c.text?.length || 0)); }
     const finalMsg = {
       ...prev,
       status: 'done',

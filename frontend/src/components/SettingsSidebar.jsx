@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Settings, Copy, LogOut, ChevronRight, Sun, Moon, Monitor } from 'lucide-react';
+import { bridgeAction } from '../actions';
 
 const PLAN_MAP = {
   free:  { name: 'Starter',  price: 'Kostenlos' },
@@ -35,14 +36,13 @@ export default function SettingsSidebar() {
 
   // Request status from Python on mount
   useEffect(() => {
-    if (window.ankiBridge) {
-      window.ankiBridge.addMessage('sidebarGetStatus', null);
-    }
+    bridgeAction('sidebarGetStatus');
   }, []);
 
-  // Listen for messages from Python
+  // Listen for messages from Python via ankiReceive (safe — doesn't override the handler)
   useEffect(() => {
-    const handler = (payload) => {
+    const handler = (e) => {
+      const payload = e.detail;
       if (!payload || typeof payload !== 'object') return;
 
       if (payload.type === 'sidebarStatus') {
@@ -57,76 +57,34 @@ export default function SettingsSidebar() {
           tokenUsed: d.tokenUsed || 0,
           tokenLimit: d.tokenLimit || 0,
         });
-        // Set data-theme attribute on the html element
-        document.documentElement.setAttribute(
-          'data-theme',
-          d.theme === 'light' ? 'light' : 'dark'
-        );
+        document.documentElement.setAttribute('data-theme', d.theme === 'light' ? 'light' : 'dark');
       }
-
       if (payload.type === 'themeChanged') {
         const theme = payload.data?.theme;
         if (theme) {
           setStatus(prev => ({ ...prev, theme }));
-          document.documentElement.setAttribute(
-            'data-theme',
-            theme === 'light' ? 'light' : 'dark'
-          );
+          document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
         }
       }
-
       if (payload.type === 'sidebarLogsCopied') {
-        setCopyLabel('Kopiert! ✓');
-        setTimeout(() => setCopyLabel(null), 1500);
+        setCopyLabel('Kopiert ✓');
+        setTimeout(() => setCopyLabel(null), 2000);
       }
     };
-
-    // Store previous handler and chain
-    const prev = window.ankiReceive;
-    window.ankiReceive = (payload) => {
-      if (prev) prev(payload);
-      handler(payload);
-    };
-
-    return () => {
-      window.ankiReceive = prev;
-    };
+    window.addEventListener('ankiReceive', handler);
+    return () => window.removeEventListener('ankiReceive', handler);
   }, []);
 
   const setTheme = useCallback((theme) => {
     setStatus(prev => ({ ...prev, theme }));
-    document.documentElement.setAttribute(
-      'data-theme',
-      theme === 'light' ? 'light' : 'dark'
-    );
-    if (window.ankiBridge) {
-      window.ankiBridge.addMessage('sidebarSetTheme', theme);
-    }
+    document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
+    bridgeAction('sidebarSetTheme', theme);
   }, []);
 
-  const openNativeSettings = useCallback(() => {
-    if (window.ankiBridge) {
-      window.ankiBridge.addMessage('sidebarOpenNativeSettings', null);
-    }
-  }, []);
-
-  const copyLogs = useCallback(() => {
-    if (window.ankiBridge) {
-      window.ankiBridge.addMessage('sidebarCopyLogs', null);
-    }
-  }, []);
-
-  const handleUpgrade = useCallback(() => {
-    if (window.ankiBridge) {
-      window.ankiBridge.addMessage('sidebarOpenUpgrade', null);
-    }
-  }, []);
-
-  const handleLogout = useCallback(() => {
-    if (window.ankiBridge) {
-      window.ankiBridge.addMessage('sidebarLogout', null);
-    }
-  }, []);
+  const openNativeSettings = useCallback(() => bridgeAction('sidebarOpenNativeSettings'), []);
+  const copyLogs = useCallback(() => bridgeAction('sidebarCopyLogs'), []);
+  const handleUpgrade = useCallback(() => bridgeAction('sidebarOpenUpgrade'), []);
+  const handleLogout = useCallback(() => bridgeAction('sidebarLogout'), []);
 
   const tokenPct = status.tokenLimit > 0
     ? Math.round((status.tokenUsed / status.tokenLimit) * 100)
@@ -134,8 +92,8 @@ export default function SettingsSidebar() {
 
   const tierGradient = {
     free:  'from-[var(--ds-hover-tint)] to-transparent border-[var(--ds-border-subtle)]',
-    tier1: 'from-[rgba(10,132,255,0.07)] to-[rgba(10,132,255,0.02)] border-[rgba(10,132,255,0.12)]',
-    tier2: 'from-[rgba(168,85,247,0.07)] to-[rgba(168,85,247,0.02)] border-[rgba(168,85,247,0.12)]',
+    tier1: 'from-[var(--ds-accent-5)] to-[var(--ds-accent-5)] border-[var(--ds-accent-10)]',
+    tier2: 'from-[var(--ds-purple-5)] to-[var(--ds-purple-5)] border-[var(--ds-purple-10)]',
   };
 
   return (
@@ -308,7 +266,7 @@ export default function SettingsSidebar() {
             style={{
               fontSize: 13,
               fontWeight: 500,
-              color: 'rgba(255, 59, 48, 0.6)',
+              color: 'var(--ds-red)',
               padding: '10px 0',
               borderRadius: 'var(--ds-radius-sm)',
               border: 'none',

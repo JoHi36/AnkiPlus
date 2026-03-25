@@ -515,6 +515,14 @@ class ChatbotWidget(QWidget):
             'card.rate': self._msg_rate_card,
             'card.evaluate': self._msg_evaluate_answer,
             'card.mc.generate': self._msg_generate_mc,
+            'card.requestCurrent': self._msg_request_current_card,
+            # Settings sidebar actions (forwarded from main bridge)
+            'sidebarCopyLogs': self._msg_copy_logs,
+            'sidebarGetStatus': self._msg_get_sidebar_status,
+            'sidebarSetTheme': self._msg_set_theme,
+            'sidebarOpenNativeSettings': lambda d: __import__('aqt', fromlist=['mw']).mw.onPrefs(),
+            'sidebarOpenUpgrade': lambda d: __import__('webbrowser').open('https://anki-plus.vercel.app/#pricing'),
+            'sidebarLogout': self._msg_sidebar_logout,
         }
         return handlers.get(msg_type)
 
@@ -1966,6 +1974,84 @@ class ChatbotWidget(QWidget):
             })
         except Exception as e:
             logger.error("_send_card_data error: %s", e)
+
+    def _msg_get_sidebar_status(self, data=None):
+        """Send settings status to React."""
+        try:
+            config = get_config()
+            status = {
+                'tier': config.get('tier', 'free'),
+                'theme': config.get('theme', 'dark'),
+                'isAuthenticated': config.get('auth_validated', False),
+                'tokenUsed': config.get('token_used', 0),
+                'tokenLimit': config.get('token_limit', 0),
+            }
+            self._send_to_frontend('sidebarStatus', status)
+        except Exception as e:
+            logger.warning("get_sidebar_status: %s", e)
+
+    def _msg_set_theme(self, data=None):
+        """Set theme preference."""
+        try:
+            theme = data if isinstance(data, str) else (json.loads(data) if data else 'dark')
+            update_config({'theme': theme})
+            self._send_to_frontend('themeChanged', {'theme': theme})
+        except Exception as e:
+            logger.warning("set_theme: %s", e)
+
+    def _msg_sidebar_logout(self, data=None):
+        """Clear auth tokens."""
+        try:
+            update_config({'auth_token': '', 'auth_validated': False})
+            self._send_to_frontend('authStatusLoaded', {'isAuthenticated': False})
+        except Exception as e:
+            logger.warning("sidebar_logout: %s", e)
+
+    def _msg_copy_logs(self, data=None):
+        """Copy recent logs + system info to clipboard."""
+        import platform
+        try:
+            from ..utils.logging import get_recent_logs
+        except ImportError:
+            from utils.logging import get_recent_logs
+        try:
+            from ..config import get_config
+        except ImportError:
+            from config import get_config
+        try:
+            config = get_config()
+            header = (
+                f"AnkiPlus Debug Report\n"
+                f"Platform: {platform.platform()}\n"
+                f"Python: {platform.python_version()}\n"
+                f"Theme: {config.get('theme', 'dark')}\n"
+                f"Tier: {config.get('tier', 'free')}\n"
+                f"Auth: {config.get('auth_validated', False)}\n"
+                f"{'=' * 60}\n"
+            )
+            logs = get_recent_logs(max_age_seconds=600)
+            text = header + "\n".join(logs) if logs else header + "(keine Logs)"
+            clipboard = QApplication.clipboard()
+            if clipboard:
+                clipboard.setText(text)
+                logger.info("Logs copied to clipboard (%d lines)", len(logs))
+                self._send_to_frontend('sidebarLogsCopied', {})
+        except Exception:
+            logger.exception("_msg_copy_logs failed")
+
+    def _msg_request_current_card(self, data=None):
+        """Send current card data to React (called when entering review from tab)."""
+        from aqt import mw
+        try:
+            rev = mw.reviewer
+            if rev and rev.card:
+                is_q = rev.state == 'question'
+                logger.info("request_current_card: sending card %s (is_question=%s, rev.state=%s)", rev.card.id, is_q, rev.state)
+                self._send_card_data(rev.card, is_question=is_q)
+            else:
+                logger.warning("request_current_card: no reviewer or no card (rev=%s, card=%s)", rev, rev.card if rev else None)
+        except Exception as e:
+            logger.warning("request_current_card: %s", e)
 
     def _msg_flip_card(self, data=None):
         """Show answer side. Swallow web.eval to prevent mw.web DOM writes."""

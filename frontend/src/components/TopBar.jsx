@@ -15,17 +15,19 @@ export default function TopBar({
   dueReview = 0,
   onTabClick,
   onSidebarToggle,
+  settingsOpen = false,
   holdToResetProps = {},
 }) {
   const activeTab = (ankiState === 'overview' || ankiState === 'review') ? 'session' : 'stapel';
 
-  // Plus button
+  // Plus/Close button — morphs between + and × via CSS rotation
   const plusButton = (
     <button
       onClick={onSidebarToggle}
       style={{
         background: 'none', border: 'none', cursor: 'pointer', padding: 4, marginRight: 8,
-        transition: 'transform 0.2s ease, opacity 0.15s ease',
+        transition: 'transform 0.3s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.15s ease',
+        transform: settingsOpen ? 'rotate(45deg)' : 'rotate(0deg)',
         display: 'flex', alignItems: 'center', outline: 'none',
       }}
       onMouseEnter={e => { e.currentTarget.style.opacity = '0.6'; }}
