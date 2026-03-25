@@ -385,9 +385,19 @@ def inject_addon_assets(webview):
 # ---------------------------------------------------------------------------
 
 def _inject_js(page, content, src):
-    """Run raw JS *content* in *page*."""
+    """Run raw JS *content* in *page* wrapped in try-catch for error reporting."""
     try:
-        page.runJavaScript(content)
+        # Wrap in try-catch so we can see the actual error in Python logs
+        wrapped = (
+            "try {{\n{code}\n}} catch(e) {{\n"
+            "  if (window.ankiBridge && window.ankiBridge.addMessage) {{\n"
+            "    window.ankiBridge.addMessage('jsError',\n"
+            "      'addon_proxy [{src}]: ' + e.message + ' at ' + (e.stack || '').split('\\n')[0]);\n"
+            "  }}\n"
+            "  console.error('addon_proxy [{src}]:', e);\n"
+            "}}"
+        ).format(code=content, src=src.replace("'", "\\'"))
+        page.runJavaScript(wrapped)
         logger.debug("addon_proxy: injected JS from %s", src)
     except Exception:
         logger.exception("addon_proxy: failed to inject JS from %s", src)
