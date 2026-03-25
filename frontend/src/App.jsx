@@ -55,6 +55,9 @@ import { registerDefaultRenderers } from './reasoning/defaultRenderers';
 // Register step renderers once at module load time
 registerDefaultRenderers();
 
+// Lazy-loaded heavy components
+const GraphView = React.lazy(() => import('./components/GraphView'));
+
 // Stable empty references — prevent new object creation on every render
 const EMPTY_STEPS = [];
 const EMPTY_CITATIONS = {};
@@ -197,6 +200,7 @@ function AppInner() {
 
   // Fullscreen view state (merged from MainApp)
   const [ankiState, setAnkiState] = useState('deckBrowser');
+  const [viewMode, setViewMode] = useState('graph'); // 'graph' | 'decks'
   const [deckBrowserData, setDeckBrowserData] = useState(null);
   const [overviewData, setOverviewData] = useState(null);
   const [freeChatTransition, setFreeChatTransition] = useState('idle');
@@ -745,6 +749,16 @@ function AppInner() {
       // Addon tooltip content (AMBOSS rendered HTML)
       if (payload.type === 'addon.tooltip') {
         window.dispatchEvent(new CustomEvent('addon.tooltip', { detail: payload.data }));
+        return;
+      }
+
+      // Knowledge Graph events → forward as CustomEvents
+      if (payload.type && payload.type.startsWith('graph.')) {
+        window.dispatchEvent(new CustomEvent(payload.type, { detail: payload.data }));
+        return;
+      }
+      if (payload.type === 'kg.cardTerms') {
+        window.dispatchEvent(new CustomEvent('kg.cardTerms', { detail: payload.data }));
         return;
       }
 
@@ -2389,7 +2403,17 @@ function AppInner() {
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {activeView === 'deckBrowser' && (
-            <DeckBrowserView data={deckBrowserData} isPremium={isPremium} />
+            viewMode === 'graph' ? (
+              <React.Suspense fallback={<div style={{ flex: 1 }} />}>
+                <GraphView onToggleView={() => setViewMode('decks')} />
+              </React.Suspense>
+            ) : (
+              <DeckBrowserView
+                data={deckBrowserData}
+                isPremium={isPremium}
+                onToggleView={() => setViewMode('graph')}
+              />
+            )
           )}
           {activeView === 'overview' && (
             <OverviewView
@@ -2835,12 +2859,14 @@ function AppInner() {
                         {/* No v1/v2 split. Live and saved messages always at the same place.
                             React sees the same <ChatMessage> component updating, not unmounting. */}
                         {/* ── ALL bot responses — single DOM position ── */}
-                        {/* React 18 batches setCurrentMessage(null) + setMessages([...new])
-                            in the same handler, so no intermediate frame. No ref buffer needed. */}
+                        {/* finalize() keeps currentMessage alive (status='done') for one render,
+                            then a cleanup effect clears it. No gap between live and saved. */}
                         {(() => {
                           const msg = chatHook.currentMessage || (nextMsg?.from === 'bot' ? nextMsg : null);
                           if (!msg) return null;
-                          const isLive = !!chatHook.currentMessage;
+                          // 'done' status means finalize() kept the message alive for smooth
+                          // transition — treat it as saved (not live) for rendering purposes.
+                          const isLive = !!chatHook.currentMessage && chatHook.currentMessage.status !== 'done';
                           return (
                             <div className="w-full flex-none">
                               <ChatMessage
