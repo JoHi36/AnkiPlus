@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import SourcesCarousel from '../components/SourcesCarousel';
 import { ReasoningStep, DisplayStep, MIN_STEP_INTERVAL } from './types';
 import { getStepRenderer, getFallbackRenderer } from './stepRegistry';
@@ -345,8 +345,14 @@ export default function ReasoningStream({
     }
   }, []);
 
+  // Filter out merge step — it's an internal detail between search and sources_ready.
+  // Keeping it would also block isProcessing (merge stays 'active'), preventing auto-collapse.
+  const filteredPipelineSteps = useMemo(
+    () => pipelineSteps.filter(s => s.step !== 'merge'),
+    [pipelineSteps]
+  );
   // Saved messages (not streaming): show all steps instantly, no 800ms queue delay
-  const { displaySteps, isProcessing } = useAccumulatingPipeline(pipelineSteps, pipelineGeneration, !isStreaming);
+  const { displaySteps, isProcessing } = useAccumulatingPipeline(filteredPipelineSteps, pipelineGeneration, !isStreaming);
   const animate = isStreaming || isProcessing;
 
   // Filter hidden steps (e.g. 'generating')

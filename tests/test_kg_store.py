@@ -288,3 +288,39 @@ class TestGetGraphStatus(_BaseKGTest):
         status = kg.get_graph_status()
         assert status["totalCards"] >= 2
         assert status["totalTerms"] >= 3
+
+
+class TestDeckCrossLinks(_BaseKGTest):
+    """compute_deck_links / get_deck_cross_links / search_decks_by_term."""
+
+    def test_compute_deck_links(self):
+        kg.save_card_terms(100, ["Kollagen", "Prolin", "Elastin"], deck_id=1)
+        kg.save_card_terms(200, ["Kollagen", "Prolin", "Glykolyse"], deck_id=2)
+        kg.save_card_terms(300, ["ATP", "Glykolyse"], deck_id=3)
+        kg.update_term_frequencies()
+        count = kg.compute_deck_links(min_shared=2)
+        assert count >= 1
+
+    def test_get_deck_cross_links_format(self):
+        kg.save_card_terms(100, ["Kollagen", "Prolin", "Elastin"], deck_id=1)
+        kg.save_card_terms(200, ["Kollagen", "Prolin"], deck_id=2)
+        kg.update_term_frequencies()
+        kg.compute_deck_links(min_shared=2)
+        links = kg.get_deck_cross_links()
+        assert len(links) >= 1
+        assert "source" in links[0]
+        assert "target" in links[0]
+        assert "weight" in links[0]
+        assert links[0]["type"] == "crosslink"
+
+    def test_search_decks_by_term(self):
+        kg.save_card_terms(100, ["Kollagen"], deck_id=1)
+        kg.save_card_terms(200, ["Kollagen"], deck_id=2)
+        kg.save_card_terms(300, ["Glykolyse"], deck_id=3)
+        deck_ids = kg.search_decks_by_term("Kollagen")
+        assert set(deck_ids) == {1, 2}
+
+    def test_search_decks_partial_match(self):
+        kg.save_card_terms(100, ["Aktionspotential"], deck_id=1)
+        deck_ids = kg.search_decks_by_term("Aktion")
+        assert 1 in deck_ids

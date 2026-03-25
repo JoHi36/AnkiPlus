@@ -72,6 +72,14 @@ def _init_kg_schema(db):
             created_at     TEXT DEFAULT (datetime('now')),
             updated_at     TEXT DEFAULT (datetime('now'))
         );
+
+        CREATE TABLE IF NOT EXISTS kg_deck_links (
+            deck_a       INTEGER,
+            deck_b       INTEGER,
+            shared_terms INTEGER,
+            top_terms    TEXT,
+            PRIMARY KEY (deck_a, deck_b)
+        );
     """)
     db.commit()
 
@@ -468,3 +476,68 @@ def get_graph_status():
         "lastUpdated": last_updated,
         "pendingUpdates": pending,
     }
+
+
+# ---------------------------------------------------------------------------
+#  Deck Cross-Links
+# ---------------------------------------------------------------------------
+
+def compute_deck_links(min_shared=3, max_links=200):
+    """Compute cross-links between decks based on shared terms.
+
+    Returns the number of links computed.
+    """
+    db = _get_db()
+    db.execute("DELETE FROM kg_deck_links")
+
+    rows = db.execute("""
+        SELECT a.deck_id AS deck_a, b.deck_id AS deck_b,
+               COUNT(DISTINCT a.term) AS shared_terms,
+               GROUP_CONCAT(DISTINCT a.term) AS terms
+        FROM kg_card_terms a
+        JOIN kg_card_terms b ON a.term = b.term AND a.deck_id < b.deck_id
+        WHERE a.deck_id IS NOT NULL AND b.deck_id IS NOT NULL
+        GROUP BY a.deck_id, b.deck_id
+        HAVING shared_terms >= ?
+        ORDER BY shared_terms DESC
+        LIMIT ?
+    """, (min_shared, max_links)).fetchall()
+
+    for r in rows:
+        all_terms = r["terms"].split(",") if r["terms"] else []
+        top = all_terms[:5]
+        db.execute(
+            "INSERT OR REPLACE INTO kg_deck_links VALUES (?, ?, ?, ?)",
+            (r["deck_a"], r["deck_b"], r["shared_terms"], json.dumps(top))
+        )
+    db.commit()
+    logger.info("compute_deck_links: %d links computed (min_shared=%d)", len(rows), min_shared)
+    return len(rows)
+
+
+def get_deck_cross_links():
+    """Return all deck cross-links for graph rendering."""
+    db = _get_db()
+    rows = db.execute(
+        "SELECT deck_a, deck_b, shared_terms, top_terms FROM kg_deck_links"
+    ).fetchall()
+    return [
+        {
+            "source": str(r["deck_a"]),
+            "target": str(r["deck_b"]),
+            "weight": r["shared_terms"],
+            "topTerms": json.loads(r["top_terms"]) if r["top_terms"] else [],
+            "type": "crosslink",
+        }
+        for r in rows
+    ]
+
+
+def search_decks_by_term(query):
+    """Find deck_ids that contain cards with the given term (exact or partial match)."""
+    db = _get_db()
+    rows = db.execute(
+        "SELECT DISTINCT deck_id FROM kg_card_terms WHERE term LIKE ?",
+        (f"%{query}%",)
+    ).fetchall()
+    return [r["deck_id"] for r in rows if r["deck_id"]]

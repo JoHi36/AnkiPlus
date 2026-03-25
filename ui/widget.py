@@ -672,6 +672,7 @@ class ChatbotWidget(QWidget):
             'getCardKGTerms': self._msg_get_card_kg_terms,
             'getTermDefinition': self._msg_get_term_definition,
             'searchGraph': self._msg_search_graph,
+            'getDeckCrossLinks': self._msg_get_deck_cross_links,
             'startTermStack': self._msg_start_term_stack,
         }
         return handlers.get(msg_type)
@@ -2382,20 +2383,33 @@ class ChatbotWidget(QWidget):
             logger.exception("getTermDefinition handler failed")
 
     def _msg_search_graph(self, data):
-        """Exact match → immediate. Semantic search not yet implemented."""
+        """Deck-based search: find decks containing cards with the given term."""
         try:
             query = data.get("query", "") if isinstance(data, dict) else str(data)
             try:
-                from ..storage.kg_store import search_terms_exact
+                from ..storage.kg_store import search_decks_by_term
             except ImportError:
-                from storage.kg_store import search_terms_exact
-            results = search_terms_exact(query)
+                from storage.kg_store import search_decks_by_term
+            deck_ids = search_decks_by_term(query)
             self._send_to_js({
                 "type": "graph.searchResult",
-                "data": {"matchedTerms": results, "isQuestion": False}
+                "data": {"matchedDeckIds": [str(d) for d in deck_ids], "query": query}
             })
+        except Exception as e:
+            logger.exception("searchGraph failed")
+
+    def _msg_get_deck_cross_links(self, data):
+        """Return deck cross-link edges for graph rendering."""
+        try:
+            try:
+                from ..storage.kg_store import get_deck_cross_links
+            except ImportError:
+                from storage.kg_store import get_deck_cross_links
+            links = get_deck_cross_links()
+            self._send_to_js({"type": "graph.crossLinks", "data": links})
         except Exception:
-            logger.exception("searchGraph handler failed")
+            logger.exception("getDeckCrossLinks failed")
+            self._send_to_js({"type": "graph.crossLinks", "data": []})
 
     def _msg_start_term_stack(self, data):
         """Create filtered deck from card IDs and enter reviewer."""

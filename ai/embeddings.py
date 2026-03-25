@@ -373,6 +373,16 @@ class BackgroundEmbeddingThread(QThread):
             builder = GraphIndexBuilder()
             builder.build()
             logger.info("Knowledge Graph built successfully")
+
+            try:
+                try:
+                    from ..storage.kg_store import compute_deck_links
+                except ImportError:
+                    from storage.kg_store import compute_deck_links
+                link_count = compute_deck_links()
+                logger.info("Computed %d deck cross-links", link_count)
+            except Exception as e:
+                logger.warning("Deck cross-link computation failed: %s", e)
         except Exception as e:
             logger.warning("KG graph build failed: %s", e)
 
