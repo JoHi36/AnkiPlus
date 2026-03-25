@@ -1537,6 +1537,12 @@ class ChatbotWidget(QWidget):
 
     def on_msg_event(self, request_id, event_type, data):
         """Handle v2 structured message events from the AI thread — delivered via Qt signal."""
+        if event_type in ('msg_start', 'agent_cell', 'msg_done', 'text_chunk'):
+            chunk_preview = ''
+            if event_type == 'text_chunk' and isinstance(data, dict):
+                chunk_preview = ' chunk=%d' % len(data.get('chunk', ''))
+            logger.info("[v2-signal] on_msg_event: type=%s, data_is_dict=%s%s",
+                        event_type, isinstance(data, dict), chunk_preview)
         payload = {"type": event_type}
         if isinstance(data, dict):
             payload.update(data)
@@ -1699,6 +1705,9 @@ class ChatbotWidget(QWidget):
     def _get_deck_browser_data(self):
         """Build complete deck tree data for React."""
         from aqt import mw
+        if not mw or not mw.col:
+            logger.warning("mw.col not available, skipping _get_deck_browser_data")
+            return {'roots': [], 'totalNew': 0, 'totalLearn': 0, 'totalReview': 0, 'totalDue': 0, 'isPremium': False}
         try:
             all_decks = mw.col.decks.all_names_and_ids()
 
@@ -1804,6 +1813,9 @@ class ChatbotWidget(QWidget):
     def _get_overview_data(self):
         """Get data for the overview screen."""
         from aqt import mw
+        if not mw or not mw.col:
+            logger.warning("mw.col not available, skipping _get_overview_data")
+            return {'deckId': 0, 'deckName': '', 'dueNew': 0, 'dueLearning': 0, 'dueReview': 0}
         try:
             deck_id = mw.col.decks.get_current_id()
             deck_name = mw.col.decks.name(deck_id)
@@ -1938,6 +1950,9 @@ class ChatbotWidget(QWidget):
         """Send card HTML + metadata to React."""
         import re
         from aqt import mw
+        if not mw or not mw.col:
+            logger.warning("mw.col not available, skipping _send_card_data")
+            return
         try:
             front_html = card.question()
             back_html = card.answer()

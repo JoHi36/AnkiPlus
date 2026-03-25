@@ -36,6 +36,10 @@ def open_preview(card_id):
     """Open a card in preview mode from any Anki state."""
     from aqt import mw
 
+    if not mw or not mw.col:
+        logger.warning("mw.col not available, skipping open_preview")
+        return {"success": False, "error": "Collection not available"}
+
     # Close existing preview first (no stacking)
     if _preview_state['active']:
         close_preview(notify_frontend=False)
@@ -115,17 +119,20 @@ def close_preview(notify_frontend=True):
 
     if prev_state == "review" and prev_card_id:
         # Re-inject the session card
-        try:
-            card = mw.col.get_card(prev_card_id)
-            rev = mw.reviewer
-            if rev:
-                rev.card = card
-                card.timer_started = _time.time()
-                from PyQt6.QtCore import QTimer
-                QTimer.singleShot(0, rev._initWeb)
-                return  # No state transition needed
-        except Exception:
-            pass
+        if not mw or not mw.col:
+            logger.warning("mw.col not available, skipping close_preview card re-injection")
+        else:
+            try:
+                card = mw.col.get_card(prev_card_id)
+                rev = mw.reviewer
+                if rev:
+                    rev.card = card
+                    card.timer_started = _time.time()
+                    from PyQt6.QtCore import QTimer
+                    QTimer.singleShot(0, rev._initWeb)
+                    return  # No state transition needed
+            except Exception:
+                pass
         # Fallback: go to overview
         _preview_state['_transitioning'] = True
         mw.moveToState("overview")
