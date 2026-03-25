@@ -41,10 +41,15 @@ function getSidebarAgents() {
     }
   }
 
-  // Sort: default agents first, then alphabetical by label
+  // Fixed display order for sidebar tabs
+  const ORDER = ['tutor', 'research', 'plusi', 'help'];
   eligible.sort((a, b) => {
-    if (a.isDefault && !b.isDefault) return -1;
-    if (!a.isDefault && b.isDefault) return 1;
+    const ai = ORDER.indexOf(a.name);
+    const bi = ORDER.indexOf(b.name);
+    // Known agents sorted by ORDER, unknown agents appended at end alphabetically
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
     return (a.label || a.name).localeCompare(b.label || b.name);
   });
 

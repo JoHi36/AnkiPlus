@@ -19,16 +19,18 @@ function AgentIcon({ agent, size = 20, color }) {
   }
   if (agent.iconSvg) {
     // iconSvg comes from the trusted Python agent registry — not user input.
-    // Same pattern as AgentCard.jsx which already uses dangerouslySetInnerHTML.
-    const colored = agent.iconSvg
+    let svg = agent.iconSvg
       .replace(/stroke="currentColor"/g, `stroke="${color}"`)
-      .replace(/width="[^"]*"/, `width="${size}"`)
-      .replace(/height="[^"]*"/, '');
-    const withSize = colored.includes(`width="${size}"`)
-      ? colored
-      : colored.replace('<svg', `<svg width="${size}" height="${size}"`);
+      .replace(/fill="currentColor"/g, `fill="${color}"`);
+    // Ensure width and height are set
+    svg = svg.replace(/width="[^"]*"/, `width="${size}"`);
+    svg = svg.replace(/height="[^"]*"/, `height="${size}"`);
+    // If no width/height existed, inject them
+    if (!svg.includes(`width="${size}"`)) {
+      svg = svg.replace('<svg', `<svg width="${size}" height="${size}"`);
+    }
     // nosec: SVG source is the internal Python agent registry, not user content
-    return <span dangerouslySetInnerHTML={{ __html: withSize }} />; // nosec
+    return <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }} dangerouslySetInnerHTML={{ __html: svg }} />; // nosec
   }
   // Fallback: single letter avatar
   const letter = (agent.label || agent.name || '?')[0].toUpperCase();
