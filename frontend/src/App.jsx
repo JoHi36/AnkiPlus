@@ -739,6 +739,12 @@ function AppInner() {
         return;
       }
 
+      // Addon phrase annotations (AMBOSS, Meditricks, etc.)
+      if (payload.type === 'addon.phrases') {
+        window.dispatchEvent(new CustomEvent('addon.phrases', { detail: payload.data }));
+        return;
+      }
+
       // Reviewer inline events (evaluation, MC, AI steps) → forward as CustomEvents
       if (payload.type && payload.type.startsWith('reviewer.')) {
         window.dispatchEvent(new CustomEvent(payload.type, { detail: payload.data }));

@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 
 /**
  * ReviewerView — Pure display component for the card viewer.
@@ -6,6 +6,7 @@ import React, { useCallback } from 'react';
  * ChatInput lives at App level (unified, animated between positions).
  *
  * This component only renders: card HTML + MC options.
+ * Addon annotations (AMBOSS phrases) are applied after render via DOM manipulation.
  */
 
 /** Check if HTML has visible content (not just style tags / whitespace) */
@@ -116,13 +117,103 @@ function MCOptions({ options, selected, isResult, onSelect }) {
   );
 }
 
+/**
+ * Apply addon phrase annotations to the card DOM.
+ * Walks text nodes, finds matching terms, wraps them in styled spans.
+ * Works with any addon that sends phrase data (AMBOSS, Meditricks, etc.)
+ */
+function applyPhraseMarkers(containerEl, phrases, source) {
+  if (!containerEl || !phrases || typeof phrases !== 'object') return;
+
+  const terms = Object.entries(phrases)
+    .filter(([term]) => term.length > 2)  // skip very short terms
+    .sort((a, b) => b[0].length - a[0].length);  // longest first to avoid partial matches
+
+  if (terms.length === 0) return;
+
+  // Build regex that matches any of the terms (case-insensitive)
+  const escaped = terms.map(([term]) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const regex = new RegExp('(' + escaped.join('|') + ')', 'gi');
+
+  // Map lowercase term → phraseId
+  const phraseMap = {};
+  terms.forEach(([term, id]) => { phraseMap[term.toLowerCase()] = id; });
+
+  // Walk text nodes inside the container
+  const walker = document.createTreeWalker(containerEl, NodeFilter.SHOW_TEXT, null);
+  const textNodes = [];
+  let node;
+  while ((node = walker.nextNode())) {
+    // Skip nodes inside script/style tags or already-marked spans
+    const parent = node.parentElement;
+    if (!parent) continue;
+    const tag = parent.tagName;
+    if (tag === 'SCRIPT' || tag === 'STYLE' || parent.classList.contains('amboss-marker')) continue;
+    if (regex.test(node.textContent)) {
+      textNodes.push(node);
+      regex.lastIndex = 0;  // reset after test()
+    }
+  }
+
+  // Replace matches in collected text nodes
+  textNodes.forEach(textNode => {
+    const text = textNode.textContent;
+    const parts = text.split(regex);
+    if (parts.length <= 1) return;
+
+    const fragment = document.createDocumentFragment();
+    parts.forEach(part => {
+      const phraseId = phraseMap[part.toLowerCase()];
+      if (phraseId) {
+        const span = document.createElement('span');
+        span.className = 'amboss-marker';
+        span.setAttribute('data-phrase-group-id', phraseId);
+        span.setAttribute('data-source', source || 'addon');
+        span.textContent = part;
+        span.style.cursor = 'pointer';
+        fragment.appendChild(span);
+      } else {
+        fragment.appendChild(document.createTextNode(part));
+      }
+    });
+    textNode.parentNode.replaceChild(fragment, textNode);
+  });
+}
+
 export default function ReviewerView({ cardData, reviewer }) {
+  const cardContentRef = useRef(null);
+
+  // Listen for addon phrase annotations and apply them to the card DOM
+  useEffect(() => {
+    const handler = (e) => {
+      const { phrases, source } = e.detail || {};
+      if (phrases && cardContentRef.current) {
+        applyPhraseMarkers(cardContentRef.current, phrases, source);
+      }
+    };
+    window.addEventListener('addon.phrases', handler);
+    return () => window.removeEventListener('addon.phrases', handler);
+  }, []);
+
   /**
-   * Handle clicks on links inside card HTML.
-   * AMBOSS links, Meditricks links, and other addon links open via bridge.
-   * Prevents default navigation which would break the QWebEngineView.
+   * Handle clicks on links and addon markers inside card HTML.
    */
   const handleCardClick = useCallback((e) => {
+    // Handle AMBOSS marker clicks → trigger tooltip via pycmd
+    const marker = e.target.closest('.amboss-marker');
+    if (marker) {
+      const phraseId = marker.getAttribute('data-phrase-group-id');
+      if (phraseId && window.ankiBridge?.addMessage) {
+        window.ankiBridge.addMessage('pycmd',
+          'amboss:reviewer:phraseClick:' + JSON.stringify({
+            phraseGroupId: phraseId,
+            phrase: marker.textContent
+          })
+        );
+      }
+      return;
+    }
+
     const link = e.target.closest('a');
     if (!link) return;
 
@@ -167,13 +258,13 @@ export default function ReviewerView({ cardData, reviewer }) {
         <div style={{ maxWidth: 'var(--ds-content-width)', width: '100%', margin: '0 auto' }}>
           {showBack
             ? <div id="qa" className="card-renderer" onClick={handleCardClick}>
-                <div className="card card-content" dangerouslySetInnerHTML={{ __html:
+                <div ref={cardContentRef} className="card card-content" dangerouslySetInnerHTML={{ __html:
                   sanitizeCardHtml(hasVisibleContent(cardData.backHtml) ? cardData.backHtml : (cardData.backField || cardData.backHtml || ''))
                 }} />
                 {CARD_BG_OVERRIDE}
               </div>
             : <div id="qa" className="card-renderer" onClick={handleCardClick}>
-                <div className="card card-content" dangerouslySetInnerHTML={{ __html:
+                <div ref={cardContentRef} className="card card-content" dangerouslySetInnerHTML={{ __html:
                   sanitizeCardHtml(hasVisibleContent(cardData.frontHtml) ? cardData.frontHtml : (cardData.frontField || cardData.frontHtml || ''))
                 }} />
                 {CARD_BG_OVERRIDE}

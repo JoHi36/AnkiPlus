@@ -313,51 +313,64 @@ class WebEvalProxy:
     # ------------------------------------------------------------------
 
     def _mirror(self, js_code):
-        """Mirror *js_code* into our webview.
+        """Mirror addon JS calls into our webview.
 
-        DOM-modifying calls (mark, setContentFor) are delayed 500ms
-        so React finishes rendering card content first. Without this,
-        React re-render wipes the AMBOSS annotations.
+        For mark() calls: instead of running AMBOSS's DOM manipulation
+        (which doesn't work in React's context), we parse the phrase data
+        and send it to React via ankiReceive for our own marking.
         """
         if not self._assets_loaded:
-            logger.debug(
-                "addon_proxy: queuing JS mirror (%s chars) until assets loaded",
-                len(js_code),
-            )
             self._queue.append(js_code)
             return
 
-        # Delay DOM-modifying addon calls so React renders first
-        if 'mark(' in js_code or 'setContentFor(' in js_code:
-            from PyQt6.QtCore import QTimer
-
-            def _delayed_mark(code=js_code):
-                self._run_in_our_webview(code)
-                # Diagnostic: check if mark() actually created elements
-                diag = (
-                    "setTimeout(function(){"
-                    "  var markers = document.querySelectorAll('.amboss-marker');"
-                    "  var qaEl = document.getElementById('qa');"
-                    "  var cardEl = document.querySelector('.card');"
-                    "  var textLen = (qaEl ? qaEl.textContent : '').length;"
-                    "  if (window.ankiBridge && window.ankiBridge.addMessage) {"
-                    "    window.ankiBridge.addMessage('jsError',"
-                    "      'AMBOSS DIAG: markers=' + markers.length"
-                    "      + ' qa=' + !!qaEl"
-                    "      + ' card=' + !!cardEl"
-                    "      + ' textLen=' + textLen"
-                    "      + ' ambossAddon=' + (typeof ambossAddon)"
-                    "      + ' phraseMarker=' + (typeof ambossAddon !== 'undefined' && ambossAddon.tooltip ? typeof ambossAddon.tooltip.phraseMarker : 'N/A')"
-                    "    );"
-                    "  }"
-                    "}, 200);"
-                )
-                self._run_in_our_webview(diag)
-
-            QTimer.singleShot(500, _delayed_mark)
+        # Intercept mark() calls — extract phrase data, send to React
+        if 'phraseMarker.mark(' in js_code:
+            self._send_phrases_to_react(js_code)
             return
 
+        # Intercept setContentFor() — tooltip content for clicked terms
+        if 'setContentFor(' in js_code:
+            self._send_tooltip_to_react(js_code)
+            return
+
+        # All other addon calls: run directly
         self._run_in_our_webview(js_code)
+
+    def _send_phrases_to_react(self, js_code):
+        """Parse phrase pairs from mark() call and send to React."""
+        # Extract JSON from: ambossAddon.tooltip.phraseMarker.mark({"term": "id", ...})
+        start = js_code.find('mark(')
+        if start == -1:
+            return
+        start += 5  # skip 'mark('
+        end = js_code.rfind(')')
+        if end <= start:
+            return
+        json_str = js_code[start:end]
+
+        try:
+            phrases = json.loads(json_str)
+        except (json.JSONDecodeError, ValueError):
+            logger.warning("addon_proxy: failed to parse mark() JSON: %s", json_str[:100])
+            return
+
+        if not phrases or not isinstance(phrases, dict):
+            return
+
+        # Send to React as ankiReceive event
+        payload = json.dumps({
+            "type": "addon.phrases",
+            "data": {"phrases": phrases, "source": "amboss"}
+        })
+        js = "if(window.ankiReceive)window.ankiReceive(%s);" % payload
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(300, lambda: self._run_in_our_webview(js))
+        logger.debug("addon_proxy: sent %d phrases to React", len(phrases))
+
+    def _send_tooltip_to_react(self, js_code):
+        """Forward tooltip content to React (future use)."""
+        # TODO: parse setContentFor() and send tooltip HTML to React
+        logger.debug("addon_proxy: tooltip content intercepted (not yet forwarded)")
 
     def _run_in_our_webview(self, js_code):
         """Execute *js_code* in our QWebEngineView."""
