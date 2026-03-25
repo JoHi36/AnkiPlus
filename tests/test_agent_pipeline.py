@@ -623,10 +623,10 @@ class TestTutorFallback:
 class TestHelpPipeline:
     """Test that the Help agent integrates with the dispatch system."""
 
-    @patch('config.get_config', return_value={'api_key': 'fake-key'})
-    @patch('config.is_backend_mode', return_value=False)
-    @patch('config.get_backend_url', return_value='')
-    @patch('config.get_auth_token', return_value='')
+    @patch('config.get_config', return_value={'api_key': ''})
+    @patch('config.is_backend_mode', return_value=True)
+    @patch('config.get_backend_url', return_value='https://test-backend.example.com')
+    @patch('config.get_auth_token', return_value='fake-token')
     def test_help_dispatches_via_pipeline(self, mock_auth_token, mock_backend_url,
                                           mock_backend_mode, mock_config):
         """Help agent runs through _dispatch_agent and emits correct events."""
@@ -634,7 +634,8 @@ class TestHelpPipeline:
         mock_resp = MagicMock()
         mock_resp.raise_for_status = MagicMock()
         mock_resp.json.return_value = {
-            'candidates': [{'content': {'parts': [{'text': 'Use Cmd+I to open the panel.'}]}}]
+            'response': 'Use Cmd+I to open the panel.',
+            'text': 'Use Cmd+I to open the panel.'
         }
         with patch.object(req_mod, 'post', return_value=mock_resp):
             from ai.handler import AIHandler

@@ -58,7 +58,7 @@ class EmbeddingManager:
         self._api_key = api_key
         self._backend_url = backend_url
         self._auth_headers_fn = auth_headers_fn
-        self._backend_failed = False  # Skip backend after first auth failure
+        # _backend_failed flag removed — backend is the only path now
         self._index = []       # list of normalized float lists
         self._card_ids = []    # card_id list aligned with index rows
         self._lock = threading.Lock()
@@ -80,51 +80,23 @@ class EmbeddingManager:
 
         import requests as http_requests
 
-        # Backend-Modus: Embeddings über Cloud Function (skip if previously failed)
-        if self._backend_url and self._auth_headers_fn and not self._backend_failed:
-            try:
-                embed_url = f"{self._backend_url}/embed"
-                headers = {**self._auth_headers_fn(), "Content-Type": "application/json"}
-                body = {"texts": [t[:2000] for t in texts]}
-
-                response = http_requests.post(embed_url, json=body, headers=headers, timeout=5)
-                response.raise_for_status()
-                data = response.json()
-                return data.get("embeddings", [])
-            except (OSError, ValueError, KeyError) as e:
-                logger.warning("EmbeddingManager: Backend-Fehler: %s, Fallback auf direkte API (Backend wird übersprungen)", e)
-                self._backend_failed = True
-
-        # Direkter Gemini API Modus (Fallback)
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.MODEL}:batchEmbedContents"
-
-        if self._api_key:
-            url += f"?key={self._api_key}"
-            headers = {"Content-Type": "application/json"}
-        else:
-            logger.warning("EmbeddingManager: No credentials configured")
+        # Backend-only mode: Embeddings via Cloud Function
+        if not self._backend_url or not self._auth_headers_fn:
+            logger.warning("EmbeddingManager: No backend credentials configured")
             return []
 
-        body = {
-            "requests": [
-                {
-                    "model": f"models/{self.MODEL}",
-                    "content": {"parts": [{"text": t[:2000]}]}
-                }
-                for t in texts
-            ]
-        }
+        try:
+            embed_url = f"{self._backend_url}/embed"
+            headers = {**self._auth_headers_fn(), "Content-Type": "application/json"}
+            body = {"texts": [t[:2000] for t in texts]}
 
-        response = http_requests.post(url, json=body, headers=headers, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-
-        embeddings = []
-        for item in data.get("embeddings", []):
-            vec = item["values"]
-            embeddings.append(vec)
-
-        return embeddings
+            response = http_requests.post(embed_url, json=body, headers=headers, timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            return data.get("embeddings", [])
+        except (OSError, ValueError, KeyError) as e:
+            logger.warning("EmbeddingManager: Backend error: %s", e)
+            return []
 
     def _card_to_text(self, card_data):
         parts = []

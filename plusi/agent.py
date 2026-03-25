@@ -317,21 +317,43 @@ Setze mood auf "reading". Aktualisiere "obsession", "energy", und gerne auch
 "self" oder "user" im internal-Feld."""
 
 
-def _gemini_call(system_prompt, user_prompt, api_key, max_tokens=256):
-    """Lightweight Gemini API call helper."""
-    data = {
-        "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
-        "generationConfig": {"temperature": 0.9, "maxOutputTokens": max_tokens},
-        "systemInstruction": {"parts": [{"text": system_prompt}]}
+def _gemini_call(system_prompt, user_prompt, api_key=None, max_tokens=256):
+    """Lightweight backend API call helper for Plusi."""
+    try:
+        from .auth_helper import get_auth_headers
+    except ImportError:
+        pass
+
+    backend_url = get_backend_url()
+    if not backend_url:
+        logger.warning("_gemini_call: No backend URL configured")
+        return ""
+
+    try:
+        from ..ai.auth import get_auth_headers
+    except ImportError:
+        try:
+            from ai.auth import get_auth_headers
+        except ImportError:
+            def get_auth_headers():
+                auth_token = get_auth_token()
+                if auth_token:
+                    return {"Content-Type": "application/json", "Authorization": f"Bearer {auth_token}"}
+                return {"Content-Type": "application/json"}
+
+    url = f"{backend_url}/chat"
+    payload = {
+        "message": user_prompt,
+        "model": PLUSI_MODEL,
+        "agent": "plusi",
+        "systemPrompt": system_prompt,
+        "stream": False,
     }
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{PLUSI_MODEL}:generateContent?key={api_key}"
-    response = requests.post(url, json=data, headers={"Content-Type": "application/json"}, timeout=15)
+    headers = get_auth_headers()
+    response = requests.post(url, json=payload, headers=headers, timeout=15)
     response.raise_for_status()
     result = response.json()
-    candidates = result.get("candidates", [])
-    if candidates:
-        return "".join(p.get("text", "") for p in candidates[0].get("content", {}).get("parts", []))
-    return ""
+    return result.get("response", result.get("text", ""))
 
 
 def _search_cards(query, top_k=10):
@@ -829,47 +851,46 @@ def run_plusi(situation, emit_step=None, memory=None, stream_callback=None, **kw
             raw_text = _sonnet_call(system_prompt, messages, PLUSI_API_KEY_SONNET,
                                    max_tokens=params['max_tokens'], temperature=params['temperature'])
         else:
-            # Existing Gemini path (fallback)
-            if not api_key:
-                logger.debug("plusi_agent: No API key configured")
+            # Backend-only path
+            backend_url = get_backend_url()
+            if not backend_url:
+                logger.debug("plusi_agent: No backend URL configured")
                 return {"mood": "neutral", "text": "", "error": True}
 
-            contents = []
+            try:
+                from ..ai.auth import get_auth_headers
+            except ImportError:
+                try:
+                    from ai.auth import get_auth_headers
+                except ImportError:
+                    def get_auth_headers():
+                        auth_token = get_auth_token()
+                        if auth_token:
+                            return {"Content-Type": "application/json", "Authorization": f"Bearer {auth_token}"}
+                        return {"Content-Type": "application/json"}
+
+            # Build history for backend
+            backend_history = []
             for msg in history:
-                contents.append({
-                    "role": "user" if msg["role"] == "user" else "model",
-                    "parts": [{"text": msg["content"]}]
+                backend_history.append({
+                    "role": msg["role"],
+                    "content": msg["content"]
                 })
-            contents.append({
-                "role": "user",
-                "parts": [{"text": situation}]
-            })
 
-            data = {
-                "contents": contents,
-                "generationConfig": {
-                    "temperature": params['temperature'],
-                    "maxOutputTokens": params['max_tokens'],
-                },
-                "systemInstruction": {
-                    "parts": [{"text": system_prompt}]
-                }
+            url = f"{backend_url}/chat"
+            payload = {
+                "message": situation,
+                "model": PLUSI_MODEL,
+                "agent": "plusi",
+                "systemPrompt": system_prompt,
+                "history": backend_history,
+                "stream": False,
             }
-
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{PLUSI_MODEL}:generateContent?key={api_key}"
-            headers = {"Content-Type": "application/json"}
-            response = requests.post(url, json=data, headers=headers, timeout=30)
-
+            headers = get_auth_headers()
+            response = requests.post(url, json=payload, headers=headers, timeout=30)
             response.raise_for_status()
             result = response.json()
-
-            # Extract text from Gemini API response
-            candidates = result.get("candidates", [])
-            if candidates:
-                parts = candidates[0].get("content", {}).get("parts", [])
-                raw_text = "".join(p.get("text", "") for p in parts)
-            else:
-                raw_text = ""
+            raw_text = result.get("response", result.get("text", ""))
 
         # Parse mood + internal state from response
         mood, text, internal, friendship_delta, diary_raw, discoveries, next_wake, thoughts, action, action_query = parse_plusi_response(raw_text)
