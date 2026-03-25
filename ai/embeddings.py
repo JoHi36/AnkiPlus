@@ -317,7 +317,9 @@ class BackgroundEmbeddingThread(QThread):
                     from storage.kg_store import save_card_terms
                 if not hasattr(self, '_term_extractor'):
                     self._term_extractor = TermExtractor()
-                terms = self._term_extractor.extract(text)
+                # Use only question+answer for term extraction (NOT tags)
+                kg_text = ' '.join(filter(None, [card.get('question', ''), card.get('answer', '')]))
+                terms = self._term_extractor.extract(kg_text)
                 if terms:
                     question = card.get('question', '')
                     definition_terms = [t for t in terms if self._term_extractor.is_definition_card(t, question, card.get('answer', ''))]

@@ -157,6 +157,15 @@ def _is_stopword(token: str) -> bool:
 
 def _should_keep(token: str) -> bool:
     """Return True if token should be included in results."""
+    # Filter Anki tags (start with # or contain ::)
+    if token.startswith('#') or '::' in token:
+        return False
+    # Filter tokens that look like Anki internals (only digits/underscores, version strings)
+    if re.match(r'^[_\d]+$', token) or re.match(r'^v\d', token):
+        return False
+    # Filter HTML/CSS artifacts
+    if token.startswith(('http', 'www.', 'rgb', 'px', 'em', 'rem')):
+        return False
     # Always keep known abbreviations regardless of length
     if token in _KEEP_ABBREVIATIONS or token.upper() in _KEEP_ABBREVIATIONS:
         return True
@@ -165,6 +174,9 @@ def _should_keep(token: str) -> bool:
         return False
     # Filter stopwords
     if _is_stopword(token):
+        return False
+    # Filter pure numbers
+    if token.isdigit():
         return False
     return True
 

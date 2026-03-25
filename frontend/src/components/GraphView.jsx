@@ -55,7 +55,7 @@ export default function GraphView({ onToggleView, isPremium }) {
       .graphData({ nodes: graphData.nodes, links })
       .backgroundColor('rgba(0,0,0,0)')
       .nodeColor(node => node.deckColor || '#0A84FF')
-      .nodeVal(node => Math.max(1, (node.frequency || 1) / 2))
+      .nodeVal(node => Math.max(0.5, Math.log2((node.frequency || 1) + 1) * 0.8))
       .nodeLabel(node => `${node.label} (${node.frequency || 0} Karten)`)
       .nodeVisibility(node => {
         if (!graphRef.current) return true;
