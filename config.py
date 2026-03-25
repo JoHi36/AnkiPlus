@@ -172,8 +172,39 @@ def load_config():
             return DEFAULT_CONFIG.copy()
     return DEFAULT_CONFIG.copy()
 
+def _sanitize_config(config: dict) -> dict:
+    """Sanitize config values, fixing invalid entries to safe defaults."""
+    # Theme must be one of: dark, light, system
+    if config.get('theme') not in ('dark', 'light', 'system'):
+        logger.warning("Invalid theme %s, defaulting to dark", config.get('theme'))
+        config['theme'] = 'dark'
+
+    # response_style must be one of the known styles
+    valid_styles = ('concise', 'balanced', 'detailed', 'friendly')
+    if config.get('response_style') and config['response_style'] not in valid_styles:
+        logger.warning("Invalid response_style %s, defaulting to balanced", config.get('response_style'))
+        config['response_style'] = 'balanced'
+
+    # API keys must be strings (not numbers, not booleans)
+    for key in ('api_key', 'openai_api_key', 'anthropic_api_key'):
+        if key in config and config[key] is not None and not isinstance(config[key], str):
+            logger.warning("Invalid %s type, clearing", key)
+            config[key] = ''
+
+    # Plusi autonomy budget must be non-negative
+    plusi = config.get('plusi_autonomy', {})
+    if isinstance(plusi, dict):
+        budget = plusi.get('budget_per_hour')
+        if budget is not None and (not isinstance(budget, (int, float)) or budget < 0):
+            logger.warning("Invalid plusi budget_per_hour %s, defaulting to 500", budget)
+            plusi['budget_per_hour'] = 500
+
+    return config
+
+
 def save_config(config):
     """Speichert die Konfiguration in die Datei"""
+    config = _sanitize_config(config)
     config_path = get_config_path()
     logger.debug("save_config: Versuche zu speichern nach: %s", config_path)
     logger.debug("save_config: Config enthält api_key mit Länge: %s", len(config.get('api_key', '')))
