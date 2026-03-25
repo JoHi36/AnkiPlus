@@ -215,6 +215,23 @@ header *,
   to   { --border-angle: 360deg; }
 }
 
+/* ═══ Dock Scrim — dark gradient behind the floating dock ═══ */
+.dock-scrim-wrapper::before {
+  content: '';
+  position: absolute;
+  left: -40px;
+  right: -40px;
+  bottom: -20px;
+  height: 120px;
+  background: linear-gradient(to top, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.3) 40%, transparent 100%);
+  pointer-events: none;
+  z-index: -1;
+  border-radius: 0 0 20px 20px;
+}
+[data-theme="light"] .dock-scrim-wrapper::before {
+  background: linear-gradient(to top, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.08) 40%, transparent 100%);
+}
+
 /* ═══ Token Budget Range Slider ═══ */
 .token-budget-range::-webkit-slider-thumb {
   -webkit-appearance: none;

@@ -675,6 +675,8 @@ function AppInner() {
       
       // Emit through Event Bus (agents can subscribe)
       emit(payload.type, payload);
+      // Also dispatch as CustomEvent so child components can listen safely
+      window.dispatchEvent(new CustomEvent('ankiReceive', { detail: payload }));
 
       // Fullscreen state changes (merged from MainApp)
       if (payload.type === 'app.stateChanged' || payload.type === 'stateChanged') {
@@ -2071,26 +2073,42 @@ function AppInner() {
 
   // ── TopBar tab handler (merged from MainApp) ──────────────────
   const handleTabClick = useCallback((tab) => {
-    // Close chat sidebar on tab switch (settings stays open — it's a global layer)
-    if (activeView === 'review' && tab !== 'session') {
-      if (reviewChatOpen) reviewChatWasOpenRef.current = true;
-      setReviewChatOpen(false);
-    }
-
-    // Instant navigation — set activeView + ref synchronously so bounce protection works
-    if (tab === 'stapel') {
-      if (activeView === 'freeChat') executeAction('chat.close');
-      else {
+    const doNavigate = (target) => {
+      if (target === 'stapel') {
+        if (activeView === 'freeChat') { executeAction('chat.close'); return; }
         setActiveView('deckBrowser');
         activeViewRef.current = 'deckBrowser';
         executeAction('view.navigate', 'deckBrowser');
+      } else if (target === 'session') {
+        setActiveView('review');
+        activeViewRef.current = 'review';
+        bridgeAction('view.navigate', 'review');
+        bridgeAction('card.requestCurrent');
+      } else if (target === 'statistik') {
+        executeAction('stats.open');
       }
-    } else if (tab === 'session') {
-      setActiveView('review');
-      activeViewRef.current = 'review';
-      bridgeAction('view.navigate', 'review');
-    } else if (tab === 'statistik') {
-      executeAction('stats.open');
+    };
+
+    // Leaving review with sidebar open → close sidebar first, navigate mid-animation
+    if (activeView === 'review' && reviewChatOpen && tab !== 'session') {
+      reviewChatWasOpenRef.current = true;
+      setReviewChatOpen(false);
+      setTimeout(() => doNavigate(tab), 200); // navigate at 200ms — sidebar is 2/3 closed, feels seamless
+      return;
+    }
+
+    // Leaving review without sidebar → instant
+    if (activeView === 'review' && tab !== 'session') {
+      setReviewChatOpen(false);
+    }
+
+    // Navigate
+    doNavigate(tab);
+
+    // Entering session → restore sidebar after content settles
+    if (tab === 'session' && reviewChatWasOpenRef.current) {
+      reviewChatWasOpenRef.current = false;
+      setTimeout(() => setReviewChatOpen(true), 200);
     }
   }, [activeView, reviewChatOpen]);
 
@@ -2327,6 +2345,7 @@ function AppInner() {
       borderRight: '1px solid var(--ds-border-subtle)',
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
       transform: settingsOpen ? 'translateX(0)' : 'translateX(-100%)',
+      pointerEvents: settingsOpen ? 'auto' : 'none',
       transition: 'transform 0.35s cubic-bezier(0.25, 1, 0.5, 1)',
     }}>
       <SettingsSidebar />
@@ -2335,11 +2354,10 @@ function AppInner() {
 
   if (activeView === 'deckBrowser' || activeView === 'overview' || activeView === 'freeChat') {
     return (
-      <div style={{
+      <div className={showFreeChat && isFreeChatAnimatingIn ? '' : 'ds-canvas-surface'} style={{
         position: 'fixed', inset: 0,
         display: 'flex', flexDirection: 'column',
-        background: showFreeChat && isFreeChatAnimatingIn ? 'var(--ds-bg-deep)' : 'var(--ds-bg-canvas)',
-        transition: 'background-color 400ms cubic-bezier(0.25, 0.1, 0.25, 1)',
+        background: showFreeChat && isFreeChatAnimatingIn ? 'var(--ds-bg-deep)' : undefined,
         marginLeft: settingsOpen ? 'var(--ds-settings-width)' : 0,
         transition: `background-color 400ms cubic-bezier(0.25, 0.1, 0.25, 1), margin-left 0.35s cubic-bezier(0.25, 1, 0.5, 1)`,
       }}>
@@ -2504,7 +2522,7 @@ function AppInner() {
       }
       .dock-pulse { animation: dockPulse 0.3s cubic-bezier(0.25, 1, 0.5, 1); }
     `}</style>
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--ds-bg-canvas)' }}>
+    <div className="ds-canvas-surface" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       {settingsPanel}
       {/* Spacer — pushes content right when settings is open */}
       <div style={{
@@ -2516,7 +2534,7 @@ function AppInner() {
 
       {/* LEFT: Card viewer — only in review mode */}
       {activeView === 'review' && (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--ds-bg-canvas)', minWidth: 0 }}>
+        <div className="ds-canvas-surface" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
           <TopBar
             activeView="review" ankiState="review"
             messageCount={0} totalDue={deckBrowserData?.totalDue || 0}
@@ -3120,7 +3138,7 @@ function AppInner() {
           : { left: `calc(${sOff} + var(--ds-space-lg))`, width: `calc(100% - ${sOff} - 2 * var(--ds-space-lg))`, bottom: 'var(--ds-space-lg)' };
 
       return (
-        <div ref={dockPulseRef} style={{
+        <div ref={dockPulseRef} className="dock-scrim-wrapper" style={{
           position: 'fixed', zIndex: 60,
           ...posStyle,
           transition: 'left 0.3s cubic-bezier(0.25, 1, 0.5, 1), right 0.3s cubic-bezier(0.25, 1, 0.5, 1), width 0.3s cubic-bezier(0.25, 1, 0.5, 1), bottom 0.3s cubic-bezier(0.25, 1, 0.5, 1)',
