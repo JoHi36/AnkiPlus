@@ -92,17 +92,17 @@ AnkiPlus_main/
 │   ├── mc_cache.py          # Multiple-choice cache
 │   └── insights.py          # Card insight extraction
 ├── ui/                      # Qt UI components & communication
-│   ├── widget.py            # ChatbotWidget (QWebEngineView)
-│   ├── bridge.py            # WebBridge (JS ↔ Python communication, 50 slots)
-│   ├── setup.py             # DockWidget creation, keyboard shortcuts
+│   ├── widget.py            # ChatbotWidget (QWebEngineView, message queue, AI threading)
+│   ├── bridge.py            # WebBridge (JS ↔ Python communication, 56 @pyqtSlot methods)
+│   ├── main_view.py         # MainViewWidget (fullscreen React app container)
+│   ├── addon_proxy.py       # AddonProxy (bridge method wrappers for main view)
+│   ├── setup.py             # Widget creation, keyboard shortcuts
 │   ├── manager.py           # Toolbar/bottom bar hide/show
 │   ├── shortcut_filter.py   # GlobalShortcutFilter (all keyboard routing)
 │   ├── theme.py             # Theme utilities
 │   ├── global_theme.py      # Application-wide dark theme
 │   ├── tokens_qt.py         # Qt-compatible design token approximations
-│   ├── overlay_chat.py      # Free chat overlay
-│   ├── settings_sidebar.py  # Settings sidebar Python integration
-│   └── custom_screens.py    # DeckBrowser + Overview replacement
+│   └── settings_sidebar.py  # Settings sidebar Python integration
 ├── utils/                   # Shared utilities
 │   ├── text.py              # HTML cleaning, image extraction
 │   ├── anki.py              # Thread-safe Anki API helpers
@@ -115,8 +115,8 @@ AnkiPlus_main/
 │   ├── components/          # Design system primitives (7 files, Anki-agnostic)
 │   ├── plusi-renderer.js    # Unified Plusi SVG mood renderer
 │   └── utils/constants.ts   # Shared constants
-├── custom_reviewer/         # Custom reviewer (HTML/CSS/JS replacement)
-├── frontend/                # React source code (48 components, 12 hooks)
+├── custom_reviewer/         # Custom reviewer (HTML/CSS/JS, being migrated to React)
+├── frontend/                # React source code (74 components, 16 hooks)
 ├── web/                     # Built frontend (loaded by QWebEngineView)
 ├── docs/                    # Documentation + specs + plans
 ├── scripts/                 # Shell scripts (build, deploy, cache)
@@ -132,9 +132,11 @@ AnkiPlus_main/
 ### Python Backend
 
 - `__init__.py`: Main entry point, hook registration, addon initialization
-- `ui/bridge.py`: WebBridge class with 50 `@pyqtSlot` methods for JS communication
+- `ui/bridge.py`: WebBridge class with 56 `@pyqtSlot` methods for JS communication
 - `ui/widget.py`: ChatbotWidget class, QWebEngineView setup, message queue polling, AI request handling
-- `ui/setup.py`: QDockWidget creation, keyboard shortcuts (Cmd/Ctrl+I), toolbar button, menu items
+- `ui/main_view.py`: MainViewWidget — fullscreen React app container (replaces native Anki UI)
+- `ui/addon_proxy.py`: AddonProxy — bridge method wrappers for main view
+- `ui/setup.py`: Widget creation, keyboard shortcuts (Cmd/Ctrl+I), toolbar button, menu items
 - `ui/global_theme.py`: Application-wide dark theme styling, continuous re-application logic
 - `ui/shortcut_filter.py`: GlobalShortcutFilter — all keyboard routing
 - `ai/handler.py`: AI orchestrator — delegates to gemini.py, rag.py, models.py
@@ -163,20 +165,29 @@ AnkiPlus_main/
 - `frontend/src/hooks/useQuotaDisplay.js`: Token quota and tier limits
 - `frontend/src/hooks/useReviewTrail.js`: Review history tracking
 - `frontend/src/hooks/usePlusiDirect.js`: Direct Plusi personality/autonomy state
-- `frontend/src/components/`: 48 React components (see below)
+- `frontend/src/hooks/useReviewerState.js`: Reviewer state machine (question → answer → MC → rated)
+- `frontend/src/hooks/useDeckTree.js`: Deck tree data structure for browser
+- `frontend/src/hooks/useHoldToReset.js`: Long-press gesture handler
+- `frontend/src/components/`: 74 React components (see below)
 - `frontend/src/components/SettingsSidebar.jsx`: React settings panel (replaces old Python settings dialog)
+- `frontend/src/components/SidebarShell.jsx`: Agent sidebar with tab navigation
+- `frontend/src/components/ReviewerView.jsx`: Card reviewer (React replacement for custom_reviewer)
 - `frontend/vite.config.js`: Vite build configuration (relative paths for local file loading)
 - `frontend/tailwind.config.js`: Tailwind + DaisyUI styling configuration
 
-**Key component groups** (48 total in `frontend/src/components/`):
-- Chat: `ChatInput`, `ChatMessage`, `StreamingChatMessage`, `FreeChatView`, `FreeChatSearchBar`
+**Key component groups** (74 total in `frontend/src/components/`):
+- Chat: `ChatInput`, `ChatMessage`, `StreamingChatMessage`, `FreeChatSearchBar`, `AgenticCell`
 - Cards: `CardContext`, `CardListWidget`, `CardPreviewModal`, `CardRefChip`, `CardWidget`
-- Plusi: `PlusiWidget`, `PlusiMenu`, `PersonalityGrid`, `MascotCharacter`, `MascotShell`, `DiaryStream`, `AutonomyCard`
-- Insights: `InsightsDashboard`, `InsightBullet`, `ExtractInsightsButton`
-- Navigation: `Header`, `DeckBrowser`, `DeckProgressBar`, `SectionDropdown`, `SectionNavigation`
-- Tools: `ToolWidgetRenderer`, `ImageWidget`, `StatsWidget`, `MultipleChoiceCard`, `ToolTogglePopup`
-- Settings: `SettingsSidebar`, `SettingsButton`, `TokenBudgetSlider`, `TokenBar`
-- Modals: `PaywallModal`, `QuotaLimitDialog`
+- Reviewer: `ReviewerView`, `ReviewerDock`, `ReviewFeedback`, `DockLoading`, `DockEvalResult`, `DockTimer`, `DockStars`
+- Plusi: `PlusiWidget`, `PlusiMenu`, `PlusiDock`, `PersonalityGrid`, `MascotCharacter`, `MascotShell`, `DiaryStream`, `AutonomyCard`
+- Insights: `InsightsDashboard`, `InsightBullet`
+- Navigation: `Header`, `TopBar`, `DeckBrowser`, `DeckBrowserView`, `DeckProgressBar`, `DeckSearchBar`, `DeckNode`, `SectionDropdown`, `SectionNavigation`, `SectionDivider`, `DeckSectionDivider`
+- Views: `OverviewView`, `StatistikView`, `SessionOverview`, `SessionView/SessionHeader`, `SessionView/SessionList`
+- Research: `ResearchMenu`, `ResearchContent`, `ResearchSourceBadge`, `SourceCard`, `SourcesCarousel`, `WebCitationBadge`, `CitationBadge`
+- Tools: `ToolWidgetRenderer`, `ImageWidget`, `StatsWidget`, `MultipleChoiceCard`, `ToolTogglePopup`, `ToolErrorBadge`, `ToolLoadingPlaceholder`
+- Settings: `SettingsSidebar`, `SettingsButton`, `SidebarShell`, `SidebarTabBar`, `TokenBudgetSlider`, `TokenBar`
+- Agents: `StandardSubMenu`, `ResizeHandle`, `ContextSurface`, `ContextTags`, `CompactWidget`
+- Modals: `PaywallModal`, `QuotaLimitDialog`, `AccountBadge`
 
 ### Build Output
 
@@ -185,7 +196,7 @@ AnkiPlus_main/
 
 ## Python ↔ JavaScript Bridge Methods
 
-The WebBridge exposes 50 `@pyqtSlot` methods to JavaScript (all defined in `ui/bridge.py`):
+The WebBridge exposes 56 `@pyqtSlot` methods to JavaScript (all defined in `ui/bridge.py`):
 
 **AI & Messaging**: `sendMessage()`, `cancelRequest()`, `setModel()`, `generateSectionTitle()`
 
@@ -229,12 +240,11 @@ Configuration is stored in `config.json` (not in repository):
 
 ```
 mw (Anki Main Window)
-├── toolbar.web (QWebEngineView - the actual toolbar widget)
+├── toolbar.web (QWebEngineView - hidden, native toolbar suppressed)
 ├── centralWidget
-│   └── QDockWidget (chatbot panel - right side)
-│       └── ChatbotWidget (QWidget)
-│           └── QWebEngineView (loads React app)
-└── reviewer (when in review state)
+│   └── MainViewWidget (QWidget - fullscreen, replaces entire native UI)
+│       └── QWebEngineView (loads unified React app from web/index.html)
+└── reviewer (native reviewer suppressed, React ReviewerView handles cards)
 ```
 
 **Critical**: `mw.toolbar` is NOT a QWidget - only `mw.toolbar.web` has Qt methods like `hide()`, `show()`, `setFixedHeight()`.
@@ -388,7 +398,7 @@ All keyboard shortcuts are routed through a single `GlobalShortcutFilter` (`ui/s
 
 ### Dark Bar Above Reviewer
 
-When custom reviewer is enabled and native toolbar is hidden, a ~40px dark bar may remain at the top of the reviewer. This is a Qt layout issue where the hidden `mw.toolbar.web` widget still reserves space despite `setFixedHeight(0)`. Investigation ongoing - see `TECHNICAL.md` section 9 for details.
+When custom reviewer is enabled and native toolbar is hidden, a ~40px dark bar may remain at the top of the reviewer. This is a Qt layout issue where the hidden `mw.toolbar.web` widget still reserves space despite `setFixedHeight(0)`. Investigation ongoing.
 
 ### Message Queue Polling
 
@@ -503,14 +513,9 @@ except ImportError:
 
 ## References
 
-See `TECHNICAL.md` for exhaustive implementation details including:
-- Line-by-line Qt component documentation
-- WebBridge method signatures (note: TECHNICAL.md may lag behind bridge.py which has 50 methods)
-- Complete hook integration documentation
-- Error handling patterns
-- Toolbar hiding investigation (section 9)
+See `docs/archive/TECHNICAL.2025.md` for historical implementation details (pre-2026-03 architecture, largely superseded by this file).
 
-See `QT_INTEGRATION_GUIDE.md` for:
+See `docs/reference/QT_INTEGRATION_GUIDE.md` for:
 - General Qt/Anki addon development patterns
 - Available integration points (menus, toolbars, docks)
 - Best practices and common pitfalls
