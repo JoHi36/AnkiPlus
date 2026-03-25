@@ -46,7 +46,8 @@ def open_preview(card_id):
 
     try:
         card = mw.col.get_card(card_id)
-    except Exception:
+    except (KeyError, AttributeError) as e:
+        logger.warning("CustomReviewer: Card %s not found: %s", card_id, e)
         return {"success": False, "error": "Card not found"}
 
     # Save current state
@@ -131,8 +132,8 @@ def close_preview(notify_frontend=True):
                     from PyQt6.QtCore import QTimer
                     QTimer.singleShot(0, rev._initWeb)
                     return  # No state transition needed
-            except Exception:
-                pass
+            except (KeyError, AttributeError) as e:
+                logger.warning("CustomReviewer: Card re-injection failed (card %s): %s", prev_card_id, e)
         # Fallback: go to overview
         _preview_state['_transitioning'] = True
         mw.moveToState("overview")
@@ -211,9 +212,9 @@ def _evaluate_answer_async(data):
                             }
                             chat_js = f"if(window.ankiReceive) window.ankiReceive({json.dumps(eval_payload)});"
                             chat_widget.web_view.page().runJavaScript(chat_js)
-                    except Exception as e:
-                        logger.error("CustomReviewer: ⚠️ Could not send eval result to chat: %s", e)
-            except Exception as e:
+                    except (AttributeError, RuntimeError) as e:
+                        logger.error("CustomReviewer: Could not send eval result to chat: %s", e)
+            except (AttributeError, RuntimeError) as e:
                 logger.error("CustomReviewer: Error injecting eval result: %s", e)
 
         mw.taskman.run_on_main(inject)
@@ -224,8 +225,8 @@ def _evaluate_answer_async(data):
             try:
                 if mw and mw.reviewer and mw.reviewer.web:
                     mw.reviewer.web.eval(f'window.onEvaluationResult({json.dumps({"error": str(e)})});')
-            except (AttributeError, RuntimeError):
-                pass
+            except (AttributeError, RuntimeError) as inject_e:
+                logger.debug("CustomReviewer: Could not inject evaluation error result (reviewer not ready): %s", inject_e)
         mw.taskman.run_on_main(inject_error)
 
 
@@ -243,8 +244,8 @@ def _inject_ai_step(phase, label):
             try:
                 if mw and mw.reviewer and mw.reviewer.web:
                     mw.reviewer.web.eval(f'window.onAIStep({json.dumps(step)});')
-            except Exception:
-                pass
+            except (AttributeError, RuntimeError) as e:
+                logger.debug("CustomReviewer: AI step injection skipped (reviewer not ready): %s", e)
             finally:
                 done_event.set()
 
@@ -253,8 +254,8 @@ def _inject_ai_step(phase, label):
         done_event.wait(timeout=2.0)
         # Additional delay so the user can read each step
         _time.sleep(0.8)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("CustomReviewer: _inject_ai_step failed (phase=%s): %s", phase, e)
 
 
 def _get_deck_context_answers_sync(card_id=None, max_answers=8):
@@ -277,7 +278,8 @@ def _get_deck_context_answers_sync(card_id=None, max_answers=8):
             try:
                 tag_card_ids = [c for c in mw.col.find_cards(f'({tag_query}) deck:"{deck_name}"') if c != card.id]
                 _rand.shuffle(tag_card_ids)
-            except Exception:
+            except (AttributeError, RuntimeError) as e:
+                logger.debug("CustomReviewer: Tag-filtered card search failed: %s", e)
                 tag_card_ids = []
 
         # Fill remaining slots from full deck
@@ -300,7 +302,8 @@ def _get_deck_context_answers_sync(card_id=None, max_answers=8):
                         clean = re.sub(r'\s+', ' ', clean).strip()
                         if clean and len(clean) < 200:
                             answers.append(clean)
-            except Exception:
+            except (AttributeError, KeyError) as e:
+                logger.debug("CustomReviewer: Skipping card %s in deck context (field access error): %s", cid, e)
                 continue
 
         # Prefer answers with similar length to the correct answer
@@ -314,8 +317,8 @@ def _get_deck_context_answers_sync(card_id=None, max_answers=8):
                     filtered = [a for a in answers if 0.5 * correct_len <= len(a) <= 2.0 * correct_len]
                     if len(filtered) >= 3:
                         answers = filtered
-        except Exception:
-            pass
+        except (AttributeError, KeyError) as e:
+            logger.debug("CustomReviewer: Answer length filtering failed: %s", e)
 
         return answers[:max_answers]
     except Exception as e:
@@ -343,7 +346,7 @@ def _generate_mc_async(data, deck_answers=None):
                 try:
                     if mw and mw.reviewer and mw.reviewer.web:
                         mw.reviewer.web.eval(f'window.onMCOptions({json.dumps(cached)});')
-                except Exception as e:
+                except (AttributeError, RuntimeError) as e:
                     logger.error("CustomReviewer: Error injecting cached MC: %s", e)
             mw.taskman.run_on_main(inject_cached)
             return
@@ -381,7 +384,7 @@ def _generate_mc_async(data, deck_answers=None):
                 if mw and mw.reviewer and mw.reviewer.web:
                     js = f'window.onMCOptions({json.dumps(result)});'
                     mw.reviewer.web.eval(js)
-            except Exception as e:
+            except (AttributeError, RuntimeError) as e:
                 logger.error("CustomReviewer: Error injecting MC options: %s", e)
 
         mw.taskman.run_on_main(inject)
@@ -392,8 +395,8 @@ def _generate_mc_async(data, deck_answers=None):
             try:
                 if mw and mw.reviewer and mw.reviewer.web:
                     mw.reviewer.web.eval('window.onMCOptions([]);')
-            except (AttributeError, RuntimeError):
-                pass
+            except (AttributeError, RuntimeError) as inject_e:
+                logger.debug("CustomReviewer: Could not inject MC error result (reviewer not ready): %s", inject_e)
         mw.taskman.run_on_main(inject_error)
 
 
@@ -418,7 +421,7 @@ def _ai_get_response_sync(prompt):
     try:
         result = ai.get_response(prompt, callback=_collector)
         logger.debug("CustomReviewer: get_response returned, collected %s chunks, result_len=%s", len(collected), len(result) if result else 0)
-    except Exception as e:
+    except (OSError, RuntimeError, ValueError) as e:
         logger.exception("CustomReviewer: AI response error: %s", e)
 
     if errors:
@@ -481,7 +484,7 @@ Antworte NUR mit JSON: {{"score": 0-100, "feedback": "..."}}"""
     except json.JSONDecodeError as e:
         logger.error("CustomReviewer: JSON parse error in evaluation: %s", e)
         return {"score": 50, "feedback": "Bewertung konnte nicht vollständig durchgeführt werden."}
-    except Exception as e:
+    except (KeyError, ValueError, TypeError) as e:
         logger.error("CustomReviewer: AI evaluation error: %s", e)
 
     # Fallback: simple text comparison
@@ -573,7 +576,7 @@ Antworte NUR mit JSON-Array:
 
     except json.JSONDecodeError as e:
         logger.error("CustomReviewer: JSON parse error in MC generation: %s", e)
-    except Exception as e:
+    except (KeyError, ValueError, TypeError) as e:
         logger.error("CustomReviewer: AI MC generation error: %s", e)
 
     # Fallback: generate simple options from correct answer
@@ -628,8 +631,8 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                         if mw and mw.reviewer and mw.reviewer.web:
                             mw.reviewer.web.setFocus()
                             mw.reviewer.web.eval('document.body.focus(); window.focus();')
-                    except Exception:
-                        pass
+                    except (AttributeError, RuntimeError) as e:
+                        logger.debug("CustomReviewer: Refocus after ans failed (webview not ready): %s", e)
                 # Single refocus after Qt layout stabilizes
                 QTimer.singleShot(150, _refocus)
 
@@ -640,8 +643,8 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
             try:
                 if mw and mw.reviewer:
                     mw.reviewer.state = "answer"
-            except Exception:
-                pass
+            except (AttributeError, RuntimeError) as e:
+                logger.debug("CustomReviewer: Fallback state set failed: %s", e)
         return (True, None)
 
     elif message.startswith("ease"):
@@ -671,8 +674,8 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                     btn_count = mw.col.sched.answerButtons(card)
                     if ease_num > btn_count:
                         ease_num = btn_count
-                except Exception:
-                    pass
+                except (AttributeError, RuntimeError) as e:
+                    logger.debug("CustomReviewer: Could not clamp ease to button count: %s", e)
 
                 # Swallow ALL web.eval calls during _answerCard.
                 # _answerCard → nextCard → _showQuestion → web.eval(...)
@@ -778,8 +781,8 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
         try:
             if mw and hasattr(mw, 'onPrefs'):
                 mw.onPrefs()
-        except Exception:
-            pass
+        except (AttributeError, RuntimeError) as e:
+            logger.warning("CustomReviewer: Could not open preferences: %s", e)
         return (True, None)
 
     elif message == "deck:home":
@@ -858,8 +861,8 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
             try:
                 if mw and mw.reviewer and mw.reviewer.web:
                     mw.reviewer.web.eval('if(window.setChatOpen) setChatOpen(true);')
-            except Exception:
-                pass
+            except (AttributeError, RuntimeError) as e:
+                logger.debug("CustomReviewer: Could not notify reviewer of chat open: %s", e)
 
             # Auto-focus the chat textarea after panel opens/is shown
             from aqt.qt import QTimer
@@ -923,8 +926,8 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
             try:
                 if mw and mw.reviewer and mw.reviewer.web:
                     mw.reviewer.web.eval('if(window.setChatOpen) setChatOpen(false);')
-            except Exception:
-                pass
+            except (AttributeError, RuntimeError) as e:
+                logger.debug("CustomReviewer: Could not notify reviewer of chat close: %s", e)
             # Refocus reviewer webview
             from aqt.qt import QTimer
             def _refocus_reviewer():
@@ -932,8 +935,8 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                     if mw and mw.reviewer and mw.reviewer.web:
                         mw.reviewer.web.setFocus()
                         mw.reviewer.web.eval('document.body.focus(); window.focus();')
-                except Exception:
-                    pass
+                except (AttributeError, RuntimeError) as e:
+                    logger.debug("CustomReviewer: Refocus after chat close failed: %s", e)
             QTimer.singleShot(100, _refocus_reviewer)
         except Exception as e:
             logger.error("CustomReviewer: Error closing chat: %s", e)
@@ -947,8 +950,8 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
             import builtins
             builtins._anki_card_context = data
             logger.debug("CustomReviewer: Card context stored for chat")
-        except Exception as e:
-            logger.error("CustomReviewer: Error storing chat context: %s", e)
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.error("CustomReviewer: Error storing chat context (JSON parse failed): %s", e)
         return (True, None)
 
     elif message.startswith("evaluate:"):
@@ -958,8 +961,8 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
             thread = threading.Thread(target=_evaluate_answer_async, args=(data,), daemon=True)
             thread.start()
             logger.debug("CustomReviewer: Evaluation started in background")
-        except Exception as e:
-            logger.error("CustomReviewer: Error starting evaluation: %s", e)
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.error("CustomReviewer: Error starting evaluation (JSON parse failed): %s", e)
             # Fallback: show answer
             if mw and mw.reviewer and mw.reviewer.web:
                 mw.reviewer.web.eval('window.onEvaluationResult({"error": "Parse error"});')
@@ -974,8 +977,8 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
             thread = threading.Thread(target=_generate_mc_async, args=(data, deck_answers), daemon=True)
             thread.start()
             logger.debug("CustomReviewer: MC generation started in background (deck_answers=%s)", len(deck_answers))
-        except Exception as e:
-            logger.error("CustomReviewer: Error starting MC generation: %s", e)
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.error("CustomReviewer: Error starting MC generation (JSON parse failed): %s", e)
             if mw and mw.reviewer and mw.reviewer.web:
                 mw.reviewer.web.eval('window.onMCOptions([]);')
         return (True, None)
@@ -1096,8 +1099,8 @@ def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tup
                                                     mw.reviewer.web.eval(
                                                         f'if(window.showStoredPerformance) showStoredPerformance({perf_json});'
                                                     )
-                                            except Exception:
-                                                pass
+                                            except (AttributeError, RuntimeError) as e:
+                                                logger.debug("CustomReviewer: Performance injection skipped (reviewer not ready): %s", e)
                                         from aqt.qt import QTimer as _QT
                                         _QT.singleShot(300, _inject_perf)
                             except Exception as perf_e:
@@ -1126,7 +1129,7 @@ def _get_design_tokens_css():
         try:
             with open(css_path, 'r', encoding='utf-8') as f:
                 _design_tokens_css = f.read()
-        except Exception as e:
+        except (OSError, IOError) as e:
             logger.error("CustomReviewer: Could not load design-system.css: %s", e)
             _design_tokens_css = ''
     return _design_tokens_css
@@ -1165,8 +1168,8 @@ class CustomReviewer:
                 if hasattr(mw.reviewer, '_bottomWeb') and mw.reviewer._bottomWeb:
                     mw.reviewer._bottomWeb.hide()
                     mw.reviewer._bottomWeb.setFixedHeight(0)
-        except Exception:
-            pass
+        except (AttributeError, RuntimeError) as e:
+            logger.debug("CustomReviewer: Could not hide reviewer bottom bar (Qt object may be deleted): %s", e)
 
     def enable(self):
         """Enable custom reviewer using webview hook"""
@@ -1295,8 +1298,8 @@ class CustomReviewer:
                     labels = mw.col.sched.describe_next_states(states)
                     if labels and len(labels) >= 4:
                         return list(labels[:4])
-                except (AttributeError, KeyError, RuntimeError):
-                    pass
+                except (AttributeError, KeyError, RuntimeError) as e:
+                    logger.debug("CustomReviewer: describe_next_states failed, using fallback labels: %s", e)
 
             # Fallback: Use answerButtons count and default labels
             button_count = mw.col.sched.answerButtons(reviewer.card)
@@ -1430,16 +1433,16 @@ class CustomReviewer:
             try:
                 if mw and mw.pm and mw.pm.name:
                     profile_initial = mw.pm.name[0].upper()
-            except Exception:
-                pass
+            except (AttributeError, IndexError) as e:
+                logger.debug("CustomReviewer: Could not get profile initial: %s", e)
             html = html.replace('{{PROFILE_INITIAL}}', profile_initial)
             # Profile name
             profile_name = ''
             try:
                 if mw and mw.pm and mw.pm.name:
                     profile_name = mw.pm.name
-            except Exception:
-                pass
+            except AttributeError as e:
+                logger.debug("CustomReviewer: Could not get profile name: %s", e)
             html = html.replace('{{PROFILE_NAME}}', profile_name or 'Profil')
             # Account badge — frosted glass style
             is_premium_user = False
@@ -1447,8 +1450,8 @@ class CustomReviewer:
                 from ..ai import auth
                 status = auth.get_auth_status()
                 is_premium_user = status.get('is_premium') or status.get('isPremium')
-            except Exception:
-                pass
+            except (ImportError, AttributeError, KeyError) as e:
+                logger.debug("CustomReviewer: Could not get auth status for badge: %s", e)
             if is_premium_user:
                 html = html.replace('{{ACCOUNT_BADGE_HTML}}',
                     '<span style="font-size:9px;font-weight:600;letter-spacing:0.5px;padding:2px 7px;'
@@ -1478,8 +1481,8 @@ class CustomReviewer:
         try:
             from ..ui.main_view import get_main_view
             chat_panel_open = get_main_view()._sidebar_visible
-        except Exception:
-            pass
+        except (ImportError, AttributeError) as e:
+            logger.debug("CustomReviewer: Could not read chat panel state: %s", e)
         chat_state_js = f'\n<script>window.__chatOpen = {"true" if chat_panel_open else "false"};</script>'
         html = html.replace('</head>', chat_state_js + '\n</head>')
 
