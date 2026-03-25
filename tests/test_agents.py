@@ -9,9 +9,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 class TestAgentRegistry:
     def setup_method(self):
-        """Clear registry before each test."""
+        """Clear registry before each test, saving a snapshot for restore."""
+        from ai.agents import AGENT_REGISTRY
+        self._saved_registry = dict(AGENT_REGISTRY)
+        AGENT_REGISTRY.clear()
+
+    def teardown_method(self):
+        """Restore registry to its pre-test state so downstream tests see the full registry."""
         from ai.agents import AGENT_REGISTRY
         AGENT_REGISTRY.clear()
+        AGENT_REGISTRY.update(self._saved_registry)
 
     def _make_agent(self, name='test', enabled_key='test_on', **kwargs):
         from ai.agents import AgentDefinition
