@@ -63,6 +63,7 @@ class AddonContentCapture:
         Hook handler.  Call this from the ``webview_will_set_content`` Anki hook.
 
         Only processes Reviewer contexts; silently ignores everything else.
+        When assets are first captured, immediately injects them into our webview.
         """
         context_type = type(context).__name__
         if "Reviewer" not in context_type:
@@ -75,13 +76,16 @@ class AddonContentCapture:
         new_assets = self._extract_assets(body)
 
         if new_assets:
-            # Replace previous capture — the reviewer re-renders per card, so
-            # we always want the latest complete set.
+            had_assets_before = bool(self.captured_assets)
             self.captured_assets = new_assets
             logger.info(
                 "addon_proxy: captured %s addon asset(s) from reviewer body",
                 len(new_assets),
             )
+            # On first capture, immediately inject into our webview
+            if not had_assets_before and _proxy._our_webview is not None:
+                logger.info("addon_proxy: first capture — injecting assets now")
+                inject_addon_assets(_proxy._our_webview)
         else:
             logger.debug("addon_proxy: no third-party addon assets found in reviewer body")
 
@@ -314,6 +318,12 @@ def get_capture():
 def get_proxy():
     """Return the module-level WebEvalProxy singleton."""
     return _proxy
+
+
+def set_target_webview(webview):
+    """Store a reference to our React QWebEngineView for later injection."""
+    _proxy._our_webview = webview
+    logger.debug("addon_proxy: target webview set")
 
 
 def inject_addon_assets(webview):

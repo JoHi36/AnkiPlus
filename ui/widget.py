@@ -1460,12 +1460,15 @@ class ChatbotWidget(QWidget):
         except Exception as e:
             logger.error("Failed to push subagent registry: %s", e)
 
-        # Inject addon assets (AMBOSS JS/CSS, Meditricks, etc.) into our WebView
+        # Register our webview with addon proxy so it can inject assets when captured
+        # Assets may not be captured yet (reviewer hasn't loaded), but when they are,
+        # the capture hook will immediately inject into this webview
         try:
-            from .addon_proxy import inject_addon_assets
-            inject_addon_assets(self.web_view)
+            from .addon_proxy import set_target_webview, inject_addon_assets
+            set_target_webview(self.web_view)
+            inject_addon_assets(self.web_view)  # inject now if assets already captured
         except Exception as e:
-            logger.warning("Addon asset injection failed: %s", e)
+            logger.warning("Addon proxy setup failed: %s", e)
 
     def push_updated_models(self):
         """Sendet aktualisierte Model-Liste an die Web-UI"""
