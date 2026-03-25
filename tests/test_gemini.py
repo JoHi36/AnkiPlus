@@ -87,15 +87,22 @@ def _make_stubs():
     return stubs
 
 
+# Save original modules before overwriting — restore in conftest/teardown
+_saved_modules = {}
 _stubs = _make_stubs()
 for _name, _stub in _stubs.items():
+    _saved_modules[f"ai.{_name}"] = sys.modules.get(f"ai.{_name}")
+    _saved_modules[_name] = sys.modules.get(_name)
     sys.modules[f"ai.{_name}"] = _stub
     sys.modules[_name] = _stub
 
+# Also save requests module
+_saved_modules["requests"] = sys.modules.get("requests")
+
 # Remove any cached gemini module so a fresh import picks up our stubs
-for _key in list(sys.modules.keys()):
-    if "gemini" in _key and "test" not in _key:
-        del sys.modules[_key]
+_gemini_keys = [k for k in sys.modules if "gemini" in k and "test" not in k]
+for _key in _gemini_keys:
+    _saved_modules[_key] = sys.modules.pop(_key)
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +115,21 @@ retry_with_backoff = _gemini.retry_with_backoff
 get_google_response = _gemini.get_google_response
 get_user_friendly_error = _gemini.get_user_friendly_error
 ERROR_MESSAGES = _gemini.ERROR_MESSAGES
+
+
+# ---------------------------------------------------------------------------
+# Step 4: restore original modules IMMEDIATELY after import
+# ---------------------------------------------------------------------------
+# We needed the stubs only so ai.gemini could import successfully.
+# Now that it's imported and we have references to its functions,
+# restore the original modules so subsequent test files are not polluted.
+
+for _key, _original in _saved_modules.items():
+    if _original is None:
+        sys.modules.pop(_key, None)
+    else:
+        sys.modules[_key] = _original
+del _saved_modules
 
 
 # ---------------------------------------------------------------------------
