@@ -256,7 +256,7 @@ body.sidebar-resizing * {
 
 /* ── Agentic Cell Skeleton ── */
 .agent-cell {
-  position: relative; padding: 20px 32px; margin: 8px -32px;
+  position: relative; padding: 20px 32px; margin: 8px -32px; max-width: none;
   background:
     linear-gradient(180deg,
       rgba(var(--agent-rgb), 0.06) 0%,

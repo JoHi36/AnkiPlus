@@ -2516,6 +2516,13 @@ function AppInner() {
   return (
     <ErrorBoundary>
     <style>{`
+      /* All direct children of messages container: center at content width.
+         .agent-cell breaks out via margin:-32px to stay edge-to-edge. */
+      #messages-container > * {
+        max-width: var(--ds-content-width);
+        margin-left: auto;
+        margin-right: auto;
+      }
       @keyframes slideInFromRight {
         from { transform: translateX(30px); opacity: 0; }
         to   { transform: translateX(0);    opacity: 1; }

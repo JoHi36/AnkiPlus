@@ -3,10 +3,16 @@
  * Add new models here as they become available.
  */
 export const MODEL_RATES: Record<string, { input: number; output: number }> = {
+  // Internal model names (legacy, kept for backward compat)
   'gemini-3.0-flash':          { input: 0.50, output: 3.00 },
   'gemini-3-flash-preview':    { input: 0.50, output: 3.00 },
   'gemini-2.5-flash':          { input: 0.30, output: 2.50 },
   'gemini-2.5-flash-lite':     { input: 0.10, output: 0.40 },
+
+  // OpenRouter model IDs
+  'google/gemini-2.5-flash':      { input: 0.30, output: 2.50 },
+  'google/gemini-2.5-flash-lite': { input: 0.10, output: 0.40 },
+  'perplexity/sonar':             { input: 1.00, output: 1.00 },
 };
 
 /**

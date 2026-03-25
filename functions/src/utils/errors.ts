@@ -21,6 +21,7 @@ const USER_FRIENDLY_MESSAGES: Record<string, string> = {
   RATE_LIMIT_EXCEEDED: 'Zu viele Anfragen. Bitte versuchen Sie es später erneut.',
   BACKEND_ERROR: 'Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.',
   GEMINI_API_ERROR: 'Der Service ist vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut.',
+  OPENROUTER_API_ERROR: 'Der AI-Service ist vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut.',
   VALIDATION_ERROR: 'Ungültige Anfrage. Bitte überprüfen Sie Ihre Eingabe.',
 };
 
@@ -34,6 +35,7 @@ export enum ErrorCode {
   RATE_LIMIT_EXCEEDED = 'RATE_LIMIT_EXCEEDED',
   BACKEND_ERROR = 'BACKEND_ERROR',
   GEMINI_API_ERROR = 'GEMINI_API_ERROR',
+  OPENROUTER_API_ERROR = 'OPENROUTER_API_ERROR',
   VALIDATION_ERROR = 'VALIDATION_ERROR',
 }
 
