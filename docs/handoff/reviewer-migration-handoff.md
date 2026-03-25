@@ -1,118 +1,118 @@
-# ReviewerView Migration — Handoff Prompt
+# ReviewerView Migration — Handoff
 
-## Kontext
+## Context
 
-Wir migrieren den Custom Reviewer (vanilla HTML/JS/CSS in `custom_reviewer/`) zu einer React-Komponente (`ReviewerView.jsx`). Die Stufen 1+2 (QDockWidget → Sidebar, zwei React-Apps zu einer) sind erledigt. Der Custom Reviewer ist deaktiviert, sein Code existiert als Referenz.
+We are migrating the custom reviewer (vanilla HTML/JS/CSS in `custom_reviewer/`) to a React component (`ReviewerView.jsx`). Stages 1+2 (QDockWidget -> sidebar, two React apps merged into one) are complete. The custom reviewer is disabled; its code remains as a reference.
 
-## Aktueller Stand
+## Current State
 
-### Was funktioniert
-- ReviewerView.jsx existiert mit State Machine (QUESTION/EVALUATING/EVALUATED/MC_LOADING/MC_ACTIVE/MC_RESULT/ANSWER)
-- ChatInput (shared) wird als Dock wiederverwendet mit `topSlot` + `hideInput` zum Morphen
-- Python-Handler in widget.py: `card.flip`, `card.rate`, `card.evaluate`, `card.mc.generate`
-- Events von Python: `reviewer.evaluationResult`, `reviewer.mcOptions`, `reviewer.aiStep` → als CustomEvents in App.jsx dispatched
-- Timer mit Auto-Rating (zeitbasiert) im ANSWER-State
-- Stars-System für MC (3 Sterne, degradiert pro Fehlversuch)
+### What Works
+- `ReviewerView.jsx` exists with state machine (QUESTION / EVALUATING / EVALUATED / MC_LOADING / MC_ACTIVE / MC_RESULT / ANSWER)
+- ChatInput (shared) is reused as the dock via `topSlot` + `hideInput` for morphing
+- Python handlers in `widget.py`: `card.flip`, `card.rate`, `card.evaluate`, `card.mc.generate`
+- Events from Python: `reviewer.evaluationResult`, `reviewer.mcOptions`, `reviewer.aiStep` — dispatched as `CustomEvent` in `App.jsx`
+- Timer with auto-rating (time-based) in ANSWER state
+- Stars system for MC (3 stars, degrades per wrong attempt)
 
-### Was KAPUTT ist / NICHT stimmt
+### What Is Broken / Incorrect
 
-1. **Card HTML zeigt Müll-Text**: Anki-Tags (#Ankiphil_Vorklinik...), "Errata"-Label, und teilweise noch JavaScript-Code werden als sichtbarer Text gerendert. Die `_clean_card_html` Funktion in `widget.py` strippt nicht genug. Anki's `card.answer()` enthält alles: Styles, Scripts, Tag-Metadata, Question+Answer. Man muss aggressiver bereinigen oder die Felder direkt aus der Note lesen.
+1. **Card HTML renders garbage text**: Anki tags (`#Ankiphil_Vorklinik...`), "Errata" labels, and sometimes JavaScript code are rendered as visible text. The `_clean_card_html` function in `widget.py` does not strip enough. `card.answer()` returns everything: styles, scripts, tag metadata, question and answer combined. Either strip more aggressively, or read fields directly from the note.
 
-2. **MC-Komponente ist VERALTET**: Sowohl `MultipleChoiceCard.tsx` als auch `QuizCard.tsx` in `shared/components/` sind alte, überladene Komponenten (Framer Motion, emerald-500 Tailwind-Farben, "Karte umdrehen" Button etc.). Sie gehören GELÖSCHT. Das Design System hat einfache `.ds-mc-option` CSS-Klassen (`shared/styles/design-system.css` ab Zeile 388). Die MC-Optionen sollen diese Design-System-Klassen verwenden — schlank, clean, keine Animations-Library.
+2. **MC component is outdated**: Both `MultipleChoiceCard.tsx` and `QuizCard.tsx` in `shared/components/` are old, bloated components (Framer Motion, `emerald-500` Tailwind colors, "flip card" buttons, etc.). They should be deleted. The design system has simple `.ds-mc-option` CSS classes (`shared/styles/design-system.css` from line 388). MC options should use those design system classes — lean, clean, no animation library.
 
-3. **Rating doppelt angezeigt**: Im MC_RESULT-State zeigen die Stars "★★★ → Good" UND der Button "Weiter · Good". Rating soll NUR in den Stars (topSlot) stehen, der Button sagt nur "Weiter".
+3. **Rating shown twice**: In MC_RESULT state, the stars display "3 stars -> Good" AND the button reads "Continue - Good". The rating should appear ONLY in the stars (topSlot); the button should say only "Continue".
 
-4. **Timer stoppt nicht**: Im ANSWER-State läuft der Timer weiter nachdem man flippt. Er soll STOPPEN wenn die Karte umgedreht wird und den Wert einfrieren.
+4. **Timer does not stop**: In ANSWER state the timer keeps running after the card flips. It should STOP when the card is flipped and freeze that value.
 
-5. **"Weiter" soll NICHT "Weiter · Good" heißen**: Der Button heißt nur "Weiter", die Bewertung steht oben im Dock-Content (Timer oder Stars).
+5. **"Continue" button should not say "Continue - Good"**: The button says only "Continue"; the rating is shown above in the dock content (timer or stars).
 
-## Architektur (so soll es sein, 1:1 wie Custom Reviewer)
+## Architecture (Target State, 1:1 Match with Custom Reviewer)
 
-### Zwei Bereiche
+### Two Regions
 ```
-┌──────────────────────────────────┐
-│  KARTEN-BEREICH (scrollbar)      │
-│  - Card HTML (Front ODER Back)   │
-│  - MC-Optionen (wenn MC-State)   │
-│                                  │
-│                                  │
-├──────────────────────────────────┤
-│  DOCK (ChatInput, sticky bottom) │
-│  ┌────────────────────────────┐  │
-│  │ topSlot: morpht per State  │  │
-│  │ (textarea/timer/score/     │  │
-│  │  stars/thoughtstream)      │  │
-│  ├────────────────────────────┤  │
-│  │ Actions: [Primary | Secon] │  │
-│  └────────────────────────────┘  │
-└──────────────────────────────────┘
++----------------------------------+
+|  CARD AREA (scrollable)          |
+|  - Card HTML (Front OR Back)     |
+|  - MC options (when in MC state) |
+|                                  |
+|                                  |
++----------------------------------+
+|  DOCK (ChatInput, sticky bottom) |
+|  +----------------------------+  |
+|  | topSlot: morphs per state  |  |
+|  | (textarea / timer / score /|  |
+|  |  stars / thoughtstream)    |  |
+|  +----------------------------+  |
+|  | Actions: [Primary | Second]|  |
+|  +----------------------------+  |
++----------------------------------+
 ```
 
-### State Machine — Dock-Inhalte
+### State Machine — Dock Contents
 
-| State | topSlot (im Dock) | hideInput | Primary Button | Secondary Button |
+| State | topSlot (in dock) | hideInput | Primary Button | Secondary Button |
 |---|---|---|---|---|
-| QUESTION | — | false (Textarea sichtbar) | Show Answer `SPACE` | Multiple Choice `↵` |
-| EVALUATING | Spinner + AI-Step-Label | true | Abbrechen | — |
-| EVALUATED | Score-Bar (3px) + % + Ease + Feedback | true | Weiter `SPACE` | Nachfragen `↵` |
-| MC_LOADING | Spinner + AI-Step-Label | true | Abbrechen | — |
-| MC_ACTIVE | ★★★ → Gut (Stars) | true | Auflösen `SPACE` | Auflösen & Nachfragen `↵` |
-| MC_RESULT | ★★★ → Rating (Stars + Label) | true | Weiter `SPACE` | Nachfragen `↵` |
-| ANSWER | Timer (12s Good, klick zum Ändern) | true | Weiter `SPACE` | Nachfragen `↵` |
+| QUESTION | — | false (textarea visible) | Show Answer `SPACE` | Multiple Choice `ENTER` |
+| EVALUATING | Spinner + AI step label | true | Cancel | — |
+| EVALUATED | Score bar (3px) + % + ease + feedback | true | Continue `SPACE` | Follow Up `ENTER` |
+| MC_LOADING | Spinner + AI step label | true | Cancel | — |
+| MC_ACTIVE | stars | true | Resolve `SPACE` | Resolve & Follow Up `ENTER` |
+| MC_RESULT | stars + label | true | Continue `SPACE` | Follow Up `ENTER` |
+| ANSWER | Timer (12s Good, click to change) | true | Continue `SPACE` | Follow Up `ENTER` |
 
-### "Nachfragen" Verhalten
-- Klick auf "Nachfragen" ODER Text tippen + Enter im rateable State → öffnet Sidebar-Chat mit Kontext
-- Das Sidebar-Panel (rechts, 450px) zeigt den Chat
-- `onFollowUp(text)` Prop ruft `handleSend(text)` in App.jsx auf
+### Follow-Up Behavior
+- Click "Follow Up" OR type text + Enter in a rateable state -> opens sidebar chat with card context
+- The sidebar panel (right, 450px) shows the chat
+- `onFollowUp(text)` prop calls `handleSend(text)` in `App.jsx`
 
-## Schlüssel-Dateien
+## Key Files
 
 ### React Frontend
-- `frontend/src/components/ReviewerView.jsx` — Hauptkomponente (HIER arbeiten)
-- `frontend/src/components/ChatInput.jsx` → re-exportiert `shared/components/ChatInput.tsx`
-- `frontend/src/App.jsx` — Rendert ReviewerView (ab ~Zeile 2406), forwarded reviewer.* Events
-- `shared/styles/design-system.css` — `.ds-mc-option` Klassen (Zeile 388-419), `.ds-review-result` (Zeile 423-465)
-- `shared/components/ChatInput.tsx` — Dock-Komponente mit `topSlot`, `hideInput`, `placeholder`, `actionPrimary/Secondary`
+- `frontend/src/components/ReviewerView.jsx` — main component (work here)
+- `frontend/src/components/ChatInput.jsx` — re-exports `shared/components/ChatInput.tsx`
+- `frontend/src/App.jsx` — renders ReviewerView (from ~line 2406), forwards `reviewer.*` events
+- `shared/styles/design-system.css` — `.ds-mc-option` classes (lines 388-419), `.ds-review-result` (lines 423-465)
+- `shared/components/ChatInput.tsx` — dock component with `topSlot`, `hideInput`, `placeholder`, `actionPrimary/Secondary`
 
 ### Python Backend
-- `ui/widget.py` — Handler: `card.flip`, `card.rate`, `card.evaluate`, `card.mc.generate`, `_send_card_data`, `_clean_card_html`
-- `custom_reviewer/__init__.py` — Referenz: `_call_ai_evaluation()`, `_call_ai_mc_generation()`, `_get_deck_context_answers_sync()`
-- `custom_reviewer/interactions.js` — **DIE REFERENZ** für das gesamte Dock-Verhalten (1072 Zeilen, komplett lesen!)
-- `custom_reviewer/template.html` — HTML-Struktur des Docks
-- `custom_reviewer/styles.css` — `.mc-option`, `.mc-letter` Klassen
+- `ui/widget.py` — handlers: `card.flip`, `card.rate`, `card.evaluate`, `card.mc.generate`, `_send_card_data`, `_clean_card_html`
+- `custom_reviewer/__init__.py` — reference: `_call_ai_evaluation()`, `_call_ai_mc_generation()`, `_get_deck_context_answers_sync()`
+- `custom_reviewer/interactions.js` — THE reference for all dock behavior (1072 lines, read completely)
+- `custom_reviewer/template.html` — HTML structure of the dock
+- `custom_reviewer/styles.css` — `.mc-option`, `.mc-letter` classes
 
-### Bridge-Kommunikation
-- **JS → Python**: `bridgeAction('card.flip')`, `bridgeAction('card.rate', {ease})`, `bridgeAction('card.evaluate', {question, userAnswer, correctAnswer})`, `bridgeAction('card.mc.generate', {question, correctAnswer, cardId})`
-- **Python → JS**: `_send_to_frontend('reviewer.evaluationResult', {score, feedback})`, `_send_to_frontend('reviewer.mcOptions', [{text, correct, explanation}])`, `_send_to_frontend('reviewer.aiStep', {phase, label})`
-- **Events**: App.jsx forwarded `reviewer.*` Payloads als `window.dispatchEvent(new CustomEvent(...))`
+### Bridge Communication
+- **JS -> Python**: `bridgeAction('card.flip')`, `bridgeAction('card.rate', {ease})`, `bridgeAction('card.evaluate', {question, userAnswer, correctAnswer})`, `bridgeAction('card.mc.generate', {question, correctAnswer, cardId})`
+- **Python -> JS**: `_send_to_frontend('reviewer.evaluationResult', {score, feedback})`, `_send_to_frontend('reviewer.mcOptions', [{text, correct, explanation}])`, `_send_to_frontend('reviewer.aiStep', {phase, label})`
+- **Events**: `App.jsx` forwards `reviewer.*` payloads as `window.dispatchEvent(new CustomEvent(...))`
 
-## Card HTML Problem im Detail
+## Card HTML Problem in Detail
 
-`card.answer()` liefert ALLES:
+`card.answer()` returns EVERYTHING:
 ```html
 <style>.card { ... }</style>
 <div class="tags">#Ankiphil_Vorklinik...</div>
 <div>Errata</div>
 <div>Kleinzehenloge</div>
-<div>Wo liegt der Ursprung des M. abductor digiti minimi pedis ?</div>
+<div>Where does M. abductor digiti minimi pedis originate?</div>
 <script>// BUTTON SHORTCUTS var tags = '84' ...</script>
 <hr id="answer">
 <div>Calcaneus (Proc. lateralis ...)</div>
 ```
 
-Die aktuelle `_clean_card_html` strippt nur `<script>` Tags und `// BUTTON SHORTCUTS`. Sie muss auch strippen:
-- `<style>` Tags
-- Alles vor `<hr id=answer>` (für backHtml — wird schon gemacht aber greift nicht immer)
-- Div-Elemente mit Tag-Metadaten (#-prefixed lines)
-- "Errata" Labels und andere Template-Artefakte
+The current `_clean_card_html` only strips `<script>` tags and `// BUTTON SHORTCUTS`. It must also strip:
+- `<style>` tags
+- Everything before `<hr id=answer>` (for backHtml — partially done but not always effective)
+- Div elements with tag metadata (lines prefixed with `#`)
+- "Errata" labels and other template artifacts
 
-Besser: Die Note-Felder direkt lesen (`card.note().fields[0]` / `fields[1]`) statt `card.question()`/`card.answer()` die das komplette Template rendern.
+Better approach: Read note fields directly (`card.note().fields[0]` / `fields[1]`) instead of using `card.question()` / `card.answer()` which render the full template.
 
-## MC-Optionen — Richtige Implementierung
+## MC Options — Correct Implementation
 
-NICHT MultipleChoiceCard.tsx oder QuizCard.tsx verwenden. Diese sind überladen.
+Do NOT use `MultipleChoiceCard.tsx` or `QuizCard.tsx`. These are bloated.
 
-Die MC-Optionen sollen die `.ds-mc-option` CSS-Klassen aus `design-system.css` nutzen:
+MC options should use the `.ds-mc-option` CSS classes from `design-system.css`:
 ```jsx
 <button className={`ds-mc-option ${isCorrect ? 'correct' : ''} ${isWrong ? 'wrong' : ''}`}>
   <span className="mc-letter">{letter}</span>
@@ -120,45 +120,45 @@ Die MC-Optionen sollen die `.ds-mc-option` CSS-Klassen aus `design-system.css` n
 </button>
 ```
 
-Oder einen neuen, minimalen React-Wrapper bauen der diese Klassen benutzt.
+Alternatively, build a new minimal React wrapper that uses these classes.
 
-## Timer-Logik (aus interactions.js)
+## Timer Logic (from interactions.js)
 
 ```javascript
-// Timer startet wenn ANSWER-State beginnt (Karte umgedreht)
-// Timer STOPPT sofort — er misst nur die Zeit VOM Fragestart BIS zum Umdrehen
-// Der angezeigte Wert ist EINGEFROREN nach dem Flip
+// Timer starts when ANSWER state begins (card flipped)
+// Timer STOPS immediately — it measures only the time FROM question start TO flip
+// The displayed value is FROZEN after the flip
 function getTimeThresholds() {
   const chars = questionCharCount;
   const bonus = Math.floor(chars / 50);
-  const goodThreshold = Math.min(6 + bonus, 20);    // 6-20s
+  const goodThreshold = Math.min(6 + bonus, 20);     // 6-20s
   const hardThreshold = Math.min(15 + bonus * 2, 45); // 15-45s
 }
-// elapsed <= goodThreshold → Good (3)
-// elapsed <= hardThreshold → Hard (2)
-// else → Again (1)
-// Klick auf Timer cycled: 1→2→3→4→1
+// elapsed <= goodThreshold -> Good (3)
+// elapsed <= hardThreshold -> Hard (2)
+// else -> Again (1)
+// Click on timer cycles: 1->2->3->4->1
 ```
 
-WICHTIG: Der Timer misst die Zeit von QUESTION-Start bis FLIP. Im ANSWER-State wird die eingefrorene Zeit + Rating angezeigt. Der Timer läuft NICHT weiter.
+IMPORTANT: The timer measures time from QUESTION start to FLIP. In ANSWER state, the frozen time and rating are displayed. The timer does NOT keep running.
 
 ## Keyboard Shortcuts
 
 ```
-SPACE       → Flip (QUESTION) / Rate+Next (ANSWER/EVALUATED/MC_RESULT)
-ENTER       → MC generieren (QUESTION, leer) / Evaluieren (QUESTION, mit Text) / Nachfragen (rateable, mit Text)
-1-4         → Rating manuell setzen (ANSWER/EVALUATED/MC_RESULT)
-A-D/a-d     → MC-Option wählen (MC_ACTIVE) [TODO]
-ESC         → Chat schließen (wenn offen)
+SPACE       -> Flip (QUESTION) / Rate+Next (ANSWER/EVALUATED/MC_RESULT)
+ENTER       -> Generate MC (QUESTION, empty) / Evaluate (QUESTION, with text) / Follow Up (rateable, with text)
+1-4         -> Set rating manually (ANSWER/EVALUATED/MC_RESULT)
+A-D/a-d     -> Select MC option (MC_ACTIVE) [TODO]
+ESC         -> Close chat (when open)
 ```
 
 ## Safety Tags
-- `pre-reviewer-migration` — vor dem ersten Versuch
-- `pre-unified-app` — vor Stufe 2
+- `pre-reviewer-migration` — before the first attempt
+- `pre-unified-app` — before stage 2
 
-## Regeln
-1. **ChatInput WIEDERVERWENDEN** — nicht nachbauen
-2. **Alle Farben via `var(--ds-*)` Tokens** — NIEMALS hardcoded hex
-3. **Inkrementell** — ein Feature nach dem anderen, jedes testen
-4. **`custom_reviewer/interactions.js` ist DIE REFERENZ** — im Zweifel dort nachlesen
-5. **MC-Optionen: `.ds-mc-option` CSS-Klassen** — nicht die alten React-Komponenten
+## Rules
+1. **Reuse ChatInput** — do not rebuild it
+2. **All colors via `var(--ds-*)` tokens** — NEVER hardcoded hex
+3. **Incremental** — one feature at a time, test each before continuing
+4. **`custom_reviewer/interactions.js` is THE reference** — consult it when in doubt
+5. **MC options: `.ds-mc-option` CSS classes** — not the old React components

@@ -1,124 +1,124 @@
-# ReviewerView — Grundkonzept
+# ReviewerView — Core Concept
 
-## Architektur
+## Architecture
 
-Die React-App (QWebEngineView) liegt über dem GESAMTEN Anki-Fenster via `MainViewWidget`. Es gibt keine native Anki-UI die sichtbar ist. Die React-App IST die gesamte UI — Fullscreen, nicht Sidebar.
+The React app (QWebEngineView) sits over the ENTIRE Anki window via `MainViewWidget`. No native Anki UI is visible. The React app IS the entire UI — fullscreen, not a sidebar.
 
-`MainViewWidget._position_over_main()` setzt `setGeometry(0, 0, mw.width(), mw.height())` im Fullscreen-Mode. Der äußere React-Container hat ein opakes Background (`--ds-bg-canvas`), damit Ankis native UI darunter nicht durchscheint.
+`MainViewWidget._position_over_main()` sets `setGeometry(0, 0, mw.width(), mw.height())` in fullscreen mode. The outer React container has an opaque background (`--ds-bg-canvas`) so that Anki's native UI does not show through underneath.
 
-## Kernprinzip
+## Core Principle
 
-**Ein Screen, ein Inputfeld, kein Seitenfenster standardmäßig.**
+**One screen, one input field, no side panel by default.**
 
-Der Reviewer ist das Haupterlebnis. Der User kreuzt Karten durch — fullscreen, zentriert, ohne dass ein Chat-Seitenfenster offen ist. Das Seitenfenster öffnet sich NUR on-demand als "Nachfragen"-Modus.
+The reviewer is the primary experience. The user works through cards — fullscreen, centered, with no chat sidebar open. The sidebar opens ONLY on demand as a "follow-up" mode.
 
 ## Layout
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                                                          │
-│              KARTEN-BEREICH (zentriert)                   │
-│              Card HTML (Front ODER Back)                  │
-│              + MC-Optionen (wenn MC-State)                │
-│                                                          │
-│                                                          │
-│                                                          │
-│                                                          │
-│          ┌──────────────────────────────┐                │
-│          │  DOCK (zentriert, 520px max)  │                │
-│          │  topSlot: Rating/Stars/Score  │                │
-│          │  [Primary SPACE | Secondary ↵]│                │
-│          └──────────────────────────────┘                │
-│                                                          │
-└──────────────────────────────────────────────────────────┘
++----------------------------------------------------------+
+|                                                          |
+|              CARD AREA (centered)                        |
+|              Card HTML (Front OR Back)                   |
+|              + MC options (when in MC state)             |
+|                                                          |
+|                                                          |
+|                                                          |
+|                                                          |
+|          +------------------------------+                |
+|          |  DOCK (centered, 520px max)  |                |
+|          |  topSlot: Rating/Stars/Score |                |
+|          |  [Primary SPACE | Secondary ENTER]|           |
+|          +------------------------------+                |
+|                                                          |
++----------------------------------------------------------+
 ```
 
-Es gibt immer nur EIN Inputfeld pro Screen. Das Dock ist dieses Inputfeld.
+There is always exactly ONE input field per screen. The dock is that input field.
 
-## Die drei Antworttypen
+## The Three Answer Types
 
 ### 1. Show Answer (SPACE)
 
-Reguläre Anki-Funktion. Karte dreht sich direkt um.
+Standard Anki functionality. The card flips directly.
 
-- **Bewertung**: Automatisch, basierend auf Timer (Zeit von Frage-Anzeige bis Flip) im Verhältnis zur Kartenlänge
-- **Timer-Thresholds**: `goodThreshold = min(6 + charBonus, 20)s`, `hardThreshold = min(15 + charBonus*2, 45)s`
-- **Rating**: elapsed ≤ good → Good (3), elapsed ≤ hard → Hard (2), else → Again (1)
-- **Timer-Wert ist EINGEFROREN** nach dem Flip — läuft nicht weiter
-- **Klick auf Timer cycled**: 1 → 2 → 3 → 4 → 1 (manuelles Override)
+- **Rating**: Automatic, based on the timer (time from question display to flip) relative to card length
+- **Timer thresholds**: `goodThreshold = min(6 + charBonus, 20)s`, `hardThreshold = min(15 + charBonus*2, 45)s`
+- **Rating**: elapsed <= good -> Good (3), elapsed <= hard -> Hard (2), else -> Again (1)
+- **Timer value is FROZEN** after the flip — does not keep running
+- **Click on timer cycles**: 1 -> 2 -> 3 -> 4 -> 1 (manual override)
 
-### 2. Multiple Choice (↵ ohne Text)
+### 2. Multiple Choice (ENTER without text)
 
-KI generiert MC-Optionen. User wählt per Klick oder A-D Tasten.
+AI generates MC options. User selects via click or A-D keys.
 
-- **Stars**: 3 Sterne, -1 pro Fehlversuch
-- **Rating**: 1. Versuch richtig → Good, 2. → Hard, 3+ → Again
-- **Nach korrekter Antwort**: Karte dreht sich automatisch um
-- **Nach 0 Sternen**: Ergebnis = Again, Karte dreht sich um
+- **Stars**: 3 stars, -1 per wrong attempt
+- **Rating**: Correct on 1st attempt -> Good, 2nd -> Hard, 3rd+ -> Again
+- **After correct answer**: Card flips automatically
+- **After 0 stars**: Result = Again, card flips
 
-### 3. Antwort eingeben (Text + ↵)
+### 3. Free-text Answer (text + ENTER)
 
-User tippt Antwort ein, KI bewertet gegen die korrekte Antwort.
+User types an answer; AI evaluates it against the correct answer.
 
-- **Auswertung**: Score (0-100%), Feedback, Ease-Mapping
-- **Score → Rating**: ≥90 → Easy, ≥70 → Good, ≥40 → Hard, <40 → Again
-- **Nach Auswertung**: Karte dreht sich automatisch um
+- **Evaluation**: Score (0-100%), feedback, ease mapping
+- **Score -> Rating**: >=90 -> Easy, >=70 -> Good, >=40 -> Hard, <40 -> Again
+- **After evaluation**: Card flips automatically
 
-## State Machine — Dock-Inhalte
+## State Machine — Dock Contents
 
-| State | topSlot (im Dock) | hideInput | Primary Button | Secondary Button |
+| State | topSlot (in dock) | hideInput | Primary Button | Secondary Button |
 |---|---|---|---|---|
-| QUESTION | — | false (Textarea sichtbar) | Show Answer `SPACE` | Multiple Choice `↵` |
-| EVALUATING | Spinner + AI-Step-Label | true | Abbrechen | — |
-| EVALUATED | Score-Bar + % + Rating + Feedback | true | Weiter `SPACE` | Nachfragen `↵` |
-| MC_LOADING | Spinner + AI-Step-Label | true | Abbrechen | — |
-| MC_ACTIVE | ★★★ (Stars, zentriert) | true | Auflösen `SPACE` | — |
-| MC_RESULT | ★★★ → Rating (Stars + Label, zentriert) | true | Weiter `SPACE` | Nachfragen `↵` |
-| ANSWER | Timer + Rating (zentriert, klickbar) | true | Weiter `SPACE` | Nachfragen `↵` |
+| QUESTION | — | false (textarea visible) | Show Answer `SPACE` | Multiple Choice `ENTER` |
+| EVALUATING | Spinner + AI step label | true | Cancel | — |
+| EVALUATED | Score bar + % + rating + feedback | true | Continue `SPACE` | Follow Up `ENTER` |
+| MC_LOADING | Spinner + AI step label | true | Cancel | — |
+| MC_ACTIVE | stars (centered) | true | Resolve `SPACE` | — |
+| MC_RESULT | stars + label (centered) | true | Continue `SPACE` | Follow Up `ENTER` |
+| ANSWER | Timer + rating (centered, clickable) | true | Continue `SPACE` | Follow Up `ENTER` |
 
-**topSlot-Höhe**: Immer gleiche Höhe wie das Textarea-Feld (~48px min). Alles zentriert. Keine Typ-Labels links oder rechts.
+**topSlot height**: Always the same height as the textarea (~48px min). Everything centered. No type labels left or right.
 
-## "Nachfragen"-Flow (Sidebar-Chat)
+## Follow-Up Flow (Sidebar Chat)
 
-Verfügbar in allen "rateable" States: ANSWER, EVALUATED, MC_RESULT.
+Available in all rateable states: ANSWER, EVALUATED, MC_RESULT.
 
-1. User drückt ↵ (oder klickt "Nachfragen") oder tippt Text + ↵
-2. Das mittlere Dock verschwindet (animiert raus)
-3. Das Seitenfenster gleitet von rechts ein (animiert)
-4. Das Textfeld "wandert" visuell von der Mitte nach rechts — fließender Übergang
-5. Der Chat hat den Karten-Kontext (Frage, Antwort, Auswertung)
-6. ESC schließt das Seitenfenster, Dock erscheint wieder
+1. User presses ENTER (or clicks "Follow Up") or types text + ENTER
+2. The center dock disappears (animated out)
+3. The sidebar slides in from the right (animated)
+4. The text field visually "travels" from the center to the right — smooth transition
+5. The chat has the card context (question, answer, evaluation)
+6. ESC closes the sidebar; the dock reappears
 
-Dieser Übergang muss smooth sein — Animationen für:
-- Sidebar slide-in von rechts
+This transition must be smooth — animations for:
+- Sidebar slide-in from right
 - Dock fade-out
-- Textfeld-Transition (Mitte → Sidebar)
+- Text field transition (center -> sidebar)
 
 ## Keyboard Shortcuts
 
 ```
-SPACE       → Flip (QUESTION) / Rate+Next (rateable states)
-ENTER       → MC generieren (QUESTION, leer) / Evaluieren (QUESTION, mit Text) / Nachfragen (rateable)
-1-4         → Rating manuell setzen (rateable states)
-A-D         → MC-Option wählen (MC_ACTIVE)
-ESC         → Chat schließen (wenn Sidebar offen)
+SPACE       -> Flip (QUESTION) / Rate+Next (rateable states)
+ENTER       -> Generate MC (QUESTION, empty) / Evaluate (QUESTION, with text) / Follow Up (rateable)
+1-4         -> Set rating manually (rateable states)
+A-D         -> Select MC option (MC_ACTIVE)
+ESC         -> Close chat (when sidebar is open)
 ```
 
-## Schlüssel-Dateien
+## Key Files
 
-- `frontend/src/components/ReviewerView.jsx` — Hauptkomponente
-- `frontend/src/App.jsx` — Rendert ReviewerView, forwarded Events, managed Sidebar-State
-- `shared/components/ChatInput.tsx` — Dock-Komponente (topSlot + hideInput + actions)
-- `shared/styles/design-system.css` — .ds-mc-option, .ds-review-result Klassen
-- `ui/widget.py` — Python-Handler: card.flip, card.rate, card.evaluate, card.mc.generate
-- `custom_reviewer/interactions.js` — Alte Vanilla-JS Referenz (1072 Zeilen)
+- `frontend/src/components/ReviewerView.jsx` — main component
+- `frontend/src/App.jsx` — renders ReviewerView, forwards events, manages sidebar state
+- `shared/components/ChatInput.tsx` — dock component (topSlot + hideInput + actions)
+- `shared/styles/design-system.css` — `.ds-mc-option`, `.ds-review-result` classes
+- `ui/widget.py` — Python handlers: `card.flip`, `card.rate`, `card.evaluate`, `card.mc.generate`
+- `custom_reviewer/interactions.js` — legacy vanilla JS reference (1072 lines)
 
-## Regeln
+## Rules
 
-1. **Ein Inputfeld pro Screen** — nie zwei gleichzeitig sichtbar
-2. **Kein Seitenfenster standardmäßig** — nur via "Nachfragen"
-3. **Alles zentriert** — keine Typ-Labels, keine Info links/rechts im Dock
-4. **ChatInput WIEDERVERWENDEN** — nicht nachbauen
-5. **Alle Farben via `var(--ds-*)` Tokens** — niemals hardcoded hex
-6. **MC-Optionen: `.ds-mc-option` CSS-Klassen** — nicht die alten React-Komponenten
-7. **Note-Felder für Display** — `frontField`/`backField` statt template-gerenderte HTML
+1. **One input field per screen** — never two visible at the same time
+2. **No sidebar by default** — only via Follow Up
+3. **Everything centered** — no type labels, no info left/right in the dock
+4. **Reuse ChatInput** — do not rebuild it
+5. **All colors via `var(--ds-*)` tokens** — never hardcoded hex
+6. **MC options: `.ds-mc-option` CSS classes** — not the old React components
+7. **Note fields for display** — use `frontField`/`backField` instead of template-rendered HTML
