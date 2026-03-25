@@ -77,76 +77,50 @@ class EmbeddingManager:
     # OpenRouter embedding model
     OPENROUTER_EMBED_MODEL = "google/gemini-embedding-001"
 
-    def embed_texts(self, texts):
-        if not texts:
-            return []
-
-        import requests as http_requests
+    def _get_openrouter_key(self):
+        """Get OpenRouter API key from config."""
         try:
             from ..config import get_config
         except ImportError:
             from config import get_config
-        config = get_config()
+        return get_config().get("dev_openrouter_key", "")
 
-        # Try 1: Dev mode — direct OpenRouter with dev_openrouter_key
-        or_key = config.get("dev_openrouter_key", "")
-        if or_key and not getattr(self, '_skip_openrouter', False):
-            try:
-                response = http_requests.post(
-                    "https://openrouter.ai/api/v1/embeddings",
-                    headers={
-                        "Authorization": f"Bearer {or_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "input": [t[:2000] for t in texts],
-                        "model": self.OPENROUTER_EMBED_MODEL,
-                    },
-                    timeout=30,
-                )
-                response.raise_for_status()
-                data = response.json()
-                embeddings = [item["embedding"] for item in data.get("data", [])]
-                if embeddings:
-                    return embeddings
-            except Exception as e:
-                logger.warning("EmbeddingManager: OpenRouter error: %s", e)
-                self._skip_openrouter = True
+    def embed_texts(self, texts):
+        """Embed texts via OpenRouter (google/gemini-embedding-001)."""
+        if not texts:
+            return []
 
-        # Try 2: Production — Backend with auth_token
+        import requests as http_requests
+        or_key = self._get_openrouter_key()
+
+        if not or_key:
+            logger.warning("EmbeddingManager: No OpenRouter key (dev_openrouter_key) configured")
+            return []
+
         try:
-            from ..config import get_backend_url, get_auth_token
-        except ImportError:
-            try:
-                from config import get_backend_url, get_auth_token
-            except ImportError:
-                get_backend_url = lambda: config.get("backend_url", "")
-                get_auth_token = lambda: config.get("auth_token", "")
-
-        backend_url = get_backend_url()
-        auth_token = get_auth_token()
-        if backend_url and auth_token and not getattr(self, '_skip_backend', False):
-            try:
-                response = http_requests.post(
-                    f"{backend_url}/embed",
-                    headers={
-                        "Authorization": f"Bearer {auth_token}",
-                        "Content-Type": "application/json",
-                    },
-                    json={"texts": [t[:2000] for t in texts]},
-                    timeout=10,
-                )
-                response.raise_for_status()
-                data = response.json()
-                result = data.get("embeddings", [])
-                if result:
-                    return result
-            except Exception as e:
-                logger.warning("EmbeddingManager: Backend embed error: %s", e)
-                self._skip_backend = True
-
-        logger.warning("EmbeddingManager: All embedding providers failed")
-        return []
+            response = http_requests.post(
+                "https://openrouter.ai/api/v1/embeddings",
+                headers={
+                    "Authorization": f"Bearer {or_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "input": [t[:2000] for t in texts],
+                    "model": self.OPENROUTER_EMBED_MODEL,
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+            embeddings = [item["embedding"] for item in data.get("data", [])]
+            if embeddings:
+                logger.debug("EmbeddingManager: %d texts embedded via OpenRouter", len(embeddings))
+                return embeddings
+            logger.warning("EmbeddingManager: OpenRouter returned empty embeddings")
+            return []
+        except Exception as e:
+            logger.error("EmbeddingManager: OpenRouter embed failed: %s", e)
+            return []
 
     def _card_to_text(self, card_data):
         parts = []
