@@ -1,61 +1,42 @@
 
-# Frontend Build-Anleitung
+# Frontend Build Instructions
 
-## Problem: Markdown wird nicht angezeigt
+## Building the Frontend
 
-Wenn Markdown nicht formatiert wird, muss das Frontend neu gebaut werden.
+Before testing changes in Anki, always build the React frontend.
 
-## Lösung: Frontend neu bauen
+### Prerequisites
 
-### Schritt 1: Anki schließen
-⚠️ **WICHTIG**: Schließe Anki komplett, bevor du das Frontend baust!
+⚠️ **Close Anki completely** before building. The addon loads files from the `web/` directory, and file locks can cause build failures.
 
-### Schritt 2: Terminal öffnen
-Öffne ein Terminal und navigiere zum Frontend-Ordner:
+### Steps
 
-```bash
-cd "/Users/johanneshinkel/Library/Application Support/Anki2/addons21/anki-chatbot-addon/frontend"
-```
+1. Navigate to the frontend directory:
+   ```bash
+   cd "/Users/johanneshinkel/Library/Application Support/Anki2/addons21/AnkiPlus_main/frontend"
+   ```
 
-### Schritt 3: Frontend bauen
-Führe den Build-Befehl aus:
-
-```bash
-npm run build
-```
-
-Dies erstellt die optimierten Dateien im `web/` Ordner.
-
-### Schritt 4: Anki neu starten
-Starte Anki neu und teste den Chatbot.
-
-## Wenn der Build fehlschlägt
-
-Falls du einen Fehler wie "EPERM: operation not permitted" siehst:
-
-1. **Stelle sicher, dass Anki komplett geschlossen ist**
-   - Prüfe im Activity Monitor, ob noch ein Anki-Prozess läuft
-   - Beende alle Anki-Prozesse
-
-2. **Versuche es erneut:**
+2. Build the frontend:
    ```bash
    npm run build
    ```
 
-3. **Falls es immer noch nicht funktioniert:**
-   ```bash
-   # Lösche den web-Ordner manuell
-   rm -rf "../web/assets"
-   # Dann baue neu
-   npm run build
-   ```
+   This creates optimized files in the `web/` directory.
 
-## Verifizierung
+3. Restart Anki and verify the changes load.
 
-Nach dem Build sollten folgende Dateien im `web/assets/` Ordner existieren:
-- `main.js` (enthält ReactMarkdown)
-- `main.css`
+## Build Troubleshooting
 
-Öffne `web/assets/main.js` und suche nach "react-markdown" - es sollte dort vorkommen.
+**Build fails or file locks occur:**
+- Ensure Anki is completely closed (check Activity Monitor for stray processes)
+- Clear the build cache and try again:
+  ```bash
+  rm -rf web/
+  npm run build
+  ```
+
+**Changes don't appear after restart:**
+- Hard refresh: Quit Anki, delete `web/` directory, rebuild, restart Anki
+- Check browser console (F12) for JavaScript errors
 
 
