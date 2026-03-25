@@ -233,7 +233,7 @@ export default function GraphView({ onToggleView, isPremium }) {
       </div>
 
       {/* Empty state — before any search */}
-      {!hasResults && !isSearching && (
+      {!hasResults && !isSearching && !searchResult?.error && (
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -242,6 +242,19 @@ export default function GraphView({ onToggleView, isPremium }) {
         }}>
           <span style={{ fontSize: 40, opacity: 0.15 }}>&#8984;</span>
           <span>Gib ein Thema ein, um einen Stapel zu erstellen</span>
+        </div>
+      )}
+
+      {/* Error state */}
+      {searchResult?.error && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: 8, color: 'var(--ds-text-tertiary)', fontSize: 14, pointerEvents: 'none',
+          zIndex: 5,
+        }}>
+          <span style={{ fontSize: 14, color: 'var(--ds-red)', opacity: 0.7 }}>{searchResult.error}</span>
+          <span style={{ fontSize: 12 }}>Versuche es erneut</span>
         </div>
       )}
 

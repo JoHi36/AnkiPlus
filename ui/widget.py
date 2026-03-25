@@ -286,6 +286,115 @@ class InsightExtractionThread(QThread):
                 self.error_signal.emit(self.card_id, str(e))
 
 
+class SearchCardsThread(QThread):
+    """Background thread for embedding-based card search."""
+    result_signal = pyqtSignal(str)  # JSON result string
+
+    def __init__(self, query, top_k, emb_mgr, widget_ref):
+        super().__init__()
+        self.query = query
+        self.top_k = top_k
+        self.emb_mgr = emb_mgr
+        self._widget_ref = weakref.ref(widget_ref) if widget_ref is not None else None
+
+    def run(self):
+        try:
+            import re as _re
+
+            # Embed the query
+            query_embs = self.emb_mgr.embed_texts([self.query])
+            if not query_embs or not query_embs[0]:
+                self.result_signal.emit(json.dumps({"type": "graph.searchCards", "data": {
+                    "cards": [], "edges": [], "error": "Embedding fehlgeschlagen — API nicht erreichbar"}}))
+                return
+
+            # Search top-K cards by cosine similarity
+            results = self.emb_mgr.search(query_embs[0], top_k=self.top_k)
+            if not results:
+                self.result_signal.emit(json.dumps({"type": "graph.searchCards", "data": {
+                    "cards": [], "edges": [], "query": self.query}}))
+                return
+
+            card_ids = [cid for cid, score in results]
+            scores = {cid: score for cid, score in results}
+
+            # Get card details from Anki (must run on main thread)
+            import threading
+            try:
+                from ..utils.anki import run_on_main_thread
+            except ImportError:
+                from utils.anki import run_on_main_thread
+
+            cards_data = []
+            event = threading.Event()
+
+            def _fetch():
+                try:
+                    from aqt import mw
+                    for cid in card_ids:
+                        try:
+                            card = mw.col.get_card(cid)
+                            note = card.note()
+                            fields = note.fields
+                            deck = mw.col.decks.get(card.did)
+                            deck_name = deck["name"] if deck else "Unknown"
+                            question = fields[0] if fields else ""
+                            question_clean = _re.sub(r'<[^>]+>', '', question)[:80]
+                            cards_data.append({
+                                "id": str(cid),
+                                "question": question_clean,
+                                "deck": deck_name.split("::")[-1],
+                                "deckFull": deck_name,
+                                "score": round(scores.get(cid, 0), 3),
+                            })
+                        except Exception:
+                            pass
+                finally:
+                    event.set()
+
+            run_on_main_thread(_fetch)
+            event.wait(timeout=10)
+
+            # Compute pairwise similarity edges
+            edges = []
+            card_embs = {}
+            with self.emb_mgr._lock:
+                for cid in card_ids:
+                    if cid in self.emb_mgr._card_ids:
+                        idx = self.emb_mgr._card_ids.index(cid)
+                        card_embs[cid] = self.emb_mgr._index[idx]
+
+            cids_list = list(card_embs.keys())
+            for i in range(len(cids_list)):
+                for j in range(i + 1, len(cids_list)):
+                    a = card_embs[cids_list[i]]
+                    b = card_embs[cids_list[j]]
+                    dot = sum(x * y for x, y in zip(a, b))
+                    na = sum(x * x for x in a) ** 0.5
+                    nb = sum(x * x for x in b) ** 0.5
+                    if na > 0 and nb > 0:
+                        sim = dot / (na * nb)
+                        if sim > 0.5:
+                            edges.append({"source": str(cids_list[i]), "target": str(cids_list[j]), "similarity": round(sim, 3)})
+
+            edges.sort(key=lambda e: e["similarity"], reverse=True)
+            edges = edges[:50]
+
+            self.result_signal.emit(json.dumps({
+                "type": "graph.searchCards",
+                "data": {
+                    "cards": cards_data,
+                    "edges": edges,
+                    "query": self.query,
+                    "totalFound": len(cards_data),
+                }
+            }))
+        except Exception as e:
+            logger.exception("SearchCardsThread failed for query: %s", self.query)
+            self.result_signal.emit(json.dumps({"type": "graph.searchCards", "data": {
+                "cards": [], "edges": [], "error": str(e)}}))
+
+
 class KGDefinitionThread(QThread):
     """Background thread for generating Knowledge Graph term definitions via LLM."""
     result_signal = pyqtSignal(str)  # JSON result string
@@ -2441,123 +2550,39 @@ class ChatbotWidget(QWidget):
             self._send_to_js({"type": "graph.crossLinks", "data": []})
 
     def _msg_search_cards(self, data):
-        """Find top-N cards by embedding similarity to a query."""
+        """Find top-N cards by embedding similarity. Runs in QThread to avoid blocking."""
+        query = data.get("query", "") if isinstance(data, dict) else str(data)
+        top_k = data.get("topK", 25) if isinstance(data, dict) else 25
+
         try:
-            query = data.get("query", "") if isinstance(data, dict) else str(data)
-            top_k = data.get("topK", 25) if isinstance(data, dict) else 25
-
+            from .. import get_embedding_manager
+        except ImportError:
             try:
-                from .. import get_embedding_manager
-            except ImportError:
                 from __init__ import get_embedding_manager
-
-            emb_mgr = get_embedding_manager()
-            if not emb_mgr:
-                self._send_to_js({"type": "graph.searchCards", "data": {
-                    "cards": [], "edges": [], "error": "Embedding nicht verfügbar"}})
-                return
-
-            # Embed the query
-            query_embs = emb_mgr.embed_texts([query])
-            if not query_embs or not query_embs[0]:
-                self._send_to_js({"type": "graph.searchCards", "data": {
-                    "cards": [], "edges": [], "error": "Embedding fehlgeschlagen"}})
-                return
-
-            # Search top-K cards
-            results = emb_mgr.search(query_embs[0], top_k=top_k)
-            if not results:
-                self._send_to_js({"type": "graph.searchCards", "data": {
-                    "cards": [], "edges": [], "query": query}})
-                return
-
-            card_ids = [cid for cid, score in results]
-            scores = {cid: score for cid, score in results}
-
-            # Get card details from Anki (must run on main thread)
-            import threading
-            try:
-                from ..utils.anki import run_on_main_thread
             except ImportError:
-                from utils.anki import run_on_main_thread
-            cards_data = []
-            event = threading.Event()
+                self._send_to_js({"type": "graph.searchCards", "data": {
+                    "cards": [], "edges": [], "error": "Import fehler"}})
+                return
 
-            def _fetch():
-                try:
-                    from aqt import mw
-                    for cid in card_ids:
-                        try:
-                            card = mw.col.get_card(cid)
-                            note = card.note()
-                            fields = note.fields
-                            deck = mw.col.decks.get(card.did)
-                            deck_name = deck["name"] if deck else "Unknown"
-                            question = fields[0] if fields else ""
-                            import re
-                            question_clean = re.sub(r'<[^>]+>', '', question)[:80]
-
-                            cards_data.append({
-                                "id": str(cid),
-                                "question": question_clean,
-                                "deck": deck_name.split("::")[-1],
-                                "deckFull": deck_name,
-                                "score": round(scores.get(cid, 0), 3),
-                            })
-                        except Exception:
-                            pass
-                finally:
-                    event.set()
-
-            run_on_main_thread(_fetch)
-            event.wait(timeout=10)
-
-            # Compute pairwise similarity edges between found cards
-            edges = []
-            card_embs = {}
-            with emb_mgr._lock:
-                for cid in card_ids:
-                    if cid in emb_mgr._card_ids:
-                        idx = emb_mgr._card_ids.index(cid)
-                        card_embs[cid] = emb_mgr._index[idx]
-
-            # Only compute edges for cards where we have embeddings
-            cids_with_embs = list(card_embs.keys())
-            for i in range(len(cids_with_embs)):
-                for j in range(i + 1, len(cids_with_embs)):
-                    cid_a = cids_with_embs[i]
-                    cid_b = cids_with_embs[j]
-                    a = card_embs[cid_a]
-                    b = card_embs[cid_b]
-                    dot = sum(x * y for x, y in zip(a, b))
-                    norm_a = sum(x * x for x in a) ** 0.5
-                    norm_b = sum(x * x for x in b) ** 0.5
-                    if norm_a > 0 and norm_b > 0:
-                        sim = dot / (norm_a * norm_b)
-                        if sim > 0.5:
-                            edges.append({
-                                "source": str(cid_a),
-                                "target": str(cid_b),
-                                "similarity": round(sim, 3),
-                            })
-
-            # Sort edges by similarity, keep top 50 to avoid clutter
-            edges.sort(key=lambda e: e["similarity"], reverse=True)
-            edges = edges[:50]
-
-            self._send_to_js({
-                "type": "graph.searchCards",
-                "data": {
-                    "cards": cards_data,
-                    "edges": edges,
-                    "query": query,
-                    "totalFound": len(cards_data),
-                }
-            })
-        except Exception:
-            logger.exception("searchCards failed")
+        emb_mgr = get_embedding_manager()
+        if not emb_mgr:
             self._send_to_js({"type": "graph.searchCards", "data": {
-                "cards": [], "edges": [], "error": "searchCards failed"}})
+                "cards": [], "edges": [], "error": "Embedding nicht verfügbar"}})
+            return
+
+        # Launch in background thread so embed_texts() doesn't block the UI
+        thread = SearchCardsThread(query, top_k, emb_mgr, self)
+        thread.result_signal.connect(self._on_search_cards_result)
+        self._search_cards_thread = thread  # prevent GC
+        thread.start()
+
+    def _on_search_cards_result(self, result_json):
+        """Handle SearchCardsThread result."""
+        try:
+            payload = json.loads(result_json)
+            self._send_to_js(payload)
+        except Exception:
+            logger.exception("Failed to send search cards result")
 
     def _msg_start_term_stack(self, data):
         """Create filtered deck from card IDs and enter reviewer."""
