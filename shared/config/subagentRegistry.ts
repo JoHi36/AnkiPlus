@@ -21,6 +21,7 @@ export interface SubagentConfig {
   submenuLabel?: string;
   submenuComponent?: string;
   toolsConfigurable?: boolean;
+  reasoningSteps?: Array<{ id: string; label: string; activeTitle?: string }>;
 }
 
 export interface ToolConfig {

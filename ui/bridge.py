@@ -642,59 +642,52 @@ class WebBridge(QObject):
     @pyqtSlot(str, str, result=str)
     def generateSectionTitle(self, question, answer):
         """
-        Generiert einen kurzen Titel für einen Chat-Abschnitt basierend auf der Lernkarte
-        
-        Args:
-            question: Die Frage der Lernkarte
-            answer: Die Antwort der Lernkarte (kann leer sein)
-        
-        Returns:
-            JSON mit dem generierten Titel
+        Generiert einen kurzen Titel für einen Chat-Abschnitt basierend auf der Lernkarte.
+        Runs the API call in a background thread to avoid blocking the UI.
+        Returns immediately with a pending status; the result is sent via ankiReceive.
         """
-        logger.debug("bridge.generateSectionTitle: START")
-        logger.debug("  Frage Länge: %s", len(question) if question else 0)
-        logger.debug("  Antwort Länge: %s", len(answer) if answer else 0)
-        logger.debug("  Frage (erste 100 Zeichen): %s...", question[:100] if question else 'None')
-        
-        try:
-            from ..ai.handler import get_ai_handler
-        except ImportError:
-            from ai.handler import get_ai_handler
-        
-        try:
-            logger.debug("bridge.generateSectionTitle: Rufe get_ai_handler() auf...")
-            ai = get_ai_handler()
-            logger.debug("bridge.generateSectionTitle: AI Handler erhalten, rufe get_section_title() auf...")
-            title = ai.get_section_title(question, answer)
-            logger.debug("bridge.generateSectionTitle: get_section_title() zurückgegeben: '%s'", title)
-            
-            # Prüfe ob "Lernkarte" ein Fallback ist (dann war etwas falsch)
-            if title == "Lernkarte":
-                logger.error("⚠️ bridge.generateSectionTitle: Titel ist Fallback 'Lernkarte' - möglicherweise Fehler")
-                return json.dumps({
-                    "success": False,
-                    "title": "Lernkarte",
-                    "error": "Titel-Generierung fehlgeschlagen - siehe Debug-Logs für Details"
+        import threading
+        logger.debug("bridge.generateSectionTitle: START (async)")
+
+        widget_ref = self._widget_ref() if hasattr(self, '_widget_ref') and self._widget_ref else None
+
+        def _generate_in_thread():
+            try:
+                try:
+                    from ..ai.handler import get_ai_handler
+                except ImportError:
+                    from ai.handler import get_ai_handler
+                ai = get_ai_handler()
+                title = ai.get_section_title(question, answer)
+                if title == "Lernkarte":
+                    logger.error("⚠️ bridge.generateSectionTitle: Titel ist Fallback 'Lernkarte'")
+                else:
+                    logger.info("✅ bridge.generateSectionTitle: Erfolgreich, Titel: '%s'", title)
+                # Send result back to frontend via ankiReceive
+                result_payload = json.dumps({
+                    "type": "sectionTitleGenerated",
+                    "data": {"title": title, "success": title != "Lernkarte"}
                 })
-            
-            logger.info("✅ bridge.generateSectionTitle: Erfolgreich, Titel: '%s'", title)
-            return json.dumps({
-                "success": True,
-                "title": title,
-                "error": None
-            })
-        except Exception as e:
-            error_msg = str(e)
-            error_type = type(e).__name__
-            logger.error("❌ bridge.generateSectionTitle: Exception aufgetreten")
-            logger.error("  Exception Type: %s", error_type)
-            logger.error("  Error Message: %s", error_msg)
-            logger.exception("  Full Traceback:")
-            return json.dumps({
-                "success": False,
-                "title": "Lernkarte",
-                "error": f"{error_type}: {error_msg}"
-            })
+                try:
+                    from aqt import mw as _mw
+                except ImportError:
+                    _mw = None
+                if _mw and _mw.taskman:
+                    def _send():
+                        try:
+                            if widget_ref and widget_ref.web_view:
+                                widget_ref.web_view.page().runJavaScript(
+                                    "window.ankiReceive(%s);" % result_payload
+                                )
+                        except Exception as e:
+                            logger.warning("generateSectionTitle: send result failed: %s", e)
+                    _mw.taskman.run_on_main(_send)
+            except Exception as e:
+                logger.error("❌ bridge.generateSectionTitle: Exception: %s", e)
+
+        threading.Thread(target=_generate_in_thread, daemon=True).start()
+        # Return immediately — result will come via ankiReceive event
+        return json.dumps({"success": True, "title": "", "pending": True})
     
     # ──────────────────────────────────────────────
     #  Per-Card Session Methods (SQLite)

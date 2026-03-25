@@ -2821,66 +2821,31 @@ function AppInner() {
                                                           </div>
                                                         )}
                                                         
-                                                        {/* AI Response (v1 only — v2 messages with orchestration are rendered below) */}
-                                                        {nextMsg && nextMsg.from === 'bot' && typeof nextMsg.text === 'string' && nextMsg.text && !nextMsg.orchestration && (
-                                                          <div className="w-full flex-none">
-                                                            <ErrorBoundary>
-                                                              <ChatMessage
-                                                                message={nextMsg.text}
-                                                                from="bot"
-                                                                cardContext={cardContextHook.cardContext}
-                                                                steps={nextMsg.steps || []}
-                                                                citations={nextMsg.citations || {}}
-                                                                pipelineSteps={nextMsg.pipeline_data || []}
-                                                                webSources={nextMsg.webSources || null}
-                                                                bridge={bridge}
-                                                                isLastMessage={!chatHook.isLoading && !chatHook.streamingMessage}
-                                                                onAnswerSelect={(letter, isCorrect) => {
-                                                                  console.log(`User selected ${letter}, correct: ${isCorrect}`);
-                                                                }}
-                                                                onAutoFlip={() => {
-                                                                  if (bridge && bridge.showAnswer) {
-                                                                    bridge.showAnswer();
-                                                                  } else {
-                                                                    console.warn('Bridge showAnswer not available');
-                                                                  }
-                                                                }}
-                                                                onPreviewCard={handlePreviewCard}
-                                                                onPerformanceCapture={(perfData) => {
-                                                                  handlePerformanceCapture(nextMsg.sectionId || lastUserMessage.sectionId, perfData);
-                                                                }}
-                                                                agentCells={nextMsg.agentCells}
-                                                                orchestration={nextMsg.orchestration}
-                                                                status="done"
-                                                              />
-                                                            </ErrorBoundary>
-                                                          </div>
-                                                        )}
-                        {/* ── v2: Unified message renderer (live OR saved) ── */}
-                        {/* Renders at a SINGLE DOM position to prevent flicker during
-                            currentMessage → savedMessage transition. Uses live data when
-                            streaming, seamlessly switches to saved data when finalized. */}
+                        {/* ── ALL bot responses render here — single DOM position ── */}
+                        {/* No v1/v2 split. Live and saved messages always at the same place.
+                            React sees the same <ChatMessage> component updating, not unmounting. */}
                         {(() => {
-                          // Priority: live > buffered > saved v2 message
+                          // Priority: live > buffered > saved (any bot message after last user message)
                           const liveMsg = chatHook.currentMessage || lastLiveMsgRef.current;
-                          const savedV2 = nextMsg && nextMsg.from === 'bot' && nextMsg.orchestration ? nextMsg : null;
-                          const v2Msg = liveMsg || savedV2;
-                          if (!v2Msg) return null;
-                          // Clear buffer once we're rendering the saved version
-                          if (savedV2 && !liveMsg) lastLiveMsgRef.current = null;
+                          const savedBot = nextMsg && nextMsg.from === 'bot' ? nextMsg : null;
+                          const msg = liveMsg || savedBot;
+                          if (!msg) return null;
+                          // Clear buffer once saved message is rendering
+                          if (savedBot && !liveMsg) lastLiveMsgRef.current = null;
                           const isLive = !!chatHook.currentMessage;
                           return (
                             <div className="w-full flex-none">
                               <ChatMessage
-                                message={v2Msg.agentCells?.[0]?.text || (isLive ? chatHook.streamingMessage : '') || v2Msg.text || ''}
+                                message={msg.agentCells?.[0]?.text || (isLive ? chatHook.streamingMessage : '') || msg.text || ''}
                                 from="bot"
                                 cardContext={cardContextHook.cardContext}
-                                agentCells={v2Msg.agentCells}
-                                orchestration={v2Msg.orchestration}
-                                status={isLive ? v2Msg.status : 'done'}
+                                agentCells={msg.agentCells}
+                                orchestration={msg.orchestration}
+                                status={isLive ? msg.status : 'done'}
                                 pipelineGeneration={chatHook.pipelineGenerationV2}
-                                citations={v2Msg.agentCells?.[0]?.citations || v2Msg.citations || {}}
-                                pipelineSteps={v2Msg.agentCells?.[0]?.pipelineSteps || v2Msg.pipeline_data || []}
+                                citations={msg.agentCells?.[0]?.citations || msg.citations || {}}
+                                pipelineSteps={msg.agentCells?.[0]?.pipelineSteps || msg.pipeline_data || []}
+                                webSources={msg.webSources || null}
                                 bridge={bridge}
                                 isStreaming={isLive}
                                 isLastMessage={true}

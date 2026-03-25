@@ -393,6 +393,8 @@ class AIHandler:
             method = getattr(routing_result, 'method', 'default')
             response_length = getattr(routing_result, 'response_length', 'medium')
 
+        context = extra_kwargs.get('context')
+        has_card = bool(context and context.get('cardId'))
         orch_data = {
             'search_needed': False,
             'retrieval_mode': 'agent:%s' % agent_name,
@@ -400,6 +402,7 @@ class AIHandler:
             'scope': 'none',
             'scope_label': agent_name,
             'response_length': response_length,
+            'has_card': has_card,
         }
         self._emit_pipeline_step("orchestrating", "done", orch_data)
 

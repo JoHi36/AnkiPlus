@@ -13,6 +13,7 @@ import MultipleChoiceCard from './MultipleChoiceCard';
 import CitationBadge from './CitationBadge';
 import WebCitationBadge from './WebCitationBadge';
 import ThoughtStream from './ThoughtStream';
+import ReasoningStream from '../reasoning/ReasoningStream';
 import ToolWidgetRenderer from './ToolWidgetRenderer';
 import AgenticCell from './AgenticCell';
 import ResearchContent from './ResearchContent';
@@ -1255,6 +1256,9 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
   };
   const hasV2Data = (message_prop.agentCells && message_prop.agentCells.length > 0) || message_prop.orchestration;
 
+  // Stable orchestration steps — always use latest data but keep reference stable
+  const orchestrationSteps = message_prop.orchestration?.steps || [];
+
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [answerFeedback, setAnswerFeedback] = useState(null);
   const [score, setScore] = useState(null);
@@ -1860,16 +1864,15 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
             {/* ── v2: Structured Agent Cells ── */}
             {hasV2Data && !isUser && (
               <>
-                {/* Router ThoughtStream */}
-                {message_prop.orchestration && (
-                  <ThoughtStream
+                {/* Router Orchestration */}
+                {orchestrationSteps.length > 0 && (
+                  <ReasoningStream
                     variant="router"
-                    pipelineSteps={message_prop.orchestration.steps}
+                    steps={orchestrationSteps}
                     isStreaming={message_prop.status !== 'done'}
                     agentColor={'var(--ds-text-muted)'}
                     citations={{}}
                     message=""
-                    steps={[]}
                   />
                 )}
                 {/* Agent Cells — ordered blocks */}
@@ -1882,15 +1885,14 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                   >
                     {/* Tutor-style ThoughtStream */}
                     {cell.pipelineSteps && cell.pipelineSteps.length > 0 && (
-                      <ThoughtStream
-                        pipelineSteps={cell.pipelineSteps}
+                      <ReasoningStream
+                        steps={cell.pipelineSteps}
                         pipelineGeneration={message_prop.pipelineGeneration}
                         citations={cell.citations || {}}
                         isStreaming={cell.status === 'streaming' || cell.status === 'thinking'}
+                        message={cell.text || ''}
                         bridge={bridge}
                         onPreviewCard={onPreviewCard}
-                        message={cell.text || ''}
-                        steps={[]}
                       />
                     )}
                     {/* Text content */}
@@ -1926,14 +1928,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                         isLastMessage={isLastMessage}
                       />
                     )}
-                    {/* Generating skeleton — inside cell, after steps all done */}
-                    {cell.status === 'thinking' && cell.pipelineSteps?.length > 0 && cell.pipelineSteps.every(s => s.status === 'done') && (
-                      <div style={{ padding: '8px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {[0.92, 0.76, 0.58].map((w, idx) => (
-                          <div key={idx} style={{ height: 12, borderRadius: 6, width: `${w * 100}%`, background: 'linear-gradient(90deg, var(--ds-hover-tint), var(--ds-active-tint), var(--ds-hover-tint))', backgroundSize: '200% 100%', animation: `ts-shimmerWave 2s ease-in-out infinite ${idx * 0.15}s` }} />
-                        ))}
-                      </div>
-                    )}
+                    {/* Text skeleton — managed by ThoughtStream's onAllDone callback */}
                   </AgenticCell>
                 ))}
               </>

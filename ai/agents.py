@@ -65,6 +65,7 @@ class AgentDefinition:
 
     # Backward compat (from SubagentDefinition)
     pipeline_label: str = ''           # Shown in ThoughtStream done-step
+    reasoning_steps: list = field(default_factory=list)  # Steps shown in ThoughtStream
     main_model_hint: str = ''          # Instruction for tutor (legacy, will be removed later)
     extra_kwargs: dict = field(default_factory=dict)
 
@@ -129,6 +130,7 @@ def get_registry_for_frontend(config: dict) -> List[dict]:
             'enabled': is_enabled,
             'isDefault': a.is_default,
             'pipelineLabel': a.pipeline_label,
+            'reasoningSteps': a.reasoning_steps,
             'iconType': a.icon_type,
             'iconSvg': a.icon_svg,
             'badgeLogo': a.badge_logo,
@@ -338,6 +340,11 @@ register_agent(AgentDefinition(
     can_handoff_to=['research'],
     # Labels
     pipeline_label='Tutor',
+    reasoning_steps=[
+        {'id': 'sql_search', 'label': 'Keyword-Suche'},
+        {'id': 'semantic_search', 'label': 'Semantische Suche'},
+        {'id': 'merge', 'label': 'Zusammenführung'},
+    ],
     loading_hint_template='Suche in deinen Karten...',
     # Agent Studio UI
     widget_type='embeddings',
@@ -390,6 +397,10 @@ register_agent(AgentDefinition(
     can_handoff_to=['tutor'],
     # Labels
     pipeline_label='Research',
+    reasoning_steps=[
+        {'id': 'web_search', 'label': 'Web-Recherche'},
+        {'id': 'summarize', 'label': 'Zusammenfassung'},
+    ],
     loading_hint_template='Durchsuche Quellen zu {query}...',
     # Agent Studio UI
     widget_type='',

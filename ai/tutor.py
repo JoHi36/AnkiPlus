@@ -72,9 +72,6 @@ def run_tutor(situation, emit_step=None, memory=None,
     Returns:
         dict with 'text', 'citations', '_used_streaming'.
     """
-    if emit_step:
-        emit_step("Verarbeite Anfrage...", "active")
-
     # ------------------------------------------------------------------
     # 1. Extract parameters from kwargs
     # ------------------------------------------------------------------
@@ -148,6 +145,9 @@ def run_tutor(situation, emit_step=None, memory=None,
                 rag_context = rag_result.rag_context
                 citations = rag_result.citations
                 logger.debug("Tutor RAG: %s citations", len(citations))
+                # Emit citations early so frontend can show source cards during generation
+                if emit_step and citations:
+                    emit_step("sources_ready", "done", {"citations": citations})
     except Exception as e:
         logger.warning("Tutor RAG retrieval failed: %s", e)
 

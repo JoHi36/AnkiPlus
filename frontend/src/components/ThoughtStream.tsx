@@ -374,9 +374,9 @@ function RouterDetails({ data, agentColor }: { data: Record<string, any>; agentC
 /* ── Router Thinking (active state) — Skeleton tags matching done layout ── */
 function RouterThinking() {
   const skeletonTags = [
-    { label: 'Strategie', width: 72, icon: 'M8 2v12M2 8h12' },
-    { label: 'Scope', width: 64, icon: 'M2 3h12v10H2zM2 6h12' },
-    { label: 'Quellen', width: 56, icon: 'M3 13V5h3v8M7 13V3h3v10M11 13V7h3v6' },
+    { label: 'Routing', width: 52, icon: 'M3 3v10M3 8h4l3-5h3M3 8h4l3 5h3' },
+    { label: 'Agent', width: 64, icon: 'M4 4L12 4M4 4L8 12M12 4L8 12M4 4a1.5 1.5 0 1 0 0-.01M12 4a1.5 1.5 0 1 0 0-.01M8 12a1.5 1.5 0 1 0 0-.01' },
+    { label: 'Modus', width: 48, icon: 'M8 2l-3 6h6l-3 6' },
   ];
 
   return (
@@ -801,24 +801,45 @@ export default function ThoughtStream({
 
   // Collapse state
   const hasText = Boolean(message && message.trim().length > 0);
-  // Saved messages (not streaming) start collapsed; live messages start expanded
+  const allStepsDone = displaySteps.length > 0 && displaySteps.every(ds => ds.status === 'done');
+
+  // Initial state: saved messages (not streaming) start collapsed; live messages start expanded
   const [isCollapsed, setIsCollapsed] = useState(!isStreaming && hasText);
-  // Track if user manually expanded — prevents auto-collapse from overriding user intent
+  // Track if user manually toggled — prevents auto-collapse from overriding user intent
   const userExpandedRef = useRef(false);
 
-  // Auto-collapse: when streaming message text appears, collapse immediately
-  // No delay — the moment text starts streaming, the pipeline collapses
-  // For router variant: collapse when all steps are done (orchestrating finished)
-  const allStepsDone = displaySteps.length > 0 && displaySteps.every(ds => ds.status === 'done');
+  // Auto-collapse rules:
+  // - Router variant: collapse when orchestrating step completes
+  // - Agent variant: collapse when text starts streaming OR all display steps done + delay
+  const collapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (hasText && !isCollapsed && !userExpandedRef.current) {
-      setIsCollapsed(true);
+    if (userExpandedRef.current) return;
+    if (isRouterVariant) {
+      if (allStepsDone && !isCollapsed) setIsCollapsed(true);
+    } else {
+      // Agent: collapse when text arrives (text display takes over)
+      if (hasText && !isCollapsed) {
+        if (collapseTimerRef.current) clearTimeout(collapseTimerRef.current);
+        setIsCollapsed(true);
+      }
+      // Agent: collapse after MIN_STEP_INTERVAL when all displaySteps are done and no text yet
+      // This ensures the last step is visible for at least 800ms before collapsing
+      if (allStepsDone && !hasText && !isCollapsed && !isProcessing) {
+        if (!collapseTimerRef.current) {
+          collapseTimerRef.current = setTimeout(() => {
+            collapseTimerRef.current = null;
+            setIsCollapsed(true);
+          }, MIN_STEP_INTERVAL);
+        }
+      }
     }
-    // Router variant: auto-collapse once orchestrating step completes
-    if (isRouterVariant && allStepsDone && !isCollapsed && !userExpandedRef.current) {
-      setIsCollapsed(true);
-    }
-  }, [hasText, isCollapsed, isRouterVariant, allStepsDone]);
+    return () => {
+      if (collapseTimerRef.current && (hasText || !allStepsDone)) {
+        clearTimeout(collapseTimerRef.current);
+        collapseTimerRef.current = null;
+      }
+    };
+  }, [isRouterVariant, allStepsDone, hasText, isCollapsed, isProcessing]);
 
   // Expand when new pipeline starts — reset user override
   useEffect(() => {
@@ -850,32 +871,42 @@ export default function ThoughtStream({
     }}>
       {/* ── Collapsed view ── */}
       {isCollapsed && !isProcessing && !showLoadingBox && !(isStreaming && pipelineSteps.length > 0 && displaySteps.length === 0) && (
-        <button
-          onClick={() => { userExpandedRef.current = true; setIsCollapsed(false); }}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            width: '100%',
-            textAlign: 'left',
-            padding: '4px 0',
-            opacity: 0.4,
-            background: 'none',
-            border: 'none',
-            color: 'inherit',
-            cursor: 'pointer',
-            transition: 'opacity 0.2s',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.6'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.4'; }}
-        >
-          <ChevronRight />
-          <span style={{ fontSize: 11, color: 'var(--ds-text-tertiary)' }}>
-            {isRouterVariant ? 'Orchestrierung' : `${totalSteps} Schritt${totalSteps !== 1 ? 'e' : ''}`}
-            {hasCitations ? ` · ${citationCount} Quellen` : ''}
-          </span>
-          <ExtendingLine />
-        </button>
+        <>
+          <button
+            onClick={() => { userExpandedRef.current = true; setIsCollapsed(false); }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              width: '100%',
+              textAlign: 'left',
+              padding: '4px 0',
+              opacity: 0.4,
+              background: 'none',
+              border: 'none',
+              color: 'inherit',
+              cursor: 'pointer',
+              transition: 'opacity 0.2s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.6'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.4'; }}
+          >
+            <ChevronRight />
+            <span style={{ fontSize: 11, color: 'var(--ds-text-tertiary)' }}>
+              {isRouterVariant ? 'Orchestrierung' : `${totalSteps} Schritt${totalSteps !== 1 ? 'e' : ''}`}
+              {hasCitations ? ` · ${citationCount} Quellen` : ''}
+            </span>
+            <ExtendingLine />
+          </button>
+          {/* Text skeleton — shows after ThoughtStream collapses, waiting for text */}
+          {!hasText && isStreaming && !isRouterVariant && (
+            <div style={{ padding: '8px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[0.92, 0.76, 0.58].map((w, idx) => (
+                <div key={idx} style={{ height: 12, borderRadius: 6, width: `${w * 100}%`, background: 'linear-gradient(90deg, var(--ds-hover-tint), var(--ds-active-tint), var(--ds-hover-tint))', backgroundSize: '200% 100%', animation: `ts-shimmerWave 2s ease-in-out infinite ${idx * 0.15}s` }} />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {/* ── Expanded view ── */}

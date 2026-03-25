@@ -94,6 +94,7 @@ export default function useAgenticMessage() {
 
   const handlePipelineStep = useCallback((payload) => {
     const targetAgent = payload.agent || payload.data?.agent;
+    console.error('[v2] handlePipelineStep:', payload.step, payload.status, 'targetAgent:', targetAgent, 'cellCount:', msgRef.current?.agentCells?.length, 'cellAgents:', msgRef.current?.agentCells?.map(c => c.agent + ':' + c.status).join(','));
     updateMsg(prev => {
       if (!prev) return prev;
       const cells = prev.agentCells.map(c => {
@@ -112,7 +113,11 @@ export default function useAgenticMessage() {
         }
         // Transition loading → thinking so AgenticCell renders ThoughtStream instead of shimmer
         const newStatus = c.status === 'loading' ? 'thinking' : c.status;
-        return { ...c, pipelineSteps: steps, status: newStatus };
+        // Extract early citations from sources_ready step
+        const newCitations = payload.step === 'sources_ready' && payload.data?.citations
+          ? { ...(c.citations || {}), ...payload.data.citations }
+          : c.citations;
+        return { ...c, pipelineSteps: steps, status: newStatus, citations: newCitations };
       });
       return { ...prev, agentCells: cells };
     });
@@ -163,8 +168,10 @@ export default function useAgenticMessage() {
       status: 'done',
       agentCells: prev.agentCells.map(c => ({ ...c, status: 'done' })),
     };
-    // Clear both ref and state
+    // Clear ref immediately (for subsequent event handlers)
     msgRef.current = null;
+    // Clear React state — caller ensures setMessages is called in the same
+    // synchronous handler, so React 18 batches both updates into one render.
     setCurrentMessage(null);
     return finalMsg;
   }, []);

@@ -129,17 +129,50 @@ def _check_heuristics(user_message: str, session_context: dict, config: dict) ->
 _LLM_TIMEOUT_SECONDS = 10
 
 
+def _recover_partial_json(text: str) -> dict:
+    """Extract key fields from truncated/malformed JSON using regex."""
+    result = {}
+    # Extract simple string fields
+    for key in ('agent', 'reasoning', 'retrieval_mode', 'response_length',
+                'max_sources', 'search_scope'):
+        m = re.search(r'"%s"\s*:\s*"([^"]*)"' % key, text)
+        if m:
+            result[key] = m.group(1)
+    # Extract boolean fields
+    m = re.search(r'"search_needed"\s*:\s*(true|false)', text, re.IGNORECASE)
+    if m:
+        result['search_needed'] = m.group(1).lower() == 'true'
+    # Extract array fields
+    for key in ('precise_queries', 'broad_queries', 'embedding_queries'):
+        m = re.search(r'"%s"\s*:\s*\[([^\]]*)\]' % key, text)
+        if m:
+            items = re.findall(r'"([^"]*)"', m.group(1))
+            if items:
+                result[key] = items
+    # Default to tutor with search if nothing was recovered
+    result.setdefault('agent', 'tutor')
+    result.setdefault('search_needed', True)
+    result.setdefault('retrieval_mode', 'both')
+    result.setdefault('search_scope', 'current_deck')
+    logger.info("Unified router: recovered from truncated JSON: %s", result.get('agent'))
+    return result
+
+
 def unified_route(user_message: str, session_context: dict, config: dict,
                   card_context=None, chat_history=None) -> UnifiedRoutingResult:
     """Level 3: Unified LLM routing — agent selection + search strategy in one call."""
     if _requests is None:
         return UnifiedRoutingResult(agent='tutor', method='default',
-                                    reasoning='requests module not available')
+                                    reasoning='requests module not available',
+                                    search_needed=True, retrieval_mode='both',
+                                    search_scope='current_deck')
 
     api_key = config.get('api_key', '')
     if not api_key:
         return UnifiedRoutingResult(agent='tutor', method='default',
-                                    reasoning='No API key')
+                                    reasoning='No API key',
+                                    search_needed=True, retrieval_mode='both',
+                                    search_scope='current_deck')
 
     router_model = config.get('router_model', 'gemini-2.5-flash')
 
@@ -187,73 +220,29 @@ def unified_route(user_message: str, session_context: dict, config: dict,
     mode = session_context.get('mode', 'free_chat')
     deck_name = session_context.get('deck_name', '')
 
-    prompt = '''Du bist der Router eines agentischen Lernsystems. Du triffst ZWEI Entscheidungen in einer Antwort:
-1. Welcher Agent bearbeitet die Nachricht?
-2. Falls Tutor: Welche Suchstrategie und Queries?
+    # Build compact card hint (just keywords, not full content)
+    card_hint = ''
+    if card_context and card_context.get('cardId'):
+        q = card_context.get('frontField') or card_context.get('question') or ''
+        q_clean = re.sub(r'<[^>]+>', ' ', q).strip()[:200]
+        deck = card_context.get('deckName', '')
+        if q_clean:
+            card_hint = 'Karte: %s (Deck: %s)' % (q_clean, deck)
 
-Verfuegbare Agenten:
-- tutor: Default. Beantwortet Lernfragen basierend auf Anki-Karten. Waehle tutor wenn unklar.
-%s
+    prompt = '''Route diese Nachricht zum richtigen Agent. Antworte NUR mit einem JSON-Objekt.
 
-Aktuelle Situation:
-- Modus: %s
-- Deck: %s
-%s
+Agenten: tutor (Default, Lernfragen), %s
+Regeln: tutor im Zweifel. Andere NUR wenn eindeutig kein Lernthema.
 
-%s
-
+%sModus: %s
 Nachricht: "%s"
 
-AGENT-REGELN:
-1. Tutor ist der Default. Waehle einen anderen Agent NUR wenn klar ist, dass die Anfrage NICHT ins Lerngebiet faellt.
-2. Research NUR wenn User explizit nach externen Quellen/Papers/Recherche fragt.
-3. Help NUR fuer App-Bedienung und Einstellungen.
-4. Plusi NUR fuer persoenliche/emotionale Interaktion ohne Fachfrage.
-5. Im Zweifel: tutor.
-
-SUCH-REGELN (nur relevant wenn agent=tutor):
-Entscheide ob und wie die Kartensammlung durchsucht werden soll.
-
-DECISION TREE:
-1. Smalltalk, Dank, Begruessung, Meta-Frage ueber die App? -> search_needed=false
-2. Faktische/Lernfrage? -> search_needed=true (weiter unten)
-3. Kann die aktuelle Karte ALLEIN die Frage beantworten? -> search_needed=false (selten)
-
-KONTEXT-ERKENNUNG:
-Bestimme zuerst: Bezieht sich die Frage auf die aktuelle Karte/Konversation oder ist es ein eigenstaendiges Thema?
-
-Kontextabhaengige Signale: "was bedeutet das", "erklaer das", "ich verstehe nicht", Pronomen ("das", "es", "dieser")
--> Verwende Karten-Keywords + letzten Response fuer spezifische Queries.
-  embedding_queries MUESSEN die Schluesselwoerter der Karte aus VERSCHIEDENEN Perspektiven enthalten.
-
-Eigenstaendige Signale: Enthaelt Fachbegriffe die NICHT auf der Karte stehen.
--> Ignoriere Kartenkontext, erstelle Queries nur aus der Frage.
-
-QUERY-REGELN:
-- embedding_queries: 2-3 semantische Suchtexte aus VERSCHIEDENEN Perspektiven. NIEMALS die Nutzerfrage woertlich kopieren. Immer zu fachspezifischen Suchbegriffen erweitern.
-- precise_queries: 2-3 AND-Queries aus relevanten Keywords
-- broad_queries: 2-3 OR-Queries fuer breitere Suche
-- search_scope: "current_deck" bei kartenbezogenen Fragen, "collection" bei fachuebergreifenden
-- retrieval_mode: "both" als Default, "sql" fuer exakte Fakten/Namen, "semantic" fuer konzeptuelle Fragen
-- max_sources: "low" (3-5, einfache Fakten), "medium" (8-10, Erklaerungen), "high" (bis 15, Vergleiche)
-- response_length: "short" fuer einfache Fakten, "medium" fuer Erklaerungen, "long" fuer Vergleiche
-
-Antworte mit JSON:
-
-Wenn agent=tutor UND search_needed=true:
-{"agent":"tutor","reasoning":"...","search_needed":true,"retrieval_mode":"both","response_length":"medium","max_sources":"medium","search_scope":"collection","precise_queries":["..."],"broad_queries":["..."],"embedding_queries":["..."]}
-
-Wenn agent=tutor UND search_needed=false:
-{"agent":"tutor","reasoning":"...","search_needed":false}
-
-Wenn agent!=tutor:
-{"agent":"plusi","reasoning":"..."}''' % (
-        agent_descriptions,
+Antwort-Schema:
+{"agent":"tutor","search_needed":true,"precise_queries":["keyword1 keyword2"],"broad_queries":["keyword1 OR keyword2"],"search_scope":"current_deck","response_length":"medium"}''' % (
+        agent_descriptions or 'research (externe Quellen), help (App-Hilfe), plusi (persoenlich)',
+        (card_hint + '\n') if card_hint else '',
         mode,
-        deck_name or 'keins',
-        card_str,
-        history_str,
-        user_message[:500],
+        user_message[:300],
     )
 
     try:
@@ -264,8 +253,8 @@ Wenn agent!=tutor:
         data = {
             'contents': [{'role': 'user', 'parts': [{'text': prompt}]}],
             'generationConfig': {
-                'temperature': 0.1,
-                'maxOutputTokens': 1024,
+                'temperature': 0.0,
+                'maxOutputTokens': 512,
                 'responseMimeType': 'application/json',
             },
         }
@@ -287,9 +276,16 @@ Wenn agent!=tutor:
         if not text:
             logger.warning("Unified router: empty LLM response")
             return UnifiedRoutingResult(agent='tutor', method='default',
-                                        reasoning='Empty LLM response')
+                                        reasoning='Empty LLM response',
+                                        search_needed=True, retrieval_mode='both',
+                                        search_scope='current_deck')
 
-        parsed = json.loads(text)
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            # Robust recovery: extract fields from truncated JSON
+            logger.warning("Unified router: JSON parse failed, attempting recovery from: %s", text[:120])
+            parsed = _recover_partial_json(text)
         agent = parsed.get('agent', 'tutor').lower()
 
         # Validate agent
@@ -302,15 +298,20 @@ Wenn agent!=tutor:
         if not agent_def:
             agent = 'tutor'
 
+        # For tutor, default search_needed to True if not explicitly set
+        search_needed = parsed.get('search_needed')
+        if search_needed is None and agent == 'tutor':
+            search_needed = True
+
         return UnifiedRoutingResult(
             agent=agent,
             method='llm',
             reasoning=parsed.get('reasoning', ''),
-            search_needed=parsed.get('search_needed'),
-            retrieval_mode=parsed.get('retrieval_mode'),
-            response_length=parsed.get('response_length'),
-            max_sources=parsed.get('max_sources'),
-            search_scope=parsed.get('search_scope'),
+            search_needed=search_needed,
+            retrieval_mode=parsed.get('retrieval_mode') or 'both',
+            response_length=parsed.get('response_length') or 'medium',
+            max_sources=parsed.get('max_sources') or 'medium',
+            search_scope=parsed.get('search_scope') or 'current_deck',
             precise_queries=parsed.get('precise_queries'),
             broad_queries=parsed.get('broad_queries'),
             embedding_queries=parsed.get('embedding_queries'),
@@ -319,7 +320,9 @@ Wenn agent!=tutor:
     except Exception as e:
         logger.warning("Unified router LLM call failed: %s", e)
         return UnifiedRoutingResult(agent='tutor', method='default',
-                                    reasoning='LLM routing failed: %s' % e)
+                                    reasoning='LLM routing failed: %s' % e,
+                                    search_needed=True, retrieval_mode='both',
+                                    search_scope='current_deck')
 
 
 # ---------------------------------------------------------------------------
@@ -380,4 +383,6 @@ def route_message(user_message: str, session_context: dict, config: dict,
         return result
 
     # Default: Tutor (no non-default agents enabled)
-    return UnifiedRoutingResult(agent='tutor', method='default')
+    return UnifiedRoutingResult(agent='tutor', method='default',
+                                search_needed=True, retrieval_mode='both',
+                                search_scope='current_deck')

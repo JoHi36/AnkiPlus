@@ -75,22 +75,11 @@ class HybridRetrieval:
                 sql_citations = sql_data.get('citations', {})
                 sql_total = len(sql_citations)
 
-                # Build query result data for UI from request_steps captured in state
-                query_data = []
-                import re as _re
-                for step in self.state.request_steps:
-                    state_msg = step.get('state', '')
-                    if 'Ergebnis:' in state_msg:
-                        m = _re.match(r'Ergebnis:\s*(\d+)\s*Treffer\s*für\s*\'(.*?)\'', state_msg)
-                        if m:
-                            query_data.append({"text": m.group(2), "hits": int(m.group(1))})
-
-                # total_hits = number of unique notes found (not sum of query hits)
-                # But display the sum of individual query hits for better UX
-                query_hits_sum = sum(q.get('hits', 0) for q in query_data) if query_data else sql_total
+                # Build query result data for UI from the original queries
+                query_data = [{"text": q, "hits": None} for q in all_queries if q]
                 self.emit_step("sql_search", "done", {
                     "queries": query_data,
-                    "total_hits": query_hits_sum or sql_total
+                    "total_hits": sql_total
                 })
             except Exception as e:
                 logger.warning("HybridRetrieval: SQL retrieval failed: %s", e)

@@ -502,8 +502,8 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       return;
     }
     if (payload.type === 'msg_done') {
-      // Finalize: move currentMessage → messages array
-      // finalize() uses flushSync internally to guarantee synchronous execution
+      // Finalize: build saved message from live state, then atomic transition.
+      // finalize() clears msgRef but NOT currentMessage (to prevent flicker).
       const finalMsg = agenticMsg.finalize();
       if (finalMsg) {
         const primaryCell = finalMsg.agentCells[0];
@@ -517,9 +517,11 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
           agentCells: finalMsg.agentCells,
           orchestration: finalMsg.orchestration,
         };
+        // Add saved message FIRST, then clear live message in same batch
         setMessages(prev => [...prev, savedMsg]);
       }
-      // Clean up v1 loading state — critical: without this the UI stays in loading forever
+      // currentMessage was already cleared by finalize() — React batches it with setMessages
+      // Clean up v1 loading state
       setIsLoading(false);
       setStreamingMessage('');
       updatePipelineSteps([]);
@@ -553,6 +555,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     } else if (payload.type === 'pipeline_step') {
       if (payload.requestId && payload.requestId !== activeRequestIdRef.current) return;
 
+      // generating steps now handled by ReasoningStream's step registry (hidden: true)
       updatePipelineSteps(prev => {
         const existing = prev.findIndex(s => s.step === payload.step);
         const newStep = {
