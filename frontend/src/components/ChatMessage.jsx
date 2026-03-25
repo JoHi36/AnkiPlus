@@ -1790,7 +1790,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
   // === RENDER RETURN ===
   return (
     <div className="flex flex-col mb-10 animate-in slide-in-from-left-4 duration-500" ref={messageRef}
-         style={isUser ? { maxWidth: 'var(--ds-content-width)' } : undefined}>
+         style={isUser ? { maxWidth: 'var(--ds-content-width)', margin: '0 auto' } : undefined}>
         {/* Content area - Full width for bot messages (agent-cell bg bleeds), constrained for user */}
         <div className="w-full min-w-0">
             {/* 1. Review Card (Highest Priority) */}

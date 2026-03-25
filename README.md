@@ -1,6 +1,22 @@
+<div align="center">
+
 # AnkiPlus
 
-AI-powered learning assistant for Anki. Replaces Anki's native UI with a modern fullscreen React app featuring chat-based tutoring, card review, and a companion agent (Plusi).
+**AI-powered learning assistant for Anki**
+
+Replaces Anki's native UI with a modern fullscreen React app featuring chat-based tutoring, intelligent card review, and Plusi — your personal study companion.
+
+</div>
+
+## Features
+
+- **AI Tutor** — Context-aware chat that understands your cards, deck, and learning history
+- **Smart Reviewer** — Modern card review UI with multiple-choice generation, feedback, and insights
+- **Plusi Companion** — An AI companion with personality, mood, and a private diary
+- **Research Agent** — Web-powered deep research with citations and source cards
+- **RAG Pipeline** — Retrieval-augmented generation using your own card collection
+- **Agentic Architecture** — Modular agent system with tool use, handoffs, and reasoning display
+- **Design System** — Premium dark/light UI built on a custom token-based design system
 
 ## Quick Start
 
@@ -52,4 +68,27 @@ See `CLAUDE.md` for full architecture docs, bridge method reference, and design 
 
 ## Configuration
 
-Copy `config.json.example` to `config.json` and fill in your API keys. `config.json` is never committed to the repository.
+Copy `config.json.example` to `config.json` and fill in your API keys. Configuration files containing secrets are never committed to the repository.
+
+## License
+
+This project uses a split license model:
+
+**Anki Integration Layer** (`__init__.py`, `ui/`) — Licensed under the [GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html) (AGPL-3.0), consistent with Anki's own license.
+
+**All Other Components** — Proprietary. All rights reserved.
+
+```
+Copyright (c) 2026 Johannes Hinkel. All rights reserved.
+
+The React frontend (frontend/), AI modules (ai/), backend services (backend/,
+functions/), design system (shared/), Plusi companion (plusi/), and all associated
+assets are proprietary software. Unauthorized copying, modification, distribution,
+or use of these components is strictly prohibited without prior written permission
+from the copyright holder.
+
+The Anki integration layer (ui/, __init__.py) is licensed under AGPL-3.0 to comply
+with Anki's licensing requirements. This does not extend to the rest of the codebase.
+```
+
+For licensing inquiries, contact the author.

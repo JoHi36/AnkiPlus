@@ -448,12 +448,12 @@ const generatingDef: StepRendererDef = {
 const sourcesReadyDef: StepRendererDef = {
   id: 'sources_ready',
   label: 'Quellen',
-  activeTitle: 'Quellen laden...',
-  doneLabel: (data, status) => {
+  activeTitle: 'Quellen werden geladen...',
+  doneLabel: (data, _status) => {
     const count = data.citations ? Object.keys(data.citations).length : 0;
     return `${count} Quellen gefunden`;
   },
-  hidden: true,  // Not shown as a step — citations are extracted and shown via SourcesCarousel
+  // Visible step — shows citation count after RAG completes
 };
 
 export function registerDefaultRenderers(): void {
