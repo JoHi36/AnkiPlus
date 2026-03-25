@@ -74,29 +74,78 @@ class EmbeddingManager:
 
     # ── Embedding API ──
 
+    # OpenRouter embedding model (same family as our existing embeddings)
+    OPENROUTER_EMBED_MODEL = "google/gemini-embedding-001"
+
     def embed_texts(self, texts):
         if not texts:
             return []
 
         import requests as http_requests
 
-        # Backend-only mode: Embeddings via Cloud Function
-        if not self._backend_url or not self._auth_headers_fn:
-            logger.warning("EmbeddingManager: No backend credentials configured")
-            return []
-
+        # Try 1: OpenRouter Embedding API (primary)
         try:
-            embed_url = f"{self._backend_url}/embed"
-            headers = {**self._auth_headers_fn(), "Content-Type": "application/json"}
-            body = {"texts": [t[:2000] for t in texts]}
+            from ..config import get_config
+        except ImportError:
+            from config import get_config
+        config = get_config()
+        or_key = config.get("dev_openrouter_key", "")
 
-            response = http_requests.post(embed_url, json=body, headers=headers, timeout=5)
-            response.raise_for_status()
-            data = response.json()
-            return data.get("embeddings", [])
-        except (OSError, ValueError, KeyError) as e:
-            logger.warning("EmbeddingManager: Backend error: %s", e)
-            return []
+        if or_key and not getattr(self, '_skip_openrouter', False):
+            try:
+                response = http_requests.post(
+                    "https://openrouter.ai/api/v1/embeddings",
+                    headers={
+                        "Authorization": f"Bearer {or_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "input": [t[:2000] for t in texts],
+                        "model": self.OPENROUTER_EMBED_MODEL,
+                    },
+                    timeout=30,
+                )
+                response.raise_for_status()
+                data = response.json()
+                embeddings = [item["embedding"] for item in data.get("data", [])]
+                if embeddings:
+                    return embeddings
+            except Exception as e:
+                logger.warning("EmbeddingManager: OpenRouter embed error: %s, trying fallbacks", e)
+                self._skip_openrouter = True
+
+        # Try 2: Backend Cloud Function (legacy)
+        if self._backend_url and self._auth_headers_fn and not getattr(self, '_skip_backend', False):
+            try:
+                embed_url = f"{self._backend_url}/embed"
+                headers = {**self._auth_headers_fn(), "Content-Type": "application/json"}
+                body = {"texts": [t[:2000] for t in texts]}
+                response = http_requests.post(embed_url, json=body, headers=headers, timeout=5)
+                response.raise_for_status()
+                data = response.json()
+                result = data.get("embeddings", [])
+                if result:
+                    return result
+            except Exception as e:
+                logger.warning("EmbeddingManager: Backend error: %s", e)
+                self._skip_backend = True
+
+        # Try 3: Direct Google Generative AI Embedding API
+        api_key = config.get("google_api_key", "")
+        if api_key:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.MODEL}:batchEmbedContents?key={api_key}"
+                requests_body = [{"model": f"models/{self.MODEL}", "content": {"parts": [{"text": t[:2000]}]}} for t in texts]
+                response = http_requests.post(url, json={"requests": requests_body}, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+                embeddings = [item["values"] for item in data.get("embeddings", [])]
+                return embeddings
+            except Exception as e:
+                logger.warning("EmbeddingManager: Direct Google API also failed: %s", e)
+
+        logger.warning("EmbeddingManager: All embedding providers failed")
+        return []
 
     def _card_to_text(self, card_data):
         parts = []
