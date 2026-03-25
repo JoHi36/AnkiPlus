@@ -92,18 +92,54 @@ export default function GraphView({ onToggleView, isPremium }) {
     graphRef.current.onNodeClick(handleNodeClick);
   }, [handleNodeClick]);
 
-  // Search highlighting
+  // Focused sub-network search: show only matched terms + neighbors
   useEffect(() => {
-    if (!graphRef.current) return;
-    const matched = new Set(searchResult?.matchedTerms || []);
+    if (!graphRef.current || !graphData) return;
+
+    if (!searchResult?.matchedTerms?.length) {
+      // No search — show all nodes, restore default visibility
+      graphRef.current.nodeVisibility(() => true);
+      graphRef.current.linkVisibility(() => true);
+      graphRef.current.nodeColor(node => node.deckColor || '#0A84FF');
+      return;
+    }
+
+    // Build set of matched terms + their direct neighbors
+    const matched = new Set(searchResult.matchedTerms);
+    const visible = new Set(matched);
+
+    // Add all neighbors of matched terms
+    graphData.edges.forEach(e => {
+      const src = e.source?.id || e.source;
+      const tgt = e.target?.id || e.target;
+      if (matched.has(src)) visible.add(tgt);
+      if (matched.has(tgt)) visible.add(src);
+    });
+
+    // Show only the sub-network
+    graphRef.current.nodeVisibility(node => visible.has(node.id));
+    graphRef.current.linkVisibility(link => {
+      const src = link.source?.id || link.source;
+      const tgt = link.target?.id || link.target;
+      return visible.has(src) && visible.has(tgt);
+    });
     graphRef.current.nodeColor(node =>
-      matched.size === 0
-        ? (node.deckColor || '#0A84FF')
-        : matched.has(node.id)
-          ? (node.deckColor || '#0A84FF')
-          : 'rgba(255,255,255,0.05)'
+      matched.has(node.id) ? '#FFFFFF' : (node.deckColor || '#0A84FF')
     );
-  }, [searchResult]);
+
+    // Fly camera to first matched node
+    const firstMatch = graphData.nodes.find(n => matched.has(n.id));
+    if (firstMatch && graphRef.current.graphData().nodes.length > 0) {
+      const nodes3d = graphRef.current.graphData().nodes;
+      const target = nodes3d.find(n => n.id === firstMatch.id);
+      if (target) {
+        graphRef.current.cameraPosition(
+          { x: target.x + 100, y: target.y + 50, z: target.z + 100 },
+          target, 1000
+        );
+      }
+    }
+  }, [searchResult, graphData]);
 
   // Debounced search
   const handleSearchChange = useCallback((e) => {
@@ -115,7 +151,10 @@ export default function GraphView({ onToggleView, isPremium }) {
       if (query.trim()) {
         searchGraph(query.trim());
       } else {
+        // Clear search — restore full graph
         if (graphRef.current) {
+          graphRef.current.nodeVisibility(() => true);
+          graphRef.current.linkVisibility(() => true);
           graphRef.current.nodeColor(node => node.deckColor || '#0A84FF');
         }
       }
@@ -125,154 +164,156 @@ export default function GraphView({ onToggleView, isPremium }) {
   const hasGraph = graphData?.nodes?.length > 0;
 
   return (
-    <div style={{
-      flex: 1, overflow: 'hidden',
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      position: 'relative',
-    }}>
-      {/* === HEADER: Anki.plus wordmark (same as DeckBrowserView) === */}
-      <div style={{
-        flexShrink: 0, paddingTop: 64,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        gap: 10, marginBottom: 16, width: '100%', maxWidth: MAX_W,
-        position: 'relative', padding: '64px 20px 0',
-        zIndex: 10,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'baseline' }}>
-          <span style={{
-            fontFamily: '-apple-system, "SF Pro Display", system-ui, sans-serif',
-            fontSize: 46, fontWeight: 700, letterSpacing: '-1.8px',
-            color: 'var(--ds-text-primary)', lineHeight: 1,
-          }}>Anki</span>
-          <span style={{
-            fontFamily: '-apple-system, "SF Pro Display", system-ui, sans-serif',
-            fontSize: 46, fontWeight: 300, letterSpacing: '-1px',
-            color: 'var(--ds-text-muted)', lineHeight: 1,
-          }}>.plus</span>
-        </div>
-        <span
-          style={{
-            fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
-            padding: '4px 9px', borderRadius: 7, alignSelf: 'center',
-            marginTop: 4, cursor: 'pointer', whiteSpace: 'nowrap',
-            ...(isPremium
-              ? { background: 'var(--ds-accent-10)', border: '1px solid var(--ds-accent-20)', color: 'var(--ds-accent)' }
-              : { background: 'var(--ds-hover-tint)', border: '1px solid var(--ds-border-medium)', color: 'var(--ds-text-placeholder)' }),
-          }}
-          onClick={() => executeAction('settings.toggle')}
-        >
-          {isPremium ? 'Pro' : 'Free'}
-        </span>
+    <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
+      {/* 3D graph canvas — FULLSCREEN BACKGROUND */}
+      <div
+        ref={containerRef}
+        style={{ position: 'absolute', inset: 0 }}
+      />
 
-        {/* Deck list toggle */}
-        {onToggleView && (
-          <button
-            onClick={onToggleView}
+      {/* Header + search overlaid on top */}
+      <div style={{ position: 'relative', zIndex: 10, pointerEvents: 'none' }}>
+        {/* === HEADER: Anki.plus wordmark === */}
+        <div style={{
+          paddingTop: 64,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          gap: 10, marginBottom: 16, width: '100%', maxWidth: MAX_W,
+          margin: '0 auto 16px', padding: '64px 20px 0',
+          position: 'relative',
+          pointerEvents: 'auto',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', pointerEvents: 'none' }}>
+            <span style={{
+              fontFamily: '-apple-system, "SF Pro Display", system-ui, sans-serif',
+              fontSize: 46, fontWeight: 700, letterSpacing: '-1.8px',
+              color: 'var(--ds-text-primary)', lineHeight: 1,
+            }}>Anki</span>
+            <span style={{
+              fontFamily: '-apple-system, "SF Pro Display", system-ui, sans-serif',
+              fontSize: 46, fontWeight: 300, letterSpacing: '-1px',
+              color: 'var(--ds-text-muted)', lineHeight: 1,
+            }}>.plus</span>
+          </div>
+          <span
             style={{
-              position: 'absolute', right: 20, bottom: 0,
-              background: 'var(--ds-hover-tint)',
-              border: '1px solid var(--ds-border)',
-              borderRadius: 8, padding: '6px 14px',
-              color: 'var(--ds-text-secondary)',
-              fontSize: 12, fontWeight: 500, cursor: 'pointer',
-              fontFamily: 'inherit',
-              transition: 'color 0.15s, background 0.15s',
+              fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
+              padding: '4px 9px', borderRadius: 7, alignSelf: 'center',
+              marginTop: 4, cursor: 'pointer', whiteSpace: 'nowrap',
+              pointerEvents: 'auto',
+              ...(isPremium
+                ? { background: 'var(--ds-accent-10)', border: '1px solid var(--ds-accent-20)', color: 'var(--ds-accent)' }
+                : { background: 'var(--ds-hover-tint)', border: '1px solid var(--ds-border-medium)', color: 'var(--ds-text-placeholder)' }),
             }}
-            onMouseEnter={e => {
-              e.currentTarget.style.color = 'var(--ds-text-primary)';
-              e.currentTarget.style.background = 'var(--ds-active-tint)';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.color = 'var(--ds-text-secondary)';
-              e.currentTarget.style.background = 'var(--ds-hover-tint)';
+            onClick={() => executeAction('settings.toggle')}
+          >
+            {isPremium ? 'Pro' : 'Free'}
+          </span>
+
+          {/* Deck list toggle */}
+          {onToggleView && (
+            <button
+              onClick={onToggleView}
+              style={{
+                position: 'absolute', right: 20, bottom: 0,
+                background: 'var(--ds-hover-tint)',
+                border: '1px solid var(--ds-border)',
+                borderRadius: 8, padding: '6px 14px',
+                color: 'var(--ds-text-secondary)',
+                fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                fontFamily: 'inherit',
+                transition: 'color 0.15s, background 0.15s',
+                pointerEvents: 'auto',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.color = 'var(--ds-text-primary)';
+                e.currentTarget.style.background = 'var(--ds-active-tint)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.color = 'var(--ds-text-secondary)';
+                e.currentTarget.style.background = 'var(--ds-hover-tint)';
+              }}
+            >
+              Deck-Liste
+            </button>
+          )}
+        </div>
+
+        {/* === SEARCH BAR === */}
+        <div style={{
+          width: '100%', maxWidth: MAX_W,
+          padding: '0 20px', marginBottom: 16,
+          margin: '0 auto',
+          pointerEvents: 'auto',
+        }}>
+          <div
+            className="ds-frosted"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '12px 16px', borderRadius: 12,
+              border: '1px solid var(--ds-border-subtle)',
             }}
           >
-            Deck-Liste
-          </button>
-        )}
-      </div>
-
-      {/* === SEARCH BAR === */}
-      <div style={{
-        flexShrink: 0, width: '100%', maxWidth: MAX_W,
-        padding: '0 20px', marginBottom: 16, zIndex: 10,
-      }}>
-        <div
-          className="ds-frosted"
-          style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '12px 16px', borderRadius: 12,
-            border: '1px solid var(--ds-border-subtle)',
-          }}
-        >
-          <Search size={16} style={{ color: 'var(--ds-accent)', flexShrink: 0 }} />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={handleSearchChange}
-            placeholder="Fachbegriff suchen oder Frage stellen..."
-            style={{
-              flex: 1, background: 'transparent', border: 'none', outline: 'none',
-              color: 'var(--ds-text-primary)', fontSize: 15,
-              fontFamily: 'var(--ds-font-sans)',
-            }}
-          />
-          <span style={{ color: 'var(--ds-text-placeholder)', fontSize: 12, fontWeight: 500 }}>⌘K</span>
+            <Search size={16} style={{ color: 'var(--ds-accent)', flexShrink: 0 }} />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={handleSearchChange}
+              placeholder="Fachbegriff suchen oder Frage stellen..."
+              style={{
+                flex: 1, background: 'transparent', border: 'none', outline: 'none',
+                color: 'var(--ds-text-primary)', fontSize: 15,
+                fontFamily: 'var(--ds-font-sans)',
+              }}
+            />
+            <span style={{ color: 'var(--ds-text-placeholder)', fontSize: 12, fontWeight: 500 }}>⌘K</span>
+          </div>
         </div>
       </div>
 
-      {/* === 3D GRAPH CANVAS (fills remaining space) === */}
-      <div style={{
-        flex: 1, width: '100%', position: 'relative', overflow: 'hidden',
-      }}>
-        <div
-          ref={containerRef}
-          style={{ width: '100%', height: '100%' }}
-        />
-
-        {/* Loading state */}
-        {loading && (
+      {/* Loading state */}
+      {loading && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: 12, color: 'var(--ds-text-secondary)', fontSize: 14, pointerEvents: 'none',
+          zIndex: 5,
+        }}>
           <div style={{
-            position: 'absolute', inset: 0,
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            gap: 12, color: 'var(--ds-text-secondary)', fontSize: 14, pointerEvents: 'none',
-          }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: '50%',
-              border: '2px solid var(--ds-border-subtle)',
-              borderTopColor: 'var(--ds-accent)',
-              animation: 'spin 0.8s linear infinite',
-            }} />
-            <span>Wissensgraph wird geladen...</span>
-          </div>
-        )}
+            width: 32, height: 32, borderRadius: '50%',
+            border: '2px solid var(--ds-border-subtle)',
+            borderTopColor: 'var(--ds-accent)',
+            animation: 'spin 0.8s linear infinite',
+          }} />
+          <span>Wissensgraph wird geladen...</span>
+        </div>
+      )}
 
-        {/* Empty state */}
-        {!loading && !hasGraph && (
-          <div style={{
-            position: 'absolute', inset: 0,
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            gap: 8, color: 'var(--ds-text-tertiary)', fontSize: 14, pointerEvents: 'none',
-          }}>
-            <span style={{ fontSize: 32, opacity: 0.3 }}>◎</span>
-            <span>Noch keine Begriffe extrahiert</span>
-            <span style={{ fontSize: 12 }}>Starte ein Embedding, um den Graphen aufzubauen</span>
-          </div>
-        )}
+      {/* Empty state */}
+      {!loading && !hasGraph && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: 8, color: 'var(--ds-text-tertiary)', fontSize: 14, pointerEvents: 'none',
+          zIndex: 5,
+        }}>
+          <span style={{ fontSize: 32, opacity: 0.3 }}>◎</span>
+          <span>Noch keine Begriffe extrahiert</span>
+          <span style={{ fontSize: 12 }}>Starte ein Embedding, um den Graphen aufzubauen</span>
+        </div>
+      )}
 
-        {/* Selected term badge */}
-        {selectedTerm && (
-          <div style={{
-            position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-            padding: '4px 12px', borderRadius: 20,
-            background: 'var(--ds-accent-10)', border: '1px solid var(--ds-accent-20)',
-            color: 'var(--ds-accent)', fontSize: 12, fontWeight: 500,
-            pointerEvents: 'none', zIndex: 10, whiteSpace: 'nowrap',
-          }}>
-            {selectedTerm}
-          </div>
-        )}
-      </div>
+      {/* Selected term badge */}
+      {selectedTerm && (
+        <div style={{
+          position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+          padding: '4px 12px', borderRadius: 20,
+          background: 'var(--ds-accent-10)', border: '1px solid var(--ds-accent-20)',
+          color: 'var(--ds-accent)', fontSize: 12, fontWeight: 500,
+          pointerEvents: 'none', zIndex: 10, whiteSpace: 'nowrap',
+        }}>
+          {selectedTerm}
+        </div>
+      )}
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
