@@ -105,9 +105,9 @@ const DOCK_CSS = `
 
   .plusi-dock {
     position: fixed;
-    bottom: 104px;
-    left: 12px;
-    z-index: 60;
+    bottom: var(--ds-space-2xl);
+    left: var(--ds-space-2xl);
+    z-index: 80;
     display: flex;
     align-items: flex-end;
     gap: 12px;

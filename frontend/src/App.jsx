@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useAnki } from './hooks/useAnki';
 import ReviewerView from './components/ReviewerView';
 import useReviewerState from './hooks/useReviewerState';
@@ -2350,18 +2351,18 @@ function AppInner() {
     />
   );
 
-  // Plusi mascot — rendered at app level so it persists across all views.
-  // z-index 60 (below sidebar at 70) — sidebar slides in front of Plusi.
-  const mascotElement = mascotEnabled && (
+  // Plusi mascot — portalled to document.body so it NEVER remounts on view switches.
+  // z-index 80 (above sidebar at 70) — Plusi floats on top of everything.
+  const mascotElement = mascotEnabled && createPortal(
     <MascotShell
       mood={mood}
       onPlusiAsk={() => {
-        // Focus chat with @Plusi
         setStickyAgent('plusi');
       }}
       onEvent={eventTriggerRef}
       enabled={mascotEnabled}
-    />
+    />,
+    document.body,
   );
 
   if (activeView === 'deckBrowser' || activeView === 'overview' || activeView === 'freeChat' || activeView === 'statistik') {
@@ -2886,7 +2887,7 @@ function AppInner() {
                         {/* CRITICAL: Only render StreamingChatMessage if no saved bot message exists yet */}
                         {/* This prevents double-rendering when message is saved but timeout hasn't cleared streamingMessage */}
                         {/* Robust: Text-Vergleich verhindert Dopplung auch bei Race Conditions */}
-                        {/* Pipeline ThoughtStream — Router + Agent split */}
+                        {/* Pipeline ReasoningStream — Router + Agent split */}
                         {chatHook.isLoading && !chatHook.currentMessage && !(nextMsg && nextMsg.from === 'bot' && nextMsg.text) && (() => {
                           const allSteps = chatHook.pipelineSteps || [];
                           const rSteps = allSteps.filter(s => s.step === 'orchestrating');
@@ -2903,24 +2904,23 @@ function AppInner() {
                           })();
                           return (
                             <div className="w-full flex-none mb-2" style={{ maxWidth: 'var(--ds-content-width)' }}>
-                              {/* Router ThoughtStream (before agent) */}
+                              {/* Router ReasoningStream (before agent) */}
                               {rSteps.length > 0 && (
-                                <ThoughtStream
-                                  pipelineSteps={rSteps}
+                                <ReasoningStream
+                                  steps={rSteps}
                                   agentColor={activeAgentColor}
                                   citations={{}}
                                   isStreaming={true}
                                   message=""
-                                  steps={[]}
                                   variant="router"
                                 />
                               )}
-                              {/* Agent ThoughtStream inside AgenticCell */}
+                              {/* Agent ReasoningStream inside AgenticCell */}
                               {(aSteps.length > 0 || chatHook.streamingMessage) && (
                                 <AgenticCell agentName={liveAgentName} isLoading={aSteps.length === 0 && !chatHook.streamingMessage}>
                                   {aSteps.length > 0 && (
-                                    <ThoughtStream
-                                      pipelineSteps={aSteps}
+                                    <ReasoningStream
+                                      steps={aSteps}
                                       pipelineGeneration={chatHook.pipelineGeneration}
                                       agentColor={activeAgentColor}
                                       citations={chatHook.currentCitations || {}}
@@ -2928,51 +2928,14 @@ function AppInner() {
                                       bridge={bridge}
                                       onPreviewCard={handlePreviewCard}
                                       message={chatHook.streamingMessage || ''}
-                                      steps={[]}
                                     />
-                                  )}
-                                  {/* Generating skeleton INSIDE AgenticCell — after all steps done, before text */}
-                                  {!chatHook.streamingMessage && aSteps.length > 0 && aSteps.every(s => s.status === 'done') && (
-                                    <div style={{ padding: '8px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                      {[0.92, 0.76, 0.58].map((w, i) => (
-                                        <div key={i} style={{ height: 12, borderRadius: 6, width: `${w * 100}%`, background: 'linear-gradient(90deg, var(--ds-hover-tint), var(--ds-active-tint), var(--ds-hover-tint))', backgroundSize: '200% 100%', animation: `ts-shimmerWave 2s ease-in-out infinite ${i * 0.15}s` }} />
-                                      ))}
-                                    </div>
                                   )}
                                 </AgenticCell>
                               )}
                             </div>
                           );
                         })()}
-                        {/* Initial routing skeleton — only before any pipeline steps arrive */}
-                        {chatHook.isLoading && !chatHook.currentMessage && !chatHook.streamingMessage && (chatHook.pipelineSteps || []).length === 0 && !(nextMsg && nextMsg.from === 'bot' && nextMsg.text) && (
-                          <div className="w-full flex-none mb-2" style={{ padding: '0 4px', maxWidth: 'var(--ds-content-width)' }}>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                              {[
-                                { label: 'Routing Agent', width: 60 },
-                                { label: 'Agent', width: 52 },
-                                { label: 'Modus', width: 48 },
-                              ].map((tag, i) => (
-                                <div
-                                  key={tag.label}
-                                  style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 5,
-                                    fontSize: 11,
-                                    padding: '3px 8px',
-                                    borderRadius: 5,
-                                    background: 'var(--ds-hover-tint)',
-                                    animation: `ts-phaseReveal 0.3s ease-out ${i * 0.1}s both`,
-                                  }}
-                                >
-                                  <span style={{ color: 'var(--ds-text-muted)' }}>{tag.label}</span>
-                                  <div style={{ width: tag.width, height: 10, borderRadius: 3, background: 'linear-gradient(90deg, var(--ds-hover-tint), var(--ds-active-tint), var(--ds-hover-tint))', backgroundSize: '200% 100%', animation: 'ts-shimmerWave 2s ease-in-out infinite' }} />
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                        {/* Initial routing skeleton removed — ReasoningStream handles skeleton internally */}
                         {(chatHook.isLoading || chatHook.streamingMessage) && !chatHook.currentMessage && !(
                           nextMsg &&
                           nextMsg.from === 'bot' &&
