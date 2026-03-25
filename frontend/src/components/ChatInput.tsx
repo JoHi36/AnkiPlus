@@ -405,7 +405,11 @@ export default function ChatInput({
                     fontFamily: 'var(--ds-font-sans)',
                     pointerEvents: 'none',
                     userSelect: 'none',
-                    whiteSpace: 'pre',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    maxWidth: textareaRef.current
+                      ? `calc(100% - ${textareaRef.current.offsetLeft + getTextWidth(input, textareaRef.current) + (chipAgent ? chipWidth + 8 : 0)}px)`
+                      : undefined,
                     lineHeight: textareaRef.current
                       ? window.getComputedStyle(textareaRef.current).lineHeight
                       : undefined,
