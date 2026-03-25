@@ -8,7 +8,7 @@ import { executeAction, bridgeAction } from '../actions';
 
 const MAX_W = 'var(--ds-content-width)';
 
-export default function DeckBrowserView({ data, isPremium }) {
+export default function DeckBrowserView({ data, isPremium, onToggleView }) {
   const { isExpanded, toggleExpanded } = useDeckTree();
 
   if (!data) return null;
@@ -42,6 +42,7 @@ export default function DeckBrowserView({ data, isPremium }) {
         flexShrink: 0, paddingTop: 64,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         gap: 10, marginBottom: 24, width: '100%', maxWidth: MAX_W,
+        position: 'relative',
       }}>
         <div style={{ display: 'flex', alignItems: 'baseline' }}>
           <span style={{
@@ -68,6 +69,38 @@ export default function DeckBrowserView({ data, isPremium }) {
         >
           {isPremium ? 'Pro' : 'Free'}
         </span>
+
+        {/* Knowledge Graph toggle */}
+        {onToggleView && (
+          <button
+            onClick={onToggleView}
+            style={{
+              position: 'absolute',
+              right: 0,
+              bottom: 0,
+              background: 'var(--ds-hover-tint)',
+              border: '1px solid var(--ds-border)',
+              borderRadius: 8,
+              padding: '6px 14px',
+              color: 'var(--ds-text-secondary)',
+              fontSize: 12,
+              fontWeight: 500,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              transition: 'color 0.15s, background 0.15s',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.color = 'var(--ds-text-primary)';
+              e.currentTarget.style.background = 'var(--ds-active-tint)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.color = 'var(--ds-text-secondary)';
+              e.currentTarget.style.background = 'var(--ds-hover-tint)';
+            }}
+          >
+            Knowledge Graph
+          </button>
+        )}
       </div>
 
       {/* Search Bar — fixed, never scrolls, same max-width */}

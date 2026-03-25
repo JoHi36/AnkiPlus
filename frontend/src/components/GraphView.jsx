@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import ForceGraph3D from '3d-force-graph';
-import { Search, List } from 'lucide-react';
+import { Search } from 'lucide-react';
 import useKnowledgeGraph from '../hooks/useKnowledgeGraph';
 
 const QUESTION_WORDS = /\b(was|wie|warum|erkläre|welche|wozu|wann|what|how|why|explain|which|when|describe)\b/i;
@@ -59,11 +59,21 @@ export default function GraphView({ onToggleView }) {
       .nodeColor(node => node.deckColor || '#0A84FF')
       .nodeVal(node => Math.max(1, (node.frequency || 1) / 2))
       .nodeLabel(node => `${node.label} (${node.frequency || 0} Karten)`)
+      .nodeVisibility(node => {
+        if (!graphRef.current) return true;
+        const camera = graphRef.current.camera();
+        const dist = camera.position.length();
+        if (dist < 200) return true;
+        if (dist < 400) return (node.frequency || 1) >= 3;
+        return (node.frequency || 1) >= 8;
+      })
       .linkWidth(link => Math.min((link.value || 1) / 2, 3))
       .linkOpacity(0.15)
       .linkColor(() => 'rgba(255,255,255,0.1)')
       .onNodeClick(handleNodeClick)
-      .enableNodeDrag(false);
+      .enableNodeDrag(false)
+      .d3AlphaDecay(0.04)
+      .d3VelocityDecay(0.4);
 
     // Auto-rotate
     if (graph.controls()) {
@@ -235,25 +245,30 @@ export default function GraphView({ onToggleView }) {
         {onToggleView && (
           <button
             onClick={onToggleView}
-            className="ds-frosted"
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 36,
-              height: 36,
-              borderRadius: 10,
-              border: '1px solid var(--ds-border-subtle)',
+              background: 'var(--ds-hover-tint)',
+              border: '1px solid var(--ds-border)',
+              borderRadius: 8,
+              padding: '6px 14px',
               color: 'var(--ds-text-secondary)',
+              fontSize: 12,
+              fontWeight: 500,
               cursor: 'pointer',
+              fontFamily: 'inherit',
               flexShrink: 0,
-              transition: 'color 0.15s',
+              whiteSpace: 'nowrap',
+              transition: 'color 0.15s, background 0.15s',
             }}
-            onMouseEnter={e => e.currentTarget.style.color = 'var(--ds-text-primary)'}
-            onMouseLeave={e => e.currentTarget.style.color = 'var(--ds-text-secondary)'}
-            title="Deck-Liste anzeigen"
+            onMouseEnter={e => {
+              e.currentTarget.style.color = 'var(--ds-text-primary)';
+              e.currentTarget.style.background = 'var(--ds-active-tint)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.color = 'var(--ds-text-secondary)';
+              e.currentTarget.style.background = 'var(--ds-hover-tint)';
+            }}
           >
-            <List size={16} />
+            Deck-Liste
           </button>
         )}
       </div>

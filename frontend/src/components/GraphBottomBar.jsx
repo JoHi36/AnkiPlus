@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Play } from 'lucide-react';
 
 /**
@@ -125,7 +125,29 @@ function PulseText({ width = 160 }) {
 
 /* ─── State 1: Idle ─── */
 function IdleState({ status }) {
+  const [refreshState, setRefreshState] = useState('checking');
+
+  useEffect(() => {
+    const timer = setTimeout(() => setRefreshState('ready'), 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
   const loaded = status !== null;
+
+  if (refreshState === 'checking') {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        fontSize: 13,
+        color: 'var(--ds-text-secondary)',
+      }}>
+        <StatusDot active={false} />
+        <span>Prüfe auf neue Karten…</span>
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -138,20 +160,30 @@ function IdleState({ status }) {
       <StatusDot active={loaded} />
       {loaded ? (
         <>
-          <span style={{ color: 'var(--ds-green)', fontWeight: 500 }}>Graph aktuell</span>
-          <Separator />
-          <span>
-            {status.totalCards.toLocaleString('de-DE')} Karten
-          </span>
-          <Separator />
-          <span>
-            {status.totalTerms.toLocaleString('de-DE')} Terme
-          </span>
-          {status.pendingUpdates > 0 && (
+          {status.pendingUpdates > 0 ? (
             <>
+              <span style={{ color: 'var(--ds-yellow)', fontWeight: 500 }}>
+                {status.pendingUpdates} Karten werden verarbeitet…
+              </span>
               <Separator />
-              <span style={{ color: 'var(--ds-yellow)' }}>
-                {status.pendingUpdates} ausstehend
+              <span>
+                {status.totalCards.toLocaleString('de-DE')} Karten
+              </span>
+              <Separator />
+              <span>
+                {status.totalTerms.toLocaleString('de-DE')} Terme
+              </span>
+            </>
+          ) : (
+            <>
+              <span style={{ color: 'var(--ds-green)', fontWeight: 500 }}>Graph aktuell</span>
+              <Separator />
+              <span>
+                {status.totalCards.toLocaleString('de-DE')} Karten
+              </span>
+              <Separator />
+              <span>
+                {status.totalTerms.toLocaleString('de-DE')} Terme
               </span>
             </>
           )}
