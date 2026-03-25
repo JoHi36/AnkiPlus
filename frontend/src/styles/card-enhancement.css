@@ -211,10 +211,15 @@
 }
 
 /* AMBOSS metadata buttons — template uses <button onclick="..."> for Tags/NoteID/Errata */
-.card-renderer button[onclick] {
+.card-renderer button[onclick],
+.card-renderer button {
   font-size: 10px;
   opacity: 0.15;
-  border-color: var(--ds-border-subtle) !important;
+  border: 1px solid var(--ds-border-subtle) !important;
+  border-radius: 4px;
+  padding: 2px 6px;
+  color: var(--ds-text-tertiary) !important;
+  cursor: pointer;
   transition: opacity 0.25s ease;
 }
 
