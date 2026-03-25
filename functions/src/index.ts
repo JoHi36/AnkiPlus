@@ -15,6 +15,8 @@ import { verifyCheckoutSessionHandler } from './handlers/verifyCheckoutSession';
 import { migrationHandler } from './handlers/migration';
 import { routerHandler } from './handlers/router';
 import { embedHandler } from './handlers/embed';
+import { researchHandler } from './handlers/research';
+import { insightsExtractHandler } from './handlers/insights';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -98,6 +100,12 @@ app.post('/migrate-anonymous', validateToken, migrationHandler);
 // RAG routes (router + embeddings)
 app.post('/router', validateToken, routerHandler);
 app.post('/embed', validateToken, embedHandler);
+
+// Research route (Perplexity Sonar via OpenRouter)
+app.post('/research', validateToken, researchHandler);
+
+// Insights extraction route
+app.post('/insights/extract', validateToken, insightsExtractHandler);
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
