@@ -774,7 +774,7 @@ function AppInner() {
         try {
           originalMainHandler(payload);
         } catch (e) {
-          console.error('🔵 DEBUG App.jsx: Error calling original handler', e);
+          console.error('App.jsx: Error calling original handler', e);
         }
       }
 
@@ -848,7 +848,6 @@ function AppInner() {
 
           // Dedup: skip if this card was already processed (dual dispatch)
           if (newCardId && newCardId === lastProcessedCardRef.current) {
-            console.log('🔵 CARD_SWITCH: skipping duplicate for cardId:', newCardId);
             return;
           }
           if (newCardId) lastProcessedCardRef.current = newCardId;
@@ -1090,12 +1089,10 @@ function AppInner() {
         // Plusi Sub-Agent Events (ignored when Plusi is disabled)
         if (payload.type === 'plusiSkeleton') {
           if (!mascotEnabledRef.current) return;
-          console.log('🔵 Plusi skeleton received');
         }
 
         if (payload.type === 'plusiResult') {
           if (!mascotEnabledRef.current) return;
-          console.log('🔵 Plusi result received:', payload.mood, payload.text?.substring(0, 50));
           if (!payload.error && payload.text) {
             const meta = {
               happy: 'freut sich', empathy: 'fühlt mit dir', excited: 'ist aufgeregt',
@@ -1309,12 +1306,9 @@ function AppInner() {
     // Function to process queued messages (only init/deckSelected — rest handled live by ankiReceive)
     const processQueue = () => {
       if (window._ankiReceiveQueue && window._ankiReceiveQueue.length > 0) {
-        console.error('🔵 DEBUG App.jsx: Processing queued messages', window._ankiReceiveQueue.length);
         const queued = window._ankiReceiveQueue.splice(0);
         queued.forEach(payload => {
-          console.error('🔵 DEBUG App.jsx: Processing queued payload', payload?.type);
           if (payload.type === 'deckSelected') {
-            console.error('🔵 DEBUG App.jsx: Processing queued deckSelected', payload.data);
             window.dispatchEvent(new CustomEvent('deckSelected', { detail: payload.data }));
           } else if (payload.type === 'init') {
             modelsHookRef.current.handleAnkiReceive(payload);
@@ -1369,8 +1363,6 @@ function AppInner() {
     const handleCardContextEvent = (event) => {
       const payload = event.detail;
       if (!payload || payload.type !== 'cardContext') return;
-      console.error('🟢 CARD_SWITCH via CustomEvent: cardId:', payload.data?.cardId);
-
       const _chat = chatHookRef.current;
       const _cardCtx = cardContextHookRef.current;
       const _cardSession = cardSessionHookRef.current;
@@ -1382,7 +1374,6 @@ function AppInner() {
 
       // Dedup: skip if this card was already processed by ankiReceive handler
       if (newCardId && newCardId === lastProcessedCardRef.current) {
-        console.log('🟢 CARD_SWITCH: skipping duplicate CustomEvent for cardId:', newCardId);
         return;
       }
       if (newCardId) lastProcessedCardRef.current = newCardId;
@@ -1420,8 +1411,6 @@ function AppInner() {
     const handleCardSessionLoadedEvent = (event) => {
       const payload = event.detail;
       if (!payload || payload.type !== 'cardSessionLoaded') return;
-      console.error('🟢 CARD_SESSION_LOADED via CustomEvent: cardId:', payload.cardId);
-
       const _chat = chatHookRef.current;
       const _cardCtx = cardContextHookRef.current;
       const _cardSession = cardSessionHookRef.current;
