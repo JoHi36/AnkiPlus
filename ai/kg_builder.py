@@ -51,9 +51,9 @@ class GraphIndexBuilder:
             max_edges:  Maximum number of edges to persist.
         """
         try:
-            from storage import kg_store as kg
+            from ..storage import kg_store as kg
         except ImportError:
-            import storage.kg_store as kg
+            from storage import kg_store as kg
 
         db = kg._get_db()
 
@@ -100,9 +100,9 @@ class GraphIndexBuilder:
         efficient GROUP BY upsert in a single SQL statement.
         """
         try:
-            from storage import kg_store as kg
+            from ..storage import kg_store as kg
         except ImportError:
-            import storage.kg_store as kg
+            from storage import kg_store as kg
 
         logger.info("GraphIndexBuilder.update_frequencies: updating term frequencies")
         kg.update_term_frequencies()
