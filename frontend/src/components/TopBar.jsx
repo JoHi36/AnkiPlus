@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState, useEffect, useLayoutEffect } from 'react';
 
 /**
  * TopBar — unified top bar for all views.
@@ -106,12 +106,36 @@ export default function TopBar({
     );
   }
 
-  // Tab bar
+  // Tab bar with sliding indicator
   const tabs = [
     { id: 'stapel', label: 'Stapel' },
     { id: 'session', label: 'Session' },
     { id: 'statistik', label: 'Statistik' },
   ];
+
+  const tabContainerRef = useRef(null);
+  const tabRefs = useRef({});
+  const [indicator, setIndicator] = useState({ left: 0, width: 0 });
+  const [isFirstRender, setIsFirstRender] = useState(true);
+
+  // Measure active tab position and update indicator
+  useLayoutEffect(() => {
+    const el = tabRefs.current[activeTab];
+    const container = tabContainerRef.current;
+    if (el && container) {
+      const tabRect = el.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      setIndicator({
+        left: tabRect.left - containerRect.left,
+        width: tabRect.width,
+      });
+    }
+    // Disable animation on first render
+    if (isFirstRender) {
+      const timer = setTimeout(() => setIsFirstRender(false), 50);
+      return () => clearTimeout(timer);
+    }
+  }, [activeTab]);
 
   return (
     <div style={{
@@ -120,23 +144,40 @@ export default function TopBar({
       background: 'transparent',
     }}>
       <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>{leftContent}</div>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 2, padding: 3, borderRadius: 8,
-        background: 'var(--ds-hover-tint)',
-      }}>
+      <div
+        ref={tabContainerRef}
+        style={{
+          position: 'relative',
+          display: 'flex', alignItems: 'center', gap: 2, padding: 3, borderRadius: 8,
+          background: 'var(--ds-hover-tint)',
+        }}
+      >
+        {/* Sliding indicator — the "pill" that glides between tabs */}
+        <div style={{
+          position: 'absolute',
+          top: 3, height: 'calc(100% - 6px)',
+          left: indicator.left,
+          width: indicator.width,
+          borderRadius: 6,
+          background: 'var(--ds-border-subtle)',
+          transition: isFirstRender ? 'none' : 'left 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          zIndex: 0,
+        }} />
         {tabs.map(({ id, label }) => {
           const isActive = id === activeTab;
           return (
             <button
               key={id}
+              ref={el => { tabRefs.current[id] = el; }}
               onClick={() => onTabClick?.(id)}
               style={{
+                position: 'relative', zIndex: 1,
                 padding: '5px 16px', fontSize: 12, borderRadius: 6,
                 border: 'none', cursor: isActive ? 'default' : 'pointer',
                 fontWeight: isActive ? 600 : 500,
-                background: isActive ? 'var(--ds-border-subtle)' : 'transparent',
+                background: 'transparent',
                 color: isActive ? 'var(--ds-text-primary)' : 'var(--ds-text-muted)',
-                transition: 'background 0.15s, color 0.15s',
+                transition: 'color 0.2s',
                 fontFamily: 'inherit', lineHeight: 1,
               }}
             >
