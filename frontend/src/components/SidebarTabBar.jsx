@@ -12,31 +12,41 @@ function PlusiSvg({ size = 20, color }) {
   );
 }
 
-/* ── AgentIcon (mirrors AgentCard.jsx pattern) ────────────────────────────── */
-function AgentIcon({ agent, size = 20, color }) {
+/* ── Known agent icons as React SVGs ──────────────────────────────────────── */
+const AGENT_ICONS = {
+  tutor: ({ size, color }) => (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3L2 9l10 6 10-6-10-6z" />
+      <path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5" />
+      <path d="M20 9v7" />
+    </svg>
+  ),
+  research: ({ size, color }) => (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="8" />
+      <path d="M11 3a15 15 0 0 1 4 8 15 15 0 0 1-4 8" />
+      <path d="M11 3a15 15 0 0 0-4 8 15 15 0 0 0 4 8" />
+      <path d="M3 11h16" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" strokeWidth="2" />
+    </svg>
+  ),
+  help: ({ size, color }) => (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+      <circle cx="12" cy="17" r="0.5" fill={color} stroke="none" />
+    </svg>
+  ),
+};
+
+/* ── AgentIcon ────────────────────────────────────────────────────────────── */
+function AgentIcon({ agent, size = 16, color }) {
   if (agent.name === 'plusi') {
     return <PlusiSvg size={size} color={color} />;
   }
-  if (agent.iconSvg) {
-    // Keep stroke="currentColor" in SVG — it inherits from CSS `color`.
-    // SVG attributes can't resolve CSS custom properties, but `currentColor` can.
-    let svg = agent.iconSvg;
-    // Ensure width and height are set
-    svg = svg.replace(/width="[^"]*"/, `width="${size}"`);
-    svg = svg.replace(/height="[^"]*"/, `height="${size}"`);
-    if (!svg.includes(`width="${size}"`)) {
-      svg = svg.replace('<svg', `<svg width="${size}" height="${size}"`);
-    }
-    // nosec: SVG source is the internal Python agent registry, not user content
-    return (
-      <span
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color,  // currentColor in SVG inherits from this
-        }}
-        dangerouslySetInnerHTML={{ __html: svg }} // nosec
-      />
-    );
+  const KnownIcon = AGENT_ICONS[agent.name];
+  if (KnownIcon) {
+    return <KnownIcon size={size} color={color} />;
   }
   // Fallback: single letter avatar
   const letter = (agent.label || agent.name || '?')[0].toUpperCase();
