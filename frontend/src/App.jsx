@@ -28,7 +28,6 @@ import PaywallModal from './components/PaywallModal';
 import TokenBar from './components/TokenBar';
 import SectionDivider from './components/SectionDivider';
 import ReviewTrailIndicator from './components/ReviewTrailIndicator';
-import { BookOpen } from 'lucide-react';
 import { useFreeChat } from './hooks/useFreeChat';
 import { useHoldToReset } from './hooks/useHoldToReset';
 import { setRegistry, findAgent, getRegistry } from '@shared/config/subagentRegistry';
@@ -203,7 +202,6 @@ function AppInner() {
   const [cardData, setCardData] = useState(null);
   const [reviewChatOpen, setReviewChatOpen] = useState(false);
   const reviewChatWasOpenRef = useRef(false); // remember across tab switches
-  const [viewTransition, setViewTransition] = useState(false); // crossfade during tab switches
   const [settingsOpen, setSettingsOpen] = useState(false);
   const dockPulseRef = useRef(null);
   const triggerDockPulse = useCallback(() => {
@@ -665,9 +663,6 @@ function AppInner() {
     // Store original handler (from main.jsx) to call it first
     const originalMainHandler = window.ankiReceive;
     window.ankiReceive = (payload) => {
-      console.error('🔵 DEBUG App.jsx: ankiReceive aufgerufen:', payload?.type, payload);
-      console.log('🔵 App.jsx: ankiReceive aufgerufen:', payload.type, payload);
-      
       if (!payload || typeof payload !== 'object') {
         console.warn('⚠️ App.jsx: Ungültiges Payload:', payload);
         return;
@@ -768,8 +763,7 @@ function AppInner() {
       // CRITICAL: Process deckSelected immediately, don't queue it
       // This event is time-sensitive and needs to be processed as soon as possible
       if (payload.type === 'deckSelected') {
-        console.error('🔵 DEBUG App.jsx: Processing deckSelected IMMEDIATELY', payload.data);
-        window.dispatchEvent(new CustomEvent('deckSelected', { 
+        window.dispatchEvent(new CustomEvent('deckSelected', {
           detail: payload.data 
         }));
       }
@@ -3138,7 +3132,7 @@ function AppInner() {
           : { left: `calc(${sOff} + var(--ds-space-lg))`, width: `calc(100% - ${sOff} - 2 * var(--ds-space-lg))`, bottom: 'var(--ds-space-lg)' };
 
       return (
-        <div ref={dockPulseRef} className="dock-scrim-wrapper" style={{
+        <div ref={dockPulseRef} style={{
           position: 'fixed', zIndex: 60,
           ...posStyle,
           transition: 'left 0.3s cubic-bezier(0.25, 1, 0.5, 1), right 0.3s cubic-bezier(0.25, 1, 0.5, 1), width 0.3s cubic-bezier(0.25, 1, 0.5, 1), bottom 0.3s cubic-bezier(0.25, 1, 0.5, 1)',
