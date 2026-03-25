@@ -1,12 +1,12 @@
 """Tests for ai/term_extractor.py — local term extraction (no LLM)."""
 
 try:
-    from ai.term_extractor import TermExtractor
+    from ai.term_extractor import TermExtractor, compute_collocations
 except ImportError:
     import sys
     import os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-    from ai.term_extractor import TermExtractor
+    from ai.term_extractor import TermExtractor, compute_collocations
 
 
 class TestTermExtractor:
@@ -215,3 +215,35 @@ class TestTermExtractor:
         # Should not also appear as two separate terms
         assert "Renale" not in result
         assert "Hypertonie" not in result
+
+
+class TestPMICollocation:
+    """Test suite for the compute_collocations() PMI function."""
+
+    def test_detects_frequent_bigrams(self):
+        """Bigrams with high frequency and PMI are returned as collocations."""
+        texts = [
+            "Osteogenesis imperfecta ist eine Erbkrankheit",
+            "Bei Osteogenesis imperfecta ist Kollagen betroffen",
+            "Typ I Osteogenesis imperfecta ist häufig",
+            "Osteogenesis imperfecta betrifft Knochen",
+            "Kollagen ist ein Protein",
+            "Knochen bestehen aus Kollagen",
+        ]
+        collocations = compute_collocations(texts, min_count=3, pmi_threshold=2.0)
+        assert ("Osteogenesis", "imperfecta") in collocations
+
+    def test_ignores_rare_bigrams(self):
+        """Bigrams appearing fewer than min_count times are not returned."""
+        texts = ["Seltenes Wortpaar hier", "Anderer Text komplett"]
+        collocations = compute_collocations(texts, min_count=3, pmi_threshold=2.0)
+        assert len(collocations) == 0
+
+    def test_extractor_uses_collocations(self):
+        """TermExtractor merges adjacent tokens when they match a collocation."""
+        extractor = TermExtractor()
+        extractor.set_collocations({("Osteogenesis", "imperfecta")})
+        terms = extractor.extract("Osteogenesis imperfecta ist eine Erkrankung")
+        assert "Osteogenesis imperfecta" in terms
+        assert "Osteogenesis" not in terms  # merged into compound
+

@@ -10,7 +10,9 @@ Extracts technical/medical terms from card text using pure heuristics:
   6. Deduplicate
 """
 
+import math
 import re
+from collections import Counter
 from typing import List, Optional, Set, Tuple
 
 try:
@@ -165,6 +167,83 @@ def _should_keep(token: str) -> bool:
     if _is_stopword(token):
         return False
     return True
+
+
+def compute_collocations(
+    texts: list[str],
+    min_count: int = 3,
+    pmi_threshold: float = 3.0,
+) -> set[tuple[str, str]]:
+    """Compute significant word pair collocations across a corpus.
+
+    Uses Pointwise Mutual Information (PMI) to identify adjacent word pairs
+    that occur together significantly more often than chance would predict.
+    Only word pairs where both tokens pass the stopword filter are considered.
+
+    Args:
+        texts: List of card text strings.
+        min_count: Minimum co-occurrence count for a pair to be considered.
+        pmi_threshold: Minimum PMI score (higher = more significant).
+
+    Returns:
+        Set of (word1, word2) tuples representing significant collocations.
+    """
+    # Tokenize: strip punctuation from each token and lowercase for counting,
+    # but keep original casing for the returned pairs.
+    _PUNCT_RE = re.compile(r'[^\w]')
+
+    all_unigrams: list[str] = []
+    all_bigrams: list[tuple[str, str]] = []
+
+    for text in texts:
+        # Strip HTML first
+        text = _strip_html(text)
+        # Split on whitespace and punctuation boundaries
+        raw_tokens = re.split(r'[\s,;:.!?()\[\]{}"\']+', text)
+        # Strip remaining punctuation from each token and drop empties
+        tokens = [_PUNCT_RE.sub('', t) for t in raw_tokens]
+        tokens = [t for t in tokens if t]
+
+        # Only keep tokens that are candidate terms (pass stopword filter)
+        candidate_tokens = [t for t in tokens if _should_keep(t)]
+
+        all_unigrams.extend(candidate_tokens)
+
+        # Build bigrams from consecutive candidate tokens in this text.
+        # We use the original token sequence to find adjacency, but only
+        # emit a bigram when both members pass the candidate filter.
+        for i in range(len(tokens) - 1):
+            a, b = tokens[i], tokens[i + 1]
+            if _should_keep(a) and _should_keep(b):
+                all_bigrams.append((a, b))
+
+    if not all_bigrams:
+        return set()
+
+    total_unigrams = len(all_unigrams)
+    total_bigrams = len(all_bigrams)
+
+    unigram_counts: Counter[str] = Counter(all_unigrams)
+    bigram_counts: Counter[tuple[str, str]] = Counter(all_bigrams)
+
+    collocations: set[tuple[str, str]] = set()
+
+    for (a, b), count in bigram_counts.items():
+        if count < min_count:
+            continue
+
+        p_ab = count / total_bigrams
+        p_a = unigram_counts[a] / total_unigrams
+        p_b = unigram_counts[b] / total_unigrams
+
+        if p_a == 0 or p_b == 0:
+            continue
+
+        pmi = math.log2(p_ab / (p_a * p_b))
+        if pmi >= pmi_threshold:
+            collocations.add((a, b))
+
+    return collocations
 
 
 class TermExtractor:
