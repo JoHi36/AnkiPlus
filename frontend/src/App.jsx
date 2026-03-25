@@ -2405,7 +2405,7 @@ function AppInner() {
           {activeView === 'deckBrowser' && (
             viewMode === 'graph' ? (
               <React.Suspense fallback={<div style={{ flex: 1 }} />}>
-                <GraphView onToggleView={() => setViewMode('decks')} isPremium={isPremium} />
+                <GraphView onToggleView={() => setViewMode('decks')} isPremium={isPremium} deckData={deckBrowserData} />
               </React.Suspense>
             ) : (
               <DeckBrowserView

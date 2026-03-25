@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import ForceGraph3D from '3d-force-graph';
 import { Search } from 'lucide-react';
 import useKnowledgeGraph from '../hooks/useKnowledgeGraph';
@@ -7,27 +7,67 @@ import { executeAction } from '../actions';
 const QUESTION_WORDS = /\b(was|wie|warum|erkläre|welche|wozu|wann|what|how|why|explain|which|when|describe)\b/i;
 const MAX_W = 'var(--ds-content-width)';
 
-export default function GraphView({ onToggleView, isPremium }) {
+const DECK_COLORS = ['#0A84FF','#30D158','#FF9F0A','#BF5AF2','#FF453A','#5AC8FA','#FFD60A','#AC8E68'];
+
+function deckTreeToGraph(roots) {
+  const nodes = [];
+  const links = [];
+  let colorIdx = 0;
+
+  function walk(deck, parentId, topColor, depth) {
+    if (!deck || !deck.id) return;
+    const color = depth === 0 ? DECK_COLORS[colorIdx++ % DECK_COLORS.length] : topColor;
+    const total = deck.total || 0;
+    if (total === 0 && (!deck.children || deck.children.length === 0)) return;
+
+    nodes.push({
+      id: String(deck.id),
+      label: deck.display || deck.name,
+      fullName: deck.name,
+      total: total,
+      dueNew: deck.dueNew || 0,
+      dueLearn: deck.dueLearn || 0,
+      dueReview: deck.dueReview || 0,
+      deckColor: color,
+      depth: depth,
+      parentId: parentId,
+    });
+
+    if (parentId) {
+      links.push({ source: parentId, target: String(deck.id), value: 1, type: 'hierarchy' });
+    }
+
+    if (deck.children) {
+      deck.children.forEach(child => walk(child, String(deck.id), color, depth + 1));
+    }
+  }
+
+  roots.forEach(root => walk(root, null, null, 0));
+  return { nodes, links };
+}
+
+export default function GraphView({ onToggleView, isPremium, deckData }) {
   const containerRef = useRef(null);
   const graphRef = useRef(null);
   const debounceRef = useRef(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   const {
-    graphData,
-    loading,
     selectedTerm,
     setSelectedTerm,
     searchResult,
     searchGraph,
-    requestDefinition,
   } = useKnowledgeGraph();
 
-  // Handle node click — fly camera to node and request definition
+  const graphData = useMemo(() => {
+    if (!deckData?.roots?.length) return null;
+    return deckTreeToGraph(deckData.roots);
+  }, [deckData]);
+
+  // Handle node click — fly camera to node
   const handleNodeClick = useCallback((node) => {
     if (!node || !graphRef.current) return;
-    setSelectedTerm(node.id);
-    requestDefinition(node.id);
+    setSelectedTerm(node.label);
 
     const distance = 80;
     const distRatio = 1 + distance / Math.hypot(node.x || 1, node.y || 1, node.z || 1);
@@ -36,38 +76,30 @@ export default function GraphView({ onToggleView, isPremium }) {
       node,
       1000
     );
-  }, [setSelectedTerm, requestDefinition]);
+  }, [setSelectedTerm]);
 
   // Build / rebuild the graph when data arrives
   useEffect(() => {
     if (!containerRef.current || !graphData) return;
 
-    const links = graphData.edges.map(e => ({
-      source: e.source || e.term_a,
-      target: e.target || e.term_b,
-      value: e.weight,
-    }));
-
     const graph = ForceGraph3D()(containerRef.current);
     graphRef.current = graph;
 
     graph
-      .graphData({ nodes: graphData.nodes, links })
+      .graphData({ nodes: graphData.nodes, links: graphData.links })
       .backgroundColor('rgba(0,0,0,0)')
       .nodeColor(node => node.deckColor || '#0A84FF')
-      .nodeVal(node => Math.max(0.5, Math.log2((node.frequency || 1) + 1) * 0.8))
-      .nodeLabel(node => `${node.label} (${node.frequency || 0} Karten)`)
-      .nodeVisibility(node => {
-        if (!graphRef.current) return true;
-        const camera = graphRef.current.camera();
-        const dist = camera.position.length();
-        if (dist < 200) return true;
-        if (dist < 400) return (node.frequency || 1) >= 3;
-        return (node.frequency || 1) >= 8;
+      .nodeVal(node => {
+        const base = Math.log2((node.total || 1) + 1);
+        return node.depth === 0 ? base * 3 : base * 1.5;
       })
-      .linkWidth(link => Math.min((link.value || 1) / 2, 3))
-      .linkOpacity(0.15)
-      .linkColor(() => 'rgba(255,255,255,0.1)')
+      .nodeLabel(node => {
+        const due = node.dueNew + node.dueLearn + node.dueReview;
+        return `${node.label} (${node.total} Karten, ${due} fällig)`;
+      })
+      .linkWidth(link => link.type === 'hierarchy' ? 0.5 : Math.min((link.value || 1) / 2, 3))
+      .linkOpacity(link => link.type === 'hierarchy' ? 0.08 : 0.3)
+      .linkColor(link => link.type === 'hierarchy' ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.25)')
       .onNodeClick(handleNodeClick)
       .enableNodeDrag(false)
       .d3AlphaDecay(0.04)
@@ -102,11 +134,11 @@ export default function GraphView({ onToggleView, isPremium }) {
     graphRef.current.onNodeClick(handleNodeClick);
   }, [handleNodeClick]);
 
-  // Focused sub-network search: show only matched terms + neighbors
+  // Focused sub-network search: show only matched decks + parents
   useEffect(() => {
     if (!graphRef.current || !graphData) return;
 
-    if (!searchResult?.matchedTerms?.length) {
+    if (!searchResult?.matchedDeckIds?.length) {
       // No search — show all nodes, restore default visibility
       graphRef.current.nodeVisibility(() => true);
       graphRef.current.linkVisibility(() => true);
@@ -114,16 +146,15 @@ export default function GraphView({ onToggleView, isPremium }) {
       return;
     }
 
-    // Build set of matched terms + their direct neighbors
-    const matched = new Set(searchResult.matchedTerms);
-    const visible = new Set(matched);
+    // Build set of matched deck IDs
+    const matched = new Set(searchResult.matchedDeckIds.map(String));
 
-    // Add all neighbors of matched terms
-    graphData.edges.forEach(e => {
-      const src = e.source?.id || e.source;
-      const tgt = e.target?.id || e.target;
-      if (matched.has(src)) visible.add(tgt);
-      if (matched.has(tgt)) visible.add(src);
+    // Include parent decks of matched decks
+    const visible = new Set(matched);
+    graphData.nodes.forEach(node => {
+      if (matched.has(node.id) && node.parentId) {
+        visible.add(node.parentId);
+      }
     });
 
     // Show only the sub-network
@@ -171,6 +202,7 @@ export default function GraphView({ onToggleView, isPremium }) {
     }, 300);
   }, [searchGraph]);
 
+  const isLoading = !deckData;
   const hasGraph = graphData?.nodes?.length > 0;
 
   return (
@@ -268,7 +300,7 @@ export default function GraphView({ onToggleView, isPremium }) {
               type="text"
               value={searchQuery}
               onChange={handleSearchChange}
-              placeholder="Fachbegriff suchen oder Frage stellen..."
+              placeholder="Deck suchen..."
               style={{
                 flex: 1, background: 'transparent', border: 'none', outline: 'none',
                 color: 'var(--ds-text-primary)', fontSize: 15,
@@ -281,7 +313,7 @@ export default function GraphView({ onToggleView, isPremium }) {
       </div>
 
       {/* Loading state */}
-      {loading && (
+      {isLoading && (
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -299,7 +331,7 @@ export default function GraphView({ onToggleView, isPremium }) {
       )}
 
       {/* Empty state */}
-      {!loading && !hasGraph && (
+      {!isLoading && !hasGraph && (
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -307,8 +339,7 @@ export default function GraphView({ onToggleView, isPremium }) {
           zIndex: 5,
         }}>
           <span style={{ fontSize: 32, opacity: 0.3 }}>◎</span>
-          <span>Noch keine Begriffe extrahiert</span>
-          <span style={{ fontSize: 12 }}>Starte ein Embedding, um den Graphen aufzubauen</span>
+          <span>Keine Decks vorhanden</span>
         </div>
       )}
 
