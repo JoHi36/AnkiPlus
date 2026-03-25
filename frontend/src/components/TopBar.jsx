@@ -1,5 +1,11 @@
 import React, { useRef, useState, useEffect, useLayoutEffect } from 'react';
 
+// Global: persist last known tab + indicator position across TopBar mounts
+// This allows the sliding animation to work even when TopBar remounts
+// between React render branches (early returns in App.jsx).
+let _lastTab = 'stapel';
+let _lastIndicator = null; // { left, width } from last mount
+
 /**
  * TopBar — unified top bar for all views.
  * Adapts content based on activeView and ankiState.
@@ -118,24 +124,42 @@ export default function TopBar({
   const tabContainerRef = useRef(null);
   const tabRefs = useRef({});
   const [indicator, setIndicator] = useState({ left: 0, width: 0 });
-  const [isFirstRender, setIsFirstRender] = useState(true);
+  // Animate on mount if the tab changed since last mount (cross-branch navigation)
+  const shouldAnimateOnMount = _lastTab !== activeTab && _lastIndicator !== null;
+  const [isFirstRender, setIsFirstRender] = useState(!shouldAnimateOnMount);
 
-  // Measure active tab position
+  // Measure active tab position + persist globally
   useLayoutEffect(() => {
     const el = tabRefs.current[activeTab];
     const container = tabContainerRef.current;
     if (el && container) {
       const tabRect = el.getBoundingClientRect();
       const containerRect = container.getBoundingClientRect();
-      setIndicator({
+      const newIndicator = {
         left: tabRect.left - containerRect.left,
         width: tabRect.width,
-      });
+      };
+
+      // On mount: if tab changed across branches, start from last known position
+      if (shouldAnimateOnMount && _lastIndicator) {
+        // Set the OLD position first (no animation), then animate to new
+        setIndicator(_lastIndicator);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setIndicator(newIndicator);
+          });
+        });
+      } else {
+        setIndicator(newIndicator);
+      }
+
+      // Persist for next mount
+      _lastIndicator = newIndicator;
+      _lastTab = activeTab;
     }
-    if (isFirstRender) {
-      const timer = setTimeout(() => setIsFirstRender(false), 50);
-      return () => clearTimeout(timer);
-    }
+    if (!isFirstRender) return;
+    const timer = setTimeout(() => setIsFirstRender(false), 50);
+    return () => clearTimeout(timer);
   }, [activeTab]);
 
   return (

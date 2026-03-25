@@ -50,6 +50,7 @@ import DeckBrowserView from './components/DeckBrowserView';
 import OverviewView from './components/OverviewView';
 import StatistikView from './components/StatistikView';
 import ContextTags from './components/ContextTags';
+import ResizeHandle, { loadPersistedWidth, applyWidth } from './components/ResizeHandle';
 
 // Stable empty references — prevent new object creation on every render
 const EMPTY_STEPS = [];
@@ -1303,7 +1304,11 @@ function AppInner() {
       };
       ankiReceiveRef.current = true;
     }
-    
+
+    // Restore persisted sidebar width
+    const savedWidth = loadPersistedWidth();
+    if (savedWidth) applyWidth(savedWidth);
+
     // Function to process queued messages (only init/deckSelected — rest handled live by ankiReceive)
     const processQueue = () => {
       if (window._ankiReceiveQueue && window._ankiReceiveQueue.length > 0) {
@@ -2337,6 +2342,24 @@ function AppInner() {
     </div>
   );
 
+  // ── Persistent TopBar — never unmounts, slides between all tabs ──
+  const persistentTopBar = (
+    <TopBar
+      activeView={activeView}
+      ankiState={ankiState}
+      messageCount={freeChatHook.messageCount}
+      totalDue={deckBrowserData?.totalDue || 0}
+      deckName={activeView === 'review' ? (cardData?.deckName || '') : (overviewData?.deckName || '')}
+      dueNew={ankiState === 'overview' ? (overviewData?.dueNew || 0) : (deckBrowserData?.totalNew || 0)}
+      dueLearning={ankiState === 'overview' ? (overviewData?.dueLearning || 0) : (deckBrowserData?.totalLearn || 0)}
+      dueReview={ankiState === 'overview' ? (overviewData?.dueReview || 0) : (deckBrowserData?.totalReview || 0)}
+      onTabClick={handleTabClick}
+      onSidebarToggle={handleSidebarToggle}
+      settingsOpen={settingsOpen}
+      holdToResetProps={holdToReset}
+    />
+  );
+
   if (activeView === 'deckBrowser' || activeView === 'overview' || activeView === 'freeChat' || activeView === 'statistik') {
     return (
       <div className={showFreeChat && isFreeChatAnimatingIn ? '' : 'ds-canvas-surface'} style={{
@@ -2347,19 +2370,7 @@ function AppInner() {
         transition: `background-color 400ms cubic-bezier(0.25, 0.1, 0.25, 1), margin-left 0.35s cubic-bezier(0.25, 1, 0.5, 1)`,
       }}>
         {settingsPanel}
-        <TopBar
-          activeView={activeView}
-          ankiState={ankiState}
-          messageCount={freeChatHook.messageCount}
-          totalDue={deckBrowserData?.totalDue || 0}
-          deckName={overviewData?.deckName || ''}
-          dueNew={ankiState === 'overview' ? (overviewData?.dueNew || 0) : (deckBrowserData?.totalNew || 0)}
-          dueLearning={ankiState === 'overview' ? (overviewData?.dueLearning || 0) : (deckBrowserData?.totalLearn || 0)}
-          dueReview={ankiState === 'overview' ? (overviewData?.dueReview || 0) : (deckBrowserData?.totalReview || 0)}
-          onTabClick={handleTabClick}
-          onSidebarToggle={handleSidebarToggle} settingsOpen={settingsOpen}
-          holdToResetProps={holdToReset}
-        />
+        {persistentTopBar}
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {activeView === 'deckBrowser' && (
@@ -2523,12 +2534,7 @@ function AppInner() {
       {/* LEFT: Card viewer — only in review mode */}
       {activeView === 'review' && (
         <div className="ds-canvas-surface" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-          <TopBar
-            activeView="review" ankiState="review"
-            messageCount={0} totalDue={deckBrowserData?.totalDue || 0}
-            deckName={cardData?.deckName || ''} dueNew={0} dueLearning={0} dueReview={0}
-            onTabClick={handleTabClick} onSidebarToggle={handleSidebarToggle} settingsOpen={settingsOpen}
-          />
+          {persistentTopBar}
           <div key="review-content" className="view-enter" style={{ flex: 1, overflow: 'hidden' }}>
             <ReviewerView cardData={cardData} reviewer={reviewer} />
           </div>
@@ -2557,19 +2563,7 @@ function AppInner() {
         position: activeView === 'review' ? 'absolute' : 'relative',
         top: 0, right: 0,
       }}>
-      {/* Unified TopBar — same header across all views (hidden in review) */}
-      {activeView !== 'review' && <TopBar
-        activeView={activeView}
-        ankiState={ankiState}
-        messageCount={freeChatHook.messageCount}
-        totalDue={deckBrowserData?.totalDue || 0}
-        deckName={overviewData?.deckName || sessionContext?.currentSession?.deckName || ''}
-        dueNew={overviewData?.dueNew || deckBrowserData?.totalNew || 0}
-        dueLearning={overviewData?.dueLearning || deckBrowserData?.totalLearn || 0}
-        dueReview={overviewData?.dueReview || deckBrowserData?.totalReview || 0}
-        onTabClick={handleTabClick}
-        onSidebarToggle={handleSidebarToggle} settingsOpen={settingsOpen}
-      />}
+      {/* TopBar removed — using persistentTopBar in view branches instead */}
       {/* Header — ContextSurface (fixiert oben, hidden in review) */}
       <div ref={headerRef} className="fixed top-0 left-0 right-0 z-40" style={{ overflow: 'visible', display: activeView === 'review' ? 'none' : undefined }}>
         <ContextSurface
@@ -2639,7 +2633,7 @@ function AppInner() {
               <div
                 ref={messagesContainerRef}
                 id="messages-container"
-                className={`h-full w-full scrollbar-thin relative z-10 ${activeView === 'chat' ? 'overflow-y-auto px-8 pt-20 pb-40' : 'overflow-hidden flex flex-col px-0 pt-2 pb-0'}`}
+                className={`h-full w-full scrollbar-thin relative z-10 ${activeView === 'chat' ? 'overflow-y-auto px-8 pt-20 pb-40' : 'overflow-hidden flex flex-col px-8 pt-2 pb-0'}`}
               >
 
                 {activeView === 'agentStudio' ? (
