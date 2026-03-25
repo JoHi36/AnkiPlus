@@ -607,6 +607,7 @@ class ChatbotWidget(QWidget):
             'saveAITools': self._msg_save_ai_tools,
             'saveMascotEnabled': self._msg_save_mascot_enabled,
             'saveSubagentEnabled': self._msg_save_subagent_enabled,
+            'saveWorkflowConfig': self._msg_save_workflow_config,
             'getResearchSources': self._msg_get_research_sources,
             'saveResearchSources': self._msg_save_research_sources,
             'getEmbeddingStatus': self._msg_get_embedding_status,
@@ -1068,6 +1069,33 @@ class ChatbotWidget(QWidget):
                 logger.warning("Unknown subagent: %s", name)
         except Exception as e:
             logger.exception("saveSubagentEnabled error: %s", e)
+
+    def _msg_save_workflow_config(self, data):
+        """Save workflow or slot mode change to config."""
+        try:
+            agent_name = data.get('agent') if isinstance(data, dict) else None
+            workflow_name = data.get('workflow') if isinstance(data, dict) else None
+            slot_ref = data.get('slot')  # None if toggling whole workflow
+            mode = data.get('mode') if isinstance(data, dict) else None
+
+            if not agent_name or not workflow_name:
+                logger.warning("saveWorkflowConfig: missing agent or workflow in data: %s", data)
+                return
+
+            config = get_config()
+            wf_config = config.get('workflow_config', {})
+            agent_wf = wf_config.setdefault(agent_name, {})
+            wf = agent_wf.setdefault(workflow_name, {})
+
+            if slot_ref:
+                wf[slot_ref] = mode
+            else:
+                wf['_enabled'] = (mode != 'off')
+
+            update_config(workflow_config=wf_config)
+            logger.info("Saved workflow config: %s/%s/%s = %s", agent_name, workflow_name, slot_ref or '_enabled', mode)
+        except Exception as e:
+            logger.exception("saveWorkflowConfig error: %s", e)
 
     def _msg_get_research_sources(self, data):
         """Return current research source toggles."""
