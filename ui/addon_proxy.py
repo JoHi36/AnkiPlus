@@ -313,7 +313,12 @@ class WebEvalProxy:
     # ------------------------------------------------------------------
 
     def _mirror(self, js_code):
-        """Mirror *js_code* into our webview, queuing if assets not yet loaded."""
+        """Mirror *js_code* into our webview.
+
+        DOM-modifying calls (mark, setContentFor) are delayed 500ms
+        so React finishes rendering card content first. Without this,
+        React re-render wipes the AMBOSS annotations.
+        """
         if not self._assets_loaded:
             logger.debug(
                 "addon_proxy: queuing JS mirror (%s chars) until assets loaded",
@@ -321,6 +326,13 @@ class WebEvalProxy:
             )
             self._queue.append(js_code)
             return
+
+        # Delay DOM-modifying addon calls so React renders first
+        if 'mark(' in js_code or 'setContentFor(' in js_code:
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(500, lambda code=js_code: self._run_in_our_webview(code))
+            return
+
         self._run_in_our_webview(js_code)
 
     def _run_in_our_webview(self, js_code):
