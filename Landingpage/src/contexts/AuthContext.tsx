@@ -3,7 +3,8 @@ import {
   User,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
@@ -56,6 +57,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setLoading(false);
       return;
     }
+
+    // Handle redirect result from Google Sign-In
+    getRedirectResult(auth).then(async (result) => {
+      if (result?.user) {
+        try {
+          await createUserDocument(result.user.uid, result.user.email || '');
+        } catch (error) {
+          console.error('Error creating user document after redirect:', error);
+        }
+      }
+    }).catch((error) => {
+      console.error('Google redirect error:', error.code, error.message);
+    });
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
@@ -121,10 +135,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
     const provider = new GoogleAuthProvider();
     try {
-      const userCredential = await signInWithPopup(auth, provider);
-      if (userCredential.user) {
-        await createUserDocument(userCredential.user.uid, userCredential.user.email || '');
-      }
+      await signInWithRedirect(auth, provider);
+      // Browser redirects away — code below won't execute.
+      // Redirect result is handled in useEffect via getRedirectResult().
     } catch (error: any) {
       console.error('Google login error:', error.code, error.message, error);
       throw new Error(getAuthErrorMessage(error.code, error));

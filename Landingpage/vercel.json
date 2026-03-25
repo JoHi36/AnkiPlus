@@ -5,6 +5,14 @@
   "framework": "vite",
   "rewrites": [
     {
+      "source": "/__/auth/:path*",
+      "destination": "https://ankiplus-b0ffb.firebaseapp.com/__/auth/:path*"
+    },
+    {
+      "source": "/__/firebase/:path*",
+      "destination": "https://ankiplus-b0ffb.firebaseapp.com/__/firebase/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

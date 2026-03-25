@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { GoogleSignInButton } from '../components/GoogleSignInButton';
@@ -8,7 +8,7 @@ import { Loader2, AlertCircle } from 'lucide-react';
 type AuthTab = 'login' | 'register';
 
 export function AuthPage() {
-  const { login, register: registerUser, resetPassword, firebaseConfigured } = useAuth();
+  const { user, login, register: registerUser, resetPassword, firebaseConfigured } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const linkCode = searchParams.get('link');
@@ -28,6 +28,13 @@ export function AuthPage() {
   const [resetSuccess, setResetSuccess] = useState(false);
 
   const callbackUrl = linkCode ? `/auth/callback?link=${linkCode}` : '/auth/callback';
+
+  // Redirect to callback if user is already logged in (e.g. after Google redirect)
+  useEffect(() => {
+    if (user) {
+      navigate(callbackUrl);
+    }
+  }, [user, navigate, callbackUrl]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
