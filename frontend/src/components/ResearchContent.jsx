@@ -8,8 +8,7 @@ import WebCitationBadge from './WebCitationBadge';
  * rendered as clickable WebCitationBadge components via custom link renderer.
  */
 export default function ResearchContent({ sources = [], answer = '', error = null }) {
-  const rgb = '0, 208, 132';
-  const color = '#00D084';
+  const color = 'var(--ds-green)';
 
   // Convert [[WEB:N]] markers to markdown links with webcite: protocol
   const processedAnswer = useMemo(() => {
@@ -70,8 +69,8 @@ export default function ResearchContent({ sources = [], answer = '', error = nul
               key={i}
               className="research-source-chip"
               style={{
-                background: `rgba(${rgb}, 0.06)`,
-                border: `1px solid rgba(${rgb}, 0.10)`,
+                background: 'var(--ds-green-5)',
+                border: '1px solid var(--ds-green-10)',
               }}
               onClick={() => {
                 if (window.ankiBridge) {

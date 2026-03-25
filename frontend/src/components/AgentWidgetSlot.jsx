@@ -49,8 +49,8 @@ function EmbeddingsWidget({ bridge }) {
         {/* Status badge */}
         <span style={{
           fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 4,
-          background: done ? 'rgba(34,197,94,0.12)' : 'rgba(10,132,255,0.12)',
-          color: done ? 'rgba(34,197,94,0.8)' : 'rgba(10,132,255,0.7)',
+          background: done ? 'var(--ds-green-10)' : 'var(--ds-accent-10)',
+          color: done ? 'var(--ds-green)' : 'var(--ds-accent)',
         }}>
           {done ? 'Fertig' : 'L\u00E4uft...'}
         </span>

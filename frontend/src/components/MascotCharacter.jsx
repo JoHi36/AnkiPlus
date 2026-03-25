@@ -34,7 +34,7 @@ export default function MascotCharacter({ mood = 'neutral', size = 52, tapKey = 
     }
   }, [tapKey]);
 
-  const glowStyle = active ? { filter: 'drop-shadow(0 0 6px rgba(10,132,255,0.5))' } : {};
+  const glowStyle = active ? { filter: 'drop-shadow(0 0 6px var(--ds-accent-50))' } : {};
 
   return <div ref={containerRef} style={{ display: 'inline-block', ...glowStyle }} />;
 }

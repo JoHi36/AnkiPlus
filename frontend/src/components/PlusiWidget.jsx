@@ -35,13 +35,8 @@ export default function PlusiContent({
     ? window.getPlusiColor(mood)
     : '#0a84ff';
 
-  const hexToRgb = (hex) => {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    return `${r},${g},${b}`;
-  };
-  const rgb = hexToRgb(color);
+  // Build opacity variants using color-mix to avoid hardcoded rgba literals
+  const colorMix = (pct) => `color-mix(in srgb, ${color} ${pct}%, transparent)`;
 
   const displayText = isLoading ? 'hmm, moment mal...' : text;
   const textParts = displayText.split('\n---\n');
@@ -82,7 +77,7 @@ export default function PlusiContent({
         ) : (
           textParts.map((part, i) => (
             <React.Fragment key={i}>
-              {i > 0 && <div className="plusi-fade" style={{ background: `radial-gradient(ellipse at center, rgba(${rgb},0.25) 0%, rgba(${rgb},0.08) 40%, transparent 80%)` }} />}
+              {i > 0 && <div className="plusi-fade" style={{ background: `radial-gradient(ellipse at center, ${colorMix(25)} 0%, ${colorMix(8)} 40%, transparent 80%)` }} />}
               <div className="plusi-markdown">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {part.trim()}
@@ -98,12 +93,12 @@ export default function PlusiContent({
         <div className="plusi-footer">
           <div className="plusi-footer-row">
             <div className="plusi-footer-left">
-              <span className="plusi-level-name" style={{ color: `rgba(${rgb}, 0.5)` }}>{friendship.levelName}</span>
+              <span className="plusi-level-name" style={{ color: colorMix(50) }}>{friendship.levelName}</span>
               {friendship.delta > 0 && (
-                <span className="plusi-delta" style={{ color: `rgba(${rgb}, 0.6)` }}>▲ +{friendship.delta}</span>
+                <span className="plusi-delta" style={{ color: colorMix(60) }}>▲ +{friendship.delta}</span>
               )}
               {friendship.delta < 0 && (
-                <span className="plusi-delta" style={{ color: `rgba(${rgb}, 0.55)` }}>▼ {friendship.delta}</span>
+                <span className="plusi-delta" style={{ color: colorMix(55) }}>▼ {friendship.delta}</span>
               )}
             </div>
             <span className="plusi-points">
@@ -117,7 +112,7 @@ export default function PlusiContent({
                 width: friendship.level >= 4
                   ? '100%'
                   : `${Math.min(100, (friendship.points / friendship.maxPoints) * 100)}%`,
-                background: `rgba(${rgb}, 0.5)`,
+                background: colorMix(50),
               }}
             />
           </div>

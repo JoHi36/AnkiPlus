@@ -164,7 +164,7 @@ export default function ReviewerView({ cardData, reviewer }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'transparent', overflow: 'hidden' }}>
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 'var(--ds-space-2xl) var(--ds-space-xl) 160px', scrollbarWidth: 'none' }}>
-        <div style={{ maxWidth: 'var(--ds-dock-width)', width: '100%', margin: '0 auto' }}>
+        <div style={{ maxWidth: 'var(--ds-content-width)', width: '100%', margin: '0 auto' }}>
           {showBack
             ? <div className="card-renderer" onClick={handleCardClick}>
                 <div className="card-content" dangerouslySetInnerHTML={{ __html:

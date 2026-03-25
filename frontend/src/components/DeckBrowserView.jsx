@@ -6,7 +6,7 @@ import PlusiDock from './PlusiDock';
 import { useDeckTree } from '../hooks/useDeckTree';
 import { executeAction, bridgeAction } from '../actions';
 
-const MAX_W = 750;
+const MAX_W = 'var(--ds-content-width)';
 
 export default function DeckBrowserView({ data, isPremium }) {
   const { isExpanded, toggleExpanded } = useDeckTree();
@@ -61,7 +61,7 @@ export default function DeckBrowserView({ data, isPremium }) {
             padding: '4px 9px', borderRadius: 7, alignSelf: 'center',
             marginTop: 4, cursor: 'pointer', whiteSpace: 'nowrap',
             ...(isPremium
-              ? { background: 'rgba(10,132,255,0.1)', border: '1px solid rgba(10,132,255,0.22)', color: 'rgba(10,132,255,0.72)' }
+              ? { background: 'var(--ds-accent-10)', border: '1px solid var(--ds-accent-20)', color: 'var(--ds-accent)' }
               : { background: 'var(--ds-hover-tint)', border: '1px solid var(--ds-border-medium)', color: 'var(--ds-text-placeholder)' }),
           }}
           onClick={() => executeAction('settings.toggle')}

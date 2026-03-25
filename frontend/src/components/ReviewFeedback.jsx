@@ -36,9 +36,9 @@ export default function ReviewFeedback({ score, onAutoFlip }) {
 
   // Farbe basierend auf Score
   const getColor = (s) => {
-    if (s >= 90) return 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.4)]';
-    if (s >= 60) return 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.3)]';
-    return 'bg-red-400 shadow-[0_0_5px_rgba(248,113,113,0.2)]';
+    if (s >= 90) return 'bg-emerald-500 [box-shadow:0_0_15px_color-mix(in_srgb,var(--ds-green)_40%,transparent)]';
+    if (s >= 60) return 'bg-amber-400 [box-shadow:0_0_10px_color-mix(in_srgb,var(--ds-yellow)_30%,transparent)]';
+    return 'bg-red-400 [box-shadow:0_0_5px_color-mix(in_srgb,var(--ds-red)_20%,transparent)]';
   };
 
   const colorClass = getColor(displayedScore);

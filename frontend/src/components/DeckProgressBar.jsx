@@ -93,7 +93,7 @@ export default function DeckProgressBar({ deckId, bridge, session }) {
               key={i}
               className={`flex-1 rounded-[0.5px] transition-all duration-300 ${
                 isActive 
-                  ? 'bg-primary shadow-[0_0_8px_rgba(var(--p),0.4)]' 
+                  ? 'bg-primary [box-shadow:0_0_8px_var(--ds-accent-50)]' 
                   : 'bg-base-content/5'
               } ${isLastActive ? 'bg-primary-focus scale-y-125' : ''}`}
               style={{

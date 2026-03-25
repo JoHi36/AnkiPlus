@@ -644,7 +644,7 @@ function PhaseRow({ step, data, status, isActive, isFirst = false, animate = tru
         </span>
         {/* Checkmark */}
         {isDone && status !== 'error' && (
-          <span style={{ fontSize: 10, color: agentColor ? `${agentColor}80` : 'rgba(20,184,166,0.5)' }}>&#10003;</span>
+          <span style={{ fontSize: 10, color: agentColor ? `${agentColor}80` : 'var(--ds-green-50)' }}>&#10003;</span>
         )}
       </div>
 
@@ -705,7 +705,7 @@ function LegacyDoneStep({ label, isError }: { label: string; isError: boolean })
         {label}
       </span>
       {!isError && (
-        <span className="text-[10px]" style={{ color: 'rgba(20,184,166,0.5)' }}>&#10003;</span>
+        <span className="text-[10px]" style={{ color: 'var(--ds-green-50)' }}>&#10003;</span>
       )}
     </div>
   );

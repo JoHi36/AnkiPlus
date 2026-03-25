@@ -43,6 +43,15 @@ export default {
         'xl':   'var(--ds-text-xl)',
         '2xl':  'var(--ds-text-2xl)',
       },
+      maxWidth: {
+        'content': 'var(--ds-content-width)',
+        'dock':    'var(--ds-dock-width)',
+        'sidebar': 'var(--ds-sidebar-width)',
+      },
+      width: {
+        'content': 'var(--ds-content-width)',
+        'sidebar': 'var(--ds-sidebar-width)',
+      },
     },
   },
 };

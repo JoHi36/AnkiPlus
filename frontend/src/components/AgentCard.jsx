@@ -67,7 +67,7 @@ function Toggle({ on, onChange, locked = false }) {
         left: on ? 16 : 2,
         width: 14, height: 14, borderRadius: '50%',
         background: '#fff', transition: 'left 0.2s',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+        boxShadow: '0 1px 3px var(--ds-shadow-sm)',
       }} />
     </button>
   );
@@ -159,7 +159,7 @@ function SubMenuLink({ agent, onOpenSubmenu }) {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         cursor: 'pointer', transition: 'background 0.12s',
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.025)'; }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--ds-hover-tint)'; }}
       onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
     >
       <span style={{

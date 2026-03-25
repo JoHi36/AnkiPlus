@@ -551,9 +551,6 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       updateCurrentCitations({});  // Reset citations
       updatePipelineSteps([]);
     } else if (payload.type === 'pipeline_step') {
-      // Filter out generating steps — ThoughtStream doesn't render them
-      if (payload.step === 'generating') return;
-
       if (payload.requestId && payload.requestId !== activeRequestIdRef.current) return;
 
       updatePipelineSteps(prev => {

@@ -17,13 +17,15 @@ export default function useAgenticMessage() {
 
   const isLoading = currentMessage !== null;
 
-  // Helper: update both state and ref
+  // Helper: update both state and ref SYNCHRONOUSLY.
+  // msgRef.current is the single source of truth — updated immediately so
+  // finalize() always sees the latest state, even when React 18 batches
+  // multiple runJavaScript → ankiReceive calls into one render cycle.
   const updateMsg = useCallback((updater) => {
-    setCurrentMessage(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      msgRef.current = next;
-      return next;
-    });
+    const prev = msgRef.current;
+    const next = typeof updater === 'function' ? updater(prev) : updater;
+    msgRef.current = next;
+    setCurrentMessage(next);
   }, []);
 
   const handleMsgStart = useCallback((payload) => {
@@ -91,10 +93,16 @@ export default function useAgenticMessage() {
   }, [updateMsg]);
 
   const handlePipelineStep = useCallback((payload) => {
+    const targetAgent = payload.agent || payload.data?.agent;
     updateMsg(prev => {
       if (!prev) return prev;
       const cells = prev.agentCells.map(c => {
-        if (!['thinking', 'streaming'].includes(c.status)) return c;
+        // Match by agent name if available, otherwise fall back to active cells
+        if (targetAgent) {
+          if (c.agent !== targetAgent) return c;
+        } else {
+          if (!['thinking', 'streaming', 'loading'].includes(c.status)) return c;
+        }
         const steps = [...(c.pipelineSteps || [])];
         const idx = steps.findIndex(s => s.step === payload.step);
         if (idx >= 0) {
@@ -102,7 +110,9 @@ export default function useAgenticMessage() {
         } else {
           steps.push({ step: payload.step, status: payload.status, data: payload.data || {}, timestamp: payload.timestamp || Date.now() });
         }
-        return { ...c, pipelineSteps: steps };
+        // Transition loading → thinking so AgenticCell renders ThoughtStream instead of shimmer
+        const newStatus = c.status === 'loading' ? 'thinking' : c.status;
+        return { ...c, pipelineSteps: steps, status: newStatus };
       });
       return { ...prev, agentCells: cells };
     });

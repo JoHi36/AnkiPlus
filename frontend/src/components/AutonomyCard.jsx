@@ -5,7 +5,7 @@ const CARD_STYLE = {
   borderRadius: 16,
   padding: 20,
   backdropFilter: 'blur(20px)',
-  border: '1px solid var(--ds-border, rgba(255,255,255,0.06))',
+  border: '1px solid var(--ds-border))',
 };
 
 const CAPABILITIES = [
@@ -68,7 +68,7 @@ function Toggle({ on, onChange, disabled = false }) {
           borderRadius: '50%',
           background: '#fff',
           transition: 'left 0.2s',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
+          boxShadow: 'var(--ds-shadow-sm)',
         }}
       />
     </button>
@@ -103,7 +103,7 @@ function ActivitySegments({ value, onChange }) {
       style={{
         position: 'relative',
         display: 'flex',
-        background: 'var(--ds-bg-overlay, rgba(255,255,255,0.06))',
+        background: 'var(--ds-bg-overlay))',
         borderRadius: 8,
         padding: 2,
       }}
@@ -111,8 +111,8 @@ function ActivitySegments({ value, onChange }) {
       <div style={{
         position: 'absolute', top: 2, height: 'calc(100% - 4px)',
         borderRadius: 6,
-        background: 'rgba(10, 132, 255, 0.15)',
-        border: '1px solid rgba(10, 132, 255, 0.25)',
+        background: 'var(--ds-accent-10)',
+        border: '1px solid var(--ds-accent-20)',
         transition: 'left 0.25s ease, width 0.25s ease',
         ...pillStyle,
       }} />
@@ -128,7 +128,7 @@ function ActivitySegments({ value, onChange }) {
             fontWeight: value === level.key ? 600 : 400,
             color: value === level.key
               ? 'var(--ds-accent, #0A84FF)'
-              : 'var(--ds-text-tertiary, rgba(255,255,255,0.35))',
+              : 'var(--ds-text-tertiary))',
             transition: 'color 0.2s',
             fontFamily: '-apple-system, Inter, system-ui, sans-serif',
           }}
@@ -234,11 +234,11 @@ export default function AutonomyCard({
         <div style={{ flex: 1, minWidth: 0 }}>
           <span style={{
             fontSize: 16, fontWeight: 700,
-            color: 'var(--ds-text-primary, rgba(255,255,255,0.88))',
+            color: 'var(--ds-text-primary))',
           }}>Plusi</span>
           <span style={{
             fontSize: 12, marginLeft: 8,
-            color: 'var(--ds-text-secondary, rgba(255,255,255,0.55))',
+            color: 'var(--ds-text-secondary))',
           }}>
             {mood} &middot; {energy}
           </span>
@@ -251,7 +251,7 @@ export default function AutonomyCard({
       }}>
         <span style={{
           fontSize: 11, fontWeight: 600,
-          color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))',
+          color: 'var(--ds-text-tertiary))',
           whiteSpace: 'nowrap',
         }}>
           Lv {friendshipLevel}{friendshipLevelName ? ` \u00B7 ${friendshipLevelName}` : ''}
@@ -259,7 +259,7 @@ export default function AutonomyCard({
 
         <div style={{
           flex: 1, height: 3, borderRadius: 2,
-          background: 'var(--ds-border, rgba(255,255,255,0.08))',
+          background: 'var(--ds-border))',
           overflow: 'hidden',
         }}>
           <div style={{
@@ -272,7 +272,7 @@ export default function AutonomyCard({
 
         <span style={{
           fontSize: 11,
-          color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))',
+          color: 'var(--ds-text-tertiary))',
           whiteSpace: 'nowrap',
           fontVariantNumeric: 'tabular-nums',
         }}>
@@ -288,13 +288,13 @@ export default function AutonomyCard({
         }}>
           <span style={{
             fontSize: 13, fontWeight: 500,
-            color: 'var(--ds-text-secondary, rgba(255,255,255,0.7))',
+            color: 'var(--ds-text-secondary))',
           }}>
             Aktivität
           </span>
           <span style={{
             fontSize: 11,
-            color: 'var(--ds-text-tertiary, rgba(255,255,255,0.35))',
+            color: 'var(--ds-text-tertiary))',
           }}>
             {(ACTIVITY_LEVELS.find(l => l.key === config.activity_level) || ACTIVITY_LEVELS[0]).desc}
           </span>
@@ -309,7 +309,7 @@ export default function AutonomyCard({
       {/* ── Separator line ───────────────────────────────────────── */}
       <div style={{
         height: 1,
-        background: 'var(--ds-border, rgba(255,255,255,0.06))',
+        background: 'var(--ds-border))',
         marginBottom: 14,
       }} />
 
@@ -329,7 +329,7 @@ export default function AutonomyCard({
                 paddingTop: i === 0 ? 0 : 10,
                 paddingBottom: i < CAPABILITIES.length - 1 ? 10 : 0,
                 borderBottom: i < CAPABILITIES.length - 1
-                  ? '1px solid var(--ds-border-subtle, rgba(255,255,255,0.06))'
+                  ? '1px solid var(--ds-border-subtle))'
                   : 'none',
                 opacity: isLocked ? 0.4 : 1,
               }}
@@ -337,7 +337,7 @@ export default function AutonomyCard({
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{
                   fontSize: 13, fontWeight: 400,
-                  color: 'var(--ds-text-secondary, rgba(255,255,255,0.7))',
+                  color: 'var(--ds-text-secondary))',
                 }}>
                   {cap.label}{isLocked ? ' (locked)' : ''}
                 </div>

@@ -425,7 +425,7 @@ export default function ComponentViewer() {
           onClick={() => setSidebarOpen(false)}
           style={{
             position: 'fixed', inset: 0, zIndex: 140,
-            background: 'rgba(0,0,0,0.5)',
+            background: 'color-mix(in srgb, black 50%, transparent)',
             transition: 'opacity 0.25s ease',
           }}
         />

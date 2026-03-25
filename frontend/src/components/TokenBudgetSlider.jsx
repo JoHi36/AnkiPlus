@@ -72,7 +72,7 @@ export default function TokenBudgetSlider({ value, onChange }) {
               fontSize: 11.5,
               lineHeight: 1.55,
               color: 'var(--ds-text-secondary)',
-              boxShadow: '0 2px 12px rgba(0,0,0,0.2)',
+              boxShadow: 'var(--ds-shadow-sm)',
               zIndex: 20,
               cursor: 'pointer',
               animation: 'dsTipIn 0.15s ease',

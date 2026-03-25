@@ -43,7 +43,6 @@ export interface ChatInputProps {
   onBlur?: () => void;  // Called when the textarea loses focus
   stickyAgent?: { name: string; label: string } | null;
   onStickyAgentChange?: (agent: { name: string; label: string } | null) => void;
-  onOpenAgentStudio?: () => void;
 }
 
 
@@ -77,7 +76,6 @@ export default function ChatInput({
   onBlur: onBlurProp,
   stickyAgent: stickyAgentProp = null,
   onStickyAgentChange,
-  onOpenAgentStudio,
 }: ChatInputProps) {
   const [input, setInput] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -251,10 +249,9 @@ export default function ChatInput({
         e.preventDefault();
         if (currentGhost) {
           if ((currentGhost as any).isSettings) {
-            // Open Agent Studio
+            // Settings entry — clear the input and close ghost
             setInput(input.replace(/@\w*$/, ''));
             setGhostVisible(false);
-            onOpenAgentStudio?.();
           } else {
             // Create chip, remove @text from input
             const newAgent = { name: currentGhost.name, label: currentGhost.label };
@@ -314,7 +311,7 @@ export default function ChatInput({
             inset: '-1px',
             borderRadius: '17px',
             padding: '1px',
-            background: 'conic-gradient(from var(--border-angle, 0deg) at 50% 100%, rgba(10,132,255,0.0) 0deg, rgba(10,132,255,0.5) 60deg, rgba(10,132,255,0.1) 120deg, rgba(10,132,255,0.0) 180deg, rgba(10,132,255,0.1) 240deg, rgba(10,132,255,0.5) 300deg, rgba(10,132,255,0.0) 360deg)',
+            background: 'conic-gradient(from var(--border-angle, 0deg) at 50% 100%, transparent 0deg, var(--ds-accent-50) 60deg, var(--ds-accent-10) 120deg, transparent 180deg, var(--ds-accent-10) 240deg, var(--ds-accent-50) 300deg, transparent 360deg)',
             WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
             WebkitMaskComposite: 'xor',
             maskComposite: 'exclude',
@@ -489,7 +486,7 @@ export default function ChatInput({
               style={{
                 right: 'var(--ds-space-md)',
                 bottom: '10px',
-                background: 'rgba(255,69,58,0.15)',
+                background: 'var(--ds-red-10)',
               }}
             >
               <Square size={10} style={{ color: 'var(--ds-red)' }} fill="currentColor" />

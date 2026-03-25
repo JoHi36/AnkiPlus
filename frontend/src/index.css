@@ -247,19 +247,25 @@ header *,
   height: 20px;
 }
 
+/* ── Sidebar Resize: kill transitions during drag for instant response ── */
+body.sidebar-resizing,
+body.sidebar-resizing * {
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+}
+
 /* ── Agentic Cell Skeleton ── */
 .agent-cell {
   position: relative; padding: 20px 32px; margin: 8px -32px;
   background:
     linear-gradient(180deg,
-      rgba(var(--agent-rgb), 0.05) 0%,
-      rgba(var(--agent-rgb), 0.02) 20%,
-      transparent 45%,
-      transparent 80%,
-      rgba(var(--agent-rgb), 0.03) 100%);
+      rgba(var(--agent-rgb), 0.06) 0%,
+      rgba(var(--agent-rgb), 0.03) 15%,
+      rgba(var(--agent-rgb), 0.015) 35%,
+      transparent 65%);
 }
 .agent-cell-glow { display: none; }
-.agent-cell-top { display: flex; align-items: center; margin-bottom: 12px; }
+.agent-cell-top { display: flex; align-items: center; margin-bottom: 12px; max-width: var(--ds-content-width); }
 .agent-cell-top-left { display: flex; align-items: center; gap: 8px; flex: 1; }
 .agent-cell-top-right { display: flex; align-items: center; gap: 6px; }
 .agent-cell-icon {
@@ -270,7 +276,7 @@ header *,
 .agent-cell-icon-letter { font-size: 11px; font-weight: 600; }
 .agent-cell-emote { width: 22px; height: 22px; flex-shrink: 0; }
 .agent-cell-name { font-size: 13px; font-weight: 600; letter-spacing: 0.2px; }
-.agent-cell-content { font-size: 15px; line-height: 1.65; }
+.agent-cell-content { font-size: 15px; line-height: 1.65; max-width: var(--ds-content-width); }
 .agent-cell-content p { margin-bottom: 12px; }
 .agent-cell-loading-hint { font-size: 13px; font-style: italic; opacity: 0.5; margin-bottom: 12px; }
 .agent-cell-shimmer {

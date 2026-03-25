@@ -61,7 +61,7 @@ function CipherSpan({ length }) {
     <span
       style={{
         display: 'inline',
-        color: 'var(--ds-text-muted, rgba(255,255,255,0.18))',
+        color: 'var(--ds-text-muted))',
         fontSize: 14,
         wordBreak: 'break-all',
         userSelect: 'none',
@@ -103,7 +103,7 @@ function renderEntryText(text, cipherParts = []) {
 
 const TAG_CONFIG = {
   gemerkt:     { color: 'var(--ds-green)',  bg: 'var(--ds-green-10)',  tip: 'Während eines Gesprächs entstanden' },
-  reflektiert: { color: 'var(--ds-purple)', bg: 'var(--ds-purple-10)', tip: 'Plusi war allein aktiv und hat selbstständig nachgedacht' },
+  reflektiert: { color: 'var(--ds-purple)', bg: 'color-mix(in srgb, var(--ds-purple) 10%, transparent)', tip: 'Plusi war allein aktiv und hat selbstständig nachgedacht' },
   entdeckt:    { color: 'var(--ds-yellow)', bg: 'var(--ds-yellow-10)', tip: 'Plusi hat eigenständig Karten durchsucht und Verbindungen gefunden' },
   forscht:     { color: 'var(--ds-yellow)', bg: 'var(--ds-yellow-10)', tip: 'Plusi hat eigenständig Karten durchsucht und Verbindungen gefunden' },
   'geträumt':  { color: 'var(--ds-accent)', bg: 'var(--ds-accent-10)', tip: 'Plusi hat im Schlaf geträumt — automatisch, ohne gesteuert zu werden' },
@@ -175,7 +175,7 @@ function CategoryTag({ category }) {
             padding: '5px 10px',
             borderRadius: 6,
             background: 'var(--ds-bg-overlay, #3A3A3C)',
-            color: 'var(--ds-text-secondary, rgba(255,255,255,0.7))',
+            color: 'var(--ds-text-secondary))',
             fontSize: 10,
             lineHeight: 1.4,
             whiteSpace: 'nowrap',
@@ -200,7 +200,7 @@ function DiaryEntry({ entry }) {
       <div
         style={{
           fontSize: 11,
-          color: 'var(--ds-text-quaternary, rgba(255,255,255,0.25))',
+          color: 'var(--ds-text-quaternary))',
           fontVariantNumeric: 'tabular-nums',
           marginBottom: 4,
           display: 'flex',
@@ -239,8 +239,8 @@ function DiaryEntry({ entry }) {
               key={idx}
               style={{
                 fontSize: 10,
-                color: 'var(--ds-text-tertiary, rgba(255,255,255,0.35))',
-                background: 'var(--ds-bg-overlay, rgba(255,255,255,0.06))',
+                color: 'var(--ds-text-tertiary))',
+                background: 'var(--ds-bg-overlay))',
                 borderRadius: 6,
                 padding: '2px 7px',
                 display: 'inline-flex',
@@ -298,8 +298,8 @@ export default function DiaryStream({ entries = [], dayRefs }) {
               fontWeight: 500,
               letterSpacing: '0.5px',
               textTransform: 'uppercase',
-              color: 'var(--ds-text-secondary, rgba(255,255,255,0.55))',
-              borderBottom: '1px solid var(--ds-border, rgba(255,255,255,0.06))',
+              color: 'var(--ds-text-secondary))',
+              borderBottom: '1px solid var(--ds-border))',
               paddingBottom: 6,
               marginBottom: 12,
             }}

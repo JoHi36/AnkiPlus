@@ -161,20 +161,20 @@ export default function PlusiMenu({ agent, bridge, onNavigateBack }) {
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: 'var(--ds-text-muted, rgba(255,255,255,0.18))',
+                  color: 'var(--ds-text-muted))',
                   fontSize: 11,
                   cursor: 'pointer',
                   padding: '6px 12px',
                   transition: 'color 0.2s',
                 }}
                 onMouseEnter={e => e.target.style.color = 'var(--ds-red, #f87171)'}
-                onMouseLeave={e => e.target.style.color = 'var(--ds-text-muted, rgba(255,255,255,0.18))'}
+                onMouseLeave={e => e.target.style.color = 'var(--ds-text-muted))'}
               >
                 Plusi zurücksetzen
               </button>
             ) : (
               <div style={{
-                background: 'var(--ds-bg-overlay, rgba(255,255,255,0.06))',
+                background: 'var(--ds-bg-overlay))',
                 borderRadius: 10,
                 padding: '14px 16px',
                 maxWidth: 280,
@@ -182,7 +182,7 @@ export default function PlusiMenu({ agent, bridge, onNavigateBack }) {
               }}>
                 <p style={{
                   fontSize: 12,
-                  color: 'var(--ds-text-secondary, rgba(255,255,255,0.55))',
+                  color: 'var(--ds-text-secondary))',
                   margin: '0 0 12px',
                   lineHeight: 1.5,
                 }}>
@@ -192,8 +192,8 @@ export default function PlusiMenu({ agent, bridge, onNavigateBack }) {
                   <button
                     onClick={() => setShowResetConfirm(false)}
                     style={{
-                      background: 'var(--ds-hover-tint, rgba(255,255,255,0.04))',
-                      border: '1px solid var(--ds-border-subtle, rgba(255,255,255,0.06))',
+                      background: 'var(--ds-hover-tint))',
+                      border: '1px solid var(--ds-border-subtle))',
                       borderRadius: 6,
                       color: 'var(--ds-text-secondary)',
                       fontSize: 11,
@@ -206,10 +206,10 @@ export default function PlusiMenu({ agent, bridge, onNavigateBack }) {
                   <button
                     onClick={handleReset}
                     style={{
-                      background: 'rgba(248,113,113,0.12)',
-                      border: '1px solid rgba(248,113,113,0.2)',
+                      background: 'var(--ds-red-10)',
+                      border: '1px solid var(--ds-red-20)',
                       borderRadius: 6,
-                      color: '#f87171',
+                      color: 'var(--ds-red)',
                       fontSize: 11,
                       fontWeight: 600,
                       padding: '5px 14px',

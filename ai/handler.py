@@ -383,44 +383,41 @@ class AIHandler:
         """
         extra_kwargs = extra_kwargs or {}
 
-        # Orchestration — use routing_result if available (Tutor has search params)
+        # Orchestration — always show agent routing, never search details.
+        # Search details (retrieval_mode, scope) are agent-internal pipeline steps.
         routing_result = extra_kwargs.get('routing_result')
-        if (routing_result
-                and hasattr(routing_result, 'search_needed')
-                and routing_result.search_needed is not None):
-            orch_data = {
-                'search_needed': routing_result.search_needed,
-                'retrieval_mode': routing_result.retrieval_mode or 'agent:%s' % agent_name,
-                'method': getattr(routing_result, 'method', 'default'),
-                'scope': 'none',
-                'scope_label': getattr(routing_result, 'search_scope', '') or agent_name,
-                'response_length': getattr(routing_result, 'response_length', 'medium'),
-            }
-        else:
-            orch_data = {
-                'search_needed': False,
-                'retrieval_mode': 'agent:%s' % agent_name,
-                'scope': 'none',
-                'scope_label': agent_name,
-            }
+        method = 'default'
+        response_length = 'medium'
+        if routing_result:
+            method = getattr(routing_result, 'method', 'default')
+            response_length = getattr(routing_result, 'response_length', 'medium')
+
+        orch_data = {
+            'search_needed': False,
+            'retrieval_mode': 'agent:%s' % agent_name,
+            'method': method,
+            'scope': 'none',
+            'scope_label': agent_name,
+            'response_length': response_length,
+        }
         self._emit_pipeline_step("orchestrating", "done", orch_data)
 
         # v2: Emit orchestration event
         self._emit_msg_event("orchestration", {
             "messageId": request_id or '',
             "agent": agent_name,
-            "mode": orch_data.get('method', 'dispatch'),
+            "mode": method,
             "steps": [{"step": "orchestrating", "status": "done", "data": {
                 "agent": agent_name,
                 **orch_data,
             }}],
         })
 
-        # v2: Create agent cell
+        # v2: Create agent cell (status='loading' triggers shimmer in frontend)
         self._emit_msg_event("agent_cell", {
             "messageId": request_id or '',
             "agent": agent_name,
-            "status": "thinking",
+            "status": "loading",
             "data": {}
         })
 
@@ -443,7 +440,9 @@ class AIHandler:
 
         # Build the agent's emit_step callback (routes through pipeline signal)
         def agent_emit_step(step, status, data=None):
-            self._emit_pipeline_step(step, status, data)
+            enriched = dict(data or {})
+            enriched['agent'] = agent_name
+            self._emit_pipeline_step(step, status, enriched)
 
         # Build kwargs — always inject config so every agent has access
         agent_kwargs = dict(extra_kwargs)
