@@ -2648,6 +2648,7 @@ function AppInner() {
                 ref={messagesContainerRef}
                 id="messages-container"
                 className={`h-full w-full scrollbar-thin relative z-10 ${activeView === 'chat' ? 'overflow-y-auto px-8 pt-20 pb-40' : 'overflow-y-auto flex flex-col px-8 pt-2 pb-40'}`}
+                style={{ maxWidth: 'var(--ds-content-width)', margin: '0 auto' }}
               >
 
                 {chatHook.messages.length === 0 && !chatHook.isLoading && !chatHook.streamingMessage ? (
@@ -2833,6 +2834,12 @@ function AppInner() {
                           // Clear buffer once saved message is rendering
                           if (savedBot && !liveMsg) lastLiveMsgRef.current = null;
                           const isLive = !!chatHook.currentMessage;
+                          // DEBUG: track what's rendering
+                          const _src = liveMsg ? (chatHook.currentMessage ? 'LIVE' : 'BUFFERED') : 'SAVED';
+                          const _cells = msg.agentCells?.length || 0;
+                          const _steps = msg.agentCells?.[0]?.pipelineSteps?.length || 0;
+                          const _orch = !!msg.orchestration;
+                          console.error(`[v2-unified] src=${_src} cells=${_cells} steps=${_steps} orch=${_orch} isLive=${isLive} text=${(msg.agentCells?.[0]?.text || msg.text || '').length}`);
                           return (
                             <div className="w-full flex-none">
                               <ChatMessage
