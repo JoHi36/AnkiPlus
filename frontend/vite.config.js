@@ -35,6 +35,10 @@ export default defineConfig(({ mode }) => ({
         assetFileNames: 'assets/[name]-[hash].[ext]',
         entryFileNames: 'assets/[name]-[hash].js',
         chunkFileNames: 'assets/[name]-[hash].js',
+        manualChunks: {
+          'three-vendor': ['three'],
+          '3d-force-graph': ['3d-force-graph'],
+        },
       },
       external: ['d3-sankey'], // Externalize d3-sankey to avoid build issues
     },
