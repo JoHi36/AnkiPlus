@@ -726,6 +726,13 @@ def cleanup_addon():
             _embedding_manager.stop_background_embedding()
             _embedding_manager = None
 
+        # Restore addon proxy (uninstall eval wrapper)
+        try:
+            from .ui.addon_proxy import get_proxy
+            get_proxy().uninstall()
+        except Exception:
+            pass
+
         show_native_bottom_bar()
         show_native_top_separator()
         show_native_toolbar()
@@ -735,8 +742,17 @@ def cleanup_addon():
 
 # Hook registrieren (mit Fallback falls Hooks nicht verfügbar sind)
 if mw is not None:
+    # Addon Proxy — capture JS/CSS injected by other addons (AMBOSS, etc.)
+    # Must be registered BEFORE profile_did_open so it captures from first reviewer load
+    try:
+        from .ui.addon_proxy import get_capture
+        gui_hooks.webview_will_set_content.append(get_capture().on_webview_content)
+        logger.info("Addon proxy: content capture hook registered")
+    except Exception as e:
+        logger.warning("Addon proxy registration failed: %s", e)
+
     gui_hooks.profile_did_open.append(on_profile_loaded)
-    
+
     # Register cleanup hook
     if hasattr(gui_hooks, 'profile_will_close'):
         gui_hooks.profile_will_close.append(cleanup_addon)

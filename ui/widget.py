@@ -1459,7 +1459,14 @@ class ChatbotWidget(QWidget):
             )
         except Exception as e:
             logger.error("Failed to push subagent registry: %s", e)
-    
+
+        # Inject addon assets (AMBOSS JS/CSS, Meditricks, etc.) into our WebView
+        try:
+            from .addon_proxy import inject_addon_assets
+            inject_addon_assets(self.web_view)
+        except Exception as e:
+            logger.warning("Addon asset injection failed: %s", e)
+
     def push_updated_models(self):
         """Sendet aktualisierte Model-Liste an die Web-UI"""
         api_key = self.config.get("api_key", "")
@@ -2018,6 +2025,16 @@ class ChatbotWidget(QWidget):
         if not mw or not mw.col:
             logger.warning("mw.col not available, skipping _send_card_data")
             return
+
+        # Install addon proxy on first card (reviewer is now available)
+        if not getattr(self, '_addon_proxy_installed', False):
+            try:
+                from .addon_proxy import get_proxy
+                get_proxy().install(self.web_view)
+                self._addon_proxy_installed = True
+            except Exception as e:
+                logger.warning("Addon proxy install failed: %s", e)
+
         try:
             front_html = card.question()
             back_html = card.answer()
