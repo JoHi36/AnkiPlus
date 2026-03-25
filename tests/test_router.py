@@ -125,3 +125,44 @@ def test_route_message_heuristic_plusi():
     )
     assert result.agent == 'plusi'
     assert result.method == 'heuristic'
+
+
+def test_route_empty_query():
+    """Routing an empty string should not crash and should default to tutor."""
+    from ai.router import route_message
+    result = route_message(
+        '',
+        {'mode': 'free_chat', 'deck_name': '', 'has_card': False},
+        {},
+    )
+    assert result.agent == 'tutor'
+
+
+def test_route_none_query():
+    """Routing None as the message should raise a clear error or default to tutor gracefully."""
+    from ai.router import route_message
+    try:
+        result = route_message(
+            None,
+            {'mode': 'free_chat', 'deck_name': '', 'has_card': False},
+            {},
+        )
+        # If it returns without raising, agent must still be a valid string
+        assert isinstance(result.agent, str)
+    except (TypeError, AttributeError):
+        pass  # Acceptable: explicit exception from None.lower() is a clear error
+
+
+@patch('ai.router._requests')
+def test_route_malformed_json_response(mock_requests):
+    """If the LLM returns malformed JSON, unified_route falls back to tutor."""
+    mock_requests.post.return_value = _mock_gemini_response('this is { not valid json !!!')
+    result = unified_route(
+        user_message='what is mitosis',
+        session_context={'mode': 'card_session', 'deck_name': 'Bio', 'has_card': True},
+        config={'api_key': 'test-key'},
+        card_context=None,
+        chat_history=[],
+    )
+    assert result.agent == 'tutor'
+    assert result.method == 'default'

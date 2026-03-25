@@ -224,3 +224,78 @@ class TestEmbeddings:
         cs.save_embedding(1, b"\x00", "h1", "v1")
         cs.delete_embedding(1)
         assert cs.load_embedding(1) is None
+
+
+class TestEdgeCases:
+    """Edge case and error path tests."""
+
+    def setup_method(self):
+        TestCardSessionsCRUD._fresh_db(self)
+
+    def teardown_method(self):
+        if cs._db:
+            cs._db.close()
+            cs._db = None
+
+    def test_save_session_empty_card_id(self):
+        """Saving a session with card_id=None should not crash — returns False or raises cleanly."""
+        data = {
+            "session": {"deck_name": "TestDeck"},
+            "sections": [],
+            "messages": [],
+        }
+        # int(None) raises TypeError; the function should handle it gracefully
+        try:
+            result = cs.save_card_session(None, data)
+            # If it returns instead of raising, it must signal failure
+            assert result is False
+        except (TypeError, ValueError):
+            pass  # Acceptable: explicit exception is also graceful
+
+    def test_max_messages_per_card_limit(self):
+        """After exceeding MAX_MESSAGES_PER_CARD, oldest messages are pruned."""
+        original_limit = cs.MAX_MESSAGES_PER_CARD
+        cs.MAX_MESSAGES_PER_CARD = 10
+
+        try:
+            for i in range(15):
+                cs.save_message(600, {"text": f"Msg {i:02d}", "sender": "user"})
+
+            result = cs.load_card_session(600)
+            assert len(result["messages"]) == 10
+
+            # The remaining messages should be the most recent ones
+            texts = [m["text"] for m in result["messages"]]
+            assert "Msg 14" in texts   # newest preserved
+            assert "Msg 00" not in texts  # oldest pruned
+        finally:
+            cs.MAX_MESSAGES_PER_CARD = original_limit
+
+    def test_load_session_corrupted_json_fields(self):
+        """Loading a session whose steps/citations columns hold invalid JSON does not crash."""
+        import sqlite3
+
+        card_id = 700
+        now = "2024-01-01T00:00:00"
+
+        # Directly insert a session and a message with invalid JSON in steps/citations
+        cs._db.execute(
+            "INSERT INTO card_sessions (card_id, created_at, updated_at) VALUES (?, ?, ?)",
+            (card_id, now, now),
+        )
+        cs._db.execute(
+            "INSERT INTO messages (id, card_id, text, sender, created_at, steps, citations)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("msg-bad-json", card_id, "test", "ai", now, "NOT_VALID_JSON{{{", "[unclosed"),
+        )
+        cs._db.commit()
+
+        result = cs.load_card_session(card_id)
+        assert result["session"] is not None
+        assert len(result["messages"]) == 1
+        msg = result["messages"][0]
+        # Should not raise; bad JSON is returned as-is (raw string passthrough)
+        assert msg["text"] == "test"
+        # steps and citations are present — either raw string or parsed; crucially no exception
+        assert "steps" in msg
+        assert "citations" in msg
