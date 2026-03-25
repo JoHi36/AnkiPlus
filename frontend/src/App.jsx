@@ -2516,6 +2516,11 @@ function AppInner() {
   return (
     <ErrorBoundary>
     <style>{`
+      #messages-container > * {
+        max-width: var(--ds-content-width);
+        margin-left: auto;
+        margin-right: auto;
+      }
       @keyframes slideInFromRight {
         from { transform: translateX(30px); opacity: 0; }
         to   { transform: translateX(0);    opacity: 1; }
@@ -2651,7 +2656,6 @@ function AppInner() {
                 ref={messagesContainerRef}
                 id="messages-container"
                 className={`h-full w-full scrollbar-thin relative z-10 ${activeView === 'chat' ? 'overflow-y-auto px-8 pt-20 pb-40' : 'overflow-y-auto flex flex-col px-8 pt-2 pb-40'}`}
-                style={{ maxWidth: 'var(--ds-content-width)', margin: '0 auto' }}
               >
 
                 {chatHook.messages.length === 0 && !chatHook.isLoading && !chatHook.streamingMessage ? (
@@ -2876,7 +2880,7 @@ function AppInner() {
                             return activeAgentName || 'tutor';
                           })();
                           return (
-                            <div className="w-full flex-none mb-2" style={{ maxWidth: 'var(--ds-content-width)' }}>
+                            <div className="w-full flex-none mb-2" style={{ maxWidth: 'var(--ds-content-width)', margin: '0 auto' }}>
                               {/* Router ReasoningStream (before agent) */}
                               {rSteps.length > 0 && (
                                 <ReasoningStream
@@ -2915,7 +2919,7 @@ function AppInner() {
                           typeof nextMsg.text === 'string' &&
                           nextMsg.text
                         ) && (
-                          <div className="w-full flex-none" style={{ maxWidth: 'var(--ds-content-width)' }}>
+                          <div className="w-full flex-none" style={{ maxWidth: 'var(--ds-content-width)', margin: '0 auto' }}>
                             <StreamingChatMessage
                               message={chatHook.streamingMessage || ''}
                               isStreaming={chatHook.isLoading}
