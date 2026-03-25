@@ -244,23 +244,28 @@
 }
 
 /* ── Frosted Glass Material ──
-   Real glass material: gradient overlay + strong blur + inset edge highlights.
-   Transparent enough for content to shimmer through, opaque enough to read on. */
+   Real glass: semi-opaque base + gradient overlay + strong blur + edge highlights.
+   The base layer ensures readability over any content (bright images, white bg).
+   The gradient + blur add the glass character on top. */
 .ds-frosted {
-  background: linear-gradient(165deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.07) 100%);
+  background:
+    linear-gradient(165deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%),
+    rgba(28,28,30,0.65);
   backdrop-filter: blur(40px) saturate(1.8);
   -webkit-backdrop-filter: blur(40px) saturate(1.8);
-  border: 1px solid rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.10);
   box-shadow:
-    inset 0 1px 0 0 rgba(255,255,255,0.25),
-    inset 1px 0 0 0 rgba(255,255,255,0.12),
+    inset 0 1px 0 0 rgba(255,255,255,0.22),
+    inset 1px 0 0 0 rgba(255,255,255,0.10),
     inset 0 -1px 0 0 rgba(0,0,0,0.06),
     inset -1px 0 0 0 rgba(0,0,0,0.04),
-    0 4px 16px rgba(0,0,0,0.12);
+    0 4px 20px rgba(0,0,0,0.18);
   border-radius: var(--ds-radius-lg);
 }
 [data-theme="light"] .ds-frosted {
-  background: linear-gradient(165deg, rgba(240,240,244,0.92) 0%, rgba(228,228,234,0.88) 100%);
+  background:
+    linear-gradient(165deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.30) 100%),
+    rgba(240,240,244,0.65);
   backdrop-filter: blur(40px) saturate(1.4);
   -webkit-backdrop-filter: blur(40px) saturate(1.4);
   border: 1px solid rgba(0,0,0,0.08);
@@ -269,7 +274,7 @@
     inset 1px 0 0 0 rgba(255,255,255,0.40),
     inset 0 -1px 0 0 rgba(0,0,0,0.06),
     inset -1px 0 0 0 rgba(0,0,0,0.03),
-    0 2px 12px rgba(0,0,0,0.07);
+    0 2px 12px rgba(0,0,0,0.08);
 }
 
 /* ── Borderless Content Container (legacy alias for .ds-canvas without dot grid) ── */
@@ -280,31 +285,32 @@
 }
 
 /* ── Input Dock ──
-   Full-width dock housing a textarea + action row + send button.
-   The textarea and action buttons are transparent children;
-   the dock itself owns the frosted glass surface.               */
+   Extends .ds-frosted with layout (flex column, overflow hidden).
+   Apply BOTH classes: class="ds-frosted ds-input-dock" or just
+   ds-input-dock which duplicates the material for specificity.    */
 .ds-input-dock {
   display: flex;
   flex-direction: column;
+  /* Inherit frosted glass material */
   background:
-    linear-gradient(165deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.05) 100%),
-    rgba(28,28,30,0.82);
+    linear-gradient(165deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%),
+    rgba(28,28,30,0.65);
   backdrop-filter: blur(40px) saturate(1.8);
   -webkit-backdrop-filter: blur(40px) saturate(1.8);
   border: 1px solid rgba(255,255,255,0.10);
   box-shadow:
-    inset 0 1px 0 0 rgba(255,255,255,0.20),
-    inset 1px 0 0 0 rgba(255,255,255,0.08),
+    inset 0 1px 0 0 rgba(255,255,255,0.22),
+    inset 1px 0 0 0 rgba(255,255,255,0.10),
     inset 0 -1px 0 0 rgba(0,0,0,0.06),
     inset -1px 0 0 0 rgba(0,0,0,0.04),
-    0 4px 24px rgba(0,0,0,0.25);
+    0 4px 20px rgba(0,0,0,0.18);
   border-radius: var(--ds-radius-lg);
   overflow: hidden;
 }
 [data-theme="light"] .ds-input-dock {
   background:
-    linear-gradient(165deg, rgba(255,255,255,0.60) 0%, rgba(255,255,255,0.35) 100%),
-    rgba(240,240,244,0.78);
+    linear-gradient(165deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.30) 100%),
+    rgba(240,240,244,0.65);
   backdrop-filter: blur(40px) saturate(1.4);
   -webkit-backdrop-filter: blur(40px) saturate(1.4);
   border: 1px solid rgba(0,0,0,0.08);
@@ -313,7 +319,7 @@
     inset 1px 0 0 0 rgba(255,255,255,0.40),
     inset 0 -1px 0 0 rgba(0,0,0,0.06),
     inset -1px 0 0 0 rgba(0,0,0,0.03),
-    0 2px 12px rgba(0,0,0,0.10);
+    0 2px 12px rgba(0,0,0,0.08);
 }
 
 .ds-input-dock textarea {
