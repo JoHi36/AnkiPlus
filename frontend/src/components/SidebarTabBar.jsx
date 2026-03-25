@@ -18,19 +18,25 @@ function AgentIcon({ agent, size = 20, color }) {
     return <PlusiSvg size={size} color={color} />;
   }
   if (agent.iconSvg) {
-    // iconSvg comes from the trusted Python agent registry — not user input.
-    let svg = agent.iconSvg
-      .replace(/stroke="currentColor"/g, `stroke="${color}"`)
-      .replace(/fill="currentColor"/g, `fill="${color}"`);
+    // Keep stroke="currentColor" in SVG — it inherits from CSS `color`.
+    // SVG attributes can't resolve CSS custom properties, but `currentColor` can.
+    let svg = agent.iconSvg;
     // Ensure width and height are set
     svg = svg.replace(/width="[^"]*"/, `width="${size}"`);
     svg = svg.replace(/height="[^"]*"/, `height="${size}"`);
-    // If no width/height existed, inject them
     if (!svg.includes(`width="${size}"`)) {
       svg = svg.replace('<svg', `<svg width="${size}" height="${size}"`);
     }
     // nosec: SVG source is the internal Python agent registry, not user content
-    return <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }} dangerouslySetInnerHTML={{ __html: svg }} />; // nosec
+    return (
+      <span
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color,  // currentColor in SVG inherits from this
+        }}
+        dangerouslySetInnerHTML={{ __html: svg }} // nosec
+      />
+    );
   }
   // Fallback: single letter avatar
   const letter = (agent.label || agent.name || '?')[0].toUpperCase();
