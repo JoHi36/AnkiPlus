@@ -119,8 +119,10 @@ export default function TopBar({
   const tabRefs = useRef({});
   const [indicator, setIndicator] = useState({ left: 0, width: 0 });
   const [isFirstRender, setIsFirstRender] = useState(true);
+  const [containerPad, setContainerPad] = useState({ left: 0, right: 0 });
+  const prevTabRef = useRef(activeTab);
 
-  // Measure active tab position and update indicator
+  // Measure active tab position and update indicator + rubber band
   useLayoutEffect(() => {
     const el = tabRefs.current[activeTab];
     const container = tabContainerRef.current;
@@ -131,8 +133,22 @@ export default function TopBar({
         left: tabRect.left - containerRect.left,
         width: tabRect.width,
       });
+
+      // Rubber band: stretch container edge in direction of movement
+      if (!isFirstRender) {
+        const tabIndex = tabs.findIndex(t => t.id === activeTab);
+        const prevIndex = tabs.findIndex(t => t.id === prevTabRef.current);
+        const movingRight = tabIndex > prevIndex;
+        const isEdge = tabIndex === 0 || tabIndex === tabs.length - 1;
+
+        if (isEdge) {
+          setContainerPad(movingRight ? { left: 0, right: 4 } : { left: 4, right: 0 });
+          setTimeout(() => setContainerPad({ left: 0, right: 0 }), 300);
+        }
+      }
     }
-    // Disable animation on first render
+    prevTabRef.current = activeTab;
+
     if (isFirstRender) {
       const timer = setTimeout(() => setIsFirstRender(false), 50);
       return () => clearTimeout(timer);
@@ -150,8 +166,11 @@ export default function TopBar({
         ref={tabContainerRef}
         style={{
           position: 'relative',
-          display: 'flex', alignItems: 'center', gap: 2, padding: 3, borderRadius: 8,
+          display: 'flex', alignItems: 'center', gap: 2,
+          padding: `3px ${3 + containerPad.right}px 3px ${3 + containerPad.left}px`,
+          borderRadius: 8,
           background: 'var(--ds-hover-tint)',
+          transition: 'padding 0.35s cubic-bezier(0.34, 1.2, 0.64, 1)',
         }}
       >
         {/* Sliding indicator — the "pill" that glides between tabs */}
@@ -162,7 +181,7 @@ export default function TopBar({
           width: indicator.width,
           borderRadius: 6,
           background: 'var(--ds-border-subtle)',
-          transition: isFirstRender ? 'none' : 'left 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          transition: isFirstRender ? 'none' : 'left 0.32s cubic-bezier(0.25, 1, 0.5, 1), width 0.32s cubic-bezier(0.25, 1, 0.5, 1)',
           zIndex: 0,
         }} />
         {tabs.map(({ id, label }) => {
