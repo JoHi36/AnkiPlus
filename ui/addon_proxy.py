@@ -234,6 +234,9 @@ class WebEvalProxy:
         proxy_self = self
 
         def _proxy_eval(js_code):
+            # Log every call for debugging
+            snippet = js_code[:120].replace('\n', ' ') if js_code else '(empty)'
+            logger.info("addon_proxy: EVAL intercepted (%d chars): %s", len(js_code), snippet)
             # Always call the real eval first (don't break the native reviewer).
             proxy_self._original_eval(js_code)
             # Skip mirroring our own injections to prevent infinite loops.
