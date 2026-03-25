@@ -45,14 +45,14 @@ def load_sessions():
             logger.debug("sessions_storage: Sessions-Daten sind kein Array, setze zurück")
             return []
         
-        logger.info(f"sessions_storage: {len(sessions)} Sessions geladen")
+        logger.info("sessions_storage: %s Sessions geladen", len(sessions))
         return sessions
         
     except json.JSONDecodeError as e:
-        logger.error(f"sessions_storage: JSON-Fehler beim Laden: {e}")
+        logger.error("sessions_storage: JSON-Fehler beim Laden: %s", e)
         return []
     except Exception as e:
-        logger.error(f"sessions_storage: Fehler beim Laden der Sessions: {e}")
+        logger.error("sessions_storage: Fehler beim Laden der Sessions: %s", e)
         return []
 
 def save_sessions(sessions):
@@ -79,7 +79,7 @@ def save_sessions(sessions):
             try:
                 existing_sessions = load_sessions()
                 if len(existing_sessions) > 0:
-                    logger.debug(f"sessions_storage: Verhindere Überschreibung von {len(existing_sessions)} Sessions mit leerem Array")
+                    logger.debug("sessions_storage: Verhindere Überschreibung von %s Sessions mit leerem Array", len(existing_sessions))
                     return True  # Return success to avoid error messages, but don't overwrite
             except Exception as e:
                 # If we can't load existing sessions, proceed with save (might be first save)
@@ -102,11 +102,11 @@ def save_sessions(sessions):
         with open(sessions_path, 'w', encoding='utf-8') as f:
             json.dump(cleaned_sessions, f, indent=2, ensure_ascii=False)
         
-        logger.info(f"sessions_storage: {len(cleaned_sessions)} Sessions gespeichert nach {sessions_path}")
+        logger.info("sessions_storage: %s Sessions gespeichert nach %s", len(cleaned_sessions), sessions_path)
         return True
         
     except Exception as e:
-        logger.error(f"sessions_storage: Fehler beim Speichern: {e}")
+        logger.error("sessions_storage: Fehler beim Speichern: %s", e)
         
         # Bei Speicherfehler: Versuche mit reduzierten Daten
         try:
@@ -125,7 +125,7 @@ def save_sessions(sessions):
             logger.info("sessions_storage: Reduzierte Sessions gespeichert")
             return True
         except Exception as e2:
-            logger.error(f"sessions_storage: Auch reduziertes Speichern fehlgeschlagen: {e2}")
+            logger.error("sessions_storage: Auch reduziertes Speichern fehlgeschlagen: %s", e2)
             return False
 
 def delete_all_sessions():
@@ -143,7 +143,7 @@ def delete_all_sessions():
         logger.info("sessions_storage: Alle Sessions gelöscht")
         return True
     except Exception as e:
-        logger.error(f"sessions_storage: Fehler beim Löschen: {e}")
+        logger.error("sessions_storage: Fehler beim Löschen: %s", e)
         return False
 
 

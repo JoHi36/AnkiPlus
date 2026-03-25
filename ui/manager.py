@@ -198,12 +198,17 @@ def hide_splitter_visuals():
 
 
 def focus_reviewer_webview():
-    """Force focus back to the reviewer webview so keyboard shortcuts work."""
+    """Focus the reviewer webview for scroll and mouse interactions.
+
+    Note: Keyboard shortcut routing is handled by GlobalShortcutFilter
+    (ui/shortcut_filter.py). This function is only needed for non-keyboard
+    focus scenarios (e.g. ensuring scroll wheel targets the reviewer).
+    """
     try:
         if mw and hasattr(mw, 'reviewer') and mw.reviewer and hasattr(mw.reviewer, 'web'):
             web = mw.reviewer.web
             if web and hasattr(web, 'setFocus'):
                 web.setFocus()
-                web.eval('document.body.focus(); window.focus();')
+                web.page().runJavaScript('document.body.focus(); window.focus();')
     except Exception as e:
-        logger.warning("⚠️ Could not focus reviewer webview: %s", e)
+        logger.warning("Could not focus reviewer webview: %s", e)

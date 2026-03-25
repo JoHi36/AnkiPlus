@@ -1,8 +1,10 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import FreeChatApp from './FreeChatApp';
+import ComponentViewer from './ComponentViewer';
+import GlassLab from './GlassLab';
 import './index.css';
+import './styles/card-enhancement.css';
 import 'katex/dist/katex.min.css'; // KaTeX CSS
 
 if (typeof window !== 'undefined') {
@@ -30,15 +32,23 @@ if (typeof window !== 'undefined') {
 }
 
 const params = new URLSearchParams(window.location.search);
-const mode = params.get('mode');
+const view = params.get('view');
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
 try {
-  if (mode === 'freechat') {
+  if (view === 'components') {
+    // Design System Viewer — localhost:3000?view=components
     root.render(
       <React.StrictMode>
-        <FreeChatApp />
+        <ComponentViewer />
+      </React.StrictMode>
+    );
+  } else if (view === 'glass') {
+    // Glass Lab — localhost:3000?view=glass
+    root.render(
+      <React.StrictMode>
+        <GlassLab />
       </React.StrictMode>
     );
   } else {
@@ -49,5 +59,5 @@ try {
     );
   }
 } catch (error) {
-  console.error('❌ Fehler beim Rendern der App:', error);
+  console.error('Fehler beim Rendern der App:', error);
 }

@@ -1,5 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, startTransition } from 'react';
 import { updateSession, updateSessionSections, createSession, findSessionByDeck } from '../utils/sessions';
+import { getDirectCallPattern, findAgent, getDefaultAgent } from '@shared/config/subagentRegistry';
+import useAgenticMessage from './useAgenticMessage';
 
 // REMOVED: Auto-scroll helper functions - no longer needed with Interaction Container approach
 
@@ -23,6 +25,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
   const [error, setError] = useState(null);  // NEW: Error state
   const [connectionStatus, setConnectionStatus] = useState('connected');  // NEW: Connection status: 'connected', 'connecting', 'error', 'disconnected'
   const [lastFailedMessage, setLastFailedMessage] = useState(null);  // NEW: Store last failed message for retry
+  const [tokenInfo, setTokenInfo] = useState(null);  // Token usage info from backend
   
   // Refs to access latest state inside stable callbacks (handleAnkiReceive)
   const currentStepsRef = useRef([]);
@@ -56,8 +59,14 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
   }, []);
   
   const [pipelineSteps, setPipelineSteps] = useState([]);
-  // Each: { step: 'router'|'sql_search'|..., status: 'active'|'done'|'error', data: {}, timestamp: number }
+  // Each: { step: 'orchestrating'|'sql_search'|..., status: 'active'|'done'|'error', data: {}, timestamp: number }
   const pipelineStepsRef = useRef([]);
+
+  // v2: Structured message state
+  const agenticMsg = useAgenticMessage();
+  const v2ActiveRef = useRef(false); // Ref for stale-closure-safe check in streaming handler
+  // Generation counter — increments on each new pipeline to signal ThoughtStream to reset refs
+  const [pipelineGeneration, setPipelineGeneration] = useState(0);
 
   const updatePipelineSteps = useCallback((updater) => {
     setPipelineSteps(prev => {
@@ -115,6 +124,23 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
   // Verwendet Refs um immer die aktuelle Session-ID und Section-ID zu haben
   const appendMessage = useCallback((text, from, steps = [], citations = {}, requestId = null, stepLabels = [], pipelineData = null) => {
     console.log(`💬 useChat: Füge Nachricht hinzu (${from}):`, text.substring(0, 50) + (text.length > 50 ? '...' : ''));
+
+    // Extract webSources from search_web tool markers in the message text
+    let webSources = null;
+    if (from === 'bot') {
+      const toolMarkers = [...text.matchAll(/\[\[TOOL:(\{.*?\})\]\]/g)];
+      for (const match of toolMarkers) {
+        try {
+          const toolData = JSON.parse(match[1]);
+          if (toolData.name === 'search_web' && toolData.result?.sources) {
+            webSources = toolData.result.sources;
+          }
+        } catch (e) {
+          // Ignore parse errors
+        }
+      }
+    }
+
     const newMessage = {
       text,
       from,
@@ -124,31 +150,33 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       citations: citations || {},  // NEW: Citations map
       request_id: requestId || activeRequestIdRef.current,  // Link to request
       pipeline_data: pipelineData,  // Full pipeline step data for persistent ThoughtStream
+      ...(webSources ? { webSources } : {}),  // Web sources from search_web tool for [[WEB:N]] citations
     };
     
-    setMessages((prev) => {
-      const updated = [...prev, newMessage];
+    // CRITICAL PATH: Update messages immediately
+    setMessages((prev) => [...prev, newMessage]);
 
-      // Speichere in Session - verwende Ref für aktuelle Session-ID
+    // LOW PRIORITY: Session persistence deferred to avoid blocking render
+    startTransition(() => {
       const sessionId = currentSessionIdRef.current;
       if (sessionId) {
         setSessions((prevSessions) => {
           try {
-            return updateSession(prevSessions, sessionId, updated);
+            // Use functional updater to get latest messages
+            return updateSession(prevSessions, sessionId, [...(prevSessions.find(s => s.id === sessionId)?.messages || []), newMessage]);
           } catch (error) {
             console.error('Fehler beim Speichern der Nachricht:', error);
             return prevSessions;
           }
         });
       }
-      return updated;
     });
 
-    // Per-Card SQLite Persistence
+    // DEFERRED: Per-Card SQLite Persistence
     if (cardSessionHookRef.current) {
       const cardId = cardSessionHookRef.current.currentCardId;
       if (cardId) {
-        cardSessionHookRef.current.saveMessage(cardId, newMessage);
+        queueMicrotask(() => cardSessionHookRef.current?.saveMessage(cardId, newMessage));
       }
     }
 
@@ -259,115 +287,145 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       request_id: requestId  // Link to request for correlation
     };
     
-    // ATOMARE OPERATION: Session-Erstellung + Nachricht-Speicherung
-    // Alles passiert in EINEM setSessions-Aufruf
-    setSessions((prevSessions) => {
-      let targetSessionId = currentSessionIdRef.current;
-      let updatedSessions = prevSessions;
-      let needsNewSession = false;
-      
-      // Prüfe ob Session erstellt werden muss
-      if (!targetSessionId && pendingDeckSession) {
-        // Suche zuerst ob Session vielleicht schon existiert
-        const existingSession = findSessionByDeck(prevSessions, pendingDeckSession.deckId);
-        
-        if (existingSession) {
-          // Session existiert bereits - verwende sie
-          console.log('📖 useChat: Session bereits vorhanden:', existingSession.id);
-          targetSessionId = existingSession.id;
-        } else {
-          // Erstelle neue Session
-          console.log('➕ useChat: Erstelle neue Session für Deck:', pendingDeckSession.deckName);
+    // ── CRITICAL PATH: These must fire FIRST to unblock the UI ──
+    // Pipeline generation increment signals ThoughtStream to reset its internal refs
+    // (seenRef, activeRef, etc.) even when React batches the [] and new steps together.
+    setPipelineGeneration(g => g + 1);
+    updatePipelineSteps([]);
+    updateCurrentSteps([]);
+    updateCurrentCitations({});
+    setMessages((prev) => [...prev, newMessage]);
+    setIsLoading(true);
+    setStreamingMessage('');
+    setError(null);
+    setConnectionStatus('connecting');
+
+    // ── DEFERRED: Session persistence (heavy computation, not visible to user) ──
+    startTransition(() => {
+      setSessions((prevSessions) => {
+        let targetSessionId = currentSessionIdRef.current;
+        let updatedSessions = prevSessions;
+        let needsNewSession = false;
+
+        if (!targetSessionId && pendingDeckSession) {
+          const existingSession = findSessionByDeck(prevSessions, pendingDeckSession.deckId);
+
+          if (existingSession) {
+            targetSessionId = existingSession.id;
+          } else {
+            try {
+              const newSession = createSession(
+                prevSessions,
+                pendingDeckSession.deckId,
+                pendingDeckSession.deckName,
+                tempSeenCardIds
+              );
+              targetSessionId = newSession.id;
+              updatedSessions = [...prevSessions, newSession];
+              needsNewSession = true;
+            } catch (error) {
+              console.error('Fehler beim Erstellen der Session:', error);
+              targetSessionId = null;
+            }
+          }
+
+          if (targetSessionId) {
+            setCurrentSessionId(targetSessionId);
+            currentSessionIdRef.current = targetSessionId;
+          }
+          setPendingDeckSession(null);
+        }
+
+        if (targetSessionId) {
+          const currentSession = updatedSessions.find(s => s.id === targetSessionId);
+          const currentSessionMessages = needsNewSession
+            ? []
+            : (currentSession?.messages || []);
+          const updatedMessages = [...currentSessionMessages, newMessage];
+
+          let updatedSectionsArray = currentSession?.sections || [];
+          if (newlyCreatedSection) {
+            updatedSectionsArray = [...updatedSectionsArray, {
+              id: newlyCreatedSection.id,
+              cardId: newlyCreatedSection.cardId,
+              title: newlyCreatedSection.title,
+              createdAt: newlyCreatedSection.createdAt
+            }];
+          }
+
           try {
-            const newSession = createSession(
-              prevSessions, 
-              pendingDeckSession.deckId, 
-              pendingDeckSession.deckName, 
-              tempSeenCardIds // Übergebe temporäre IDs
-            );
-            targetSessionId = newSession.id;
-            updatedSessions = [...prevSessions, newSession];
-            needsNewSession = true;
+            updatedSessions = updateSession(updatedSessions, targetSessionId, updatedMessages, updatedSectionsArray);
           } catch (error) {
-            console.error('Fehler beim Erstellen der Session:', error);
-            // Fallback: Sende Nachricht ohne Session
-            targetSessionId = null;
+            console.error('Fehler beim Speichern der Nachricht:', error);
           }
         }
-        
-        // Aktualisiere State (außerhalb des funktionalen Updates, aber synchron geplant)
-        if (targetSessionId) {
-          setCurrentSessionId(targetSessionId);
-          currentSessionIdRef.current = targetSessionId;
-        }
-        setPendingDeckSession(null);
-      }
-      
-      // Füge Nachricht zu Session hinzu
-      if (targetSessionId) {
-        const currentSession = updatedSessions.find(s => s.id === targetSessionId);
-        const currentSessionMessages = needsNewSession 
-          ? [] 
-          : (currentSession?.messages || []);
-        const updatedMessages = [...currentSessionMessages, newMessage];
-        
-        // Berechne aktualisierte Sections (mit neuer Section falls erstellt)
-        let updatedSectionsArray = currentSession?.sections || [];
-        if (newlyCreatedSection) {
-          // Füge neue Section hinzu (nur die persistierbaren Felder)
-          updatedSectionsArray = [...updatedSectionsArray, {
-            id: newlyCreatedSection.id,
-            cardId: newlyCreatedSection.cardId,
-            title: newlyCreatedSection.title,
-            createdAt: newlyCreatedSection.createdAt
-          }];
-        }
-        
-        try {
-          updatedSessions = updateSession(updatedSessions, targetSessionId, updatedMessages, updatedSectionsArray);
-        } catch (error) {
-          console.error('Fehler beim Speichern der Nachricht:', error);
-        }
-      }
-      return updatedSessions;
+        return updatedSessions;
+      });
     });
-    
-    // Aktualisiere lokale Messages State
-    setMessages((prev) => [...prev, newMessage]);
 
-    // Per-Card SQLite: Save user message
+    // ── DEFERRED: Per-Card SQLite persistence ──
     if (cardSessionHookRef.current) {
       const cardId = cardSessionHookRef.current.currentCardId;
       if (cardId) {
-        cardSessionHookRef.current.saveMessage(cardId, newMessage);
+        queueMicrotask(() => cardSessionHookRef.current?.saveMessage(cardId, newMessage));
       }
     }
-    
+
     // Sammle die letzten 10 Nachrichten für KI-Kontext
     const allMessages = [...(currentMessages || []), newMessage];
     const historyMessages = allMessages.slice(-10);
-    
+
     // Konvertiere zu Format für KI
     const conversationHistory = historyMessages.map(msg => ({
       role: msg.from === 'user' ? 'user' : 'assistant',
       content: msg.text
     }));
-    
-    // DISABLED: Auto-Scroll während Generation
-    // Die View bleibt am Top des Interaction Containers
-    
-    // Sende an API
-    setIsLoading(true);
-    setStreamingMessage('');
-    setError(null);
-    setConnectionStatus('connecting');
-    updateCurrentSteps([]);  // Reset steps for new request
-    updateCurrentCitations({});  // Reset citations for new request
-    updatePipelineSteps([]);  // Reset pipeline steps for new request
-    
+
+    // @Subagent direct mode — detect via registry, emit synthetic pipeline, route via subagentDirect
+    const directCallPattern = getDirectCallPattern();
+    const directMatch = directCallPattern ? directCallPattern.exec(text) : null;
+
+    if (directMatch) {
+      const agentName = directMatch[1].toLowerCase();
+      const agent = findAgent(agentName);
+      // Default agent (Tutor) goes through normal sendMessage → handler.py routing
+      // Only non-default agents use subagentDirect
+      if (agent && !agent.isDefault) {
+        console.log(`@${agent.label} detected, emitting synthetic pipeline`);
+        // Emit synthetic orchestrating-active immediately
+        updatePipelineSteps([{ step: 'orchestrating', status: 'active', data: {}, timestamp: Date.now() }]);
+
+        // After 700ms, emit orchestrating-done with subagent info
+        setTimeout(() => {
+          updatePipelineSteps(prev => prev.map(s => s.step === 'orchestrating' ? {
+            ...s,
+            status: 'done',
+            data: {
+              search_needed: false,
+              retrieval_mode: `subagent:${agentName}`,
+              response_length: 'short',
+              scope: 'none',
+              scope_label: ''
+            },
+            timestamp: Date.now()
+          } : s));
+        }, 700);
+
+        // Strip @Name prefix and route via generic bridge method
+        const cleanText = text.replace(directCallPattern, '').trim() || text;
+        console.log(`@${agent.label}: routing via bridge.subagentDirect`);
+        if (bridge && bridge.subagentDirect) {
+          bridge.subagentDirect(agentName, cleanText, JSON.stringify({}));
+        } else {
+          console.error(`@${agent.label}: bridge.subagentDirect NOT available!`);
+        }
+        return; // Skip normal sendMessage flow
+      }
+    }
+
     // Store message for potential retry
     setLastFailedMessage({ text, context });
-    
+
     if (bridge && bridge.sendMessage) {
       console.log('📤 useChat: Sende an API mit Historie:', conversationHistory.length, 'Nachrichten, Modus:', mode, 'requestId:', requestId);
       try {
@@ -423,6 +481,70 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
   
   // Verarbeite ankiReceive Events für Chat
   const handleAnkiReceive = useCallback((payload) => {
+    // ── v2 Structured Message Events ──
+    if (payload.type === 'msg_start') {
+      console.error('[v2-router] msg_start received, calling handleMsgStart');
+      agenticMsg.handleMsgStart(payload);
+      v2ActiveRef.current = true; // Mark v2 active for stale-closure-safe checks
+      // Don't return — let existing 'loading' handler also process if it follows
+    }
+    if (payload.type === 'orchestration') {
+      agenticMsg.handleOrchestration(payload);
+      return;
+    }
+    if (payload.type === 'agent_cell') {
+      agenticMsg.handleAgentCell(payload);
+      return;
+    }
+    if (payload.type === 'text_chunk') {
+      console.error('[v2-router] text_chunk → handleTextChunk, v2Active:', v2ActiveRef.current, 'agent:', payload.agent);
+      agenticMsg.handleTextChunk(payload);
+      return;
+    }
+    if (payload.type === 'msg_done') {
+      // Finalize: build saved message from live state, then atomic transition.
+      // finalize() clears msgRef but NOT currentMessage (to prevent flicker).
+      const finalMsg = agenticMsg.finalize();
+      if (finalMsg) {
+        const primaryCell = finalMsg.agentCells[0];
+        const savedMsg = {
+          id: finalMsg.id,
+          text: primaryCell?.text || '',
+          from: 'bot',
+          steps: primaryCell?.pipelineSteps?.map(s => ({ state: s.data?.label || s.step, timestamp: s.timestamp })) || [],
+          citations: primaryCell?.citations || {},
+          pipeline_data: primaryCell?.pipelineSteps || [],
+          agentCells: finalMsg.agentCells,
+          orchestration: finalMsg.orchestration,
+        };
+        // Add saved message FIRST, then clear live message in same batch
+        setMessages(prev => [...prev, savedMsg]);
+      }
+      // currentMessage was already cleared by finalize() — React batches it with setMessages
+      // Clean up v1 loading state
+      setIsLoading(false);
+      setStreamingMessage('');
+      updatePipelineSteps([]);
+      v2ActiveRef.current = false;
+      return;
+    }
+    if (payload.type === 'msg_error') {
+      agenticMsg.cancel();
+      setIsLoading(false);
+      setStreamingMessage('');
+      updatePipelineSteps([]);
+      v2ActiveRef.current = false;
+      return;
+    }
+    if (payload.type === 'msg_cancelled') {
+      agenticMsg.cancel();
+      setIsLoading(false);
+      setStreamingMessage('');
+      updatePipelineSteps([]);
+      v2ActiveRef.current = false;
+      return;
+    }
+
     if (payload.type === 'loading') {
       console.log('⏳ useChat: Loading-Indikator aktiviert');
       setIsLoading(true);
@@ -431,11 +553,9 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       updateCurrentCitations({});  // Reset citations
       updatePipelineSteps([]);
     } else if (payload.type === 'pipeline_step') {
-      // Filter out generating steps — ThoughtStream doesn't render them
-      if (payload.step === 'generating') return;
-
       if (payload.requestId && payload.requestId !== activeRequestIdRef.current) return;
 
+      // generating steps now handled by ReasoningStream's step registry (hidden: true)
       updatePipelineSteps(prev => {
         const existing = prev.findIndex(s => s.step === payload.step);
         const newStep = {
@@ -451,6 +571,8 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
         }
         return [...prev, newStep];
       });
+      // v2: Also forward to structured message hook
+      agenticMsg.handlePipelineStep(payload);
       return;
     } else if (payload.type === 'ai_state') {
       // ai_state events are suppressed by the backend when pipeline is active.
@@ -513,6 +635,8 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
           
           return prev;
         });
+        // v2: Forward citations to structured message hook
+        agenticMsg.handleCitations({ data: payload.data });
       }
     } else if (payload.type === 'metadata') {
       // Handle metadata payloads (steps/citations from backend)
@@ -565,6 +689,15 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       }
       console.log('📡 useChat: Streaming-Chunk erhalten:', payload.chunk?.substring(0, 30) + '...', 'done:', payload.done, 'isFunctionCall:', payload.isFunctionCall);
 
+      // v2: Skip most v1 chunk processing when structured message system is active
+      // BUT still accumulate text in streamingMessage as a fallback for rendering
+      if (v2ActiveRef.current) {
+        if (!payload.done && payload.chunk && !payload.isFunctionCall) {
+          setStreamingMessage(prev => (prev || '') + payload.chunk);
+        }
+        return;
+      }
+
       // Zeige Function Call Indikator wenn nötig
       if (payload.isFunctionCall && !streamingMessage) {
         console.log('🔧 useChat: Function Call erkannt - zeige Indikator');
@@ -595,6 +728,15 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       }
       
       if (payload.done) {
+        // v2: Skip v1 save when structured message system is active
+        if (v2ActiveRef.current) {
+          console.log('📡 useChat: v1 streaming done SKIPPED (v2 active)');
+          return;
+        }
+        // Extract token usage info if present
+        if (payload.tokens) {
+          setTokenInfo(payload.tokens);
+        }
         // CRITICAL: Don't set isLoading to false immediately - keep it true until message is saved
         // This ensures StreamingChatMessage continues to render with currentSteps/currentCitations
         // until the saved message is available with the same data
@@ -771,11 +913,14 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     messages,
     setMessages,
     isLoading,
+    setIsLoading,
     streamingMessage,
     freeChatPushRef,
     currentSteps,  // NEW: Expose current steps for streaming
     currentCitations,  // NEW: Expose current citations for streaming
     pipelineSteps,  // NEW: Expose pipeline steps for ThoughtStream
+    pipelineGeneration,  // Generation counter for ThoughtStream reset
+    updatePipelineSteps,  // Expose for @Plusi synthetic pipeline in App.jsx
     error,  // NEW: Error state
     connectionStatus,  // NEW: Connection status
     appendMessage,
@@ -784,6 +929,11 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     handleStopRequest,
     handleRetry,  // NEW: Retry function
     clearError,  // NEW: Clear error function
-    handleAnkiReceive
+    handleAnkiReceive,
+    tokenInfo,
+    // v2 structured message
+    currentMessage: agenticMsg.currentMessage,
+    pipelineGenerationV2: agenticMsg.pipelineGeneration,
+    cancelCurrentMessage: agenticMsg.cancel,
   };
 }

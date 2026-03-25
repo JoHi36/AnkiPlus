@@ -81,7 +81,7 @@ header *,
 
 /* Markdown Content Styles */
 .markdown-content {
-  @apply text-base-content/90;
+  color: var(--ds-text-primary);
 }
 
 .markdown-content pre {
@@ -128,11 +128,12 @@ header *,
 }
 
 .markdown-content pre::-webkit-scrollbar-thumb {
-  @apply bg-base-300/50 rounded;
+  background: var(--ds-border-medium);
+  border-radius: 4px;
 }
 
 .markdown-content pre::-webkit-scrollbar-track {
-  @apply bg-base-300/20;
+  background: var(--ds-hover-tint);
 }
 
 /* Reset Strong inside Blockquotes to avoid double styling */
@@ -213,3 +214,149 @@ header *,
   from { --border-angle: 0deg; }
   to   { --border-angle: 360deg; }
 }
+
+
+/* ═══ Token Budget Range Slider ═══ */
+.token-budget-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ds-text-primary);
+  box-shadow: 0 1px 4px var(--ds-shadow-sm);
+  cursor: pointer;
+  border: none;
+  margin-top: -5px;
+}
+.token-budget-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ds-text-primary);
+  box-shadow: 0 1px 4px var(--ds-shadow-sm);
+  cursor: pointer;
+  border: none;
+}
+.token-budget-range::-webkit-slider-runnable-track {
+  background: transparent;
+  height: 20px;
+}
+.token-budget-range::-moz-range-track {
+  background: transparent;
+  height: 20px;
+}
+
+/* ── Sidebar Resize: kill transitions during drag for instant response ── */
+body.sidebar-resizing,
+body.sidebar-resizing * {
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+}
+
+/* ── Agentic Cell Skeleton ── */
+.agent-cell {
+  position: relative; padding: 20px 32px; margin: 8px -32px; max-width: none;
+  background:
+    linear-gradient(180deg,
+      rgba(var(--agent-rgb), 0.06) 0%,
+      rgba(var(--agent-rgb), 0.03) 15%,
+      rgba(var(--agent-rgb), 0.015) 35%,
+      transparent 65%);
+}
+.agent-cell-glow { display: none; }
+.agent-cell-top { display: flex; align-items: center; margin-bottom: 12px; max-width: var(--ds-content-width); margin-left: auto; margin-right: auto; }
+.agent-cell-top-left { display: flex; align-items: center; gap: 8px; flex: 1; }
+.agent-cell-top-right { display: flex; align-items: center; gap: 6px; }
+.agent-cell-icon {
+  width: 22px; height: 22px; display: flex; align-items: center;
+  justify-content: center; border-radius: 6px; flex-shrink: 0;
+}
+.agent-cell-icon svg { width: 16px; height: 16px; }
+.agent-cell-icon-letter { font-size: 11px; font-weight: 600; }
+.agent-cell-emote { width: 22px; height: 22px; flex-shrink: 0; }
+.agent-cell-name { font-size: 13px; font-weight: 600; letter-spacing: 0.2px; }
+.agent-cell-content { font-size: 15px; line-height: 1.65; max-width: var(--ds-content-width); margin-left: auto; margin-right: auto; }
+.agent-cell-content p { margin-bottom: 12px; }
+.agent-cell-loading-hint { font-size: 13px; font-style: italic; opacity: 0.5; margin-bottom: 12px; }
+.agent-cell-shimmer {
+  height: 14px; border-radius: 4px; margin-bottom: 10px; width: 92%;
+  position: relative; overflow: hidden;
+}
+.agent-cell-shimmer::after {
+  content: ''; position: absolute; top: 0; left: -100%;
+  width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, var(--ds-hover-tint), transparent);
+  animation: agent-shimmer 1.8s ease-in-out infinite;
+}
+@keyframes agent-shimmer { 0% { left: -100%; } 100% { left: 100%; } }
+.agent-cell-pulse-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  animation: agent-pulse 1.5s ease-in-out infinite;
+}
+@keyframes agent-pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.8; } }
+
+/* Transparent agent (Tutor) — no glow, subtle presence */
+.agent-cell[data-transparent="true"] {
+  background: none;
+  margin: 0 -32px;
+  padding: 12px 32px;
+}
+.agent-cell[data-transparent="true"] .agent-cell-name {
+  color: var(--ds-text-secondary);
+}
+
+/* Chain stacking — flush cells when agents chain */
+.agent-cell[data-chained="true"] {
+  margin-top: -8px;
+  border-top: 1px solid var(--ds-border);
+  padding-top: 16px;
+}
+
+/* Badge logo in header right */
+.agent-cell-badge-logo {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ds-text-tertiary);
+  letter-spacing: 0.3px;
+}
+
+/* ── Web Citation Badge ── */
+.web-cite-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; font-size: 10px; font-weight: 600;
+  border-radius: 5px; vertical-align: super; margin: 0 1px; cursor: pointer;
+  transition: background 0.15s;
+}
+
+/* ── Research Source Strip ── */
+.research-source-strip {
+  position: relative;
+  display: flex; gap: 8px; overflow-x: auto; padding: 10px 0;
+  margin-top: 12px; scrollbar-width: none;
+  mask-image: linear-gradient(to right, transparent, black 20px, black calc(100% - 20px), transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 20px, black calc(100% - 20px), transparent);
+}
+.research-source-strip::-webkit-scrollbar { display: none; }
+.research-source-chip {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 12px 7px 9px; border-radius: 9px; cursor: pointer;
+  flex-shrink: 0; transition: all 0.2s ease;
+  max-width: 220px;
+}
+.research-source-chip > div:last-child {
+  min-width: 0; overflow: hidden;
+}
+.research-source-title {
+  font-size: 12px; font-weight: 500; color: var(--ds-text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.research-source-chip:hover { filter: brightness(1.2); }
+.research-source-fav {
+  width: 15px; height: 15px; border-radius: 3px;
+  background: var(--ds-bg-overlay);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; flex-shrink: 0; color: var(--ds-text-primary);
+}
+/* merged into .research-source-title above */
+.research-source-domain { font-size: 10.5px; color: var(--ds-text-tertiary); }

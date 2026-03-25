@@ -6,13 +6,17 @@ import rehypeKatex from 'rehype-katex';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { CheckCircle2, XCircle, RotateCcw, CheckCircle, Lightbulb, Brain, Sparkles, User, Bot, MessageSquare, List, ImageIcon, AlertCircle } from 'lucide-react';
+import { findAgent as findSubagent } from '@shared/config/subagentRegistry';
 import ReviewFeedback from './ReviewFeedback';
 import ReviewResult from './ReviewResult';
 import MultipleChoiceCard from './MultipleChoiceCard';
 import CitationBadge from './CitationBadge';
+import WebCitationBadge from './WebCitationBadge';
 import ThoughtStream from './ThoughtStream';
-import SourcesCarousel from './SourcesCarousel';
+import ReasoningStream from '../reasoning/ReasoningStream';
 import ToolWidgetRenderer from './ToolWidgetRenderer';
+import AgenticCell from './AgenticCell';
+import ResearchContent from './ResearchContent';
 import mermaid from 'mermaid';
 // SmilesDrawer wird dynamisch importiert, da es CommonJS ist und Vite-Probleme verursachen kann
 
@@ -1242,13 +1246,26 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
  * ChatMessage Komponente - INTENT BASED RENDERING
  * Analysiert JSON-Daten oder Intents und rendert die entsprechende High-End Card.
  */
-function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, isStreaming = false, isLastMessage = false, steps = [], citations = {}, pipelineSteps = [], bridge = null, onPreviewCard, onPerformanceCapture }) {
+function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, isStreaming = false, isLastMessage = false, steps = [], citations = {}, pipelineSteps = [], bridge = null, onPreviewCard, onPerformanceCapture, webSources: webSourcesProp = null, agentCells, orchestration, status: msgStatus, pipelineGeneration: msgPipelineGeneration }) {
+  // v2: Structured message detection
+  const message_prop = {
+    agentCells: agentCells || null,
+    orchestration: orchestration || null,
+    status: msgStatus || 'done',
+    pipelineGeneration: msgPipelineGeneration || 0,
+  };
+  const hasV2Data = (message_prop.agentCells && message_prop.agentCells.length > 0) || message_prop.orchestration;
+
+  // Stable orchestration steps — always use latest data but keep reference stable
+  const orchestrationSteps = message_prop.orchestration?.steps || [];
+
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [answerFeedback, setAnswerFeedback] = useState(null);
   const [score, setScore] = useState(null);
   const [reviewData, setReviewData] = useState(null);
   const [quizData, setQuizData] = useState(null);
   const [toolWidgets, setToolWidgets] = useState([]);
+  const [webSources, setWebSources] = useState(webSourcesProp || []); // Sources from search_web tool for [[WEB:N]] citation resolution
   const [intent, setIntent] = useState(null); // 'REVIEW', 'MC', 'HINT', 'EXPLANATION', 'MNEMONIC', 'CHAT'
   const [routerIntent, setRouterIntent] = useState(null); // Router intent: 'EXPLANATION', 'FACT_CHECK', 'MNEMONIC', 'QUIZ', 'CHAT'
   
@@ -1416,6 +1433,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
         }
 
         // 5. Tool markers ([[TOOL:{...}]]) → generic toolWidgets array
+        if (!hasV2Data) {
         const toolMarkers = [...fixedMessage.matchAll(/\[\[TOOL:(\{.*?\})\]\]/g)];
         if (toolMarkers.length > 0) {
             setToolWidgets(prev => {
@@ -1436,6 +1454,10 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                                 updated.push(toolData);
                             }
                         }
+                        // Extract webSources from search_web tool results for [[WEB:N]] citation resolution
+                        if (toolData.name === 'search_web' && toolData.result?.sources) {
+                            setWebSources(toolData.result.sources);
+                        }
                     } catch (e) {
                         console.warn('Failed to parse TOOL marker:', e);
                     }
@@ -1443,8 +1465,9 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                 return updated;
             });
         }
+        } // end !hasV2Data guard
     }
-  }, [fixedMessage, isUser]);
+  }, [fixedMessage, isUser, hasV2Data]);
 
   // Capture text evaluation performance data for SectionDivider
   useEffect(() => {
@@ -1529,6 +1552,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
   processedMessage = processedMessage.replace(/\[\[SCORE:\s*\d+\]\]/g, '');
   processedMessage = processedMessage.replace(/\[\[INTENT:\s*\w+\]\]/g, '');
   processedMessage = processedMessage.replace(/\[\[TOOL:\{.*?\}\]\]/g, '');
+  // [[WEB:N]] markers are replaced with inline WebCitationBadge components during rendering (see below)
   // Remove "JSON undefined" artefacts if any leaked
   processedMessage = processedMessage.replace(/JSON\s*\n\s*undefined/g, '');
   
@@ -1589,7 +1613,9 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
   // This must happen AFTER citationIndices is calculated, so we have the correct index numbers
   // Use a ref to store the processed message with citations replaced
   const processedMessageWithCitations = React.useMemo(() => {
-    let message = processedMessage;
+    // Strip HANDOFF signals from displayed text (handoff is processed server-side)
+    let message = processedMessage.replace(/\n?HANDOFF:?\s*\w+\s+REASON:?\s*.+?\s+QUERY:?\s*.+$/s, '').trim();
+    if (!message) message = processedMessage; // Fallback if regex removes everything
     if (citations && Object.keys(citations).length > 0) {
       const citationPattern = /\[\[\s*(?:CardID:\s*)?(\d+)\s*\]\]/gi;
       let replacementCount = 0;
@@ -1609,8 +1635,35 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
         return match; // Keep original if citation not found or no index
       });
     }
+    // Replace [[WEB:N]] markers with clickable citation badges
+    // Extract sources from tool markers in the raw message (sync, no state dependency)
+    let resolvedWebSources = webSources || [];
+    if (resolvedWebSources.length === 0 && fixedMessage) {
+      const toolMatches = [...fixedMessage.matchAll(/\[\[TOOL:(\{.*?\})\]\]/g)];
+      for (const m of toolMatches) {
+        try {
+          const td = JSON.parse(m[1]);
+          if (td.name === 'search_web' && td.result?.sources) {
+            resolvedWebSources = td.result.sources;
+            break;
+          }
+        } catch {}
+      }
+    }
+    if (resolvedWebSources.length > 0) {
+      const webCiteRegex = /\[\[WEB:(\d+)\]\]/g;
+      message = message.replace(webCiteRegex, (match, indexStr) => {
+        const idx = parseInt(indexStr, 10);
+        const source = resolvedWebSources[idx - 1]; // WEB:1 → sources[0]
+        if (source) {
+          const url = source.url || '';
+          return `[${idx}](webcite:${idx}:${encodeURIComponent(url)})`;
+        }
+        return match;
+      });
+    }
     return message;
-  }, [processedMessage, citations, citationIndices]);
+  }, [processedMessage, citations, citationIndices, webSources, fixedMessage]);
     
   // Handler für MC Klick
   const handleAnswerClick = (option) => {
@@ -1670,10 +1723,12 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
   // Generate fallback steps if citations exist but no steps
   const generateFallbackSteps = React.useMemo(() => {
     if (steps.length > 0) return steps; // Use existing steps if available
-    
+    // If we have v5 pipeline data, don't generate legacy fallback steps
+    if (pipelineSteps && pipelineSteps.length > 0) return [];
+
     const citationCount = Object.keys(citations).length;
     if (citationCount > 0) {
-      // Generate artificial steps to show the retrieval process
+      // Generate artificial steps to show the retrieval process (legacy only)
       return [
         {
           state: 'Intent: Analyse',
@@ -1685,9 +1740,9 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
         }
       ];
     }
-    
+
     return steps; // Return empty array if no citations
-  }, [steps, citations]);
+  }, [steps, citations, pipelineSteps]);
   
   // Determine if ThoughtStream should be rendered
   // NOTE: Live pipelineSteps are rendered directly in App.jsx during loading.
@@ -1703,45 +1758,50 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
     return hasSteps || hasPipelineData || hasCitations;
   }, [isUser, isStreaming, steps.length, generateFallbackSteps.length, pipelineSteps, citations]);
 
+  // Detect agent name from pipeline data (retrieval_mode: 'subagent:help' or 'agent:help')
+  const detectedAgentName = React.useMemo(() => {
+    if (!pipelineSteps || pipelineSteps.length === 0) return 'tutor';
+    for (const step of pipelineSteps) {
+      const rm = step.data?.retrieval_mode || '';
+      const match = rm.match(/^(?:subagent|agent):(\w+)$/);
+      if (match) return match[1];
+      if (step.data?.agent) return step.data.agent;
+    }
+    return 'tutor';
+  }, [pipelineSteps]);
+
+  // Split pipeline: orchestrating steps (router decision) vs agent-internal steps (RAG, search, etc.)
+  const routerSteps = React.useMemo(() => {
+    if (!pipelineSteps) return [];
+    return pipelineSteps.filter(s => s.step === 'orchestrating');
+  }, [pipelineSteps]);
+
+  const agentSteps = React.useMemo(() => {
+    if (!pipelineSteps) return [];
+    return pipelineSteps.filter(s => s.step !== 'orchestrating');
+  }, [pipelineSteps]);
+
+  const showRouterThoughtStream = !isUser && !isStreaming && routerSteps.length > 0;
+  const showAgentThoughtStream = React.useMemo(() => {
+    if (isUser || isStreaming) return false;
+    return agentSteps.length > 0 || steps.length > 0 || generateFallbackSteps.length > 0 || Object.keys(citations).length > 0;
+  }, [isUser, isStreaming, agentSteps, steps, generateFallbackSteps, citations]);
+
   // === RENDER RETURN ===
   return (
-    <div className="flex flex-col mb-10 animate-in slide-in-from-left-4 duration-500" ref={messageRef}>
-        {/* Content area - Full width for bot messages, no icon column */}
+    <div className="flex flex-col mb-10 animate-in slide-in-from-left-4 duration-500" ref={messageRef}
+         style={isUser ? { maxWidth: 'var(--ds-content-width)', margin: '0 auto' } : undefined}>
+        {/* Content area - Full width for bot messages (agent-cell bg bleeds), constrained for user */}
         <div className="w-full min-w-0">
-            {/* 0. ThoughtStream - Shows during loading and after completion */}
-            {shouldRenderThoughtStream ? (
-                <>
-                  <ThoughtStream
-                      pipelineSteps={pipelineSteps || []}
-                      steps={generateFallbackSteps}
-                      citations={citations}
-                      message={message}
-                  />
-                  {Object.keys(citations).length > 0 && (
-                    <SourcesCarousel
-                      citations={citations}
-                      citationIndices={citationIndices || {}}
-                      bridge={bridge}
-                      onPreviewCard={onPreviewCard}
-                    />
-                  )}
-                </>
-            ) : (
-                /* Simple divider for saved bot messages without steps — only for pure text replies (no Plusi, no ReviewCard) */
-                !isUser && toolWidgets.length === 0 && !reviewData && message && message.trim().length > 0 && (
-                  <div className="h-px my-2" style={{ background: 'var(--ds-border-subtle)' }} />
-                )
-            )}
-            
             {/* 1. Review Card (Highest Priority) */}
             {reviewData && (
                 <ReviewResult data={reviewData} onAutoFlip={onAutoFlip} />
             )}
 
-            {/* Tool Widgets (Plusi, Cards, Stats, etc.) */}
-            {toolWidgets.length > 0 && (
+            {/* Tool Widgets (Plusi, Cards, Stats, etc.) — excludes agent_handoff which renders after text */}
+            {toolWidgets.filter(tw => tw.name !== 'agent_handoff').length > 0 && (
                 <ToolWidgetRenderer
-                    toolWidgets={toolWidgets}
+                    toolWidgets={toolWidgets.filter(tw => tw.name !== 'agent_handoff')}
                     bridge={bridge}
                     isStreaming={isStreaming}
                     isLastMessage={isLastMessage}
@@ -1755,19 +1815,166 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
 
             {/* 2. Multiple Choice Card */}
             {hasMultipleChoice && mcOptions && (
-                <MultipleChoiceCard 
+                <MultipleChoiceCard
                     question={quizData?.question}
-                    options={mcOptions} 
-                    onSelect={handleAnswerClick} 
-                    onRetry={handleRetry} 
+                    options={mcOptions}
+                    onSelect={handleAnswerClick}
+                    onRetry={handleRetry}
                 />
             )}
 
             {/* 3. Text Content (Markdown) - Show only if not empty */}
-            {processedMessageWithCitations && (
-                <SafeMarkdownRenderer 
-                    content={processedMessageWithCitations} 
-                    MermaidDiagram={MermaidDiagram} 
+            {processedMessageWithCitations && isUser && /^@\w+/i.test(processedMessageWithCitations) && (() => {
+                const match = processedMessageWithCitations.match(/^@(\w+)/i);
+                if (!match) return null;
+                const agentName = match[1].toLowerCase();
+                // Try registry first, fallback to hardcoded colors for known agents
+                const agent = findSubagent(agentName);
+                const FALLBACK_COLORS = { plusi: '#0A84FF', research: '#00D084' };
+                const color = agent?.color || FALLBACK_COLORS[agentName];
+                if (!color) return null;
+                const label = agent?.label || (agentName.charAt(0).toUpperCase() + agentName.slice(1));
+                return (
+                    <span style={{
+                        display: 'inline-block',
+                        fontSize: 10,
+                        fontWeight: 600,
+                        padding: '2px 8px',
+                        borderRadius: 4,
+                        background: `${color}18`,
+                        color: color,
+                        border: `1px solid ${color}30`,
+                        marginBottom: 6,
+                        letterSpacing: '0.3px',
+                    }}>
+                        @{label}
+                    </span>
+                );
+            })()}
+            {/* Router ThoughtStream — BEFORE AgenticCell (routing decision) */}
+            {showRouterThoughtStream && (
+                <ThoughtStream
+                    pipelineSteps={routerSteps}
+                    steps={[]}
+                    citations={{}}
+                    message=""
+                    variant="router"
+                />
+            )}
+            {/* ── v2: Structured Agent Cells ── */}
+            {hasV2Data && !isUser && (
+              <>
+                {/* Router Orchestration */}
+                {orchestrationSteps.length > 0 && (
+                  <ReasoningStream
+                    variant="router"
+                    steps={orchestrationSteps}
+                    isStreaming={message_prop.status !== 'done'}
+                    agentColor={'var(--ds-text-muted)'}
+                    citations={{}}
+                    message=""
+                  />
+                )}
+                {/* Agent Cells — ordered blocks */}
+                {(message_prop.agentCells || []).map((cell, i) => (
+                  <AgenticCell
+                    key={`${cell.agent}-${i}`}
+                    agentName={cell.agent}
+                    isLoading={cell.status === 'loading'}
+                    loadingHint={cell.loadingHint || ''}
+                  >
+                    {/* Tutor-style ThoughtStream */}
+                    {cell.pipelineSteps && cell.pipelineSteps.length > 0 && (
+                      <ReasoningStream
+                        steps={cell.pipelineSteps}
+                        pipelineGeneration={message_prop.pipelineGeneration}
+                        citations={cell.citations || {}}
+                        isStreaming={cell.status === 'streaming' || cell.status === 'thinking'}
+                        message={cell.text || ''}
+                        bridge={bridge}
+                        onPreviewCard={onPreviewCard}
+                      />
+                    )}
+                    {/* Text content */}
+                    {cell.text && cell.status !== 'loading' && !cell.sources?.length && (() => {
+                      // Strip HANDOFF signal from display text
+                      const cleanText = cell.text.replace(/\n?HANDOFF:?\s*\w+\s+REASON:?\s*.+?\s+QUERY:?\s*.+$/s, '').trim();
+                      if (!cleanText) return null;
+                      return (
+                        <SafeMarkdownRenderer
+                          content={cleanText}
+                          MermaidDiagram={MermaidDiagram}
+                          isStreaming={cell.status === 'streaming'}
+                          citations={cell.citations || {}}
+                          citationIndices={{}}
+                          bridge={bridge}
+                          onPreviewCard={onPreviewCard}
+                        />
+                      );
+                    })()}
+                    {/* Research sources */}
+                    {cell.sources && cell.sources.length > 0 && (
+                      <ResearchContent
+                        sources={cell.sources}
+                        answer={cell.text || ''}
+                      />
+                    )}
+                    {/* Tool widgets (Plusi, Cards, Stats) */}
+                    {cell.toolWidgets && cell.toolWidgets.length > 0 && (
+                      <ToolWidgetRenderer
+                        toolWidgets={cell.toolWidgets}
+                        bridge={bridge}
+                        isStreaming={cell.status === 'streaming'}
+                        isLastMessage={isLastMessage}
+                      />
+                    )}
+                    {/* Text skeleton — managed by ThoughtStream's onAllDone callback */}
+                  </AgenticCell>
+                ))}
+              </>
+            )}
+            {!hasV2Data && processedMessageWithCitations && !isUser && (
+                <AgenticCell agentName={detectedAgentName}>
+                    {/* Agent ThoughtStream — INSIDE AgenticCell (search, retrieval, etc.) */}
+                    {showAgentThoughtStream ? (
+                      <ThoughtStream
+                          pipelineSteps={agentSteps}
+                          steps={generateFallbackSteps}
+                          citations={citations}
+                          message={message}
+                      />
+                    ) : (
+                      /* Simple divider for pure text bot messages */
+                      !showRouterThoughtStream && toolWidgets.length === 0 && !reviewData && message && message.trim().length > 0 && (
+                        <div className="h-px my-2" style={{ background: 'var(--ds-border-subtle)' }} />
+                      )
+                    )}
+                    <SafeMarkdownRenderer
+                        content={processedMessageWithCitations}
+                        MermaidDiagram={MermaidDiagram}
+                        isStreaming={isStreaming}
+                        citations={citations}
+                        citationIndices={citationIndices}
+                        bridge={bridge}
+                        onPreviewCard={onPreviewCard}
+                    />
+                </AgenticCell>
+            )}
+            {/* Agent Handoff Widget — renders AFTER the agent's text, flush against it */}
+            {!hasV2Data && toolWidgets.filter(tw => tw.name === 'agent_handoff').length > 0 && (
+                <div style={{ marginTop: -8 }}>
+                  <ToolWidgetRenderer
+                      toolWidgets={toolWidgets.filter(tw => tw.name === 'agent_handoff')}
+                      bridge={bridge}
+                      isStreaming={isStreaming}
+                      isLastMessage={isLastMessage}
+                  />
+                </div>
+            )}
+            {processedMessageWithCitations && isUser && (
+                <SafeMarkdownRenderer
+                    content={processedMessageWithCitations}
+                    MermaidDiagram={MermaidDiagram}
                     isStreaming={isStreaming}
                     citations={citations}
                     citationIndices={citationIndices} // PASS INDICES
@@ -1790,7 +1997,12 @@ const MemoizedChatMessage = React.memo(ChatMessage, (prevProps, nextProps) => {
          prevProps.isLastMessage === nextProps.isLastMessage &&
          prevProps.cardContext === nextProps.cardContext &&
          prevProps.steps === nextProps.steps &&
-         prevProps.citations === nextProps.citations;
+         prevProps.citations === nextProps.citations &&
+         prevProps.webSources === nextProps.webSources &&
+         prevProps.agentCells === nextProps.agentCells &&
+         prevProps.orchestration === nextProps.orchestration &&
+         prevProps.status === nextProps.status &&
+         prevProps.pipelineGeneration === nextProps.pipelineGeneration;
 });
 
 MemoizedChatMessage.displayName = 'ChatMessage';
@@ -2028,15 +2240,17 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                             
                             // Hervorhebungen - Textmarker Effekt
                             strong: ({node, ...props}) => (
-                                <span className="font-semibold text-base-content bg-primary/15 px-1 rounded-sm decoration-clone box-decoration-clone pb-0.5" {...props} />
+                                <span className="font-semibold px-1 rounded-sm decoration-clone box-decoration-clone pb-0.5"
+                                      style={{ color: 'var(--ds-text-primary)', background: 'color-mix(in srgb, var(--ds-accent) 15%, transparent)' }} {...props} />
                             ),
-                            em: ({node, ...props}) => <em className="italic text-base-content/75" {...props} />,
+                            em: ({node, ...props}) => <em className="italic" style={{ color: 'var(--ds-text-secondary)' }} {...props} />,
                             
                             // Simplified Blockquote - ONLY brand colors (primary), no yellow/red variants
                             blockquote: ({node, children, ...props}) => {
                                 // Always use primary brand color - no special coloring for keywords
                                 return (
-                                    <blockquote className="border-l-2 border-primary/40 bg-primary/5 text-base-content/90 pl-4 py-3 my-5 rounded-none shadow-sm" {...props}>
+                                    <blockquote className="border-l-2 pl-4 py-3 my-5 rounded-none shadow-sm"
+                                                style={{ borderColor: 'color-mix(in srgb, var(--ds-accent) 40%, transparent)', background: 'color-mix(in srgb, var(--ds-accent) 5%, transparent)', color: 'var(--ds-text-primary)' }} {...props}>
                                         <div className="reset-strong">
                                             {children}
                                         </div>
@@ -2045,18 +2259,18 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                             },
                             
                             // Horizontale Linie - subtiler
-                            hr: ({node, ...props}) => <hr className="my-6 border-0 h-px bg-gradient-to-r from-transparent via-base-content/20 to-transparent" {...props} />,
+                            hr: ({node, ...props}) => <hr className="my-6 border-0 h-px" style={{ background: `linear-gradient(to right, transparent, var(--ds-border-medium), transparent)` }} {...props} />,
                             
                             // Table Styling
                             table: ({node, ...props}) => (
-                                <div className="my-5 overflow-hidden rounded-xl border border-base-300/50 shadow-sm">
-                                    <table className="min-w-full divide-y divide-base-300/50" {...props} />
+                                <div className="my-5 overflow-hidden rounded-xl border shadow-sm" style={{ borderColor: 'var(--ds-border-subtle)' }}>
+                                    <table className="min-w-full" {...props} />
                                 </div>
                             ),
-                            thead: ({node, ...props}) => <thead className="bg-base-200/60" {...props} />,
-                            th: ({node, ...props}) => <th className="px-4 py-3 text-left text-xs font-semibold text-base-content/70 uppercase tracking-wider" {...props} />,
-                            tbody: ({node, ...props}) => <tbody className="divide-y divide-base-300/30 bg-base-100/20" {...props} />,
-                            td: ({node, ...props}) => <td className="px-4 py-3 text-sm text-base-content/80" {...props} />,
+                            thead: ({node, ...props}) => <thead style={{ background: 'var(--ds-hover-tint)' }} {...props} />,
+                            th: ({node, ...props}) => <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--ds-text-secondary)', borderBottom: '1px solid var(--ds-border-subtle)' }} {...props} />,
+                            tbody: ({node, ...props}) => <tbody {...props} />,
+                            td: ({node, ...props}) => <td className="px-4 py-3 text-sm" style={{ color: 'var(--ds-text-primary)', borderBottom: '1px solid var(--ds-border-subtle)' }} {...props} />,
 
                             // Code Blocks & Concept Pills
                             code: ({node, inline, className, children, ...props}) => {
@@ -2184,6 +2398,18 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                                 }
                                 // If citation not found, render as normal link (fallback)
                                 return <a href={href} {...props}>{children}</a>;
+                              }
+                              // Check if this is a web citation link (format: webcite:INDEX:ENCODED_URL)
+                              if (href && href.startsWith('webcite:')) {
+                                const parts = href.split(':');
+                                const webIndex = parseInt(parts[1], 10);
+                                const webUrl = decodeURIComponent(parts.slice(2).join(':'));
+                                return (
+                                  <WebCitationBadge
+                                    index={webIndex}
+                                    url={webUrl}
+                                  />
+                                );
                               }
                               // Normal link - check if it's a number that might be a citation
                               // Normal link - CRITICAL: Prevent default if href is empty, #, or undefined

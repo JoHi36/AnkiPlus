@@ -32,7 +32,7 @@
     let mcWrongPicks = [];    // Track which wrong options were picked
     let autoRateEase = 0;
     let questionStartTime = Date.now();
-    let chatOpen = false;
+    let chatOpen = window.__chatOpen || false;
     let aiSteps = [];         // ThoughtStream steps
     let lastUserAnswer = '';
 
@@ -58,27 +58,30 @@
         }
         el.style.display = 'flex';
 
-        // Build buttons with explicit inline border-radius (no pseudo-selectors).
-        // Matches ChatInput.jsx exactly — clean hover fills to container edges.
-        const btn = (a, position) => {
-            const color = a.color || 'var(--ds-text-tertiary)';
-            const weight = a.weight || '500';
-            let radius = 'border-radius:0;';
-            if (position === 'left' || position === 'only') radius += 'border-bottom-left-radius:16px;';
-            if (position === 'right' || position === 'only') radius += 'border-bottom-right-radius:16px;';
-            return (
-                `<button class="dock-action" onclick="${a.onclick}" style="color:${color};font-weight:${weight};${radius}">`
-                + `${a.label}`
-                + `<span class="shortcut">${a.shortcut}</span>`
-                + `</button>`
-            );
+        // Build buttons using .ds-split-btn from design-system.css.
+        // Matches ChatInput.tsx exactly — both use the same .ds-input-dock classes.
+        // Note: action labels/shortcuts are internal strings, not user input.
+        const makeBtn = (a) => {
+            const b = document.createElement('button');
+            b.className = 'ds-split-btn';
+            b.setAttribute('onclick', a.onclick);
+            if (a.color) b.style.color = a.color;
+            const labelNode = document.createTextNode(a.label);
+            b.appendChild(labelNode);
+            const kbd = document.createElement('span');
+            kbd.className = 'ds-kbd';
+            kbd.textContent = a.shortcut;
+            b.appendChild(kbd);
+            return b;
         };
 
+        el.replaceChildren();
+        el.appendChild(makeBtn(left));
         if (right) {
-            const divider = '<div style="width:1px;height:16px;background:var(--ds-border-subtle);flex-shrink:0;"></div>';
-            el.innerHTML = btn(left, 'left') + divider + btn(right, 'right');
-        } else {
-            el.innerHTML = btn(left, 'only');
+            const divider = document.createElement('div');
+            divider.className = 'ds-split-divider';
+            el.appendChild(divider);
+            el.appendChild(makeBtn(right));
         }
     }
 
@@ -314,11 +317,9 @@
         function toggleSend() {
             if (!send) return;
             if (ta.value.trim().length > 0) {
-                send.classList.remove('opacity-0', 'scale-75', 'pointer-events-none');
-                send.classList.add('opacity-100', 'scale-100');
+                send.removeAttribute('data-empty');
             } else {
-                send.classList.add('opacity-0', 'scale-75', 'pointer-events-none');
-                send.classList.remove('opacity-100', 'scale-100');
+                send.setAttribute('data-empty', 'true');
             }
         }
 
@@ -417,13 +418,21 @@
         if (current !== S.ANSWER) return;
         const max = window.buttonCount || 4;
         if (ease < 1 || ease > max) return;
-        console.log('[AnkiPlus] rateCard ease=' + ease + ' state=' + current);
+        // Close chat panel if open before advancing
+        if (chatOpen) {
+            pycmd('chat:close');
+            chatOpen = false;
+        }
         pycmd('ease' + ease);
     };
 
     window.proceedAfterEval = function() {
         if (autoRateEase > 0) {
-            console.log('[AnkiPlus] proceedAfterEval ease=' + autoRateEase);
+            // Close chat panel if open before advancing
+            if (chatOpen) {
+                pycmd('chat:close');
+                chatOpen = false;
+            }
             pycmd('ease' + autoRateEase);
         }
     };
@@ -877,7 +886,10 @@
     // ═══ Keyboard ═══
 
     function onKeydown(e) {
-        const tag = e.target.tagName.toLowerCase();
+        // DEBUG: log all keydown events reaching this handler
+        pycmd('debug:keydown:' + e.key + ':' + e.code + ':state=' + current + ':chatOpen=' + chatOpen);
+
+        const tag = (e.target.tagName || '').toLowerCase();
         if (tag === 'textarea' || tag === 'input' || e.target.isContentEditable) return;
 
         // ESC closes chat if open
@@ -960,9 +972,25 @@
         questionStartTime = Date.now();
         setupTextarea();
         setState(S.QUESTION);
+        // Ask Python for authoritative panel state (covers all race conditions)
+        pycmd('dock:query_panel_state');
         document.addEventListener('keydown', onKeydown);
         document.addEventListener('touchstart', onTouchStart, { passive: true });
         document.addEventListener('touchend', onTouchEnd, { passive: true });
+
+        // Report text field focus state to Python for global shortcut routing
+        document.addEventListener('focusin', function(e) {
+            var tag = e.target.tagName.toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) {
+                if (window.ankiBridge) window.ankiBridge.addMessage('textFieldFocus', { focused: true });
+            }
+        });
+        document.addEventListener('focusout', function(e) {
+            var tag = e.target.tagName.toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) {
+                if (window.ankiBridge) window.ankiBridge.addMessage('textFieldFocus', { focused: false });
+            }
+        });
 
         document.body.tabIndex = -1;
         document.body.focus();
@@ -991,7 +1019,7 @@
                         canvas.style.transform = 'translateY(0)';
                     });
                 }
-                if (dock) {
+                if (dock && !chatOpen) {
                     dock.style.opacity = '0';
                     dock.style.transform = 'translateX(-50%) translateY(12px)';
                     dock.style.transition = 'opacity 0.35s ease 0.1s, transform 0.35s ease 0.1s';
@@ -1015,7 +1043,7 @@
         aiSteps = [];
         autoRateEase = 0;
         questionStartTime = Date.now();
-        chatOpen = false;
+        chatOpen = window.__chatOpen || false;
         setState(S.QUESTION);
     });
 
@@ -1024,6 +1052,17 @@
     } else {
         init();
     }
+
+    // Expose handleKey for Python shortcut filter (synthetic KeyboardEvents
+    // don't work reliably in QWebEngineView)
+    window.handleKey = function(key, code) {
+        onKeydown({
+            key: key, code: code,
+            target: { tagName: 'BODY', isContentEditable: false },
+            shiftKey: false, ctrlKey: false, metaKey: false, altKey: false,
+            preventDefault: function() {}
+        });
+    };
 
     window._state = { get: () => current };
     Object.defineProperty(window, 'autoRateEase', {

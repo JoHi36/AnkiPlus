@@ -31,6 +31,16 @@ class TestBuildToolMarker:
         assert result.startswith("[[TOOL:")
         assert result.endswith("]]")
 
+    def test_build_tool_marker_extra_fields(self):
+        import json
+        marker = _build_tool_marker('search_web', 'loading',
+                                    extra_fields={'loadingHint': 'Searching photosynthesis...'})
+        json_str = marker[len('[[TOOL:'):-len(']]')]
+        data = json.loads(json_str)
+        assert data['name'] == 'search_web'
+        assert data['displayType'] == 'loading'
+        assert data['loadingHint'] == 'Searching photosynthesis...'
+
 
 class TestPruneContents:
     def test_no_pruning_when_under_budget(self):

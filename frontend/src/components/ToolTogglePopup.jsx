@@ -103,8 +103,8 @@ export default function ToolTogglePopup({
     <div
       ref={popupRef}
       className="bg-base-100 border border-base-300 rounded-xl shadow-xl min-w-[240px] animate-in fade-in slide-in-from-bottom-2 duration-200"
-      style={{ 
-        boxShadow: '0 10px 40px -10px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.05)'
+      style={{
+        boxShadow: 'var(--ds-shadow-md)'
       }}
     >
         {/* Header */}

@@ -2,8 +2,8 @@ import React, { useMemo } from 'react';
 
 export default function MiniChart({
   data = [],
-  color = 'rgba(140,120,200,0.35)',
-  fillColor = 'rgba(140,120,200,0.1)',
+  color = 'var(--ds-purple)',
+  fillColor = 'color-mix(in srgb, var(--ds-purple) 10%, transparent)',
   height = 36,
   label,
   showGrid = true,

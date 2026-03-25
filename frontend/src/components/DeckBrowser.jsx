@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, MessageSquare, Layers } from 'lucide-react';
+import { MessageSquare, Layers } from 'lucide-react';
+import TreeList from '../../../shared/components/TreeList';
 import FreeChatSearchBar from './FreeChatSearchBar';
-import FreeChatView from './FreeChatView';
 import ChatMessage from './ChatMessage';
 import CardRefChip from './CardRefChip';
 import DeckSectionDivider from './DeckSectionDivider';
@@ -94,140 +94,6 @@ function SegmentedBar({ stats, loading }) {
   );
 }
 
-/* ── Deck row (recursive) ── */
-function DeckRow({ deck, deckStatsMap, deckSessionCountMap, onOpenDeck, depth = 0 }) {
-  const [expanded, setExpanded] = useState(depth === 0);
-  const hasChildren = deck.children && deck.children.length > 0;
-  const stats = deckStatsMap[deck.id];
-  const loading = !stats;
-  const displayName = deck.name.split('::').pop();
-
-  // Count sessions for this deck name (exact or sub-deck)
-  const sessionCount = deckSessionCountMap[deck.name] || 0;
-
-  const handleClick = useCallback(() => {
-    if (hasChildren) {
-      setExpanded(v => !v);
-    } else {
-      onOpenDeck(deck.id, deck.name);
-    }
-  }, [hasChildren, onOpenDeck, deck.id, deck.name]);
-
-  return (
-    <div>
-      <motion.button
-        onClick={handleClick}
-        style={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: 8,
-          padding: `6px 16px 6px ${16 + depth * 16}px`,
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          textAlign: 'left',
-          borderRadius: 0,
-        }}
-        whileHover={{ backgroundColor: 'var(--ds-hover-tint)' }}
-        whileTap={{ scale: 0.99 }}
-      >
-        {/* Chevron / dot */}
-        <div style={{ width: 14, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, paddingTop: 1 }}>
-          {hasChildren ? (
-            <motion.div
-              animate={{ rotate: expanded ? 90 : 0 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-              style={{ display: 'flex' }}
-            >
-              <ChevronRight size={12} style={{ color: 'var(--ds-text-tertiary)' }} />
-            </motion.div>
-          ) : (
-            <div style={{
-              width: 4, height: 4, borderRadius: '50%',
-              background: 'var(--ds-text-muted)',
-              flexShrink: 0,
-            }} />
-          )}
-        </div>
-
-        {/* Content */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {/* Name row */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{
-              fontSize: depth === 0 ? 13 : 12,
-              fontWeight: depth === 0 ? 600 : 400,
-              color: depth === 0 ? 'var(--ds-text-primary)' : 'var(--ds-text-secondary)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              flex: 1,
-            }}>
-              {displayName}
-            </span>
-
-            {/* Session badge */}
-            {sessionCount > 0 && (
-              <span style={{
-                fontSize: 10, fontWeight: 600,
-                color: T.blue,
-                background: 'rgba(10,132,255,0.12)',
-                borderRadius: 5,
-                padding: '1px 5px',
-                flexShrink: 0,
-              }}>
-                {sessionCount}
-              </span>
-            )}
-
-            {/* Card count */}
-            {stats && (
-              <span style={{
-                fontSize: 10,
-                color: 'var(--ds-text-muted)',
-                flexShrink: 0,
-                fontVariantNumeric: 'tabular-nums',
-              }}>
-                {stats.totalCards}
-              </span>
-            )}
-          </div>
-
-          {/* Progress bar (leaf decks only) */}
-          {!hasChildren && (
-            <SegmentedBar stats={stats} loading={loading} />
-          )}
-        </div>
-      </motion.button>
-
-      {/* Sub-decks */}
-      <AnimatePresence initial={false}>
-        {expanded && hasChildren && (
-          <motion.div
-            key="children"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 370, damping: 34 }}
-            style={{ overflow: 'hidden' }}
-          >
-            {deck.children.map(child => (
-              <DeckRow
-                key={child.id}
-                deck={child}
-                deckStatsMap={deckStatsMap}
-                deckSessionCountMap={deckSessionCountMap}
-                onOpenDeck={onOpenDeck}
-                depth={depth + 1}
-              />
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
 
 /* ── Session row ── */
 function SessionRow({ session, index, onClick }) {
@@ -371,11 +237,7 @@ export default function DeckBrowser({
   onOpenDeck,
   headerHeight,
   onFreeChatOpen,
-  freeChatOpen = false,
-  animPhase = 'idle',
-  freeChatInitialText = '',
   freeChatHook = null,
-  onFreeChatClose = null,
 }) {
   const [decks, setDecks] = useState([]);
   const [deckStatsMap, setDeckStatsMap] = useState({});
@@ -428,6 +290,15 @@ export default function DeckBrowser({
 
   const deckTree = useMemo(() => buildDeckTree(decks), [decks]);
 
+  /* Convert deckTree to TreeList items */
+  const toTreeItems = useCallback((nodes) => nodes.map(node => ({
+    id: node.id,
+    label: node.name.split('::').pop(),
+    _deckName: node.name,
+    children: node.children?.length ? toTreeItems(node.children) : undefined,
+  })), []);
+  const deckTreeItems = useMemo(() => toTreeItems(deckTree), [deckTree, toTreeItems]);
+
   /* Session count per deck name */
   const deckSessionCountMap = useMemo(() => {
     const map = {};
@@ -446,20 +317,9 @@ export default function DeckBrowser({
       .slice(0, 12)
   ), [sessions]);
 
-  const deckContentVisible = animPhase === 'idle' || animPhase === 'exiting';
-  const deckContentStyle = {
-    transition: 'opacity 250ms ease, transform 250ms ease',
-    opacity: deckContentVisible ? 1 : 0,
-    transform: deckContentVisible ? 'translateY(0)' : 'translateY(60px)',
-    pointerEvents: deckContentVisible ? 'auto' : 'none',
-    flexShrink: 0,
-    // When not visible: collapse to 0 so FreeChatView fills all available space
-    ...(deckContentVisible ? {} : { flex: '0 0 0', overflow: 'hidden' }),
-  };
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-      {/* Scrollable deck content — animates out when freeChatOpen */}
+      {/* Scrollable deck content */}
       <div
         style={{
           flex: 1,
@@ -467,7 +327,6 @@ export default function DeckBrowser({
           scrollbarWidth: 'none',
           paddingTop: (headerHeight || 60) + 12,
           paddingBottom: 24,
-          ...deckContentStyle,
         }}
       >
         {/* ── Free Chat Search Bar ── */}
@@ -477,30 +336,48 @@ export default function DeckBrowser({
 
         {/* ── Decks ── */}
         <div style={{ marginBottom: 4 }}>
-          <SectionLabel count={decks.length}>Decks</SectionLabel>
-
           {decks.length === 0 && (
             <div style={{ padding: '12px 16px', fontSize: 12, color: 'var(--ds-text-muted)' }}>
               Keine Decks gefunden
             </div>
           )}
 
-          {deckTree.map((deck, i) => (
-            <motion.div
-              key={deck.id}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.035, type: 'spring', stiffness: 360, damping: 32 }}
-            >
-              <DeckRow
-                deck={deck}
-                deckStatsMap={deckStatsMap}
-                deckSessionCountMap={deckSessionCountMap}
-                onOpenDeck={onOpenDeck}
-                depth={0}
-              />
-            </motion.div>
-          ))}
+          <TreeList
+            items={deckTreeItems}
+            header="Decks"
+            onItemClick={(item) => onOpenDeck(item.id, item._deckName)}
+            defaultExpanded={true}
+            renderRight={(item) => {
+              const stats = deckStatsMap[item.id];
+              const sessionCount = deckSessionCountMap[item._deckName] || 0;
+              return (
+                <>
+                  {sessionCount > 0 && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 600,
+                      color: T.blue,
+                      background: 'var(--ds-accent-10)',
+                      borderRadius: 5,
+                      padding: '1px 5px',
+                      flexShrink: 0,
+                    }}>
+                      {sessionCount}
+                    </span>
+                  )}
+                  {stats && (
+                    <span style={{
+                      fontSize: 10,
+                      color: 'var(--ds-text-muted)',
+                      flexShrink: 0,
+                      fontVariantNumeric: 'tabular-nums',
+                    }}>
+                      {stats.totalCards}
+                    </span>
+                  )}
+                </>
+              );
+            }}
+          />
         </div>
 
         {/* ── Deck Actions ── */}
@@ -528,7 +405,7 @@ export default function DeckBrowser({
         )}
 
         {/* ── Chat History (all messages across decks) ── */}
-        {!freeChatOpen && freeChatHook && freeChatHook.messages && freeChatHook.messages.length > 0 && (
+        {freeChatHook && freeChatHook.messages && freeChatHook.messages.length > 0 && (
           <div>
             <div style={{ height: 1, background: 'var(--ds-border-subtle)', margin: '8px 16px' }} />
             <SectionLabel count={freeChatHook.messages.length}>Chat-Verlauf</SectionLabel>
@@ -564,17 +441,6 @@ export default function DeckBrowser({
           </div>
         )}
       </div>
-
-      {/* FreeChatView — renders inline when freeChatOpen, fills remaining space */}
-      {freeChatOpen && freeChatHook && (
-        <FreeChatView
-          freeChatHook={freeChatHook}
-          initialText={freeChatInitialText}
-          onClose={onFreeChatClose}
-          bridge={bridge}
-          animPhase={animPhase}
-        />
-      )}
     </div>
   );
 }

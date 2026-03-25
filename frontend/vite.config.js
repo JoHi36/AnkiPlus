@@ -44,6 +44,7 @@ export default defineConfig(({ mode }) => ({
     port: 3000,
     strictPort: true, // Verhindert automatische Port-Wechsel
     open: false,
+    allowedHosts: true, // Allow all hosts (tunnel access)
   },
 }));
 

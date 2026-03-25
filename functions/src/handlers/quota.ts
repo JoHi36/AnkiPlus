@@ -2,16 +2,19 @@ import { Request, Response } from 'express';
 import { QuotaResponse } from '../types';
 import {
   getOrCreateUser,
-  getOrCreateDailyUsage,
+  getOrCreateTokenDailyUsage,
+  getOrCreateTokenWeeklyUsage,
   getCurrentDateString,
+  getCurrentWeekString,
   getResetTime,
 } from '../utils/firestore';
+import { getTokenLimits } from '../utils/tokenPricing';
 import { createErrorResponse, ErrorCode } from '../utils/errors';
 import { createLogger } from '../utils/logging';
 
 /**
  * GET /api/user/quota
- * Returns user quota status
+ * Returns user quota status (token-based)
  * Requires authentication
  */
 export async function quotaHandler(
@@ -19,10 +22,8 @@ export async function quotaHandler(
   res: Response
 ): Promise<void> {
   const logger = createLogger();
-  
+
   try {
-    // Token validation is handled by middleware in index.ts
-    // userId is attached to req by validateToken middleware
     const userId = (req as any).userId;
     if (!userId) {
       res.status(401).json(createErrorResponse(ErrorCode.TOKEN_INVALID, 'User ID not found'));
@@ -31,51 +32,51 @@ export async function quotaHandler(
 
     logger.info('Fetching quota', { userId });
 
-    // Get user document
     const user = await getOrCreateUser(userId, (req as any).userEmail);
-    
-    // Get current date
-    const currentDate = getCurrentDateString();
-    
-    // Get daily usage
-    const dailyUsage = await getOrCreateDailyUsage(userId, currentDate);
 
-    // Calculate limits based on tier
-    let flashLimit = -1; // -1 = unlimited
-    let deepLimit = 3; // Default for free tier
+    const date = getCurrentDateString();
+    const week = getCurrentWeekString();
 
-    switch (user.tier) {
-      case 'free':
-        flashLimit = -1; // Unlimited
-        deepLimit = 3;
-        break;
-      case 'tier1':
-        flashLimit = -1; // Unlimited
-        deepLimit = 30; // Start with 30, can be adjusted
-        break;
-      case 'tier2':
-        flashLimit = 500; // Safety limit
-        deepLimit = 500; // Safety limit
-        break;
-    }
+    // Fetch daily + weekly usage in parallel
+    const [dailyUsage, weeklyUsage] = await Promise.all([
+      getOrCreateTokenDailyUsage(userId, date),
+      getOrCreateTokenWeeklyUsage(userId, week),
+    ]);
 
-    // Calculate remaining
-    const flashRemaining = flashLimit === -1 ? -1 : Math.max(0, flashLimit - dailyUsage.flashRequests);
-    const deepRemaining = Math.max(0, deepLimit - dailyUsage.deepRequests);
+    const limits = getTokenLimits(user.tier);
+
+    const dailyRemaining = Math.max(0, limits.daily - dailyUsage.tokensUsed);
+    const weeklyRemaining = Math.max(0, limits.weekly - weeklyUsage.tokensUsed);
+
+    // Calculate weekly reset: next Monday 00:00 UTC
+    const now = new Date();
+    const dayOfWeek = now.getUTCDay(); // 0=Sun, 1=Mon, ...
+    const daysUntilMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
+    const nextMonday = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate() + daysUntilMonday,
+      0, 0, 0, 0
+    ));
 
     const response: QuotaResponse = {
       tier: user.tier,
-      flash: {
-        used: dailyUsage.flashRequests,
-        limit: flashLimit,
-        remaining: flashRemaining,
+      tokens: {
+        daily: {
+          used: dailyUsage.tokensUsed,
+          limit: limits.daily,
+          remaining: dailyRemaining,
+        },
+        weekly: {
+          used: weeklyUsage.tokensUsed,
+          limit: limits.weekly,
+          remaining: weeklyRemaining,
+        },
       },
-      deep: {
-        used: dailyUsage.deepRequests,
-        limit: deepLimit,
-        remaining: deepRemaining,
+      resetAt: {
+        daily: getResetTime(),
+        weekly: nextMonday.toISOString(),
       },
-      resetAt: getResetTime(),
     };
 
     logger.info('Quota retrieved', { userId, tier: user.tier });
@@ -85,4 +86,3 @@ export async function quotaHandler(
     res.status(500).json(createErrorResponse(ErrorCode.BACKEND_ERROR, 'Failed to fetch quota', error.message));
   }
 }
-

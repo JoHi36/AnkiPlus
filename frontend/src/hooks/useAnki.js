@@ -408,9 +408,14 @@ export function useAnki() {
               console.warn('Bridge: Fehler beim Parsen der Tools:', e);
             }
           },
-          plusiDirect: (text, deckId) => {
+          saveMascotEnabled: (enabled) => {
             if (window.ankiBridge) {
-              window.ankiBridge.addMessage('plusiDirect', JSON.stringify({ text, deck_id: deckId }));
+              window.ankiBridge.addMessage('saveMascotEnabled', enabled);
+            }
+          },
+          subagentDirect: (agentName, text, extraJson) => {
+            if (window.ankiBridge) {
+              window.ankiBridge.addMessage('subagentDirect', { agent_name: agentName, text, ...JSON.parse(extraJson || '{}') });
             }
           },
           saveTheme: (theme) => {
@@ -582,11 +587,17 @@ export function useAnki() {
               console.warn('Mock: localStorage nicht verfügbar');
             }
           },
-          plusiDirect: (text, deckId) => {
-            console.log('Mock: plusiDirect', text?.substring(0, 50));
+          saveMascotEnabled: (enabled) => {
+            console.log('Mock: saveMascotEnabled', enabled);
+            if (window.ankiReceive) {
+              window.ankiReceive({ type: 'mascotEnabledSaved', data: { enabled } });
+            }
+          },
+          subagentDirect: (agentName, text, extraJson) => {
+            console.log('Mock: subagentDirect', agentName, text?.substring(0, 50));
             setTimeout(() => {
               if (window.ankiReceive) {
-                window.ankiReceive({ type: 'plusi_direct_result', mood: 'happy', text: 'Hey! Das ist eine Mock-Antwort von Plusi.', meta: 'freut sich', friendship: { level: 2, levelName: 'Bekannte', points: 23, maxPoints: 50, delta: 1 }, error: false });
+                window.ankiReceive({ type: 'subagent_result', agent_name: agentName, text: `Mock response from ${agentName}: "${text}"`, error: false });
               }
             }, 800);
           },

@@ -6,7 +6,8 @@ from ai.system_prompt import get_system_prompt, SYSTEM_PROMPT
 class TestGetSystemPrompt:
     def test_returns_base_prompt_without_insights(self):
         result = get_system_prompt()
-        assert result == SYSTEM_PROMPT
+        assert result.startswith(SYSTEM_PROMPT)
+        assert 'HANDOFF' in result  # Handoff section always appended
 
     def test_base_prompt_contains_key_instructions(self):
         prompt = get_system_prompt()
@@ -47,11 +48,11 @@ class TestGetSystemPrompt:
 
     def test_empty_insights_list_ignored(self):
         result = get_system_prompt(insights={"insights": []})
-        assert result == SYSTEM_PROMPT
+        assert "BISHERIGE ERKENNTNISSE" not in result
 
     def test_none_insights_ignored(self):
         result = get_system_prompt(insights=None)
-        assert result == SYSTEM_PROMPT
+        assert "BISHERIGE ERKENNTNISSE" not in result
 
     def test_legacy_params_accepted(self):
         # mode and tools are legacy but should not crash

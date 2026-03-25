@@ -63,11 +63,31 @@
   --ds-stat-learning: rgba(255, 159, 10, 0.85);
   --ds-stat-review:   rgba(48, 209, 88, 0.85);
 
+  /* ── Canvas Grid ── */
+  --ds-grid-dot: rgba(255, 255, 255, 0.04);   /* Dot grid on canvas — barely visible */
+
   /* ── Interaction Tints ── */
   --ds-hover-tint:  rgba(255, 255, 255, 0.04);
   --ds-active-tint: rgba(255, 255, 255, 0.08);
   --ds-green-tint:  rgba(48, 209, 88, 0.08);
   --ds-red-tint:    rgba(255, 69, 58, 0.05);
+
+  /* ── Semantic Color Tints (for quiz/review states) ── */
+  --ds-accent-10:  color-mix(in srgb, var(--ds-accent) 10%, transparent);
+  --ds-accent-20:  color-mix(in srgb, var(--ds-accent) 20%, transparent);
+  --ds-accent-50:  color-mix(in srgb, var(--ds-accent) 50%, transparent);
+  --ds-green-5:    color-mix(in srgb, var(--ds-green) 5%, transparent);
+  --ds-green-10:   color-mix(in srgb, var(--ds-green) 10%, transparent);
+  --ds-green-20:   color-mix(in srgb, var(--ds-green) 20%, transparent);
+  --ds-green-30:   color-mix(in srgb, var(--ds-green) 30%, transparent);
+  --ds-green-50:   color-mix(in srgb, var(--ds-green) 50%, transparent);
+  --ds-red-5:      color-mix(in srgb, var(--ds-red) 5%, transparent);
+  --ds-red-10:     color-mix(in srgb, var(--ds-red) 10%, transparent);
+  --ds-red-20:     color-mix(in srgb, var(--ds-red) 20%, transparent);
+  --ds-red-50:     color-mix(in srgb, var(--ds-red) 50%, transparent);
+  --ds-yellow-5:   color-mix(in srgb, var(--ds-yellow) 5%, transparent);
+  --ds-yellow-10:  color-mix(in srgb, var(--ds-yellow) 10%, transparent);
+  --ds-yellow-20:  color-mix(in srgb, var(--ds-yellow) 20%, transparent);
 
   /* ── Rating Aliases — var() refs so light mode overrides work ── */
   --ds-rate-again: var(--ds-red);
@@ -85,6 +105,13 @@
   --ds-space-lg:  16px;
   --ds-space-xl:  24px;
   --ds-space-2xl: 32px;
+
+  /* Layout widths */
+  --ds-content-width: 680px;                                       /* Optimal reading measure (~65 chars at 15px) */
+  --ds-sidebar-width: 568px;                                       /* Chat sidebar (resizable via drag handle) */
+  --ds-dock-width: calc(var(--ds-sidebar-width) - 2 * var(--ds-space-2xl)); /* ChatInput dock = sidebar - 2×32px */
+  --ds-sidebar-tab-width: 44px;                                    /* Sidebar tab bar — vertical icon strip */
+  --ds-settings-width: 324px;                                      /* 280px content + 44px tab bar */
 
 
   /* ─────────────────────────────────────────────────────────
@@ -158,6 +185,8 @@
   --ds-stat-learning: rgba(255, 159, 10, 0.85);
   --ds-stat-review:   rgba(52, 199, 89, 0.85);
 
+  --ds-grid-dot: rgba(0, 0, 0, 0.04);
+
   --ds-hover-tint:  rgba(0, 0, 0, 0.03);
   --ds-active-tint: rgba(0, 0, 0, 0.06);
   --ds-green-tint:  rgba(52, 199, 89, 0.08);
@@ -176,17 +205,81 @@
    All properties reference tokens only — no hardcoded colors.
    ───────────────────────────────────────────────────────── */
 
-/* ── Frosted Glass Container ── */
-.ds-frosted {
-  background: var(--ds-bg-frosted);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--ds-border-medium);
-  box-shadow: var(--ds-shadow-md);
+/* ── Deep Material ──
+   Deepest surface — where AI lives. Chat panel, diary, ThoughtStream.
+   Pure color, no decoration. Recedes behind everything. */
+.ds-deep {
+  background: var(--ds-bg-deep);
   border-radius: var(--ds-radius-lg);
 }
 
-/* ── Borderless Content Container ── */
+/* ── Canvas Material ──
+   Neutral working surface with dot grid texture.
+   Content lives here: cards, deck lists, session history.
+   The grid is subtle — felt, not seen. */
+.ds-canvas {
+  background: var(--ds-bg-canvas);
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: var(--ds-radius-lg);
+  position: relative;
+}
+.ds-canvas::before,
+.ds-canvas-surface::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1; /* below content, above parent bg (thanks to isolation: isolate) */
+  border-radius: inherit;
+  background-image: radial-gradient(circle, var(--ds-grid-dot) 1px, transparent 1px);
+  background-size: 16px 16px;
+  background-position: center center;
+  pointer-events: none;
+  mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black 20%, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black 20%, transparent 70%);
+}
+
+/* Fullscreen canvas surface — no border, no radius, fills its container */
+.ds-canvas-surface {
+  background: var(--ds-bg-canvas);
+  position: relative;
+  isolation: isolate; /* stacking context so ::before z-index:-1 stays above bg */
+}
+
+/* ── Frosted Glass Material ──
+   Real glass: semi-opaque base + gradient overlay + strong blur + edge highlights.
+   The base layer ensures readability over any content (bright images, white bg).
+   The gradient + blur add the glass character on top. */
+.ds-frosted {
+  background:
+    linear-gradient(165deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.08) 100%),
+    rgba(28,28,30,0.82);
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255,255,255,0.28),
+    inset 1px 0 0 0 rgba(255,255,255,0.12),
+    inset 0 -1px 0 0 rgba(0,0,0,0.06),
+    inset -1px 0 0 0 rgba(0,0,0,0.04),
+    0 4px 24px rgba(0,0,0,0.25);
+  border-radius: var(--ds-radius-lg);
+}
+[data-theme="light"] .ds-frosted {
+  background:
+    linear-gradient(165deg, rgba(255,255,255,0.60) 0%, rgba(255,255,255,0.35) 100%),
+    rgba(240,240,244,0.78);
+  backdrop-filter: blur(40px) saturate(1.4);
+  -webkit-backdrop-filter: blur(40px) saturate(1.4);
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255,255,255,0.90),
+    inset 1px 0 0 0 rgba(255,255,255,0.40),
+    inset 0 -1px 0 0 rgba(0,0,0,0.06),
+    inset -1px 0 0 0 rgba(0,0,0,0.03),
+    0 2px 12px rgba(0,0,0,0.08);
+}
+
+/* ── Borderless Content Container (legacy alias for .ds-canvas without dot grid) ── */
 .ds-borderless {
   background: var(--ds-bg-canvas);
   border: 1px solid var(--ds-border-subtle);
@@ -194,17 +287,41 @@
 }
 
 /* ── Input Dock ──
-   Full-width dock housing a textarea + action row + send button.
-   The textarea and action buttons are transparent children;
-   the dock itself owns the surface and border.               */
+   Extends .ds-frosted with layout (flex column, overflow hidden).
+   Apply BOTH classes: class="ds-frosted ds-input-dock" or just
+   ds-input-dock which duplicates the material for specificity.    */
 .ds-input-dock {
   display: flex;
   flex-direction: column;
-  background: var(--ds-bg-frosted);
-  border: 1px solid var(--ds-border-medium);
+  /* Same frosted glass material as .ds-frosted */
+  background:
+    linear-gradient(165deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.08) 100%),
+    rgba(28,28,30,0.82);
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255,255,255,0.28),
+    inset 1px 0 0 0 rgba(255,255,255,0.12),
+    inset 0 -1px 0 0 rgba(0,0,0,0.06),
+    inset -1px 0 0 0 rgba(0,0,0,0.04),
+    0 4px 24px rgba(0,0,0,0.25);
   border-radius: var(--ds-radius-lg);
-  box-shadow: var(--ds-shadow-md);
   overflow: hidden;
+}
+[data-theme="light"] .ds-input-dock {
+  background:
+    linear-gradient(165deg, rgba(255,255,255,0.60) 0%, rgba(255,255,255,0.35) 100%),
+    rgba(240,240,244,0.78);
+  backdrop-filter: blur(40px) saturate(1.4);
+  -webkit-backdrop-filter: blur(40px) saturate(1.4);
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255,255,255,0.90),
+    inset 1px 0 0 0 rgba(255,255,255,0.40),
+    inset 0 -1px 0 0 rgba(0,0,0,0.06),
+    inset -1px 0 0 0 rgba(0,0,0,0.03),
+    0 2px 12px rgba(0,0,0,0.08);
 }
 
 .ds-input-dock textarea {
@@ -275,6 +392,63 @@
   opacity: 0;
   pointer-events: none;
   transform: scale(0.7);
+}
+
+/* ── Split Action Row ──
+   Two equal buttons side-by-side with a 1px divider.
+   Used when the dock has primary + secondary actions (e.g. Show Answer / Overview). */
+.ds-input-dock .ds-split-actions {
+  display: flex;
+  align-items: center;
+  border-top: 1px solid var(--ds-border-subtle);
+}
+
+.ds-input-dock .ds-split-actions .ds-split-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--ds-border-subtle);
+  flex-shrink: 0;
+}
+
+.ds-input-dock .ds-split-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 44px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-base);
+  font-weight: 500;
+  color: var(--ds-text-tertiary);
+  padding: 0 var(--ds-space-md);
+  transition: background var(--ds-duration) var(--ds-ease);
+}
+
+.ds-input-dock .ds-split-btn:hover {
+  background: var(--ds-hover-tint);
+}
+
+.ds-input-dock .ds-split-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.ds-input-dock .ds-split-btn:first-child {
+  border-bottom-left-radius: var(--ds-radius-lg);
+  font-weight: 600;
+  color: var(--ds-text-primary);
+}
+
+.ds-input-dock .ds-split-btn:last-child {
+  border-bottom-right-radius: var(--ds-radius-lg);
+}
+
+.ds-input-dock .ds-split-btn .ds-kbd {
+  margin-left: 4px;
 }
 
 

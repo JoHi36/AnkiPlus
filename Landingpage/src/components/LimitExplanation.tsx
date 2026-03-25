@@ -3,41 +3,48 @@ import { AlertCircle, Info, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@shared/components/Button';
 
+const formatTokens = (n: number) => {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return n.toLocaleString('de-DE');
+};
+
 interface LimitExplanationProps {
   tier: 'free' | 'tier1' | 'tier2';
   currentUsage?: number;
-  limit?: number;
+  dailyLimit?: number;
 }
 
-export function LimitExplanation({ tier, currentUsage, limit }: LimitExplanationProps) {
+export function LimitExplanation({ tier, currentUsage, dailyLimit }: LimitExplanationProps) {
   if (tier === 'tier2') {
-    return null; // No limits for Exam Pro
+    return null;
   }
 
-  const usagePercent = limit && currentUsage !== undefined 
-    ? (currentUsage / limit) * 100 
+  const usagePercent = dailyLimit && currentUsage !== undefined
+    ? (currentUsage / dailyLimit) * 100
     : 0;
   const isNearLimit = usagePercent >= 80;
-  const isAtLimit = limit && currentUsage !== undefined && currentUsage >= limit;
+  const isAtLimit = dailyLimit && currentUsage !== undefined && currentUsage >= dailyLimit;
 
   const getLimitInfo = () => {
     if (tier === 'free') {
       return {
-        limit: 3,
-        message: 'Nach 3x Deep Mode pro Tag kannst du weiterhin Flash Mode nutzen.',
-        upgradeMessage: 'Upgrade auf Student für 30x Deep Mode pro Tag',
+        dailyLimit: 20_000,
+        message: `${formatTokens(20_000)} Tokens pro Tag verfügbar.`,
+        upgradeMessage: 'Upgrade auf Student für 70K Tokens pro Tag',
         upgradeTier: 'tier1' as const,
       };
     }
     return {
-      limit: 30,
-      message: 'Nach 30x Deep Mode pro Tag kannst du weiterhin Flash Mode nutzen.',
-      upgradeMessage: 'Upgrade auf Exam Pro für unbegrenzten Deep Mode',
+      dailyLimit: 70_000,
+      message: `${formatTokens(70_000)} Tokens pro Tag verfügbar.`,
+      upgradeMessage: 'Upgrade auf Exam Pro für 210K Tokens pro Tag',
       upgradeTier: 'tier2' as const,
     };
   };
 
   const info = getLimitInfo();
+  const displayLimit = dailyLimit || info.dailyLimit;
 
   return (
     <motion.div
@@ -61,10 +68,10 @@ export function LimitExplanation({ tier, currentUsage, limit }: LimitExplanation
           <p className={`text-xs mb-2 ${
             isAtLimit ? 'text-red-400' : isNearLimit ? 'text-yellow-400' : 'text-teal-400'
           }`}>
-            {isAtLimit 
-              ? `Limit erreicht: ${info.limit}x Deep Mode heute verwendet`
+            {isAtLimit
+              ? `Tageslimit erreicht: ${formatTokens(currentUsage!)} / ${formatTokens(displayLimit)} Tokens verbraucht`
               : isNearLimit
-              ? `Warnung: ${currentUsage}/${info.limit} Deep Mode verwendet (${Math.round(usagePercent)}%)`
+              ? `Warnung: ${formatTokens(currentUsage!)} / ${formatTokens(displayLimit)} Tokens verbraucht (${Math.round(usagePercent)}%)`
               : info.message
             }
           </p>
@@ -91,14 +98,15 @@ export function LimitInfoBox({ tier }: { tier: 'free' | 'tier1' | 'tier2' }) {
              <Sparkles size={12} />
            </div>
            <p className="text-xs text-purple-200/80 leading-relaxed">
-             <strong className="text-purple-200">Unlimited Power:</strong> Keine Limits, keine Wartezeiten. Du lernst so schnell du kannst.
+             <strong className="text-purple-200">210K Tokens / Tag:</strong> Maximale Power für intensive Lernphasen.
            </p>
          </div>
       </div>
     );
   }
 
-  const limit = tier === 'free' ? 3 : 30;
+  const dailyLimit = tier === 'free' ? '20K' : '70K';
+  const weeklyLimit = tier === 'free' ? '100K' : '350K';
   const upgradeTier = tier === 'free' ? 'Student' : 'Exam Pro';
   const colorClass = tier === 'free' ? 'text-neutral-400' : 'text-teal-400/80';
   const borderClass = tier === 'free' ? 'border-white/10' : 'border-teal-500/20';
@@ -112,8 +120,8 @@ export function LimitInfoBox({ tier }: { tier: 'free' | 'tier1' | 'tier2' }) {
         </div>
         <div className="flex-1">
           <p className={`text-xs ${colorClass} leading-relaxed`}>
-            {limit}x Deep Mode pro Tag. <br/>
-            <span className="opacity-60">Danach unbegrenzt Flash Mode.</span>
+            {dailyLimit} Tokens pro Tag, {weeklyLimit} pro Woche. <br/>
+            <span className="opacity-60">Upgrade auf {upgradeTier} für mehr.</span>
           </p>
         </div>
       </div>

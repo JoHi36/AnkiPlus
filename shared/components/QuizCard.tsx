@@ -54,8 +54,8 @@ export function QuizCard({ question, options, onSelect, className = '', customWr
     <div className={`w-full max-w-3xl mx-auto flex flex-col font-sans ${className} pb-20`}>
       
       {/* Header Badge */}
-      <div className="flex items-center gap-2 mb-6 mt-4 text-teal-500/80 px-1">
-        <div className="w-1 h-4 bg-teal-500 rounded-full" />
+      <div className="flex items-center gap-2 mb-6 mt-4 px-1" style={{ color: 'var(--ds-green)', opacity: 0.8 }}>
+        <div className="w-1 h-4 rounded-full" style={{ background: 'var(--ds-green)' }} />
         <span className="text-[10px] font-bold tracking-[0.2em] uppercase font-mono">Multiple Choice</span>
       </div>
 
@@ -103,61 +103,95 @@ export function QuizCard({ question, options, onSelect, className = '', customWr
                 className={`
                   w-full text-left relative flex items-start group rounded-lg overflow-hidden transition-all duration-200
                   border border-transparent
-                  ${state === 'idle' 
-                    ? 'bg-[var(--ds-bg-frosted)] hover:bg-[var(--ds-bg-canvas)] border-base-content/5 hover:border-base-content/10' 
+                  ${state === 'idle'
+                    ? 'bg-[var(--ds-bg-frosted)] hover:bg-[var(--ds-bg-canvas)] border-base-content/5 hover:border-base-content/10'
                     : ''}
-                  ${state === 'selected-correct' 
-                    ? 'bg-teal-500/10 border-teal-500/50 shadow-[0_0_15px_-5px_rgba(20,184,166,0.3)]' 
+                  ${state === 'missed-correct'
+                    ? 'border-dashed'
                     : ''}
-                  ${state === 'selected-wrong' 
-                    ? 'bg-red-500/10 border-red-500/50' 
-                    : ''}
-                  ${state === 'missed-correct' 
-                    ? 'bg-teal-500/5 border-teal-500/30 border-dashed' 
-                    : ''}
-                  ${state === 'dim' 
-                    ? 'bg-[var(--ds-bg-frosted)] border-transparent opacity-50 grayscale' 
+                  ${state === 'dim'
+                    ? 'bg-[var(--ds-bg-frosted)] border-transparent opacity-50 grayscale'
                     : ''}
                 `}
+                style={{
+                  ...(state === 'selected-correct' ? {
+                    background: 'var(--ds-green-10)',
+                    borderColor: 'var(--ds-green-50)',
+                    boxShadow: '0 0 15px -5px var(--ds-green-30)',
+                  } : {}),
+                  ...(state === 'selected-wrong' ? {
+                    background: 'var(--ds-red-10)',
+                    borderColor: 'var(--ds-red-50)',
+                  } : {}),
+                  ...(state === 'missed-correct' ? {
+                    background: 'var(--ds-green-5)',
+                    borderColor: 'var(--ds-green-30)',
+                  } : {}),
+                }}
               >
                 {/* Active Indicator Bar (Left) */}
-                <div className={`absolute left-0 top-0 bottom-0 w-1 transition-colors duration-200
-                  ${state === 'idle' ? 'bg-transparent group-hover:bg-base-content/20' : ''}
-                  ${state === 'selected-correct' ? 'bg-teal-500' : ''}
-                  ${state === 'selected-wrong' ? 'bg-red-500' : ''}
-                  ${state === 'missed-correct' ? 'bg-teal-500/50' : ''}
-                `} />
+                <div
+                  className={`absolute left-0 top-0 bottom-0 w-1 transition-colors duration-200
+                    ${state === 'idle' ? 'bg-transparent group-hover:bg-base-content/20' : ''}
+                  `}
+                  style={{
+                    ...(state === 'selected-correct' ? { background: 'var(--ds-green)' } : {}),
+                    ...(state === 'selected-wrong' ? { background: 'var(--ds-red)' } : {}),
+                    ...(state === 'missed-correct' ? { background: 'var(--ds-green-50)' } : {}),
+                  }}
+                />
 
                 <div className="flex w-full p-4 pl-5">
                   {/* Index Box (A, B, C...) */}
-                  <div className={`
-                    flex-shrink-0 w-8 h-8 mr-4 rounded flex items-center justify-center font-mono text-sm font-bold border transition-colors
-                    ${state === 'idle' ? 'bg-base-300/40 border-base-content/10 text-neutral-500 group-hover:text-neutral-300' : ''}
-                    ${state === 'selected-correct' ? 'bg-teal-500 text-black border-teal-500' : ''}
-                    ${state === 'selected-wrong' ? 'bg-red-500 text-base-content border-red-500' : ''}
-                    ${state === 'missed-correct' ? 'bg-teal-500/20 text-teal-500 border-teal-500/30' : ''}
-                    ${state === 'dim' ? 'bg-base-300/40 border-base-content/5 text-neutral-600' : ''}
-                  `}>
+                  <div
+                    className={`
+                      flex-shrink-0 w-8 h-8 mr-4 rounded flex items-center justify-center font-mono text-sm font-bold border transition-colors
+                      ${state === 'idle' ? 'bg-base-300/40 border-base-content/10 text-neutral-500 group-hover:text-neutral-300' : ''}
+                      ${state === 'dim' ? 'bg-base-300/40 border-base-content/5 text-neutral-600' : ''}
+                    `}
+                    style={{
+                      ...(state === 'selected-correct' ? {
+                        background: 'var(--ds-green)',
+                        color: 'white',
+                        borderColor: 'var(--ds-green)',
+                      } : {}),
+                      ...(state === 'selected-wrong' ? {
+                        background: 'var(--ds-red)',
+                        color: 'var(--ds-text-primary)',
+                        borderColor: 'var(--ds-red)',
+                      } : {}),
+                      ...(state === 'missed-correct' ? {
+                        background: 'var(--ds-green-20)',
+                        color: 'var(--ds-green)',
+                        borderColor: 'var(--ds-green-30)',
+                      } : {}),
+                    }}
+                  >
                     {option.id}
                   </div>
 
                   {/* Text Content */}
                   <div className="flex-1 py-1">
-                    <div className={`text-[15px] leading-relaxed transition-colors ${
-                      state === 'selected-correct' ? 'text-teal-50' :
-                      state === 'selected-wrong' ? 'text-red-50' :
-                      state === 'missed-correct' ? 'text-teal-100' :
-                      'text-neutral-300 group-hover:text-neutral-100'
-                    }`}>
+                    <div
+                      className={`text-[15px] leading-relaxed transition-colors ${
+                        state === 'idle' || state === 'dim' ? 'text-neutral-300 group-hover:text-neutral-100' : ''
+                      }`}
+                      style={{
+                        ...(state === 'selected-correct' || state === 'missed-correct'
+                          ? { color: 'var(--ds-text-primary)' } : {}),
+                        ...(state === 'selected-wrong'
+                          ? { color: 'var(--ds-text-primary)' } : {}),
+                      }}
+                    >
                       {option.text}
                     </div>
                   </div>
 
                   {/* Status Icon (Right) */}
                   <div className="flex-shrink-0 w-6 flex items-center justify-center ml-2">
-                    {state === 'selected-correct' && <Check size={18} className="text-teal-400" strokeWidth={3} />}
-                    {state === 'selected-wrong' && <X size={18} className="text-red-400" strokeWidth={3} />}
-                    {state === 'missed-correct' && <Check size={16} className="text-teal-500/50" />}
+                    {state === 'selected-correct' && <Check size={18} style={{ color: 'var(--ds-green)' }} strokeWidth={3} />}
+                    {state === 'selected-wrong' && <X size={18} style={{ color: 'var(--ds-red)' }} strokeWidth={3} />}
+                    {state === 'missed-correct' && <Check size={16} style={{ color: 'var(--ds-green-50)' }} />}
                   </div>
                 </div>
               </button>
@@ -171,12 +205,20 @@ export function QuizCard({ question, options, onSelect, className = '', customWr
                     transition={{ duration: 0.3, ease: "easeOut" }}
                     className="overflow-hidden"
                   >
-                    <div className={`
-                      mx-5 mb-2 p-3 rounded-b-lg border-x border-b text-sm leading-relaxed
-                      ${state === 'selected-correct' || state === 'missed-correct' 
-                        ? 'bg-teal-950/20 border-teal-500/20 text-teal-200/80' 
-                        : 'bg-red-950/20 border-red-500/20 text-red-200/80'}
-                    `}>
+                    <div
+                      className="mx-5 mb-2 p-3 rounded-b-lg border-x border-b text-sm leading-relaxed"
+                      style={{
+                        ...(state === 'selected-correct' || state === 'missed-correct' ? {
+                          background: 'var(--ds-green-10)',
+                          borderColor: 'var(--ds-green-20)',
+                          color: 'var(--ds-green)',
+                        } : {
+                          background: 'var(--ds-red-10)',
+                          borderColor: 'var(--ds-red-20)',
+                          color: 'var(--ds-red)',
+                        }),
+                      }}
+                    >
                       <div className="flex gap-2">
                         <div className="mt-0.5 shrink-0 opacity-70">
                           {state === 'selected-correct' || state === 'missed-correct' ? <Check size={14} /> : <HelpCircle size={14} />}
@@ -223,7 +265,12 @@ export function QuizCard({ question, options, onSelect, className = '', customWr
             ) : (
               <button 
                 onClick={() => onSelect && onSelect('FLIP', true)}
-                className="flex items-center gap-2 px-8 py-3 rounded-full bg-teal-500 text-black hover:bg-teal-400 transition-all text-sm font-bold shadow-lg shadow-teal-500/20"
+                className="flex items-center gap-2 px-8 py-3 rounded-full transition-all text-sm font-bold shadow-lg"
+                style={{
+                  background: 'var(--ds-green)',
+                  color: 'white',
+                  boxShadow: '0 10px 15px -3px var(--ds-green-20), 0 4px 6px -4px var(--ds-green-20)',
+                }}
               >
                 Karte umdrehen
                 <ChevronRight size={16} />

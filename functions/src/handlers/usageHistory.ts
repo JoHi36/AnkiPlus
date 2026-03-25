@@ -61,19 +61,21 @@ export async function usageHistoryHandler(
       const data = doc.exists ? doc.data() : null;
       return {
         date,
-        flash: data?.flashRequests || 0,
-        deep: data?.deepRequests || 0,
+        tokens: data?.tokensUsed || 0,
+        requests: data?.requestCount || 0,
+        flash: data?.flashRequests || 0,  // Legacy
+        deep: data?.deepRequests || 0,    // Legacy
       };
     }).reverse(); // Reverse to get chronological order (oldest first)
 
     // Calculate totals
-    const totalFlash = dailyUsage.reduce((sum, day) => sum + day.flash, 0);
-    const totalDeep = dailyUsage.reduce((sum, day) => sum + day.deep, 0);
+    const totalTokens = dailyUsage.reduce((sum, day) => sum + day.tokens, 0);
+    const totalRequests = dailyUsage.reduce((sum, day) => sum + day.requests, 0);
 
     // Calculate streak (consecutive days with any usage)
     let streak = 0;
     for (let i = dailyUsage.length - 1; i >= 0; i--) {
-      if (dailyUsage[i].flash > 0 || dailyUsage[i].deep > 0) {
+      if (dailyUsage[i].tokens > 0 || dailyUsage[i].flash > 0 || dailyUsage[i].deep > 0) {
         streak++;
       } else {
         break;
@@ -82,9 +84,11 @@ export async function usageHistoryHandler(
 
     const response = {
       dailyUsage,
-      totalFlash,
-      totalDeep,
+      totalTokens,
+      totalRequests,
       streak,
+      totalFlash: dailyUsage.reduce((sum, day) => sum + day.flash, 0),
+      totalDeep: dailyUsage.reduce((sum, day) => sum + day.deep, 0),
     };
 
     res.json(response);

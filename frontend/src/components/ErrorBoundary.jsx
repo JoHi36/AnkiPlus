@@ -21,9 +21,17 @@ export default class ErrorBoundary extends React.Component {
     // Log the error to console
     console.error('ErrorBoundary caught an error:', error, errorInfo);
     this.setState({ errorInfo });
-    
-    // Optional: Log to backend (can be implemented later)
-    // this.logErrorToBackend(error, errorInfo);
+
+    // Send error to Python logs via ankiBridge (visible in debug report)
+    try {
+      if (window.ankiBridge && window.ankiBridge.addMessage) {
+        window.ankiBridge.addMessage('jsError', {
+          message: error?.message || 'Unknown error',
+          stack: error?.stack?.substring(0, 500) || '',
+          component: errorInfo?.componentStack?.substring(0, 300) || '',
+        });
+      }
+    } catch (e) { /* ignore */ }
   }
 
   handleRetry = () => {

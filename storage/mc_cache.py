@@ -46,7 +46,7 @@ def _save_cache():
         with open(_CACHE_PATH, 'w', encoding='utf-8') as f:
             json.dump(_cache, f, ensure_ascii=False, indent=None)
     except IOError as e:
-        logger.error(f"MC Cache: Fehler beim Speichern: {e}")
+        logger.error("MC Cache: Fehler beim Speichern: %s", e)
 
 
 def _make_hash(question, answer):

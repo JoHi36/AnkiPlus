@@ -1,29 +1,13 @@
 """
 UI-Setup Modul
-Verwaltet Dock-Widget, Keyboard Shortcut (Cmd+I) und UI-Initialisierung
+Sidebar via MainViewWidget (replaces QDockWidget)
 """
 
 from aqt import mw
 from aqt.qt import *
 from aqt.utils import showInfo
 from aqt import gui_hooks
-import sys
 import json
-
-# WebEngine / WebChannel
-try:
-    from PyQt6.QtWebEngineWidgets import QWebEngineView
-except Exception:
-    try:
-        from PyQt5.QtWebEngineWidgets import QWebEngineView
-    except Exception:
-        QWebEngineView = None
-
-# Widget-Import
-try:
-    from .widget import ChatbotWidget
-except ImportError:
-    from ui.widget import ChatbotWidget
 
 try:
     from ..utils.logging import get_logger
@@ -31,339 +15,218 @@ except ImportError:
     from utils.logging import get_logger
 logger = get_logger(__name__)
 
-try:
-    from .tokens_qt import get_tokens
-except ImportError:
-    from tokens_qt import get_tokens
-
-# Style-Funktionen
-def get_dock_widget_style():
-    try:
-        from .theme import get_resolved_theme
-    except ImportError:
-        from ui.theme import get_resolved_theme
-    resolved = get_resolved_theme()
-    tokens = get_tokens(resolved)
-    return f"""
-    QDockWidget {{
-        background-color: {tokens['bg_deep']};
-        color: {tokens['text_primary']};
-    }}
-    /* Minimal separator - nearly invisible, matches unified background */
-    QDockWidget::separator {{
-        background: {tokens['border_subtle']};
-        width: 1px;
-    }}
-    QDockWidget::separator:hover {{
-        background: {tokens['border_medium']};
-        width: 1px;
-    }}
-    """
-
-def show_qwebengine_warning():
-    showInfo("QWebEngine ist nicht verfügbar. Bitte installieren Sie QtWebEngine (PyQt6-WebEngine).")
-
-# Globale Variablen
-_chatbot_dock = None
-_chatbot_widget = None  # Widget-Instanz für Event-Hooks
-_shortcut = None
+# Sidebar state
+_panel_user_closed = False  # True wenn User das Panel manuell geschlossen hat
 
 def _notify_reviewer_chat_state(is_open):
     """Tell the reviewer webview to show/hide its dock based on chat panel visibility."""
+    val = "true" if is_open else "false"
+    js = 'if(window.setChatOpen) setChatOpen(%s);' % val
+
+    def _send():
+        try:
+            if mw and mw.reviewer and mw.reviewer.web:
+                mw.reviewer.web.page().runJavaScript(js)
+        except (AttributeError, RuntimeError):
+            pass
+
+    _send()
+    for delay in [200, 500, 1000]:
+        QTimer.singleShot(delay, _send)
+
+def _get_main_view():
+    """Get MainViewWidget singleton."""
     try:
-        if mw and mw.reviewer and mw.reviewer.web:
-            js = f'if(window.setChatOpen) setChatOpen({"true" if is_open else "false"});'
-            mw.reviewer.web.eval(js)
-            # Retry after short delay for reliability
-            QTimer.singleShot(200, lambda: mw.reviewer.web.eval(js) if mw and mw.reviewer and mw.reviewer.web else None)
-    except Exception:
-        pass
-
-def toggle_chatbot():
-    """Öffnet oder schließt das Chatbot-Panel (Cmd+I / Ctrl+I)"""
-    global _chatbot_dock
-    if QWebEngineView is None:
-        show_qwebengine_warning()
-        return
-
-    # Don't close when user is focused in the chat panel (e.g. typing)
-    if _chatbot_dock is not None and _chatbot_dock.isVisible():
-        try:
-            focused = QApplication.focusWidget()
-            if focused and _chatbot_dock.isAncestorOf(focused):
-                logger.debug("toggle_chatbot: Skipping close — focus is in chat panel")
-                return
-        except Exception:
-            pass
-
-    if _chatbot_dock is None:
-        # Dock-Widget erstellen
-        _chatbot_dock = QDockWidget("", mw)  # Leerer Titel, da wir eigenen Header haben
-        _chatbot_dock.setObjectName("chatbotDock")
-        _chatbot_dock.setTitleBarWidget(QWidget())  # Entferne Standard-Titlebar
-        
-        # Modernes Styling für Dock-Widget (Theme-basiert)
-        _chatbot_dock.setStyleSheet(get_dock_widget_style())
-        
-        # Chatbot-Widget hinzufügen
-        global _chatbot_widget
-        chatbot_widget = ChatbotWidget()
-        _chatbot_widget = chatbot_widget  # Global speichern für Hooks
-        _chatbot_dock.setWidget(chatbot_widget)
-        
-        # Dock-Widget links positionieren
-        mw.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, _chatbot_dock)
-        
-        # Resizable: Min/Max Breite setzen
-        DOCK_MIN_WIDTH = 350
-        DOCK_MAX_WIDTH = 800
-        DOCK_DEFAULT_WIDTH = 450
-        _chatbot_dock.setMinimumWidth(DOCK_MIN_WIDTH)
-        _chatbot_dock.setMaximumWidth(DOCK_MAX_WIDTH)
-        _chatbot_dock.resize(DOCK_DEFAULT_WIDTH, mw.height())
-        
-        # Style für Main Window Splitter (zwischen Dock und Reviewer)
-        # 1px dezenter Trenner — kein padding, kein margin, !important überschreibt alles
-        # Use token colors so it works in both light and dark mode
-        try:
-            from .theme import get_resolved_theme
-        except ImportError:
-            from ui.theme import get_resolved_theme
-        _resolved = get_resolved_theme()
-        _sep_tokens = get_tokens(_resolved)
-        mw.setStyleSheet(mw.styleSheet() + f"""
-            QMainWindow::separator {{
-                background: {_sep_tokens['border_subtle']};
-                width: 1px !important;
-                margin: 0px;
-                padding: 0px;
-            }}
-            QMainWindow::separator:hover {{
-                background: {_sep_tokens['border_medium']};
-                width: 1px !important;
-            }}
-            QSplitter::handle {{
-                background: {_sep_tokens['border_subtle']};
-                width: 1px !important;
-                margin: 0px;
-                padding: 0px;
-            }}
-            QSplitter::handle:hover {{
-                background: {_sep_tokens['border_medium']};
-                width: 1px !important;
-            }}
-        """)
-        
-        # Erlauben, dass das Panel geschlossen, bewegt und in der Größe geändert werden kann
-        _chatbot_dock.setFeatures(
-            QDockWidget.DockWidgetFeature.DockWidgetClosable |
-            QDockWidget.DockWidgetFeature.DockWidgetMovable |
-            QDockWidget.DockWidgetFeature.DockWidgetFloatable
-        )
-    
-    # Panel ein-/ausblenden
-    if _chatbot_dock.isVisible():
-        _chatbot_dock.hide()
-        # Tell reviewer dock to un-hide
-        _notify_reviewer_chat_state(False)
-    else:
-        _chatbot_dock.show()
-        # Tell reviewer dock to hide (chat panel is now visible)
-        _notify_reviewer_chat_state(True)
-        # Trigger slide-in animation in React
-        try:
-            widget = get_chatbot_widget()
-            if widget and widget.web_view:
-                widget.web_view.page().runJavaScript(
-                    "window.ankiReceive && window.ankiReceive({type:'panelOpened'});"
-                )
-        except Exception:
-            pass
-        # Prüfe aktuelles Deck beim Öffnen und sende deckSelected Event
-        # Kleine Verzögerung, damit WebView bereit ist
-        def check_and_send_deck():
-            try:
-                widget = get_chatbot_widget()
-                if widget and widget.bridge and widget.web_view:
-                    # Hole aktuelles Deck
-                    deck_info = widget.bridge.getCurrentDeck()
-                    deck_data = json.loads(deck_info)
-                    
-                    # Nur senden wenn wirklich ein Deck aktiv ist
-                    if deck_data.get("deckId") and deck_data.get("isInDeck"):
-                        deck_id = deck_data["deckId"]
-                        deck_name = deck_data["deckName"]
-                        
-                        # Berechne totalCards
-                        stats = widget.bridge._get_deck_stats(deck_id)
-                        total_cards = stats.get("totalCards", 0) if stats else 0
-                        
-                        # Prüfe ob Sub-Deck (enthält :: im Namen)
-                        is_sub_deck = "::" in deck_name if deck_name else False
-                        
-                        # Sende deckSelected Event
-                        payload = {
-                            "type": "deckSelected",
-                            "data": {
-                                "deckId": deck_id,
-                                "deckName": deck_name,
-                                "totalCards": total_cards,
-                                "isSubDeck": is_sub_deck
-                            }
-                        }
-                        widget.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
-                        logger.info("📚 toggle_chatbot: deckSelected Event gesendet - Deck: %s, Cards: %s", deck_name, total_cards)
-            except Exception as e:
-                logger.exception("Fehler beim Senden von deckSelected beim Öffnen: %s", e)
-        
-        # Verzögerung, damit WebView vollständig geladen ist
-        QTimer.singleShot(100, check_and_send_deck)
+        from .main_view import get_main_view
+    except ImportError:
+        from ui.main_view import get_main_view
+    return get_main_view()
 
 def show_settings():
-    """Öffnet das native AnkiPlus Settings-Popup."""
+    """Opens Anki's native preferences dialog."""
     try:
-        from .settings import show_settings as _show_native_settings
-        _show_native_settings()
+        if mw:
+            mw.onPrefs()
     except Exception as e:
         logger.exception("Fehler beim Öffnen der Settings: %s", e)
 
+def toggle_chatbot_panel():
+    """Toggle sidebar visibility."""
+    global _panel_user_closed
+    mv = _get_main_view()
+    if mv._sidebar_visible:
+        mv.hide_sidebar()
+        _panel_user_closed = True
+        _notify_reviewer_chat_state(False)
+    else:
+        _panel_user_closed = False
+        ensure_chatbot_open()
+
+# Alias for backwards compatibility
+toggle_chatbot = toggle_chatbot_panel
+
 def close_chatbot_panel():
-    """Schließt das Dock-Panel"""
-    global _chatbot_dock
-    if _chatbot_dock:
-        _chatbot_dock.hide()
+    """Close the sidebar."""
+    global _panel_user_closed
+    mv = _get_main_view()
+    mv.hide_sidebar()
+    _panel_user_closed = True
+    _notify_reviewer_chat_state(False)
 
 def get_chatbot_widget():
-    """Gibt die Chatbot-Widget-Instanz zurück (für Hooks)"""
-    global _chatbot_widget
-    return _chatbot_widget
+    """Return the ChatbotWidget instance (sidebar in MainViewWidget)."""
+    mv = _get_main_view()
+    return mv.get_sidebar_widget()
 
 def ensure_chatbot_open():
-    """Öffnet das Chatbot-Panel falls es noch nicht sichtbar ist. Gibt das Widget zurück."""
-    global _chatbot_dock
-    if _chatbot_dock is None or not _chatbot_dock.isVisible():
-        toggle_chatbot()
+    """Open the sidebar. Returns the ChatbotWidget."""
+    mv = _get_main_view()
+    mv.show_sidebar()
+    _notify_reviewer_chat_state(True)
+    # Send current deck info after short delay
+    def check_and_send_deck():
+        try:
+            widget = get_chatbot_widget()
+            if widget and widget.bridge and widget.web_view:
+                deck_info = widget.bridge.getCurrentDeck()
+                deck_data = json.loads(deck_info)
+                if deck_data.get("deckId") and deck_data.get("isInDeck"):
+                    deck_id = deck_data["deckId"]
+                    deck_name = deck_data["deckName"]
+                    stats = widget.bridge._get_deck_stats(deck_id)
+                    total_cards = stats.get("totalCards", 0) if stats else 0
+                    is_sub_deck = "::" in deck_name if deck_name else False
+                    payload = {
+                        "type": "deckSelected",
+                        "data": {
+                            "deckId": deck_id,
+                            "deckName": deck_name,
+                            "totalCards": total_cards,
+                            "isSubDeck": is_sub_deck
+                        }
+                    }
+                    widget.web_view.page().runJavaScript(
+                        "window.ankiReceive(%s);" % json.dumps(payload)
+                    )
+        except Exception as e:
+            logger.exception("Fehler beim Senden von deckSelected: %s", e)
+    QTimer.singleShot(100, check_and_send_deck)
     return get_chatbot_widget()
-
-def setup_keyboard_shortcut():
-    """Erstellt den Cmd+I / Ctrl+I Shortcut zum Öffnen/Schließen des Chatbots"""
-    global _shortcut
-    # Shortcut erstellen: Cmd+I auf macOS, Ctrl+I auf Windows/Linux
-    _shortcut = QShortcut(QKeySequence("Ctrl+I"), mw)
-    _shortcut.activated.connect(toggle_chatbot)
-    logger.info("Chatbot Shortcut erstellt: Cmd+I / Ctrl+I")
 
 def setup_toolbar_button():
     """Fügt einen Button zur Anki-Toolbar hinzu (ganz links)"""
     if mw is None:
         return
-    
+
     try:
-        # Plattformspezifischen Shortcut-Text bestimmen
-        if sys.platform == 'darwin':  # macOS
-            shortcut_text = "Cmd+I"
-        else:  # Windows/Linux
-            shortcut_text = "Ctrl+I"
-        
         # Action erstellen
         action = QAction("AnKI+", mw)
-        action.setToolTip(f"Chatbot öffnen/schließen ({shortcut_text})")
-        action.triggered.connect(toggle_chatbot)
-        
+        action.setToolTip("AnKI+ öffnen")
+        action.triggered.connect(ensure_chatbot_open)
+
         # Verschiedene Wege versuchen, um zur Toolbar zu gelangen
         toolbar = None
-        
+
         # Methode 1: mw.form.toolbar (Standard in Anki)
         if hasattr(mw, 'form') and hasattr(mw.form, 'toolbar'):
             toolbar = mw.form.toolbar
-            logger.info("✅ Toolbar gefunden via mw.form.toolbar")
-        
+            logger.info("Toolbar gefunden via mw.form.toolbar")
+
         # Methode 2: mw.toolbar (direkt)
         elif hasattr(mw, 'toolbar') and mw.toolbar is not None:
             toolbar = mw.toolbar
-            logger.info("✅ Toolbar gefunden via mw.toolbar")
-        
+            logger.info("Toolbar gefunden via mw.toolbar")
+
         # Methode 3: Toolbar im Hauptfenster suchen
         else:
             # Suche nach QToolBar im Hauptfenster
             for widget in mw.findChildren(QToolBar):
                 if widget.isVisible():
                     toolbar = widget
-                    logger.info("✅ Toolbar gefunden via findChildren: %s", widget.objectName())
+                    logger.info("Toolbar gefunden via findChildren: %s", widget.objectName())
                     break
-        
+
         if toolbar is None:
-            logger.warning("⚠️ Anki Toolbar nicht gefunden.")
+            logger.warning("Anki Toolbar nicht gefunden.")
             return
-        
+
         # Debug: Alle verfügbaren Methoden/Attribute ausgeben
-        logger.debug("🔍 Toolbar Typ: %s", type(toolbar))
-        logger.debug("🔍 Toolbar Attribute: %s", [attr for attr in dir(toolbar) if not attr.startswith('_')])
-        
+        logger.debug("Toolbar Typ: %s", type(toolbar))
+        logger.debug("Toolbar Attribute: %s", [attr for attr in dir(toolbar) if not attr.startswith('_')])
+
         # Prüfe ob es eine QToolBar ist (hat insertAction)
         if isinstance(toolbar, QToolBar):
             # Standard QToolBar: insertAction verwenden für Position ganz links
             toolbar.insertAction(None, action)
-            logger.info("✅ Toolbar-Button 'AnKI+' ganz links hinzugefügt (QToolBar, Shortcut: %s)", shortcut_text)
+            logger.info("Toolbar-Button 'AnKI+' ganz links hinzugefügt (QToolBar)")
         # Versuche verschiedene Methoden für Anki's Toolbar
         elif hasattr(toolbar, 'add_link'):
             # Anki's Toolbar hat möglicherweise add_link
-            toolbar.add_link("AnKI+", toggle_chatbot)
-            logger.info("✅ Toolbar-Button 'AnKI+' hinzugefügt via add_link (Shortcut: %s)", shortcut_text)
+            toolbar.add_link("AnKI+", ensure_chatbot_open)
+            logger.info("Toolbar-Button 'AnKI+' hinzugefügt via add_link")
         elif hasattr(toolbar, 'link'):
             # Anki's Toolbar hat möglicherweise link
-            toolbar.link("AnKI+", toggle_chatbot)
-            logger.info("✅ Toolbar-Button 'AnKI+' hinzugefügt via link (Shortcut: %s)", shortcut_text)
+            toolbar.link("AnKI+", ensure_chatbot_open)
+            logger.info("Toolbar-Button 'AnKI+' hinzugefügt via link")
         elif hasattr(toolbar, 'addAction'):
             # Standard addAction
             existing_actions = toolbar.actions() if hasattr(toolbar, 'actions') else []
             if existing_actions and hasattr(toolbar, 'insertAction'):
                 toolbar.insertAction(existing_actions[0], action)
-                logger.info("✅ Toolbar-Button 'AnKI+' ganz links hinzugefügt (vor erster Action, Shortcut: %s)", shortcut_text)
+                logger.info("Toolbar-Button 'AnKI+' ganz links hinzugefügt (vor erster Action)")
             else:
                 toolbar.addAction(action)
-                logger.info("✅ Toolbar-Button 'AnKI+' hinzugefügt (Shortcut: %s)", shortcut_text)
+                logger.info("Toolbar-Button 'AnKI+' hinzugefügt")
         else:
             # Versuche, direkt ein Button-Widget hinzuzufügen
             try:
                 # Erstelle einen QPushButton
                 button = QPushButton("AnKI+", toolbar)
-                button.setToolTip(f"Chatbot öffnen/schließen ({shortcut_text})")
-                button.clicked.connect(toggle_chatbot)
-                
+                button.setToolTip("AnKI+ öffnen")
+                button.clicked.connect(ensure_chatbot_open)
+
                 # Versuche, den Button zur Toolbar hinzuzufügen
                 if hasattr(toolbar, 'addWidget'):
                     toolbar.addWidget(button)
-                    logger.info("✅ Toolbar-Button 'AnKI+' als Widget hinzugefügt (Shortcut: %s)", shortcut_text)
+                    logger.info("Toolbar-Button 'AnKI+' als Widget hinzugefügt")
                 elif hasattr(toolbar, 'insertWidget'):
                     toolbar.insertWidget(0, button)  # Ganz links
-                    logger.info("✅ Toolbar-Button 'AnKI+' als Widget ganz links hinzugefügt (Shortcut: %s)", shortcut_text)
+                    logger.info("Toolbar-Button 'AnKI+' als Widget ganz links hinzugefügt")
                 else:
-                    logger.warning("⚠️ Toolbar hat keine bekannte Methode zum Hinzufügen von Widgets/Actions")
+                    logger.warning("Toolbar hat keine bekannte Methode zum Hinzufügen von Widgets/Actions")
             except Exception as widget_error:
-                logger.warning("⚠️ Fehler beim Hinzufügen als Widget: %s", widget_error)
-        
+                logger.warning("Fehler beim Hinzufügen als Widget: %s", widget_error)
+
     except Exception as e:
-        logger.exception("⚠️ Fehler beim Hinzufügen des Toolbar-Buttons: %s", e)
+        logger.exception("Fehler beim Hinzufügen des Toolbar-Buttons: %s", e)
 
 def setup_ui():
-    """Initialisiert die Chatbot-UI mit Keyboard Shortcut"""
-    # Keyboard Shortcut erstellen (Cmd+I / Ctrl+I)
-    setup_keyboard_shortcut()
-    # Toolbar-Button hinzufügen
+    """Initialisiert die Chatbot-UI mit globalem Shortcut-Filter"""
+    try:
+        from .shortcut_filter import install_shortcut_filter
+    except ImportError:
+        from ui.shortcut_filter import install_shortcut_filter
+    install_shortcut_filter()
     setup_toolbar_button()
-    
-    # State-Change Hook registrieren
     gui_hooks.state_did_change.append(on_state_did_change)
 
 def on_state_did_change(new_state, old_state):
     """Wird aufgerufen, wenn sich der Anki-Status ändert"""
+    global _panel_user_closed
+    if new_state == 'review':
+        # ReviewerView runs fullscreen in React — no sidebar needed
+        # Chat is rendered as right panel inside the React layout
+        pass
+    # Sidebar cleanup for non-review is handled by show_for_state() — don't call
+    # hide_sidebar() here, it would hide the fullscreen MainViewWidget too.
+
+    # Send deck update to sidebar widget (only if it exists and is initialized)
     try:
-        widget = get_chatbot_widget()
+        mv = _get_main_view()
+        widget = mv.get_sidebar_widget()
         if widget and widget.web_view and hasattr(widget, 'bridge') and widget.bridge:
-            # Hole Deck-Daten proaktiv und sende sie an das Frontend
             deck_json = widget.bridge.getCurrentDeck()
-            js = f"window.ankiReceive({{type: 'currentDeck', data: {deck_json}}});"
+            js = "window.ankiReceive({type: 'currentDeck', data: %s});" % deck_json
             widget.web_view.page().runJavaScript(js)
             logger.debug("State Change (%s -> %s): Deck-Update gesendet", old_state, new_state)
     except Exception as e:
@@ -402,11 +265,10 @@ def toggle_custom_reviewer(checked):
 
 def setup_menu():
     """Fügt die Chatbot-Menüeinträge zum Anki-Hauptmenü hinzu"""
-    # Chatbot öffnen/schließen mit Shortcut-Anzeige
-    action = QAction("Chatbot öffnen/schließen", mw)
-    action.setShortcut(QKeySequence("Ctrl+I"))
-    action.triggered.connect(toggle_chatbot)
-    mw.form.menuTools.addAction(action)
+    # Chatbot panel toggle (no keyboard shortcut)
+    toggle_action = QAction("Chatbot öffnen/schließen", mw)
+    toggle_action.triggered.connect(toggle_chatbot_panel)
+    mw.form.menuTools.addAction(toggle_action)
 
     # Custom Reviewer toggle
     try:
@@ -426,4 +288,13 @@ def setup_menu():
 
     # Einstellungen werden nur über das Chat-Fenster zugänglich gemacht
     # (kein separater Menü-Eintrag mehr)
+
+
+def toggle_settings_sidebar():
+    """Toggle the settings sidebar."""
+    try:
+        from .settings_sidebar import toggle_settings_sidebar as _toggle
+    except ImportError:
+        from ui.settings_sidebar import toggle_settings_sidebar as _toggle
+    _toggle()
 

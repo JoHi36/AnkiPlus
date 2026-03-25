@@ -43,6 +43,8 @@ export default function FreeChatSearchBar({ onOpen }) {
   }, []);
 
   const hasText = value.trim().length > 0;
+  const RADIUS = 22;
+  const BORDER = 1.5;
 
   return (
     <div style={{ padding: '8px 16px 12px' }}>
@@ -58,24 +60,19 @@ export default function FreeChatSearchBar({ onOpen }) {
         Anki<span style={{ color: 'var(--ds-accent)' }}>Plus</span>
       </div>
 
-      {/* Snake-border wrapper */}
-      <div style={{ position: 'relative', borderRadius: 24, padding: 2 }}>
-        {/* Animated conic-gradient ring — transform:rotate for smooth continuous spin */}
-        <div style={{
-          position: 'absolute',
-          inset: -1,
-          borderRadius: 25,
-          background: 'conic-gradient(from 0deg, transparent 0deg, transparent 55%, var(--ds-accent) 60%, var(--ds-purple) 72%, #38bdf8 81%, var(--ds-accent) 86%, transparent 92%)',
-          WebkitMask: 'radial-gradient(circle, transparent calc(100% - 2px), white calc(100% - 2px))',
-          mask: 'radial-gradient(circle, transparent calc(100% - 2px), white calc(100% - 2px))',
-          animation: 'freechat-snake-rotate 2.5s linear infinite',
-        }} />
-
-        {/* Input */}
+      {/* Snake-border wrapper — the gradient fills this element, border-radius clips it,
+          and the inner div covers the center so only a thin ring is visible. */}
+      <div className="freechat-snake-ring" style={{
+        position: 'relative',
+        borderRadius: RADIUS,
+        padding: BORDER,
+        overflow: 'hidden',
+      }}>
+        {/* Input surface — covers the gradient center, leaving only the ring edge */}
         <div style={{
           position: 'relative',
           background: 'var(--ds-bg-frosted)',
-          borderRadius: 22,
+          borderRadius: RADIUS - BORDER,
           display: 'flex',
           alignItems: 'center',
           padding: '9px 14px 9px 38px',
@@ -92,6 +89,7 @@ export default function FreeChatSearchBar({ onOpen }) {
 
           <input
             ref={inputRef}
+            className="freechat-input"
             value={value}
             onChange={e => setValue(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -101,6 +99,8 @@ export default function FreeChatSearchBar({ onOpen }) {
               background: 'transparent',
               border: 'none',
               outline: 'none',
+              boxShadow: 'none',
+              WebkitAppearance: 'none',
               color: 'var(--ds-text-primary)',
               fontSize: 13,
             }}
@@ -138,11 +138,34 @@ export default function FreeChatSearchBar({ onOpen }) {
         </div>
       </div>
 
-      {/* CSS animation — transform:rotate produces smooth continuous spin */}
+      {/* CSS: rotating gradient background on the outer ring + focus suppression */}
       <style>{`
+        .freechat-snake-ring {
+          background:
+            conic-gradient(
+              from var(--snake-angle, 0deg),
+              transparent 0deg, transparent 55%,
+              var(--ds-accent) 60%, var(--ds-purple) 72%,
+              #38bdf8 81%, var(--ds-accent) 86%,
+              transparent 92%
+            );
+          animation: freechat-snake-rotate 2.5s linear infinite;
+        }
         @keyframes freechat-snake-rotate {
-          from { transform: rotate(0deg); }
-          to   { transform: rotate(360deg); }
+          from { --snake-angle: 0deg; }
+          to   { --snake-angle: 360deg; }
+        }
+        @property --snake-angle {
+          syntax: '<angle>';
+          initial-value: 0deg;
+          inherits: false;
+        }
+        /* Suppress all browser/DaisyUI focus outlines on this input */
+        .freechat-input:focus,
+        .freechat-input:focus-visible {
+          outline: none !important;
+          box-shadow: none !important;
+          border: none !important;
         }
       `}</style>
     </div>

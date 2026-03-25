@@ -3,17 +3,14 @@ import { useAuth } from '../contexts/AuthContext';
 
 export interface QuotaData {
   tier: 'free' | 'tier1' | 'tier2';
-  flash: {
-    used: number;
-    limit: number; // -1 for unlimited
-    remaining: number; // -1 for unlimited
+  tokens: {
+    daily: { used: number; limit: number; remaining: number };
+    weekly: { used: number; limit: number; remaining: number };
   };
-  deep: {
-    used: number;
-    limit: number;
-    remaining: number;
+  resetAt: {
+    daily: string;
+    weekly: string;
   };
-  resetAt: string; // ISO date string
 }
 
 const DEFAULT_BACKEND_URL = 'https://europe-west1-ankiplus-b0ffb.cloudfunctions.net/api';
@@ -67,7 +64,8 @@ export function useQuota() {
     // Refresh every 5 minutes
     const interval = setInterval(fetchQuota, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [user, getAuthToken]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid]);
 
   return {
     quota,

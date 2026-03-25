@@ -1,27 +1,35 @@
 """
-AI-Handler für das Anki Chatbot Addon
-Orchestriert Google Gemini API-Integration, RAG-Pipeline und Model Management.
+AI-Handler für das Anki Chatbot Addon — pure dispatcher.
+
+Routes every message through the unified router, loads the target agent,
+and dispatches via _dispatch_agent(). All agents (Tutor, Help, Research,
+Plusi) go through the same path — no special cases.
 
 Heavy lifting is delegated to:
+  - ai.agents   (Agent registry, lazy loading)
+  - ai.router   (Unified message routing)
   - ai.gemini   (Gemini API requests, streaming, retry logic)
-  - ai.rag      (RAG router, retrieval, keyword helpers)
+  - ai.tutor    (Tutor agent: RAG + streaming + fallback + handoff)
   - ai.models   (section titles, model fetching)
 """
 
 import json
 import time
-from ..config import (
-    get_config, RESPONSE_STYLES, is_backend_mode, get_backend_url,
-    get_auth_token, get_refresh_token, update_config
-)
-from .system_prompt import get_system_prompt
+try:
+    from ..config import (
+        get_config, RESPONSE_STYLES, is_backend_mode, get_backend_url,
+        get_auth_token, get_refresh_token, update_config
+    )
+except ImportError:
+    from config import (
+        get_config, RESPONSE_STYLES, is_backend_mode, get_backend_url,
+        get_auth_token, get_refresh_token, update_config
+    )
 
 try:
-    from .tools import registry as tool_registry
-    from .agent_loop import run_agent_loop
+    from .router import route_message
 except ImportError:
-    from tools import registry as tool_registry
-    from agent_loop import run_agent_loop
+    from router import route_message
 
 try:
     from ..utils.logging import get_logger
@@ -30,19 +38,32 @@ except ImportError:
 logger = get_logger(__name__)
 
 # --- Re-exports from extracted modules -------------------------------------------
-from .gemini import (
-    get_google_response, get_google_response_streaming, stream_response,
-    retry_with_backoff, get_user_friendly_error, ERROR_MESSAGES
-)
-from .rag import (
-    rag_router, rag_retrieve_cards, fix_router_queries,
-    is_standalone_question, extract_card_keywords,
-    PHASE_SEARCH, PHASE_RETRIEVAL
-)
-from .models import (
-    get_section_title as _get_section_title,
-    fetch_available_models as _fetch_available_models,
-)
+try:
+    from .gemini import (
+        get_google_response, get_google_response_streaming, stream_response,
+        retry_with_backoff, get_user_friendly_error, ERROR_MESSAGES
+    )
+except ImportError:
+    from gemini import (
+        get_google_response, get_google_response_streaming, stream_response,
+        retry_with_backoff, get_user_friendly_error, ERROR_MESSAGES
+    )
+
+try:
+    from .rag import PHASE_SEARCH, PHASE_RETRIEVAL
+except ImportError:
+    from rag import PHASE_SEARCH, PHASE_RETRIEVAL
+
+try:
+    from .models import (
+        get_section_title as _get_section_title,
+        fetch_available_models as _fetch_available_models,
+    )
+except ImportError:
+    from models import (
+        get_section_title as _get_section_title,
+        fetch_available_models as _fetch_available_models,
+    )
 
 # Import Anki's main window for thread-safe UI access
 try:
@@ -66,6 +87,7 @@ class AIHandler:
         self._current_request_steps = []  # Track steps for the current request
         self._current_request_id = None
         self._pipeline_signal_callback = None
+        self._msg_event_callback = None
         self._current_step_labels = []
 
     def _refresh_config(self):
@@ -140,35 +162,6 @@ class AIHandler:
     def fetch_available_models(self, provider, api_key):
         return _fetch_available_models(provider, api_key)
 
-    def _rag_router(self, user_message, context=None):
-        return rag_router(
-            user_message, context=context,
-            config=self.config,
-            emit_step=self._emit_pipeline_step,
-        )
-
-    def _rag_retrieve_cards(self, precise_queries=None, broad_queries=None,
-                            search_scope="current_deck", context=None,
-                            max_notes=10):
-        return rag_retrieve_cards(
-            precise_queries=precise_queries,
-            broad_queries=broad_queries,
-            search_scope=search_scope,
-            context=context,
-            max_notes=max_notes,
-            emit_state=self._emit_ai_state,
-            emit_event=self._emit_ai_event,
-        )
-
-    def _fix_router_queries(self, router_result, user_message, context):
-        return fix_router_queries(router_result, user_message, context)
-
-    def _is_standalone_question(self, user_message, context):
-        return is_standalone_question(user_message, context)
-
-    def _extract_card_keywords(self, context):
-        return extract_card_keywords(context)
-
     # ---- Core orchestration methods (kept in handler.py) ------------------------
 
     def get_response(self, user_message, context=None, history=None, mode='compact',
@@ -203,8 +196,9 @@ class AIHandler:
                     context=context, history=history, mode=mode,
                     system_prompt_override=system_prompt_override,
                 )
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             error_msg = f"Fehler bei der API-Anfrage: {str(e)}"
+            logger.exception("get_response error: %s", e)
             if callback:
                 callback(error_msg, True, False)
             return error_msg
@@ -269,7 +263,7 @@ class AIHandler:
                     app = QApplication.instance()
                     if app:
                         app.processEvents()
-                except Exception as e:
+                except (AttributeError, RuntimeError) as e:
                     logger.warning("Fehler beim Senden von AI-State: %s", e)
             mw.taskman.run_on_main(emit_on_main)
         else:
@@ -278,7 +272,7 @@ class AIHandler:
                     "window.ankiReceive(" + js_payload + ");"
                 )
                 logger.debug("RAG State: %s (phase: %s)", message, phase)
-            except Exception as e:
+            except (AttributeError, RuntimeError) as e:
                 logger.warning("Fehler beim Senden von AI-State: %s", e)
 
     def _emit_pipeline_step(self, step, status, data=None):
@@ -287,14 +281,14 @@ class AIHandler:
             label = self._step_done_label(step, data)
             self._current_step_labels.append(label)
 
-        if getattr(self, '_fallback_in_progress', False) and step != 'router':
+        if getattr(self, '_fallback_in_progress', False) and step not in ('router', 'orchestrating'):
             return
 
         callback = getattr(self, '_pipeline_signal_callback', None)
         if callback:
             try:
                 callback(step, status, data)
-            except Exception as e:
+            except (AttributeError, TypeError, RuntimeError) as e:
                 logger.warning("_emit_pipeline_step error: %s", e)
 
     def _step_done_label(self, step, data):
@@ -305,7 +299,7 @@ class AIHandler:
             'sql': 'Keyword-Suche',
             'semantic': 'Semantische Suche',
         }
-        if step == 'router':
+        if step in ('router', 'orchestrating'):
             mode = mode_labels.get(data.get('retrieval_mode', ''),
                                    data.get('retrieval_mode', ''))
             scope = data.get('scope_label', '')
@@ -337,257 +331,311 @@ class AIHandler:
                         "window.ankiReceive(" + payload_str + ");"
                     )
                     logger.debug("AI Event (%s) sent", event_type)
-                except Exception as e:
+                except (AttributeError, RuntimeError) as e:
                     logger.warning("Fehler beim Senden von AI-Event: %s", e)
             mw.taskman.run_on_main(emit_on_main)
 
-    # ---- RAG orchestrator (stays here -- uses self.widget, self._emit_*) --------
+    def _emit_msg_event(self, event_type, data):
+        """Emit a structured message event to the frontend (v2 protocol).
+        Uses Qt signal callback (set by AIRequestThread) for synchronous delivery,
+        falling back to taskman for events emitted outside the thread context."""
+        cb = getattr(self, '_msg_event_callback', None)
+        if cb:
+            cb(event_type, data)
+            return
+        # Fallback: direct JS injection via taskman (e.g., events outside AI thread)
+        if not self.widget or not self.widget.web_view:
+            return
+        payload = {"type": event_type}
+        payload.update(data)
+        payload_str = json.dumps(payload)
+        if mw and mw.taskman:
+            def emit_on_main():
+                try:
+                    self.widget.web_view.page().runJavaScript(
+                        "window.ankiReceive(" + payload_str + ");"
+                    )
+                except (AttributeError, RuntimeError) as e:
+                    logger.warning("msg_event emit error: %s", e)
+            mw.taskman.run_on_main(emit_on_main)
+
+    # ---- Consolidated agent dispatch (all agents) --------------------------------
+
+    def _dispatch_agent(self, agent_name, run_fn, situation, request_id,
+                        on_finished=None, extra_kwargs=None, callback=None,
+                        agent_def=None):
+        """Consolidated agent dispatch — used for ALL agents including Tutor.
+
+        Creates AgentMemory, loads shared memory, emits v2 events,
+        calls the agent's run function with standard interface, handles result.
+
+        Args:
+            agent_name: Agent identifier ('tutor', 'help', 'research', 'plusi', etc.)
+            run_fn: The agent's run function (standard signature)
+            situation: User message (cleaned of @mentions)
+            request_id: Unique request ID for v2 event correlation
+            on_finished: Optional lifecycle callback(widget, agent_name, result)
+            extra_kwargs: Additional kwargs to pass to the agent
+            callback: Optional v1 streaming callback
+            agent_def: Optional AgentDefinition for model selection
+
+        Returns:
+            str: The agent's response text
+        """
+        extra_kwargs = extra_kwargs or {}
+
+        # Orchestration — always show agent routing, never search details.
+        # Search details (retrieval_mode, scope) are agent-internal pipeline steps.
+        routing_result = extra_kwargs.get('routing_result')
+        method = 'default'
+        response_length = 'medium'
+        if routing_result:
+            method = getattr(routing_result, 'method', 'default')
+            response_length = getattr(routing_result, 'response_length', 'medium')
+
+        context = extra_kwargs.get('context')
+        has_card = bool(context and context.get('cardId'))
+        orch_data = {
+            'search_needed': False,
+            'retrieval_mode': 'agent:%s' % agent_name,
+            'method': method,
+            'scope': 'none',
+            'scope_label': agent_name,
+            'response_length': response_length,
+            'has_card': has_card,
+        }
+        self._emit_pipeline_step("orchestrating", "done", orch_data)
+
+        # v2: Emit orchestration event
+        self._emit_msg_event("orchestration", {
+            "messageId": request_id or '',
+            "agent": agent_name,
+            "mode": method,
+            "steps": [{"step": "orchestrating", "status": "done", "data": {
+                "agent": agent_name,
+                **orch_data,
+            }}],
+        })
+
+        # v2: Create agent cell (status='loading' triggers shimmer in frontend)
+        self._emit_msg_event("agent_cell", {
+            "messageId": request_id or '',
+            "agent": agent_name,
+            "status": "loading",
+            "data": {}
+        })
+
+        # Load shared memory for context
+        memory_context = ''
+        try:
+            from .memory import load_shared_memory
+            shared_mem = load_shared_memory()
+            memory_context = shared_mem.to_context_string()
+        except (AttributeError, ImportError, OSError) as e:
+            logger.debug("load_shared_memory error: %s", e)
+
+        # Create agent-specific memory instance
+        agent_memory = None
+        try:
+            from .agent_memory import AgentMemory
+            agent_memory = AgentMemory(agent_name)
+        except (AttributeError, ImportError, OSError) as e:
+            logger.debug("AgentMemory init error: %s", e)
+
+        # Build the agent's emit_step callback (routes through pipeline signal)
+        def agent_emit_step(step, status, data=None):
+            enriched = dict(data or {})
+            enriched['agent'] = agent_name
+            self._emit_pipeline_step(step, status, enriched)
+
+        # Build kwargs — always inject config so every agent has access
+        agent_kwargs = dict(extra_kwargs)
+        agent_kwargs.setdefault('config', self.config or {})
+        if memory_context:
+            agent_kwargs['memory_context'] = memory_context
+
+        # Inject embedding_manager for agents that need semantic search
+        if 'embedding_manager' not in agent_kwargs:
+            try:
+                # Access the global embedding manager without re-importing __init__
+                import sys
+                init_mod = sys.modules.get('AnkiPlus_main') or sys.modules.get('__init__')
+                if init_mod and hasattr(init_mod, 'get_embedding_manager'):
+                    emb = init_mod.get_embedding_manager()
+                    if emb:
+                        agent_kwargs['embedding_manager'] = emb
+            except (AttributeError, ImportError) as e:
+                logger.debug("embedding_manager inject error: %s", e)
+
+        # Model selection from agent_def + global mode
+        if agent_def:
+            mode = (self.config or {}).get('model_mode', 'premium')
+            if mode == 'fast':
+                model = agent_def.fast_model or agent_def.premium_model
+            else:
+                model = agent_def.premium_model or agent_def.fast_model
+            fallback = agent_def.fallback_model or model
+            if model:
+                agent_kwargs['model'] = model
+            if fallback:
+                agent_kwargs['fallback_model'] = fallback
+
+        # Build streaming callback
+        _used_streaming = []
+        _chunk_count = [0]
+        def _stream_callback(chunk, done):
+            if done:
+                return
+            if chunk:
+                _used_streaming.append(True)
+                _chunk_count[0] += 1
+                if _chunk_count[0] <= 3:
+                    logger.info("[DEBUG] _stream_callback: emitting text_chunk #%d, agent=%s, len=%d",
+                                _chunk_count[0], agent_name, len(chunk))
+                self._emit_msg_event("text_chunk", {
+                    "messageId": request_id or '',
+                    "agent": agent_name,
+                    "chunk": chunk,
+                })
+
+        # Call agent with standard interface
+        result = run_fn(
+            situation=situation,
+            emit_step=agent_emit_step,
+            memory=agent_memory,
+            stream_callback=_stream_callback,
+            **agent_kwargs,
+        )
+
+        # Extract text and citations from result
+        text = result.get('text', '') if isinstance(result, dict) else str(result)
+        citations = result.get('citations', {}) if isinstance(result, dict) else {}
+        logger.info("[DEBUG] _dispatch_agent done: agent=%s, textLen=%d, chunks=%d, usedStreaming=%s",
+                    agent_name, len(text), _chunk_count[0], bool(_used_streaming))
+
+        # Only emit full text if agent didn't stream
+        used_streaming = result.get('_used_streaming', False) if isinstance(result, dict) else False
+        if not _used_streaming and not used_streaming:
+            self._emit_msg_event("text_chunk", {
+                "messageId": request_id or '',
+                "agent": agent_name,
+                "chunk": text,
+            })
+
+        # v2: Mark agent cell done (include citations if available)
+        cell_data = {}
+        if citations:
+            cell_data['citations'] = citations
+        self._emit_msg_event("agent_cell", {
+            "messageId": request_id or '',
+            "agent": agent_name,
+            "status": "done",
+            "data": cell_data,
+        })
+
+        # v1 callback
+        if callback:
+            callback(text, True, False,
+                     steps=self._current_request_steps,
+                     citations=citations,
+                     step_labels=self._current_step_labels)
+
+        # Memory extraction (rule-based, fast)
+        try:
+            from .memory import extract_memory_signals, apply_memory_updates
+            mem_updates = extract_memory_signals(situation)
+            if mem_updates:
+                apply_memory_updates(mem_updates)
+        except (AttributeError, ImportError, KeyError) as mem_err:
+            logger.debug("Memory extraction skipped: %s", mem_err)
+
+        # v2: Done
+        self._emit_msg_event("msg_done", {"messageId": request_id or ''})
+
+        # Lifecycle: on_finished (main thread)
+        if on_finished and self.widget:
+            _widget = self.widget
+            _result = result if isinstance(result, dict) else {}
+            if mw and mw.taskman:
+                mw.taskman.run_on_main(
+                    lambda: on_finished(_widget, agent_name, _result))
+
+        return text
+
+    # ---- Pure dispatcher (all agents go through _dispatch_agent) ----------------
 
     def get_response_with_rag(self, user_message, context=None, history=None,
                               mode='compact', callback=None, insights=None):
-        """
-        Hauptmethode für RAG-Pipeline: Orchestriert Router -> Retrieval -> Generator.
-        """
+        """Dispatch user message to the appropriate agent."""
         self._current_request_steps = []
         self._current_step_labels = []
         self._fallback_in_progress = False
-        citations = {}
+        request_id = getattr(self, '_current_request_id', None)
+
+        # v2: Start
+        self._emit_msg_event("msg_start", {"messageId": request_id or ''})
+        self._emit_pipeline_step("orchestrating", "active")
 
         try:
-            # Stage 1: Router
-            router_result = self._rag_router(user_message, context=context)
+            # Route message to agent
+            session_context = {
+                'locked_agent': None,
+                'mode': 'card_session' if context and context.get('cardId') else 'free_chat',
+                'deck_name': (context or {}).get('deckName', ''),
+                'has_card': bool(context and context.get('cardId')),
+            }
+            routing_result = route_message(user_message, session_context, self.config,
+                                            card_context=context, chat_history=history)
+            logger.info("Router: agent=%s, method=%s", routing_result.agent, routing_result.method)
 
-            rag_context = None
-            if router_result and router_result.get("search_needed"):
-                # Stage 2: Retrieval
-                search_scope = router_result.get("search_scope", "current_deck")
-                max_sources_level = router_result.get("max_sources", "medium")
-                max_notes = {"low": 5, "medium": 10, "high": 15}.get(max_sources_level, 10)
-                logger.debug("RAG: max_sources=%s -> max_notes=%s", max_sources_level, max_notes)
+            # Load agent
+            try:
+                from .agents import get_agent, get_default_agent, lazy_load_run_fn
+            except ImportError:
+                from agents import get_agent, get_default_agent, lazy_load_run_fn
 
-                precise_queries = [q for q in router_result.get("precise_queries", []) if q and q.strip()]
-                broad_queries = [q for q in router_result.get("broad_queries", []) if q and q.strip()]
-
-                if precise_queries or broad_queries:
-                    _emb_mgr = None
-                    try:
-                        from .. import get_embedding_manager
-                        _emb_mgr = get_embedding_manager()
-                    except Exception:
-                        pass
-
-                    retrieval_mode = router_result.get('retrieval_mode', 'both')
-
-                    if _emb_mgr and retrieval_mode in ('semantic', 'both'):
-                        try:
-                            try:
-                                from .retrieval import HybridRetrieval
-                            except ImportError:
-                                from retrieval import HybridRetrieval
-                            hybrid = HybridRetrieval(_emb_mgr, self)
-                            retrieval_result = hybrid.retrieve(
-                                user_message, router_result, context, max_notes=max_notes)
-                        except Exception as e:
-                            logger.debug("Hybrid retrieval failed, falling back to SQL: %s", e)
-                            retrieval_result = self._rag_retrieve_cards(
-                                precise_queries=precise_queries,
-                                broad_queries=broad_queries,
-                                search_scope=search_scope,
-                                context=context,
-                                max_notes=max_notes,
-                            )
-                    else:
-                        retrieval_result = self._rag_retrieve_cards(
-                            precise_queries=precise_queries,
-                            broad_queries=broad_queries,
-                            search_scope=search_scope,
-                            context=context,
-                            max_notes=max_notes,
-                        )
-
-                    if retrieval_result and retrieval_result.get("context_string"):
-                        context_string = retrieval_result["context_string"]
-                        citations = retrieval_result.get("citations", {})
-
-                        if context and context.get('cardId'):
-                            current_note_id = str(context.get('noteId', context['cardId']))
-                            if current_note_id not in citations:
-                                import re as _re
-                                _q = context.get('question') or context.get('frontField') or ''
-                                _a = context.get('answer') or ''
-                                _q_clean = _re.sub(r'<[^>]+>', ' ', _q).strip()[:200]
-                                _a_clean = _re.sub(r'<[^>]+>', ' ', _a).strip()[:200]
-                                citations[current_note_id] = {
-                                    'noteId': context.get('noteId', context['cardId']),
-                                    'cardId': context['cardId'],
-                                    'question': _q_clean,
-                                    'answer': _a_clean,
-                                    'fields': context.get('fields', {}),
-                                    'deckName': context.get('deckName', ''),
-                                    'isCurrentCard': True,
-                                    'sources': ['current'],
-                                }
-                                context_string = (
-                                    f"Note {current_note_id} (aktuelle Karte):\n"
-                                    f"  Frage: {_q_clean}\n  Antwort: {_a_clean}\n"
-                                    f"{context_string}"
-                                )
-
-                        formatted_cards = [line for line in context_string.split("\n") if line.strip()]
-                        rag_context = {
-                            "cards": formatted_cards,
-                            "reasoning": router_result.get("reasoning", ""),
-                            "citations": citations,
-                        }
-                        logger.debug("RAG: %s Karten fuer Kontext verwendet, %s Citations",
-                                     len(formatted_cards), len(citations))
-                    else:
-                        logger.debug("RAG: Keine Karten gefunden")
-
-            # Even without search, include current card as context for the AI
-            if not rag_context and context and context.get('cardId'):
-                import re as _re
-                current_note_id = str(context.get('noteId', context['cardId']))
-                _q = context.get('question') or context.get('frontField') or ''
-                _a = context.get('answer') or ''
-                _q_clean = _re.sub(r'<[^>]+>', ' ', _q).strip()[:200]
-                _a_clean = _re.sub(r'<[^>]+>', ' ', _a).strip()[:200]
-                if _q_clean or _a_clean:
-                    rag_context = {
-                        "cards": [
-                            f"Note {current_note_id} (aktuelle Karte):\n"
-                            f"  Frage: {_q_clean}\n  Antwort: {_a_clean}"
-                        ],
-                        "citations": {
-                            current_note_id: {
-                                'noteId': context.get('noteId', context['cardId']),
-                                'cardId': context['cardId'],
-                                'question': _q_clean,
-                                'answer': _a_clean,
-                                'fields': context.get('fields', {}),
-                                'deckName': context.get('deckName', ''),
-                                'isCurrentCard': True,
-                                'sources': ['current'],
-                            }
-                        }
-                    }
-                    citations = rag_context["citations"]
-
-            # Stage 3: Generator
-            self._refresh_config()
-
-            if not self.is_configured():
-                error_msg = "Bitte konfigurieren Sie zuerst den API-Schlüssel in den Einstellungen."
-                if callback:
-                    callback(error_msg, True, False)
-                return error_msg
-
-            model = "gemini-3-flash-preview"
-            fallback_model = "gemini-2.5-flash"
-            api_key = self.config.get("api_key", "")
-
-            ai_tools = self.config.get("ai_tools", {
-                "images": True, "diagrams": True, "molecules": False})
-            insights_system_prompt = get_system_prompt(
-                mode=mode, tools=ai_tools, insights=insights)
-
-            self._emit_pipeline_step("generating", "active")
-
-            _generating_done_emitted = False
-
-            def enhanced_callback(chunk, done, is_function_call=False):
-                nonlocal _generating_done_emitted
-                if done:
-                    if not _generating_done_emitted:
-                        self._emit_pipeline_step("generating", "done")
-                        _generating_done_emitted = True
-                    if callback:
-                        callback(chunk, done, is_function_call,
-                                 steps=self._current_request_steps,
-                                 citations=citations,
-                                 step_labels=getattr(self, '_current_step_labels', []))
-                else:
-                    if callback:
-                        callback(chunk, done, is_function_call)
+            agent_def = get_agent(routing_result.agent)
+            if not agent_def:
+                agent_def = get_default_agent()
+                logger.info("Agent %s not found, using default", routing_result.agent)
 
             try:
-                if callback:
-                    result = self._get_google_response_streaming(
-                        user_message, model, api_key,
-                        context=context, history=history, mode=mode,
-                        callback=enhanced_callback,
-                        rag_context=rag_context,
-                        suppress_error_callback=True,
-                        system_prompt_override=insights_system_prompt,
-                    )
-                else:
-                    result = self._get_google_response(
-                        user_message, model, api_key,
-                        context=context, history=history, mode=mode,
-                        rag_context=rag_context,
-                        system_prompt_override=insights_system_prompt,
-                    )
-                return result
+                run_fn = lazy_load_run_fn(agent_def)
+            except (AttributeError, ImportError) as e:
+                logger.warning("Agent %s load failed: %s, using default", agent_def.name, e)
+                agent_def = get_default_agent()
+                run_fn = lazy_load_run_fn(agent_def)
 
-            except Exception as e:
-                error_str = str(e).lower()
-                status_code = None
-                if hasattr(e, 'response') and e.response:
-                    status_code = e.response.status_code
+            clean_msg = routing_result.clean_message or user_message
 
-                logger.warning("Primary model error (%s): %s...",
-                               status_code or 'unknown', str(e)[:100])
-
-                fallback_rag_context = rag_context
-                fallback_history = history
-
-                if status_code == 400 or "400" in error_str or "too large" in error_str:
-                    logger.warning("400/Size Error -> Massives Kuerzen fuer Fallback")
-                    fallback_history = []
-                    if rag_context and rag_context.get("cards"):
-                        fallback_rag_context = dict(rag_context)
-                        fallback_rag_context["cards"] = rag_context["cards"][:3]
-
-                logger.info("Versuche Fallback mit gemini-2.5-flash (mit RAG)...")
-                try:
-                    if callback:
-                        return self._get_google_response_streaming(
-                            user_message, fallback_model, api_key,
-                            context=context, history=fallback_history, mode=mode,
-                            callback=enhanced_callback,
-                            rag_context=fallback_rag_context,
-                            suppress_error_callback=True,
-                            system_prompt_override=insights_system_prompt,
-                        )
-                    else:
-                        return self._get_google_response(
-                            user_message, fallback_model, api_key,
-                            context=context, history=fallback_history, mode=mode,
-                            rag_context=fallback_rag_context,
-                            system_prompt_override=insights_system_prompt,
-                        )
-                except Exception as fallback_e:
-                    logger.warning("Fallback mit RAG gescheitert: %s", fallback_e)
-                    logger.info("Letzter Versuch: Fallback OHNE RAG...")
-                    if callback:
-                        return self._get_google_response_streaming(
-                            user_message, fallback_model, api_key,
-                            context=context, history=None, mode=mode,
-                            callback=enhanced_callback,
-                            rag_context=None,
-                            suppress_error_callback=False,
-                            system_prompt_override=insights_system_prompt,
-                        )
-                    else:
-                        raise fallback_e
+            # Dispatch — same path for ALL agents
+            logger.info("[DEBUG] Dispatching to agent=%s, run_fn=%s", agent_def.name, run_fn.__name__ if hasattr(run_fn, '__name__') else str(run_fn))
+            return self._dispatch_agent(
+                agent_name=agent_def.name,
+                run_fn=run_fn,
+                situation=clean_msg,
+                request_id=request_id,
+                on_finished=agent_def.on_finished,
+                extra_kwargs={
+                    'context': context,
+                    'history': history,
+                    'mode': mode,
+                    'insights': insights,
+                    'routing_result': routing_result,
+                    'callback': callback,
+                    **agent_def.extra_kwargs,
+                },
+                callback=callback,
+                agent_def=agent_def,
+            )
 
         except Exception as e:
-            error_msg = f"Fehler in RAG-Pipeline: {str(e)}"
-            logger.exception("%s", error_msg)
-            logger.info("Fallback auf normale Antwort ohne RAG (Endgueltig)...")
-            return self.get_response(
-                user_message, context=context, history=history, mode=mode,
-                callback=enhanced_callback or callback)
+            logger.exception("get_response_with_rag error: %s", e)
+            error_msg = "Ein Fehler ist aufgetreten. Bitte versuche es erneut."
+            if callback:
+                callback(error_msg, True, False)
+            self._emit_msg_event("msg_done", {"messageId": request_id or ''})
+            return error_msg
 
 
 # Globale Instanz

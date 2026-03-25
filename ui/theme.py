@@ -22,7 +22,7 @@ def _detect_system_theme() -> str:
         from aqt import mw
         if mw and mw.pm and hasattr(mw.pm, 'night_mode'):
             return "dark" if mw.pm.night_mode() else "light"
-    except Exception:
+    except (AttributeError, RuntimeError):
         pass
     try:
         from aqt.qt import QApplication, QPalette
@@ -30,7 +30,7 @@ def _detect_system_theme() -> str:
         if app:
             color = app.palette().color(QPalette.ColorRole.Window)
             return "dark" if color.lightness() < 128 else "light"
-    except Exception:
+    except (AttributeError, RuntimeError, ImportError):
         pass
     return "dark"
 

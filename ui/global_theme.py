@@ -101,23 +101,23 @@ def is_qapplication_valid():
         app = QApplication.instance()
         if app is None:
             return False
-        
+
         try:
             name = app.applicationName()
             pid = app.applicationPid()
             widgets = app.allWidgets()
             widget_count = len(widgets) if widgets else 0
-            
+
             if widget_count == 0:
                 return False
-            
+
             if app.closingDown():
                 return False
-            
+
             return True
         except (RuntimeError, AttributeError, TypeError, OSError):
             return False
-    except Exception:
+    except (RuntimeError, AttributeError, TypeError):
         return False
 
 
@@ -128,20 +128,20 @@ def is_main_window_valid():
     try:
         if mw is None:
             return False
-        
+
         try:
             visible = mw.isVisible()
             name = mw.objectName()
             width = mw.width()
             height = mw.height()
-            
+
             if width == 0 or height == 0:
                 return False
-            
+
             return True
         except (RuntimeError, AttributeError, TypeError):
             return False
-    except Exception:
+    except (RuntimeError, AttributeError, TypeError):
         return False
 
 
@@ -259,9 +259,9 @@ def remove_logo_widgets():
                     widget.setVisible(False)
                     widget.setParent(None)
                     removed_count += 1
-                except Exception:
+                except (AttributeError, RuntimeError):
                     pass
-    except Exception:
+    except (AttributeError, RuntimeError):
         pass
 
 
@@ -284,8 +284,8 @@ def apply_global_dark_theme():
     
     try:
         remove_logo_widgets()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("remove_logo_widgets failed: %s", e)
     
     _resolved = get_resolved_theme()
     _t = get_tokens(_resolved)
@@ -649,9 +649,9 @@ def apply_global_dark_theme():
             _debug_log(f"❌ QApplication.setStyleSheet() RuntimeError: {e}")
             _write_debug_log("B", "apply_global_dark_theme:error", f"RuntimeError: {e}", {})
             return
-        except Exception as e:
+        except (AttributeError, TypeError) as e:
             _app_running = False
-            _debug_log(f"❌ QApplication.setStyleSheet() Exception: {e}")
+            _debug_log(f"❌ QApplication.setStyleSheet() error: {e}")
             _write_debug_log("B", "apply_global_dark_theme:error", f"Exception: {e}", {})
             return
         
@@ -862,6 +862,7 @@ def on_webview_will_set_content(web_content, context):
         </script>
         """
     except Exception as e:
+        logger.warning("HTML modification in on_webview_will_set_content failed: %s", e)
         _debug_log(f"⚠️ Fehler bei HTML-Modifikation: {e}")
         _resolved_theme = get_resolved_theme()
         _wt = get_tokens(_resolved_theme)
@@ -916,6 +917,7 @@ def on_state_change(new_state, old_state):
     try:
         apply_global_dark_theme()
     except Exception as e:
+        logger.warning("apply_global_dark_theme failed in on_state_change: %s", e)
         _debug_log(f"⚠️ apply_global_dark_theme() failed: {e}")
     
     # Nach erfolgreicher Initialisierung: Starte kontinuierliches Restyling
@@ -946,11 +948,12 @@ def start_continuous_restyle():
         
         try:
             apply_global_dark_theme()
-            
+
             if _app_running and _app_initialized:
                 _continuous_restyle_timer = create_safe_timer(15000, continuous_restyle)
         except Exception as e:
             _app_running = False
+            logger.warning("Continuous restyle stopped due to error: %s", e)
             _debug_log(f"❌ Continuous restyle stopped: {e}")
     
     _debug_log("🎨 Starte kontinuierliches Restyling...")
@@ -980,14 +983,16 @@ def setup_global_theme():
     try:
         gui_hooks.webview_will_set_content.append(on_webview_will_set_content)
         _debug_log("  ✅ webview_will_set_content Hook registriert")
-    except Exception as e:
+    except (AttributeError, TypeError) as e:
+        logger.warning("Could not register webview_will_set_content hook: %s", e)
         _debug_log(f"  ⚠️ webview_will_set_content Hook fehlgeschlagen: {e}")
-    
+
     # Hook für State-Changes - DAS ist unser sicherer Einstiegspunkt!
     try:
         gui_hooks.state_did_change.append(on_state_change)
         _debug_log("  ✅ state_did_change Hook registriert (HAUPTEINSTIEGSPUNKT)")
-    except Exception as e:
+    except (AttributeError, TypeError) as e:
+        logger.warning("Could not register state_did_change hook: %s", e)
         _debug_log(f"  ⚠️ state_did_change Hook fehlgeschlagen: {e}")
     
     # Hook für Cleanup beim Schließen

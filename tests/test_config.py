@@ -65,6 +65,14 @@ class TestLoadConfig:
         assert "diagrams" in result["ai_tools"]
 
 
+def test_research_config_defaults():
+    """Research agent has default config entries."""
+    from config import DEFAULT_CONFIG
+    assert DEFAULT_CONFIG.get('research_enabled') is True
+    assert DEFAULT_CONFIG.get('openrouter_api_key') == ''
+    assert DEFAULT_CONFIG['ai_tools'].get('research') is True
+
+
 class TestSaveConfig:
     def test_save_creates_file(self, tmp_path, monkeypatch):
         config_path = tmp_path / "config.json"
@@ -76,3 +84,63 @@ class TestSaveConfig:
 
         saved = json.loads(config_path.read_text())
         assert saved["api_key"] == "test"
+
+
+class TestEdgeCases:
+    """Edge case and error path tests for config loading/saving."""
+
+    def test_config_missing_nested_keys(self, tmp_path, monkeypatch):
+        """Config with only top-level keys and no nested dicts gets nested defaults filled in."""
+        config_path = tmp_path / "config.json"
+        # Write a config that has NO nested dicts at all
+        config_path.write_text(json.dumps({
+            "model_provider": "google",
+            "api_key": "mykey",
+        }))
+        monkeypatch.setattr(cfg, "get_config_path", lambda: str(config_path))
+
+        result = cfg.load_config()
+
+        # Nested dicts must be filled with defaults
+        assert isinstance(result.get("ai_tools"), dict)
+        assert "plusi" in result["ai_tools"]
+        assert "diagrams" in result["ai_tools"]
+        assert isinstance(result.get("firebase"), dict)
+        assert isinstance(result.get("plusi_autonomy"), dict)
+        assert "budget_per_hour" in result["plusi_autonomy"]
+
+    def test_config_invalid_types(self, tmp_path, monkeypatch):
+        """Config with wrong types is sanitized on save/load."""
+        config_path = tmp_path / "config.json"
+        # api_key is a number, plusi budget is a string
+        config_path.write_text(json.dumps({
+            "model_provider": "google",
+            "api_key": 12345,
+            "plusi_autonomy": {"budget_per_hour": "abc", "enabled": True},
+        }))
+        monkeypatch.setattr(cfg, "get_config_path", lambda: str(config_path))
+
+        result = cfg.load_config()
+
+        # After save (triggered internally) + reload through sanitize, api_key must be a string
+        # We call save_config explicitly to apply sanitization
+        monkeypatch.setattr(cfg, "get_config_path", lambda: str(config_path))
+        cfg.save_config(result)
+        reloaded = cfg.load_config()
+
+        assert isinstance(reloaded["api_key"], str)
+        # budget_per_hour "abc" is not a valid number — sanitize defaults it to 500
+        assert reloaded["plusi_autonomy"]["budget_per_hour"] == 500
+
+    def test_config_empty_file(self, tmp_path, monkeypatch):
+        """Loading from an empty config.json returns full defaults without crashing."""
+        config_path = tmp_path / "config.json"
+        config_path.write_text("")  # empty file — invalid JSON
+        monkeypatch.setattr(cfg, "get_config_path", lambda: str(config_path))
+
+        result = cfg.load_config()
+
+        # Must return a valid dict with all required default keys
+        assert result["model_provider"] == "google"
+        assert "ai_tools" in result
+        assert "auth_token" in result

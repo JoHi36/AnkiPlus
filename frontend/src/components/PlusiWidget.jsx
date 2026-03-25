@@ -1,240 +1,145 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import '@shared/plusi-renderer.js';
 
-const MOOD_COLORS = {
-  happy:     '#34d399',
-  empathy:   '#818cf8',
-  excited:   '#a78bfa',
-  neutral:   '#0a84ff',
-  sleepy:    '#6b7280',
-  surprised: '#f59e0b',
-  blush:     '#f87171',
-  thinking:  '#0a84ff',
-  annoyed:   '#f87171',
-  curious:   '#f59e0b',
-  reading:   '#0a84ff',
+const MOOD_LABELS = {
+  happy:      'freut sich',
+  empathy:    'fühlt mit',
+  excited:    'aufgeregt',
+  neutral:    'chillt',
+  sleepy:     'müde',
+  surprised:  'überrascht',
+  flustered:  'erwischt',
+  thinking:   'grübelt...',
+  annoyed:    'genervt',
+  curious:    'neugierig',
+  reading:    'stöbert...',
+  proud:      'stolz',
+  sleeping:   'schläft...',
+  reflecting: 'reflektiert...',
 };
 
-const MOOD_META = {
-  happy:     'freut sich',
-  empathy:   'fühlt mit',
-  excited:   'aufgeregt',
-  neutral:   'chillt',
-  sleepy:    'müde',
-  surprised: 'überrascht',
-  blush:     'verlegen',
-  thinking:  'grübelt...',
-  annoyed:   'genervt',
-  curious:   'neugierig',
-  reading:   'stöbert...',
-};
-
-const hexToRgb = (hex) => {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `${r},${g},${b}`;
-};
-
-// Static SVG mascot — mood expressions without animation
-const MOOD_FACES = {
-  neutral: {
-    eyes: <><ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/><ellipse cx="49" cy="50" rx="4" ry="4" fill="#1a1a1a"/><ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/><ellipse cx="71" cy="50" rx="4" ry="4" fill="#1a1a1a"/></>,
-    mouth: <path d="M 48 68 Q 60 74 72 68" stroke="#1a1a1a" strokeWidth="3" fill="none" strokeLinecap="round"/>,
-  },
-  happy: {
-    eyes: <><ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/><rect x="41" y="41" width="14" height="4" fill="#0a84ff"/><ellipse cx="49" cy="51" rx="4" ry="3.5" fill="#1a1a1a"/><ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/><rect x="65" y="41" width="14" height="4" fill="#0a84ff"/><ellipse cx="71" cy="51" rx="4" ry="3.5" fill="#1a1a1a"/></>,
-    mouth: <path d="M 46 66 Q 60 78 74 66" stroke="#1a1a1a" strokeWidth="3" fill="none" strokeLinecap="round"/>,
-  },
-  annoyed: {
-    eyes: <><ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/><rect x="41" y="41" width="14" height="7" fill="#0a84ff"/><ellipse cx="49" cy="52" rx="4" ry="3" fill="#1a1a1a"/><ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/><rect x="65" y="41" width="14" height="7" fill="#0a84ff"/><ellipse cx="71" cy="52" rx="4" ry="3" fill="#1a1a1a"/></>,
-    mouth: <line x1="50" y1="70" x2="70" y2="70" stroke="#1a1a1a" strokeWidth="3" strokeLinecap="round"/>,
-  },
-  curious: {
-    eyes: <><ellipse cx="48" cy="48" rx="7" ry="9" fill="white"/><ellipse cx="49" cy="49" rx="4" ry="4" fill="#1a1a1a"/><ellipse cx="72" cy="50" rx="7" ry="7" fill="white"/><rect x="65" y="43" width="14" height="5" fill="#0a84ff"/><ellipse cx="71" cy="52" rx="4" ry="3" fill="#1a1a1a"/></>,
-    mouth: <path d="M 50 68 Q 56 68 60 66 Q 64 64 68 66" stroke="#1a1a1a" strokeWidth="2.5" fill="none" strokeLinecap="round"/>,
-  },
-  excited: {
-    eyes: <><ellipse cx="48" cy="47" rx="8" ry="10" fill="white"/><ellipse cx="49" cy="48" rx="5" ry="5" fill="#1a1a1a"/><ellipse cx="72" cy="47" rx="8" ry="10" fill="white"/><ellipse cx="71" cy="48" rx="5" ry="5" fill="#1a1a1a"/></>,
-    mouth: <ellipse cx="60" cy="70" rx="7" ry="6" fill="#1a1a1a"/>,
-  },
-  sleepy: {
-    eyes: <><ellipse cx="48" cy="52" rx="7" ry="3" fill="white"/><ellipse cx="72" cy="52" rx="7" ry="3" fill="white"/></>,
-    mouth: <line x1="54" y1="70" x2="66" y2="71" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>,
-  },
-  surprised: {
-    eyes: <><ellipse cx="48" cy="46" rx="8" ry="10" fill="white"/><ellipse cx="49" cy="47" rx="5" ry="5" fill="#1a1a1a"/><ellipse cx="72" cy="46" rx="8" ry="10" fill="white"/><ellipse cx="71" cy="47" rx="5" ry="5" fill="#1a1a1a"/></>,
-    mouth: <ellipse cx="60" cy="70" rx="5" ry="4" fill="#1a1a1a"/>,
-  },
-  blush: {
-    eyes: <><ellipse cx="48" cy="49" rx="7" ry="7" fill="white"/><rect x="41" y="42" width="14" height="4" fill="#0a84ff"/><ellipse cx="49" cy="51" rx="3.5" ry="3.5" fill="#1a1a1a"/><ellipse cx="72" cy="49" rx="7" ry="7" fill="white"/><rect x="65" y="42" width="14" height="4" fill="#0a84ff"/><ellipse cx="71" cy="51" rx="3.5" ry="3.5" fill="#1a1a1a"/><ellipse cx="38" cy="60" rx="6" ry="3" fill="rgba(248,113,113,0.3)"/><ellipse cx="82" cy="60" rx="6" ry="3" fill="rgba(248,113,113,0.3)"/></>,
-    mouth: <path d="M 52 68 Q 54 66 57 68 Q 60 70 63 68 Q 66 66 68 68" stroke="#1a1a1a" strokeWidth="2" fill="none" strokeLinecap="round"/>,
-  },
-  empathy: {
-    eyes: <><ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/><rect x="41" y="41" width="14" height="3" fill="#0a84ff"/><ellipse cx="49" cy="52" rx="4" ry="4" fill="#1a1a1a"/><ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/><rect x="65" y="41" width="14" height="3" fill="#0a84ff"/><ellipse cx="71" cy="52" rx="4" ry="4" fill="#1a1a1a"/></>,
-    mouth: <path d="M 50 70 Q 60 66 70 70" stroke="#1a1a1a" strokeWidth="2.5" fill="none" strokeLinecap="round"/>,
-  },
-  thinking: {
-    eyes: <><ellipse cx="48" cy="49" rx="7" ry="8" fill="white"/><ellipse cx="51" cy="47" rx="4" ry="4" fill="#1a1a1a"/><ellipse cx="72" cy="49" rx="7" ry="8" fill="white"/><ellipse cx="75" cy="47" rx="4" ry="4" fill="#1a1a1a"/></>,
-    mouth: <path d="M 50 69 Q 60 72 70 69" stroke="#1a1a1a" strokeWidth="2.5" fill="none" strokeLinecap="round"/>,
-  },
-  reading: {
-    eyes: <><ellipse cx="48" cy="51" rx="7" ry="6" fill="white"/><rect x="41" y="43" width="14" height="5" fill="#0a84ff"/><ellipse cx="49" cy="53" rx="4" ry="3" fill="#1a1a1a"/><ellipse cx="72" cy="51" rx="7" ry="6" fill="white"/><rect x="65" y="43" width="14" height="5" fill="#0a84ff"/><ellipse cx="71" cy="53" rx="4" ry="3" fill="#1a1a1a"/></>,
-    mouth: <path d="M 52 68 Q 60 71 68 68" stroke="#1a1a1a" strokeWidth="2" fill="none" strokeLinecap="round"/>,
-  },
-};
-
-function PlusiIcon({ mood = 'neutral', size = 24 }) {
-  const face = MOOD_FACES[mood] || MOOD_FACES.neutral;
-  return (
-    <svg viewBox="0 0 120 120" width={size} height={size}>
-      <rect x="40" y="5" width="40" height="110" rx="8" fill="#0a84ff"/>
-      <rect x="5" y="35" width="110" height="40" rx="8" fill="#0a84ff"/>
-      <rect x="40" y="35" width="40" height="40" fill="#0a84ff"/>
-      {face.eyes}
-      {face.mouth}
-    </svg>
-  );
-}
-
-export default function PlusiWidget({
+/**
+ * PlusiContent — body content for Plusi agent, rendered inside AgenticCell.
+ * Handles: markdown text, friendship footer, double-tap like.
+ */
+export default function PlusiContent({
   mood = 'neutral',
   text = '',
-  metaText = '',
   friendship = null,
-  isLoading = false,
   isFrozen = false,
+  isLoading = false,
 }) {
-  const color = MOOD_COLORS[mood] || MOOD_COLORS.neutral;
-  const resolvedMeta = isLoading ? 'denkt nach...' : metaText || MOOD_META[mood] || '';
+  const color = (typeof window.getPlusiColor === 'function')
+    ? window.getPlusiColor(mood)
+    : '#0a84ff';
+
+  // Build opacity variants using color-mix to avoid hardcoded rgba literals
+  const colorMix = (pct) => `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+
   const displayText = isLoading ? 'hmm, moment mal...' : text;
   const textParts = displayText.split('\n---\n');
-  const rgb = hexToRgb(color);
+
+  // Double-tap like
+  const [liked, setLiked] = React.useState(false);
+  const [showHeart, setShowHeart] = React.useState(false);
+  const lastTapRef = React.useRef(0);
+
+  const handleDoubleTap = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 400) {
+      if (!liked && !isFrozen) {
+        setLiked(true);
+        setShowHeart(true);
+        if (window.ankiBridge) {
+          window.ankiBridge.addMessage('plusiLike', {});
+        }
+        setTimeout(() => setShowHeart(false), 800);
+      }
+      lastTapRef.current = 0;
+    } else {
+      lastTapRef.current = now;
+    }
+  };
 
   return (
     <>
-      <style>{PLUSI_CSS}</style>
-      <div
-        className="plusi-card"
-        style={{
-          '--plusi-rgb': rgb,
-          '--plusi-color': color,
-          opacity: isFrozen ? 0.55 : 1,
-        }}
-      >
-        {isLoading && <div className="plusi-shimmer" />}
+      <style>{PLUSI_CONTENT_CSS}</style>
 
-        {/* Top row: Mascot + Name + Mood */}
-        <div className="plusi-top">
-          <PlusiIcon mood={isLoading ? 'thinking' : mood} size={24} />
-          <span className="plusi-name">Plusi</span>
-          <div style={{ flex: 1 }} />
-          {resolvedMeta && (
-            <span className="plusi-mood-text">{resolvedMeta}</span>
-          )}
-          <span
-            className="plusi-mood-dot"
-            style={{ opacity: resolvedMeta ? 1 : 0.5 }}
-          />
-        </div>
+      {showHeart && <div className="plusi-heart-burst">❤️</div>}
+      {liked && <div className="plusi-heart-badge">❤️</div>}
 
-        {/* Body: Text */}
-        <div className="plusi-body">
-          {isLoading ? (
-            <p className="plusi-placeholder">{displayText}</p>
-          ) : (
-            textParts.map((part, i) => (
-              <React.Fragment key={i}>
-                {i > 0 && <div className="plusi-fade" />}
-                <div className="plusi-markdown">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {part.trim()}
-                  </ReactMarkdown>
-                </div>
-              </React.Fragment>
-            ))
-          )}
-        </div>
-
-        {/* Footer: Friendship Bar */}
-        {friendship && (
-          <div className="plusi-footer">
-            <div className="plusi-footer-row">
-              <div className="plusi-footer-left">
-                <span className="plusi-level-name">{friendship.levelName}</span>
-                {friendship.delta > 0 && (
-                  <span className="plusi-delta plusi-delta-up">▲ +{friendship.delta}</span>
-                )}
-                {friendship.delta < 0 && (
-                  <span className="plusi-delta plusi-delta-down">▼ {friendship.delta}</span>
-                )}
+      {/* Body text */}
+      <div className="plusi-body" onClick={handleDoubleTap} style={{ opacity: isFrozen ? 0.55 : 1 }}>
+        {isLoading ? (
+          <p className="plusi-placeholder">{displayText}</p>
+        ) : (
+          textParts.map((part, i) => (
+            <React.Fragment key={i}>
+              {i > 0 && <div className="plusi-fade" style={{ background: `radial-gradient(ellipse at center, ${colorMix(25)} 0%, ${colorMix(8)} 40%, transparent 80%)` }} />}
+              <div className="plusi-markdown">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {part.trim()}
+                </ReactMarkdown>
               </div>
-              <span className="plusi-points">
-                {friendship.level >= 4 ? '★ Max' : `${friendship.points} / ${friendship.maxPoints}`}
-              </span>
-            </div>
-            <div className="plusi-bar-bg">
-              <div
-                className="plusi-bar-fill"
-                style={{
-                  width: friendship.level >= 4
-                    ? '100%'
-                    : `${Math.min(100, (friendship.points / friendship.maxPoints) * 100)}%`,
-                }}
-              />
-            </div>
-          </div>
+            </React.Fragment>
+          ))
         )}
       </div>
+
+      {/* Friendship footer */}
+      {friendship && (
+        <div className="plusi-footer">
+          <div className="plusi-footer-row">
+            <div className="plusi-footer-left">
+              <span className="plusi-level-name" style={{ color: colorMix(50) }}>{friendship.levelName}</span>
+              {friendship.delta > 0 && (
+                <span className="plusi-delta" style={{ color: colorMix(60) }}>▲ +{friendship.delta}</span>
+              )}
+              {friendship.delta < 0 && (
+                <span className="plusi-delta" style={{ color: colorMix(55) }}>▼ {friendship.delta}</span>
+              )}
+            </div>
+            <span className="plusi-points">
+              {friendship.level >= 4 ? '★ Max' : `${friendship.points} / ${friendship.maxPoints}`}
+            </span>
+          </div>
+          <div className="plusi-bar-bg">
+            <div
+              className="plusi-bar-fill"
+              style={{
+                width: friendship.level >= 4
+                  ? '100%'
+                  : `${Math.min(100, (friendship.points / friendship.maxPoints) * 100)}%`,
+                background: colorMix(50),
+              }}
+            />
+          </div>
+        </div>
+      )}
     </>
   );
 }
 
-const PLUSI_CSS = `
-  .plusi-card {
-    margin: 10px 0 6px;
-    background: rgba(var(--plusi-rgb), 0.04);
-    border: 1px solid rgba(var(--plusi-rgb), 0.15);
-    border-radius: 10px;
-    overflow: hidden;
-    box-shadow: 0 0 16px rgba(var(--plusi-rgb), 0.07);
-    transition: all 0.3s ease;
-    position: relative;
-    font-family: 'Varela Round', -apple-system, sans-serif;
-  }
+/** Mood label for AgenticCell headerMeta */
+export function PlusiMoodMeta({ mood, color }) {
+  const label = MOOD_LABELS[mood] || '';
+  return label ? (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+      <span style={{ fontSize: 11, color: `${color}99` }}>{label}</span>
+      <span style={{
+        width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
+        background: color,
+        boxShadow: `0 0 5px ${color}80`,
+      }} />
+    </span>
+  ) : null;
+}
 
-  /* ── Top row (renamed from header to avoid index.css override) ── */
-  .plusi-top {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 11px 7px;
-  }
-
-  .plusi-name {
-    font-size: 11px;
-    font-weight: 600;
-    color: rgba(var(--plusi-rgb), 0.7);
-  }
-
-  .plusi-mood-text {
-    font-size: 9px;
-    color: rgba(var(--plusi-rgb), 0.4);
-  }
-
-  .plusi-mood-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    background: var(--plusi-color);
-    box-shadow: 0 0 5px rgba(var(--plusi-rgb), 0.5);
-  }
-
-  /* ── Body ── */
+const PLUSI_CONTENT_CSS = `
   .plusi-body {
-    padding: 2px 11px 10px;
+    font-family: 'Varela Round', -apple-system, sans-serif;
   }
 
   .plusi-markdown {
@@ -247,35 +152,32 @@ const PLUSI_CSS = `
   }
   .plusi-markdown p:last-child { margin-bottom: 0; }
   .plusi-markdown strong { color: var(--ds-text-primary); font-weight: 600; }
-  .plusi-markdown em { color: rgba(180,210,255,0.7); }
+  .plusi-markdown em { color: var(--ds-text-secondary); }
   .plusi-markdown code {
-    background: rgba(0,0,0,0.25);
+    background: var(--ds-hover-tint);
     padding: 0.15em 0.4em;
     border-radius: 4px;
     font-size: 0.9em;
     font-family: 'SF Mono', 'Fira Code', monospace;
   }
-  .plusi-markdown a { color: rgba(10,132,255,0.8); text-decoration: none; }
+  .plusi-markdown a { color: var(--ds-accent); opacity: 0.8; text-decoration: none; }
 
   .plusi-fade {
     height: 1px;
     margin: 8px 0;
-    background: radial-gradient(ellipse at center, rgba(var(--plusi-rgb),0.25) 0%, rgba(var(--plusi-rgb),0.08) 40%, transparent 80%);
   }
 
   .plusi-placeholder {
     font-size: 12px;
-    color: rgba(154,154,154,0.35);
+    color: var(--ds-text-placeholder);
     font-style: italic;
     margin: 0;
-    position: relative;
-    z-index: 2;
   }
 
   /* ── Footer ── */
   .plusi-footer {
-    padding: 6px 11px 7px;
-    background: rgba(0,0,0,0.15);
+    padding: 6px 0 0;
+    margin-top: 8px;
     border-top: 1px solid var(--ds-hover-tint);
   }
 
@@ -294,14 +196,11 @@ const PLUSI_CSS = `
 
   .plusi-level-name {
     font-size: 9px;
-    color: rgba(var(--plusi-rgb), 0.5);
   }
 
   .plusi-delta {
     font-size: 8px;
   }
-  .plusi-delta-up { color: rgba(var(--plusi-rgb), 0.6); }
-  .plusi-delta-down { color: rgba(var(--plusi-rgb), 0.55); }
 
   .plusi-points {
     font-size: 8px;
@@ -318,18 +217,30 @@ const PLUSI_CSS = `
   .plusi-bar-fill {
     height: 100%;
     border-radius: 1px;
-    background: rgba(var(--plusi-rgb), 0.5);
     transition: width 0.5s ease;
   }
 
-  /* ── Shimmer ── */
-  .plusi-shimmer {
+  /* ── Heart Like ── */
+  .plusi-heart-burst {
     position: absolute;
-    top: 0; left: -100%; width: 100%; height: 100%;
-    background: linear-gradient(90deg, transparent 0%, rgba(var(--plusi-rgb),0.03) 40%, rgba(var(--plusi-rgb),0.06) 50%, rgba(var(--plusi-rgb),0.03) 60%, transparent 100%);
-    animation: plusi-shimmer 2.5s ease-in-out infinite;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    font-size: 32px;
+    animation: plusi-heart-pop 0.6s ease-out forwards;
     pointer-events: none;
-    z-index: 1;
+    z-index: 10;
   }
-  @keyframes plusi-shimmer { 0% { left: -100%; } 100% { left: 100%; } }
+  @keyframes plusi-heart-pop {
+    0% { transform: translate(-50%, -50%) scale(0); opacity: 1; }
+    50% { transform: translate(-50%, -50%) scale(1.3); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+  }
+  .plusi-heart-badge {
+    position: absolute;
+    bottom: 6px;
+    right: 8px;
+    font-size: 10px;
+    opacity: 0.6;
+  }
 `;

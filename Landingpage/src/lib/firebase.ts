@@ -11,7 +11,7 @@ function cleanEnvVar(value: string | undefined, defaultValue?: string): string |
 // Firebase configuration from environment variables
 const firebaseConfig = {
   apiKey: cleanEnvVar(import.meta.env.VITE_FIREBASE_API_KEY),
-  authDomain: cleanEnvVar(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN, 'ankiplus-b0ffb.firebaseapp.com'),
+  authDomain: cleanEnvVar(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN, 'anki-plus.vercel.app'),
   projectId: cleanEnvVar(import.meta.env.VITE_FIREBASE_PROJECT_ID, 'ankiplus-b0ffb'),
   storageBucket: cleanEnvVar(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET, 'ankiplus-b0ffb.appspot.com'),
   messagingSenderId: cleanEnvVar(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID),

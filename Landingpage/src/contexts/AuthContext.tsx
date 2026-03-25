@@ -3,7 +3,8 @@ import {
   User,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
@@ -56,6 +57,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setLoading(false);
       return;
     }
+
+    // Handle redirect result from Google Sign-In
+    getRedirectResult(auth).then(async (result) => {
+      if (result?.user) {
+        try {
+          await createUserDocument(result.user.uid, result.user.email || '');
+        } catch (error) {
+          console.error('Error creating user document after redirect:', error);
+        }
+      }
+    }).catch((error) => {
+      console.error('Google redirect error:', error.code, error.message);
+    });
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
@@ -119,15 +133,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (!auth) {
       throw new Error('Firebase Auth is not configured. Please configure Firebase API keys.');
     }
+    const provider = new GoogleAuthProvider();
     try {
-      const provider = new GoogleAuthProvider();
-      const userCredential = await signInWithPopup(auth, provider);
-      // Create user document if it doesn't exist
-      if (userCredential.user) {
-        await createUserDocument(userCredential.user.uid, userCredential.user.email || '');
-      }
+      await signInWithRedirect(auth, provider);
+      // Browser redirects away — code below won't execute.
+      // Redirect result is handled in useEffect via getRedirectResult().
     } catch (error: any) {
-      console.error('Google login error:', error);
+      console.error('Google login error:', error.code, error.message, error);
       throw new Error(getAuthErrorMessage(error.code, error));
     }
   };
@@ -214,7 +226,13 @@ function getAuthErrorMessage(code: string, originalError?: any): string {
     case 'auth/network-request-failed':
       return 'Netzwerkfehler. Bitte überprüfe deine Internetverbindung.';
     case 'auth/popup-closed-by-user':
-      return 'Anmeldung abgebrochen.';
+      return 'Anmeldung abgebrochen. Versuche es erneut.';
+    case 'auth/popup-blocked':
+      return 'Popup wurde vom Browser blockiert. Bitte erlaube Popups für diese Seite.';
+    case 'auth/cancelled-popup-request':
+      return 'Popup-Anfrage abgebrochen. Versuche es erneut.';
+    case 'auth/unauthorized-domain':
+      return 'Diese Domain ist nicht für Google Sign-In autorisiert.';
     case 'auth/operation-not-allowed':
       return 'Diese Anmeldemethode ist nicht aktiviert. Bitte kontaktiere den Support.';
     case 'auth/requires-recent-login':

@@ -6,7 +6,9 @@ import { DEMO_SCENARIOS, type DemoScenario } from './DemoData';
 import { RealChatMessage } from './RealChatMessage';
 
 // Shared components — identical to the real app
-import ChatInput from '@shared/components/ChatInput';
+// NOTE: ChatInput moved to frontend product layer (not a shared primitive).
+// Using local RealChatInput demo clone instead.
+import ChatInput from './RealChatInput';
 import { QuizCard } from '@shared/components/QuizCard';
 
 // ───────────────────────────────────────────────

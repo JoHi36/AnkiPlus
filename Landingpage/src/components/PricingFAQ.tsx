@@ -9,8 +9,8 @@ interface FAQItem {
 
 const faqItems: FAQItem[] = [
   {
-    question: 'Was passiert, wenn ich mein Tageslimit erreiche?',
-    answer: 'Bei Free/Student: Du kannst weiterhin Flash Mode nutzen. Deep Mode steht erst nach dem täglichen Reset (00:00 UTC) wieder zur Verfügung. Upgrade auf Exam Pro für unbegrenzte Nutzung.',
+    question: 'Was passiert, wenn ich mein Token-Limit erreiche?',
+    answer: 'Wenn dein tägliches Token-Budget aufgebraucht ist, kannst du keine weiteren KI-Anfragen stellen, bis sich dein Budget am nächsten Tag zurücksetzt. Upgrade auf einen höheren Plan für mehr Tokens.',
     category: 'limits',
   },
   {
@@ -19,13 +19,13 @@ const faqItems: FAQItem[] = [
     category: 'billing',
   },
   {
-    question: 'Was ist der Unterschied zwischen Flash und Deep Mode?',
-    answer: 'Flash Mode: Schnelle Antworten ohne erweiterte Recherche (unbegrenzt). Deep Mode: Analysiert 10+ relevante Karten, liefert fundierte Antworten mit Quellenangaben (limitierter).',
+    question: 'Was sind Tokens?',
+    answer: 'Tokens sind die Einheit, in der KI-Nutzung gemessen wird. Ein Token entspricht ungefähr einem Wort. Jede Anfrage verbraucht Tokens basierend auf der Länge deiner Frage und der Antwort.',
     category: 'features',
   },
   {
-    question: 'Werden meine Limits täglich zurückgesetzt?',
-    answer: 'Ja, alle Limits resetten täglich um 00:00 UTC. Deine Deep Mode Credits stehen dann wieder vollständig zur Verfügung.',
+    question: 'Wie funktioniert das Wochenlimit?',
+    answer: 'Zusätzlich zum täglichen Budget gibt es ein Wochenlimit. So kannst du an einzelnen Tagen mehr nutzen, solange du innerhalb des Wochenbudgets bleibst. Das Wochenlimit setzt sich jeden Montag zurück.',
     category: 'limits',
   },
   {

@@ -17,12 +17,10 @@ export function GoogleSignInButton({ onSuccess, className = '' }: GoogleSignInBu
     setError(null);
     try {
       await loginWithGoogle();
-      if (onSuccess) {
-        onSuccess();
-      }
+      // signInWithRedirect navigates away — page unloads.
+      // If we reach here, something went wrong.
     } catch (err: any) {
       setError(err.message || 'Google Sign-In fehlgeschlagen');
-    } finally {
       setLoading(false);
     }
   };

@@ -4,7 +4,7 @@ export default function ToolErrorBadge({ toolName, error }) {
   return (
     <div style={{
       background: 'var(--ds-red-tint)',
-      border: '1px solid rgba(255,69,58,0.15)',
+      border: '1px solid var(--ds-red-10)',
       borderRadius: 12,
       padding: '10px 14px',
       display: 'flex',

@@ -94,6 +94,7 @@ export function useFreeChat({ bridge, onLoadingChange, onCancelComplete }) {
   const handleAnkiReceive = useCallback((payload) => {
     // Drop section-related payloads — free chat has no concept of sections
     if (payload.type === 'sectionTitleGenerated') return;
+    if (payload.type === 'deckMessagesCleared') return; // already handled optimistically
 
     if (payload.type === 'loading') {
       setIsLoadingWithCallback(payload.loading ?? true);
@@ -140,6 +141,13 @@ export function useFreeChat({ bridge, onLoadingChange, onCancelComplete }) {
     // All other payload types (ai_state, rag_sources, etc.) — silently ignore
   }, [setIsLoadingWithCallback, onCancelComplete]);  // streamingMessage intentionally omitted
 
+  const clearMessages = useCallback(() => {
+    window.ankiBridge?.addMessage('clearDeckMessages', '');
+    setMessages([]);
+    setStreamingMessage('');
+    messagesLoadedRef.current = false;
+  }, []);
+
   return {
     messages,
     streamingMessage,
@@ -150,6 +158,8 @@ export function useFreeChat({ bridge, onLoadingChange, onCancelComplete }) {
     startCancel,
     loadForDeck,
     setMessages,
+    clearMessages,
+    messageCount: messages.length,
     resetMessages: useCallback(() => { setMessages([]); messagesLoadedRef.current = false; }, []),
   };
 }

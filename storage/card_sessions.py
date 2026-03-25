@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 _DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'card_sessions.db')
 _db = None
 
-MAX_MESSAGES_PER_CARD = 200
+MAX_MESSAGES_PER_CARD = 200  # Maximum chat messages retained per card (prevents unbounded growth)
 
 
 # ---------------------------------------------------------------------------
@@ -329,7 +329,7 @@ def save_card_session(card_id, data):
         return True
 
     except (sqlite3.Error, KeyError, ValueError) as e:
-        logger.error(f"CardSessionsDB: Error saving session for card {card_id}: {e}")
+        logger.error("CardSessionsDB: Error saving session for card %s: %s", card_id, e)
         db.rollback()
         return False
 
@@ -399,7 +399,7 @@ def save_message(card_id, message):
         return True
 
     except (sqlite3.Error, KeyError, ValueError) as e:
-        logger.error(f"CardSessionsDB: Error saving message for card {card_id}: {e}")
+        logger.error("CardSessionsDB: Error saving message for card %s: %s", card_id, e)
         db.rollback()
         return False
 
@@ -516,9 +516,24 @@ def save_deck_message(deck_id, message):
         return True
 
     except (sqlite3.Error, KeyError, ValueError) as e:
-        logger.error(f"CardSessionsDB: Error saving deck message for deck {deck_id}: {e}")
+        logger.error("CardSessionsDB: Error saving deck message for deck %s: %s", deck_id, e)
         db.rollback()
         return False
+
+
+def clear_deck_messages():
+    """Delete all free-chat messages (card_id IS NULL). Returns count of deleted rows."""
+    db = _get_db()
+    try:
+        cursor = db.execute("DELETE FROM messages WHERE card_id IS NULL")
+        db.commit()
+        count = cursor.rowcount
+        logger.info("Cleared %s free-chat messages", count)
+        return count
+    except sqlite3.Error as e:
+        logger.error("Failed to clear deck messages: %s", e)
+        db.rollback()
+        return 0
 
 
 def save_section(card_id, section):
@@ -563,7 +578,7 @@ def save_section(card_id, section):
         return True
 
     except (sqlite3.Error, KeyError, ValueError) as e:
-        logger.error(f"CardSessionsDB: Error saving section for card {card_id}: {e}")
+        logger.error("CardSessionsDB: Error saving section for card %s: %s", card_id, e)
         db.rollback()
         return False
 
@@ -579,7 +594,7 @@ def update_summary(card_id, summary):
         db.commit()
         return True
     except (sqlite3.Error, KeyError, ValueError) as e:
-        logger.error(f"CardSessionsDB: Error updating summary for card {card_id}: {e}")
+        logger.error("CardSessionsDB: Error updating summary for card %s: %s", card_id, e)
         return False
 
 
@@ -595,7 +610,7 @@ def load_insights(card_id):
             return json.loads(row['summary'])
         return {"version": 1, "insights": []}
     except (sqlite3.Error, KeyError, ValueError) as e:
-        logger.error(f"[card_sessions_storage] Error loading insights for card {card_id}: {e}")
+        logger.error("[card_sessions_storage] Error loading insights for card %s: %s", card_id, e)
         return {"version": 1, "insights": []}
 
 
@@ -621,7 +636,7 @@ def save_insights(card_id, insights_data):
         db.commit()
         return True
     except (sqlite3.Error, KeyError, ValueError) as e:
-        logger.error(f"[card_sessions_storage] Error saving insights for card {card_id}: {e}")
+        logger.error("[card_sessions_storage] Error saving insights for card %s: %s", card_id, e)
         return False
 
 
@@ -651,7 +666,7 @@ def get_card_revlog(card_id, max_points=50):
             for row in rows
         ]
     except (sqlite3.Error, KeyError, ValueError) as e:
-        logger.error(f"[card_sessions_storage] Error fetching revlog for card {card_id}: {e}")
+        logger.error("[card_sessions_storage] Error fetching revlog for card %s: %s", card_id, e)
         return []
 
 
@@ -663,7 +678,7 @@ def delete_card_session(card_id):
         db.commit()
         return True
     except (sqlite3.Error, KeyError, ValueError) as e:
-        logger.error(f"CardSessionsDB: Error deleting session for card {card_id}: {e}")
+        logger.error("CardSessionsDB: Error deleting session for card %s: %s", card_id, e)
         return False
 
 
@@ -702,7 +717,7 @@ def migrate_from_json(sessions_json_path=None):
     db = _get_db()
     count = db.execute("SELECT COUNT(*) FROM card_sessions").fetchone()[0]
     if count > 0:
-        logger.info(f"CardSessionsDB: DB already has {count} sessions, skipping migration")
+        logger.info("CardSessionsDB: DB already has %s sessions, skipping migration", count)
         return False
 
     try:
@@ -795,12 +810,12 @@ def migrate_from_json(sessions_json_path=None):
         backup_path = sessions_json_path + '.bak'
         os.rename(sessions_json_path, backup_path)
 
-        logger.info(f"CardSessionsDB: Migration complete — {migrated_cards} cards, {migrated_sections} sections, {migrated_messages} messages")
-        logger.debug(f"CardSessionsDB: sessions.json renamed to {backup_path}")
+        logger.info("CardSessionsDB: Migration complete — %s cards, %s sections, %s messages", migrated_cards, migrated_sections, migrated_messages)
+        logger.debug("CardSessionsDB: sessions.json renamed to %s", backup_path)
         return True
 
     except (sqlite3.Error, KeyError, ValueError, OSError) as e:
-        logger.exception(f"CardSessionsDB: Migration error: {e}")
+        logger.exception("CardSessionsDB: Migration error: %s", e)
         db.rollback()
         return False
 

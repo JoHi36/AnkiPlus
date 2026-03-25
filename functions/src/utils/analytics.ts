@@ -107,7 +107,7 @@ export async function logChatError(
 export async function logQuotaExceeded(
   userId: string,
   tier: string,
-  requestType: 'flash' | 'deep'
+  requestType: 'flash' | 'deep' | 'tokens'
 ): Promise<void> {
   await logAnalyticsEvent('quota_exceeded', userId, {
     tier,

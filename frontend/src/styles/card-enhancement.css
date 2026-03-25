@@ -1,0 +1,243 @@
+/* =============================================================================
+   Card Enhancement Layer
+   Three-layer CSS system for rendering Anki cards.
+   This layer provides typography, dark mode fixes, and spacing defaults
+   that card CSS can override (except Section 3 dark mode safety overrides).
+   ============================================================================= */
+
+/* =============================================================================
+   Section 1: Reset / Isolation
+   ============================================================================= */
+
+.card-renderer {
+  position: relative;
+  background: transparent;
+  color: var(--ds-text-primary);
+  box-sizing: border-box;
+}
+
+.card-renderer *,
+.card-renderer *::before,
+.card-renderer *::after {
+  box-sizing: border-box;
+}
+
+/* =============================================================================
+   Section 2: Enhancement Defaults (LOW specificity — card CSS wins)
+   ============================================================================= */
+
+.card-renderer .card,
+.card-renderer #qa,
+.card-renderer .card-content {
+  font-size: var(--ds-text-xl);
+  line-height: 1.65;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  color: var(--ds-text-primary);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.card-renderer img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+
+.card-renderer table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12px 0;
+}
+
+.card-renderer th,
+.card-renderer td {
+  padding: 8px 12px;
+  border: 1px solid var(--ds-border-medium);
+  text-align: left;
+}
+
+.card-renderer th {
+  font-weight: 600;
+  background: var(--ds-hover-tint);
+}
+
+.card-renderer pre {
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: var(--ds-hover-tint);
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.card-renderer code {
+  font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
+  font-size: 0.9em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--ds-hover-tint);
+}
+
+.card-renderer pre code {
+  padding: 0;
+  background: none;
+}
+
+.card-renderer ul {
+  list-style-type: disc;
+  margin-left: 1.5em;
+}
+
+.card-renderer ol {
+  list-style-type: decimal;
+  margin-left: 1.5em;
+}
+
+.card-renderer li {
+  margin-bottom: 4px;
+}
+
+.card-renderer p {
+  margin: 0 0 0.6em 0;
+}
+
+.card-renderer a {
+  color: var(--ds-accent);
+  text-decoration: none;
+}
+
+.card-renderer a:hover {
+  text-decoration: underline;
+}
+
+.card-renderer sub,
+.card-renderer sup {
+  font-size: 0.75em;
+  line-height: 0;
+  position: relative;
+  vertical-align: baseline;
+}
+
+.card-renderer sup {
+  top: -0.5em;
+}
+
+.card-renderer sub {
+  bottom: -0.25em;
+}
+
+/* =============================================================================
+   Section 3: Dark Mode Safety (!important overrides)
+   Force-fix black text and white backgrounds injected by card CSS.
+   ============================================================================= */
+
+/* Black text overrides */
+.card-renderer [style*="color: black"],
+.card-renderer [style*="color:black"],
+.card-renderer [style*="color:#000"],
+.card-renderer [style*="color: #000"],
+.card-renderer [style*="color: rgb(0"],
+.card-renderer [style*="color:rgb(0"] {
+  color: var(--ds-text-primary) !important;
+}
+
+/* White background overrides */
+.card-renderer [style*="background: white"],
+.card-renderer [style*="background:white"],
+.card-renderer [style*="background-color:white"],
+.card-renderer [style*="background-color: white"],
+.card-renderer [style*="background:#fff"],
+.card-renderer [style*="background: #fff"],
+.card-renderer [style*="background-color:#fff"],
+.card-renderer [style*="background-color: #fff"],
+.card-renderer [style*="background: rgb(255"],
+.card-renderer [style*="background:rgb(255"],
+.card-renderer [style*="background-color: rgb(255"],
+.card-renderer [style*="background-color:rgb(255"] {
+  background: transparent !important;
+}
+
+/* Force card and nightMode backgrounds transparent */
+.card-renderer .card,
+.card-renderer .card.nightMode {
+  background: transparent !important;
+}
+
+/* =============================================================================
+   Section 4: Cloze Prep
+   ============================================================================= */
+
+.card-renderer .cloze {
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--ds-active-tint);
+  transition: all 0.2s ease;
+}
+
+/* Future: .cloze-blank for unrevealed clozes (Tab-to-reveal) */
+
+/* =============================================================================
+   Section 5: Deck Metadata Fade
+   AMBOSS/AnKing cards include metadata bars (Tags, Note ID, Errata).
+   These are typically <button> elements with onclick handlers, or divs
+   containing pipe-separated labels, placed before an <hr> separator.
+   Fade them out by default, reveal on hover. No functionality lost.
+   ============================================================================= */
+
+/* Target by known class names */
+.card-renderer .tags,
+.card-renderer #tags,
+.card-renderer .field--tags,
+.card-renderer .errata,
+.card-renderer #errata,
+.card-renderer .note-id,
+.card-renderer #note-id,
+.card-renderer .ankihub-tags {
+  font-size: 10px;
+  opacity: 0.15;
+  transition: opacity 0.25s ease;
+}
+
+.card-renderer .tags:hover,
+.card-renderer #tags:hover,
+.card-renderer .field--tags:hover,
+.card-renderer .errata:hover,
+.card-renderer #errata:hover,
+.card-renderer .note-id:hover,
+.card-renderer #note-id:hover,
+.card-renderer .ankihub-tags:hover {
+  opacity: 0.8;
+}
+
+/* AMBOSS metadata buttons — template uses <button onclick="..."> for Tags/NoteID/Errata */
+.card-renderer button[onclick],
+.card-renderer button {
+  font-size: 10px;
+  opacity: 0.15;
+  border: 1px solid var(--ds-border-subtle) !important;
+  border-radius: 4px;
+  padding: 2px 6px;
+  color: var(--ds-text-tertiary) !important;
+  cursor: pointer;
+  transition: opacity 0.25s ease;
+}
+
+.card-renderer button[onclick]:hover {
+  opacity: 0.8;
+}
+
+/* Fade the entire first-child row if it contains metadata (before <hr>) */
+.card-renderer .card > div:first-child,
+.card-renderer .card-content > div:first-child,
+.card-renderer #qa > div:first-child {
+  /* Only fade if followed by an <hr> — metadata rows precede separators */
+}
+
+/* Horizontal rules separating metadata from content */
+.card-renderer hr {
+  border: none;
+  border-top: 1px solid var(--ds-border-subtle);
+  opacity: 0.3;
+  margin: 8px 0;
+}

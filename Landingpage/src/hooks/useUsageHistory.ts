@@ -2,16 +2,21 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
 export interface DailyUsage {
-  date: string; // YYYY-MM-DD
-  flash: number;
-  deep: number;
+  date: string;
+  tokens: number;
+  requests: number;
+  flash: number;  // Legacy
+  deep: number;   // Legacy
 }
 
 export interface UsageHistoryData {
   dailyUsage: DailyUsage[];
+  totalTokens: number;
+  totalRequests: number;
+  streak: number;
+  // Legacy
   totalFlash: number;
   totalDeep: number;
-  streak: number; // Consecutive days with usage
 }
 
 const DEFAULT_BACKEND_URL = 'https://europe-west1-ankiplus-b0ffb.cloudfunctions.net/api';
@@ -51,9 +56,11 @@ export function useUsageHistory() {
           console.warn('Usage history endpoint not available, using mock data');
           setHistory({
             dailyUsage: [],
+            totalTokens: 0,
+            totalRequests: 0,
+            streak: 0,
             totalFlash: 0,
             totalDeep: 0,
-            streak: 0,
           });
           return;
         }
@@ -79,7 +86,8 @@ export function useUsageHistory() {
 
   useEffect(() => {
     fetchUsageHistory();
-  }, [user, getAuthToken]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid]);
 
   return {
     history,

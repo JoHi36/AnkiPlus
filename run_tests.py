@@ -169,6 +169,18 @@ except ImportError:
     sys.modules["requests"] = _MockModule("requests")
 
 # ---------------------------------------------------------------------------
+# Prevent pytest from importing the root __init__.py
+# ---------------------------------------------------------------------------
+# The addon's __init__.py has heavy side-effects (Qt timer creation, Anki
+# hook registration, monkey-patching) that cannot run in test mode.
+# Register a lightweight stub so pytest's importlib mode never executes it.
+_root_pkg = types.ModuleType("AnkiPlus_main")
+_root_pkg.__path__ = [os.getcwd()]
+_root_pkg.__package__ = "AnkiPlus_main"
+_root_pkg.__file__ = os.path.join(os.getcwd(), "__init__.py")
+sys.modules["AnkiPlus_main"] = _root_pkg
+
+# ---------------------------------------------------------------------------
 # Run pytest
 # ---------------------------------------------------------------------------
 import pytest

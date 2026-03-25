@@ -179,13 +179,18 @@ def fix_router_queries(router_result, user_message, context):
     else:
         router_result['embedding_queries'] = [' '.join(top_kw)]
     router_result['search_scope'] = 'current_deck'
+    # Force hybrid retrieval since we're adding keyword queries
+    router_result['retrieval_mode'] = 'both'
 
-    logger.info("Router-Fix: precise=%s, broad=%s, embedding_queries=%s", precise, broad, router_result['embedding_queries'])
+    logger.info("Router-Fix: precise=%s, broad=%s, embedding_queries=%s, mode=both", precise, broad, router_result['embedding_queries'])
     return router_result
 
 
 def rag_router(user_message, context=None, config=None, emit_step=None):
-    """
+    """DEPRECATED: Use unified_route() in router.py instead.
+    Kept as fallback for Level 1/2 routing (lock/heuristic) where search
+    strategy is not included in the routing result.
+
     Stage 1: Router - Analysiert die Anfrage und entscheidet ob und wie gesucht werden soll.
 
     Args:
@@ -213,6 +218,8 @@ def rag_router(user_message, context=None, config=None, emit_step=None):
         router_model = "gemini-2.5-flash"
         fallback_model = "gemini-3-flash-preview"
 
+        # Subagent routing removed — handled by ai/router.py in Stage 0
+
         # Emit pipeline step
         if emit_step:
             emit_step("router", "active")
@@ -231,8 +238,8 @@ def rag_router(user_message, context=None, config=None, emit_step=None):
                     if msg.get('sender') == 'bot':
                         last_assistant_message = (msg.get('text', '') or '')[:300]
                         break
-        except Exception:
-            pass
+        except (AttributeError, KeyError, TypeError) as e:
+            logger.debug("router: last assistant message lookup error: %s", e)
 
         # Extrahiere Karteninhalt
         card_question = ""
@@ -275,59 +282,65 @@ def rag_router(user_message, context=None, config=None, emit_step=None):
                 card = mw.col.get_card(context['cardId'])
                 note = card.note()
                 card_tags = list(note.tags)
-            except Exception:
-                pass
+            except (AttributeError, KeyError) as e:
+                logger.debug("router: card tags lookup error: %s", e)
 
         # Debug-Logging
         logger.debug("Router: user_message='%s', has_context=%s, deck=%s", user_message[:100], bool(context), deck_name)
         logger.debug("Router: card_question='%s', card_answer='%s'", card_question[:100] if card_question else 'LEER', card_answer[:80] if card_answer else 'LEER')
         logger.debug("Router: context keys=%s", list(context.keys()) if context else 'None')
 
-        router_prompt = f"""Du bist ein Such-Router für eine Lernkarten-App. Entscheide ob und wie gesucht werden soll.
+        router_prompt = f"""You are a search router for a flashcard learning app. Decide whether and how to search the user's card collection.
 
-Benutzer-Nachricht: "{user_message}"
-{f'Letzte Antwort: "{last_assistant_message[:200]}"' if last_assistant_message else ''}
+User message: "{user_message}"
+{f'Last assistant response: "{last_assistant_message[:200]}"' if last_assistant_message else ''}
 
-Aktuelle Karte (die der Nutzer gerade lernt):
-- Frage: {card_question}
-- Antwort: {card_answer}
+Current card (the one the user is studying right now):
+- Question: {card_question}
+- Answer: {card_answer}
 - Deck: {deck_name}
-- Tags: {', '.join(card_tags) if card_tags else 'keine'}
+- Tags: {', '.join(card_tags) if card_tags else 'none'}
 {extra_fields}
 
-Antworte NUR mit JSON:
+Respond with JSON ONLY:
 {{
   "search_needed": true/false,
   "retrieval_mode": "sql" | "semantic" | "both",
-  "embedding_queries": ["semantischer Suchtext 1", "semantischer Suchtext 2"],
+  "response_length": "short" | "medium" | "long",
+  "embedding_queries": ["semantic search text 1", "semantic search text 2"],
   "precise_queries": ["keyword1 AND keyword2", ...],
   "broad_queries": ["keyword1 OR keyword2", ...],
   "search_scope": "current_deck" | "collection",
   "max_sources": "low" | "medium" | "high"
 }}
 
-KONTEXT-ERKENNUNG (KRITISCH):
-Bestimme zuerst, ob die Frage sich auf die aktuelle Karte/Gesprächskontext bezieht oder ein eigenständiges Thema ist.
+DECISION TREE (follow in order):
+1. Is this small talk, thanks, greeting, or a meta-question about the app? → search_needed=false
+2. Does the user ask a factual/learning question? → search_needed=true (continue below)
+4. Can the current card ALONE fully answer the question? → search_needed=false (rare — only if the card text obviously contains the complete answer)
 
-Kontextbezogene Fragen erkennen: "was ist damit gemeint", "erkläre das genauer", "ich verstehe das nicht", "was bedeutet das", "kannst du das erklären", "erzähl mir mehr darüber", Pronomen wie "das", "es", "dieser".
-→ Bei kontextbezogenen Fragen: Nutze Karten-Kontext + letzte Antwort um spezifische Queries zu erstellen.
-  embedding_queries MÜSSEN die Schlüsselbegriffe der Karte enthalten, aus verschiedenen Perspektiven.
-  Beispiel: Karte="K-Zellen GIP", Frage="ich verstehe das nicht"
-  → embedding_queries=["K-Zellen GIP Dünndarm endokrine Zellen Lokalisation", "GIP Insulinsekretion Magensäure gastrointestinale Hormone Wirkung"]
+CONTEXT DETECTION (CRITICAL):
+First determine: does the question refer to the current card/conversation, or is it a standalone topic?
 
-Eigenständige Fragen erkennen: Enthält eigene Fachbegriffe die NICHT auf der Karte stehen.
-→ Bei eigenständigen Fragen: Ignoriere Kartenkontext, erstelle Queries aus der Frage selbst.
-  Beispiel: Karte="Nucleotid", Frage="wie viel Volumen hat das Herz?"
-  → embedding_queries=["Herzvolumen Herzgröße Schlagvolumen", "Pumpleistung Herzzeitvolumen Ejektionsfraktion"]
+Context-dependent signals: "what does that mean", "explain this", "I don't understand", pronouns ("this", "it", "that"), vague references, follow-up questions.
+→ For context-dependent questions: Use card keywords + last response to create specific queries.
+  embedding_queries MUST contain the card's key terms from DIFFERENT perspectives.
+  Example: Card="K cells GIP", Question="I don't get it"
+  → embedding_queries=["K cells GIP duodenum endocrine cells localization", "GIP insulin secretion gastric acid gastrointestinal hormones effect"]
 
-REGELN:
-- search_needed=false NUR bei Smalltalk, Danke, Meta-Fragen über die App
-- embedding_queries: 2-3 semantische Suchtexte aus VERSCHIEDENEN Perspektiven/Aspekten des Themas. NIEMALS die Benutzerfrage wörtlich verwenden. Immer zu fachlichen Suchbegriffen expandieren.
-- precise_queries: 2-3 AND-Queries aus den relevanten Keywords (Karte ODER Frage, je nach Kontext)
-- broad_queries: 2-3 OR-Queries für breitere Suche
-- search_scope: "current_deck" als Default, "collection" nur bei fächerübergreifenden Fragen
-- retrieval_mode: "both" als Default, "sql" für exakte Fakten, "semantic" für konzeptuelle Fragen
-- max_sources: "low" (3-5 Quellen, einfache Faktenfragen), "medium" (8-10, Standard-Erklärungen), "high" (bis 15, Vergleiche/Überblicke)"""
+Standalone signals: Contains domain-specific terms NOT on the current card.
+→ For standalone questions: Ignore card context, create queries from the question itself.
+  Example: Card="Nucleotide", Question="what is the volume of the heart?"
+  → embedding_queries=["heart volume stroke volume cardiac output", "ejection fraction cardiac pump function"]
+
+QUERY RULES:
+- embedding_queries: 2-3 semantic search texts from DIFFERENT perspectives/aspects. NEVER copy the user's question verbatim. Always expand to domain-specific search terms.
+- precise_queries: 2-3 AND-queries from relevant keywords (card OR question, depending on context)
+- broad_queries: 2-3 OR-queries for broader search
+- search_scope: "current_deck" by default, "collection" only for cross-subject questions
+- retrieval_mode: "both" by default, "sql" for exact facts/names, "semantic" for conceptual questions
+- max_sources: "low" (3-5, simple fact questions), "medium" (8-10, standard explanations), "high" (up to 15, comparisons/overviews)
+- response_length: "short" for simple facts, "medium" for explanations, "long" for detailed comparisons"""
 
         # Backend-Modus: Router über Cloud Function (API-Key serverseitig)
         if use_backend:
@@ -362,7 +375,7 @@ REGELN:
                 if router_result.get("search_needed") is not None:
                     logger.info("Router (Backend): search_needed=%s", router_result.get('search_needed'))
                     # Weiter zur Validierung unten (gleicher Code wie bei direkter API)
-            except Exception as be:
+            except (OSError, ValueError, requests.exceptions.RequestException) as be:
                 logger.warning("Router: Backend-Fehler: %s, Fallback auf direkte API", be)
                 use_backend = False
 
@@ -387,7 +400,6 @@ REGELN:
             router_result["precise_queries"] = precise_queries[:3]
             router_result["broad_queries"] = broad_queries[:3]
 
-            # Emit pipeline done
             scope_label = ""
             if deck_name:
                 scope_label = deck_name.split("::")[-1]
@@ -396,9 +408,10 @@ REGELN:
                     "search_needed": router_result.get("search_needed", True),
                     "retrieval_mode": retrieval_mode,
                     "scope": router_result.get("search_scope", "current_deck"),
-                    "scope_label": scope_label,
-                    "max_sources": router_result.get("max_sources", "medium")
-                })
+                        "scope_label": scope_label,
+                        "max_sources": router_result.get("max_sources", "medium"),
+                        "response_length": router_result.get("response_length", "medium")
+                    })
 
             logger.info("Router (Backend): search_needed=%s, retrieval_mode=%s", router_result.get('search_needed'), retrieval_mode)
             return fix_router_queries(router_result, user_message, context)
@@ -663,18 +676,18 @@ REGELN:
 
                                     logger.info("Router: Validierung abgeschlossen: %s precise, %s broad", len([q for q in corrected_precise if q]), len([q for q in corrected_broad if q]))
 
-                                # Emit pipeline done
                                 scope_label = ""
                                 if deck_name:
                                     scope_label = deck_name.split("::")[-1]
                                 if emit_step:
                                     emit_step("router", "done", {
-                                        "search_needed": router_result.get("search_needed", True),
-                                        "retrieval_mode": retrieval_mode,
-                                        "scope": router_result.get("search_scope", "current_deck"),
-                                        "scope_label": scope_label,
-                                        "max_sources": router_result.get("max_sources", "medium")
-                                    })
+                                            "search_needed": router_result.get("search_needed", True),
+                                            "retrieval_mode": retrieval_mode,
+                                            "scope": router_result.get("search_scope", "current_deck"),
+                                            "scope_label": scope_label,
+                                            "max_sources": router_result.get("max_sources", "medium"),
+                                            "response_length": router_result.get("response_length", "medium")
+                                        })
 
                                 # Finale Log-Ausgabe
                                 logger.info("Router: search_needed=%s, retrieval_mode=%s, embedding_queries=%s, precise_queries=%s, broad_queries=%s, scope=%s", router_result.get('search_needed'), retrieval_mode, [q[:40] for q in embedding_queries], len([q for q in precise_queries if q]), len([q for q in broad_queries if q]), router_result.get('search_scope'))
@@ -766,7 +779,8 @@ REGELN:
                 "retrieval_mode": "both",
                 "scope": "current_deck",
                 "scope_label": scope_label,
-                "max_sources": "medium"
+                "max_sources": "medium",
+                "response_length": "medium"
             })
 
         return {
@@ -970,7 +984,7 @@ def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="c
                             if card_id not in note_results[note_id]['card_ids']:
                                 note_results[note_id]['card_ids'].append(card_id)
 
-                        except Exception as e:
+                        except (AttributeError, KeyError, IndexError, ValueError) as e:
                             logger.warning("RAG Retrieval: Fehler bei Karte %s: %s", card_id, e)
                             continue
                     return len(card_ids)
@@ -980,7 +994,7 @@ def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="c
                         emit_state(f"Ergebnis: 0 Treffer für '{query[:50]}...'", phase=PHASE_SEARCH)
                     return 0
 
-            except Exception as e:
+            except (AttributeError, RuntimeError, OSError) as e:
                 logger.warning("RAG Retrieval: Fehler bei %s Query: %s", query_type, e)
                 return 0
 
@@ -1110,7 +1124,7 @@ def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="c
                                         'queries_found_in': ['fallback']
                                     }
 
-                            except Exception as e:
+                            except (AttributeError, KeyError, IndexError, ValueError) as e:
                                 logger.warning("RAG Retrieval: Fehler bei Fallback-Karte %s: %s", card_id, e)
                                 continue
 
@@ -1121,7 +1135,7 @@ def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="c
                         reverse=True
                     )[:max_notes]
 
-                except Exception as e:
+                except (AttributeError, RuntimeError, OSError) as e:
                     logger.warning("RAG Retrieval: Fallback-Fehler: %s", e)
 
         if len(ranked_notes) == 0:
@@ -1187,7 +1201,7 @@ def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="c
                     "isCurrentCard": False  # Will be set to True for current card below
                 }
 
-            except Exception as e:
+            except (AttributeError, KeyError, IndexError, ValueError) as e:
                 logger.warning("RAG Retrieval: Fehler bei Note %s: %s", note_id, e)
                 continue
 

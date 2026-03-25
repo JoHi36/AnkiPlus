@@ -1,11 +1,12 @@
 import React from 'react';
 
 const DOT_COLORS = {
-  learned: 'rgba(74,158,108,0.55)',
-  weakness: 'rgba(180,80,70,0.55)',
+  learned: 'var(--ds-green-50)',
+  weakness: 'var(--ds-red-50)',
 };
 
-export default function InsightBullet({ text, type = 'learned', citations = [], onCitationClick }) {
+export default function InsightBullet({ text, type = 'learned', citations = [], onCitationClick, bulletColor }) {
+  const dotColor = bulletColor || DOT_COLORS[type] || DOT_COLORS.learned;
   return (
     <div style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
       <div
@@ -13,7 +14,7 @@ export default function InsightBullet({ text, type = 'learned', citations = [], 
           width: 6,
           height: 6,
           borderRadius: '50%',
-          background: DOT_COLORS[type] || DOT_COLORS.learned,
+          background: dotColor,
           flexShrink: 0,
           marginTop: 6,
         }}
@@ -26,7 +27,7 @@ export default function InsightBullet({ text, type = 'learned', citations = [], 
             onClick={() => onCitationClick?.(c.cardId)}
             style={{
               fontSize: 10,
-              color: 'rgba(10,132,255,0.5)',
+              color: 'var(--ds-accent-50)',
               cursor: 'pointer',
               marginLeft: 3,
               fontWeight: 500,

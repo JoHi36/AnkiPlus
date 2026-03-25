@@ -1,238 +1,208 @@
-# Anki Chatbot Addon - Design-Sprache
+# AnkiPlus Design System
 
-## Design-Philosophie
+## Quick Reference
 
-**Clean, modern, professionell, hochwertig** - inspiriert von Apps wie Wispr Flow und Cursor. Das Design soll Spaß machen, ohne aufdringlich zu sein, und nahtlos in Anki integriert sein.
-
-## Design-Prinzipien
-
-### 1. Minimalismus
-- Klare, uncluttered Interfaces
-- Fokus auf Inhalt, nicht auf Dekoration
-- Genug Whitespace für Atmung
-
-### 2. Konsistenz
-- Einheitliche Farbpalette
-- Konsistente Abstände und Größen
-- Vorhersehbare Interaktionen
-
-### 3. Funktionalität vor Form
-- Jedes Design-Element hat einen Zweck
-- Keine rein dekorativen Elemente
-- Intuitive Bedienbarkeit
-
-### 4. Modernität
-- Aktuelle Design-Trends (aber nicht modisch)
-- Zeitlose Ästhetik
-- Professionelle Ausstrahlung
-
-## Farbpalette
-
-### Primärfarben
-- **Primary Blue**: `#4a9eff` - Hauptakzentfarbe (Buttons, Links)
-- **Primary Blue Hover**: `#5aaeff` - Hover-Zustand
-- **Primary Blue Pressed**: `#3a8eef` - Aktiver Zustand
-
-### Hintergrundfarben
-- **Background Dark**: `#1e1e1e` - Haupt-Hintergrund (Chat-Display)
-- **Background Medium**: `#252525` - Container-Hintergrund (Input-Bereich)
-- **Background Light**: `#2d2d2d` - Input-Felder
-
-### Textfarben
-- **Text Primary**: `#e0e0e0` - Haupttext
-- **Text Secondary**: `#888888` - Placeholder, sekundärer Text
-- **Text Accent**: `#4a9eff` - Akzent-Text (Bot-Name)
-- **Text User**: `#6bb6ff` - Benutzer-Name
-
-### Nachrichten-Hintergründe
-- **Bot Message**: `#2d3a4a` - Bot-Nachrichten (links)
-- **User Message**: `#1a4a6e` - Benutzer-Nachrichten (rechts)
-- **Border**: `#333333` - Trennlinien
-
-## Typografie
-
-### Schriftarten
-- **System Font Stack**: `-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
-- Nutzt native System-Schriftarten für beste Performance und native Optik
-
-### Schriftgrößen
-- **Body Text**: `14px` - Haupttext in Nachrichten
-- **Labels**: `12px` - Namen, Labels
-- **Buttons**: `18px` - Button-Icons
-- **FAB**: `24px` - Floating Action Button
-
-### Zeilenhöhe
-- **Standard**: `1.5` - Gute Lesbarkeit
-
-## Komponenten
-
-### Floating Action Button (FAB)
-- **Größe**: 56x56px
-- **Form**: Perfekter Kreis (border-radius: 28px)
-- **Farbe**: Primary Blue mit Hover-Effekten
-- **Position**: Obere rechte Ecke, immer sichtbar
-- **Icon**: 💬 (Chat-Emoji)
-
-### Chat-Panel (Dock-Widget)
-- **Minimale Breite**: 350px
-- **Maximale Breite**: 800px
-- **Standard-Breite**: 450px
-- **Resizable**: Ja, durch Ziehen am Rand
-- **Position**: Links (LeftDockWidgetArea)
-
-### Chat-Display
-- **Hintergrund**: Dark Background (#1e1e1e)
-- **Padding**: 16px
-- **Scrollbar**: System-Standard (automatisch)
-
-### Nachrichten-Bubbles
-- **Bot-Nachrichten**:
-  - Links positioniert (margin-right: 20%)
-  - Hintergrund: #2d3a4a
-  - Border-radius: 12px (oben-links: 4px)
-  - Padding: 12px 16px
-  
-- **Benutzer-Nachrichten**:
-  - Rechts positioniert (margin-left: 20%)
-  - Hintergrund: #1a4a6e
-  - Border-radius: 12px (oben-rechts: 4px)
-  - Padding: 12px 16px
-
-### Input-Bereich
-- **Container**: Background Medium (#252525)
-- **Border-Top**: 1px solid #333333
-- **Padding**: 12px
-- **Spacing**: 8px zwischen Elementen
-
-### Input-Feld
-- **Hintergrund**: #2d2d2d
-- **Border**: 1px solid #3a3a3a
-- **Border-radius**: 8px
-- **Padding**: 10px 14px
-- **Focus**: Border wird zu #4a9eff, Hintergrund zu #323232
-
-### Send-Button
-- **Größe**: 40x40px
-- **Form**: Abgerundetes Rechteck (8px)
-- **Icon**: → (Pfeil)
-- **Farbe**: Primary Blue mit Hover-Effekten
-
-## Abstände & Spacing
-
-### Padding
-- **Klein**: 8px
-- **Medium**: 12px
-- **Groß**: 16px
-
-### Margins
-- **Nachrichten**: 8px vertikal, 20% horizontal (für Alignment)
-- **Container**: 0px (keine Außenabstände)
-
-### Spacing (zwischen Elementen)
-- **Klein**: 5px
-- **Medium**: 8px
-- **Groß**: 12px
-
-## Interaktionen
-
-### Hover-Effekte
-- **Buttons**: Leichte Farbänderung (heller)
-- **Input-Feld**: Border-Farbe ändert sich bei Focus
-
-### Transitions
-- Sanfte Übergänge (wo möglich)
-- Keine abrupten Änderungen
-
-### Feedback
-- Visuelles Feedback bei allen Interaktionen
-- Klare Zustände (normal, hover, pressed, focus)
-
-## Responsive Verhalten
-
-### Panel-Größe
-- Nutzer kann Breite zwischen 350px und 800px anpassen
-- Höhe passt sich automatisch an Fenstergröße an
-
-### Button-Position
-- FAB bleibt immer in oberer rechter Ecke
-- Position passt sich bei Fenstergrößenänderung an
-
-## Anpassungen an Anki
-
-### Theme-Kompatibilität
-- Aktuell: Dark Theme optimiert
-- Sollte später auch Light Theme unterstützen
-- Nutzt Anki's native Widget-Styling wo möglich
-
-### Integration
-- Dock-Widget fügt sich nahtlos in Anki ein
-- Keine störenden Elemente
-- Respektiert Anki's Layout
-
-### Frontend-Implementierung
-
-### Technologie-Stack
-
-Das Design wird mit modernen Web-Technologien umgesetzt:
-
-- **Tailwind CSS**: Alle Design-Tokens (Farben, Abstände, etc.) sind in `frontend/tailwind.config.js` definiert
-- **DaisyUI**: Nutzt DaisyUI-Komponenten für schnelle UI-Entwicklung
-- **React**: Komponenten-basierte Architektur für modulare UI-Bausteine
-
-### Design-Tokens in Tailwind
-
-Die Farbpalette und Design-Werte sind als Tailwind-Theme definiert:
-
-```javascript
-// tailwind.config.js
-colors: {
-  'bg-dark': '#121212',
-  'bg-panel': '#1a1a1a',
-  'bg-muted': '#252525',
-  'text-primary': '#e8e8e8',
-  'accent': '#14b8a6',
-  // ...
-}
-```
-
-### Layout-Architektur: Interaction Container
-
-Um ein flüssiges Chat-Erlebnis zu gewährleisten, bei dem die aktuelle Interaktion im Fokus steht, wird ein spezieller **Interaction Container** verwendet:
-
-- **Konzept**: Die letzte User-Nachricht und die darauf folgende Antwort (oder Loading-Indicator) werden in einem speziellen Container gruppiert.
-- **Verhalten**: 
-  - Der Container hat eine Mindesthöhe (`min-h`), die fast den gesamten Screen füllt.
-  - Mittels `flex-col` und `justify-start` werden die Nachrichten am **oberen Rand** fixiert.
-  - Ein `flex-grow` Spacer am Ende des Containers drückt den leeren Raum nach unten.
-  - Dies sorgt dafür, dass bei kurzen Nachrichten der Inhalt oben bleibt, während bei langen, streamenden Nachrichten der Container natürlich wächst.
-- **Scroll-Logik**: Beim Senden einer neuen Nachricht wird der Container an den oberen Rand gescrollt, sodass die Frage des Nutzers fixiert erscheint, während die Antwort darunter "einfließt".
-
-### Komponenten-Implementierung
-
-- **ChatMessage**: Nutzt Tailwind-Klassen für Styling (kein manuelles CSS)
-- **ChatInput**: DaisyUI-kompatible Input-Komponente
-- **Header**: Flexbox-Layout mit Tailwind Utilities
-- **SessionPicker**: Custom Dropdown mit Tailwind + DaisyUI
-
-### Development-Workflow
-
-1. **Design anpassen**: Ändere Werte in `tailwind.config.js` oder nutze DaisyUI-Komponenten
-2. **Im Browser testen**: `npm run dev` im `frontend/` Ordner
-3. **Build**: `npm run build` erstellt optimierte Dateien für Anki
-
-## Zukünftige Design-Erweiterungen
-
-- [ ] Light Theme Support (via DaisyUI Theme-Switching)
-- [ ] Animierte Übergänge (Framer Motion Integration)
-- [x] Custom Scrollbar-Styling (via Tailwind Utilities)
-- [ ] Code-Syntax-Highlighting (für Code-Snippets)
-- [ ] Markdown-Rendering in Nachrichten
-- [ ] Emoji-Support verbessern
-- [ ] Typing-Indicator
-- [ ] Message-Timestamps
-- [ ] Avatar-Icons für Bot/Benutzer
+**Source of Truth:** `shared/styles/design-system.css`
+**Full Spec:** `docs/superpowers/specs/2026-03-20-unified-design-system.md`
+**Component Viewer:** `npm run dev` → `http://localhost:3000/?view=components`
+**Component Viewer Source:** `frontend/src/ComponentViewer.jsx`
 
 ---
 
-*Diese Design-Sprache wird kontinuierlich weiterentwickelt und verfeinert.*
+## Core Principle: Material = Function
 
+Zwei Materialien, nicht Elevation:
+
+| Material | Klasse | Wann | Beispiele |
+|----------|--------|------|-----------|
+| **Frosted Glass** | `.ds-frosted` | Aktionselemente | ChatInput, Search, Docks |
+| **Borderless** | `.ds-borderless` | Content | Karten, Deck-Listen, Sessions |
+
+---
+
+## Design Tokens (CSS Custom Properties)
+
+### Backgrounds
+| Token | Dark | Light | Rolle |
+|-------|------|-------|-------|
+| `--ds-bg-deep` | `#141416` | `#ECECF0` | Chat-Panel, Plusi Diary |
+| `--ds-bg-canvas` | `#1C1C1E` | `#FFFFFF` | Hauptfläche |
+| `--ds-bg-frosted` | `#161618` | `#F9F9FB` | Frosted Glass |
+| `--ds-bg-overlay` | `#3A3A3C` | `#E5E5EA` | Tooltips, Popovers |
+
+### Semantic Colors (Apple HIG)
+| Token | Dark | Light | Rolle |
+|-------|------|-------|-------|
+| `--ds-accent` | `#0A84FF` | `#007AFF` | Primary Actions, Easy |
+| `--ds-green` | `#30D158` | `#34C759` | Success, Good |
+| `--ds-yellow` | `#FFD60A` | `#FF9F0A` | Warning, Hard |
+| `--ds-red` | `#FF453A` | `#FF3B30` | Error, Again |
+| `--ds-purple` | `#BF5AF2` | `#AF52DE` | Plusi, Deep Mode |
+
+### Text (Opacity-basiert)
+| Token | Rolle |
+|-------|-------|
+| `--ds-text-primary` | Headlines, Body |
+| `--ds-text-secondary` | Beschreibungen |
+| `--ds-text-tertiary` | Inaktive Tabs |
+| `--ds-text-placeholder` | Input Placeholder |
+| `--ds-text-muted` | Keyboard Hints (SPACE) |
+
+### Typography
+| Token | Größe | Wo |
+|-------|-------|----|
+| `--ds-text-xs` | 11px | Keyboard Hints |
+| `--ds-text-sm` | 12px | Buttons, Timestamps |
+| `--ds-text-base` | 13px | Beschreibungen |
+| `--ds-text-md` | 14px | Card Content |
+| **`--ds-text-lg`** | **15px** | **Chat Messages (Standard)** |
+| `--ds-text-xl` | 18px | Section Headlines |
+| `--ds-text-2xl` | 20px | Logo, Major Headlines |
+
+### Fonts
+| Token | Verwendung |
+|-------|-----------|
+| `--ds-font-sans` | Alles (SF Pro / System) |
+| `--ds-font-brand` | NUR Plusi + Brand (Space Grotesk) |
+| `--ds-font-mono` | Code, Stats |
+
+### Spacing (Base-4)
+`--ds-space-xs` (4) / `--ds-space-sm` (8) / `--ds-space-md` (12) / `--ds-space-lg` (16) / `--ds-space-xl` (24) / `--ds-space-2xl` (32)
+
+### Radius
+`--ds-radius-sm` (8) / `--ds-radius-md` (12) / `--ds-radius-lg` (16) / `--ds-radius-xl` (22)
+
+---
+
+## Component Classes (`.ds-*`)
+
+CSS-Klassen die in React UND nativem HTML funktionieren:
+
+| Klasse | Zweck |
+|--------|-------|
+| `.ds-frosted` | Frosted Glass Container |
+| `.ds-borderless` | Content Container |
+| `.ds-input-dock` | Komplettes Input-Element (Textarea + Actions) |
+| `.ds-thought-step` | AI Pipeline Step |
+| `.ds-mc-option` | Multiple Choice Option (idle/correct/wrong) |
+| `.ds-review-result` | Quiz Feedback |
+| `.ds-tab-bar` + `.ds-tab` | Tab-Navigation |
+| `.ds-kbd` | Keyboard Shortcut Badge |
+| `.ds-split-actions` | Split Action Row (Primary | Divider | Secondary) |
+
+---
+
+## Shared React Components (10 Primitives)
+
+In `shared/components/`:
+
+| Component | Zweck | Key Props |
+|-----------|-------|-----------|
+| **ChatInput** | Universelles Input-Dock | `actionPrimary`, `actionSecondary`, `placeholder`, `onSend` |
+| **Button** | Button Primitive | `variant` (primary/secondary/ghost/outline), `size` |
+| **Card** | Content-Container | Glass Effect, Hover, Motion |
+| **ThoughtStream** | Pipeline-Visualisierung | `steps[]`, Animationen |
+| **MultipleChoiceCard** | MC-UI | Options, Stars, Explanations |
+| **QuizCard** | 5-Option Layout | States, Animations |
+| **ReviewResult** | Score + Feedback | Circular Progress, Analysis |
+| **SourceCard** | Citation Display | Deck Info, Snippet |
+| **SourcesCarousel** | Sources Scroll | Masking, Perplexity-Style |
+| **ResponsiveContainer** | Layout Wrapper | Max-Width, Responsive |
+
+---
+
+## Composable Primitive Vision (Next Level)
+
+### Das Ziel: Ein Baustein, viele Anwendungen
+
+Statt 70 lose Komponenten → 6 Grundbausteine aus denen ALLES gebaut wird:
+
+**ActionDock** = ChatInput mit konfigurierbaren Actions
+```
+Reviewer (Question): Input "Antwort..." + [Show Answer SPACE] | [MC ↵]
+Reviewer (Answer):   [Weiter SPACE] | [Nachfragen ↵]
+Session Chat:        Input "Stelle eine Frage..." + [Weiter SPACE] | [Agent Studio ↵]
+FreeChat:            Input "Stelle eine Frage..." + [Schließen ⌴] | [Senden ↵]
+```
+
+**Surface** = Hintergrund-Material
+```
+<Surface material="frosted">  → .ds-frosted
+<Surface material="canvas">   → .ds-borderless
+<Surface material="deep">     → bg-deep
+```
+
+**Badge** = Status/Kategorie Labels
+```
+Agent Badges:  @Tutor (grün), @Research (blau), @Plusi (lila)
+Rating Badges: Again (rot), Hard (gelb), Good (grün), Easy (blau)
+Stats Badges:  Neu (blau), Fällig (orange), Wieder (grün)
+```
+
+**CardShell** = Container für Inhalts-Karten
+```
+MC-Option, Insight-Bullet, Agent-Card, Source-Card → gleicher Container
+```
+
+---
+
+## Plusi Design System
+
+### Moods (14+ States)
+neutral, happy, sad, curious, reading, thinking, excited, empathy, proud, confused, sleepy, mischievous, love, error
+
+### Visual Elements
+- SVG Mascot: `shared/plusi-renderer.js` (41KB, vollständig)
+- Glow Animation: Pulsierender Halo basierend auf Mood-Farbe
+- Bubble: Sprechblase mit Text + Fade-Animation
+- Brand Font: Space Grotesk (`--ds-font-brand`)
+- Brand Color: `--ds-purple` (#BF5AF2)
+
+### Agent Colors
+| Agent | Farbe | Token |
+|-------|-------|-------|
+| @Tutor | Grün | `--ds-green` |
+| @Research | Blau | `--ds-accent` |
+| @Plusi | Lila | `--ds-purple` |
+| @Help | Grau | `--ds-text-secondary` |
+
+---
+
+## Regeln (MANDATORY)
+
+1. **KEINE hardcoded Farben** — immer `var(--ds-*)` Tokens
+2. **Material = Function** — Frosted Glass für Actions, Borderless für Content
+3. **Chat Body = 15px** (`--ds-text-lg`)
+4. **Jede neue Komponente** MUSS im ComponentViewer eingetragen werden
+5. **Shared Components wiederverwenden** — nicht nachbauen
+6. **Dark + Light Mode testen** für jede neue Komponente
+7. **Space Grotesk NUR für Plusi + Brand**
+8. **ChatInput für ALLE Input-Docks** — verschiedene Actions via Props
+
+---
+
+## Dateistruktur
+
+```
+shared/
+├── styles/design-system.css      ← Source of Truth (alle Tokens + .ds-*)
+├── config/tailwind.preset.js     ← Tailwind ↔ Token Mapping
+├── components/                   ← 10 Shared React Primitives
+│   ├── ChatInput.tsx             ← DAS Input-Element
+│   ├── Button.tsx
+│   ├── Card.tsx
+│   ├── ThoughtStream.tsx
+│   ├── MultipleChoiceCard.tsx
+│   ├── QuizCard.tsx
+│   ├── ReviewResult.tsx
+│   ├── SourceCard.tsx
+│   ├── SourcesCarousel.tsx
+│   └── ResponsiveContainer.tsx
+├── plusi-renderer.js             ← Plusi SVG Mood System
+└── utils/constants.ts
+
+frontend/src/
+├── ComponentViewer.jsx           ← Design System Referenz (localhost:3000/?view=components)
+├── components/                   ← 70 App-Komponenten (nutzen Shared Primitives)
+└── hooks/                        ← 15 Hooks
+```

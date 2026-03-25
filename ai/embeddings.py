@@ -87,11 +87,11 @@ class EmbeddingManager:
                 headers = {**self._auth_headers_fn(), "Content-Type": "application/json"}
                 body = {"texts": [t[:2000] for t in texts]}
 
-                response = http_requests.post(embed_url, json=body, headers=headers, timeout=30)
+                response = http_requests.post(embed_url, json=body, headers=headers, timeout=5)
                 response.raise_for_status()
                 data = response.json()
                 return data.get("embeddings", [])
-            except Exception as e:
+            except (OSError, ValueError, KeyError) as e:
                 logger.warning("EmbeddingManager: Backend-Fehler: %s, Fallback auf direkte API (Backend wird übersprungen)", e)
                 self._backend_failed = True
 
@@ -290,8 +290,8 @@ class BackgroundEmbeddingThread(QThread):
         try:
             for card_id, _, content_hash in load_all_embeddings():
                 existing[card_id] = content_hash
-        except Exception:
-            pass
+        except (AttributeError, OSError, ValueError) as e:
+            logger.debug("BackgroundEmbedding: load_all_embeddings error: %s", e)
 
         to_embed = []
         for card in all_cards:
@@ -326,7 +326,7 @@ class BackgroundEmbeddingThread(QThread):
                     self.manager.add_to_index(item['card_id'], emb)
                 embedded += len(embeddings)
                 self.progress_signal.emit(embedded, total)
-            except Exception as e:
+            except (OSError, ValueError, KeyError) as e:
                 logger.error("BackgroundEmbedding batch error: %s, stopping background embedding", e)
                 break  # Stop on error instead of continuing to spam API
 

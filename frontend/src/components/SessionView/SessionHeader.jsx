@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, BookOpen, CheckCircle, XCircle, User } from 'lucide-react';
+import { ChevronLeft, BookOpen } from 'lucide-react';
 import SectionNavigation from '../SectionNavigation';
 import SectionDropdown from '../SectionDropdown';
 import { getDeckMainTitle } from '../../utils/deckName';
@@ -20,7 +20,6 @@ export default function SessionHeader({
   activeSectionTitle,
   onSectionTitleClick,
   bridge,
-  onOpenSettings
 }) {
   const { currentSession } = useSessionContext();
   
@@ -173,22 +172,6 @@ export default function SessionHeader({
               title="Zur Übersicht"
             >
               <ChevronLeft size={18} />
-            </button>
-          ) : showSessionOverview && onOpenSettings ? (
-            <button
-              onClick={onOpenSettings}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs backdrop-blur-sm border transition-all ${
-                authStatus.authenticated
-                  ? 'bg-success/10 text-success border-success/20 hover:bg-success/20'
-                  : 'bg-base-300/50 text-base-content/70 border-base-300 hover:bg-base-300'
-              }`}
-              title={authStatus.authenticated ? 'Profil öffnen' : 'Profil öffnen - Nicht verbunden'}
-            >
-              <User size={14} />
-              <span>Profil</span>
-              {authStatus.authenticated && (
-                <CheckCircle size={10} className="text-success" />
-              )}
             </button>
           ) : (
             <div className="w-9" /> // Spacer wenn kein Button

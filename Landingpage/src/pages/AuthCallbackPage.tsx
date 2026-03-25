@@ -94,7 +94,8 @@ export function AuthCallbackPage() {
     };
 
     connectPlugin();
-  }, [user, getAuthToken, getRefreshToken, navigate, linkCode]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, linkCode]);
 
   const handleCopyToken = async () => {
     if (idToken) {

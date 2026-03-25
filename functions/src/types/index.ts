@@ -4,9 +4,11 @@
 export interface ChatRequest {
   message: string;
   history?: Array<{
-    role: 'user' | 'assistant';
-    content: string;
+    role: 'user' | 'assistant' | 'model' | 'function';
+    content?: string;
+    parts?: any[];  // Gemini-format parts (functionCall, functionResponse, text)
   }>;
+  /** Legacy context field (backward compat) — mapped to cardContext internally */
   context?: {
     isQuestion?: boolean;
     question?: string;
@@ -19,6 +21,28 @@ export interface ChatRequest {
       interval?: number;
     };
   };
+  /** Agent identifier (default: 'tutor') */
+  agent?: 'tutor' | 'research' | 'help' | 'plusi';
+  /** Card context for system prompt injection */
+  cardContext?: {
+    question?: string;
+    answer?: string;
+    deckName?: string;
+    tags?: string[];
+    stats?: {
+      knowledgeScore?: number;
+      reps?: number;
+      lapses?: number;
+      interval?: number;
+    };
+    isQuestion?: boolean;
+  };
+  /** Per-card learning insights */
+  insights?: string[];
+  /** Response style preference */
+  responseStyle?: 'compact' | 'detailed';
+  /** Gemini-format tool definitions for agent loop */
+  tools_definitions?: any[];
   mode?: 'compact' | 'detailed';
   model?: string;
   stream?: boolean; // Optional: if false, return complete response instead of streaming
@@ -58,17 +82,14 @@ export interface ModelsResponse {
  */
 export interface QuotaResponse {
   tier: 'free' | 'tier1' | 'tier2';
-  flash: {
-    used: number;
-    limit: number; // -1 = unlimited
-    remaining: number; // -1 = unlimited
+  tokens: {
+    daily: { used: number; limit: number; remaining: number };
+    weekly: { used: number; limit: number; remaining: number };
   };
-  deep: {
-    used: number;
-    limit: number;
-    remaining: number;
+  resetAt: {
+    daily: string;
+    weekly: string;
   };
-  resetAt: string; // ISO timestamp
 }
 
 

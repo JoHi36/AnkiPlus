@@ -19,6 +19,7 @@ DEFAULT_CONFIG = {
     "model_provider": "google",  # Nur Google unterstützt
     "model_name": "gemini-3-flash-preview",  # Standard: Gemini 3 Flash (schnell, minimal thinking)
     "api_key": "",  # Wird vom Nutzer eingegeben (für Backward-Kompatibilität)
+    "openrouter_api_key": "",  # OpenRouter API key (unified gateway for Perplexity, Gemini, etc.)
     "auth_token": "",  # Firebase Auth ID Token
     "refresh_token": "",  # Firebase Refresh Token
     "backend_url": "",  # Backend URL (Standard: Firebase Function URL)
@@ -32,13 +33,31 @@ DEFAULT_CONFIG = {
         "diagrams": True,    # Tool: Mermaid diagrams
         "stats": True,       # Tool: Learning statistics
         "molecules": False,  # Tool: Molecules (Beta)
+        "compact": True,     # Tool: Chat-Zusammenfassung / Insight Extraction
+        "research": True,    # Sub-Agent: Research via OpenRouter
     },
     "firebase": {
         "enabled": False,  # Firebase MCP Integration aktiviert
         "service_account_path": "",  # Pfad zur Service Account JSON (optional, kann auch über Umgebungsvariable gesetzt werden)
         "storage_bucket": ""  # Firebase Storage Bucket (optional, kann auch über Umgebungsvariable gesetzt werden)
     },
-    "mascot_enabled": False
+    "plusi_autonomy": {
+        "budget_per_hour": 2000,
+        "enabled": True,
+    },
+    "mascot_enabled": False,
+    "research_enabled": True,  # Research Agent enabled
+    "research_sources": {
+        "pubmed": True,
+        "wikipedia": True,
+    },
+    # Agent orchestration
+    "tutor_enabled": True,           # Always True — Tutor cannot be disabled
+    "help_enabled": True,            # Help agent toggle
+    "default_interaction_mode": "auto",  # 'auto', 'tutor', 'research', 'help', 'plusi'
+    "router_model": "gemini-2.5-flash",  # Router model selection
+    "max_chain_depth": 2,            # Max agents in a handoff chain
+    "system_quality": "standard",    # Response quality tier: 'standard', 'high'
 }
 
 # Standard Backend URL
@@ -106,13 +125,27 @@ def load_config():
                         for firebase_key, firebase_value in default_firebase.items():
                             if firebase_key not in config[key]:
                                 config[key][firebase_key] = firebase_value
+                    elif key == "plusi_autonomy" and isinstance(value, dict):
+                        default_autonomy = DEFAULT_CONFIG["plusi_autonomy"]
+                        for k, v in default_autonomy.items():
+                            if k not in config[key]:
+                                config[key][k] = v
+                    elif key == "research_sources" and isinstance(value, dict):
+                        default_sources = DEFAULT_CONFIG["research_sources"]
+                        for source_key, source_value in default_sources.items():
+                            if source_key not in config[key]:
+                                config[key][source_key] = source_value
                 # Migration: Wenn ai_tools fehlt, füge Standardwerte hinzu
                 if "ai_tools" not in config:
                     config["ai_tools"] = DEFAULT_CONFIG["ai_tools"].copy()
                 # Migration: Wenn firebase fehlt, füge Standardwerte hinzu
                 if "firebase" not in config:
                     config["firebase"] = DEFAULT_CONFIG["firebase"].copy()
-                
+
+                # Migration: Wenn research_sources fehlt, füge Standardwerte hinzu
+                if "research_sources" not in config:
+                    config["research_sources"] = DEFAULT_CONFIG["research_sources"].copy()
+
                 # Migration: "auto" → "dark" (legacy value renamed)
                 if config.get("theme") == "auto":
                     config["theme"] = "dark"
@@ -139,27 +172,58 @@ def load_config():
             return DEFAULT_CONFIG.copy()
     return DEFAULT_CONFIG.copy()
 
+def _sanitize_config(config: dict) -> dict:
+    """Sanitize config values, fixing invalid entries to safe defaults."""
+    # Theme must be one of: dark, light, system
+    if config.get('theme') not in ('dark', 'light', 'system'):
+        logger.warning("Invalid theme %s, defaulting to dark", config.get('theme'))
+        config['theme'] = 'dark'
+
+    # response_style must be one of the known styles
+    valid_styles = ('concise', 'balanced', 'detailed', 'friendly')
+    if config.get('response_style') and config['response_style'] not in valid_styles:
+        logger.warning("Invalid response_style %s, defaulting to balanced", config.get('response_style'))
+        config['response_style'] = 'balanced'
+
+    # API keys must be strings (not numbers, not booleans)
+    for key in ('api_key', 'openai_api_key', 'anthropic_api_key'):
+        if key in config and config[key] is not None and not isinstance(config[key], str):
+            logger.warning("Invalid %s type, clearing", key)
+            config[key] = ''
+
+    # Plusi autonomy budget must be non-negative
+    plusi = config.get('plusi_autonomy', {})
+    if isinstance(plusi, dict):
+        budget = plusi.get('budget_per_hour')
+        if budget is not None and (not isinstance(budget, (int, float)) or budget < 0):
+            logger.warning("Invalid plusi budget_per_hour %s, defaulting to 500", budget)
+            plusi['budget_per_hour'] = 500
+
+    return config
+
+
 def save_config(config):
     """Speichert die Konfiguration in die Datei"""
+    config = _sanitize_config(config)
     config_path = get_config_path()
-    logger.debug(f"save_config: Versuche zu speichern nach: {config_path}")
-    logger.debug(f"save_config: Config enthält api_key mit Länge: {len(config.get('api_key', ''))}")
+    logger.debug("save_config: Versuche zu speichern nach: %s", config_path)
+    logger.debug("save_config: Config enthält api_key mit Länge: %s", len(config.get('api_key', '')))
     try:
         # Stelle sicher, dass das Verzeichnis existiert
         os.makedirs(os.path.dirname(config_path), exist_ok=True)
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
-        logger.info(f"save_config: ✓ Erfolgreich gespeichert nach: {config_path}")
+        logger.info("save_config: ✓ Erfolgreich gespeichert nach: %s", config_path)
         
         # Verifiziere durch Zurücklesen
         with open(config_path, 'r', encoding='utf-8') as f:
             verify_config = json.load(f)
-            logger.debug(f"save_config: Verifizierung - API-Key Länge in Datei: {len(verify_config.get('api_key', ''))}")
+            logger.debug("save_config: Verifizierung - API-Key Länge in Datei: %s", len(verify_config.get('api_key', '')))
         
         return True
     except Exception as e:
         error_msg = f"Fehler beim Speichern der Konfiguration: {str(e)}"
-        logger.error(f"save_config: ✗ FEHLER: {error_msg}")
+        logger.error("save_config: ✗ FEHLER: %s", error_msg)
         showInfo(error_msg)
         return False
 
@@ -170,7 +234,7 @@ def get_config(force_reload=False):
     try:
         if force_reload or not hasattr(mw, '_chatbot_config') or mw._chatbot_config is None:
             mw._chatbot_config = load_config()
-            logger.info(f"Config geladen. API-Key vorhanden: {'Ja' if mw._chatbot_config.get('api_key') else 'Nein'} (Länge: {len(mw._chatbot_config.get('api_key', ''))})")
+            logger.info("Config geladen. API-Key vorhanden: %s (Länge: %s)", 'Ja' if mw._chatbot_config.get('api_key') else 'Nein', len(mw._chatbot_config.get('api_key', '')))
         return mw._chatbot_config
     except (RuntimeError, AttributeError):
         # Thread-safety: mw may not be accessible from worker threads
@@ -179,24 +243,24 @@ def get_config(force_reload=False):
 def update_config(mascot_enabled=None, **kwargs):
     """Aktualisiert die Konfiguration"""
     config = get_config()
-    logger.debug(f"update_config aufgerufen mit: {list(kwargs.keys())}")
+    logger.debug("update_config aufgerufen mit: %s", list(kwargs.keys()))
     
     # Trimme API-Key falls vorhanden (entferne Whitespace)
     if 'api_key' in kwargs:
         kwargs['api_key'] = kwargs['api_key'].strip() if kwargs['api_key'] else ""
-        logger.debug(f"update_config: API-Key getrimmt, neue Länge: {len(kwargs['api_key'])}")
+        logger.debug("update_config: API-Key getrimmt, neue Länge: %s", len(kwargs['api_key']))
         if len(kwargs['api_key']) > 50:
-            logger.warning(f"⚠️ WARNUNG: API-Key ist sehr lang ({len(kwargs['api_key'])} Zeichen)!")
+            logger.warning("⚠️ WARNUNG: API-Key ist sehr lang (%s Zeichen)!", len(kwargs['api_key']))
     
     # Trimme Auth-Token falls vorhanden
     if 'auth_token' in kwargs:
         kwargs['auth_token'] = kwargs['auth_token'].strip() if kwargs['auth_token'] else ""
-        logger.debug(f"update_config: Auth-Token getrimmt, neue Länge: {len(kwargs['auth_token'])}")
+        logger.debug("update_config: Auth-Token getrimmt, neue Länge: %s", len(kwargs['auth_token']))
     
     # Trimme Refresh-Token falls vorhanden
     if 'refresh_token' in kwargs:
         kwargs['refresh_token'] = kwargs['refresh_token'].strip() if kwargs['refresh_token'] else ""
-        logger.debug(f"update_config: Refresh-Token getrimmt, neue Länge: {len(kwargs['refresh_token'])}")
+        logger.debug("update_config: Refresh-Token getrimmt, neue Länge: %s", len(kwargs['refresh_token']))
     
     # Setze Backend-URL falls nicht gesetzt
     if 'backend_url' in kwargs:
@@ -254,7 +318,7 @@ def get_or_create_device_id():
         device_id = str(uuid.uuid4())
         config['device_id'] = device_id
         save_config(config)
-        logger.debug(f"Device-ID generiert: {device_id}")
+        logger.debug("Device-ID generiert: %s", device_id)
     
     return device_id
 

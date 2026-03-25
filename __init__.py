@@ -14,6 +14,16 @@ except ImportError:
     from utils.logging import get_logger
 logger = get_logger(__name__)
 
+# ---------------------------------------------------------------------------
+# Timing constants
+# ---------------------------------------------------------------------------
+EMBEDDING_INIT_DELAY_MS = 10_000    # Delay before starting background embedding (avoids slowing startup)
+STARTUP_TOKEN_REFRESH_MS = 3_000    # Delay before first token refresh check after profile load
+TOKEN_REFRESH_INTERVAL_MS = 30 * 60 * 1000  # Periodic token refresh interval (30 minutes)
+MAIN_VIEW_INIT_DELAY_MS = 200       # Delay before first MainViewWidget show (Anki init timing)
+STATE_CHANGE_DECK_DELAY_MS = 300    # Delay before sending deckSelected after state change (reviewer init timing)
+INIT_ADDON_LATE_DELAY_MS = 100      # Delay for init_addon when profile was already loaded at import time
+
 # Global EmbeddingManager instance
 _embedding_manager = None
 
@@ -39,11 +49,11 @@ try:
 except ImportError:
     from custom_reviewer import custom_reviewer
 
-# Custom Screens Import (DeckBrowser + Overview)
+# MainViewWidget Import (replaces custom_screens)
 try:
-    from .ui.custom_screens import custom_screens
+    from .ui.main_view import get_main_view, show_main_view
 except ImportError:
-    from ui.custom_screens import custom_screens
+    from ui.main_view import get_main_view, show_main_view
 
 # ── Early class-level patches (MUST run at import time, before first render) ──
 # Anki renders DeckBrowser during profile load, BEFORE profile_did_open fires.
@@ -52,8 +62,8 @@ try:
     from aqt.deckbrowser import DeckBrowser as _DB
     _DB._orig_drawButtons = _DB._drawButtons
     _DB._drawButtons = lambda self: None
-except Exception:
-    pass
+except (AttributeError, ImportError) as e:
+    logger.debug("DeckBrowser._drawButtons patch skipped: %s", e)
 
 try:
     from aqt.toolbar import Toolbar as _TB, BottomBar as _BB
@@ -74,8 +84,8 @@ try:
         self.web.setFixedHeight(0)
         self.web.setMaximumHeight(0)
     _BB.draw = _suppress_bottom_draw
-except Exception:
-    pass
+except (AttributeError, ImportError) as e:
+    logger.debug("Toolbar/BottomBar patch skipped: %s", e)
 
 # Hide the Qt widgets as early as possible — state_did_change fires before first paint
 def _early_hide_native_ui(*args):
@@ -85,15 +95,15 @@ def _early_hide_native_ui(*args):
             mw.toolbar.web.hide()
             mw.toolbar.web.setFixedHeight(0)
             mw.toolbar.web.setMaximumHeight(0)
-    except Exception:
-        pass
+    except (AttributeError, RuntimeError) as e:
+        logger.debug("_early_hide_native_ui toolbar error: %s", e)
     try:
         if mw and hasattr(mw, 'bottomWeb') and mw.bottomWeb:
             mw.bottomWeb.hide()
             mw.bottomWeb.setFixedHeight(0)
             mw.bottomWeb.setMaximumHeight(0)
-    except Exception:
-        pass
+    except (AttributeError, RuntimeError) as e:
+        logger.debug("_early_hide_native_ui bottomWeb error: %s", e)
 
 gui_hooks.state_did_change.append(_early_hide_native_ui)
 
@@ -125,8 +135,8 @@ def _set_dark_backgrounds():
             p.setColor(QPalette.ColorRole.Window, dark)
             central.setPalette(p)
             central.setAutoFillBackground(True)
-    except Exception:
-        pass
+    except (AttributeError, RuntimeError, ImportError) as e:
+        logger.debug("_set_dark_backgrounds error: %s", e)
 
 QTimer.singleShot(0, _set_dark_backgrounds)
 
@@ -144,8 +154,8 @@ def _suppress_bottom_web():
         bw.show = lambda: None
         bw.adjustHeightToFit = lambda: None
         bw._suppressed = True
-    except Exception:
-        pass
+    except (AttributeError, RuntimeError) as e:
+        logger.debug("_suppress_bottom_web (bottomWeb) error: %s", e)
     try:
         tw = getattr(mw.toolbar, 'web', None) if hasattr(mw, 'toolbar') and mw.toolbar else None
         if tw and not getattr(tw, '_suppressed', False):
@@ -155,8 +165,8 @@ def _suppress_bottom_web():
             tw.setMinimumHeight(0)
             tw.show = lambda: None
             tw._suppressed = True
-    except Exception:
-        pass
+    except (AttributeError, RuntimeError) as e:
+        logger.debug("_suppress_bottom_web (toolbar) error: %s", e)
 
 # Burst: try at multiple early moments to catch whenever mw.bottomWeb appears
 for _delay in (0, 50, 150, 300):
@@ -169,7 +179,7 @@ try:
         hide_deckbrowser_bottom, show_deckbrowser_bottom,
         hide_native_toolbar, show_native_toolbar,
         hide_native_top_separator, show_native_top_separator,
-        hide_splitter_visuals, focus_reviewer_webview
+        hide_splitter_visuals
     )
 except ImportError:
     from ui.manager import (
@@ -177,7 +187,7 @@ except ImportError:
         hide_deckbrowser_bottom, show_deckbrowser_bottom,
         hide_native_toolbar, show_native_toolbar,
         hide_native_top_separator, show_native_top_separator,
-        hide_splitter_visuals, focus_reviewer_webview
+        hide_splitter_visuals
     )
 
 def _init_embedding_manager():
@@ -226,15 +236,16 @@ def _init_embedding_manager():
                         'answer': note.fields[1] if len(note.fields) > 1 else '',
                         'tags': note.tags,
                     })
-                except Exception:
+                except (AttributeError, KeyError, IndexError) as card_err:
+                    logger.debug("get_all_cards: skipping card %s: %s", cid, card_err)
                     continue
             return cards
 
-        QTimer.singleShot(10000, lambda: _embedding_manager.start_background_embedding(get_all_cards))
+        QTimer.singleShot(EMBEDDING_INIT_DELAY_MS, lambda: _embedding_manager.start_background_embedding(get_all_cards))
 
-        logger.info(f"EmbeddingManager initialized")
+        logger.info("EmbeddingManager initialized")
     except Exception as e:
-        logger.error(f"EmbeddingManager initialization failed: {e}")
+        logger.error("EmbeddingManager initialization failed: %s", e)
         _embedding_manager = None
 
 
@@ -248,7 +259,7 @@ def init_addon():
         from .storage.card_sessions import migrate_from_json
         migrate_from_json()
     except Exception as e:
-        logger.error(f"Card sessions migration skipped: {e}")
+        logger.error("Card sessions migration skipped: %s", e)
 
     # Proaktiver Token-Refresh beim Startup + periodischer Refresh
     def _startup_token_refresh():
@@ -301,13 +312,13 @@ def init_addon():
             handler = get_ai_handler()
             handler._ensure_valid_token()
 
-    QTimer.singleShot(3000, _startup_token_refresh)
+    QTimer.singleShot(STARTUP_TOKEN_REFRESH_MS, _startup_token_refresh)
 
     # Periodischer Token-Refresh: alle 30 Minuten prüfen
     if not hasattr(mw, '_token_refresh_timer'):
         mw._token_refresh_timer = QTimer(mw)
         mw._token_refresh_timer.timeout.connect(_periodic_token_refresh)
-        mw._token_refresh_timer.start(30 * 60 * 1000)  # 30 Minuten
+        mw._token_refresh_timer.start(TOKEN_REFRESH_INTERVAL_MS)  # 30 Minuten
 
     try:
         mw.addonManager.setWebExports(__name__, r"(web|icons)/.*")
@@ -321,10 +332,14 @@ def init_addon():
         config = mw.addonManager.getConfig(__name__) or {}
         use_custom_reviewer = config.get("use_custom_reviewer", True)
 
-        # Enable Custom Screens (DeckBrowser + Overview)
-        custom_screens.enable()
-        QTimer.singleShot(80, custom_screens.refresh_if_visible)
-        logger.info("Custom Screens: Enabled on addon init")
+        # Initialize MainViewWidget (replaces custom_screens)
+        try:
+            main_view = get_main_view()
+            current_state = getattr(mw, 'state', 'deckBrowser')
+            QTimer.singleShot(MAIN_VIEW_INIT_DELAY_MS, lambda: show_main_view(current_state))
+            logger.info("MainViewWidget: Initialized")
+        except (AttributeError, RuntimeError, ImportError) as e:
+            logger.error("Failed to init MainViewWidget: %s", e)
 
         # Hide toolbar + bottom bar on Qt level (backup to class-level patches)
         hide_native_toolbar()
@@ -336,43 +351,24 @@ def init_addon():
                     if central and central.layout():
                         central.layout().setContentsMargins(0, 0, 0, 0)
                         central.layout().setSpacing(0)
-                except Exception:
-                    pass
-            QTimer.singleShot(200, _fix_db_margins)
+                except (AttributeError, RuntimeError) as e:
+                    logger.debug("_fix_db_margins error: %s", e)
+            QTimer.singleShot(MAIN_VIEW_INIT_DELAY_MS, _fix_db_margins)
 
-        if use_custom_reviewer:
-            custom_reviewer.enable()
-            logger.info("Custom Reviewer: Enabled on addon init")
+        # Custom reviewer disabled — ReviewerView in React replaces it
+        # custom_reviewer.enable() not called — React renders cards now
 
-            # Patch Reviewer to prevent bottom bar from ever showing
-            # This eliminates the flash completely
-            try:
-                from aqt.reviewer import Reviewer
-                _orig_bottom_html = getattr(Reviewer, '_bottomHTML', None)
-                def _patched_bottom_html(self):
-                    # Return empty bottom — our custom dock replaces it
-                    return ""
-                Reviewer._bottomHTML = _patched_bottom_html
-
-                # Also patch _showAnswerButton to prevent bottom bar updates
-                _orig_show_answer = getattr(Reviewer, '_showAnswerButton', None)
-                def _patched_show_answer(self):
-                    pass  # No-op — our custom UI handles this
-                Reviewer._showAnswerButton = _patched_show_answer
-
-                # CRITICAL: Disable Anki's native Qt keyboard shortcuts
-                # Anki registers Space, Enter, 1-4 etc. as QShortcuts which fire
-                # BEFORE JavaScript keydown events, stealing all key presses.
-                # Our custom JS handles all keyboard interaction.
-                _orig_shortcut_keys = getattr(Reviewer, '_shortcutKeys', None)
-                def _patched_shortcut_keys(self):
-                    # Only keep Ctrl+Z (undo) at Qt level, everything else handled by JS
-                    return []
-                Reviewer._shortcutKeys = _patched_shortcut_keys
-
-                logger.info("✅ Reviewer bottom bar + shortcuts patched (no flash, JS handles keys)")
-            except Exception as e:
-                logger.error(f"⚠️ Could not patch reviewer bottom: {e}")
+        # CRITICAL: Disable Anki's native Qt keyboard shortcuts
+        # Anki registers Space, Enter, 1-4 as QShortcuts which fire
+        # BEFORE our event filter. React handles all keyboard interaction.
+        try:
+            from aqt.reviewer import Reviewer
+            Reviewer._shortcutKeys = lambda self: []
+            Reviewer._bottomHTML = lambda self: ""
+            Reviewer._showAnswerButton = lambda self: None
+            logger.info("Reviewer shortcuts + bottom bar patched for React ReviewerView")
+        except (AttributeError, ImportError) as e:
+            logger.error("Could not patch reviewer: %s", e)
 
             # Class-level patches (DeckBrowser._drawButtons, Toolbar.draw/redraw)
             # are already applied at module import time above.
@@ -412,23 +408,26 @@ def on_profile_loaded():
     _plusi_reflect_lock = threading.Lock()
 
     def _plusi_reflect_once():
-        """Run one self-reflection cycle in a background thread."""
+        """Run one self-reflection cycle in a background thread.
+        No-op if Plusi is disabled."""
         try:
+            from .plusi.dock import is_plusi_enabled, sync_mood
+            if not is_plusi_enabled():
+                return
             from .plusi.agent import self_reflect
-            from .plusi.dock import sync_mood
             sync_mood('reading')
             try:
                 self_reflect()
-            except Exception as e:
-                logger.error(f"Plusi self-reflect failed: {e}")
+            except (AttributeError, RuntimeError, OSError) as e:
+                logger.error("Plusi self-reflect failed: %s", e)
             sync_mood('neutral')
             try:
                 from .plusi.panel import notify_new_diary_entry
                 notify_new_diary_entry()
-            except Exception:
-                pass
+            except (AttributeError, ImportError) as e:
+                logger.debug("notify_new_diary_entry error: %s", e)
         except Exception as e:
-            logger.error(f"Plusi reflect error: {e}")
+            logger.error("Plusi reflect error: %s", e)
 
     def _run_guarded_reflect():
         """Run _plusi_reflect_once with a guard to prevent concurrent executions."""
@@ -440,8 +439,16 @@ def on_profile_loaded():
             _plusi_reflect_lock.release()
 
     def _open_reflect_window():
-        """Open the reflection window — next interaction will trigger reflect."""
+        """Open the reflection window — next interaction will trigger reflect.
+        Skips if Plusi is disabled but still schedules next check."""
         global _plusi_reflect_pending
+        try:
+            from .plusi.dock import is_plusi_enabled
+            if not is_plusi_enabled():
+                _schedule_next_window()
+                return
+        except (AttributeError, ImportError) as e:
+            logger.debug("is_plusi_enabled check error: %s", e)
         _plusi_reflect_pending = True
         logger.debug("plusi reflect: window opened, waiting for next interaction")
         # Schedule next window
@@ -451,7 +458,7 @@ def on_profile_loaded():
         """Schedule the next reflection window with random 30-60 min interval."""
         interval_ms = random.randint(30, 60) * 60 * 1000
         interval_min = interval_ms // 60000
-        logger.debug(f"plusi reflect: next window in {interval_min} min")
+        logger.debug("plusi reflect: next window in %s min", interval_min)
         QTimer.singleShot(interval_ms, _open_reflect_window)
 
     def check_and_trigger_reflect():
@@ -510,9 +517,9 @@ def _emit_deck_selected(widget, deck_id, deck_name):
         }})();
         """
         widget.web_view.page().runJavaScript(js_code)
-        logger.info(f"📚 Hook: deckSelected Event gesendet - Deck: {deck_name}, Cards: {total_cards}")
+        logger.info("📚 Hook: deckSelected Event gesendet - Deck: %s, Cards: %s", deck_name, total_cards)
     except Exception as e:
-        logger.exception(f"Fehler beim Senden von deckSelected Event: {e}")
+        logger.exception("Fehler beim Senden von deckSelected Event: %s", e)
 
 def on_reviewer_did_show_question(card):
     """Wird aufgerufen, wenn eine Karte im Reviewer angezeigt wird"""
@@ -520,11 +527,16 @@ def on_reviewer_did_show_question(card):
     config = mw.addonManager.getConfig(__name__) or {}
     if config.get("use_custom_reviewer", True):
         hide_native_bottom_bar()
-        # Force focus to webview so keyboard shortcuts work
-        QTimer.singleShot(100, focus_reviewer_webview)
+
+    # Send card data to React ReviewerView
+    widget = get_chatbot_widget()
+    if widget and hasattr(widget, '_send_card_data'):
+        try:
+            widget._send_card_data(card, is_question=True)
+        except (AttributeError, RuntimeError) as e:
+            logger.error("reviewer_did_show_question card send error: %s", e)
 
     # Deck-Event senden (nur wenn Widget existiert)
-    widget = get_chatbot_widget()
     if widget and widget.bridge and widget.web_view:
         try:
             deck_info = widget.bridge.getCurrentDeck()
@@ -538,7 +550,7 @@ def on_reviewer_did_show_question(card):
                     deck_data["deckName"]
                 )
         except Exception as e:
-            logger.exception(f"Fehler beim Senden von Deck-Event: {e}")
+            logger.exception("Fehler beim Senden von Deck-Event: %s", e)
 
 # Alte Logik entfernt - User fügt Token manuell in Profil-Dialog ein
 
@@ -546,6 +558,18 @@ def on_reviewer_did_answer_card(reviewer, card, ease):
     """Emit cardResult event to frontend for Plusi dock reactions and streak counting."""
     try:
         correct = ease >= 2  # ease 1 = Again (wrong), 2+ = correct
+
+        # Record for Plusi's environmental awareness (zero-cost passive sensing)
+        try:
+            deck = mw.col.decks.get(card.did)
+            deck_name = deck['name'] if deck else 'Unknown'
+            try:
+                from .plusi.storage import record_card_review
+            except ImportError:
+                from plusi.storage import record_card_review
+            record_card_review(deck_name, correct)
+        except (AttributeError, ImportError, KeyError) as e:
+            logger.debug("plusi awareness tracking error: %s", e)
 
         # Send to chat panel (React)
         widget = get_chatbot_widget()
@@ -562,10 +586,10 @@ def on_reviewer_did_answer_card(reviewer, card, ease):
                 show_bubble(None, 'Richtig! ✨', 'happy')
             else:
                 show_bubble(None, 'nächstes mal 💪', 'empathy')
-        except Exception:
-            pass
+        except (AttributeError, ImportError) as e:
+            logger.debug("show_bubble error: %s", e)
     except Exception as e:
-        logger.error(f"cardResult emission error: {e}")
+        logger.error("cardResult emission error: %s", e)
 
 
 def on_state_will_change(new_state, old_state):
@@ -579,8 +603,14 @@ def on_state_will_change(new_state, old_state):
             from .custom_reviewer import close_preview
             close_preview(notify_frontend=True)
             # Don't return — let normal state_will_change logic run
-    except Exception as e:
-        logger.error(f"Preview state check error: {e}")
+    except (AttributeError, ImportError, KeyError) as e:
+        logger.error("Preview state check error: %s", e)
+
+    # Update MainViewWidget for the new state
+    try:
+        show_main_view(new_state)
+    except (AttributeError, RuntimeError) as e:
+        logger.warning("MainView state update failed: %s", e)
 
     # Smart Toolbar Management: Hide in Review, Show elsewhere
     config = mw.addonManager.getConfig(__name__) or {}
@@ -620,9 +650,9 @@ def on_state_will_change(new_state, old_state):
                 if new_state == "review":
                     hide_native_bottom_bar()
 
-                logger.debug(f"🎨 State: {new_state} → Toolbar hidden")
-            except Exception as e:
-                logger.error(f"⚠️ Error hiding toolbar: {e}")
+                logger.debug("🎨 State: %s → Toolbar hidden", new_state)
+            except (AttributeError, RuntimeError) as e:
+                logger.error("⚠️ Error hiding toolbar: %s", e)
         # Hide chat panel when leaving review state
         if new_state != "review":
             # Skip chat panel close if we're in a preview transition
@@ -630,8 +660,8 @@ def on_state_will_change(new_state, old_state):
                 try:
                     from .ui.setup import close_chatbot_panel
                     close_chatbot_panel()
-                except Exception:
-                    pass
+                except (AttributeError, RuntimeError, ImportError) as e:
+                    logger.debug("close_chatbot_panel error: %s", e)
 
         if new_state not in ("review", "deckBrowser", "overview"):
             # Leaving custom state - Restore toolbar
@@ -656,8 +686,8 @@ def on_state_will_change(new_state, old_state):
                     pass
 
                 logger.debug("State: %s -> Toolbar restored", new_state)
-            except Exception as e:
-                logger.error(f"⚠️ Error restoring toolbar: {e}")
+            except (AttributeError, RuntimeError) as e:
+                logger.error("⚠️ Error restoring toolbar: %s", e)
     
     # Original deck-event logic
     widget = get_chatbot_widget()
@@ -676,10 +706,10 @@ def on_state_will_change(new_state, old_state):
                                 deck_data["deckId"],
                                 deck_data["deckName"]
                             )
-                    except Exception as e:
-                        logger.error(f"Fehler beim Senden von deckSelected in state_will_change: {e}")
+                    except (AttributeError, RuntimeError, json.JSONDecodeError) as e:
+                        logger.error("Fehler beim Senden von deckSelected in state_will_change: %s", e)
                 
-                QTimer.singleShot(300, send_deck_selected)
+                QTimer.singleShot(STATE_CHANGE_DECK_DELAY_MS, send_deck_selected)
             
             # Wenn State zu "deckBrowser" wechselt, sende deckExited Event
             elif new_state == "deckBrowser":
@@ -687,7 +717,7 @@ def on_state_will_change(new_state, old_state):
                 widget.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
                 logger.info("📚 Hook: State zu deckBrowser gewechselt, deckExited Event gesendet")
         except Exception as e:
-            logger.exception(f"Fehler beim Senden von State-Change-Event: {e}")
+            logger.exception("Fehler beim Senden von State-Change-Event: %s", e)
 
 def cleanup_addon():
     """Cleanup when addon is disabled or Anki closes"""
@@ -697,17 +727,33 @@ def cleanup_addon():
             _embedding_manager.stop_background_embedding()
             _embedding_manager = None
 
+        # Restore addon proxy (uninstall eval wrapper)
+        try:
+            from .ui.addon_proxy import get_proxy
+            get_proxy().uninstall()
+        except (AttributeError, ImportError) as e:
+            logger.debug("addon_proxy uninstall error: %s", e)
+
         show_native_bottom_bar()
         show_native_top_separator()
         show_native_toolbar()
         logger.debug("Addon cleanup: Native UI restored")
     except Exception as e:
-        logger.error(f"Cleanup error: {e}")
+        logger.error("Cleanup error: %s", e)
 
 # Hook registrieren (mit Fallback falls Hooks nicht verfügbar sind)
 if mw is not None:
+    # Addon Proxy — capture JS/CSS injected by other addons (AMBOSS, etc.)
+    # Must be registered BEFORE profile_did_open so it captures from first reviewer load
+    try:
+        from .ui.addon_proxy import get_capture
+        gui_hooks.webview_will_set_content.append(get_capture().on_webview_will_set_content)
+        logger.info("Addon proxy: content capture hook registered")
+    except (AttributeError, ImportError) as e:
+        logger.warning("Addon proxy registration failed: %s", e)
+
     gui_hooks.profile_did_open.append(on_profile_loaded)
-    
+
     # Register cleanup hook
     if hasattr(gui_hooks, 'profile_will_close'):
         gui_hooks.profile_will_close.append(cleanup_addon)
@@ -727,15 +773,6 @@ if mw is not None:
     else:
         logger.warning("⚠️ WARNUNG: reviewer_did_answer_card Hook nicht verfügbar")
 
-    # Also refocus webview after answer is shown
-    if hasattr(gui_hooks, 'reviewer_did_show_answer'):
-        def on_reviewer_did_show_answer(card):
-            config = mw.addonManager.getConfig(__name__) or {}
-            if config.get("use_custom_reviewer", True):
-                QTimer.singleShot(50, focus_reviewer_webview)
-        gui_hooks.reviewer_did_show_answer.append(on_reviewer_did_show_answer)
-        logger.info("✅ Hook: reviewer_did_show_answer registriert (refocus)")
-    
     if hasattr(gui_hooks, 'state_will_change'):
         gui_hooks.state_will_change.append(on_state_will_change)
         logger.info("✅ Hook: state_will_change registriert")
@@ -748,4 +785,4 @@ if mw is not None:
     
     # Falls Profil bereits geladen ist, sofort initialisieren
     if hasattr(mw, 'col') and mw.col is not None:
-        QTimer.singleShot(100, init_addon)
+        QTimer.singleShot(INIT_ADDON_LATE_DELAY_MS, init_addon)

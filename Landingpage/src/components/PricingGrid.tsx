@@ -107,11 +107,11 @@ export function PricingGrid({ currentTier = 'free', onPortal, isLoggedIn = false
         <ul className="space-y-3 mb-8 text-sm text-white/[0.55] flex-1">
           <li className="flex items-start gap-3">
             <Check size={14} className="text-white/[0.18] mt-0.5 flex-shrink-0" />
-            <span>Unbegrenzt Flash Mode</span>
+            <span><strong className="text-white/80">20K</strong> Tokens / Tag</span>
           </li>
           <li className="flex items-start gap-3">
             <Check size={14} className="text-white/[0.18] mt-0.5 flex-shrink-0" />
-            <span><strong className="text-white/80">3x</strong> Deep Mode / Tag</span>
+            <span><strong className="text-white/80">100K</strong> Tokens / Woche</span>
           </li>
           <li className="flex items-start gap-3">
             <Check size={14} className="text-white/[0.18] mt-0.5 flex-shrink-0" />
@@ -153,7 +153,11 @@ export function PricingGrid({ currentTier = 'free', onPortal, isLoggedIn = false
           </li>
           <li className="flex items-start gap-3">
             <Check size={14} className="text-[#0a84ff]/50 mt-0.5 flex-shrink-0" />
-            <span><strong className="text-white/80">30x</strong> Deep Mode / Tag</span>
+            <span><strong className="text-white/80">70K</strong> Tokens / Tag</span>
+          </li>
+          <li className="flex items-start gap-3">
+            <Check size={14} className="text-[#0a84ff]/50 mt-0.5 flex-shrink-0" />
+            <span><strong className="text-white/80">350K</strong> Tokens / Woche</span>
           </li>
           <li className="flex items-start gap-3">
             <BarChart3 size={14} className="text-[#0a84ff]/50 mt-0.5 flex-shrink-0" />
@@ -195,7 +199,11 @@ export function PricingGrid({ currentTier = 'free', onPortal, isLoggedIn = false
           </li>
           <li className="flex items-start gap-3">
             <Check size={14} className="text-purple-400/50 mt-0.5 flex-shrink-0" />
-            <span><strong className="text-white/80">UNBEGRENZT</strong> Deep Mode</span>
+            <span><strong className="text-white/80">210K</strong> Tokens / Tag</span>
+          </li>
+          <li className="flex items-start gap-3">
+            <Check size={14} className="text-purple-400/50 mt-0.5 flex-shrink-0" />
+            <span><strong className="text-white/80">1.05M</strong> Tokens / Woche</span>
           </li>
           <li className="flex items-start gap-3">
             <Sparkles size={14} className="text-purple-400/50 mt-0.5 flex-shrink-0" />

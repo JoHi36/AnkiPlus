@@ -33,6 +33,24 @@ export interface AnonymousUserDocument {
   createdAt: Timestamp;
 }
 
+export interface TokenDailyUsage {
+  tokensUsed: number;
+  inputTokens: number;
+  outputTokens: number;
+  requestCount: number;
+  costMicrodollars: number;
+  lastReset: Timestamp;
+  flashRequests: number;  // Legacy
+  deepRequests: number;   // Legacy
+}
+
+export interface TokenWeeklyUsage {
+  tokensUsed: number;
+  costMicrodollars: number;
+  requestCount: number;
+  weekStart: Timestamp;
+}
+
 /**
  * Get or create user document in Firestore
  * @param userId - Firebase Auth User ID
@@ -480,4 +498,126 @@ export async function migrateAnonymousUsage(
   };
 }
 
+/**
+ * Get current ISO 8601 week string like "2026-W12"
+ */
+export function getCurrentWeekString(): string {
+  const now = new Date();
+  const target = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const dayNum = target.getUTCDay() || 7;
+  target.setUTCDate(target.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil(((target.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${target.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+}
 
+/**
+ * Get or create token-based daily usage document
+ * @param userId - Firebase Auth User ID (or "anon_{deviceId}" for anonymous)
+ * @param date - Date string in format YYYY-MM-DD
+ * @returns TokenDailyUsage with defaults for missing fields
+ */
+export async function getOrCreateTokenDailyUsage(
+  userId: string,
+  date: string
+): Promise<TokenDailyUsage> {
+  const db = getDb();
+  const usageRef = db.collection('usage').doc(userId).collection('daily').doc(date);
+  const usageDoc = await usageRef.get();
+
+  const defaults: TokenDailyUsage = {
+    tokensUsed: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    requestCount: 0,
+    costMicrodollars: 0,
+    lastReset: Timestamp.now(),
+    flashRequests: 0,
+    deepRequests: 0,
+  };
+
+  if (!usageDoc.exists) {
+    return defaults;
+  }
+
+  const data = usageDoc.data()!;
+  return {
+    tokensUsed: data.tokensUsed ?? defaults.tokensUsed,
+    inputTokens: data.inputTokens ?? defaults.inputTokens,
+    outputTokens: data.outputTokens ?? defaults.outputTokens,
+    requestCount: data.requestCount ?? defaults.requestCount,
+    costMicrodollars: data.costMicrodollars ?? defaults.costMicrodollars,
+    lastReset: data.lastReset ?? defaults.lastReset,
+    flashRequests: data.flashRequests ?? defaults.flashRequests,
+    deepRequests: data.deepRequests ?? defaults.deepRequests,
+  };
+}
+
+/**
+ * Get or create token-based weekly usage document
+ * @param userId - Firebase Auth User ID
+ * @param week - Week string in format YYYY-Www (e.g. "2026-W12")
+ * @returns TokenWeeklyUsage with defaults for missing fields
+ */
+export async function getOrCreateTokenWeeklyUsage(
+  userId: string,
+  week: string
+): Promise<TokenWeeklyUsage> {
+  const db = getDb();
+  const weeklyRef = db.collection('usage').doc(userId).collection('weekly').doc(week);
+  const weeklyDoc = await weeklyRef.get();
+
+  const defaults: TokenWeeklyUsage = {
+    tokensUsed: 0,
+    costMicrodollars: 0,
+    requestCount: 0,
+    weekStart: Timestamp.now(),
+  };
+
+  if (!weeklyDoc.exists) {
+    return defaults;
+  }
+
+  const data = weeklyDoc.data()!;
+  return {
+    tokensUsed: data.tokensUsed ?? defaults.tokensUsed,
+    costMicrodollars: data.costMicrodollars ?? defaults.costMicrodollars,
+    requestCount: data.requestCount ?? defaults.requestCount,
+    weekStart: data.weekStart ?? defaults.weekStart,
+  };
+}
+
+/**
+ * Atomically debit tokens from a user's daily and weekly usage.
+ * Uses batched set() with merge and FieldValue.increment() for race-free updates.
+ */
+export async function debitTokens(
+  userId: string,
+  date: string,
+  week: string,
+  normalizedTokens: number,
+  rawInputTokens: number,
+  rawOutputTokens: number,
+  costMicrodollars: number
+): Promise<void> {
+  const db = getDb();
+  const dailyRef = db.collection('usage').doc(userId).collection('daily').doc(date);
+  const weeklyRef = db.collection('usage').doc(userId).collection('weekly').doc(week);
+
+  const batch = db.batch();
+  batch.set(dailyRef, {
+    tokensUsed: FieldValue.increment(normalizedTokens),
+    inputTokens: FieldValue.increment(rawInputTokens),
+    outputTokens: FieldValue.increment(rawOutputTokens),
+    requestCount: FieldValue.increment(1),
+    costMicrodollars: FieldValue.increment(costMicrodollars),
+    lastReset: Timestamp.now(),
+  }, { merge: true });
+  batch.set(weeklyRef, {
+    tokensUsed: FieldValue.increment(normalizedTokens),
+    costMicrodollars: FieldValue.increment(costMicrodollars),
+    requestCount: FieldValue.increment(1),
+    weekStart: Timestamp.now(),
+  }, { merge: true });
+  await batch.commit();
+}

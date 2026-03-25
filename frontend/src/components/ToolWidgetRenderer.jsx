@@ -1,11 +1,15 @@
 import React from 'react';
-import PlusiWidget from './PlusiWidget';
+import PlusiContent, { PlusiMoodMeta } from './PlusiWidget';
 import CardWidget from './CardWidget';
 import CardListWidget from './CardListWidget';
 import StatsWidget from './StatsWidget';
 import ToolLoadingPlaceholder from './ToolLoadingPlaceholder';
 import ImageWidget from './ImageWidget';
 import ToolErrorBadge from './ToolErrorBadge';
+import AgenticCell from './AgenticCell';
+import ResearchContent from './ResearchContent';
+import CompactWidget from './CompactWidget';
+import ResearchSourceBadge from './ResearchSourceBadge';
 
 export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, isLastMessage }) {
   if (!toolWidgets || toolWidgets.length === 0) return null;
@@ -19,6 +23,28 @@ export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, i
   return (
     <>
       {toolWidgets.map((tw, i) => {
+        // Agents using AgenticCell shell
+        if (tw.name === 'search_web') {
+          if (tw.displayType === 'loading') {
+            return <AgenticCell key={`loading-${i}`} agentName="research" isLoading loadingHint={tw.loadingHint} />;
+          }
+          const toolUsed = tw.result?.tool_used || 'perplexity';
+          return (
+            <AgenticCell key={`widget-${i}`} agentName="research" headerMeta={<ResearchSourceBadge toolUsed={toolUsed} />}>
+              <ResearchContent
+                sources={tw.result?.sources}
+                answer={tw.result?.answer}
+                error={tw.result?.error}
+              />
+            </AgenticCell>
+          );
+        }
+        if (tw.name === 'spawn_plusi' && tw.displayType === 'loading') {
+          return <AgenticCell key={`loading-${i}`} agentName="plusi" isLoading />;
+        }
+        if (tw.name === 'agent_handoff' && tw.displayType === 'loading') {
+          return <AgenticCell key={`loading-${i}`} agentName="research" isLoading loadingHint={tw.loadingHint} />;
+        }
         if (tw.displayType === 'loading') {
           return <ToolLoadingPlaceholder key={`loading-${i}`} toolName={tw.name} />;
         }
@@ -27,18 +53,26 @@ export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, i
         }
         if (tw.displayType === 'widget' && tw.result) {
           switch (tw.name) {
-            case 'spawn_plusi':
+            case 'spawn_plusi': {
+              const plusiMood = tw.result.mood || 'neutral';
+              const plusiColor = (typeof window.getPlusiColor === 'function')
+                ? window.getPlusiColor(plusiMood)
+                : '#0a84ff';
               return (
-                <PlusiWidget
+                <AgenticCell
                   key={`plusi-${i}`}
-                  mood={tw.result.mood || 'neutral'}
-                  text={tw.result.text || ''}
-                  metaText={tw.result.meta || ''}
-                  friendship={tw.result.friendship || null}
-                  isLoading={false}
-                  isFrozen={!isStreaming && !isLastMessage}
-                />
+                  agentName="plusi"
+                  headerMeta={<PlusiMoodMeta mood={plusiMood} color={plusiColor} />}
+                >
+                  <PlusiContent
+                    mood={plusiMood}
+                    text={tw.result.text || ''}
+                    friendship={tw.result.friendship || null}
+                    isFrozen={!isStreaming && !isLastMessage}
+                  />
+                </AgenticCell>
               );
+            }
             case 'show_card':
               return (
                 <CardWidget
@@ -67,6 +101,28 @@ export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, i
               return <ImageWidget key={`media-${i}`} data={tw.result} toolName="show_card_media" />;
             case 'search_image':
               return <ImageWidget key={`img-${i}`} data={tw.result} toolName="search_image" />;
+            case 'agent_handoff': {
+              const handoffAgent = tw.result.agent || 'research';
+              return (
+                <AgenticCell key={`handoff-${i}`} agentName={handoffAgent}>
+                  <ResearchContent
+                    sources={tw.result.sources || []}
+                    answer={tw.result.text || ''}
+                  />
+                </AgenticCell>
+              );
+            }
+            case 'compact':
+              return (
+                <CompactWidget
+                  key={`compact-${i}`}
+                  reason={tw.result?.reason}
+                  onConfirm={() => {
+                    window.dispatchEvent(new CustomEvent('compactConfirmed'));
+                  }}
+                  onDismiss={() => {}}
+                />
+              );
             default:
               return null;
           }

@@ -80,7 +80,12 @@ class WebBridge(QObject):
 
     @pyqtSlot()
     def openSettings(self):
-        self.widget.open_settings_dialog()
+        try:
+            from aqt import mw
+            if mw:
+                mw.onPrefs()
+        except Exception:
+            pass
 
     @pyqtSlot()
     def closePanel(self):
@@ -255,15 +260,22 @@ class WebBridge(QObject):
     def goToCard(self, card_id):
         """Öffnet den Browser und zeigt die Karte an"""
         try:
+            # Validate card_id is a valid integer to prevent injection
+            try:
+                card_id_int = int(card_id)
+            except (ValueError, TypeError):
+                logger.warning("goToCard: Ungültige card_id: %s", card_id)
+                return
+
             from aqt import mw, dialogs
-            
+
             # Öffne Browser
             browser = dialogs.open("Browser", mw)
             if browser:
-                # Suche nach der Karten-ID
-                browser.form.searchEdit.lineEdit().setText(f"cid:{card_id}")
+                # Suche nach der Karten-ID (use validated int)
+                browser.form.searchEdit.lineEdit().setText(f"cid:{card_id_int}")
                 browser.onSearchActivated()
-                logger.info("goToCard: Browser geöffnet für CID %s", card_id)
+                logger.info("goToCard: Browser geöffnet für CID %s", card_id_int)
         except Exception as e:
             logger.exception("Fehler in goToCard: %s", e)
     
@@ -363,12 +375,16 @@ class WebBridge(QObject):
         try:
             from aqt import mw
             from aqt.previewer import Previewer
-            
+
             if mw is None or mw.col is None:
                 logger.debug("previewCard: mw oder mw.col ist None")
                 return
-            
-            card_id_int = int(card_id)
+
+            try:
+                card_id_int = int(card_id)
+            except (ValueError, TypeError):
+                logger.warning("previewCard: Ungültige card_id: %s", card_id)
+                return
             card = mw.col.get_card(card_id_int)
             if not card:
                 logger.debug("previewCard: Karte %s nicht gefunden", card_id)
@@ -626,59 +642,52 @@ class WebBridge(QObject):
     @pyqtSlot(str, str, result=str)
     def generateSectionTitle(self, question, answer):
         """
-        Generiert einen kurzen Titel für einen Chat-Abschnitt basierend auf der Lernkarte
-        
-        Args:
-            question: Die Frage der Lernkarte
-            answer: Die Antwort der Lernkarte (kann leer sein)
-        
-        Returns:
-            JSON mit dem generierten Titel
+        Generiert einen kurzen Titel für einen Chat-Abschnitt basierend auf der Lernkarte.
+        Runs the API call in a background thread to avoid blocking the UI.
+        Returns immediately with a pending status; the result is sent via ankiReceive.
         """
-        logger.debug("bridge.generateSectionTitle: START")
-        logger.debug("  Frage Länge: %s", len(question) if question else 0)
-        logger.debug("  Antwort Länge: %s", len(answer) if answer else 0)
-        logger.debug("  Frage (erste 100 Zeichen): %s...", question[:100] if question else 'None')
-        
-        try:
-            from ..ai.handler import get_ai_handler
-        except ImportError:
-            from ai.handler import get_ai_handler
-        
-        try:
-            logger.debug("bridge.generateSectionTitle: Rufe get_ai_handler() auf...")
-            ai = get_ai_handler()
-            logger.debug("bridge.generateSectionTitle: AI Handler erhalten, rufe get_section_title() auf...")
-            title = ai.get_section_title(question, answer)
-            logger.debug("bridge.generateSectionTitle: get_section_title() zurückgegeben: '%s'", title)
-            
-            # Prüfe ob "Lernkarte" ein Fallback ist (dann war etwas falsch)
-            if title == "Lernkarte":
-                logger.error("⚠️ bridge.generateSectionTitle: Titel ist Fallback 'Lernkarte' - möglicherweise Fehler")
-                return json.dumps({
-                    "success": False,
-                    "title": "Lernkarte",
-                    "error": "Titel-Generierung fehlgeschlagen - siehe Debug-Logs für Details"
+        import threading
+        logger.debug("bridge.generateSectionTitle: START (async)")
+
+        widget_ref = self._widget_ref() if hasattr(self, '_widget_ref') and self._widget_ref else None
+
+        def _generate_in_thread():
+            try:
+                try:
+                    from ..ai.handler import get_ai_handler
+                except ImportError:
+                    from ai.handler import get_ai_handler
+                ai = get_ai_handler()
+                title = ai.get_section_title(question, answer)
+                if title == "Lernkarte":
+                    logger.error("⚠️ bridge.generateSectionTitle: Titel ist Fallback 'Lernkarte'")
+                else:
+                    logger.info("✅ bridge.generateSectionTitle: Erfolgreich, Titel: '%s'", title)
+                # Send result back to frontend via ankiReceive
+                result_payload = json.dumps({
+                    "type": "sectionTitleGenerated",
+                    "data": {"title": title, "success": title != "Lernkarte"}
                 })
-            
-            logger.info("✅ bridge.generateSectionTitle: Erfolgreich, Titel: '%s'", title)
-            return json.dumps({
-                "success": True,
-                "title": title,
-                "error": None
-            })
-        except Exception as e:
-            error_msg = str(e)
-            error_type = type(e).__name__
-            logger.error("❌ bridge.generateSectionTitle: Exception aufgetreten")
-            logger.error("  Exception Type: %s", error_type)
-            logger.error("  Error Message: %s", error_msg)
-            logger.exception("  Full Traceback:")
-            return json.dumps({
-                "success": False,
-                "title": "Lernkarte",
-                "error": f"{error_type}: {error_msg}"
-            })
+                try:
+                    from aqt import mw as _mw
+                except ImportError:
+                    _mw = None
+                if _mw and _mw.taskman:
+                    def _send():
+                        try:
+                            if widget_ref and widget_ref.web_view:
+                                widget_ref.web_view.page().runJavaScript(
+                                    "window.ankiReceive(%s);" % result_payload
+                                )
+                        except Exception as e:
+                            logger.warning("generateSectionTitle: send result failed: %s", e)
+                    _mw.taskman.run_on_main(_send)
+            except Exception as e:
+                logger.error("❌ bridge.generateSectionTitle: Exception: %s", e)
+
+        threading.Thread(target=_generate_in_thread, daemon=True).start()
+        # Return immediately — result will come via ankiReceive event
+        return json.dumps({"success": True, "title": "", "pending": True})
     
     # ──────────────────────────────────────────────
     #  Per-Card Session Methods (SQLite)
@@ -771,11 +780,33 @@ class WebBridge(QObject):
         try:
             data = json.loads(data_json)
             deck_id = data.get('deckId')
-            message = data.get('message', {})
+            if deck_id is None:
+                return json.dumps({"success": False, "error": "Missing deckId"})
+            try:
+                deck_id = int(deck_id)
+            except (ValueError, TypeError):
+                return json.dumps({"success": False, "error": "Invalid deckId"})
+            message = data.get('message')
+            if not isinstance(message, dict):
+                return json.dumps({"success": False, "error": "Missing or invalid message"})
             success = save_deck_message(deck_id, message)
             return json.dumps({"success": success})
         except Exception as e:
             logger.error("saveDeckMessage error: %s", e)
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(result=str)
+    def clearDeckMessages(self):
+        """Clear all free-chat messages (card_id IS NULL)."""
+        try:
+            from ..storage.card_sessions import clear_deck_messages
+        except ImportError:
+            from storage.card_sessions import clear_deck_messages
+        try:
+            count = clear_deck_messages()
+            return json.dumps({"success": True, "count": count})
+        except Exception as e:
+            logger.exception("clearDeckMessages error")
             return json.dumps({"success": False, "error": str(e)})
 
     @pyqtSlot(str, str, result=str)
@@ -829,10 +860,15 @@ class WebBridge(QObject):
         except (ValueError, KeyError, AttributeError):
             return "balanced"
 
+    VALID_RESPONSE_STYLES = {"concise", "balanced", "detailed"}
+
     @pyqtSlot(str)
     def saveResponseStyle(self, style):
         """Speichert den Antwortstil"""
         try:
+            if style not in self.VALID_RESPONSE_STYLES:
+                logger.warning("saveResponseStyle: Ungültiger Stil: %s", style)
+                return
             update_config(response_style=style)
         except Exception as e:
             logger.error("saveResponseStyle: Fehler: %s", e)
@@ -846,10 +882,15 @@ class WebBridge(QObject):
         except (ValueError, KeyError, AttributeError):
             return "dark"
 
+    VALID_THEMES = {"dark", "light", "system"}
+
     @pyqtSlot(str)
     def saveTheme(self, theme):
         """Speichert das Theme"""
         try:
+            if theme not in self.VALID_THEMES:
+                logger.warning("saveTheme: Ungültiges Theme: %s", theme)
+                return
             update_config(theme=theme)
         except Exception as e:
             logger.error("saveTheme: Fehler: %s", e)
@@ -1376,4 +1417,70 @@ class WebBridge(QObject):
         except Exception as e:
             # Bei Fehler: assume no MC
             return json.dumps({"hasMC": False})
+
+    @pyqtSlot(result=str)
+    def getEmbeddingStatus(self):
+        """Return embedding indexing status as JSON."""
+        try:
+            try:
+                from ..ai.embeddings import get_embedding_status
+            except ImportError:
+                from ai.embeddings import get_embedding_status
+            return json.dumps(get_embedding_status())
+        except Exception as e:
+            logger.exception("getEmbeddingStatus error: %s", e)
+            return json.dumps({"embeddedCards": 0, "totalCards": 0, "isRunning": False})
+
+    @pyqtSlot(bool)
+    def saveMascotEnabled(self, enabled):
+        """Toggle Plusi mascot on/off."""
+        try:
+            try:
+                from ..config import update_config
+            except ImportError:
+                from config import update_config
+            update_config(mascot_enabled=enabled)
+        except Exception as e:
+            logger.exception("saveMascotEnabled error: %s", e)
+
+    @pyqtSlot(str, str, str)
+    def subagentDirect(self, agent_name, text, extra_json='{}'):
+        """Route @Name messages to the appropriate subagent."""
+        try:
+            extra = json.loads(extra_json) if extra_json else {}
+            self.widget._handle_subagent_direct(agent_name, text, extra)
+        except Exception as e:
+            logger.exception("subagentDirect error: %s", e)
+
+    @pyqtSlot(result=str)
+    def getSubagentRegistry(self):
+        """Return enabled subagents as JSON for frontend registry."""
+        try:
+            try:
+                from ..ai.agents import get_registry_for_frontend
+            except ImportError:
+                from ai.agents import get_registry_for_frontend
+            config = self.widget.config
+            return json.dumps(get_registry_for_frontend(config))
+        except Exception as e:
+            logger.exception("getSubagentRegistry error: %s", e)
+            return '[]'
+
+    @pyqtSlot(str, result=str)
+    def saveSystemQuality(self, quality):
+        """Save system quality mode (standard/deep)."""
+        try:
+            try:
+                from ..config import get_config, save_config
+            except ImportError:
+                from config import get_config, save_config
+            config = get_config()
+            if quality in ('standard', 'deep'):
+                config['system_quality'] = quality
+                save_config(config)
+                return json.dumps({"success": True})
+            return json.dumps({"error": "Invalid quality value"})
+        except Exception as e:
+            logger.exception("saveSystemQuality error: %s", e)
+            return json.dumps({"error": str(e)})
 

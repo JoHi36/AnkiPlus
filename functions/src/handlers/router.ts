@@ -5,6 +5,8 @@
 import { Request, Response } from 'express';
 import * as functions from 'firebase-functions';
 import { geminiPost } from '../utils/geminiClient';
+import { calculateNormalizedTokens, calculateCostMicrodollars } from '../utils/tokenPricing';
+import { debitTokens, getCurrentDateString, getCurrentWeekString } from '../utils/firestore';
 
 const ROUTER_MODEL = 'gemini-2.5-flash';
 
@@ -60,6 +62,22 @@ REGELN:
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
     });
+
+    // Track token usage
+    const userId = (req as any).userId;
+    if (userId) {
+      const usageMetadata = response.data?.usageMetadata;
+      if (usageMetadata) {
+        const inputTokens = usageMetadata.promptTokenCount || 0;
+        const outputTokens = usageMetadata.candidatesTokenCount || 0;
+        const normalizedTokens = calculateNormalizedTokens(ROUTER_MODEL, inputTokens, outputTokens);
+        const costMicro = calculateCostMicrodollars(ROUTER_MODEL, inputTokens, outputTokens);
+        const date = getCurrentDateString();
+        const week = getCurrentWeekString();
+        debitTokens(userId, date, week, normalizedTokens, inputTokens, outputTokens, costMicro)
+          .catch(err => functions.logger.error('Failed to debit router tokens', err));
+      }
+    }
 
     const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 

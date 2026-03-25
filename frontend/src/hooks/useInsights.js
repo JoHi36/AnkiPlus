@@ -7,12 +7,16 @@ export default function useInsights() {
   const [revlogData, setRevlogData] = useState([]);
   const [isExtracting, setIsExtracting] = useState(false);
   const [currentCardId, setCurrentCardId] = useState(null);
+  const [newInsightIds, setNewInsightIds] = useState([]);
+  const [noNewInsights, setNoNewInsights] = useState(false);
 
   const loadInsights = useCallback((cardId) => {
     if (!cardId) return;
     setCurrentCardId(cardId);
     setInsights(EMPTY_INSIGHTS);
     setRevlogData([]);
+    setNewInsightIds([]);
+    setNoNewInsights(false);
     window.ankiBridge?.addMessage('getCardInsights', { cardId });
     window.ankiBridge?.addMessage('getCardRevlog', { cardId });
   }, []);
@@ -37,6 +41,12 @@ export default function useInsights() {
     });
   }, [insights]);
 
+  const markInsightsSeen = useCallback((cardId) => {
+    if (!cardId) return;
+    setNewInsightIds([]);
+    window.ankiBridge?.addMessage('markInsightsSeen', { cardId });
+  }, []);
+
   useEffect(() => {
     const onInsightsLoaded = (e) => {
       const data = e.detail;
@@ -56,7 +66,17 @@ export default function useInsights() {
       const data = e.detail;
       setIsExtracting(false);
       if (data?.success && data.insights) {
-        setInsights(data.insights);
+        if (data.insights.no_new_insights) {
+          // No new insights found — show brief message, keep existing
+          setNoNewInsights(true);
+          setTimeout(() => setNoNewInsights(false), 4000);
+          setInsights(data.insights);
+          setNewInsightIds([]);
+        } else {
+          setNoNewInsights(false);
+          setInsights(data.insights);
+          setNewInsightIds(data.insights.new_indices || []);
+        }
       }
     };
 
@@ -83,9 +103,12 @@ export default function useInsights() {
     chartData,
     isExtracting,
     currentCardId,
+    newInsightIds,
+    noNewInsights,
     loadInsights,
     saveInsights,
     extractInsights,
+    markInsightsSeen,
     setInsights,
   };
 }

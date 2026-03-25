@@ -145,6 +145,8 @@ body {
 .tag-gemerkt { color: #6ee7b7; background: rgba(52,211,153,0.08); }
 .tag-reflektiert { color: #a78bfa; background: rgba(167,139,250,0.08); }
 .tag-forscht { color: #fbbf24; background: rgba(251,191,36,0.08); }
+.tag-entdeckt { color: #fbbf24; background: rgba(251,191,36,0.08); }
+.tag-geträumt { color: #60a5fa; background: rgba(96,165,250,0.08); }
 .entry-text {
     font-size: 13.5px;
     line-height: 1.65;
@@ -326,10 +328,11 @@ var CIPHER_CHARS = '\u283f\u283e\u283d\u283b\u2837\u282f\u281f\u283e\u283c\u283a
 var cipherIntervals = [];
 
 var MOOD_COLORS = {
-    neutral: '#818cf8', happy: '#6ee7b7', curious: '#fbbf24',
-    annoyed: '#f87171', sleepy: '#9ca3af', excited: '#c084fc',
-    surprised: '#fbbf24', blush: '#f87171', empathy: '#818cf8',
-    thinking: '#60a5fa', reading: '#60a5fa'
+    neutral: '#0a84ff', curious: '#f59e0b', thinking: '#0a84ff',
+    annoyed: '#f87171', empathy: '#818cf8', happy: '#34d399',
+    excited: '#a78bfa', surprised: '#f59e0b', flustered: '#f87171',
+    proud: '#34d399', sleepy: '#6b7280', sleeping: '#6b7280',
+    reflecting: '#818cf8', reading: '#0a84ff'
 };
 
 var FACES = {};
@@ -404,9 +407,11 @@ function renderEntries(entries) {
         if (e.discoveries && e.discoveries.length > 0) {
             html += '<div class="discoveries">';
             e.discoveries.forEach(function(d) {
-                html += '<div class="discovery" onclick="window._apAction={type:\'goToCard\',cardId:' + d.card_id + '}">';
+                var cardId = d.card_id || (d.card_ids && d.card_ids[0]) || 0;
+                var label = d.why || d.connection || '?';
+                html += '<div class="discovery" onclick="window._apAction={type:\'goToCard\',cardId:' + cardId + '}">';
                 html += '<span class="discovery-icon">🔍</span> ';
-                html += '<span class="discovery-why">' + d.why + '</span>';
+                html += '<span class="discovery-why">' + label + '</span>';
                 html += '</div>';
             });
             html += '</div>';
@@ -418,7 +423,7 @@ function renderEntries(entries) {
     startCipherAnimations();
 }
 
-function updateMood(mood, energy) {
+function updateMood(mood, energy, integrity) {
     var label = document.getElementById('mood-label');
     if (label) label.textContent = mood;
     var face = document.getElementById('plusi-panel-face');
@@ -429,6 +434,12 @@ function updateMood(mood, energy) {
         var e = (typeof energy === 'number') ? energy : 5;
         eFill.style.width = (e * 10) + '%';
         eFill.style.background = MOOD_COLORS[mood] || MOOD_COLORS.neutral;
+    }
+    /* Integrity-based glow on panel SVG */
+    var svg = document.getElementById('plusi-panel-svg');
+    if (svg && typeof integrity === 'number') {
+        svg.style.opacity = (0.6 + integrity * 0.4).toFixed(2);
+        svg.style.filter = 'drop-shadow(0 0 ' + (integrity * 6) + 'px rgba(10,132,255,' + integrity + '))';
     }
 }
 
@@ -444,7 +455,7 @@ function updateFriendship(data) {
 
 window.diaryReceive = function(payload) {
     if (payload.entries) renderEntries(payload.entries);
-    if (payload.mood) updateMood(payload.mood, payload.energy);
+    if (payload.mood) updateMood(payload.mood, payload.energy, payload.integrity);
     if (payload.friendship) updateFriendship(payload.friendship);
     if (payload.faces) FACES = payload.faces;
     if (payload.newEntry) {
@@ -495,8 +506,6 @@ _settings_channel = None
 
 def _get_panel_html():
     """Build complete HTML document for the panel webview."""
-    from .dock import get_faces_dict
-    faces_json = json.dumps(get_faces_dict())
     mood = _get_current_mood()
     energy = _get_current_energy()
     friendship = _get_current_friendship()
@@ -510,7 +519,6 @@ def _get_panel_html():
 <script>
 {PANEL_JS}
 window.addEventListener('DOMContentLoaded', function() {{
-    FACES = {faces_json};
     updateMood('{mood}', {energy});
     updateFriendship({json.dumps(friendship)});
 }});
@@ -522,7 +530,8 @@ def _get_current_mood():
     try:
         from .storage import get_memory
         return get_memory('state', 'last_mood', 'neutral')
-    except Exception:
+    except (AttributeError, ImportError, KeyError) as e:
+        logger.debug("_get_current_mood error: %s", e)
         return 'neutral'
 
 
@@ -539,7 +548,8 @@ def _get_current_friendship():
     try:
         from .storage import get_friendship_data
         return get_friendship_data()
-    except Exception:
+    except (AttributeError, ImportError, KeyError) as e:
+        logger.debug("_get_current_friendship error: %s", e)
         return {'level': 1, 'levelName': 'Fremde', 'points': 0, 'maxPoints': 15}
 
 
@@ -562,7 +572,7 @@ def _handle_panel_message(msg_type, msg_data=None):
                 browser.search_for(f"cid:{card_id}")
                 browser.show()
             except Exception as e:
-                logger.error(f"plusi panel goToCard error: {e}")
+                logger.error("plusi panel goToCard error: %s", e)
 
 
 def _send_diary_data():
@@ -570,7 +580,7 @@ def _send_diary_data():
     if not _panel_webview:
         return
     try:
-        from .storage import load_diary, get_friendship_data, get_memory
+        from .storage import load_diary, get_friendship_data, get_memory, compute_integrity
         entries = load_diary(limit=50)
         mood = get_memory('state', 'last_mood', 'neutral')
         energy = get_memory('state', 'energy', 5)
@@ -579,49 +589,29 @@ def _send_diary_data():
         except (ValueError, TypeError):
             energy = 5
         friendship = get_friendship_data()
+        integrity = compute_integrity()
         payload = {
             'entries': entries,
             'mood': mood,
             'energy': energy,
-            'friendship': friendship
+            'friendship': friendship,
+            'integrity': integrity
         }
         _panel_webview.page().runJavaScript(
             f"window.diaryReceive({json.dumps(payload)});"
         )
-    except Exception as e:
-        logger.error(f"[PlusiPanel] Error loading diary: {e}")
+    except (AttributeError, ImportError, KeyError, json.JSONDecodeError) as e:
+        logger.error("[PlusiPanel] Error loading diary: %s", e)
 
 
 def _open_settings():
-    """Switch panel webview to settings view."""
-    global _panel_webview, _settings_mode, _settings_bridge, _settings_channel, _poll_timer
-    if not _panel_webview:
-        return
-
-    _settings_mode = True
-
-    # Stop diary polling while in settings
-    if _poll_timer:
-        _poll_timer.stop()
-
-    # Set up QWebChannel for settings bridge
-    from ..settings_window import SettingsBridge
+    """Open Anki's native preferences dialog."""
     try:
-        from PyQt6.QtWebChannel import QWebChannel
-    except ImportError:
-        from PyQt5.QtWebChannel import QWebChannel
-
-    _settings_bridge = SettingsBridge()
-    # Override closeWindow to go back to diary instead of closing popup
-    _settings_bridge._panel_back = _back_to_diary
-    _settings_channel = QWebChannel()
-    _settings_channel.registerObject("bridge", _settings_bridge)
-    _panel_webview.page().setWebChannel(_settings_channel)
-
-    # Load settings.html
-    import os
-    html_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "settings.html")
-    _panel_webview.setUrl(QUrl.fromLocalFile(html_path))
+        from aqt import mw
+        if mw:
+            mw.onPrefs()
+    except (AttributeError, RuntimeError) as e:
+        logger.error("Could not open Anki preferences: %s", e)
 
 
 def _back_to_diary():
@@ -671,8 +661,8 @@ def _on_panel_poll_result(result):
         data = json.loads(result) if isinstance(result, str) else result
         if data and 'type' in data:
             _handle_panel_message(data['type'], data)
-    except Exception:
-        pass
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        logger.debug("_on_panel_poll_result parse error: %s", e)
 
 
 def toggle_panel():
@@ -739,8 +729,8 @@ def _set_dock_plusi_visible(visible):
             web.page().runJavaScript(
                 f"var d=document.getElementById('plusi-dock'); if(d) d.style.display='{display}';"
             )
-    except Exception:
-        pass
+    except (AttributeError, ImportError, RuntimeError) as e:
+        logger.debug("_set_dock_plusi_visible error: %s", e)
 
 
 def notify_new_diary_entry():

@@ -11,54 +11,13 @@ interface Feature {
 }
 
 const features: Feature[] = [
-  {
-    name: 'Flash Mode',
-    description: 'Schnelle KI-Antworten ohne Deep Search',
-    free: 'Unbegrenzt',
-    tier1: 'Unbegrenzt',
-    tier2: 'Unbegrenzt',
-  },
-  {
-    name: 'Deep Mode',
-    description: 'Erweiterte Analyse mit 10+ Quellen',
-    free: '3x pro Tag',
-    tier1: '30x pro Tag',
-    tier2: '500x pro Tag',
-    highlight: true,
-  },
-  {
-    name: 'Deep Search',
-    description: 'Anzahl der durchsuchten Quellen',
-    free: '8 Karten',
-    tier1: '8 Karten',
-    tier2: '25 Karten',
-  },
-  {
-    name: 'Priorisierte Generierung',
-    description: 'Schnellere Antwortzeiten',
-    free: false,
-    tier1: true,
-    tier2: true,
-  },
-  {
-    name: 'Werbefrei',
-    free: false,
-    tier1: true,
-    tier2: true,
-  },
-  {
-    name: '24/7 Priority Support',
-    free: false,
-    tier1: false,
-    tier2: true,
-  },
-  {
-    name: 'Analytics Dashboard',
-    description: 'Detaillierte Nutzungsstatistiken',
-    free: false,
-    tier1: true,
-    tier2: true,
-  },
+  { name: 'Tägliches Token-Budget', description: 'Tokens pro Tag für alle KI-Funktionen', free: '20K', tier1: '70K', tier2: '210K', highlight: true },
+  { name: 'Wöchentliches Token-Budget', description: 'Flexibles Wochenlimit', free: '100K', tier1: '350K', tier2: '1.05M' },
+  { name: 'Deep Search', description: 'Anzahl der durchsuchten Quellen', free: '8 Karten', tier1: '8 Karten', tier2: '25 Karten' },
+  { name: 'Priorisierte Generierung', description: 'Schnellere Antwortzeiten', free: false, tier1: true, tier2: true },
+  { name: 'Werbefrei', free: false, tier1: true, tier2: true },
+  { name: '24/7 Priority Support', free: false, tier1: false, tier2: true },
+  { name: 'Analytics Dashboard', description: 'Detaillierte Nutzungsstatistiken', free: false, tier1: true, tier2: true },
 ];
 
 function formatValue(value: string | boolean): React.ReactNode {

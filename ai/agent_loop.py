@@ -20,11 +20,12 @@ except ImportError:
     from utils.logging import get_logger
 logger = get_logger(__name__)
 
-MAX_ITERATIONS = 5
-MAX_CONTEXT_CHARS = 100_000  # ~25k tokens
+MAX_ITERATIONS = 5          # Maximum tool-call cycles per agent run (prevents infinite loops)
+MAX_CONTEXT_CHARS = 100_000  # ~25k tokens — prune threshold for Gemini context window
 
 
-def _build_tool_marker(name: str, marker_type: str, result=None, error=None) -> str:
+def _build_tool_marker(name: str, marker_type: str, result=None, error=None,
+                       extra_fields: dict = None) -> str:
     """Build a [[TOOL:{...}]] marker string for the frontend.
 
     Args:
@@ -32,12 +33,15 @@ def _build_tool_marker(name: str, marker_type: str, result=None, error=None) -> 
         marker_type: One of 'loading', 'widget', 'error'.
         result: Tool result data (for 'widget' type).
         error: Error message string (for 'error' type).
+        extra_fields: Optional dict of additional fields to merge into the payload.
     """
     payload = {"name": name, "displayType": marker_type}
     if result is not None:
         payload["result"] = result
     if error is not None:
         payload["error"] = error
+    if extra_fields:
+        payload.update(extra_fields)
     return f"[[TOOL:{json.dumps(payload, ensure_ascii=False)}]]"
 
 
@@ -172,6 +176,13 @@ def run_agent_loop(
         # Handle response: emit markers, build Gemini response
         gemini_response = _handle_tool_response(function_name, tool_response, callback)
 
+        # Terminal tools (UI-only signals like compact): stop loop after execution
+        if tool_def and tool_def.display_type == "widget" and tool_response.result and isinstance(tool_response.result, dict) and tool_response.result.get("type") == "compact":
+            logger.info("agent_loop: Terminal tool '%s', stopping loop", function_name)
+            if callback:
+                callback("", True, False)
+            return text_result or ""
+
         # Append function call + response to contents
         contents = data.get("contents", [])
         contents.append({
@@ -190,7 +201,7 @@ def run_agent_loop(
         contents = _prune_contents(contents)
 
         # Rebuild data for next iteration
-        max_tokens = 8192 if model and "gemini-3-flash-preview" in model.lower() else 2000
+        max_tokens = 8192 if model and "gemini-3-flash-preview" in model.lower() else 4096
         data = {
             "contents": contents,
             "generationConfig": {"temperature": 0.7, "maxOutputTokens": max_tokens}

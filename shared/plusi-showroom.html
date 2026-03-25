@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Plusi Showroom</title>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      min-height: 100%;
+      background: #141416;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    body {
+      padding: 32px;
+    }
+
+    .header {
+      margin-bottom: 28px;
+    }
+
+    .header h1 {
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+      color: #fff;
+    }
+
+    .header p {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.4);
+      margin-top: 4px;
+    }
+
+    .controls {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 24px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .control-label {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.5);
+      white-space: nowrap;
+    }
+
+    .integrity-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 140px;
+      height: 4px;
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.15);
+      outline: none;
+      cursor: pointer;
+    }
+
+    .integrity-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #0A84FF;
+      cursor: pointer;
+    }
+
+    .integrity-slider::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #0A84FF;
+      cursor: pointer;
+      border: none;
+    }
+
+    .integrity-value {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.6);
+      min-width: 28px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .size-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 11px;
+      font-family: inherit;
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+
+    .size-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+      color: #fff;
+    }
+
+    .size-btn.active {
+      background: rgba(10, 132, 255, 0.2);
+      border-color: rgba(10, 132, 255, 0.5);
+      color: #0A84FF;
+    }
+
+    .toggle-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 12px;
+      font-family: inherit;
+      padding: 5px 14px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+
+    .toggle-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+      color: #fff;
+    }
+
+    .toggle-btn.animated-on {
+      background: rgba(52, 199, 89, 0.15);
+      border-color: rgba(52, 199, 89, 0.4);
+      color: #34C759;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 12px;
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .card:hover {
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .card-plusi {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .card-label {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.5);
+      line-height: 1.3;
+    }
+
+    .card-type-activity {
+      font-size: 10px;
+      color: rgba(139, 92, 246, 0.7);
+      margin-top: -4px;
+    }
+
+    .card-energy {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.3);
+      margin-top: -6px;
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Plusi Showroom</h1>
+    <p>All 14 states — click any card to trigger tap()</p>
+  </div>
+
+  <div class="controls">
+    <div class="control-group">
+      <span class="control-label">Integrity</span>
+      <input
+        type="range"
+        class="integrity-slider"
+        id="integritySlider"
+        min="0" max="1" step="0.01" value="0.7"
+      />
+      <span class="integrity-value" id="integrityValue">0.70</span>
+    </div>
+
+    <div class="control-group">
+      <span class="control-label">Size</span>
+      <button class="size-btn" data-size="24">24</button>
+      <button class="size-btn" data-size="48">48</button>
+      <button class="size-btn active" data-size="64">64</button>
+      <button class="size-btn" data-size="100">100</button>
+    </div>
+
+    <div class="control-group">
+      <button class="toggle-btn animated-on" id="animatedToggle">Animated</button>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <script src="plusi-renderer.js"></script>
+  <script>
+    // Ordered by vibration: low → high (Abraham Hicks Emotional Scale)
+    const MOOD_LIST = [
+      // Low vibration (red/pink aura)
+      { name: 'jealous',    type: 'mood', energy: '5–7',  vibe: 'low' },
+      { name: 'frustrated', type: 'mood', energy: '3–5',  vibe: 'low' },
+      { name: 'worried',    type: 'mood', energy: '2–4',  vibe: 'low' },
+      // Mid-low (amber/orange aura)
+      { name: 'annoyed',    type: 'mood', energy: '3–4',  vibe: 'mid-low' },
+      { name: 'flustered',  type: 'mood', energy: '4–6',  vibe: 'mid-low' },
+      // Mid (blue/cyan aura)
+      { name: 'sleepy',     type: 'mood', energy: '1–2',  vibe: 'mid' },
+      { name: 'neutral',    type: 'mood', energy: '4–5',  vibe: 'mid' },
+      { name: 'thinking',   type: 'mood', energy: '4–6',  vibe: 'mid' },
+      // Mid-high (green aura)
+      { name: 'empathy',    type: 'mood', energy: '2–4',  vibe: 'mid-high' },
+      { name: 'happy',      type: 'mood', energy: '5–6',  vibe: 'mid-high' },
+      { name: 'surprised',  type: 'mood', energy: '7–8',  vibe: 'mid-high' },
+      // High vibration (green/purple aura)
+      { name: 'proud',      type: 'mood', energy: '6–7',  vibe: 'high' },
+      { name: 'curious',    type: 'mood', energy: '6–7',  vibe: 'high' },
+      { name: 'excited',    type: 'mood', energy: '8–10', vibe: 'high' },
+      // Activities (autonomous)
+      { name: 'sleeping',   type: 'activity' },
+      { name: 'reflecting', type: 'activity' },
+      { name: 'reading',    type: 'activity' },
+    ];
+
+    let instances = [];
+    let currentSize = 64;
+    let currentAnimated = true;
+    let currentIntegrity = 0.70;
+
+    const grid = document.getElementById('grid');
+    const integritySlider = document.getElementById('integritySlider');
+    const integrityValueEl = document.getElementById('integrityValue');
+    const animatedToggle = document.getElementById('animatedToggle');
+
+    function buildGrid() {
+      instances.forEach(inst => {
+        if (inst && typeof inst.destroy === 'function') inst.destroy();
+      });
+      instances = [];
+
+      while (grid.firstChild) {
+        grid.removeChild(grid.firstChild);
+      }
+
+      MOOD_LIST.forEach((item) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        const plusiWrap = document.createElement('div');
+        plusiWrap.className = 'card-plusi';
+        plusiWrap.style.width = currentSize + 'px';
+        plusiWrap.style.height = currentSize + 'px';
+
+        const label = document.createElement('div');
+        label.className = 'card-label';
+        label.textContent = item.name;
+
+        card.appendChild(plusiWrap);
+        card.appendChild(label);
+
+        if (item.energy) {
+          const energyLabel = document.createElement('div');
+          energyLabel.className = 'card-energy';
+          energyLabel.textContent = '⚡ ' + item.energy;
+          card.appendChild(energyLabel);
+        }
+
+        if (item.type === 'activity') {
+          const typeLabel = document.createElement('div');
+          typeLabel.className = 'card-type-activity';
+          typeLabel.textContent = 'activity';
+          card.appendChild(typeLabel);
+        }
+
+        grid.appendChild(card);
+
+        let instance = null;
+        try {
+          instance = createPlusi(plusiWrap, {
+            mood: item.name,
+            size: currentSize,
+            integrity: currentIntegrity,
+            animated: currentAnimated,
+          });
+        } catch (e) {
+          console.warn('createPlusi failed for', item.name, e);
+        }
+        instances.push(instance);
+
+        card.addEventListener('click', () => {
+          if (instance && typeof instance.tap === 'function') {
+            instance.tap();
+          }
+        });
+      });
+    }
+
+    integritySlider.addEventListener('input', () => {
+      currentIntegrity = parseFloat(integritySlider.value);
+      integrityValueEl.textContent = currentIntegrity.toFixed(2);
+      instances.forEach(inst => {
+        if (inst && typeof inst.setIntegrity === 'function') {
+          inst.setIntegrity(currentIntegrity);
+        }
+      });
+    });
+
+    document.querySelectorAll('.size-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentSize = parseInt(btn.dataset.size, 10);
+        buildGrid();
+      });
+    });
+
+    animatedToggle.addEventListener('click', () => {
+      currentAnimated = !currentAnimated;
+      if (currentAnimated) {
+        animatedToggle.textContent = 'Animated';
+        animatedToggle.classList.add('animated-on');
+      } else {
+        animatedToggle.textContent = 'Static';
+        animatedToggle.classList.remove('animated-on');
+      }
+      buildGrid();
+    });
+
+    buildGrid();
+  </script>
+</body>
+</html>

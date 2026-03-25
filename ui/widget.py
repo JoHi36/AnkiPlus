@@ -6,6 +6,7 @@ Verwaltet das Web-basierte Chat-UI über QWebEngineView
 import os
 import json
 import uuid
+import weakref
 from aqt.qt import *
 from aqt.utils import showInfo
 
@@ -13,11 +14,11 @@ from aqt.utils import showInfo
 try:
     from PyQt6.QtWebEngineWidgets import QWebEngineView
     from PyQt6.QtWebChannel import QWebChannel
-except Exception:
+except ImportError:
     try:
         from PyQt5.QtWebEngineWidgets import QWebEngineView
         from PyQt5.QtWebChannel import QWebChannel
-    except Exception:
+    except ImportError:
         QWebEngineView = None
         QWebChannel = None
 
@@ -68,6 +69,14 @@ logger = get_logger(__name__)
 
 # NOTE: Legacy sessions_storage (JSON) removed — per-card SQLite is now used instead.
 
+# ---------------------------------------------------------------------------
+# Timing constants
+# ---------------------------------------------------------------------------
+POLL_INTERVAL_MS = 200          # JS→Python message queue polling rate
+PLUSI_WAKE_CHECK_MS = 60_000    # Plusi autonomy wake-up check interval (every minute)
+SETTINGS_RELOAD_DELAY_MS = 100  # Delay after config save before reloading models
+STUDY_DECK_DELAY_MS = 100       # Delay before triggering deck study (Anki init timing)
+
 
 class AIRequestThread(QThread):
     """Thread for asynchronous AI API requests with request-ID based streaming."""
@@ -76,12 +85,13 @@ class AIRequestThread(QThread):
     finished_signal = pyqtSignal(str)  # requestId
     metadata_signal = pyqtSignal(str, object, object, object)  # requestId, steps, citations, step_labels
     pipeline_signal = pyqtSignal(str, str, str, object)  # requestId, step, status, data
+    msg_event_signal = pyqtSignal(str, str, object)  # requestId, eventType, data
 
     def __init__(self, ai_handler, text, widget_ref, history=None, mode='compact', request_id=None, insights=None):
         super().__init__()
-        self.ai_handler = ai_handler
+        self._handler_ref = weakref.ref(ai_handler) if ai_handler is not None else None
+        self._widget_ref = weakref.ref(widget_ref) if widget_ref is not None else None
         self.text = text
-        self.widget_ref = widget_ref
         self.history = history
         self.mode = mode
         self.request_id = request_id or str(uuid.uuid4())
@@ -93,8 +103,13 @@ class AIRequestThread(QThread):
         self._cancelled = True
 
     def run(self):
+        handler = self._handler_ref() if self._handler_ref is not None else None
+        widget = self._widget_ref() if self._widget_ref is not None else None
+        if handler is None:
+            logger.warning("AIRequestThread: ai_handler was destroyed before run, aborting")
+            return
         try:
-            context = self.widget_ref.current_card_context if self.widget_ref else None
+            context = widget.current_card_context if widget is not None else None
             if context:
                 logger.debug("🔍 AIRequestThread.run: context=has cardId=%s, question='%s'", context.get('cardId'), (context.get('frontField') or context.get('question') or '')[:60])
             else:
@@ -131,7 +146,15 @@ class AIRequestThread(QThread):
                     return
                 self.pipeline_signal.emit(self.request_id, step, status, data or {})
 
-            self.ai_handler._pipeline_signal_callback = pipeline_callback
+            handler._pipeline_signal_callback = pipeline_callback
+
+            # Give the AI handler a callback to emit v2 msg events via Qt signal
+            def msg_event_callback(event_type, data):
+                if self._cancelled:
+                    return
+                self.msg_event_signal.emit(self.request_id, event_type, data or {})
+
+            handler._msg_event_callback = msg_event_callback
 
             def stream_callback(chunk, done, is_function_call=False, steps=None, citations=None, step_labels=None):
                 if self._cancelled:
@@ -140,7 +163,7 @@ class AIRequestThread(QThread):
                 if done and (steps or citations or step_labels):
                     self.metadata_signal.emit(self.request_id, steps or [], citations or [], step_labels or [])
 
-            bot_msg = self.ai_handler.get_response_with_rag(
+            bot_msg = handler.get_response_with_rag(
                 self.text, context=context, history=card_history,
                 mode=self.mode, callback=stream_callback,
                 insights=self.insights
@@ -153,11 +176,34 @@ class AIRequestThread(QThread):
                 logger.exception("AIRequestThread: Exception: %s", str(e))
                 self.error_signal.emit(self.request_id, str(e))
         finally:
-            self.ai_handler._pipeline_signal_callback = None
+            if handler is not None:
+                handler._pipeline_signal_callback = None
+                handler._msg_event_callback = None
+
+
+class SubagentThread(QThread):
+    """Generic thread for any subagent — keeps UI responsive."""
+    finished_signal = pyqtSignal(str, object)   # agent_name, result dict
+    error_signal = pyqtSignal(str, str)         # agent_name, error message
+
+    def __init__(self, agent_name, run_fn, text, **kwargs):
+        super().__init__()
+        self.agent_name = agent_name
+        self.run_fn = run_fn
+        self.text = text
+        self.kwargs = kwargs
+
+    def run(self):
+        try:
+            result = self.run_fn(situation=self.text, **self.kwargs)
+            self.finished_signal.emit(self.agent_name, result)
+        except Exception as e:
+            logger.exception("SubagentThread[%s] error: %s", self.agent_name, e)
+            self.error_signal.emit(self.agent_name, str(e))
 
 
 class InsightExtractionThread(QThread):
-    """Background thread for insight extraction."""
+    """Background thread for insight extraction via OpenRouter."""
     finished_signal = pyqtSignal(int, str)  # card_id, insights_json
     error_signal = pyqtSignal(int, str)     # card_id, error_message
 
@@ -168,7 +214,7 @@ class InsightExtractionThread(QThread):
         self.messages = messages
         self.existing_insights = existing_insights
         self.performance_data = performance_data
-        self.ai_handler = ai_handler
+        self._handler_ref = weakref.ref(ai_handler) if ai_handler is not None else None
         self._cancelled = False
 
     def cancel(self):
@@ -178,58 +224,65 @@ class InsightExtractionThread(QThread):
         if self._cancelled:
             return
         try:
-            from ..storage.insights import build_extraction_prompt, parse_extraction_response
+            from ..storage.insights import (
+                build_extraction_prompt, parse_extraction_response,
+                extract_insights_via_openrouter, compute_new_indices, insight_hash
+            )
+            from ..storage.card_sessions import load_insights, save_insights
+            from ..config import get_config
 
             prompt = build_extraction_prompt(
                 self.card_context, self.messages,
                 self.existing_insights, self.performance_data
             )
 
-            # Use non-streaming AI request — context=None to avoid doubling the card data
-            # (card content is already embedded in the extraction prompt)
-            logger.debug("🟢 InsightExtractionThread: Starting extraction for card %s, prompt length=%s", self.card_id, len(prompt))
-            response = self.ai_handler.get_response(
-                user_message=prompt,
-                context=None,
-                history=[],
-                mode='compact',
-            )
+            logger.debug("InsightExtractionThread: Starting for card %s, prompt length=%s",
+                         self.card_id, len(prompt))
 
             if self._cancelled:
                 return
 
-            logger.debug("🟢 InsightExtractionThread: Response received, length=%s", len(response) if response else 0)
-            if not response:
-                self.error_signal.emit(self.card_id, "Empty response from AI")
+            # Call OpenRouter directly (fast, cheap, no Gemini handler overhead)
+            api_key = get_config().get('openrouter_api_key', '')
+            response = extract_insights_via_openrouter(prompt, api_key)
+
+            if self._cancelled:
                 return
+
+            logger.debug("InsightExtractionThread: Response: %s", response[:200] if response else 'None')
 
             result = parse_extraction_response(response)
 
             if result is None:
-                logger.debug("🟡 InsightExtractionThread: Parse failed, retrying...")
-                # Retry once
-                response = self.ai_handler.get_response(
-                    user_message=prompt,
-                    context=None,
-                    history=[],
-                    mode='compact',
-                )
-                if self._cancelled:
-                    return
-                result = parse_extraction_response(response) if response else None
-
-            if result is None:
-                self.error_signal.emit(self.card_id, "Failed to parse extraction response after retry")
+                self.error_signal.emit(self.card_id, "Konnte die Antwort nicht verarbeiten")
                 return
 
-            # Save to storage
-            from ..storage.card_sessions import save_insights
+            # Compute new_indices before saving
+            existing = load_insights(self.card_id)
+            seen_hashes = existing.get('seen_hashes', [])
+            new_indices = compute_new_indices(result.get('insights', []), seen_hashes)
+
+            # Check if no new insights were found
+            if not new_indices and existing.get('insights'):
+                # No new insights — emit special signal
+                emit_data = dict(existing)
+                emit_data.pop('seen_hashes', None)
+                emit_data['new_indices'] = []
+                emit_data['no_new_insights'] = True
+                self.finished_signal.emit(self.card_id, json.dumps(emit_data, ensure_ascii=False))
+                return
+
+            result['seen_hashes'] = seen_hashes
             save_insights(self.card_id, result)
 
-            self.finished_signal.emit(self.card_id, json.dumps(result, ensure_ascii=False))
+            emit_data = dict(result)
+            emit_data.pop('seen_hashes', None)
+            emit_data['new_indices'] = new_indices
+            self.finished_signal.emit(self.card_id, json.dumps(emit_data, ensure_ascii=False))
 
         except Exception as e:
             if not self._cancelled:
+                logger.exception("InsightExtractionThread failed for card %s", self.card_id)
                 self.error_signal.emit(self.card_id, str(e))
 
 
@@ -245,10 +298,25 @@ class ChatbotWidget(QWidget):
         self.bridge = WebBridge(self)  # Bridge-Instanz für Deck-Zugriff
         self.card_tracker = None  # Card-Tracker wird später initialisiert
         self.current_card_context = None  # Aktueller Karten-Kontext
+        self._active_subagent_thread = None
+        self._freechat_was_open = False  # preserve FreeChat state across state changes
         self.setup_ui()
         # Card-Tracking wird nach UI-Setup initialisiert
         if self.web_view:
             self.card_tracker = CardTracker(self)
+
+        # Plusi autonomous wake timer — checks every minute
+        self._plusi_wake_timer = QTimer()
+        self._plusi_wake_timer.timeout.connect(self._check_plusi_wake)
+        self._plusi_wake_timer.start(PLUSI_WAKE_CHECK_MS)
+    def _safe_json_loads(self, data, default=None, context=""):
+        """Parse JSON safely, returning default on failure."""
+        try:
+            return json.loads(data) if data else (default if default is not None else {})
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning("JSON parse error in %s: %s", context, e)
+            return default if default is not None else {}
+
     def setup_ui(self):
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
@@ -297,8 +365,8 @@ class ChatbotWidget(QWidget):
         # Starte Polling für Nachrichten
         self.message_timer = QTimer()
         self.message_timer.timeout.connect(self._poll_messages)
-        self.message_timer.start(200)  # Alle 200ms prüfen
-        logger.info("Message-Polling gestartet (200ms Intervall)")
+        self.message_timer.start(POLL_INTERVAL_MS)
+        logger.info("Message-Polling gestartet (%sms Intervall)", POLL_INTERVAL_MS)
 
     def _poll_messages(self):
         """Pollt JavaScript nach neuen Nachrichten"""
@@ -320,6 +388,27 @@ class ChatbotWidget(QWidget):
                 logger.exception("Fehler beim Verarbeiten von Nachrichten: %s", e)
         
         self.web_view.page().runJavaScript(js_code, handle_messages)
+
+    def _check_plusi_wake(self):
+        """Check if Plusi should wake up for autonomous action."""
+        try:
+            from ..plusi.storage import get_memory
+            is_sleeping = get_memory('state', 'is_sleeping', False)
+            next_wake = get_memory('state', 'next_wake', None)
+
+            if not is_sleeping or not next_wake:
+                return
+
+            from datetime import datetime
+            wake_time = datetime.fromisoformat(next_wake)
+            if datetime.now() >= wake_time:
+                logger.info("plusi wake timer: triggering autonomous chain")
+                from ..plusi.agent import run_autonomous_chain
+                import threading
+                t = threading.Thread(target=run_autonomous_chain, daemon=True)
+                t.start()
+        except Exception as e:
+            logger.exception("plusi wake timer error: %s", e)
 
     def _send_to_frontend(self, payload_type, data, extra=None):
         """Helper: Sendet Payload an das React-Frontend via ankiReceive."""
@@ -360,7 +449,8 @@ class ChatbotWidget(QWidget):
             # Panel & Navigation
             'closePanel': self._msg_close_panel,
             'advanceCard': self._msg_advance_card,
-            'openSettings': lambda d: None,
+            'openSettings': self._msg_toggle_settings,
+            'settings.toggle': self._msg_toggle_settings,
             'setModel': lambda d: self.set_model_from_ui(d) if isinstance(d, str) else None,
             # Card Operations
             'previewCard': self._msg_preview_card,
@@ -375,8 +465,8 @@ class ChatbotWidget(QWidget):
             'loadMultipleChoice': self._msg_load_multiple_choice,
             'hasMultipleChoice': self._msg_has_multiple_choice,
             # Deck Operations
-            'getCurrentDeck': lambda d: self._send_to_frontend("currentDeck", json.loads(self.bridge.getCurrentDeck())),
-            'getAvailableDecks': lambda d: self._send_to_frontend("availableDecks", json.loads(self.bridge.getAvailableDecks())),
+            'getCurrentDeck': lambda d: self._send_to_frontend("currentDeck", self._safe_json_loads(self.bridge.getCurrentDeck(), default={}, context="getCurrentDeck")),
+            'getAvailableDecks': lambda d: self._send_to_frontend("availableDecks", self._safe_json_loads(self.bridge.getAvailableDecks(), default=[], context="getAvailableDecks")),
             'openDeck': lambda d: self.bridge.openDeck(int(d)) if isinstance(d, (int, float)) else None,
             'openDeckBrowser': lambda d: self.bridge.openDeckBrowser(),
             'getDeckStats': self._msg_get_deck_stats,
@@ -389,6 +479,7 @@ class ChatbotWidget(QWidget):
             'getCardInsights': self._msg_get_card_insights,
             'saveCardInsights': self._msg_save_card_insights,
             'getCardRevlog': self._msg_get_card_revlog,
+            'markInsightsSeen': self._msg_mark_insights_seen,
             'loadDeckMessages': self._msg_load_deck_messages,
             'saveDeckMessage': self._msg_save_deck_message,
             # Config & Settings
@@ -397,24 +488,65 @@ class ChatbotWidget(QWidget):
             'getAITools': self._msg_get_ai_tools,
             'saveAITools': self._msg_save_ai_tools,
             'saveMascotEnabled': self._msg_save_mascot_enabled,
+            'saveSubagentEnabled': self._msg_save_subagent_enabled,
+            'getResearchSources': self._msg_get_research_sources,
+            'saveResearchSources': self._msg_save_research_sources,
+            'getEmbeddingStatus': self._msg_get_embedding_status,
+            'getPlusiMenuData': self._msg_get_plusi_menu_data,
+            'savePlusiAutonomy': self._msg_save_plusi_autonomy,
             'saveTheme': self._msg_save_theme,
             'getTheme': self._msg_get_theme,
+            'saveSystemQuality': self._msg_save_system_quality,
+            'getToolRegistry': self._msg_get_tool_registry,
             # Auth
             'authenticate': self._msg_authenticate,
-            'getAuthStatus': lambda d: self._send_to_frontend("authStatusLoaded", json.loads(self.bridge.getAuthStatus())),
-            'getAuthToken': lambda d: self._send_to_frontend("authTokenLoaded", json.loads(self.bridge.getAuthToken())),
-            'refreshAuth': lambda d: self._send_to_frontend("authRefreshResult", json.loads(self.bridge.refreshAuth())),
+            'getAuthStatus': lambda d: self._send_to_frontend("authStatusLoaded", self._safe_json_loads(self.bridge.getAuthStatus(), default={}, context="getAuthStatus")),
+            'getAuthToken': lambda d: self._send_to_frontend("authTokenLoaded", self._safe_json_loads(self.bridge.getAuthToken(), default={}, context="getAuthToken")),
+            'refreshAuth': lambda d: self._send_to_frontend("authRefreshResult", self._safe_json_loads(self.bridge.refreshAuth(), default={}, context="refreshAuth")),
             'logout': lambda d: self.bridge.logout(),
             'startLinkAuth': lambda d: self.bridge.startLinkAuth(),
             'handleAuthDeepLink': self._msg_handle_auth_deep_link,
             # Media
             'fetchImage': self._msg_fetch_image,
             # Utilities
-            'openUrl': lambda d: self.bridge.openUrl(d) if isinstance(d, str) else None,
+            'openUrl': lambda d: self.bridge.openUrl(d.get('url', '') if isinstance(d, dict) else d),
+            'pycmd': self._msg_pycmd,
             'debugLog': self._msg_debug_log,
             'plusiPanel': self._msg_plusi_settings,
             'plusiSettings': self._msg_plusi_settings,
-            'plusiDirect': self._msg_plusi_direct,
+            'subagentDirect': self._msg_subagent_direct,
+            'plusiLike': self._msg_plusi_like,
+            'resetPlusi': self._msg_reset_plusi,
+            'textFieldFocus': self._msg_text_field_focus,
+            'jsError': self._msg_js_error,
+            # Deck actions (from MainViewWidget — SP2 unification)
+            'deck.study': self._msg_study_deck,
+            'deck.select': self._msg_select_deck,
+            'deck.create': self._msg_create_deck,
+            'deck.import': self._msg_import_deck,
+            'deck.options': self._msg_open_deck_options,
+            # View actions
+            'view.navigate': self._msg_navigate,
+            # Deck-level chat (FreeChat persistence)
+            'chat.load': self._msg_load_deck_messages,
+            'chat.save': self._msg_save_deck_message,
+            'chat.clear': self._msg_clear_deck_messages,
+            'chat.stateChanged': self._msg_freechat_state,
+            # Stats
+            'stats.open': self._msg_open_stats,
+            # Card review (React ReviewerView)
+            'card.flip': self._msg_flip_card,
+            'card.rate': self._msg_rate_card,
+            'card.evaluate': self._msg_evaluate_answer,
+            'card.mc.generate': self._msg_generate_mc,
+            'card.requestCurrent': self._msg_request_current_card,
+            # Settings sidebar actions (forwarded from main bridge)
+            'sidebarCopyLogs': self._msg_copy_logs,
+            'sidebarGetStatus': self._msg_get_sidebar_status,
+            'sidebarSetTheme': self._msg_set_theme,
+            'sidebarOpenNativeSettings': lambda d: __import__('aqt', fromlist=['mw']).mw.onPrefs(),
+            'sidebarOpenUpgrade': lambda d: __import__('webbrowser').open('https://anki-plus.vercel.app/#pricing'),
+            'sidebarLogout': self._msg_sidebar_logout,
         }
         return handlers.get(msg_type)
 
@@ -449,7 +581,7 @@ class ChatbotWidget(QWidget):
             from aqt import mw
             if mw and mw.reviewer and mw.reviewer.web:
                 mw.reviewer.web.eval('if(window.setChatOpen) setChatOpen(false);')
-        except Exception:
+        except (AttributeError, RuntimeError):
             pass
 
     def _msg_advance_card(self, data):
@@ -460,7 +592,7 @@ class ChatbotWidget(QWidget):
                 mw.reviewer.web.eval(
                     'if(window.setChatOpen) setChatOpen(false);'
                     'if(window.rateCard) rateCard(window.autoRateEase || 3);')
-        except Exception as e:
+        except (AttributeError, RuntimeError) as e:
             logger.error("advanceCard error: %s", e)
 
     def _msg_preview_card(self, data):
@@ -489,33 +621,63 @@ class ChatbotWidget(QWidget):
     def _msg_get_card_details(self, data):
         if isinstance(data, dict) and data.get('cardId'):
             result = self.bridge.getCardDetails(str(data['cardId']))
-            self._send_to_frontend("cardDetails", json.loads(result), {"callbackId": data.get('callbackId')})
+            try:
+                parsed = json.loads(result)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning("Failed to parse bridge response for getCardDetails: %s", e)
+                parsed = {}
+            self._send_to_frontend("cardDetails", parsed, {"callbackId": data.get('callbackId')})
 
     def _msg_save_multiple_choice(self, data):
         if isinstance(data, dict) and data.get('cardId') and data.get('quizDataJson'):
             result = self.bridge.saveMultipleChoice(int(data['cardId']), data['quizDataJson'])
-            self._send_to_frontend("saveMultipleChoiceResult", json.loads(result), {"callbackId": data.get('callbackId')})
+            try:
+                parsed = json.loads(result)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning("Failed to parse bridge response for saveMultipleChoice: %s", e)
+                parsed = {}
+            self._send_to_frontend("saveMultipleChoiceResult", parsed, {"callbackId": data.get('callbackId')})
 
     def _msg_load_multiple_choice(self, data):
         if isinstance(data, dict) and data.get('cardId'):
             result = self.bridge.loadMultipleChoice(int(data['cardId']))
-            self._send_to_frontend("loadMultipleChoiceResult", json.loads(result), {"callbackId": data.get('callbackId')})
+            try:
+                parsed = json.loads(result)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning("Failed to parse bridge response for loadMultipleChoice: %s", e)
+                parsed = {}
+            self._send_to_frontend("loadMultipleChoiceResult", parsed, {"callbackId": data.get('callbackId')})
 
     def _msg_has_multiple_choice(self, data):
         if isinstance(data, dict) and data.get('cardId'):
             result = self.bridge.hasMultipleChoice(int(data['cardId']))
-            self._send_to_frontend("hasMultipleChoiceResult", json.loads(result), {"callbackId": data.get('callbackId')})
+            try:
+                parsed = json.loads(result)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning("Failed to parse bridge response for hasMultipleChoice: %s", e)
+                parsed = {}
+            self._send_to_frontend("hasMultipleChoiceResult", parsed, {"callbackId": data.get('callbackId')})
 
     def _msg_get_deck_stats(self, data):
         if isinstance(data, (int, float)):
             deck_id = int(data)
             result = self.bridge.getDeckStats(deck_id)
-            self._send_to_frontend("deckStats", json.loads(result), {"deckId": deck_id})
+            try:
+                parsed = json.loads(result)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning("Failed to parse bridge response for getDeckStats: %s", e)
+                parsed = {}
+            self._send_to_frontend("deckStats", parsed, {"deckId": deck_id})
 
     def _msg_generate_section_title(self, data):
         if isinstance(data, dict):
             result = self.bridge.generateSectionTitle(data.get('question', ''), data.get('answer', ''))
-            self._send_to_frontend("sectionTitleGenerated", json.loads(result))
+            try:
+                parsed = json.loads(result)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning("Failed to parse bridge response for generateSectionTitle: %s", e)
+                parsed = {}
+            self._send_to_frontend("sectionTitleGenerated", parsed)
 
     def _msg_load_card_session(self, data):
         from ..storage.card_sessions import load_card_session
@@ -527,7 +689,11 @@ class ChatbotWidget(QWidget):
     def _msg_save_card_session(self, data):
         from ..storage.card_sessions import save_card_session
         if isinstance(data, str):
-            data = json.loads(data)
+            try:
+                data = json.loads(data)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning("Failed to parse data for saveCardSession: %s", e)
+                return
         card_id = data.get('cardId') or data.get('card_id')
         if card_id:
             save_card_session(int(card_id), data)
@@ -535,7 +701,11 @@ class ChatbotWidget(QWidget):
     def _msg_save_card_message(self, data):
         from ..storage.card_sessions import save_message
         if isinstance(data, str):
-            data = json.loads(data)
+            try:
+                data = json.loads(data)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning("Failed to parse data for saveCardMessage: %s", e)
+                return
         card_id = data.get('cardId') or data.get('card_id')
         if card_id:
             save_message(int(card_id), data.get('message', data))
@@ -543,7 +713,11 @@ class ChatbotWidget(QWidget):
     def _msg_save_card_section(self, data):
         from ..storage.card_sessions import save_section
         if isinstance(data, str):
-            data = json.loads(data)
+            try:
+                data = json.loads(data)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning("Failed to parse data for saveCardSection: %s", e)
+                return
         card_id = data.get('cardId') or data.get('card_id')
         if card_id:
             save_section(int(card_id), data.get('section', data))
@@ -600,6 +774,18 @@ class ChatbotWidget(QWidget):
         self._extraction_thread.error_signal.connect(_on_error)
         self._extraction_thread.start()
 
+    def _msg_mark_insights_seen(self, data):
+        """Mark all current insights as seen (update seen_hashes)."""
+        from ..storage.card_sessions import load_insights, save_insights
+        from ..storage.insights import insight_hash
+        card_id = data.get('cardId') if isinstance(data, dict) else int(data)
+        if not card_id:
+            return
+        current = load_insights(int(card_id))
+        hashes = [insight_hash(ins.get('text', '')) for ins in current.get('insights', [])]
+        current['seen_hashes'] = hashes
+        save_insights(int(card_id), current)
+
     def _msg_load_deck_messages(self, data):
         deck_id = data if isinstance(data, (int, str)) else data.get('deckId')
         try:
@@ -641,14 +827,37 @@ class ChatbotWidget(QWidget):
             from .theme import get_resolved_theme
         except ImportError:
             from ui.theme import get_resolved_theme
-        self._send_to_frontend("configLoaded", {
+        config_data = {
             "api_key": config.get("api_key", "").strip(),
             "provider": "google",
             "model": config.get("model_name", ""),
             "mascot_enabled": config.get("mascot_enabled", False),
+            "ai_tools": config.get("ai_tools", {
+                "images": True, "diagrams": True, "card_search": True,
+                "statistics": True, "molecules": False, "compact": True,
+            }),
             "theme": config.get("theme", "dark"),
             "resolvedTheme": get_resolved_theme(),
-        })
+        }
+        self._send_to_frontend_with_event(
+            "configLoaded", {"type": "configLoaded", "data": config_data},
+            "ankiConfigLoaded")
+
+        # Also push subagent registry (frontend is guaranteed ready at this point)
+        try:
+            try:
+                from ..ai.agents import get_registry_for_frontend
+            except ImportError:
+                from ai.agents import get_registry_for_frontend
+            registry_payload = {
+                'type': 'subagent_registry',
+                'agents': get_registry_for_frontend(config)
+            }
+            self.web_view.page().runJavaScript(
+                f"window.ankiReceive({json.dumps(registry_payload)});"
+            )
+        except Exception as e:
+            logger.error("Failed to push subagent registry on config: %s", e)
 
     def _msg_fetch_models(self, data):
         if not isinstance(data, dict):
@@ -669,7 +878,9 @@ class ChatbotWidget(QWidget):
 
     def _msg_get_ai_tools(self, data):
         tools = json.loads(self.bridge.getAITools())
-        self._send_to_frontend("aiToolsLoaded", tools)
+        self._send_to_frontend_with_event(
+            "aiToolsLoaded", {"type": "aiToolsLoaded", "data": tools},
+            "ankiAiToolsLoaded")
         self.web_view.page().runJavaScript(f"window._cachedAITools = {json.dumps(tools)};")
 
     def _msg_save_ai_tools(self, data):
@@ -686,12 +897,200 @@ class ChatbotWidget(QWidget):
         update_config(mascot_enabled=enabled)
         self.config = get_config(force_reload=True)
         self._send_to_frontend("mascotEnabledSaved", {"enabled": enabled})
+        # Dynamically hide/show the native Plusi dock in reviewer/deckBrowser webviews
+        try:
+            try:
+                from ..plusi.dock import hide_dock, get_plusi_dock_injection, _get_active_webview
+            except ImportError:
+                from plusi.dock import hide_dock, get_plusi_dock_injection, _get_active_webview
+            if not enabled:
+                hide_dock()
+            else:
+                # Re-inject dock into active webview when Plusi is turned back on
+                web = _get_active_webview()
+                if web:
+                    injection = get_plusi_dock_injection()
+                    if injection:
+                        # Check if dock already exists before injecting
+                        js = (
+                            "if(!document.getElementById('plusi-dock')){"
+                            "var _r=document.createRange();"
+                            "var _f=_r.createContextualFragment(%s);"
+                            "document.body.appendChild(_f);}"
+                        ) % json.dumps(injection)
+                        web.page().runJavaScript(js)
+        except (ImportError, AttributeError, RuntimeError) as e:
+            logger.warning("Failed to toggle Plusi dock: %s", e)
+
+    def _msg_save_subagent_enabled(self, data):
+        """Toggle any subagent on/off by its enabled_key."""
+        try:
+            name = data.get('name', '') if isinstance(data, dict) else ''
+            enabled = bool(data.get('enabled', False)) if isinstance(data, dict) else False
+            # Map subagent name to its config enabled_key
+            try:
+                from ..ai.agents import AGENT_REGISTRY
+            except ImportError:
+                from ai.agents import AGENT_REGISTRY
+            agent = AGENT_REGISTRY.get(name)
+            if agent:
+                update_config(**{agent.enabled_key: enabled})
+                self.config = get_config(force_reload=True)
+                logger.info("Subagent %s %s", name, "enabled" if enabled else "disabled")
+            else:
+                logger.warning("Unknown subagent: %s", name)
+        except Exception as e:
+            logger.exception("saveSubagentEnabled error: %s", e)
+
+    def _msg_get_research_sources(self, data):
+        """Return current research source toggles."""
+        config = get_config()
+        sources = config.get('research_sources', {'pubmed': True, 'wikipedia': True})
+        self._send_to_frontend('researchSourcesLoaded', sources)
+
+    def _msg_save_research_sources(self, data):
+        """Save research source toggles to config."""
+        try:
+            if isinstance(data, dict):
+                update_config(research_sources=data)
+                self.config = get_config(force_reload=True)
+                logger.info("Research sources updated: %s", data)
+        except Exception as e:
+            logger.exception("saveResearchSources error: %s", e)
+
+    def _msg_get_embedding_status(self, data):
+        """Return embedding indexing progress to frontend."""
+        try:
+            try:
+                from ..storage.card_sessions import count_embeddings
+            except ImportError:
+                from storage.card_sessions import count_embeddings
+
+            embedded = count_embeddings()
+
+            total = 0
+            try:
+                from aqt import mw as _mw
+                if _mw and _mw.col:
+                    total = len(_mw.col.find_cards(""))
+            except (AttributeError, RuntimeError) as e:
+                logger.debug("Could not get total card count for embedding status: %s", e)
+
+            is_running = False
+            try:
+                try:
+                    from .. import get_embedding_manager
+                except ImportError:
+                    from __init__ import get_embedding_manager
+                mgr = get_embedding_manager()
+                if mgr and mgr._background_thread and mgr._background_thread.isRunning():
+                    is_running = True
+            except (ImportError, AttributeError, RuntimeError) as e:
+                logger.debug("Could not get embedding manager status: %s", e)
+
+            result = {"totalCards": total, "embeddedCards": embedded, "isRunning": is_running}
+            self._send_to_frontend_with_event(
+                "embeddingStatusLoaded", {"type": "embeddingStatusLoaded", "data": result},
+                "ankiEmbeddingStatusLoaded")
+        except Exception as e:
+            logger.exception("_msg_get_embedding_status error: %s", e)
+            result = {"totalCards": 0, "embeddedCards": 0, "isRunning": False}
+            self._send_to_frontend_with_event(
+                "embeddingStatusLoaded", {"type": "embeddingStatusLoaded", "data": result},
+                "ankiEmbeddingStatusLoaded")
+
+    def _msg_get_plusi_menu_data(self, data=None):
+        """Return all data needed for the Plusi Menu view."""
+        try:
+            try:
+                from ..plusi.storage import (
+                    compute_personality_position, get_memory,
+                    get_friendship_data, load_diary, get_category
+                )
+                from ..config import get_config
+            except ImportError:
+                from plusi.storage import (
+                    compute_personality_position, get_memory,
+                    get_friendship_data, load_diary, get_category
+                )
+                from config import get_config
+
+            # Personality
+            position = compute_personality_position()
+            trail = get_memory('personality', 'trail', default=[])
+
+            # Current state — mood from most recent diary entry
+            state_data = get_category('state')
+            last_mood = 'neutral'
+            try:
+                diary_entries = load_diary(limit=1)
+                if diary_entries:
+                    last_mood = diary_entries[0].get('mood', 'neutral')
+            except Exception as e:
+                logger.debug("Could not load last diary mood: %s", e)
+
+            state = {
+                'energy': state_data.get('energy', 5),
+                'mood': last_mood,
+                'obsession': state_data.get('obsession', None),
+            }
+
+            # Friendship
+            friendship = get_friendship_data()
+
+            # Diary (full list)
+            diary = load_diary(limit=50)
+
+            # Autonomy config
+            config = get_config()
+            autonomy = config.get('plusi_autonomy', {})
+
+            result = {
+                'personality': {
+                    'position': {'x': position['x'], 'y': position['y']},
+                    'quadrant': position['quadrant'],
+                    'quadrant_label': position['quadrant_label'],
+                    'confident': position['confident'],
+                    'trail': trail,
+                },
+                'state': state,
+                'friendship': friendship,
+                'diary': diary,
+                'autonomy': autonomy,
+            }
+
+            self._send_to_frontend_with_event(
+                'plusiMenuData', result, 'ankiPlusiMenuDataLoaded'
+            )
+        except Exception:
+            logger.exception("Failed to load Plusi menu data")
+            self._send_to_frontend_with_event(
+                'plusiMenuData', {}, 'ankiPlusiMenuDataLoaded'
+            )
+
+    def _msg_save_plusi_autonomy(self, data):
+        """Save Plusi autonomy config (token budget, capabilities)."""
+        try:
+            try:
+                from ..config import update_config
+            except ImportError:
+                from config import update_config
+            if isinstance(data, dict):
+                update_config(plusi_autonomy=data)
+        except Exception:
+            logger.exception("Failed to save Plusi autonomy config")
 
     def _msg_save_theme(self, data):
         """Save theme setting and push it back to all web views."""
-        theme = str(data) if data else "dark"
+        if isinstance(data, dict):
+            theme = data.get("theme", data.get("value", str(data)))
+        else:
+            theme = str(data) if data else "dark"
+        theme = theme.strip().lower()
         if theme not in ("dark", "light", "system"):
+            logger.warning("Invalid theme value: %s, falling back to dark", theme)
             theme = "dark"
+        logger.info("Saving theme: %s", theme)
         update_config(theme=theme)
         self.config = get_config(force_reload=True)
         self._apply_theme_to_webview()
@@ -707,6 +1106,32 @@ class ChatbotWidget(QWidget):
         stored = config.get("theme", "dark")
         self._send_to_frontend("themeLoaded", {"theme": stored, "resolvedTheme": resolved})
 
+    def _msg_save_system_quality(self, data):
+        """Save system quality mode (standard/deep)."""
+        quality = data.get('quality', 'standard') if isinstance(data, dict) else data
+        self.bridge.saveSystemQuality(quality if isinstance(quality, str) else 'standard')
+
+    def _msg_get_tool_registry(self, data):
+        """Return all tools from all agents for the frontend registry."""
+        try:
+            try:
+                from ..ai.tools import registry as tool_registry
+                from ..ai.agents import AGENT_REGISTRY
+            except ImportError:
+                from ai.tools import registry as tool_registry
+                from ai.agents import AGENT_REGISTRY
+            config = get_config()
+            all_tools = set()
+            for agent in AGENT_REGISTRY.values():
+                all_tools.update(agent.tools)
+            tools_data = tool_registry.get_tools_for_frontend(list(all_tools), config)
+            payload = json.dumps(tools_data)
+            self.web_view.page().runJavaScript(
+                f"window.ankiReceive({{type:'ankiToolRegistryLoaded', data:{payload}}});"
+            )
+        except Exception as e:
+            logger.exception("getToolRegistry error: %s", e)
+
     def _apply_theme_to_webview(self):
         """Push the current theme to ALL active webviews and refresh Qt stylesheet."""
         try:
@@ -717,8 +1142,13 @@ class ChatbotWidget(QWidget):
         stored_theme = config.get("theme", "dark")
         resolved = get_resolved_theme()
 
-        # JS to set data-theme attribute on any webview
-        set_theme_js = f"document.documentElement.setAttribute('data-theme', '{resolved}');"
+        # JS to set data-theme attribute on any webview + force CSS repaint
+        set_theme_js = f"""(function() {{
+            document.documentElement.setAttribute('data-theme', '{resolved}');
+            document.documentElement.style.colorScheme = '{resolved}';
+            document.body && (document.body.style.transition = 'none');
+            void document.body?.offsetHeight;
+        }})();"""
 
         # JS for the chat panel (also notifies React)
         chat_js = f"""
@@ -737,28 +1167,23 @@ class ChatbotWidget(QWidget):
         if self.web_view:
             self.web_view.page().runJavaScript(chat_js)
 
-        # 2. Reviewer webview (uses Anki's .eval method on AnkiWebView)
+        # 2-4. Push theme to all Anki webviews (reviewer, deck browser, overview)
+        # NOTE: AnkiWebView.eval() is Anki's built-in JS execution method (not Python eval).
         try:
             from aqt import mw as _mw
-            if _mw and _mw.reviewer and hasattr(_mw.reviewer, 'web') and _mw.reviewer.web:
-                _mw.reviewer.web.page().runJavaScript(set_theme_js)
-        except Exception:
-            pass
-
-        # 3. Deck browser webview
-        try:
-            from aqt import mw as _mw
-            if _mw and hasattr(_mw, 'deckBrowser') and _mw.deckBrowser and hasattr(_mw.deckBrowser, 'web') and _mw.deckBrowser.web:
-                _mw.deckBrowser.web.page().runJavaScript(set_theme_js)
-        except Exception:
-            pass
-
-        # 4. Overview webview
-        try:
-            from aqt import mw as _mw
-            if _mw and hasattr(_mw, 'overview') and _mw.overview and hasattr(_mw.overview, 'web') and _mw.overview.web:
-                _mw.overview.web.page().runJavaScript(set_theme_js)
-        except Exception:
+            if _mw:
+                for wv_source in [
+                    lambda: _mw.reviewer.web if _mw.reviewer else None,
+                    lambda: _mw.deckBrowser.web if hasattr(_mw, 'deckBrowser') and _mw.deckBrowser else None,
+                    lambda: _mw.overview.web if hasattr(_mw, 'overview') and _mw.overview else None,
+                ]:
+                    try:
+                        wv = wv_source()
+                        if wv:
+                            wv.page().runJavaScript(set_theme_js)
+                    except (AttributeError, RuntimeError):
+                        pass
+        except (AttributeError, RuntimeError):
             pass
 
         # 5. Plusi panel webview
@@ -768,7 +1193,7 @@ class ChatbotWidget(QWidget):
                 pw = plusi_panel._panel_widget
                 if hasattr(pw, 'web_view') and pw.web_view:
                     pw.web_view.page().runJavaScript(set_theme_js)
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             pass
 
         # 6. Re-apply Qt global theme stylesheet with new token colors
@@ -776,16 +1201,10 @@ class ChatbotWidget(QWidget):
             from .global_theme import apply_global_dark_theme, _app_initialized
             if _app_initialized:
                 apply_global_dark_theme()
-        except Exception:
-            pass
+        except (ImportError, AttributeError, RuntimeError) as e:
+            logger.debug("Could not re-apply global theme on theme change: %s", e)
 
-        # 7. Re-apply QDockWidget stylesheet for sidebar
-        try:
-            from .setup import _chatbot_dock, get_dock_widget_style
-            if _chatbot_dock:
-                _chatbot_dock.setStyleSheet(get_dock_widget_style())
-        except Exception:
-            pass
+        # 7. QDockWidget removed — sidebar is now inside MainViewWidget
 
     def _msg_authenticate(self, data):
         if isinstance(data, dict):
@@ -812,8 +1231,8 @@ class ChatbotWidget(QWidget):
             os.makedirs(os.path.dirname(log_path), exist_ok=True)
             with open(log_path, 'a', encoding='utf-8') as f:
                 f.write(data + '\n')
-        except Exception:
-            pass
+        except (OSError, IOError) as e:
+            logger.debug("Could not write debug log: %s", e)
 
     def _msg_plusi_panel(self, data):
         """Legacy: redirects to settings."""
@@ -821,77 +1240,159 @@ class ChatbotWidget(QWidget):
 
     def _msg_plusi_settings(self, data):
         try:
-            from ..ui.settings import show_settings
-        except ImportError:
-            from ui.settings import show_settings
-        show_settings()
+            from aqt import mw
+            if mw:
+                mw.onPrefs()
+        except (AttributeError, RuntimeError) as e:
+            logger.warning("Could not open Anki preferences: %s", e)
 
-    def _msg_plusi_direct(self, data):
-        msg_data = data if isinstance(data, dict) else json.loads(data) if isinstance(data, str) else {}
-        text = msg_data.get('text', '')
-        if text:
-            self._handle_plusi_direct(text, msg_data.get('deck_id'))
-
-    def _handle_plusi_direct(self, text, deck_id=None):
-        """Route @Plusi messages directly to plusi_agent.py"""
+    def _msg_plusi_like(self, data):
+        """Handle like on Plusi message."""
         try:
             try:
-                from ..plusi.agent import run_plusi
+                from ..plusi.storage import record_resonance_like
             except ImportError:
-                from plusi.agent import run_plusi
-
-            result = run_plusi(situation=text, deck_id=deck_id)
-            mood = result.get('mood', 'neutral')
-            friendship = result.get('friendship', {})
-            is_silent = result.get('silent', False)
-            payload = {
-                'type': 'plusi_direct_result',
-                'mood': mood,
-                'text': result.get('text', ''),
-                'meta': result.get('meta', ''),
-                'friendship': friendship,
-                'silent': is_silent,
-                'error': result.get('error', False)
-            }
-            self.web_view.page().runJavaScript(
-                f"window.ankiReceive({json.dumps(payload)});"
-            )
-            # Sync mood to main window Plusi dock
-            try:
-                try:
-                    from ..plusi.dock import sync_mood
-                except ImportError:
-                    from plusi.dock import sync_mood
-                sync_mood(mood)
-            except Exception as e:
-                logger.error("plusi dock sync error: %s", e)
-            # Notify panel of diary entry and state changes
-            try:
-                from ..plusi.panel import notify_new_diary_entry, update_panel_mood, update_panel_friendship
-                if result.get('diary'):
-                    notify_new_diary_entry()
-                update_panel_mood(mood)
-                if friendship:
-                    update_panel_friendship(friendship)
-            except Exception as e:
-                logger.error("plusi panel notify error: %s", e)
-            # Check if a reflect window is open — trigger after interaction
-            try:
-                from .. import check_and_trigger_reflect
-                check_and_trigger_reflect()
-            except Exception:
-                pass
+                from plusi.storage import record_resonance_like
+            record_resonance_like()
+            logger.info("plusi like recorded from UI")
         except Exception as e:
-            logger.error("plusiDirect error: %s", e)
+            logger.exception("plusi like error: %s", e)
+
+    def _msg_reset_plusi(self, data):
+        """Reset Plusi — clear all memories, diary, and history."""
+        try:
+            try:
+                from ..plusi.storage import _get_db
+            except ImportError:
+                from plusi.storage import _get_db
+            db = _get_db()
+            db.execute("DELETE FROM plusi_memory")
+            db.execute("DELETE FROM plusi_diary")
+            db.execute("DELETE FROM plusi_history")
+            db.commit()
+            logger.info("plusi RESET: all memories, diary, and history cleared")
+        except Exception as e:
+            logger.exception("plusi reset error: %s", e)
+
+    def _msg_subagent_direct(self, data):
+        """Handle @Name subagent direct call from frontend."""
+        msg_data = data if isinstance(data, dict) else json.loads(data) if isinstance(data, str) else {}
+        agent_name = msg_data.get('agent_name', '')
+        text = msg_data.get('text', '')
+        extra = {k: v for k, v in msg_data.items() if k not in ('agent_name', 'text')}
+        if agent_name and text:
+            self._handle_subagent_direct(agent_name, text, extra)
+
+    def _handle_subagent_direct(self, agent_name, text, extra=None):
+        """Route @Name messages to the appropriate subagent in a background thread."""
+        try:
+            from ..ai.agents import AGENT_REGISTRY, lazy_load_run_fn
+        except ImportError:
+            from ai.agents import AGENT_REGISTRY, lazy_load_run_fn
+        agent = AGENT_REGISTRY.get(agent_name)
+        if not agent:
+            logger.warning("Unknown subagent: %s", agent_name)
+            return
+        if not self.config.get(agent.enabled_key, False):
+            logger.info("Subagent %s is disabled", agent_name)
+            return
+        run_fn = lazy_load_run_fn(agent)
+        kwargs = {**agent.extra_kwargs, **(extra or {})}
+        thread = SubagentThread(agent_name, run_fn, text, **kwargs)
+        thread.finished_signal.connect(self._on_subagent_finished)
+        thread.error_signal.connect(self._on_subagent_error)
+        self._active_subagent_thread = thread
+        thread.start()
+
+    def _on_subagent_finished(self, agent_name, result):
+        """Handle subagent result on main thread — emit to JS + run agent-specific side effects."""
+        try:
             payload = {
-                'type': 'plusi_direct_result',
-                'mood': 'neutral',
-                'text': '',
-                'error': True
+                'type': 'subagent_result',
+                'agent_name': agent_name,
+                'result': result,  # Pass full result dict — agent-specific
+                # Legacy Plusi fields for backwards compatibility
+                'text': result.get('text', ''),
+                'mood': result.get('mood', 'neutral'),
+                'meta': result.get('meta', ''),
+                'friendship': result.get('friendship', {}),
+                'silent': result.get('silent', False),
+                'error': result.get('error', False),
             }
             self.web_view.page().runJavaScript(
                 f"window.ankiReceive({json.dumps(payload)});"
             )
+            # Run agent-specific post-processing (mood sync, panel notify, etc.)
+            try:
+                from ..ai.agents import AGENT_REGISTRY
+            except ImportError:
+                from ai.agents import AGENT_REGISTRY
+            agent = AGENT_REGISTRY.get(agent_name)
+            if agent and agent.on_finished:
+                try:
+                    agent.on_finished(self, agent_name, result)
+                except Exception as e:
+                    logger.error("Subagent[%s] on_finished error: %s", agent_name, e)
+        except Exception as e:
+            logger.error("Subagent[%s] finished handler error: %s", agent_name, e)
+
+    def _on_subagent_error(self, agent_name, error_msg):
+        """Handle subagent error on main thread."""
+        logger.error("Subagent[%s] error: %s", agent_name, error_msg)
+        payload = {
+            'type': 'subagent_result',
+            'agent_name': agent_name,
+            'text': '',
+            'error': True,
+        }
+        self.web_view.page().runJavaScript(
+            f"window.ankiReceive({json.dumps(payload)});"
+        )
+
+    def _sync_plusi_integrity(self):
+        """Sync integrity glow and sleep state to dock."""
+        try:
+            try:
+                from ..plusi.storage import compute_integrity, get_memory
+            except ImportError:
+                from plusi.storage import compute_integrity, get_memory
+            try:
+                from ..plusi.dock import _get_active_webview
+            except ImportError:
+                from plusi.dock import _get_active_webview
+            integrity = compute_integrity()
+            is_sleeping = get_memory('state', 'is_sleeping', False)
+
+            web = _get_active_webview()
+            if web:
+                web.page().runJavaScript(
+                    f"if(window._plusiSetIntegrity) window._plusiSetIntegrity({integrity});"
+                )
+                sleeping_str = 'true' if is_sleeping else 'false'
+                web.page().runJavaScript(
+                    f"if(window._plusiSetSleeping) window._plusiSetSleeping({sleeping_str});"
+                )
+        except Exception as e:
+            logger.exception("plusi integrity sync error: %s", e)
+
+    def _msg_js_error(self, data):
+        """Log JavaScript errors from the React frontend."""
+        if isinstance(data, dict):
+            logger.error("Frontend JS Error: %s\nStack: %s\nComponent: %s",
+                          data.get('message', '?'), data.get('stack', ''), data.get('component', ''))
+        else:
+            logger.error("Frontend JS Error: %s", data)
+
+    def _msg_text_field_focus(self, data):
+        """Handle text field focus state changes from JavaScript."""
+        try:
+            from .shortcut_filter import get_shortcut_filter
+        except ImportError:
+            from ui.shortcut_filter import get_shortcut_filter
+        filt = get_shortcut_filter()
+        if filt:
+            focused = data.get('focused', False) if isinstance(data, dict) else False
+            filt.set_text_field_focus(focused, self.web_view)
 
     def push_initial_state(self):
         """Sendet Start-Config an die Web-UI"""
@@ -915,7 +1416,7 @@ class ChatbotWidget(QWidget):
         try:
             deck_info = self.bridge.getCurrentDeck()
             deck_data = json.loads(deck_info)
-        except Exception as e:
+        except (AttributeError, RuntimeError, json.JSONDecodeError) as e:
             logger.error("Fehler beim Abrufen des Decks: %s", e)
             deck_data = {"deckId": None, "deckName": None, "isInDeck": False}
 
@@ -942,7 +1443,33 @@ class ChatbotWidget(QWidget):
         self.web_view.page().runJavaScript(js)
         # Also apply data-theme attribute immediately
         self._apply_theme_to_webview()
-    
+
+        # Push subagent registry to frontend
+        try:
+            try:
+                from ..ai.agents import get_registry_for_frontend
+            except ImportError:
+                from ai.agents import get_registry_for_frontend
+            registry_payload = {
+                'type': 'subagent_registry',
+                'agents': get_registry_for_frontend(self.config)
+            }
+            self.web_view.page().runJavaScript(
+                f"window.ankiReceive({json.dumps(registry_payload)});"
+            )
+        except Exception as e:
+            logger.error("Failed to push subagent registry: %s", e)
+
+        # Register our webview with addon proxy so it can inject assets when captured
+        # Assets may not be captured yet (reviewer hasn't loaded), but when they are,
+        # the capture hook will immediately inject into this webview
+        try:
+            from .addon_proxy import set_target_webview, inject_addon_assets
+            set_target_webview(self.web_view)
+            inject_addon_assets(self.web_view)  # inject now if assets already captured
+        except (ImportError, AttributeError, RuntimeError) as e:
+            logger.warning("Addon proxy setup failed: %s", e)
+
     def push_updated_models(self):
         """Sendet aktualisierte Model-Liste an die Web-UI"""
         api_key = self.config.get("api_key", "")
@@ -1023,8 +1550,9 @@ class ChatbotWidget(QWidget):
                 try:
                     from plusi.dock import sync_mood
                     QTimer.singleShot(0, lambda: sync_mood(mood))
-                except Exception:
+                except (ImportError, AttributeError, RuntimeError):
                     pass
+                QTimer.singleShot(0, lambda: self._sync_plusi_integrity())
 
         set_frontend_callback(_push_to_frontend)
 
@@ -1074,12 +1602,26 @@ class ChatbotWidget(QWidget):
             self._ai_thread.error_signal.connect(self.on_streaming_error)
             self._ai_thread.metadata_signal.connect(self.on_streaming_metadata)
             self._ai_thread.pipeline_signal.connect(self.on_pipeline_step)
+            self._ai_thread.msg_event_signal.connect(self.on_msg_event)
             self._ai_thread.start()
 
     def _send_to_js(self, payload):
         """Send a JSON payload to the frontend via ankiReceive."""
         js_code = f"window.ankiReceive({json.dumps(payload)});"
         self.web_view.page().runJavaScript(js_code)
+
+    def on_msg_event(self, request_id, event_type, data):
+        """Handle v2 structured message events from the AI thread — delivered via Qt signal."""
+        if event_type in ('msg_start', 'agent_cell', 'msg_done', 'text_chunk'):
+            chunk_preview = ''
+            if event_type == 'text_chunk' and isinstance(data, dict):
+                chunk_preview = ' chunk=%d' % len(data.get('chunk', ''))
+            logger.info("[v2-signal] on_msg_event: type=%s, data_is_dict=%s%s",
+                        event_type, isinstance(data, dict), chunk_preview)
+        payload = {"type": event_type}
+        if isinstance(data, dict):
+            payload.update(data)
+        self._send_to_js(payload)
 
     def on_pipeline_step(self, request_id, step, status, data):
         """Handle pipeline step events from the AI thread — delivered via Qt signal for real-time UI."""
@@ -1125,7 +1667,7 @@ class ChatbotWidget(QWidget):
 
     def on_streaming_finished(self, request_id):
         self.current_request = None
-        if hasattr(self, '_ai_thread'):
+        if hasattr(self, '_ai_thread') and self._ai_thread is not None:
             self._ai_thread.quit()
             self._ai_thread.wait(1000)
             self._ai_thread = None
@@ -1164,7 +1706,7 @@ class ChatbotWidget(QWidget):
             self.config = get_config(force_reload=True)
             logger.info("_save_settings: Config neu geladen, API-Key Länge: %s", len(self.config.get('api_key', '')))
             # Warte kurz, damit Config gespeichert ist, dann lade Modelle
-            QTimer.singleShot(100, self.push_updated_models)
+            QTimer.singleShot(SETTINGS_RELOAD_DELAY_MS, self.push_updated_models)
         else:
             logger.error("_save_settings: ✗ FEHLER beim Speichern der Config!")
     
@@ -1232,4 +1774,573 @@ class ChatbotWidget(QWidget):
                 
         except Exception as e:
             logger.exception("Fehler in _go_to_card: %s", e)
+
+    # ── Deck/Overview Data Gathering (SP2 unification) ────────────
+
+    def _get_deck_browser_data(self):
+        """Build complete deck tree data for React."""
+        from aqt import mw
+        if not mw or not mw.col:
+            logger.warning("mw.col not available, skipping _get_deck_browser_data")
+            return {'roots': [], 'totalNew': 0, 'totalLearn': 0, 'totalReview': 0, 'totalDue': 0, 'isPremium': False}
+        try:
+            all_decks = mw.col.decks.all_names_and_ids()
+
+            # Due counts
+            due_counts = {}
+            tree = mw.col.sched.deck_due_tree()
+            def traverse(node):
+                did = getattr(node, 'deck_id', None)
+                if did:
+                    due_counts[did] = {
+                        'new': getattr(node, 'new_count', 0),
+                        'learning': getattr(node, 'learn_count', 0),
+                        'review': getattr(node, 'review_count', 0),
+                    }
+                for child in getattr(node, 'children', []):
+                    traverse(child)
+            traverse(tree)
+
+            # Card distribution
+            card_dist = {}
+            try:
+                rows = mw.col.db.all("SELECT did, ivl, queue FROM cards")
+                for did, ivl, queue in rows:
+                    if did not in card_dist:
+                        card_dist[did] = [0, 0, 0, 0]
+                    card_dist[did][3] += 1
+                    if queue == 0:
+                        card_dist[did][2] += 1
+                    elif ivl >= 21:
+                        card_dist[did][0] += 1
+                    else:
+                        card_dist[did][1] += 1
+            except Exception as e:
+                logger.warning("Could not load card distribution data: %s", e)
+
+            # Build tree
+            by_name = {}
+            for deck in sorted(all_decks, key=lambda d: d.name):
+                parts = deck.name.split('::')
+                due = due_counts.get(deck.id, {'new': 0, 'learning': 0, 'review': 0})
+                cd = card_dist.get(deck.id, [0, 0, 0, 0])
+                by_name[deck.name] = {
+                    'id': deck.id,
+                    'name': deck.name,
+                    'display': parts[-1],
+                    'dueNew': due['new'],
+                    'dueLearn': due['learning'],
+                    'dueReview': due['review'],
+                    'mature': cd[0],
+                    'young': cd[1],
+                    'new': cd[2],
+                    'total': cd[3],
+                    'children': [],
+                }
+
+            roots = []
+            for name, node in by_name.items():
+                parts = name.split('::')
+                if len(parts) == 1:
+                    roots.append(node)
+                else:
+                    parent = '::'.join(parts[:-1])
+                    if parent in by_name:
+                        by_name[parent]['children'].append(node)
+                    else:
+                        roots.append(node)
+
+            # Aggregate child counts upward
+            def aggregate(node):
+                for child in node['children']:
+                    aggregate(child)
+                    node['mature'] += child['mature']
+                    node['young'] += child['young']
+                    node['new'] += child['new']
+                    node['total'] += child['total']
+
+            for root in roots:
+                aggregate(root)
+
+            roots.sort(key=lambda n: n['name'])
+
+            # Total dues
+            total_new = sum(n.new_count for n in tree.children)
+            total_lrn = sum(n.learn_count for n in tree.children)
+            total_rev = sum(n.review_count for n in tree.children)
+
+            # Premium status
+            cfg = get_config()
+            is_premium = bool(cfg.get('auth_token', '').strip()) and cfg.get('auth_validated', False)
+
+            return {
+                'roots': roots,
+                'totalNew': total_new,
+                'totalLearn': total_lrn,
+                'totalReview': total_rev,
+                'totalDue': total_new + total_lrn + total_rev,
+                'isPremium': is_premium,
+            }
+        except Exception as e:
+            logger.error("_get_deck_browser_data error: %s", e)
+            return {'roots': [], 'totalNew': 0, 'totalLearn': 0, 'totalReview': 0, 'totalDue': 0, 'isPremium': False}
+
+    def _get_overview_data(self):
+        """Get data for the overview screen."""
+        from aqt import mw
+        if not mw or not mw.col:
+            logger.warning("mw.col not available, skipping _get_overview_data")
+            return {'deckId': 0, 'deckName': '', 'dueNew': 0, 'dueLearning': 0, 'dueReview': 0}
+        try:
+            deck_id = mw.col.decks.get_current_id()
+            deck_name = mw.col.decks.name(deck_id)
+            counts = mw.col.sched.counts()
+            return {
+                'deckId': deck_id,
+                'deckName': deck_name,
+                'dueNew': counts[0],
+                'dueLearning': counts[1],
+                'dueReview': counts[2],
+            }
+        except Exception as e:
+            logger.error("_get_overview_data error: %s", e)
+            return {'deckId': 0, 'deckName': '', 'dueNew': 0, 'dueLearning': 0, 'dueReview': 0}
+
+    # ── Deck/Overview/FreeChat Action Handlers (SP2 unification) ──
+
+    def _msg_study_deck(self, data):
+        from aqt import mw
+        try:
+            parsed = json.loads(data) if isinstance(data, str) else data
+            did = int(parsed.get('deckId', 0))
+            if did:
+                mw.col.decks.select(did)
+                mw.onOverview()
+                QTimer.singleShot(STUDY_DECK_DELAY_MS, lambda: mw.overview._linkHandler('study'))
+        except (AttributeError, RuntimeError, ValueError) as e:
+            logger.error("study_deck error: %s", e)
+
+    def _msg_select_deck(self, data):
+        from aqt import mw
+        try:
+            parsed = json.loads(data) if isinstance(data, str) else data
+            did = int(parsed.get('deckId', 0))
+            if did:
+                mw.col.decks.select(did)
+                mw.onOverview()
+        except (AttributeError, RuntimeError, ValueError) as e:
+            logger.error("select_deck error: %s", e)
+
+    def _msg_navigate(self, data):
+        from aqt import mw
+        try:
+            state = data if isinstance(data, str) else str(data)
+            if state == 'deckBrowser':
+                mw.moveToState('deckBrowser')
+            elif state == 'overview':
+                mw.onOverview()
+            elif state == 'review':
+                # Always try to enter review — Anki will resume or start fresh
+                try:
+                    mw.moveToState('review')
+                except (AttributeError, RuntimeError):
+                    mw.onOverview()
+        except (AttributeError, RuntimeError) as e:
+            logger.error("navigate error: %s", e)
+
+    def _msg_clear_deck_messages(self, data=None):
+        try:
+            try:
+                from ..storage.card_sessions import clear_deck_messages
+            except ImportError:
+                from storage.card_sessions import clear_deck_messages
+            count = clear_deck_messages()
+            self._send_to_frontend("chat.messagesCleared", {"count": count})
+        except (ImportError, AttributeError, RuntimeError) as e:
+            logger.error("clear_deck_messages error: %s", e)
+
+    def _msg_freechat_state(self, data):
+        try:
+            parsed = json.loads(data) if isinstance(data, str) else data
+            self._freechat_was_open = parsed.get('open', False)
+        except (json.JSONDecodeError, AttributeError, TypeError) as e:
+            logger.debug("Could not parse freechat state: %s", e)
+
+    def _msg_create_deck(self, data=None):
+        from aqt import mw
+        try:
+            if hasattr(mw, 'onAddDeck'):
+                mw.onAddDeck()
+        except (AttributeError, RuntimeError) as e:
+            logger.warning("create_deck error: %s", e)
+
+    def _msg_import_deck(self, data=None):
+        from aqt import mw
+        try:
+            if hasattr(mw, 'handleImport'):
+                mw.handleImport()
+            elif hasattr(mw, 'onImport'):
+                mw.onImport()
+        except (AttributeError, RuntimeError) as e:
+            logger.warning("import_deck error: %s", e)
+
+    def _msg_open_deck_options(self, data=None):
+        from aqt import mw
+        try:
+            mw.overview._linkHandler('opts')
+        except (AttributeError, RuntimeError) as e:
+            logger.warning("open_deck_options error: %s", e)
+
+    def _msg_open_stats(self, data=None):
+        from aqt import mw
+        try:
+            mw.onStats()
+        except (AttributeError, RuntimeError) as e:
+            logger.warning("open_stats error: %s", e)
+
+    def _msg_toggle_settings(self, data=None):
+        try:
+            from .settings_sidebar import toggle_settings_sidebar
+            toggle_settings_sidebar()
+        except (ImportError, AttributeError, RuntimeError) as e:
+            logger.warning("toggle_settings error: %s", e)
+
+    # ── Card Review Handlers (React ReviewerView) ─────────────────────
+
+    @staticmethod
+    def _clean_card_html(html):
+        """Strip script tags and Anki template JS from card HTML.
+
+        Note: <style> tags are intentionally kept — they carry card formatting.
+        For clean display content, use note fields (frontField/backField) instead.
+        """
+        import re
+        # Remove <script>...</script> blocks
+        html = re.sub(r'<script[^>]*>[\s\S]*?</script>', '', html, flags=re.IGNORECASE)
+        # Remove inline JS that Anki card templates sometimes leave as text
+        html = re.sub(r'//\s*BUTTON SHORTCUTS[\s\S]*?(?=<|$)', '', html)
+        return html
+
+    def _send_card_data(self, card, is_question=True):
+        """Send card HTML + metadata to React."""
+        import re
+        from aqt import mw
+        if not mw or not mw.col:
+            logger.warning("mw.col not available, skipping _send_card_data")
+            return
+
+        # Install addon proxy on first card (reviewer is now available)
+        if not getattr(self, '_addon_proxy_installed', False):
+            try:
+                from .addon_proxy import get_proxy
+                get_proxy().install(self.web_view)
+                self._addon_proxy_installed = True
+            except (ImportError, AttributeError, RuntimeError) as e:
+                logger.warning("Addon proxy install failed: %s", e)
+
+        try:
+            front_html = card.question()
+            back_html = card.answer()
+
+            # Strip content before <hr id=answer> from back (Anki answer includes question)
+            back_html = re.sub(r'^[\s\S]*?<hr[^>]*id\s*=\s*["\']?answer["\']?[^>]*>', '', back_html, count=1)
+
+            media_dir = mw.col.media.dir()
+            front_html = re.sub(r'src="([^":/]+)"', 'src="file://%s/\\1"' % media_dir, front_html)
+            back_html = re.sub(r'src="([^":/]+)"', 'src="file://%s/\\1"' % media_dir, back_html)
+
+            # Strip <script> tags (keeps <style> — they carry card formatting)
+            front_html = self._clean_card_html(front_html)
+            back_html = self._clean_card_html(back_html)
+
+            # Read raw note fields — clean content without template garbage
+            # Used for display (no Tags/Errata/NoteID) and for evaluate/MC text
+            note = card.note()
+            front_field = note.fields[0] if note and note.fields else ''
+            back_field = note.fields[1] if note and len(note.fields) > 1 else ''
+            # Resolve media paths in fields too (they can contain <img> tags)
+            front_field = re.sub(r'src="([^":/]+)"', 'src="file://%s/\\1"' % media_dir, front_field)
+            back_field = re.sub(r'src="([^":/]+)"', 'src="file://%s/\\1"' % media_dir, back_field)
+
+            event_type = "card.shown" if is_question else "card.answerShown"
+            self._send_to_frontend(event_type, {
+                "cardId": card.id,
+                "frontHtml": front_html,
+                "backHtml": back_html,
+                "frontField": front_field,
+                "backField": back_field,
+                "deckId": card.did,
+                "deckName": mw.col.decks.name(card.did),
+                "isQuestion": is_question,
+            })
+        except Exception as e:
+            logger.error("_send_card_data error: %s", e)
+
+    def _msg_get_sidebar_status(self, data=None):
+        """Send settings status to React."""
+        try:
+            config = get_config()
+            status = {
+                'tier': config.get('tier', 'free'),
+                'theme': config.get('theme', 'dark'),
+                'isAuthenticated': config.get('auth_validated', False),
+                'tokenUsed': config.get('token_used', 0),
+                'tokenLimit': config.get('token_limit', 0),
+            }
+            self._send_to_frontend('sidebarStatus', status)
+        except (AttributeError, RuntimeError) as e:
+            logger.warning("get_sidebar_status: %s", e)
+
+    def _msg_set_theme(self, data=None):
+        """Set theme preference."""
+        try:
+            theme = data if isinstance(data, str) else (json.loads(data) if data else 'dark')
+            update_config({'theme': theme})
+            self._send_to_frontend('themeChanged', {'theme': theme})
+        except (AttributeError, RuntimeError, json.JSONDecodeError) as e:
+            logger.warning("set_theme: %s", e)
+
+    def _msg_sidebar_logout(self, data=None):
+        """Clear auth tokens."""
+        try:
+            update_config({'auth_token': '', 'auth_validated': False})
+            self._send_to_frontend('authStatusLoaded', {'isAuthenticated': False})
+        except (AttributeError, RuntimeError) as e:
+            logger.warning("sidebar_logout: %s", e)
+
+    def _msg_copy_logs(self, data=None):
+        """Copy recent logs + system info to clipboard."""
+        import platform
+        try:
+            from ..utils.logging import get_recent_logs
+        except ImportError:
+            from utils.logging import get_recent_logs
+        try:
+            from ..config import get_config
+        except ImportError:
+            from config import get_config
+        try:
+            config = get_config()
+            header = (
+                f"AnkiPlus Debug Report\n"
+                f"Platform: {platform.platform()}\n"
+                f"Python: {platform.python_version()}\n"
+                f"Theme: {config.get('theme', 'dark')}\n"
+                f"Tier: {config.get('tier', 'free')}\n"
+                f"Auth: {config.get('auth_validated', False)}\n"
+                f"{'=' * 60}\n"
+            )
+            logs = get_recent_logs(max_age_seconds=600)
+            text = header + "\n".join(logs) if logs else header + "(keine Logs)"
+            clipboard = QApplication.clipboard()
+            if clipboard:
+                clipboard.setText(text)
+                logger.info("Logs copied to clipboard (%d lines)", len(logs))
+                self._send_to_frontend('sidebarLogsCopied', {})
+        except Exception:
+            logger.exception("_msg_copy_logs failed")
+
+    def _msg_request_current_card(self, data=None):
+        """Send current card data to React (called when entering review from tab)."""
+        from aqt import mw
+        try:
+            rev = mw.reviewer
+            if rev and rev.card:
+                is_q = rev.state == 'question'
+                logger.info("request_current_card: sending card %s (is_question=%s, rev.state=%s)", rev.card.id, is_q, rev.state)
+                self._send_card_data(rev.card, is_question=is_q)
+            else:
+                logger.warning("request_current_card: no reviewer or no card (rev=%s, card=%s)", rev, rev.card if rev else None)
+        except (AttributeError, RuntimeError) as e:
+            logger.warning("request_current_card: %s", e)
+
+    def _msg_pycmd(self, data):
+        """Forward a pycmd to Anki's native reviewer for addon interop.
+
+        Other addons (e.g. AMBOSS) register pycmd handlers on Anki's
+        native reviewer webview. We relay the command string so their
+        popups/overlays work from our React ReviewerView.
+
+        Note: rev.web.eval() is Anki's standard API for running JS in the
+        reviewer webview — it's how all addons communicate. The command is
+        JSON-serialized (not interpolated) to prevent injection.
+        """
+        from aqt import mw
+        try:
+            cmd = data if isinstance(data, str) else str(data)
+            rev = mw.reviewer
+            if rev and rev.web:
+                safe_cmd = json.dumps(cmd)
+                rev.web.eval("pycmd(%s);" % safe_cmd)
+                logger.info("pycmd relayed: %s", cmd[:80])
+            else:
+                # Fallback: try opening as URL if it looks like one
+                if cmd.startswith('http'):
+                    import webbrowser
+                    webbrowser.open(cmd)
+                else:
+                    logger.warning("pycmd: no reviewer to relay to: %s", cmd[:80])
+        except Exception as e:
+            logger.exception("pycmd error: %s", e)
+
+    def _msg_flip_card(self, data=None):
+        """Show answer side. Swallow web.eval to prevent mw.web DOM writes."""
+        from aqt import mw
+        try:
+            rev = mw.reviewer
+            if not rev or not rev.card:
+                logger.warning("flip_card: no reviewer or card")
+                return
+            if rev.web:
+                _orig = rev.web.eval
+                rev.web.eval = lambda js: None
+            try:
+                rev._showAnswer()
+            finally:
+                if rev.web:
+                    rev.web.eval = _orig
+            self._send_card_data(rev.card, is_question=False)
+        except Exception as e:
+            logger.exception("flip_card error: %s", e)
+
+    def _msg_rate_card(self, data):
+        """Rate current card and advance to next."""
+        from aqt import mw
+        try:
+            parsed = json.loads(data) if isinstance(data, str) else data
+            ease = int(parsed.get('ease', 2)) if isinstance(parsed, dict) else 2
+            rev = mw.reviewer
+            if not rev or not rev.card:
+                return
+            if rev.web:
+                _orig = rev.web.eval
+                rev.web.eval = lambda js: None
+            try:
+                rev._answerCard(ease)
+            finally:
+                if rev.web:
+                    rev.web.eval = _orig
+            if rev.card:
+                self._send_card_data(rev.card, is_question=True)
+        except Exception as e:
+            logger.exception("rate_card error: %s", e)
+
+    # --- Reviewer: Text Evaluation & MC Generation ---
+
+    def _send_reviewer_step(self, phase, label):
+        """Send a ThoughtStream step to the React ReviewerView (from background thread)."""
+        import time
+        import threading as _threading
+        try:
+            done = _threading.Event()
+            def _inject():
+                try:
+                    self._send_to_frontend('reviewer.aiStep', {"phase": phase, "label": label})
+                finally:
+                    done.set()
+            from aqt import mw
+            mw.taskman.run_on_main(_inject)
+            done.wait(timeout=2.0)
+            time.sleep(0.5)
+        except (AttributeError, RuntimeError) as e:
+            logger.debug("Could not send reviewer step %s: %s", phase, e)
+
+    def _msg_evaluate_answer(self, data):
+        """Evaluate user's text answer against correct answer via AI."""
+        import threading
+        try:
+            parsed = json.loads(data) if isinstance(data, str) else data
+            question = parsed.get('question', '')
+            user_answer = parsed.get('userAnswer', '')
+            correct_answer = parsed.get('correctAnswer', '')
+
+            def _run():
+                try:
+                    self._send_reviewer_step('analyzing', 'Analysiere Antwort…')
+                    self._send_reviewer_step('comparing', 'Vergleiche mit korrekter Antwort…')
+                    self._send_reviewer_step('evaluating', 'KI bewertet…')
+
+                    from ..custom_reviewer import _call_ai_evaluation
+                    result = _call_ai_evaluation(question, user_answer, correct_answer)
+
+                    self._send_reviewer_step('done', 'Bewertung abgeschlossen')
+
+                    def _inject():
+                        self._send_to_frontend('reviewer.evaluationResult', result)
+                    from aqt import mw
+                    mw.taskman.run_on_main(_inject)
+                except Exception as e:
+                    logger.exception("evaluate_answer thread error: %s", e)
+                    def _error():
+                        self._send_to_frontend('reviewer.evaluationResult', {
+                            "score": 50, "feedback": "Fehler bei der Bewertung."
+                        })
+                    from aqt import mw
+                    mw.taskman.run_on_main(_error)
+
+            threading.Thread(target=_run, daemon=True).start()
+        except Exception as e:
+            logger.exception("_msg_evaluate_answer error: %s", e)
+
+    def _msg_generate_mc(self, data):
+        """Generate multiple choice options via AI."""
+        import threading
+        from aqt import mw
+        try:
+            parsed = json.loads(data) if isinstance(data, str) else data
+            question = parsed.get('question', '')
+            correct_answer = parsed.get('correctAnswer', '')
+            card_id = parsed.get('cardId', None)
+
+            # Get deck context on main thread (Anki collection is not thread-safe)
+            from ..custom_reviewer import _get_deck_context_answers_sync
+            deck_answers = _get_deck_context_answers_sync(card_id)
+
+            def _run():
+                try:
+                    self._send_reviewer_step('cache', 'Prüfe gespeicherte Optionen…')
+
+                    # Check cache
+                    from ..storage.mc_cache import get_cached_mc, save_mc_cache
+                    cached = get_cached_mc(card_id, question, correct_answer) if card_id else None
+                    if cached:
+                        self._send_reviewer_step('done', 'Aus Cache geladen')
+                        def _inject():
+                            self._send_to_frontend('reviewer.mcOptions', cached)
+                        mw.taskman.run_on_main(_inject)
+                        return
+
+                    self._send_reviewer_step('generating', 'Generiere Multiple-Choice-Optionen…')
+
+                    from ..custom_reviewer import _call_ai_mc_generation
+                    result = _call_ai_mc_generation(question, correct_answer, deck_answers)
+
+                    # Cache (skip fallbacks)
+                    is_fallback = any(
+                        opt.get('text', '') in (
+                            'Keine der genannten Optionen',
+                            'Alle genannten Optionen sind richtig',
+                            'Die Frage kann nicht beantwortet werden',
+                        ) for opt in result
+                    )
+                    if card_id and result and len(result) >= 4 and not is_fallback:
+                        save_mc_cache(card_id, question, correct_answer, result)
+
+                    import random
+                    random.shuffle(result)
+
+                    self._send_reviewer_step('done', 'Optionen erstellt')
+
+                    def _inject():
+                        self._send_to_frontend('reviewer.mcOptions', result)
+                    mw.taskman.run_on_main(_inject)
+                except Exception as e:
+                    logger.exception("generate_mc thread error: %s", e)
+                    def _error():
+                        self._send_to_frontend('reviewer.mcOptions', [])
+                    mw.taskman.run_on_main(_error)
+
+            threading.Thread(target=_run, daemon=True).start()
+        except Exception as e:
+            logger.exception("_msg_generate_mc error: %s", e)
 
