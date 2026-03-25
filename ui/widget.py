@@ -294,6 +294,14 @@ class ChatbotWidget(QWidget):
         self._plusi_wake_timer = QTimer()
         self._plusi_wake_timer.timeout.connect(self._check_plusi_wake)
         self._plusi_wake_timer.start(60000)  # check every minute
+    def _safe_json_loads(self, data, default=None, context=""):
+        """Parse JSON safely, returning default on failure."""
+        try:
+            return json.loads(data) if data else (default if default is not None else {})
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning("JSON parse error in %s: %s", context, e)
+            return default if default is not None else {}
+
     def setup_ui(self):
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
@@ -442,8 +450,8 @@ class ChatbotWidget(QWidget):
             'loadMultipleChoice': self._msg_load_multiple_choice,
             'hasMultipleChoice': self._msg_has_multiple_choice,
             # Deck Operations
-            'getCurrentDeck': lambda d: self._send_to_frontend("currentDeck", json.loads(self.bridge.getCurrentDeck())),
-            'getAvailableDecks': lambda d: self._send_to_frontend("availableDecks", json.loads(self.bridge.getAvailableDecks())),
+            'getCurrentDeck': lambda d: self._send_to_frontend("currentDeck", self._safe_json_loads(self.bridge.getCurrentDeck(), default={}, context="getCurrentDeck")),
+            'getAvailableDecks': lambda d: self._send_to_frontend("availableDecks", self._safe_json_loads(self.bridge.getAvailableDecks(), default=[], context="getAvailableDecks")),
             'openDeck': lambda d: self.bridge.openDeck(int(d)) if isinstance(d, (int, float)) else None,
             'openDeckBrowser': lambda d: self.bridge.openDeckBrowser(),
             'getDeckStats': self._msg_get_deck_stats,
@@ -477,9 +485,9 @@ class ChatbotWidget(QWidget):
             'getToolRegistry': self._msg_get_tool_registry,
             # Auth
             'authenticate': self._msg_authenticate,
-            'getAuthStatus': lambda d: self._send_to_frontend("authStatusLoaded", json.loads(self.bridge.getAuthStatus())),
-            'getAuthToken': lambda d: self._send_to_frontend("authTokenLoaded", json.loads(self.bridge.getAuthToken())),
-            'refreshAuth': lambda d: self._send_to_frontend("authRefreshResult", json.loads(self.bridge.refreshAuth())),
+            'getAuthStatus': lambda d: self._send_to_frontend("authStatusLoaded", self._safe_json_loads(self.bridge.getAuthStatus(), default={}, context="getAuthStatus")),
+            'getAuthToken': lambda d: self._send_to_frontend("authTokenLoaded", self._safe_json_loads(self.bridge.getAuthToken(), default={}, context="getAuthToken")),
+            'refreshAuth': lambda d: self._send_to_frontend("authRefreshResult", self._safe_json_loads(self.bridge.refreshAuth(), default={}, context="refreshAuth")),
             'logout': lambda d: self.bridge.logout(),
             'startLinkAuth': lambda d: self.bridge.startLinkAuth(),
             'handleAuthDeepLink': self._msg_handle_auth_deep_link,
@@ -598,33 +606,63 @@ class ChatbotWidget(QWidget):
     def _msg_get_card_details(self, data):
         if isinstance(data, dict) and data.get('cardId'):
             result = self.bridge.getCardDetails(str(data['cardId']))
-            self._send_to_frontend("cardDetails", json.loads(result), {"callbackId": data.get('callbackId')})
+            try:
+                parsed = json.loads(result)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning("Failed to parse bridge response for getCardDetails: %s", e)
+                parsed = {}
+            self._send_to_frontend("cardDetails", parsed, {"callbackId": data.get('callbackId')})
 
     def _msg_save_multiple_choice(self, data):
         if isinstance(data, dict) and data.get('cardId') and data.get('quizDataJson'):
             result = self.bridge.saveMultipleChoice(int(data['cardId']), data['quizDataJson'])
-            self._send_to_frontend("saveMultipleChoiceResult", json.loads(result), {"callbackId": data.get('callbackId')})
+            try:
+                parsed = json.loads(result)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning("Failed to parse bridge response for saveMultipleChoice: %s", e)
+                parsed = {}
+            self._send_to_frontend("saveMultipleChoiceResult", parsed, {"callbackId": data.get('callbackId')})
 
     def _msg_load_multiple_choice(self, data):
         if isinstance(data, dict) and data.get('cardId'):
             result = self.bridge.loadMultipleChoice(int(data['cardId']))
-            self._send_to_frontend("loadMultipleChoiceResult", json.loads(result), {"callbackId": data.get('callbackId')})
+            try:
+                parsed = json.loads(result)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning("Failed to parse bridge response for loadMultipleChoice: %s", e)
+                parsed = {}
+            self._send_to_frontend("loadMultipleChoiceResult", parsed, {"callbackId": data.get('callbackId')})
 
     def _msg_has_multiple_choice(self, data):
         if isinstance(data, dict) and data.get('cardId'):
             result = self.bridge.hasMultipleChoice(int(data['cardId']))
-            self._send_to_frontend("hasMultipleChoiceResult", json.loads(result), {"callbackId": data.get('callbackId')})
+            try:
+                parsed = json.loads(result)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning("Failed to parse bridge response for hasMultipleChoice: %s", e)
+                parsed = {}
+            self._send_to_frontend("hasMultipleChoiceResult", parsed, {"callbackId": data.get('callbackId')})
 
     def _msg_get_deck_stats(self, data):
         if isinstance(data, (int, float)):
             deck_id = int(data)
             result = self.bridge.getDeckStats(deck_id)
-            self._send_to_frontend("deckStats", json.loads(result), {"deckId": deck_id})
+            try:
+                parsed = json.loads(result)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning("Failed to parse bridge response for getDeckStats: %s", e)
+                parsed = {}
+            self._send_to_frontend("deckStats", parsed, {"deckId": deck_id})
 
     def _msg_generate_section_title(self, data):
         if isinstance(data, dict):
             result = self.bridge.generateSectionTitle(data.get('question', ''), data.get('answer', ''))
-            self._send_to_frontend("sectionTitleGenerated", json.loads(result))
+            try:
+                parsed = json.loads(result)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning("Failed to parse bridge response for generateSectionTitle: %s", e)
+                parsed = {}
+            self._send_to_frontend("sectionTitleGenerated", parsed)
 
     def _msg_load_card_session(self, data):
         from ..storage.card_sessions import load_card_session
@@ -636,7 +674,11 @@ class ChatbotWidget(QWidget):
     def _msg_save_card_session(self, data):
         from ..storage.card_sessions import save_card_session
         if isinstance(data, str):
-            data = json.loads(data)
+            try:
+                data = json.loads(data)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning("Failed to parse data for saveCardSession: %s", e)
+                return
         card_id = data.get('cardId') or data.get('card_id')
         if card_id:
             save_card_session(int(card_id), data)
@@ -644,7 +686,11 @@ class ChatbotWidget(QWidget):
     def _msg_save_card_message(self, data):
         from ..storage.card_sessions import save_message
         if isinstance(data, str):
-            data = json.loads(data)
+            try:
+                data = json.loads(data)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning("Failed to parse data for saveCardMessage: %s", e)
+                return
         card_id = data.get('cardId') or data.get('card_id')
         if card_id:
             save_message(int(card_id), data.get('message', data))
@@ -652,7 +698,11 @@ class ChatbotWidget(QWidget):
     def _msg_save_card_section(self, data):
         from ..storage.card_sessions import save_section
         if isinstance(data, str):
-            data = json.loads(data)
+            try:
+                data = json.loads(data)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning("Failed to parse data for saveCardSection: %s", e)
+                return
         card_id = data.get('cardId') or data.get('card_id')
         if card_id:
             save_section(int(card_id), data.get('section', data))

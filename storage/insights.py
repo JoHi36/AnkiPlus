@@ -176,7 +176,12 @@ def extract_insights_via_openrouter(prompt, api_key):
     )
 
     with urllib.request.urlopen(req, timeout=20) as resp:
-        data = json.loads(resp.read().decode('utf-8'))
+        raw = resp.read().decode('utf-8')
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError) as e:
+        logger.warning("Failed to parse OpenRouter response: %s", e)
+        raise ValueError("Invalid JSON in OpenRouter response") from e
 
     answer = data.get('choices', [{}])[0].get('message', {}).get('content', '')
     if not answer:

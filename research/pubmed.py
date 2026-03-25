@@ -91,7 +91,7 @@ def search_pubmed(query: str) -> dict:
             })
         return {'articles': articles, 'error': None}
 
-    except urllib.error.URLError as e:
+    except (urllib.error.URLError, json.JSONDecodeError) as e:
         logger.warning("PubMed API error: %s", e)
         return {'articles': [], 'error': f'PubMed error: {e}'}
     except Exception as e:
