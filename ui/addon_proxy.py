@@ -405,14 +405,15 @@ class WebEvalProxy:
                 html = args[1]
                 has_media = args[2] if len(args) > 2 else False
 
-                # Send to React
-                payload = json.dumps({
-                    "type": "addon.tooltip",
-                    "data": {"markId": mark_id, "html": html, "hasMedia": has_media, "source": "amboss"}
-                })
-                js = "if(window.ankiReceive)window.ankiReceive(%s);" % payload
-                self._run_in_our_webview(js)
-                logger.info("addon_proxy: sent tooltip content to React (%d chars HTML)", len(html))
+                # Send directly to React via CustomEvent (bypasses ankiReceive chain)
+                detail = json.dumps({"html": html, "markId": mark_id, "source": "amboss"})
+                js = "window.dispatchEvent(new CustomEvent('addon.tooltip',{detail:%s}));" % detail
+                # Run directly on the webview page (no proxy marker wrapping)
+                try:
+                    self._our_webview.page().runJavaScript(js)
+                    logger.info("addon_proxy: dispatched tooltip to React (%d chars HTML)", len(html))
+                except Exception:
+                    logger.exception("addon_proxy: failed to dispatch tooltip event")
         except Exception:
             logger.exception("addon_proxy: failed to parse setContentFor() args")
 
