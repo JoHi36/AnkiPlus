@@ -166,14 +166,14 @@ export default function ReviewerView({ cardData, reviewer }) {
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 'var(--ds-space-2xl) var(--ds-space-xl) 160px', scrollbarWidth: 'none' }}>
         <div style={{ maxWidth: 'var(--ds-content-width)', width: '100%', margin: '0 auto' }}>
           {showBack
-            ? <div className="card-renderer" onClick={handleCardClick}>
-                <div className="card-content" dangerouslySetInnerHTML={{ __html:
+            ? <div id="qa" className="card-renderer" onClick={handleCardClick}>
+                <div className="card card-content" dangerouslySetInnerHTML={{ __html:
                   sanitizeCardHtml(hasVisibleContent(cardData.backHtml) ? cardData.backHtml : (cardData.backField || cardData.backHtml || ''))
                 }} />
                 {CARD_BG_OVERRIDE}
               </div>
-            : <div className="card-renderer" onClick={handleCardClick}>
-                <div className="card-content" dangerouslySetInnerHTML={{ __html:
+            : <div id="qa" className="card-renderer" onClick={handleCardClick}>
+                <div className="card card-content" dangerouslySetInnerHTML={{ __html:
                   sanitizeCardHtml(hasVisibleContent(cardData.frontHtml) ? cardData.frontHtml : (cardData.frontField || cardData.frontHtml || ''))
                 }} />
                 {CARD_BG_OVERRIDE}
