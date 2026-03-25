@@ -27,7 +27,7 @@ def _notify_reviewer_chat_state(is_open):
         try:
             if mw and mw.reviewer and mw.reviewer.web:
                 mw.reviewer.web.page().runJavaScript(js)
-        except Exception:
+        except (AttributeError, RuntimeError):
             pass
 
     _send()

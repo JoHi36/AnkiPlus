@@ -396,8 +396,8 @@ def _rotate_toggle_button(is_open):
         )
         if mw and mw.web:
             mw.web.page().runJavaScript(js)
-    except Exception:
-        pass
+    except (AttributeError, RuntimeError) as e:
+        logger.debug("Could not rotate sidebar toggle button: %s", e)
 
 
 def is_sidebar_visible():

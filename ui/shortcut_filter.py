@@ -73,7 +73,7 @@ class GlobalShortcutFilter(QObject):
         try:
             return (mw and hasattr(mw, 'state') and mw.state == 'review'
                     and mw.reviewer and mw.reviewer.web)
-        except Exception:
+        except (AttributeError, RuntimeError):
             return False
 
     def _get_reviewer_web(self):
@@ -81,7 +81,7 @@ class GlobalShortcutFilter(QObject):
         try:
             if self._is_reviewer_active():
                 return mw.reviewer.web
-        except Exception:
+        except (AttributeError, RuntimeError):
             pass
         return None
 
@@ -92,7 +92,7 @@ class GlobalShortcutFilter(QObject):
             reviewer_web = self._get_reviewer_web()
             if focused and reviewer_web:
                 return focused is reviewer_web or reviewer_web.isAncestorOf(focused)
-        except Exception:
+        except (AttributeError, RuntimeError):
             pass
         return False
 
@@ -103,7 +103,7 @@ class GlobalShortcutFilter(QObject):
             widget = get_chatbot_widget()
             if widget and widget.isVisible():
                 return True
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             pass
         return False
 
@@ -124,7 +124,7 @@ class GlobalShortcutFilter(QObject):
             focused = QApplication.focusWidget()
             if focused and mw and hasattr(mw, 'web') and mw.web:
                 return focused is mw.web or mw.web.isAncestorOf(focused)
-        except Exception:
+        except (AttributeError, RuntimeError):
             pass
         return False
 
@@ -147,7 +147,7 @@ class GlobalShortcutFilter(QObject):
                     "document.querySelector('input[type=text], input[type=search], "
                     "[data-chat-input], textarea')?.focus();"
                 )
-        except Exception as e:
+        except (AttributeError, RuntimeError) as e:
             logger.warning("Could not toggle main webview input: %s", e)
 
     def _focus_text_field(self):
@@ -160,7 +160,7 @@ class GlobalShortcutFilter(QObject):
                 widget.web_view.page().runJavaScript(
                     "document.querySelector('[data-chat-input]')?.focus();"
                 )
-        except Exception as e:
+        except (AttributeError, RuntimeError) as e:
             logger.warning("Could not focus text field: %s", e)
 
     def _defocus_text_field(self):
@@ -179,7 +179,7 @@ class GlobalShortcutFilter(QObject):
             reviewer_web = self._get_reviewer_web()
             if reviewer_web:
                 reviewer_web.setFocus()
-        except Exception as e:
+        except (AttributeError, RuntimeError) as e:
             logger.warning("Could not defocus text field: %s", e)
 
     def _clear_and_defocus_text_field(self):
@@ -196,7 +196,7 @@ class GlobalShortcutFilter(QObject):
             reviewer_web = self._get_reviewer_web()
             if reviewer_web:
                 reviewer_web.setFocus()
-        except Exception as e:
+        except (AttributeError, RuntimeError) as e:
             logger.warning("Could not clear text field: %s", e)
         self._text_field_has_focus = False
         self._focused_webview = None
@@ -212,7 +212,7 @@ class GlobalShortcutFilter(QObject):
                 widget = get_chatbot_widget()
                 if widget and widget.web_view:
                     widget.web_view.page().runJavaScript(js)
-        except Exception as e:
+        except (AttributeError, RuntimeError) as e:
             logger.warning("Could not send chat message: %s", e)
 
     def _forward_to_reviewer(self, event):
@@ -266,7 +266,7 @@ class GlobalShortcutFilter(QObject):
                     state = mw.state if mw else 'deckBrowser'
                     mv.show_for_state(state)
                     logger.info("AnkiPlus ON (Cmd+I)")
-            except Exception as e:
+            except (ImportError, AttributeError, RuntimeError) as e:
                 logger.warning("Could not toggle AnkiPlus: %s", e)
             return True
 
@@ -284,7 +284,7 @@ class GlobalShortcutFilter(QObject):
                         js = "window.dispatchEvent(new KeyboardEvent('keydown', {key: '%s', code: '%s', bubbles: true}));" % (key, code)
                         mv._chatbot.web_view.page().runJavaScript(js)
                         return True  # Consume event — don't let mw.web see it
-                except Exception:
+                except (ImportError, AttributeError, RuntimeError):
                     pass
             return super().eventFilter(obj, event)
 

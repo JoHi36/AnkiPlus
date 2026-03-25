@@ -76,8 +76,8 @@ class MainViewWidget(QWidget):
             self._chatbot.web_view.page().runJavaScript(
                 "window.ankiReceive && window.ankiReceive({type:'panelOpened'});"
             )
-        except Exception:
-            pass
+        except (AttributeError, RuntimeError) as e:
+            logger.debug("Could not notify React of panel open: %s", e)
 
     def hide_sidebar(self):
         """Hide sidebar. Only hides widget if still in sidebar mode."""
@@ -161,8 +161,8 @@ class MainViewWidget(QWidget):
                 widget = self.get_sidebar_widget()
                 if widget and mw.reviewer and mw.reviewer.card:
                     widget._send_card_data(mw.reviewer.card, is_question=True)
-            except Exception:
-                pass
+            except (AttributeError, RuntimeError) as e:
+                logger.debug("Could not send card data on review state: %s", e)
         else:
             return
 
@@ -188,8 +188,8 @@ class MainViewWidget(QWidget):
             sf = get_shortcut_filter()
             if sf and hasattr(sf, 'set_main_view_active'):
                 sf.set_main_view_active(True)
-        except Exception:
-            pass
+        except (ImportError, AttributeError, RuntimeError) as e:
+            logger.debug("Could not set main view active in shortcut filter: %s", e)
         self._position_over_main()
         self.show()
         self.raise_()
@@ -208,8 +208,8 @@ class MainViewWidget(QWidget):
             sf = get_shortcut_filter()
             if sf and hasattr(sf, 'set_main_view_active'):
                 sf.set_main_view_active(False)
-        except Exception:
-            pass
+        except (ImportError, AttributeError, RuntimeError) as e:
+            logger.debug("Could not clear main view active in shortcut filter: %s", e)
         if self.parent():
             self.parent().removeEventFilter(self)
         self.hide()
@@ -222,11 +222,12 @@ class MainViewWidget(QWidget):
                 self.setGeometry(mw.width() - w, 0, w, mw.height())
             else:
                 self.setGeometry(0, 0, mw.width(), mw.height())
-        except Exception:
+        except (AttributeError, RuntimeError) as e:
+            logger.debug("Could not set sidebar geometry, trying fallback: %s", e)
             try:
                 self.setGeometry(mw.rect())
-            except Exception:
-                pass
+            except (AttributeError, RuntimeError) as e2:
+                logger.debug("Geometry fallback also failed: %s", e2)
 
     def _squeeze_main_content(self, make_room):
         """Resize mw.web so custom reviewer doesn't render behind sidebar."""
@@ -235,8 +236,8 @@ class MainViewWidget(QWidget):
             if central and central.layout():
                 right_margin = SIDEBAR_DEFAULT_WIDTH if make_room else 0
                 central.layout().setContentsMargins(0, 0, right_margin, 0)
-        except Exception:
-            pass
+        except (AttributeError, RuntimeError) as e:
+            logger.debug("Could not squeeze main content: %s", e)
 
     def eventFilter(self, obj, event):
         if event.type() == event.Type.Resize and self._visible:
@@ -279,8 +280,8 @@ class MainViewWidget(QWidget):
                         card_dist[did][0] += 1
                     else:
                         card_dist[did][1] += 1
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Could not load card distribution data: %s", e)
 
             # Build tree
             by_name = {}

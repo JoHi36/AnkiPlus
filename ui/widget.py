@@ -14,11 +14,11 @@ from aqt.utils import showInfo
 try:
     from PyQt6.QtWebEngineWidgets import QWebEngineView
     from PyQt6.QtWebChannel import QWebChannel
-except Exception:
+except ImportError:
     try:
         from PyQt5.QtWebEngineWidgets import QWebEngineView
         from PyQt5.QtWebChannel import QWebChannel
-    except Exception:
+    except ImportError:
         QWebEngineView = None
         QWebChannel = None
 
@@ -581,7 +581,7 @@ class ChatbotWidget(QWidget):
             from aqt import mw
             if mw and mw.reviewer and mw.reviewer.web:
                 mw.reviewer.web.eval('if(window.setChatOpen) setChatOpen(false);')
-        except Exception:
+        except (AttributeError, RuntimeError):
             pass
 
     def _msg_advance_card(self, data):
@@ -592,7 +592,7 @@ class ChatbotWidget(QWidget):
                 mw.reviewer.web.eval(
                     'if(window.setChatOpen) setChatOpen(false);'
                     'if(window.rateCard) rateCard(window.autoRateEase || 3);')
-        except Exception as e:
+        except (AttributeError, RuntimeError) as e:
             logger.error("advanceCard error: %s", e)
 
     def _msg_preview_card(self, data):
@@ -919,7 +919,7 @@ class ChatbotWidget(QWidget):
                             "document.body.appendChild(_f);}"
                         ) % json.dumps(injection)
                         web.page().runJavaScript(js)
-        except Exception as e:
+        except (ImportError, AttributeError, RuntimeError) as e:
             logger.warning("Failed to toggle Plusi dock: %s", e)
 
     def _msg_save_subagent_enabled(self, data):
@@ -973,8 +973,8 @@ class ChatbotWidget(QWidget):
                 from aqt import mw as _mw
                 if _mw and _mw.col:
                     total = len(_mw.col.find_cards(""))
-            except Exception:
-                pass
+            except (AttributeError, RuntimeError) as e:
+                logger.debug("Could not get total card count for embedding status: %s", e)
 
             is_running = False
             try:
@@ -985,8 +985,8 @@ class ChatbotWidget(QWidget):
                 mgr = get_embedding_manager()
                 if mgr and mgr._background_thread and mgr._background_thread.isRunning():
                     is_running = True
-            except Exception:
-                pass
+            except (ImportError, AttributeError, RuntimeError) as e:
+                logger.debug("Could not get embedding manager status: %s", e)
 
             result = {"totalCards": total, "embeddedCards": embedded, "isRunning": is_running}
             self._send_to_frontend_with_event(
@@ -1026,8 +1026,8 @@ class ChatbotWidget(QWidget):
                 diary_entries = load_diary(limit=1)
                 if diary_entries:
                     last_mood = diary_entries[0].get('mood', 'neutral')
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Could not load last diary mood: %s", e)
 
             state = {
                 'energy': state_data.get('energy', 5),
@@ -1181,9 +1181,9 @@ class ChatbotWidget(QWidget):
                         wv = wv_source()
                         if wv:
                             wv.page().runJavaScript(set_theme_js)
-                    except Exception:
+                    except (AttributeError, RuntimeError):
                         pass
-        except Exception:
+        except (AttributeError, RuntimeError):
             pass
 
         # 5. Plusi panel webview
@@ -1193,7 +1193,7 @@ class ChatbotWidget(QWidget):
                 pw = plusi_panel._panel_widget
                 if hasattr(pw, 'web_view') and pw.web_view:
                     pw.web_view.page().runJavaScript(set_theme_js)
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             pass
 
         # 6. Re-apply Qt global theme stylesheet with new token colors
@@ -1201,8 +1201,8 @@ class ChatbotWidget(QWidget):
             from .global_theme import apply_global_dark_theme, _app_initialized
             if _app_initialized:
                 apply_global_dark_theme()
-        except Exception:
-            pass
+        except (ImportError, AttributeError, RuntimeError) as e:
+            logger.debug("Could not re-apply global theme on theme change: %s", e)
 
         # 7. QDockWidget removed — sidebar is now inside MainViewWidget
 
@@ -1231,8 +1231,8 @@ class ChatbotWidget(QWidget):
             os.makedirs(os.path.dirname(log_path), exist_ok=True)
             with open(log_path, 'a', encoding='utf-8') as f:
                 f.write(data + '\n')
-        except Exception:
-            pass
+        except (OSError, IOError) as e:
+            logger.debug("Could not write debug log: %s", e)
 
     def _msg_plusi_panel(self, data):
         """Legacy: redirects to settings."""
@@ -1243,7 +1243,7 @@ class ChatbotWidget(QWidget):
             from aqt import mw
             if mw:
                 mw.onPrefs()
-        except Exception as e:
+        except (AttributeError, RuntimeError) as e:
             logger.warning("Could not open Anki preferences: %s", e)
 
     def _msg_plusi_like(self, data):
@@ -1416,7 +1416,7 @@ class ChatbotWidget(QWidget):
         try:
             deck_info = self.bridge.getCurrentDeck()
             deck_data = json.loads(deck_info)
-        except Exception as e:
+        except (AttributeError, RuntimeError, json.JSONDecodeError) as e:
             logger.error("Fehler beim Abrufen des Decks: %s", e)
             deck_data = {"deckId": None, "deckName": None, "isInDeck": False}
 
@@ -1467,7 +1467,7 @@ class ChatbotWidget(QWidget):
             from .addon_proxy import set_target_webview, inject_addon_assets
             set_target_webview(self.web_view)
             inject_addon_assets(self.web_view)  # inject now if assets already captured
-        except Exception as e:
+        except (ImportError, AttributeError, RuntimeError) as e:
             logger.warning("Addon proxy setup failed: %s", e)
 
     def push_updated_models(self):
@@ -1550,7 +1550,7 @@ class ChatbotWidget(QWidget):
                 try:
                     from plusi.dock import sync_mood
                     QTimer.singleShot(0, lambda: sync_mood(mood))
-                except Exception:
+                except (ImportError, AttributeError, RuntimeError):
                     pass
                 QTimer.singleShot(0, lambda: self._sync_plusi_integrity())
 
@@ -1815,8 +1815,8 @@ class ChatbotWidget(QWidget):
                         card_dist[did][0] += 1
                     else:
                         card_dist[did][1] += 1
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Could not load card distribution data: %s", e)
 
             # Build tree
             by_name = {}
@@ -1917,7 +1917,7 @@ class ChatbotWidget(QWidget):
                 mw.col.decks.select(did)
                 mw.onOverview()
                 QTimer.singleShot(STUDY_DECK_DELAY_MS, lambda: mw.overview._linkHandler('study'))
-        except Exception as e:
+        except (AttributeError, RuntimeError, ValueError) as e:
             logger.error("study_deck error: %s", e)
 
     def _msg_select_deck(self, data):
@@ -1928,7 +1928,7 @@ class ChatbotWidget(QWidget):
             if did:
                 mw.col.decks.select(did)
                 mw.onOverview()
-        except Exception as e:
+        except (AttributeError, RuntimeError, ValueError) as e:
             logger.error("select_deck error: %s", e)
 
     def _msg_navigate(self, data):
@@ -1943,9 +1943,9 @@ class ChatbotWidget(QWidget):
                 # Always try to enter review — Anki will resume or start fresh
                 try:
                     mw.moveToState('review')
-                except Exception:
+                except (AttributeError, RuntimeError):
                     mw.onOverview()
-        except Exception as e:
+        except (AttributeError, RuntimeError) as e:
             logger.error("navigate error: %s", e)
 
     def _msg_clear_deck_messages(self, data=None):
@@ -1956,22 +1956,22 @@ class ChatbotWidget(QWidget):
                 from storage.card_sessions import clear_deck_messages
             count = clear_deck_messages()
             self._send_to_frontend("chat.messagesCleared", {"count": count})
-        except Exception as e:
+        except (ImportError, AttributeError, RuntimeError) as e:
             logger.error("clear_deck_messages error: %s", e)
 
     def _msg_freechat_state(self, data):
         try:
             parsed = json.loads(data) if isinstance(data, str) else data
             self._freechat_was_open = parsed.get('open', False)
-        except Exception:
-            pass
+        except (json.JSONDecodeError, AttributeError, TypeError) as e:
+            logger.debug("Could not parse freechat state: %s", e)
 
     def _msg_create_deck(self, data=None):
         from aqt import mw
         try:
             if hasattr(mw, 'onAddDeck'):
                 mw.onAddDeck()
-        except Exception as e:
+        except (AttributeError, RuntimeError) as e:
             logger.warning("create_deck error: %s", e)
 
     def _msg_import_deck(self, data=None):
@@ -1981,28 +1981,28 @@ class ChatbotWidget(QWidget):
                 mw.handleImport()
             elif hasattr(mw, 'onImport'):
                 mw.onImport()
-        except Exception as e:
+        except (AttributeError, RuntimeError) as e:
             logger.warning("import_deck error: %s", e)
 
     def _msg_open_deck_options(self, data=None):
         from aqt import mw
         try:
             mw.overview._linkHandler('opts')
-        except Exception as e:
+        except (AttributeError, RuntimeError) as e:
             logger.warning("open_deck_options error: %s", e)
 
     def _msg_open_stats(self, data=None):
         from aqt import mw
         try:
             mw.onStats()
-        except Exception as e:
+        except (AttributeError, RuntimeError) as e:
             logger.warning("open_stats error: %s", e)
 
     def _msg_toggle_settings(self, data=None):
         try:
             from .settings_sidebar import toggle_settings_sidebar
             toggle_settings_sidebar()
-        except Exception as e:
+        except (ImportError, AttributeError, RuntimeError) as e:
             logger.warning("toggle_settings error: %s", e)
 
     # ── Card Review Handlers (React ReviewerView) ─────────────────────
@@ -2035,7 +2035,7 @@ class ChatbotWidget(QWidget):
                 from .addon_proxy import get_proxy
                 get_proxy().install(self.web_view)
                 self._addon_proxy_installed = True
-            except Exception as e:
+            except (ImportError, AttributeError, RuntimeError) as e:
                 logger.warning("Addon proxy install failed: %s", e)
 
         try:
@@ -2088,7 +2088,7 @@ class ChatbotWidget(QWidget):
                 'tokenLimit': config.get('token_limit', 0),
             }
             self._send_to_frontend('sidebarStatus', status)
-        except Exception as e:
+        except (AttributeError, RuntimeError) as e:
             logger.warning("get_sidebar_status: %s", e)
 
     def _msg_set_theme(self, data=None):
@@ -2097,7 +2097,7 @@ class ChatbotWidget(QWidget):
             theme = data if isinstance(data, str) else (json.loads(data) if data else 'dark')
             update_config({'theme': theme})
             self._send_to_frontend('themeChanged', {'theme': theme})
-        except Exception as e:
+        except (AttributeError, RuntimeError, json.JSONDecodeError) as e:
             logger.warning("set_theme: %s", e)
 
     def _msg_sidebar_logout(self, data=None):
@@ -2105,7 +2105,7 @@ class ChatbotWidget(QWidget):
         try:
             update_config({'auth_token': '', 'auth_validated': False})
             self._send_to_frontend('authStatusLoaded', {'isAuthenticated': False})
-        except Exception as e:
+        except (AttributeError, RuntimeError) as e:
             logger.warning("sidebar_logout: %s", e)
 
     def _msg_copy_logs(self, data=None):
@@ -2151,7 +2151,7 @@ class ChatbotWidget(QWidget):
                 self._send_card_data(rev.card, is_question=is_q)
             else:
                 logger.warning("request_current_card: no reviewer or no card (rev=%s, card=%s)", rev, rev.card if rev else None)
-        except Exception as e:
+        except (AttributeError, RuntimeError) as e:
             logger.warning("request_current_card: %s", e)
 
     def _msg_pycmd(self, data):
@@ -2242,8 +2242,8 @@ class ChatbotWidget(QWidget):
             mw.taskman.run_on_main(_inject)
             done.wait(timeout=2.0)
             time.sleep(0.5)
-        except Exception:
-            pass
+        except (AttributeError, RuntimeError) as e:
+            logger.debug("Could not send reviewer step %s: %s", phase, e)
 
     def _msg_evaluate_answer(self, data):
         """Evaluate user's text answer against correct answer via AI."""
