@@ -16,37 +16,44 @@ function hasVisibleContent(html) {
 }
 
 /**
- * Regex matching background properties (background, background-color, etc.)
- * Used to strip deck backgrounds — we control all backgrounds via theme.
+ * Regex matching ALL background CSS properties (background, background-color,
+ * background-image, etc.). Catches every background-* variant.
  */
-const BG_RE = /background(?:-color)?\s*:[^;]+;?/gi;
+const BG_RE = /background(?:-[a-z-]+)?\s*:[^;]+;?/gi;
 
 /**
- * Regex matching black/near-black color declarations.
- * Targets: color: black, color: #000, color: #333, color: rgb(0,0,0), etc.
- * Does NOT match semantic colors (red, blue, green, named colors with hue).
+ * Regex matching black/near-black color declarations in <style> blocks.
+ * Targets: color: black, #000-#3xx, rgb(0,0,0). Preserves semantic colors.
  */
 const BLACK_COLOR_RE = /(?:^|;)\s*color\s*:\s*(?:black|#0{3,6}|#1[0-9a-f]{2,5}|#2[0-9a-f]{2,5}|#3[0-9a-f]{2,5}|rgb\(\s*0[\s,]+0[\s,]+0\s*\)|rgba\(\s*0[\s,]+0[\s,]+0[\s,])(?:\s*!important)?\s*;?/gi;
 
 /**
  * Sanitize card HTML for our renderer.
  * 1. Strip backgrounds from <style> blocks and inline style attributes
- * 2. Strip black/near-black text colors from <style> blocks (they break dark mode)
+ * 2. Strip black/near-black text colors from <style> blocks
+ * 3. Strip HTML bgcolor attributes (old-school table backgrounds)
  * Preserves semantic colors (red, green, blue for coding), fonts, and layout.
  */
 function sanitizeCardHtml(html) {
   if (!html) return '';
-  // Strip from <style> blocks: backgrounds + black text colors
+  // Strip from <style> blocks: all background-* + black text colors
   let result = html.replace(/<style([\s\S]*?)<\/style>/gi, (match, content) => {
     let cleaned = content.replace(BG_RE, '');
     cleaned = cleaned.replace(BLACK_COLOR_RE, ';');
     return '<style' + cleaned + '</style>';
   });
-  // Strip backgrounds from inline style="" and style='' attributes
-  result = result.replace(/style=(["'])([^"']*?)\1/gi, (match, quote, styleContent) => {
+  // Strip backgrounds from inline style="..." attributes
+  result = result.replace(/style="([^"]*)"/gi, (match, styleContent) => {
     const cleaned = styleContent.replace(BG_RE, '').trim();
-    return cleaned ? 'style=' + quote + cleaned + quote : '';
+    return cleaned ? 'style="' + cleaned + '"' : '';
   });
+  // Strip backgrounds from inline style='...' attributes
+  result = result.replace(/style='([^']*)'/gi, (match, styleContent) => {
+    const cleaned = styleContent.replace(BG_RE, '').trim();
+    return cleaned ? "style='" + cleaned + "'" : '';
+  });
+  // Strip old HTML bgcolor attributes
+  result = result.replace(/\s*bgcolor\s*=\s*["'][^"']*["']/gi, '');
   return result;
 }
 
