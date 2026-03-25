@@ -69,6 +69,14 @@ logger = get_logger(__name__)
 
 # NOTE: Legacy sessions_storage (JSON) removed — per-card SQLite is now used instead.
 
+# ---------------------------------------------------------------------------
+# Timing constants
+# ---------------------------------------------------------------------------
+POLL_INTERVAL_MS = 200          # JS→Python message queue polling rate
+PLUSI_WAKE_CHECK_MS = 60_000    # Plusi autonomy wake-up check interval (every minute)
+SETTINGS_RELOAD_DELAY_MS = 100  # Delay after config save before reloading models
+STUDY_DECK_DELAY_MS = 100       # Delay before triggering deck study (Anki init timing)
+
 
 class AIRequestThread(QThread):
     """Thread for asynchronous AI API requests with request-ID based streaming."""
@@ -300,7 +308,7 @@ class ChatbotWidget(QWidget):
         # Plusi autonomous wake timer — checks every minute
         self._plusi_wake_timer = QTimer()
         self._plusi_wake_timer.timeout.connect(self._check_plusi_wake)
-        self._plusi_wake_timer.start(60000)  # check every minute
+        self._plusi_wake_timer.start(PLUSI_WAKE_CHECK_MS)
     def _safe_json_loads(self, data, default=None, context=""):
         """Parse JSON safely, returning default on failure."""
         try:
@@ -357,8 +365,8 @@ class ChatbotWidget(QWidget):
         # Starte Polling für Nachrichten
         self.message_timer = QTimer()
         self.message_timer.timeout.connect(self._poll_messages)
-        self.message_timer.start(200)  # Alle 200ms prüfen
-        logger.info("Message-Polling gestartet (200ms Intervall)")
+        self.message_timer.start(POLL_INTERVAL_MS)
+        logger.info("Message-Polling gestartet (%sms Intervall)", POLL_INTERVAL_MS)
 
     def _poll_messages(self):
         """Pollt JavaScript nach neuen Nachrichten"""
@@ -1688,7 +1696,7 @@ class ChatbotWidget(QWidget):
             self.config = get_config(force_reload=True)
             logger.info("_save_settings: Config neu geladen, API-Key Länge: %s", len(self.config.get('api_key', '')))
             # Warte kurz, damit Config gespeichert ist, dann lade Modelle
-            QTimer.singleShot(100, self.push_updated_models)
+            QTimer.singleShot(SETTINGS_RELOAD_DELAY_MS, self.push_updated_models)
         else:
             logger.error("_save_settings: ✗ FEHLER beim Speichern der Config!")
     
@@ -1898,7 +1906,7 @@ class ChatbotWidget(QWidget):
             if did:
                 mw.col.decks.select(did)
                 mw.onOverview()
-                QTimer.singleShot(100, lambda: mw.overview._linkHandler('study'))
+                QTimer.singleShot(STUDY_DECK_DELAY_MS, lambda: mw.overview._linkHandler('study'))
         except Exception as e:
             logger.error("study_deck error: %s", e)
 

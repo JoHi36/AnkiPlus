@@ -14,6 +14,16 @@ except ImportError:
     from utils.logging import get_logger
 logger = get_logger(__name__)
 
+# ---------------------------------------------------------------------------
+# Timing constants
+# ---------------------------------------------------------------------------
+EMBEDDING_INIT_DELAY_MS = 10_000    # Delay before starting background embedding (avoids slowing startup)
+STARTUP_TOKEN_REFRESH_MS = 3_000    # Delay before first token refresh check after profile load
+TOKEN_REFRESH_INTERVAL_MS = 30 * 60 * 1000  # Periodic token refresh interval (30 minutes)
+MAIN_VIEW_INIT_DELAY_MS = 200       # Delay before first MainViewWidget show (Anki init timing)
+STATE_CHANGE_DECK_DELAY_MS = 300    # Delay before sending deckSelected after state change (reviewer init timing)
+INIT_ADDON_LATE_DELAY_MS = 100      # Delay for init_addon when profile was already loaded at import time
+
 # Global EmbeddingManager instance
 _embedding_manager = None
 
@@ -230,7 +240,7 @@ def _init_embedding_manager():
                     continue
             return cards
 
-        QTimer.singleShot(10000, lambda: _embedding_manager.start_background_embedding(get_all_cards))
+        QTimer.singleShot(EMBEDDING_INIT_DELAY_MS, lambda: _embedding_manager.start_background_embedding(get_all_cards))
 
         logger.info(f"EmbeddingManager initialized")
     except Exception as e:
@@ -301,13 +311,13 @@ def init_addon():
             handler = get_ai_handler()
             handler._ensure_valid_token()
 
-    QTimer.singleShot(3000, _startup_token_refresh)
+    QTimer.singleShot(STARTUP_TOKEN_REFRESH_MS, _startup_token_refresh)
 
     # Periodischer Token-Refresh: alle 30 Minuten prüfen
     if not hasattr(mw, '_token_refresh_timer'):
         mw._token_refresh_timer = QTimer(mw)
         mw._token_refresh_timer.timeout.connect(_periodic_token_refresh)
-        mw._token_refresh_timer.start(30 * 60 * 1000)  # 30 Minuten
+        mw._token_refresh_timer.start(TOKEN_REFRESH_INTERVAL_MS)  # 30 Minuten
 
     try:
         mw.addonManager.setWebExports(__name__, r"(web|icons)/.*")
@@ -325,7 +335,7 @@ def init_addon():
         try:
             main_view = get_main_view()
             current_state = getattr(mw, 'state', 'deckBrowser')
-            QTimer.singleShot(200, lambda: show_main_view(current_state))
+            QTimer.singleShot(MAIN_VIEW_INIT_DELAY_MS, lambda: show_main_view(current_state))
             logger.info("MainViewWidget: Initialized")
         except Exception as e:
             logger.error("Failed to init MainViewWidget: %s", e)
@@ -342,7 +352,7 @@ def init_addon():
                         central.layout().setSpacing(0)
                 except Exception:
                     pass
-            QTimer.singleShot(200, _fix_db_margins)
+            QTimer.singleShot(MAIN_VIEW_INIT_DELAY_MS, _fix_db_margins)
 
         # Custom reviewer disabled — ReviewerView in React replaces it
         # custom_reviewer.enable() not called — React renders cards now
@@ -698,7 +708,7 @@ def on_state_will_change(new_state, old_state):
                     except Exception as e:
                         logger.error(f"Fehler beim Senden von deckSelected in state_will_change: {e}")
                 
-                QTimer.singleShot(300, send_deck_selected)
+                QTimer.singleShot(STATE_CHANGE_DECK_DELAY_MS, send_deck_selected)
             
             # Wenn State zu "deckBrowser" wechselt, sende deckExited Event
             elif new_state == "deckBrowser":
@@ -758,4 +768,4 @@ if mw is not None:
     
     # Falls Profil bereits geladen ist, sofort initialisieren
     if hasattr(mw, 'col') and mw.col is not None:
-        QTimer.singleShot(100, init_addon)
+        QTimer.singleShot(INIT_ADDON_LATE_DELAY_MS, init_addon)

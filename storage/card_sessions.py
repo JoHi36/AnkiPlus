@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 _DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'card_sessions.db')
 _db = None
 
-MAX_MESSAGES_PER_CARD = 200
+MAX_MESSAGES_PER_CARD = 200  # Maximum chat messages retained per card (prevents unbounded growth)
 
 
 # ---------------------------------------------------------------------------

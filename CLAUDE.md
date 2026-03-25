@@ -44,7 +44,7 @@ This addon bridges three major technologies:
 
 **Lazy Widget Creation**: UI components are created on first use and cached globally to improve startup performance.
 
-**Message Queue System**: Instead of QWebChannel (which has timing issues), a polling-based message queue runs every 100ms to relay messages between Python and JavaScript.
+**Message Queue System**: Instead of QWebChannel (which has timing issues), a polling-based message queue runs every 200ms to relay messages between Python and JavaScript.
 
 **Thread-Based AI Requests**: AI API calls run in QThread to keep the UI responsive, with support for streaming responses via signals.
 
@@ -55,7 +55,7 @@ This addon bridges three major technologies:
 **JavaScript → Python**:
 1. React calls `bridge.sendMessage(data)`
 2. JavaScript adds message to queue: `window.ankiBridge.addMessage(type, data)`
-3. Python polls queue every 100ms via QTimer
+3. Python polls queue every 200ms via QTimer
 4. Python routes message to appropriate handler
 
 **Python → JavaScript**:
@@ -392,7 +392,7 @@ When custom reviewer is enabled and native toolbar is hidden, a ~40px dark bar m
 
 ### Message Queue Polling
 
-The 100ms polling interval is a deliberate trade-off:
+The 200ms polling interval (`POLL_INTERVAL_MS` in `ui/widget.py`) is a deliberate trade-off:
 - Fast enough to feel instant to users
 - Slow enough to avoid CPU overhead
 - More reliable than QWebChannel's timing issues

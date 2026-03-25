@@ -20,8 +20,8 @@ except ImportError:
     from utils.logging import get_logger
 logger = get_logger(__name__)
 
-MAX_ITERATIONS = 5
-MAX_CONTEXT_CHARS = 100_000  # ~25k tokens
+MAX_ITERATIONS = 5          # Maximum tool-call cycles per agent run (prevents infinite loops)
+MAX_CONTEXT_CHARS = 100_000  # ~25k tokens — prune threshold for Gemini context window
 
 
 def _build_tool_marker(name: str, marker_type: str, result=None, error=None,
