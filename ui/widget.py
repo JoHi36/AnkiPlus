@@ -547,6 +547,11 @@ class ChatbotWidget(QWidget):
             'sidebarOpenNativeSettings': lambda d: __import__('aqt', fromlist=['mw']).mw.onPrefs(),
             'sidebarOpenUpgrade': lambda d: __import__('webbrowser').open('https://anki-plus.vercel.app/#pricing'),
             'sidebarLogout': self._msg_sidebar_logout,
+            # Knowledge Graph
+            'getGraphData': self._msg_get_graph_data,
+            'getTermCards': self._msg_get_term_cards,
+            'getGraphStatus': self._msg_get_graph_status,
+            'getCardKGTerms': self._msg_get_card_kg_terms,
         }
         return handlers.get(msg_type)
 
@@ -2182,6 +2187,61 @@ class ChatbotWidget(QWidget):
                     logger.warning("pycmd: no reviewer to relay to: %s", cmd[:80])
         except Exception as e:
             logger.exception("pycmd error: %s", e)
+
+    # --- Knowledge Graph Handlers ---
+
+    def _msg_get_graph_data(self, data):
+        """Return full graph data for 3D rendering."""
+        try:
+            from ..storage.kg_store import get_graph_data
+        except ImportError:
+            from storage.kg_store import get_graph_data
+        try:
+            result = get_graph_data()
+            self._send_to_js({"type": "graph.data", "data": result})
+        except Exception:
+            logger.exception("getGraphData failed")
+            self._send_to_js({"type": "graph.data", "data": {"nodes": [], "edges": []}})
+
+    def _msg_get_term_cards(self, data):
+        """Return card IDs for a term."""
+        try:
+            from ..storage.kg_store import get_term_card_ids
+        except ImportError:
+            from storage.kg_store import get_term_card_ids
+        try:
+            term = data.get("term", "") if isinstance(data, dict) else ""
+            card_ids = get_term_card_ids(term)
+            self._send_to_js({"type": "graph.termCards", "data": {"term": term, "cardIds": card_ids}})
+        except Exception:
+            logger.exception("getTermCards failed")
+            self._send_to_js({"type": "graph.termCards", "data": {"cardIds": []}})
+
+    def _msg_get_graph_status(self, data):
+        """Return graph build status."""
+        try:
+            from ..storage.kg_store import get_graph_status
+        except ImportError:
+            from storage.kg_store import get_graph_status
+        try:
+            self._send_to_js({"type": "graph.status", "data": get_graph_status()})
+        except Exception:
+            logger.exception("getGraphStatus failed")
+            self._send_to_js({"type": "graph.status", "data": {"totalCards": 0, "totalTerms": 0}})
+
+    def _msg_get_card_kg_terms(self, data):
+        """Return KG terms for a specific card (for reviewer marking)."""
+        try:
+            from ..storage.kg_store import get_card_terms
+        except ImportError:
+            from storage.kg_store import get_card_terms
+        try:
+            card_id = int(data.get("cardId", 0)) if isinstance(data, dict) else 0
+            terms = get_card_terms(card_id)
+            self._send_to_js({"type": "kg.cardTerms", "data": {"cardId": card_id, "terms": terms}})
+        except Exception:
+            logger.exception("getCardKGTerms failed")
+            self._send_to_js({"type": "kg.cardTerms", "data": {"terms": []}})
 
     def _msg_flip_card(self, data=None):
         """Show answer side. Swallow web.eval to prevent mw.web DOM writes."""
