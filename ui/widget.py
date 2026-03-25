@@ -487,6 +487,7 @@ class ChatbotWidget(QWidget):
             'fetchImage': self._msg_fetch_image,
             # Utilities
             'openUrl': lambda d: self.bridge.openUrl(d.get('url', '') if isinstance(d, dict) else d),
+            'pycmd': self._msg_pycmd,
             'debugLog': self._msg_debug_log,
             'plusiPanel': self._msg_plusi_settings,
             'plusiSettings': self._msg_plusi_settings,
@@ -2052,6 +2053,35 @@ class ChatbotWidget(QWidget):
                 logger.warning("request_current_card: no reviewer or no card (rev=%s, card=%s)", rev, rev.card if rev else None)
         except Exception as e:
             logger.warning("request_current_card: %s", e)
+
+    def _msg_pycmd(self, data):
+        """Forward a pycmd to Anki's native reviewer for addon interop.
+
+        Other addons (e.g. AMBOSS) register pycmd handlers on Anki's
+        native reviewer webview. We relay the command string so their
+        popups/overlays work from our React ReviewerView.
+
+        Note: rev.web.eval() is Anki's standard API for running JS in the
+        reviewer webview — it's how all addons communicate. The command is
+        JSON-serialized (not interpolated) to prevent injection.
+        """
+        from aqt import mw
+        try:
+            cmd = data if isinstance(data, str) else str(data)
+            rev = mw.reviewer
+            if rev and rev.web:
+                safe_cmd = json.dumps(cmd)
+                rev.web.eval("pycmd(%s);" % safe_cmd)
+                logger.info("pycmd relayed: %s", cmd[:80])
+            else:
+                # Fallback: try opening as URL if it looks like one
+                if cmd.startswith('http'):
+                    import webbrowser
+                    webbrowser.open(cmd)
+                else:
+                    logger.warning("pycmd: no reviewer to relay to: %s", cmd[:80])
+        except Exception as e:
+            logger.exception("pycmd error: %s", e)
 
     def _msg_flip_card(self, data=None):
         """Show answer side. Swallow web.eval to prevent mw.web DOM writes."""

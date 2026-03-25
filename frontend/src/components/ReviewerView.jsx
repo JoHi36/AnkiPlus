@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 
 /**
  * ReviewerView — Pure display component for the card viewer.
@@ -117,6 +117,39 @@ function MCOptions({ options, selected, isResult, onSelect }) {
 }
 
 export default function ReviewerView({ cardData, reviewer }) {
+  /**
+   * Handle clicks on links inside card HTML.
+   * AMBOSS links, Meditricks links, and other addon links open via bridge.
+   * Prevents default navigation which would break the QWebEngineView.
+   */
+  const handleCardClick = useCallback((e) => {
+    const link = e.target.closest('a');
+    if (!link) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const href = link.getAttribute('href');
+    if (!href || href === '#') return;
+
+    // pycmd-style links (used by some addons): route to Anki's command handler
+    if (href.startsWith('pycmd:') || href.startsWith('py:')) {
+      const cmd = href.replace(/^py(cmd)?:/, '');
+      if (window.ankiBridge?.addMessage) {
+        window.ankiBridge.addMessage('pycmd', cmd);
+      }
+      return;
+    }
+
+    // javascript: links (AMBOSS sometimes uses onclick, which still works)
+    if (href.startsWith('javascript:')) return;
+
+    // Regular URLs — open in system browser via bridge
+    if (window.ankiBridge?.addMessage) {
+      window.ankiBridge.addMessage('openUrl', href);
+    }
+  }, []);
+
   if (!cardData) {
     return (
       <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ds-text-muted)', fontSize: 14, background: 'transparent' }}>
@@ -133,13 +166,13 @@ export default function ReviewerView({ cardData, reviewer }) {
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 'var(--ds-space-2xl) var(--ds-space-xl) 160px', scrollbarWidth: 'none' }}>
         <div style={{ maxWidth: 'var(--ds-dock-width)', width: '100%', margin: '0 auto' }}>
           {showBack
-            ? <div className="card-renderer">
+            ? <div className="card-renderer" onClick={handleCardClick}>
                 <div className="card-content" dangerouslySetInnerHTML={{ __html:
                   sanitizeCardHtml(hasVisibleContent(cardData.backHtml) ? cardData.backHtml : (cardData.backField || cardData.backHtml || ''))
                 }} />
                 {CARD_BG_OVERRIDE}
               </div>
-            : <div className="card-renderer">
+            : <div className="card-renderer" onClick={handleCardClick}>
                 <div className="card-content" dangerouslySetInnerHTML={{ __html:
                   sanitizeCardHtml(hasVisibleContent(cardData.frontHtml) ? cardData.frontHtml : (cardData.frontField || cardData.frontHtml || ''))
                 }} />
