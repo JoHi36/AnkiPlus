@@ -136,6 +136,12 @@ header *,
   background: var(--ds-hover-tint);
 }
 
+/* TermPopup — pulsing loading placeholder animation */
+@keyframes term-popup-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 0.9; }
+}
+
 /* Reset Strong inside Blockquotes to avoid double styling */
 .reset-strong strong {
   @apply bg-transparent font-bold !important;
