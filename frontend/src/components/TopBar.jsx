@@ -119,10 +119,10 @@ export default function TopBar({
   const tabRefs = useRef({});
   const [indicator, setIndicator] = useState({ left: 0, width: 0 });
   const [isFirstRender, setIsFirstRender] = useState(true);
-  const [containerPad, setContainerPad] = useState({ left: 0, right: 0 });
+  const [rubberBand, setRubberBand] = useState('none');
   const prevTabRef = useRef(activeTab);
 
-  // Measure active tab position and update indicator + rubber band
+  // Measure active tab position and trigger rubber band
   useLayoutEffect(() => {
     const el = tabRefs.current[activeTab];
     const container = tabContainerRef.current;
@@ -134,16 +134,20 @@ export default function TopBar({
         width: tabRect.width,
       });
 
-      // Rubber band: stretch container edge in direction of movement
+      // Rubber band: scale-stretch container toward direction of movement at edges
       if (!isFirstRender) {
         const tabIndex = tabs.findIndex(t => t.id === activeTab);
         const prevIndex = tabs.findIndex(t => t.id === prevTabRef.current);
-        const movingRight = tabIndex > prevIndex;
-        const isEdge = tabIndex === 0 || tabIndex === tabs.length - 1;
-
-        if (isEdge) {
-          setContainerPad(movingRight ? { left: 0, right: 4 } : { left: 4, right: 0 });
-          setTimeout(() => setContainerPad({ left: 0, right: 0 }), 300);
+        if (tabIndex !== prevIndex) {
+          const movingRight = tabIndex > prevIndex;
+          const isEdge = tabIndex === 0 || tabIndex === tabs.length - 1;
+          if (isEdge) {
+            // Stretch via scaleX + translateX — no layout shift
+            setRubberBand(movingRight ? 'right' : 'left');
+            setTimeout(() => setRubberBand('none'), 350);
+          } else {
+            setRubberBand('none');
+          }
         }
       }
     }
@@ -154,6 +158,13 @@ export default function TopBar({
       return () => clearTimeout(timer);
     }
   }, [activeTab]);
+
+  // Compute rubber band transform
+  const rubberTransform = rubberBand === 'right'
+    ? 'scaleX(1.02) translateX(1px)'
+    : rubberBand === 'left'
+      ? 'scaleX(1.02) translateX(-1px)'
+      : 'scaleX(1) translateX(0)';
 
   return (
     <div style={{
@@ -167,10 +178,11 @@ export default function TopBar({
         style={{
           position: 'relative',
           display: 'flex', alignItems: 'center', gap: 2,
-          padding: `3px ${3 + containerPad.right}px 3px ${3 + containerPad.left}px`,
-          borderRadius: 8,
+          padding: 3, borderRadius: 8,
           background: 'var(--ds-hover-tint)',
-          transition: 'padding 0.35s cubic-bezier(0.34, 1.2, 0.64, 1)',
+          transform: rubberTransform,
+          transformOrigin: rubberBand === 'right' ? 'left center' : rubberBand === 'left' ? 'right center' : 'center',
+          transition: 'transform 0.35s cubic-bezier(0.34, 1.2, 0.64, 1)',
         }}
       >
         {/* Sliding indicator — the "pill" that glides between tabs */}
