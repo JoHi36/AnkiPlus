@@ -37,13 +37,10 @@ import { classifyCard } from './utils/cardClassifier';
 // MascotShell moved to main window (plusi_dock.py) — no longer imported
 import { useMascot } from './hooks/useMascot';
 import InsightsDashboard from './components/InsightsDashboard';
-import AgentStudio from './components/AgentStudio';
 import useInsights from './hooks/useInsights';
-import PlusiMenu from './components/PlusiMenu';
-import ResearchMenu from './components/ResearchMenu';
-import StandardSubMenu from './components/StandardSubMenu';
 import TokenBudgetSlider from './components/TokenBudgetSlider';
 import SettingsSidebar from './components/SettingsSidebar';
+import SidebarShell from './components/SidebarShell';
 import AgenticCell from './components/AgenticCell';
 import TopBar from './components/TopBar';
 import DeckBrowserView from './components/DeckBrowserView';
@@ -188,7 +185,7 @@ function AppInner() {
   const cardSessionHook = useCardSession(bridge);
   const reviewTrailHook = useReviewTrail();
   const insightsHook = useInsights();
-  const [activeView, setActiveView] = useState('chat'); // 'chat' | 'agentStudio' | 'plusiMenu' | 'researchMenu' | 'subMenu:<agentName>' | 'deckBrowser' | 'overview' | 'freeChat'
+  const [activeView, setActiveView] = useState('chat'); // 'chat' | 'deckBrowser' | 'overview' | 'freeChat' | 'review' | 'statistik'
   const activeViewRef = useRef('chat');
   useEffect(() => { activeViewRef.current = activeView; }, [activeView]);
 
@@ -1911,18 +1908,6 @@ function AppInner() {
     return () => window.removeEventListener('keydown', handler);
   }, [activeChat]);
 
-  // ⌘. — toggle between chat and agentStudio
-  useEffect(() => {
-    const handleGlobalShortcut = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === '.') {
-        e.preventDefault();
-        setActiveView(prev => prev === 'chat' ? 'agentStudio' : 'chat');
-      }
-    };
-    window.addEventListener('keydown', handleGlobalShortcut);
-    return () => window.removeEventListener('keydown', handleGlobalShortcut);
-  }, []);
-
   // Report text field focus state to Python for global shortcut routing
   useEffect(() => {
     const onFocusIn = (e) => {
@@ -2319,9 +2304,6 @@ function AppInner() {
     }
   }, [sessionContext.currentSessionId, sessionContext.isTemporary, chatHook.messages.length, scrollToLastUserMessage]);
 
-  // Computed view state — used in JSX below
-  const isInSubmenu = activeView === 'plusiMenu' || activeView === 'researchMenu' || activeView.startsWith('subMenu:');
-
   // ── Fullscreen views (DeckBrowser, Overview, FreeChat) — merged from MainApp ──
   const isFreeChatAnimatingIn = freeChatTransition === 'entering' || freeChatTransition === 'visible';
   const showFreeChat = activeView === 'freeChat' && freeChatTransition !== 'idle';
@@ -2338,7 +2320,7 @@ function AppInner() {
       pointerEvents: settingsOpen ? 'auto' : 'none',
       transition: 'transform 0.35s cubic-bezier(0.25, 1, 0.5, 1)',
     }}>
-      <SettingsSidebar />
+      <SidebarShell bridge={bridge} />
     </div>
   );
 
@@ -2397,7 +2379,7 @@ function AppInner() {
               {/* Messages area */}
               <div style={{
                 flex: 1, overflowY: 'auto', padding: '20px 16px 120px',
-                maxWidth: 720, width: '100%', margin: '0 auto',
+                maxWidth: 'var(--ds-content-width)', width: '100%', margin: '0 auto',
               }}>
                 {freeChatHook.messages.length === 0 && !freeChatHook.isLoading && !freeChatHook.streamingMessage && (
                   <div style={{
@@ -2462,7 +2444,7 @@ function AppInner() {
               {/* Input dock -- fixed bottom */}
               <div style={{
                 position: 'fixed', bottom: 0, left: 0, right: 0,
-                padding: '0 16px 16px', maxWidth: 720, margin: '0 auto', width: '100%',
+                padding: '0 16px 16px', maxWidth: 'var(--ds-content-width)', margin: '0 auto', width: '100%',
                 opacity: isFreeChatAnimatingIn ? 1 : 0,
                 transform: isFreeChatAnimatingIn ? 'translateY(0)' : 'translateY(8px)',
                 transition: 'opacity 250ms ease 150ms, transform 250ms ease 150ms',
@@ -2478,7 +2460,6 @@ function AppInner() {
                   onBlur={handleMainInputBlur}
                   stickyAgent={stickyAgent}
                   onStickyAgentChange={setStickyAgent}
-                  onOpenAgentStudio={() => setActiveView('agentStudio')}
                   actionPrimary={{
                     label: 'Schlie\u00DFen',
                     shortcut: '\u2423',
@@ -2555,6 +2536,8 @@ function AppInner() {
         ),
         height: '100vh', position: 'relative',
       }}>
+      {/* Resize handle — only visible in review mode when sidebar is open */}
+      {activeView === 'review' && reviewChatOpen && <ResizeHandle />}
       <div id="chat-root" className="flex flex-col overflow-hidden" style={{
         backgroundColor: 'var(--ds-bg-deep)', color: 'var(--ds-text-primary)',
         width: activeView === 'review' ? 'var(--ds-sidebar-width)' : '100%',
@@ -2619,8 +2602,8 @@ function AppInner() {
             />
             {/* Chat Container - scrollbar */}
             <div className="flex-1 overflow-hidden relative">
-              {/* Top Fade Gradient — hidden in review, sub-menus and Agent Studio */}
-              {!isInSubmenu && activeView !== 'agentStudio' && activeView !== 'review' && (
+              {/* Top Fade Gradient — hidden in review */}
+              {activeView !== 'review' && (
               <div
                 className="fixed left-0 right-0 pointer-events-none z-25"
                 style={{
@@ -2636,30 +2619,7 @@ function AppInner() {
                 className={`h-full w-full scrollbar-thin relative z-10 ${activeView === 'chat' ? 'overflow-y-auto px-8 pt-20 pb-40' : 'overflow-hidden flex flex-col px-8 pt-2 pb-0'}`}
               >
 
-                {activeView === 'agentStudio' ? (
-                  <AgentStudio
-                    bridge={bridge}
-                    onNavigateToSubmenu={(view) => setActiveView(view)}
-                  />
-                ) : activeView === 'plusiMenu' ? (
-                  <PlusiMenu
-                    agent={[...getRegistry().values()].find(a => a.name === 'plusi')}
-                    bridge={bridge}
-                    onNavigateBack={() => setActiveView('agentStudio')}
-                  />
-                ) : activeView === 'researchMenu' ? (
-                  <ResearchMenu
-                    agent={[...getRegistry().values()].find(a => a.name === 'research')}
-                    bridge={bridge}
-                    onNavigateBack={() => setActiveView('agentStudio')}
-                  />
-                ) : activeView.startsWith('subMenu:') ? (
-                  <StandardSubMenu
-                    agent={[...getRegistry().values()].find(a => a.name === activeView.split(':')[1])}
-                    bridge={bridge}
-                    onNavigateBack={() => setActiveView('agentStudio')}
-                  />
-                ) : chatHook.messages.length === 0 && !chatHook.isLoading && !chatHook.streamingMessage ? (
+                {chatHook.messages.length === 0 && !chatHook.isLoading && !chatHook.streamingMessage ? (
             <InsightsDashboard
               insights={insightsHook.insights}
               cardStats={cardContextHook.cardContext?.stats || {}}
@@ -2909,7 +2869,7 @@ function AppInner() {
                             return activeAgentName || 'tutor';
                           })();
                           return (
-                            <div className="w-full flex-none mb-2">
+                            <div className="w-full flex-none mb-2" style={{ maxWidth: 'var(--ds-content-width)' }}>
                               {/* Router ThoughtStream (before agent) */}
                               {rSteps.length > 0 && (
                                 <ThoughtStream
@@ -2953,7 +2913,7 @@ function AppInner() {
                         })()}
                         {/* Initial routing skeleton — only before any pipeline steps arrive */}
                         {chatHook.isLoading && !chatHook.currentMessage && !chatHook.streamingMessage && (chatHook.pipelineSteps || []).length === 0 && !(nextMsg && nextMsg.from === 'bot' && nextMsg.text) && (
-                          <div className="w-full flex-none mb-2" style={{ padding: '0 4px' }}>
+                          <div className="w-full flex-none mb-2" style={{ padding: '0 4px', maxWidth: 'var(--ds-content-width)' }}>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                               {[
                                 { label: 'Routing Agent', width: 60 },
@@ -2986,7 +2946,7 @@ function AppInner() {
                           typeof nextMsg.text === 'string' &&
                           nextMsg.text
                         ) && (
-                          <div className="w-full flex-none">
+                          <div className="w-full flex-none" style={{ maxWidth: 'var(--ds-content-width)' }}>
                             <StreamingChatMessage
                               message={chatHook.streamingMessage || ''}
                               isStreaming={chatHook.isLoading}
@@ -3090,22 +3050,21 @@ function AppInner() {
         actionSecondary = { label: '', shortcut: '', onClick: () => {} };
       } else {
         // Normal chat mode (non-review)
-        topSlot = activeView === 'plusiMenu' ? <TokenBudgetSlider value={500} /> : undefined;
-        hideInput = isInSubmenu || activeView === 'agentStudio';
+        topSlot = undefined;
+        hideInput = false;
         placeholder = undefined;
         onSend = handleSend;
         actionPrimary = {
-          label: isInSubmenu ? 'Zurück' : 'Weiter', shortcut: 'SPACE',
+          label: 'Weiter', shortcut: 'SPACE',
           onClick: () => {
-            if (isInSubmenu) setActiveView('agentStudio');
-            else if (activeView !== 'chat') setActiveView('chat');
+            if (activeView !== 'chat') setActiveView('chat');
             else if (bridge?.advanceCard) bridge.advanceCard();
             else handleClose();
           },
         };
         actionSecondary = {
-          label: isInSubmenu || activeView === 'agentStudio' ? 'Chat' : 'Agent Studio', shortcut: '↵',
-          onClick: () => setActiveView(activeView === 'chat' ? 'agentStudio' : 'chat'),
+          label: 'Senden', shortcut: '↵',
+          onClick: () => {},
         };
       }
 
@@ -3113,17 +3072,18 @@ function AppInner() {
       // All positions use left + width only (no right/auto) so CSS can animate smoothly
       // Settings offset shifts everything right when settings panel is open
       const sOff = settingsOpen ? 'var(--ds-settings-width)' : '0px';
-      const posStyle = isReviewCenter
-        ? { left: `calc(${sOff} + (100% - ${sOff}) / 2 - var(--ds-dock-width) / 2)`, width: 'var(--ds-dock-width)', bottom: 'var(--ds-space-xl)' }
-        : isReviewSidebar
-          ? { left: 'calc(100% - var(--ds-sidebar-width) + var(--ds-space-xl))', width: 'var(--ds-dock-width)', bottom: 'var(--ds-space-xl)' }
-          : { left: `calc(${sOff} + var(--ds-space-lg))`, width: `calc(100% - ${sOff} - 2 * var(--ds-space-lg))`, bottom: 'var(--ds-space-lg)' };
+      // All modes: use left+right for bounds, maxWidth+margin:auto for centering
+      const posStyle = isReviewSidebar
+        ? { left: 'calc(100% - var(--ds-sidebar-width) + var(--ds-space-2xl))', right: 'var(--ds-space-2xl)', bottom: 'var(--ds-space-xl)' }
+        : { left: `calc(${sOff} + var(--ds-space-lg))`, right: 'var(--ds-space-lg)', bottom: isReview ? 'var(--ds-space-xl)' : 'var(--ds-space-lg)' };
 
       return (
         <div ref={dockPulseRef} style={{
           position: 'fixed', zIndex: 60,
           ...posStyle,
-          transition: 'left 0.3s cubic-bezier(0.25, 1, 0.5, 1), right 0.3s cubic-bezier(0.25, 1, 0.5, 1), width 0.3s cubic-bezier(0.25, 1, 0.5, 1), bottom 0.3s cubic-bezier(0.25, 1, 0.5, 1)',
+          maxWidth: 'var(--ds-content-width)',
+          marginLeft: 'auto', marginRight: 'auto',
+          transition: 'left 0.3s cubic-bezier(0.25, 1, 0.5, 1), right 0.3s cubic-bezier(0.25, 1, 0.5, 1), bottom 0.3s cubic-bezier(0.25, 1, 0.5, 1), max-width 0.3s cubic-bezier(0.25, 1, 0.5, 1)',
         }}>
           <ChatInput
             onSend={onSend}
@@ -3138,7 +3098,6 @@ function AppInner() {
             plusiEnabled={isReview ? false : mascotEnabled}
             stickyAgent={stickyAgent}
             onStickyAgentChange={setStickyAgent}
-            onOpenAgentStudio={() => setActiveView('agentStudio')}
             topSlot={topSlot}
             hideInput={hideInput}
             placeholder={placeholder}
