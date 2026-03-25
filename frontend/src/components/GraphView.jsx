@@ -131,6 +131,21 @@ export default function GraphView({ onToggleView, isPremium }) {
   const hasResults = searchResult?.cards?.length > 0;
   const cardIds = searchResult?.cards?.map(c => c.id) || [];
 
+  // Compute deck breakdown for legend
+  const deckBreakdown = useMemo(() => {
+    if (!searchResult?.cards?.length) return [];
+    const counts = {};
+    const colors = {};
+    searchResult.cards.forEach(c => {
+      const deck = c.deck || 'Unbekannt';
+      counts[deck] = (counts[deck] || 0) + 1;
+      if (!colors[deck]) colors[deck] = deckColor(deck);
+    });
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([deck, count]) => ({ deck, count, color: colors[deck] }));
+  }, [searchResult]);
+
   return (
     <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
       {/* 3D canvas — fullscreen background */}
@@ -258,41 +273,86 @@ export default function GraphView({ onToggleView, isPremium }) {
         </div>
       )}
 
-      {/* Bottom bar — results */}
+      {/* Deck legend — right side */}
+      {hasResults && deckBreakdown.length > 0 && (
+        <div style={{
+          position: 'absolute', right: 20, top: '50%', transform: 'translateY(-50%)',
+          display: 'flex', flexDirection: 'column', gap: 6,
+          zIndex: 10, pointerEvents: 'none',
+        }}>
+          {deckBreakdown.map(({ deck, count, color }) => (
+            <div key={deck} style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              fontSize: 11, color: 'var(--ds-text-secondary)',
+            }}>
+              <div style={{
+                width: 8, height: 8, borderRadius: '50%',
+                background: color, flexShrink: 0,
+              }} />
+              <span>{deck}</span>
+              <span style={{ color: 'var(--ds-text-tertiary)' }}>{count}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Bottom bar — results + deck breakdown */}
       {hasResults && (
         <div style={{
           position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          padding: '12px 24px', borderRadius: 16,
+          padding: '14px 24px', borderRadius: 16,
           background: 'var(--ds-bg-frosted)', backdropFilter: 'blur(20px)',
           border: '1px solid var(--ds-border-subtle)',
           boxShadow: 'var(--ds-shadow-lg)',
           zIndex: 10, pointerEvents: 'auto',
-          display: 'flex', alignItems: 'center', gap: 16,
-          maxWidth: 500,
+          maxWidth: 560,
         }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ds-text-primary)' }}>
-              {searchResult.totalFound} Karten gefunden
+          {/* Header row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--ds-text-primary)' }}>
+                {searchResult.totalFound} Karten gefunden
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--ds-text-secondary)', marginTop: 2 }}>
+                {searchResult.query}
+              </div>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--ds-text-secondary)', marginTop: 2 }}>
-              {searchResult.query}
-            </div>
+            <button
+              onClick={() => {
+                window.ankiBridge?.addMessage('startTermStack', {
+                  term: searchResult.query,
+                  cardIds: JSON.stringify(cardIds.map(Number)),
+                });
+              }}
+              style={{
+                background: 'var(--ds-accent)', color: 'white', border: 'none',
+                borderRadius: 10, padding: '10px 20px', fontSize: 14, fontWeight: 600,
+                cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+              }}
+            >
+              Stapel starten
+            </button>
           </div>
-          <button
-            onClick={() => {
-              window.ankiBridge?.addMessage('startTermStack', {
-                term: searchResult.query,
-                cardIds: JSON.stringify(cardIds.map(Number)),
-              });
-            }}
-            style={{
-              background: 'var(--ds-accent)', color: 'white', border: 'none',
-              borderRadius: 10, padding: '10px 20px', fontSize: 14, fontWeight: 600,
-              cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-            }}
-          >
-            Stapel starten
-          </button>
+
+          {/* Deck breakdown bar */}
+          {deckBreakdown.length > 1 && (
+            <div style={{
+              display: 'flex', gap: 3, marginTop: 10, borderRadius: 6, overflow: 'hidden',
+              height: 6,
+            }}>
+              {deckBreakdown.map(({ deck, count, color }) => (
+                <div
+                  key={deck}
+                  title={`${deck}: ${count} Karten`}
+                  style={{
+                    flex: count,
+                    background: color,
+                    minWidth: 4,
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
