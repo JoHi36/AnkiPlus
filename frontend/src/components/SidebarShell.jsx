@@ -112,7 +112,16 @@ const CONFIG_KEY_MAP = {
  *   bridge — WebBridge proxy (passed down to all content panels)
  */
 export default function SidebarShell({ bridge }) {
-  const [activeTab, setActiveTab] = useState('__settings__');
+  const [activeTab, setActiveTab] = useState(() => {
+    try { return localStorage.getItem('ankiplus-sidebar-tab') || '__settings__'; }
+    catch { return '__settings__'; }
+  });
+
+  // Persist active tab across view switches
+  function handleTabChange(tab) {
+    setActiveTab(tab);
+    try { localStorage.setItem('ankiplus-sidebar-tab', tab); } catch {}
+  }
   const [agents, setAgents] = useState(() => getSidebarAgents());
 
   // enabledStates: { [agentName]: boolean }
@@ -202,7 +211,7 @@ export default function SidebarShell({ bridge }) {
       {/* ── Vertical icon tab strip ─────────────────────────────────────────── */}
       <SidebarTabBar
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={handleTabChange}
         agents={agents}
       />
 
