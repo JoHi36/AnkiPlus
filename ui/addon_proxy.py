@@ -30,6 +30,35 @@ logger = get_logger(__name__)
 # Marker injected into mirrored JS so the proxy can skip its own calls.
 _PROXY_MARKER = "/* __ankiplus_proxy__ */"
 
+# JS prefixes that are Anki's own reviewer internals — NEVER mirror these.
+# They reference functions/DOM that only exist in Anki's native webview.
+_ANKI_INTERNAL_PREFIXES = (
+    '_show', '_draw', '_update', '_toggle',  # Anki reviewer functions
+    'document.body.style',                    # Direct DOM manipulation
+    'window.anki',                            # Our own card_tracker injections
+    'pycmd(',                                 # pycmd calls from native reviewer
+    '/**',                                    # Our own Premium/MC JS injections
+)
+
+
+def _should_mirror(js_code):
+    """Return True if this JS call should be mirrored to our webview.
+    Only mirrors addon calls (ambossAddon.*, meditricks.*, etc.).
+    Skips Anki internal reviewer JS and our own injections.
+    """
+    if not js_code:
+        return False
+    stripped = js_code.lstrip()
+    # Skip known Anki internals
+    for prefix in _ANKI_INTERNAL_PREFIXES:
+        if stripped.startswith(prefix):
+            return False
+    # Skip very large payloads (likely _showQuestion HTML dumps)
+    if len(js_code) > 5000:
+        return False
+    # Mirror everything else — addon calls like ambossAddon.*, meditricks.*, etc.
+    return True
+
 # Addon folder names that belong to this addon — skip them when capturing.
 _OWN_ADDON_NAMES = {"AnkiPlus_main", "ankiplus", "chatbot"}
 
@@ -234,15 +263,17 @@ class WebEvalProxy:
         proxy_self = self
 
         def _proxy_eval(js_code):
-            # Log every call for debugging
-            snippet = js_code[:120].replace('\n', ' ') if js_code else '(empty)'
-            logger.info("addon_proxy: EVAL intercepted (%d chars): %s", len(js_code), snippet)
             # Always call the real eval first (don't break the native reviewer).
             proxy_self._original_eval(js_code)
-            # Skip mirroring our own injections to prevent infinite loops.
+            # Skip our own injections (prevent loops)
             if _PROXY_MARKER in js_code:
                 return
-            proxy_self._mirror(js_code)
+            # Only mirror addon-related calls — skip Anki's own reviewer JS
+            # which would crash in our React webview (no _showQuestion etc.)
+            if _should_mirror(js_code):
+                logger.debug("addon_proxy: mirroring (%d chars): %s",
+                             len(js_code), js_code[:80].replace('\n', ' '))
+                proxy_self._mirror(js_code)
 
         reviewer_web.eval = _proxy_eval
         self._installed = True
