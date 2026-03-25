@@ -59,6 +59,24 @@ function sanitizeCardHtml(html) {
 
 const MC_LETTERS = ['A', 'B', 'C', 'D', 'E'];
 
+/**
+ * Override style injected AFTER card content in the DOM.
+ * Because it appears later, it wins the CSS cascade even against
+ * deck CSS with !important (same specificity, later wins).
+ * This is the same technique used by custom_reviewer/__init__.py.
+ */
+const CARD_BG_OVERRIDE = (
+  <style>{`
+    .card-renderer .card,
+    .card-renderer .card.nightMode,
+    .card-renderer #qa,
+    .card-renderer .card-content > div:first-child {
+      background: transparent !important;
+      background-color: transparent !important;
+    }
+  `}</style>
+);
+
 function MCOptions({ options, selected, isResult, onSelect }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 24 }}>
@@ -116,11 +134,13 @@ export default function ReviewerView({ cardData, reviewer }) {
                 <div className="card-content" dangerouslySetInnerHTML={{ __html:
                   sanitizeCardHtml(hasVisibleContent(cardData.backHtml) ? cardData.backHtml : (cardData.backField || cardData.backHtml || ''))
                 }} />
+                {CARD_BG_OVERRIDE}
               </div>
             : <div className="card-renderer">
                 <div className="card-content" dangerouslySetInnerHTML={{ __html:
                   sanitizeCardHtml(hasVisibleContent(cardData.frontHtml) ? cardData.frontHtml : (cardData.frontField || cardData.frontHtml || ''))
                 }} />
+                {CARD_BG_OVERRIDE}
               </div>
           }
           {(state.mode === 'mc_active' || state.mode === 'mc_result') && state.mcOptions && (
