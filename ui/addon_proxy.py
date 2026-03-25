@@ -330,7 +330,31 @@ class WebEvalProxy:
         # Delay DOM-modifying addon calls so React renders first
         if 'mark(' in js_code or 'setContentFor(' in js_code:
             from PyQt6.QtCore import QTimer
-            QTimer.singleShot(500, lambda code=js_code: self._run_in_our_webview(code))
+
+            def _delayed_mark(code=js_code):
+                self._run_in_our_webview(code)
+                # Diagnostic: check if mark() actually created elements
+                diag = (
+                    "setTimeout(function(){"
+                    "  var markers = document.querySelectorAll('.amboss-marker');"
+                    "  var qaEl = document.getElementById('qa');"
+                    "  var cardEl = document.querySelector('.card');"
+                    "  var textLen = (qaEl ? qaEl.textContent : '').length;"
+                    "  if (window.ankiBridge && window.ankiBridge.addMessage) {"
+                    "    window.ankiBridge.addMessage('jsError',"
+                    "      'AMBOSS DIAG: markers=' + markers.length"
+                    "      + ' qa=' + !!qaEl"
+                    "      + ' card=' + !!cardEl"
+                    "      + ' textLen=' + textLen"
+                    "      + ' ambossAddon=' + (typeof ambossAddon)"
+                    "      + ' phraseMarker=' + (typeof ambossAddon !== 'undefined' && ambossAddon.tooltip ? typeof ambossAddon.tooltip.phraseMarker : 'N/A')"
+                    "    );"
+                    "  }"
+                    "}, 200);"
+                )
+                self._run_in_our_webview(diag)
+
+            QTimer.singleShot(500, _delayed_mark)
             return
 
         self._run_in_our_webview(js_code)
