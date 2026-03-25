@@ -1238,3 +1238,82 @@ def stream_response(urls, data, callback=None, use_backend=False, backend_data=N
     if callback:
         callback("", True, False)
     return (full_text, None)
+
+
+# ---------------------------------------------------------------------------
+# generate_definition  — lightweight synchronous call for KG definitions
+# ---------------------------------------------------------------------------
+DEFINITION_MODEL = "gemini-2.0-flash"
+
+
+def generate_definition(term, card_texts, model=None):
+    """Generate a concise definition of a term from flashcard texts.
+
+    Args:
+        term: The term to define.
+        card_texts: List of dicts with 'question' and 'answer' keys.
+        model: Model to use (defaults to DEFINITION_MODEL).
+
+    Returns:
+        Definition string, or empty string on failure.
+    """
+    if not card_texts:
+        return ""
+
+    if model is None:
+        model = DEFINITION_MODEL
+
+    config = get_config() or {}
+    api_key = config.get("api_key", "")
+    if not api_key:
+        logger.warning("generate_definition: Kein API-Key konfiguriert")
+        return ""
+
+    cards_str = "\n\n".join(
+        "Karte %d:\nFrage: %s\nAntwort: %s" % (i + 1, c.get("question", ""), c.get("answer", ""))
+        for i, c in enumerate(card_texts[:8])
+    )
+
+    prompt = (
+        "Basierend auf den folgenden Lernkarten, erstelle eine präzise Definition von '%s'. "
+        "Maximal 3 Sätze. Antworte auf Deutsch.\n\n%s" % (term, cards_str)
+    )
+
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        "%s:generateContent?key=%s" % (model, api_key)
+    )
+    data = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.3,
+            "maxOutputTokens": 300,
+        },
+    }
+
+    try:
+        response = requests.post(url, json=data, headers={"Content-Type": "application/json"}, timeout=20)
+        response.raise_for_status()
+        result = response.json()
+
+        candidates = result.get("candidates", [])
+        if candidates:
+            parts = candidates[0].get("content", {}).get("parts", [])
+            if parts:
+                text = parts[0].get("text", "").strip()
+                if text:
+                    logger.info("generate_definition: Definition für '%s' generiert (%s Zeichen)", term, len(text))
+                    return text
+
+        logger.warning("generate_definition: Keine Textantwort für '%s'", term)
+        return ""
+
+    except requests.exceptions.RequestException as e:
+        logger.error("generate_definition: Netzwerkfehler für '%s': %s", term, str(e))
+        return ""
+    except (ValueError, KeyError) as e:
+        logger.error("generate_definition: Fehler beim Parsen der Antwort für '%s': %s", term, str(e))
+        return ""
+    except Exception as e:
+        logger.exception("generate_definition: Unbekannter Fehler für '%s'", term)
+        return ""
