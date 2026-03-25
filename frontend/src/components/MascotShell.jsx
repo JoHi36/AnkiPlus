@@ -30,6 +30,7 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true 
   const dockRef = useRef(null);
   const charRef = useRef(null);
   const moodTimerRef = useRef(null);
+  const overrideMoodRef = useRef(null);
 
   // Tap tracking
   const tapTimesRef = useRef([]);
@@ -147,7 +148,7 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true 
         const cleanup = () => {
           dock.style.transition = '';
           dock.style.transform = '';
-          dock.style.animationPlayState = '';
+          dock.style.animationName = '';  // restore CSS animation
         };
         dock.addEventListener('transitionend', cleanup, { once: true });
         setTimeout(cleanup, 700);
@@ -198,10 +199,13 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true 
     const startDrag = () => {
       ds.active = true;
       ds.pending = false;
-      setOverrideMood('surprised');
+      // Use ref-only mood update to avoid re-render flicker during drag
+      overrideMoodRef.current = 'surprised';
+      // Force MascotCharacter to update mood without React state
+      // (charRef mood is controlled via prop — we'll update state AFTER drag ends)
 
       dock.style.transition = 'none';
-      dock.style.animationPlayState = 'paused';
+      dock.style.animationName = 'none'; // kill animation completely, not just pause
 
       // Start lerp loop
       const lerpLoop = () => {
@@ -299,13 +303,14 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true 
         dock.style.transition = '';
         if (!ds.placed) {
           dock.style.transform = '';
+          dock.style.animationName = '';  // restore CSS animation
         }
-        dock.style.animationPlayState = ds.placed ? 'paused' : '';
       };
       dock.addEventListener('transitionend', cleanup, { once: true });
       setTimeout(cleanup, 600);
 
-      // Mood reaction
+      // Mood reaction — now safe to update React state (drag is over)
+      overrideMoodRef.current = null;
       if (shaken) {
         setTempMood('worried', 5000);
       } else {
@@ -319,14 +324,15 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true 
 
   if (!enabled) return null;
 
+  // During drag, overrideMoodRef is set but state isn't updated (avoids re-render flicker).
+  // After drag, state is updated normally.
   const effectiveMood = overrideMood || (eventBubble ? eventBubble.mood : mood);
-  const animClass = dragStateRef.current.active || dragStateRef.current.placed
-    ? ''
-    : mood === 'happy' || mood === 'excited'
-      ? 'plusi-dock-bounce'
-      : mood === 'empathy'
-        ? 'plusi-dock-droop'
-        : 'plusi-dock-float';
+  // Animation class — always set. During drag, animationName is killed via DOM.
+  const animClass = mood === 'happy' || mood === 'excited'
+    ? 'plusi-dock-bounce'
+    : mood === 'empathy'
+      ? 'plusi-dock-droop'
+      : 'plusi-dock-float';
 
   return (
     <>
@@ -349,7 +355,7 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true 
           />
         </div>
 
-        {!dragStateRef.current.active && eventBubble && (
+        {eventBubble && (
           <div className="plusi-dock-bubble">
             {eventBubble.text}
           </div>
