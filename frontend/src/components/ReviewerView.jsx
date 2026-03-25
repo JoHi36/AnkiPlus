@@ -67,12 +67,15 @@ const MC_LETTERS = ['A', 'B', 'C', 'D', 'E'];
  */
 const CARD_BG_OVERRIDE = (
   <style>{`
-    .card-renderer .card,
-    .card-renderer .card.nightMode,
-    .card-renderer #qa,
-    .card-renderer .card-content > div:first-child {
+    .card-renderer *,
+    .card-renderer *::before,
+    .card-renderer *::after {
       background: transparent !important;
       background-color: transparent !important;
+      background-image: none !important;
+    }
+    .card-renderer .cloze {
+      background: var(--ds-active-tint) !important;
     }
   `}</style>
 );
