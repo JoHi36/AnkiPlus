@@ -360,3 +360,14 @@ body.sidebar-resizing * {
 }
 /* merged into .research-source-title above */
 .research-source-domain { font-size: 10.5px; color: var(--ds-text-tertiary); }
+
+/* Knowledge Graph term markers in reviewer */
+.kg-marker {
+  border-bottom: 1px solid var(--ds-accent-20);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.kg-marker:hover {
+  border-bottom-color: var(--ds-accent);
+  background: var(--ds-accent-10);
+}
