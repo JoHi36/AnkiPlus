@@ -43,8 +43,8 @@ export default function GraphView({ onToggleView, isPremium }) {
     if (!containerRef.current || !graphData) return;
 
     const links = graphData.edges.map(e => ({
-      source: e.source,
-      target: e.target,
+      source: e.source || e.term_a,
+      target: e.target || e.term_b,
       value: e.weight,
     }));
 

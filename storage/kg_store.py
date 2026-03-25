@@ -396,9 +396,11 @@ def get_graph_data():
         if term not in primary_deck:
             primary_deck[term] = row["deck_id"]
 
-    # Fetch all terms with frequency
+    # Fetch terms with reasonable frequency (top ~1500 for performance)
+    # Too many nodes kills WebGL performance
     term_rows = db.execute(
-        "SELECT term, COALESCE(frequency, 0) AS frequency FROM kg_terms"
+        "SELECT term, COALESCE(frequency, 0) AS frequency FROM kg_terms "
+        "WHERE frequency >= 10 ORDER BY frequency DESC LIMIT 2000"
     ).fetchall()
 
     nodes = []
@@ -416,7 +418,14 @@ def get_graph_data():
             }
         )
 
-    edges = get_all_edges(min_weight=1)
+    # Only include edges where both terms exist as nodes
+    node_ids = {n["id"] for n in nodes}
+    raw_edges = get_all_edges(min_weight=1)
+    edges = [
+        {"source": e["term_a"], "target": e["term_b"], "weight": e["weight"]}
+        for e in raw_edges
+        if e["term_a"] in node_ids and e["term_b"] in node_ids
+    ]
 
     return {"nodes": nodes, "edges": edges}
 
