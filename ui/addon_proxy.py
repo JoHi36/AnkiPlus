@@ -135,17 +135,17 @@ class AddonContentCapture:
         assets = []
 
         # --- External script tags: <script src="/_addons/..."> ---
+        # NOTE: We skip addon JS files (tooltip.js, analytics.js) because webpack
+        # bundles don't work in our React webview context. We only need the CSS
+        # for marker styling. Phrase data comes through the eval proxy.
         for m in re.finditer(
             r'<script[^>]+src=["\']([^"\']+)["\'][^>]*>', body, re.IGNORECASE
         ):
             src = m.group(1)
             if self._is_own_addon(src):
-                logger.debug("addon_proxy: skipping own addon script %s", src)
                 continue
-            content = self._read_addon_file(src)
-            if content is not None:
-                assets.append({"type": "js", "content": content, "src": src})
-                logger.debug("addon_proxy: captured JS asset %s", src)
+            # Capture JS metadata but don't load it — just log for awareness
+            logger.debug("addon_proxy: noted addon JS (not loading): %s", src)
 
         # --- External stylesheet links: <link rel="stylesheet" href="/_addons/..."> ---
         for m in re.finditer(
@@ -369,14 +369,52 @@ class WebEvalProxy:
         logger.debug("addon_proxy: sent %d phrases to React", len(phrases))
 
     def _send_tooltip_to_react(self, js_code):
-        """Forward setContentFor/tooltipShown calls directly to our webview.
+        """Parse tooltip HTML from setContentFor() and send to React.
 
-        AMBOSS's tooltip.js (loaded in our webview) has Tippy instances
-        that show popups. setContentFor() fills them with content.
-        We run the JS directly since tooltip.js handles the DOM.
+        AMBOSS's setContentFor(markId, html, hasMedia) sends rendered
+        tooltip HTML. We extract the HTML and send it to React for display
+        in our own tooltip component.
         """
-        self._run_in_our_webview(js_code)
-        logger.debug("addon_proxy: forwarded tooltip content to our webview")
+        if 'setContentFor(' not in js_code:
+            return
+
+        # Extract: setContentFor(markId, htmlString, hasMedia)
+        start = js_code.find('setContentFor(')
+        if start == -1:
+            return
+        start += len('setContentFor(')
+
+        # Parse the arguments — they're JSON-encoded strings separated by commas
+        # Format: setContentFor(\n"markId", "html", true/false)
+        try:
+            # Find the arguments section
+            paren_depth = 1
+            pos = start
+            while pos < len(js_code) and paren_depth > 0:
+                if js_code[pos] == '(':
+                    paren_depth += 1
+                elif js_code[pos] == ')':
+                    paren_depth -= 1
+                pos += 1
+            args_str = js_code[start:pos - 1].strip()
+
+            # Parse as JSON array to extract arguments
+            args = json.loads('[' + args_str + ']')
+            if len(args) >= 2:
+                mark_id = args[0]
+                html = args[1]
+                has_media = args[2] if len(args) > 2 else False
+
+                # Send to React
+                payload = json.dumps({
+                    "type": "addon.tooltip",
+                    "data": {"markId": mark_id, "html": html, "hasMedia": has_media, "source": "amboss"}
+                })
+                js = "if(window.ankiReceive)window.ankiReceive(%s);" % payload
+                self._run_in_our_webview(js)
+                logger.info("addon_proxy: sent tooltip content to React (%d chars HTML)", len(html))
+        except Exception:
+            logger.exception("addon_proxy: failed to parse setContentFor() args")
 
     def _run_in_our_webview(self, js_code):
         """Execute *js_code* in our QWebEngineView."""

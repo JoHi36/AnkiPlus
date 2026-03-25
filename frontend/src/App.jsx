@@ -284,9 +284,6 @@ function AppInner() {
   });
   // Ref für messages container (für Auto-Scroll)
   const messagesContainerRef = useRef(null);
-  // Buffer last live v2 message to prevent flicker during finalize transition
-  const lastLiveMsgRef = useRef(null);
-  if (chatHook.currentMessage) lastLiveMsgRef.current = chatHook.currentMessage;
   // Ref für Header-Höhe (für sticky section headers)
   const headerRef = useRef(null);
   const [headerHeight, setHeaderHeight] = useState(60); // Default fallback
@@ -742,6 +739,12 @@ function AppInner() {
       // Addon phrase annotations (AMBOSS, Meditricks, etc.)
       if (payload.type === 'addon.phrases') {
         window.dispatchEvent(new CustomEvent('addon.phrases', { detail: payload.data }));
+        return;
+      }
+
+      // Addon tooltip content (AMBOSS rendered HTML)
+      if (payload.type === 'addon.tooltip') {
+        window.dispatchEvent(new CustomEvent('addon.tooltip', { detail: payload.data }));
         return;
       }
 
@@ -2825,21 +2828,13 @@ function AppInner() {
                         {/* ── ALL bot responses render here — single DOM position ── */}
                         {/* No v1/v2 split. Live and saved messages always at the same place.
                             React sees the same <ChatMessage> component updating, not unmounting. */}
+                        {/* ── ALL bot responses — single DOM position ── */}
+                        {/* React 18 batches setCurrentMessage(null) + setMessages([...new])
+                            in the same handler, so no intermediate frame. No ref buffer needed. */}
                         {(() => {
-                          // Priority: live > buffered > saved (any bot message after last user message)
-                          const liveMsg = chatHook.currentMessage || lastLiveMsgRef.current;
-                          const savedBot = nextMsg && nextMsg.from === 'bot' ? nextMsg : null;
-                          const msg = liveMsg || savedBot;
+                          const msg = chatHook.currentMessage || (nextMsg?.from === 'bot' ? nextMsg : null);
                           if (!msg) return null;
-                          // Clear buffer once saved message is rendering
-                          if (savedBot && !liveMsg) lastLiveMsgRef.current = null;
                           const isLive = !!chatHook.currentMessage;
-                          // DEBUG: track what's rendering
-                          const _src = liveMsg ? (chatHook.currentMessage ? 'LIVE' : 'BUFFERED') : 'SAVED';
-                          const _cells = msg.agentCells?.length || 0;
-                          const _steps = msg.agentCells?.[0]?.pipelineSteps?.length || 0;
-                          const _orch = !!msg.orchestration;
-                          console.error(`[v2-unified] src=${_src} cells=${_cells} steps=${_steps} orch=${_orch} isLive=${isLive} text=${(msg.agentCells?.[0]?.text || msg.text || '').length}`);
                           return (
                             <div className="w-full flex-none">
                               <ChatMessage

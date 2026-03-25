@@ -184,34 +184,60 @@ function applyPhraseMarkers(containerEl, phrases, source) {
 
 export default function ReviewerView({ cardData, reviewer }) {
   const cardContentRef = useRef(null);
+  const [tooltip, setTooltip] = React.useState(null); // { html, x, y }
 
   // Listen for addon phrase annotations and apply them to the card DOM
   useEffect(() => {
-    const handler = (e) => {
+    const phraseHandler = (e) => {
       const { phrases, source } = e.detail || {};
       if (phrases && cardContentRef.current) {
         applyPhraseMarkers(cardContentRef.current, phrases, source);
       }
     };
-    window.addEventListener('addon.phrases', handler);
-    return () => window.removeEventListener('addon.phrases', handler);
+    window.addEventListener('addon.phrases', phraseHandler);
+    return () => window.removeEventListener('addon.phrases', phraseHandler);
   }, []);
+
+  // Listen for tooltip content from AMBOSS
+  useEffect(() => {
+    const onAnkiReceive = (payload) => {
+      if (payload && payload.type === 'addon.tooltip' && payload.data?.html) {
+        setTooltip(prev => prev ? { ...prev, html: payload.data.html, loading: false } : null);
+      }
+    };
+    // Hook into ankiReceive — addon.tooltip events dispatched as CustomEvent
+    const handler = (e) => {
+      if (e.detail?.html) {
+        setTooltip(prev => prev ? { ...prev, html: e.detail.html, loading: false } : null);
+      }
+    };
+    window.addEventListener('addon.tooltip', handler);
+    return () => window.removeEventListener('addon.tooltip', handler);
+  }, []);
+
+  // Close tooltip on card change
+  useEffect(() => { setTooltip(null); }, [cardData]);
 
   /**
    * Handle clicks on links and addon markers inside card HTML.
    */
   const handleCardClick = useCallback((e) => {
-    // Handle AMBOSS marker clicks → trigger tooltip via pycmd
+    // Handle AMBOSS marker clicks → request tooltip from AMBOSS Python
     const marker = e.target.closest('.amboss-marker');
     if (marker) {
+      e.preventDefault();
+      e.stopPropagation();
       const phraseId = marker.getAttribute('data-phrase-group-id');
+      const term = marker.textContent;
       if (phraseId && window.ankiBridge?.addMessage) {
-        window.ankiBridge.addMessage('pycmd',
-          'amboss:reviewer:phraseClick:' + JSON.stringify({
-            phraseGroupId: phraseId,
-            phrase: marker.textContent
-          })
-        );
+        // Show loading state at marker position
+        const rect = marker.getBoundingClientRect();
+        setTooltip({ html: null, loading: true, x: rect.left, y: rect.bottom + 8, term });
+
+        // Trigger AMBOSS tooltip fetch via proper pycmd format
+        // AMBOSS expects: amboss:reviewer:tooltip:JSON with phraseId, term, markId
+        const data = JSON.stringify({ phraseId: phraseId, term: term, markId: 'ap-' + phraseId });
+        window.ankiBridge.addMessage('pycmd', 'amboss:reviewer:tooltip:' + data);
       }
       return;
     }
@@ -282,6 +308,38 @@ export default function ReviewerView({ cardData, reviewer }) {
           )}
         </div>
       </div>
+
+      {/* Addon tooltip (AMBOSS article popup) */}
+      {tooltip && (
+        <>
+          <div style={{
+            position: 'fixed', inset: 0, zIndex: 9998,
+          }} onClick={() => setTooltip(null)} />
+          <div style={{
+            position: 'fixed',
+            left: Math.min(tooltip.x || 100, window.innerWidth - 380),
+            top: Math.min(tooltip.y || 200, window.innerHeight - 400),
+            width: 360, maxHeight: 360, overflowY: 'auto',
+            background: 'var(--ds-bg-overlay)', color: 'var(--ds-text-primary)',
+            borderRadius: 12, padding: 16,
+            boxShadow: 'var(--ds-shadow-lg)',
+            border: '1px solid var(--ds-border-medium)',
+            zIndex: 9999, fontSize: 14, lineHeight: 1.5,
+          }}>
+            {tooltip.loading ? (
+              <div style={{ textAlign: 'center', padding: 20, color: 'var(--ds-text-secondary)' }}>
+                Lade...
+              </div>
+            ) : tooltip.html ? (
+              <div dangerouslySetInnerHTML={{ __html: tooltip.html }} />
+            ) : (
+              <div style={{ textAlign: 'center', padding: 20, color: 'var(--ds-text-secondary)' }}>
+                Kein Inhalt verfügbar
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
