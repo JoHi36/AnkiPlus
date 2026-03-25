@@ -7,7 +7,7 @@ import config as cfg
 
 class TestDefaultConfig:
     def test_has_required_keys(self):
-        required = ["model_provider", "model_name", "api_key", "auth_token", "ai_tools"]
+        required = ["model_provider", "model_name", "auth_token", "ai_tools"]
         for key in required:
             assert key in cfg.DEFAULT_CONFIG, f"Missing key: {key}"
 
@@ -69,7 +69,6 @@ def test_research_config_defaults():
     """Research agent has default config entries."""
     from config import DEFAULT_CONFIG
     assert DEFAULT_CONFIG.get('research_enabled') is True
-    assert DEFAULT_CONFIG.get('openrouter_api_key') == ''
     assert DEFAULT_CONFIG['ai_tools'].get('research') is True
 
 
@@ -112,23 +111,23 @@ class TestEdgeCases:
     def test_config_invalid_types(self, tmp_path, monkeypatch):
         """Config with wrong types is sanitized on save/load."""
         config_path = tmp_path / "config.json"
-        # api_key is a number, plusi budget is a string
+        # auth_token is a number, plusi budget is a string
         config_path.write_text(json.dumps({
             "model_provider": "google",
-            "api_key": 12345,
+            "auth_token": 12345,
             "plusi_autonomy": {"budget_per_hour": "abc", "enabled": True},
         }))
         monkeypatch.setattr(cfg, "get_config_path", lambda: str(config_path))
 
         result = cfg.load_config()
 
-        # After save (triggered internally) + reload through sanitize, api_key must be a string
+        # After save (triggered internally) + reload through sanitize, auth_token must be a string
         # We call save_config explicitly to apply sanitization
         monkeypatch.setattr(cfg, "get_config_path", lambda: str(config_path))
         cfg.save_config(result)
         reloaded = cfg.load_config()
 
-        assert isinstance(reloaded["api_key"], str)
+        assert isinstance(reloaded["auth_token"], str)
         # budget_per_hour "abc" is not a valid number — sanitize defaults it to 500
         assert reloaded["plusi_autonomy"]["budget_per_hour"] == 500
 

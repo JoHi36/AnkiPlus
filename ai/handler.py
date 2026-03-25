@@ -172,16 +172,13 @@ class AIHandler:
         self._refresh_config()
 
         if not self.is_configured():
-            if is_backend_mode():
-                error_msg = "Bitte verbinden Sie sich zuerst mit Ihrem Account in den Einstellungen."
-            else:
-                error_msg = "Bitte konfigurieren Sie zuerst den API-Schlüssel in den Einstellungen."
+            error_msg = "Bitte verbinden Sie sich zuerst mit Ihrem Account in den Einstellungen."
             if callback:
                 callback(error_msg, True, False)
             return error_msg
 
         model = model_override or self.config.get("model_name", "")
-        api_key = self.config.get("api_key", "")
+        api_key = ""  # Legacy parameter — backend handles auth
 
         try:
             if callback:
@@ -205,10 +202,7 @@ class AIHandler:
 
     def is_configured(self):
         """Prüft, ob die AI-Konfiguration vollständig ist"""
-        if is_backend_mode():
-            return True  # Backend-Modus = immer konfiguriert (unterstützt anonyme User)
-        api_key = self.config.get("api_key", "")
-        return bool(api_key.strip())
+        return is_backend_mode()  # Backend-Modus = immer konfiguriert (unterstützt anonyme User)
 
     def get_model_info(self):
         """Gibt Informationen über das konfigurierte Modell zurück"""

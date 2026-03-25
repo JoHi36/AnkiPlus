@@ -2,12 +2,11 @@
 Tutor Agent — the default learning assistant.
 
 Explains card content, searches decks, creates diagrams.
-Handles the full pipeline: RAG retrieval -> system prompt -> streaming generation.
+Handles the full pipeline: RAG retrieval -> streaming generation.
 
 The Tutor is a REAL agent that:
 1. Calls the RAG pipeline (ai/rag_pipeline.py) for card retrieval
-2. Builds the system prompt (ai/system_prompt.py)
-3. Generates a streaming response via Gemini (ai/gemini.py)
+2. Generates a streaming response via the backend (ai/gemini.py proxies to backend)
 4. Detects HANDOFF signals and delegates to target agents (e.g. Research)
 5. Tracks usage in AgentMemory
 
@@ -29,11 +28,6 @@ try:
     from .rag_pipeline import retrieve_rag_context
 except ImportError:
     from rag_pipeline import retrieve_rag_context
-
-try:
-    from .system_prompt import get_system_prompt
-except ImportError:
-    from system_prompt import get_system_prompt
 
 try:
     from .gemini import get_google_response_streaming
@@ -97,23 +91,21 @@ def run_tutor(situation, emit_step=None, memory=None,
             pass
 
     # ------------------------------------------------------------------
-    # 3. Check API key / backend mode
+    # 3. Check backend mode
     # ------------------------------------------------------------------
-    api_key = config.get('api_key', '')
+    api_key = ''  # Legacy parameter — backend handles auth
     use_backend = False
-    if not api_key:
+    try:
         try:
-            try:
-                from ..config import is_backend_mode, get_auth_token
-            except ImportError:
-                from config import is_backend_mode, get_auth_token
-            if is_backend_mode() and get_auth_token():
-                use_backend = True
-        except (ImportError, AttributeError):
-            pass
+            from ..config import is_backend_mode
+        except ImportError:
+            from config import is_backend_mode
+        use_backend = is_backend_mode()
+    except (ImportError, AttributeError):
+        pass
 
-    if not api_key and not use_backend:
-        msg = 'Bitte konfiguriere zuerst den API-Schlüssel in den Einstellungen.'
+    if not use_backend:
+        msg = 'Backend nicht konfiguriert. Bitte verbinde dich in den Einstellungen.'
         if stream_callback:
             stream_callback(msg, True)
         return {'text': msg}
@@ -163,7 +155,7 @@ def run_tutor(situation, emit_step=None, memory=None,
     ai_tools = config.get('ai_tools', {
         'images': True, 'diagrams': True, 'molecules': False
     })
-    system_prompt = get_system_prompt(mode=mode, tools=ai_tools, insights=insights)
+    system_prompt = None  # Backend builds the system prompt
 
     # ------------------------------------------------------------------
     # 6. Generate with 3-level fallback chain

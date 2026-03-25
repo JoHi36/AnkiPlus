@@ -18,8 +18,7 @@ logger = get_logger(__name__)
 DEFAULT_CONFIG = {
     "model_provider": "google",  # Nur Google unterstützt
     "model_name": "gemini-3-flash-preview",  # Standard: Gemini 3 Flash (schnell, minimal thinking)
-    "api_key": "",  # Wird vom Nutzer eingegeben (für Backward-Kompatibilität)
-    "openrouter_api_key": "",  # OpenRouter API key (unified gateway for Perplexity, Gemini, etc.)
+    "dev_openrouter_key": "",  # Dev-only OpenRouter key (not shown in UI)
     "auth_token": "",  # Firebase Auth ID Token
     "refresh_token": "",  # Firebase Refresh Token
     "backend_url": "",  # Backend URL (Standard: Firebase Function URL)
@@ -185,8 +184,8 @@ def _sanitize_config(config: dict) -> dict:
         logger.warning("Invalid response_style %s, defaulting to balanced", config.get('response_style'))
         config['response_style'] = 'balanced'
 
-    # API keys must be strings (not numbers, not booleans)
-    for key in ('api_key', 'openai_api_key', 'anthropic_api_key'):
+    # Auth/dev keys must be strings (not numbers, not booleans)
+    for key in ('auth_token', 'refresh_token', 'dev_openrouter_key'):
         if key in config and config[key] is not None and not isinstance(config[key], str):
             logger.warning("Invalid %s type, clearing", key)
             config[key] = ''
@@ -207,18 +206,12 @@ def save_config(config):
     config = _sanitize_config(config)
     config_path = get_config_path()
     logger.debug("save_config: Versuche zu speichern nach: %s", config_path)
-    logger.debug("save_config: Config enthält api_key mit Länge: %s", len(config.get('api_key', '')))
     try:
         # Stelle sicher, dass das Verzeichnis existiert
         os.makedirs(os.path.dirname(config_path), exist_ok=True)
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
         logger.info("save_config: ✓ Erfolgreich gespeichert nach: %s", config_path)
-        
-        # Verifiziere durch Zurücklesen
-        with open(config_path, 'r', encoding='utf-8') as f:
-            verify_config = json.load(f)
-            logger.debug("save_config: Verifizierung - API-Key Länge in Datei: %s", len(verify_config.get('api_key', '')))
         
         return True
     except Exception as e:
@@ -234,7 +227,7 @@ def get_config(force_reload=False):
     try:
         if force_reload or not hasattr(mw, '_chatbot_config') or mw._chatbot_config is None:
             mw._chatbot_config = load_config()
-            logger.info("Config geladen. API-Key vorhanden: %s (Länge: %s)", 'Ja' if mw._chatbot_config.get('api_key') else 'Nein', len(mw._chatbot_config.get('api_key', '')))
+            logger.info("Config geladen. Backend-Modus: %s", 'Ja' if mw._chatbot_config.get('backend_url') else 'Nein')
         return mw._chatbot_config
     except (RuntimeError, AttributeError):
         # Thread-safety: mw may not be accessible from worker threads
@@ -244,13 +237,6 @@ def update_config(mascot_enabled=None, **kwargs):
     """Aktualisiert die Konfiguration"""
     config = get_config()
     logger.debug("update_config aufgerufen mit: %s", list(kwargs.keys()))
-    
-    # Trimme API-Key falls vorhanden (entferne Whitespace)
-    if 'api_key' in kwargs:
-        kwargs['api_key'] = kwargs['api_key'].strip() if kwargs['api_key'] else ""
-        logger.debug("update_config: API-Key getrimmt, neue Länge: %s", len(kwargs['api_key']))
-        if len(kwargs['api_key']) > 50:
-            logger.warning("⚠️ WARNUNG: API-Key ist sehr lang (%s Zeichen)!", len(kwargs['api_key']))
     
     # Trimme Auth-Token falls vorhanden
     if 'auth_token' in kwargs:
