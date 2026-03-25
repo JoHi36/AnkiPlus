@@ -125,8 +125,10 @@ function MCOptions({ options, selected, isResult, onSelect }) {
 function applyPhraseMarkers(containerEl, phrases, source) {
   if (!containerEl || !phrases || typeof phrases !== 'object') return;
 
+  // Filter: skip branding terms and very short terms
+  const SKIP_TERMS = new Set(['amboss', 'meditricks', 'ankihub']);
   const terms = Object.entries(phrases)
-    .filter(([term]) => term.length > 2)  // skip very short terms
+    .filter(([term]) => term.length > 2 && !SKIP_TERMS.has(term.toLowerCase()))
     .sort((a, b) => b[0].length - a[0].length);  // longest first to avoid partial matches
 
   if (terms.length === 0) return;

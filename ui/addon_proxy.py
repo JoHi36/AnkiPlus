@@ -328,8 +328,9 @@ class WebEvalProxy:
             self._send_phrases_to_react(js_code)
             return
 
-        # Intercept setContentFor() — tooltip content for clicked terms
-        if 'setContentFor(' in js_code:
+        # Intercept tooltip calls — forward directly to our webview
+        # (AMBOSS's tooltip.js is loaded there and handles the Tippy popups)
+        if 'setContentFor(' in js_code or 'tooltipShown(' in js_code or 'hideAll(' in js_code or 'rotateTooltips(' in js_code:
             self._send_tooltip_to_react(js_code)
             return
 
@@ -368,9 +369,14 @@ class WebEvalProxy:
         logger.debug("addon_proxy: sent %d phrases to React", len(phrases))
 
     def _send_tooltip_to_react(self, js_code):
-        """Forward tooltip content to React (future use)."""
-        # TODO: parse setContentFor() and send tooltip HTML to React
-        logger.debug("addon_proxy: tooltip content intercepted (not yet forwarded)")
+        """Forward setContentFor/tooltipShown calls directly to our webview.
+
+        AMBOSS's tooltip.js (loaded in our webview) has Tippy instances
+        that show popups. setContentFor() fills them with content.
+        We run the JS directly since tooltip.js handles the DOM.
+        """
+        self._run_in_our_webview(js_code)
+        logger.debug("addon_proxy: forwarded tooltip content to our webview")
 
     def _run_in_our_webview(self, js_code):
         """Execute *js_code* in our QWebEngineView."""
