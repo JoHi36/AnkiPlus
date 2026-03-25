@@ -235,6 +235,7 @@ def _init_embedding_manager():
                         'question': note.fields[0] if note.fields else '',
                         'answer': note.fields[1] if len(note.fields) > 1 else '',
                         'tags': note.tags,
+                        'deck_id': card.did,
                     })
                 except (AttributeError, KeyError, IndexError) as card_err:
                     logger.debug("get_all_cards: skipping card %s: %s", cid, card_err)

@@ -305,6 +305,20 @@ class BackgroundEmbeddingThread(QThread):
             if cid and (cid not in existing or existing[cid] != h):
                 to_embed.append({'card_id': cid, 'text': text, 'hash': h})
 
+            # KG term extraction (runs for every card, independent of embedding status)
+            try:
+                from .term_extractor import TermExtractor
+                from ..storage.kg_store import save_card_terms
+                if not hasattr(self, '_term_extractor'):
+                    self._term_extractor = TermExtractor()
+                terms = self._term_extractor.extract(text)
+                if terms:
+                    question = card.get('question', '')
+                    definition_terms = [t for t in terms if self._term_extractor.is_definition_card(t, question, card.get('answer', ''))]
+                    save_card_terms(cid, terms, deck_id=card.get('deck_id', 0), definition_terms=definition_terms)
+            except Exception as e:
+                logger.warning("KG term extraction failed for card %s: %s", card.get('card_id'), e)
+
         total = len(to_embed)
         embedded = 0
 
@@ -331,5 +345,39 @@ class BackgroundEmbeddingThread(QThread):
                 break  # Stop on error instead of continuing to spam API
 
             time.sleep(0.5)
+
+        # KG graph build (runs after all cards are processed)
+        try:
+            from .term_extractor import compute_collocations
+            from .kg_builder import GraphIndexBuilder
+
+            all_texts = [self.manager._card_to_text(c) for c in all_cards]
+            collocations = compute_collocations(all_texts)
+            if hasattr(self, '_term_extractor') and collocations:
+                self._term_extractor.set_collocations(collocations)
+
+            builder = GraphIndexBuilder()
+            builder.build()
+            logger.info("Knowledge Graph built successfully")
+        except Exception as e:
+            logger.warning("KG graph build failed: %s", e)
+
+        # Embed unembedded KG terms
+        try:
+            from ..storage.kg_store import get_unembedded_terms, save_term_embedding
+            unembedded = get_unembedded_terms()
+            if unembedded and self.manager:
+                BATCH = 50
+                for i in range(0, len(unembedded), BATCH):
+                    batch = unembedded[i:i + BATCH]
+                    embeddings = self.manager.embed_texts(batch)
+                    if embeddings:
+                        for term, emb in zip(batch, embeddings):
+                            if emb is not None:
+                                emb_bytes = struct.pack(f'{len(emb)}f', *emb)
+                                save_term_embedding(term, emb_bytes)
+                logger.info("Embedded %d KG terms", len(unembedded))
+        except Exception as e:
+            logger.warning("KG term embedding failed: %s", e)
 
         self.finished_signal.emit(embedded)
