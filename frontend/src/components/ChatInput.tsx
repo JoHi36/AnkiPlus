@@ -422,25 +422,31 @@ export default function ChatInput({
                     borderRadius: 4, padding: '1px 5px',
                     fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
                     verticalAlign: 'middle',
-                  }}>{ghostAgents.filter((a: any) => !a.isSettings).length <= 1 ? 'Tab' : '↑↓'}</kbd>
-                  {/* Second hint: "· Studio Tab" — only when ghost is "Agenten" (settings entry) and user hasn't navigated yet */}
-                  {!ghostInteracted && (currentGhost as any)?.isSettings && (
-                    <span style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 4,
-                      marginLeft: 6,
-                      color: 'var(--ds-text-muted)',
-                      opacity: 0.45,
-                    }}>
-                      <span style={{ fontSize: 11 }}>·</span>
-                      <span style={{ fontSize: 12 }}>Studio</span>
+                  }}>↑↓</kbd>
+                  {/* "· Studio Tab" when ghost is Agenten (settings entry) — always, even after scrolling back */}
+                  {(currentGhost as any)?.isSettings && (
+                    <>
+                      <span style={{ color: 'var(--ds-text-placeholder)', fontSize: 'var(--ds-text-lg)' }}> · Studio</span>
                       <kbd style={{
-                        fontSize: 9, fontWeight: 500,
+                        fontSize: 10, fontWeight: 500,
                         color: 'var(--ds-text-muted)',
                         background: 'var(--ds-bg-overlay)',
-                        borderRadius: 3, padding: '0px 4px',
+                        borderRadius: 4, padding: '1px 5px',
                         fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+                        verticalAlign: 'middle',
                       }}>Tab</kbd>
-                    </span>
+                    </>
+                  )}
+                  {/* "Tab" badge for real agents — so user knows they can select */}
+                  {!(currentGhost as any)?.isSettings && (
+                    <kbd style={{
+                      fontSize: 10, fontWeight: 500,
+                      color: 'var(--ds-text-muted)',
+                      background: 'var(--ds-bg-overlay)',
+                      borderRadius: 4, padding: '1px 5px',
+                      fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+                      verticalAlign: 'middle',
+                    }}>Tab</kbd>
                   )}
                 </span>
               );
