@@ -413,7 +413,7 @@ def execute_show_card(args):
                 "back": strip_html_and_cloze(back)[:300],
                 "deck_name": deck_name,
             }
-        except Exception as e:
+        except (AttributeError, KeyError, IndexError, ValueError) as e:
             return {"error": f"Note {note_id} nicht gefunden: {e}"}
 
     return run_on_main_thread(_load, timeout=9)
@@ -903,8 +903,8 @@ def execute_search_image(args):
                                 "pubchem",
                                 f"Molekülstruktur: {query}"
                             )
-            except Exception:
-                pass
+            except (OSError, KeyError, ValueError, json.JSONDecodeError) as e:
+                logger.debug("PubChem search failed for '%s': %s", query, e)
 
         # 2. Wikimedia Commons
         try:
@@ -924,8 +924,8 @@ def execute_search_image(args):
                     md5 = hashlib.md5(fn_underscore.encode('utf-8')).hexdigest()
                     direct_url = f"https://upload.wikimedia.org/wikipedia/commons/{md5[0]}/{md5[:2]}/{req.utils.quote(fn_underscore)}"
                     return (direct_url, "wikimedia", query)
-        except Exception:
-            pass
+        except (OSError, KeyError, ValueError, json.JSONDecodeError) as e:
+            logger.debug("Wikimedia search failed for '%s': %s", query, e)
 
         return None
 
@@ -957,7 +957,7 @@ def execute_search_image(args):
         # Fetch the image and encode as base64
         try:
             data_url = _fetch_as_data_url(url)
-        except Exception as e:
+        except (OSError, ValueError) as e:
             return {"error": f"Bild gefunden aber Download fehlgeschlagen: {str(e)[:80]}"}
 
         return {
@@ -966,7 +966,7 @@ def execute_search_image(args):
             "description": description,
         }
 
-    except Exception as e:
+    except (OSError, ValueError, KeyError) as e:
         return {"error": f"Bildsuche fehlgeschlagen: {str(e)[:100]}"}
 
 

@@ -238,8 +238,8 @@ def rag_router(user_message, context=None, config=None, emit_step=None):
                     if msg.get('sender') == 'bot':
                         last_assistant_message = (msg.get('text', '') or '')[:300]
                         break
-        except Exception:
-            pass
+        except (AttributeError, KeyError, TypeError) as e:
+            logger.debug("router: last assistant message lookup error: %s", e)
 
         # Extrahiere Karteninhalt
         card_question = ""
@@ -282,8 +282,8 @@ def rag_router(user_message, context=None, config=None, emit_step=None):
                 card = mw.col.get_card(context['cardId'])
                 note = card.note()
                 card_tags = list(note.tags)
-            except Exception:
-                pass
+            except (AttributeError, KeyError) as e:
+                logger.debug("router: card tags lookup error: %s", e)
 
         # Debug-Logging
         logger.debug("Router: user_message='%s', has_context=%s, deck=%s", user_message[:100], bool(context), deck_name)
@@ -375,7 +375,7 @@ QUERY RULES:
                 if router_result.get("search_needed") is not None:
                     logger.info("Router (Backend): search_needed=%s", router_result.get('search_needed'))
                     # Weiter zur Validierung unten (gleicher Code wie bei direkter API)
-            except Exception as be:
+            except (OSError, ValueError, requests.exceptions.RequestException) as be:
                 logger.warning("Router: Backend-Fehler: %s, Fallback auf direkte API", be)
                 use_backend = False
 
@@ -984,7 +984,7 @@ def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="c
                             if card_id not in note_results[note_id]['card_ids']:
                                 note_results[note_id]['card_ids'].append(card_id)
 
-                        except Exception as e:
+                        except (AttributeError, KeyError, IndexError, ValueError) as e:
                             logger.warning("RAG Retrieval: Fehler bei Karte %s: %s", card_id, e)
                             continue
                     return len(card_ids)
@@ -994,7 +994,7 @@ def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="c
                         emit_state(f"Ergebnis: 0 Treffer für '{query[:50]}...'", phase=PHASE_SEARCH)
                     return 0
 
-            except Exception as e:
+            except (AttributeError, RuntimeError, OSError) as e:
                 logger.warning("RAG Retrieval: Fehler bei %s Query: %s", query_type, e)
                 return 0
 
@@ -1124,7 +1124,7 @@ def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="c
                                         'queries_found_in': ['fallback']
                                     }
 
-                            except Exception as e:
+                            except (AttributeError, KeyError, IndexError, ValueError) as e:
                                 logger.warning("RAG Retrieval: Fehler bei Fallback-Karte %s: %s", card_id, e)
                                 continue
 
@@ -1135,7 +1135,7 @@ def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="c
                         reverse=True
                     )[:max_notes]
 
-                except Exception as e:
+                except (AttributeError, RuntimeError, OSError) as e:
                     logger.warning("RAG Retrieval: Fallback-Fehler: %s", e)
 
         if len(ranked_notes) == 0:
@@ -1201,7 +1201,7 @@ def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="c
                     "isCurrentCard": False  # Will be set to True for current card below
                 }
 
-            except Exception as e:
+            except (AttributeError, KeyError, IndexError, ValueError) as e:
                 logger.warning("RAG Retrieval: Fehler bei Note %s: %s", note_id, e)
                 continue
 

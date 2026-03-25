@@ -89,8 +89,8 @@ class AIRequestManager:
         if self._current_thread:
             try:
                 self._current_thread.cancel()
-            except Exception:
-                pass
+            except (AttributeError, RuntimeError) as e:
+                logger.debug("start_request: cancel previous thread error: %s", e)
             self._current_thread = None
 
         try:
@@ -125,8 +125,8 @@ class AIRequestManager:
         if self._current_thread:
             try:
                 self._current_thread.cancel()
-            except Exception:
-                pass
+            except (AttributeError, RuntimeError) as e:
+                logger.debug("cancel: thread cancel error: %s", e)
             self._current_thread = None
             self._current_caller = None
 

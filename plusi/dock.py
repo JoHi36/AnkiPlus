@@ -267,7 +267,8 @@ def is_plusi_enabled():
             from config import get_config
         config = get_config()
         return config.get('mascot_enabled', False)
-    except Exception:
+    except (AttributeError, ImportError, KeyError) as e:
+        logger.debug("is_plusi_enabled error: %s", e)
         return False
 
 
@@ -306,7 +307,8 @@ def _get_active_webview():
         if mw.reviewer and mw.reviewer.web:
             return mw.reviewer.web
         return None
-    except Exception:
+    except (AttributeError, RuntimeError) as e:
+        logger.debug("_get_active_webview error: %s", e)
         return None
 
 
@@ -381,8 +383,8 @@ def sync_mood(mood):
         except ImportError:
             from storage import set_memory
         set_memory('state', 'last_mood', mood)
-    except Exception:
-        pass
+    except (AttributeError, ImportError, OSError) as e:
+        logger.debug("sync_mood persist error: %s", e)
     set_mood(None, mood)
 
 
@@ -394,5 +396,6 @@ def get_persisted_mood():
         except ImportError:
             from storage import get_memory
         return get_memory('state', 'last_mood', 'neutral')
-    except Exception:
+    except (AttributeError, ImportError, KeyError) as e:
+        logger.debug("get_persisted_mood error: %s", e)
         return 'neutral'

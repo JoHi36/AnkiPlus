@@ -196,8 +196,9 @@ class AIHandler:
                     context=context, history=history, mode=mode,
                     system_prompt_override=system_prompt_override,
                 )
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             error_msg = f"Fehler bei der API-Anfrage: {str(e)}"
+            logger.exception("get_response error: %s", e)
             if callback:
                 callback(error_msg, True, False)
             return error_msg
@@ -262,7 +263,7 @@ class AIHandler:
                     app = QApplication.instance()
                     if app:
                         app.processEvents()
-                except Exception as e:
+                except (AttributeError, RuntimeError) as e:
                     logger.warning("Fehler beim Senden von AI-State: %s", e)
             mw.taskman.run_on_main(emit_on_main)
         else:
@@ -271,7 +272,7 @@ class AIHandler:
                     "window.ankiReceive(" + js_payload + ");"
                 )
                 logger.debug("RAG State: %s (phase: %s)", message, phase)
-            except Exception as e:
+            except (AttributeError, RuntimeError) as e:
                 logger.warning("Fehler beim Senden von AI-State: %s", e)
 
     def _emit_pipeline_step(self, step, status, data=None):
@@ -287,7 +288,7 @@ class AIHandler:
         if callback:
             try:
                 callback(step, status, data)
-            except Exception as e:
+            except (AttributeError, TypeError, RuntimeError) as e:
                 logger.warning("_emit_pipeline_step error: %s", e)
 
     def _step_done_label(self, step, data):
@@ -330,7 +331,7 @@ class AIHandler:
                         "window.ankiReceive(" + payload_str + ");"
                     )
                     logger.debug("AI Event (%s) sent", event_type)
-                except Exception as e:
+                except (AttributeError, RuntimeError) as e:
                     logger.warning("Fehler beim Senden von AI-Event: %s", e)
             mw.taskman.run_on_main(emit_on_main)
 
@@ -354,7 +355,7 @@ class AIHandler:
                     self.widget.web_view.page().runJavaScript(
                         "window.ankiReceive(" + payload_str + ");"
                     )
-                except Exception as e:
+                except (AttributeError, RuntimeError) as e:
                     logger.warning("msg_event emit error: %s", e)
             mw.taskman.run_on_main(emit_on_main)
 
@@ -427,16 +428,16 @@ class AIHandler:
             from .memory import load_shared_memory
             shared_mem = load_shared_memory()
             memory_context = shared_mem.to_context_string()
-        except Exception:
-            pass
+        except (AttributeError, ImportError, OSError) as e:
+            logger.debug("load_shared_memory error: %s", e)
 
         # Create agent-specific memory instance
         agent_memory = None
         try:
             from .agent_memory import AgentMemory
             agent_memory = AgentMemory(agent_name)
-        except Exception:
-            pass
+        except (AttributeError, ImportError, OSError) as e:
+            logger.debug("AgentMemory init error: %s", e)
 
         # Build the agent's emit_step callback (routes through pipeline signal)
         def agent_emit_step(step, status, data=None):
@@ -449,6 +450,19 @@ class AIHandler:
         agent_kwargs.setdefault('config', self.config or {})
         if memory_context:
             agent_kwargs['memory_context'] = memory_context
+
+        # Inject embedding_manager for agents that need semantic search
+        if 'embedding_manager' not in agent_kwargs:
+            try:
+                # Access the global embedding manager without re-importing __init__
+                import sys
+                init_mod = sys.modules.get('AnkiPlus_main') or sys.modules.get('__init__')
+                if init_mod and hasattr(init_mod, 'get_embedding_manager'):
+                    emb = init_mod.get_embedding_manager()
+                    if emb:
+                        agent_kwargs['embedding_manager'] = emb
+            except (AttributeError, ImportError) as e:
+                logger.debug("embedding_manager inject error: %s", e)
 
         # Model selection from agent_def + global mode
         if agent_def:
@@ -529,7 +543,7 @@ class AIHandler:
             mem_updates = extract_memory_signals(situation)
             if mem_updates:
                 apply_memory_updates(mem_updates)
-        except Exception as mem_err:
+        except (AttributeError, ImportError, KeyError) as mem_err:
             logger.debug("Memory extraction skipped: %s", mem_err)
 
         # v2: Done
@@ -584,7 +598,7 @@ class AIHandler:
 
             try:
                 run_fn = lazy_load_run_fn(agent_def)
-            except Exception as e:
+            except (AttributeError, ImportError) as e:
                 logger.warning("Agent %s load failed: %s, using default", agent_def.name, e)
                 agent_def = get_default_agent()
                 run_fn = lazy_load_run_fn(agent_def)

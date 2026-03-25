@@ -368,9 +368,10 @@ def _search_cards(query, top_k=10):
                     card_ids = mw.col.find_cards(f'"{kw}"', order="c.mod desc")
                     for cid in card_ids[:20]:
                         sql_card_ids.add(cid)
-                except Exception:
+                except (AttributeError, RuntimeError, ValueError) as kw_err:
+                    logger.debug("plusi search sql keyword error: %s", kw_err)
                     continue
-        except Exception as e:
+        except (AttributeError, RuntimeError) as e:
             logger.error("plusi search sql error: %s", e)
 
         # ── Merge results (semantic score + SQL presence bonus) ──
@@ -410,7 +411,8 @@ def _search_cards(query, top_k=10):
                 deck_name = deck['name'] if deck else ''
                 field_text = " | ".join(f"{k}: {v}" for k, v in fields.items())
                 cards.append((card_id, f"[ID:{card_id}] [{deck_name}] {field_text}"))
-            except Exception:
+            except (AttributeError, KeyError, IndexError) as card_err:
+                logger.debug("plusi search: skipping card %s: %s", card_id, card_err)
                 continue
 
         logger.debug("plusi search: %s semantic + %s sql -> %s merged", len(semantic_results), len(sql_card_ids), len(cards))
@@ -960,8 +962,8 @@ def _sync_dock_mood(mood):
     try:
         from .dock import sync_mood
         sync_mood(mood)
-    except Exception:
-        pass
+    except (AttributeError, ImportError, RuntimeError) as e:
+        logger.debug("_sync_dock_mood error: %s", e)
 
 
 def run_autonomous_chain():
@@ -1059,7 +1061,7 @@ def run_autonomous_chain():
                     search_count += 1
                     remaining = get_memory('autonomy', 'budget_remaining', 0)
                     logger.info("plusi chain: searched '%s', found %d cards", query, len(card_tuples))
-                except Exception as e:
+                except (AttributeError, RuntimeError, OSError) as e:
                     logger.exception("plusi chain: search failed: %s", e)
 
         if 'reflect' in actions:
@@ -1069,7 +1071,7 @@ def run_autonomous_chain():
                 spend_budget(300)
                 remaining = get_memory('autonomy', 'budget_remaining', 0)
                 logger.info("plusi chain: reflected")
-            except Exception as e:
+            except (AttributeError, RuntimeError, OSError) as e:
                 logger.exception("plusi chain: reflect failed: %s", e)
 
         action_count += 1

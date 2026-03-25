@@ -62,8 +62,8 @@ try:
     from aqt.deckbrowser import DeckBrowser as _DB
     _DB._orig_drawButtons = _DB._drawButtons
     _DB._drawButtons = lambda self: None
-except Exception:
-    pass
+except (AttributeError, ImportError) as e:
+    logger.debug("DeckBrowser._drawButtons patch skipped: %s", e)
 
 try:
     from aqt.toolbar import Toolbar as _TB, BottomBar as _BB
@@ -84,8 +84,8 @@ try:
         self.web.setFixedHeight(0)
         self.web.setMaximumHeight(0)
     _BB.draw = _suppress_bottom_draw
-except Exception:
-    pass
+except (AttributeError, ImportError) as e:
+    logger.debug("Toolbar/BottomBar patch skipped: %s", e)
 
 # Hide the Qt widgets as early as possible — state_did_change fires before first paint
 def _early_hide_native_ui(*args):
@@ -95,15 +95,15 @@ def _early_hide_native_ui(*args):
             mw.toolbar.web.hide()
             mw.toolbar.web.setFixedHeight(0)
             mw.toolbar.web.setMaximumHeight(0)
-    except Exception:
-        pass
+    except (AttributeError, RuntimeError) as e:
+        logger.debug("_early_hide_native_ui toolbar error: %s", e)
     try:
         if mw and hasattr(mw, 'bottomWeb') and mw.bottomWeb:
             mw.bottomWeb.hide()
             mw.bottomWeb.setFixedHeight(0)
             mw.bottomWeb.setMaximumHeight(0)
-    except Exception:
-        pass
+    except (AttributeError, RuntimeError) as e:
+        logger.debug("_early_hide_native_ui bottomWeb error: %s", e)
 
 gui_hooks.state_did_change.append(_early_hide_native_ui)
 
@@ -135,8 +135,8 @@ def _set_dark_backgrounds():
             p.setColor(QPalette.ColorRole.Window, dark)
             central.setPalette(p)
             central.setAutoFillBackground(True)
-    except Exception:
-        pass
+    except (AttributeError, RuntimeError, ImportError) as e:
+        logger.debug("_set_dark_backgrounds error: %s", e)
 
 QTimer.singleShot(0, _set_dark_backgrounds)
 
@@ -154,8 +154,8 @@ def _suppress_bottom_web():
         bw.show = lambda: None
         bw.adjustHeightToFit = lambda: None
         bw._suppressed = True
-    except Exception:
-        pass
+    except (AttributeError, RuntimeError) as e:
+        logger.debug("_suppress_bottom_web (bottomWeb) error: %s", e)
     try:
         tw = getattr(mw.toolbar, 'web', None) if hasattr(mw, 'toolbar') and mw.toolbar else None
         if tw and not getattr(tw, '_suppressed', False):
@@ -165,8 +165,8 @@ def _suppress_bottom_web():
             tw.setMinimumHeight(0)
             tw.show = lambda: None
             tw._suppressed = True
-    except Exception:
-        pass
+    except (AttributeError, RuntimeError) as e:
+        logger.debug("_suppress_bottom_web (toolbar) error: %s", e)
 
 # Burst: try at multiple early moments to catch whenever mw.bottomWeb appears
 for _delay in (0, 50, 150, 300):
@@ -236,7 +236,8 @@ def _init_embedding_manager():
                         'answer': note.fields[1] if len(note.fields) > 1 else '',
                         'tags': note.tags,
                     })
-                except Exception:
+                except (AttributeError, KeyError, IndexError) as card_err:
+                    logger.debug("get_all_cards: skipping card %s: %s", cid, card_err)
                     continue
             return cards
 
@@ -337,7 +338,7 @@ def init_addon():
             current_state = getattr(mw, 'state', 'deckBrowser')
             QTimer.singleShot(MAIN_VIEW_INIT_DELAY_MS, lambda: show_main_view(current_state))
             logger.info("MainViewWidget: Initialized")
-        except Exception as e:
+        except (AttributeError, RuntimeError, ImportError) as e:
             logger.error("Failed to init MainViewWidget: %s", e)
 
         # Hide toolbar + bottom bar on Qt level (backup to class-level patches)
@@ -350,8 +351,8 @@ def init_addon():
                     if central and central.layout():
                         central.layout().setContentsMargins(0, 0, 0, 0)
                         central.layout().setSpacing(0)
-                except Exception:
-                    pass
+                except (AttributeError, RuntimeError) as e:
+                    logger.debug("_fix_db_margins error: %s", e)
             QTimer.singleShot(MAIN_VIEW_INIT_DELAY_MS, _fix_db_margins)
 
         # Custom reviewer disabled — ReviewerView in React replaces it
@@ -366,7 +367,7 @@ def init_addon():
             Reviewer._bottomHTML = lambda self: ""
             Reviewer._showAnswerButton = lambda self: None
             logger.info("Reviewer shortcuts + bottom bar patched for React ReviewerView")
-        except Exception as e:
+        except (AttributeError, ImportError) as e:
             logger.error("Could not patch reviewer: %s", e)
 
             # Class-level patches (DeckBrowser._drawButtons, Toolbar.draw/redraw)
@@ -417,14 +418,14 @@ def on_profile_loaded():
             sync_mood('reading')
             try:
                 self_reflect()
-            except Exception as e:
+            except (AttributeError, RuntimeError, OSError) as e:
                 logger.error("Plusi self-reflect failed: %s", e)
             sync_mood('neutral')
             try:
                 from .plusi.panel import notify_new_diary_entry
                 notify_new_diary_entry()
-            except Exception:
-                pass
+            except (AttributeError, ImportError) as e:
+                logger.debug("notify_new_diary_entry error: %s", e)
         except Exception as e:
             logger.error("Plusi reflect error: %s", e)
 
@@ -446,8 +447,8 @@ def on_profile_loaded():
             if not is_plusi_enabled():
                 _schedule_next_window()
                 return
-        except Exception:
-            pass
+        except (AttributeError, ImportError) as e:
+            logger.debug("is_plusi_enabled check error: %s", e)
         _plusi_reflect_pending = True
         logger.debug("plusi reflect: window opened, waiting for next interaction")
         # Schedule next window
@@ -532,7 +533,7 @@ def on_reviewer_did_show_question(card):
     if widget and hasattr(widget, '_send_card_data'):
         try:
             widget._send_card_data(card, is_question=True)
-        except Exception as e:
+        except (AttributeError, RuntimeError) as e:
             logger.error("reviewer_did_show_question card send error: %s", e)
 
     # Deck-Event senden (nur wenn Widget existiert)
@@ -567,7 +568,7 @@ def on_reviewer_did_answer_card(reviewer, card, ease):
             except ImportError:
                 from plusi.storage import record_card_review
             record_card_review(deck_name, correct)
-        except Exception as e:
+        except (AttributeError, ImportError, KeyError) as e:
             logger.debug("plusi awareness tracking error: %s", e)
 
         # Send to chat panel (React)
@@ -585,8 +586,8 @@ def on_reviewer_did_answer_card(reviewer, card, ease):
                 show_bubble(None, 'Richtig! ✨', 'happy')
             else:
                 show_bubble(None, 'nächstes mal 💪', 'empathy')
-        except Exception:
-            pass
+        except (AttributeError, ImportError) as e:
+            logger.debug("show_bubble error: %s", e)
     except Exception as e:
         logger.error("cardResult emission error: %s", e)
 
@@ -602,13 +603,13 @@ def on_state_will_change(new_state, old_state):
             from .custom_reviewer import close_preview
             close_preview(notify_frontend=True)
             # Don't return — let normal state_will_change logic run
-    except Exception as e:
+    except (AttributeError, ImportError, KeyError) as e:
         logger.error("Preview state check error: %s", e)
 
     # Update MainViewWidget for the new state
     try:
         show_main_view(new_state)
-    except Exception as e:
+    except (AttributeError, RuntimeError) as e:
         logger.warning("MainView state update failed: %s", e)
 
     # Smart Toolbar Management: Hide in Review, Show elsewhere
@@ -650,7 +651,7 @@ def on_state_will_change(new_state, old_state):
                     hide_native_bottom_bar()
 
                 logger.debug("🎨 State: %s → Toolbar hidden", new_state)
-            except Exception as e:
+            except (AttributeError, RuntimeError) as e:
                 logger.error("⚠️ Error hiding toolbar: %s", e)
         # Hide chat panel when leaving review state
         if new_state != "review":
@@ -659,8 +660,8 @@ def on_state_will_change(new_state, old_state):
                 try:
                     from .ui.setup import close_chatbot_panel
                     close_chatbot_panel()
-                except Exception:
-                    pass
+                except (AttributeError, RuntimeError, ImportError) as e:
+                    logger.debug("close_chatbot_panel error: %s", e)
 
         if new_state not in ("review", "deckBrowser", "overview"):
             # Leaving custom state - Restore toolbar
@@ -685,7 +686,7 @@ def on_state_will_change(new_state, old_state):
                     pass
 
                 logger.debug("State: %s -> Toolbar restored", new_state)
-            except Exception as e:
+            except (AttributeError, RuntimeError) as e:
                 logger.error("⚠️ Error restoring toolbar: %s", e)
     
     # Original deck-event logic
@@ -705,7 +706,7 @@ def on_state_will_change(new_state, old_state):
                                 deck_data["deckId"],
                                 deck_data["deckName"]
                             )
-                    except Exception as e:
+                    except (AttributeError, RuntimeError, json.JSONDecodeError) as e:
                         logger.error("Fehler beim Senden von deckSelected in state_will_change: %s", e)
                 
                 QTimer.singleShot(STATE_CHANGE_DECK_DELAY_MS, send_deck_selected)
@@ -730,8 +731,8 @@ def cleanup_addon():
         try:
             from .ui.addon_proxy import get_proxy
             get_proxy().uninstall()
-        except Exception:
-            pass
+        except (AttributeError, ImportError) as e:
+            logger.debug("addon_proxy uninstall error: %s", e)
 
         show_native_bottom_bar()
         show_native_top_separator()
@@ -748,7 +749,7 @@ if mw is not None:
         from .ui.addon_proxy import get_capture
         gui_hooks.webview_will_set_content.append(get_capture().on_webview_will_set_content)
         logger.info("Addon proxy: content capture hook registered")
-    except Exception as e:
+    except (AttributeError, ImportError) as e:
         logger.warning("Addon proxy registration failed: %s", e)
 
     gui_hooks.profile_did_open.append(on_profile_loaded)

@@ -530,7 +530,8 @@ def _get_current_mood():
     try:
         from .storage import get_memory
         return get_memory('state', 'last_mood', 'neutral')
-    except Exception:
+    except (AttributeError, ImportError, KeyError) as e:
+        logger.debug("_get_current_mood error: %s", e)
         return 'neutral'
 
 
@@ -547,7 +548,8 @@ def _get_current_friendship():
     try:
         from .storage import get_friendship_data
         return get_friendship_data()
-    except Exception:
+    except (AttributeError, ImportError, KeyError) as e:
+        logger.debug("_get_current_friendship error: %s", e)
         return {'level': 1, 'levelName': 'Fremde', 'points': 0, 'maxPoints': 15}
 
 
@@ -598,7 +600,7 @@ def _send_diary_data():
         _panel_webview.page().runJavaScript(
             f"window.diaryReceive({json.dumps(payload)});"
         )
-    except Exception as e:
+    except (AttributeError, ImportError, KeyError, json.JSONDecodeError) as e:
         logger.error("[PlusiPanel] Error loading diary: %s", e)
 
 
@@ -608,12 +610,8 @@ def _open_settings():
         from aqt import mw
         if mw:
             mw.onPrefs()
-    except Exception as e:
-        try:
-            from ..utils.logging import get_logger
-            get_logger(__name__).error("Could not open Anki preferences: %s", e)
-        except Exception:
-            pass
+    except (AttributeError, RuntimeError) as e:
+        logger.error("Could not open Anki preferences: %s", e)
 
 
 def _back_to_diary():
@@ -663,8 +661,8 @@ def _on_panel_poll_result(result):
         data = json.loads(result) if isinstance(result, str) else result
         if data and 'type' in data:
             _handle_panel_message(data['type'], data)
-    except Exception:
-        pass
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        logger.debug("_on_panel_poll_result parse error: %s", e)
 
 
 def toggle_panel():
@@ -731,8 +729,8 @@ def _set_dock_plusi_visible(visible):
             web.page().runJavaScript(
                 f"var d=document.getElementById('plusi-dock'); if(d) d.style.display='{display}';"
             )
-    except Exception:
-        pass
+    except (AttributeError, ImportError, RuntimeError) as e:
+        logger.debug("_set_dock_plusi_visible error: %s", e)
 
 
 def notify_new_diary_entry():
