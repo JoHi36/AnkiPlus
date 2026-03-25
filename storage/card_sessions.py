@@ -116,6 +116,13 @@ def _init_schema(db):
     """)
     db.commit()
 
+    # KG tables live in the same database file
+    try:
+        from .kg_store import _init_kg_schema
+    except ImportError:
+        from kg_store import _init_kg_schema
+    _init_kg_schema(db)
+
 
 def _migrate_schema(db):
     """Add columns that may be missing in older databases."""
