@@ -20,15 +20,15 @@ function Toggle({ on, onChange, disabled = false }) {
       style={{
         width: 36, height: 20, borderRadius: 10, position: 'relative',
         cursor: disabled ? 'default' : 'pointer', border: 'none', transition: 'background 0.2s',
-        background: on ? 'var(--ds-accent, #0a84ff)' : 'rgba(255,255,255,0.08)',
+        background: on ? 'var(--ds-accent)' : 'var(--ds-hover-tint)',
         opacity: disabled ? 0.6 : 1,
         flexShrink: 0,
       }}
     >
       <div style={{
         position: 'absolute', top: 2, left: on ? 18 : 2,
-        width: 16, height: 16, borderRadius: '50%', background: '#fff',
-        transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+        width: 16, height: 16, borderRadius: '50%', background: 'var(--ds-text-primary)',
+        transition: 'left 0.2s', boxShadow: '0 1px 3px var(--ds-shadow-sm)',
       }} />
     </button>
   );
@@ -40,7 +40,7 @@ function SectionHeader({ title, tooltip }) {
     <div
       style={{
         fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
-        letterSpacing: '0.8px', color: 'var(--ds-text-tertiary, rgba(255,255,255,0.22))',
+        letterSpacing: '0.8px', color: 'var(--ds-text-tertiary)',
         marginBottom: 10,
         display: 'flex', alignItems: 'center', gap: 6, position: 'relative',
       }}
@@ -51,10 +51,10 @@ function SectionHeader({ title, tooltip }) {
       {tooltip && (
         <span style={{
           width: 13, height: 13, borderRadius: '50%',
-          border: '1px solid var(--ds-text-tertiary, rgba(255,255,255,0.22))',
+          border: '1px solid var(--ds-text-tertiary)',
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 8, fontWeight: 700,
-          color: 'var(--ds-text-tertiary, rgba(255,255,255,0.22))',
+          color: 'var(--ds-text-tertiary)',
           cursor: 'help',
         }}>?</span>
       )}
@@ -64,16 +64,16 @@ function SectionHeader({ title, tooltip }) {
             position: 'absolute', left: 12, top: '100%',
             width: 0, height: 0,
             borderLeft: '5px solid transparent', borderRight: '5px solid transparent',
-            borderBottom: '5px solid var(--ds-bg-overlay, #3A3A3C)',
+            borderBottom: '5px solid var(--ds-bg-overlay)',
             zIndex: 21,
           }} />
           <span style={{
             position: 'absolute', left: 0, top: '100%', marginTop: 5,
             padding: '6px 10px', borderRadius: 6, maxWidth: 260,
-            background: 'var(--ds-bg-overlay, #3A3A3C)',
-            color: 'var(--ds-text-secondary, rgba(255,255,255,0.7))',
+            background: 'var(--ds-bg-overlay)',
+            color: 'var(--ds-text-secondary)',
             fontSize: 11, lineHeight: 1.5, whiteSpace: 'normal',
-            zIndex: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
+            zIndex: 20, boxShadow: '0 2px 10px var(--ds-shadow-md)',
             pointerEvents: 'none',
           }}>
             {tooltip}
@@ -108,7 +108,7 @@ const SOURCES = [
   },
 ];
 
-export default function ResearchMenu({ agent, bridge, onNavigateBack }) {
+export default function ResearchMenu({ agent, bridge, onNavigateBack = null }) {
   const [sources, setSources] = useState({
     perplexity: true,
     pubmed: true,
@@ -140,21 +140,18 @@ export default function ResearchMenu({ agent, bridge, onNavigateBack }) {
 
   return (
     <div style={S.container}>
-      {/* Header with back arrow */}
-      <div style={S.header}>
-        <button
-          onClick={onNavigateBack}
-          style={S.backButton}
-          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--ds-text-primary, rgba(255,255,255,0.88))'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--ds-text-secondary, rgba(255,255,255,0.45))'; }}
-        >
-          <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
-        </button>
-        <span style={S.headerTitle}>Research Agent</span>
-        {/* Spacer to balance the back button */}
-        <div style={{ width: 28 }} />
+      {/* Agent title */}
+      <div style={S.agentTitle}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--ds-text-primary)' }}>
+            {agent?.label || agent?.name || 'Research Agent'}
+          </div>
+          {agent?.description && (
+            <div style={{ fontSize: 11, color: 'var(--ds-text-tertiary)', marginTop: 2 }}>
+              {agent.description}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Sources section */}
@@ -172,7 +169,7 @@ export default function ResearchMenu({ agent, bridge, onNavigateBack }) {
                 style={{
                   ...S.toolRow,
                   borderBottom: i < SOURCES.length - 1
-                    ? '1px solid var(--ds-border-subtle, rgba(255,255,255,0.06))'
+                    ? '1px solid var(--ds-border-subtle)'
                     : 'none',
                 }}
               >
@@ -181,7 +178,7 @@ export default function ResearchMenu({ agent, bridge, onNavigateBack }) {
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ds-text-secondary, rgba(255,255,255,0.7))' }}>
+                    <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ds-text-secondary)' }}>
                       {label}
                     </span>
                     {badge && (
@@ -194,7 +191,7 @@ export default function ResearchMenu({ agent, bridge, onNavigateBack }) {
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--ds-text-tertiary, rgba(255,255,255,0.3))', marginTop: 1 }}>
+                  <div style={{ fontSize: 11, color: 'var(--ds-text-tertiary)', marginTop: 1 }}>
                     {desc}
                   </div>
                 </div>
@@ -217,25 +214,15 @@ const styles = {
     flex: 1, display: 'flex', flexDirection: 'column',
     padding: '0 20px 140px', overflowY: 'auto',
   },
-  header: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+  agentTitle: {
+    display: 'flex', alignItems: 'center', gap: 10,
     padding: '20px 0 16px',
-  },
-  headerTitle: {
-    fontSize: 16, fontWeight: 600, textAlign: 'center',
-    color: 'var(--ds-text-primary, rgba(255,255,255,0.88))',
-  },
-  backButton: {
-    background: 'none', border: 'none', padding: 6, borderRadius: 6,
-    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    color: 'var(--ds-text-secondary, rgba(255,255,255,0.45))',
-    transition: 'color 0.15s',
-    width: 28, height: 28,
+    marginBottom: 0,
   },
   section: { marginBottom: 20 },
   card: {
-    background: 'var(--ds-bg-canvas, rgba(255,255,255,0.03))',
-    border: '1px solid var(--ds-border-subtle, rgba(255,255,255,0.06))',
+    background: 'var(--ds-bg-canvas)',
+    border: '1px solid var(--ds-border-subtle)',
     borderRadius: 12, overflow: 'hidden',
   },
   toolRow: {
