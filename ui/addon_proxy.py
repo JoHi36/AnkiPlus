@@ -419,20 +419,28 @@ def inject_addon_assets(webview):
 # ---------------------------------------------------------------------------
 
 def _inject_js(page, content, src):
-    """Run raw JS *content* in *page* wrapped in try-catch for error reporting."""
+    """Inject JS by creating a <script> element in the page DOM.
+    This mimics how the script originally loads in Anki's reviewer
+    (as a <script> tag), which is critical for webpack bundles that
+    rely on proper script execution context.
+    """
     try:
-        # Wrap in try-catch so we can see the actual error in Python logs
-        wrapped = (
-            "try {{\n{code}\n}} catch(e) {{\n"
-            "  if (window.ankiBridge && window.ankiBridge.addMessage) {{\n"
-            "    window.ankiBridge.addMessage('jsError',\n"
-            "      'addon_proxy [{src}]: ' + e.message + ' at ' + (e.stack || '').split('\\n')[0]);\n"
-            "  }}\n"
-            "  console.error('addon_proxy [{src}]:', e);\n"
-            "}}"
-        ).format(code=content, src=src.replace("'", "\\'"))
-        page.runJavaScript(wrapped)
-        logger.debug("addon_proxy: injected JS from %s", src)
+        js_escaped = json.dumps(content)
+        src_escaped = json.dumps(src)
+        loader = (
+            "(function() {{"
+            "  var s = document.createElement('script');"
+            "  s.setAttribute('data-addon-src', {src});"
+            "  s.textContent = {js};"
+            "  document.head.appendChild(s);"
+            "  if (window.ankiBridge && window.ankiBridge.addMessage) {{"
+            "    window.ankiBridge.addMessage('jsError',"
+            "      'addon_proxy: loaded ' + {src} + ', ambossAddon exists: ' + (typeof window.ambossAddon !== \"undefined\"));"
+            "  }}"
+            "}})();"
+        ).format(js=js_escaped, src=src_escaped)
+        page.runJavaScript(loader)
+        logger.debug("addon_proxy: injected JS via <script> tag from %s", src)
     except Exception:
         logger.exception("addon_proxy: failed to inject JS from %s", src)
 
