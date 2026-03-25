@@ -395,7 +395,7 @@ export default function ChatInput({
                   style={{
                     position: 'absolute',
                     left: textareaRef.current
-                      ? textareaRef.current.offsetLeft + getTextWidth(input, textareaRef.current)
+                      ? textareaRef.current.offsetLeft + getTextWidth(input, textareaRef.current) + (chipAgent ? chipWidth + 8 : 0)
                       : 0,
                     top: textareaRef.current
                       ? textareaRef.current.offsetTop
