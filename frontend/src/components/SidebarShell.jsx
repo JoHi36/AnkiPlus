@@ -4,6 +4,7 @@ import SettingsSidebar from './SettingsSidebar';
 import PlusiMenu from './PlusiMenu';
 import ResearchMenu from './ResearchMenu';
 import StandardSubMenu from './StandardSubMenu';
+import AgentHeader from './AgentHeader';
 import { getRegistry } from '@shared/config/subagentRegistry';
 
 /* ── Content animation keyframes injected once ───────────────────────────── */
@@ -57,7 +58,7 @@ function getSidebarAgents() {
 }
 
 /* ── Content router ──────────────────────────────────────────────────────── */
-function ContentPanel({ activeTab, agents, bridge }) {
+function ContentPanel({ activeTab, agents, bridge, enabled }) {
   if (activeTab === '__settings__') {
     return <SettingsSidebar bridge={bridge} />;
   }
@@ -68,16 +69,39 @@ function ContentPanel({ activeTab, agents, bridge }) {
     return null;
   }
 
+  let content;
   if (agent.name === 'plusi') {
-    return <PlusiMenu bridge={bridge} agent={agent} />;
+    content = <PlusiMenu bridge={bridge} agent={agent} />;
+  } else if (agent.submenuComponent === 'researchMenu') {
+    content = <ResearchMenu bridge={bridge} agent={agent} />;
+  } else {
+    content = <StandardSubMenu bridge={bridge} agent={agent} />;
   }
 
-  if (agent.submenuComponent === 'researchMenu') {
-    return <ResearchMenu bridge={bridge} agent={agent} />;
-  }
-
-  return <StandardSubMenu bridge={bridge} agent={agent} />;
+  return (
+    <div
+      style={{
+        flex: 1,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        opacity: enabled ? 1 : 0.25,
+        pointerEvents: enabled ? 'auto' : 'none',
+        transition: 'opacity 0.3s ease',
+      }}
+    >
+      {content}
+    </div>
+  );
 }
+
+/* ── Config key → agent name mapping ────────────────────────────────────── */
+const CONFIG_KEY_MAP = {
+  mascot_enabled: 'plusi',
+  research_enabled: 'research',
+  help_enabled: 'help',
+  tutor_enabled: 'tutor',
+};
 
 /* ── SidebarShell ─────────────────────────────────────────────────────────── */
 /**
@@ -91,10 +115,26 @@ export default function SidebarShell({ bridge }) {
   const [activeTab, setActiveTab] = useState('__settings__');
   const [agents, setAgents] = useState(() => getSidebarAgents());
 
+  // enabledStates: { [agentName]: boolean }
+  // Default: all enabled until config arrives
+  const [enabledStates, setEnabledStates] = useState(() => {
+    const initial = {};
+    getSidebarAgents().forEach(a => { initial[a.name] = true; });
+    return initial;
+  });
+
   /* Re-derive agent list when registry updates */
   useEffect(() => {
     const onRegistryUpdated = () => {
-      setAgents(getSidebarAgents());
+      const updated = getSidebarAgents();
+      setAgents(updated);
+      setEnabledStates(prev => {
+        const next = { ...prev };
+        updated.forEach(a => {
+          if (!(a.name in next)) next[a.name] = true;
+        });
+        return next;
+      });
     };
 
     window.addEventListener('agentRegistryUpdated', onRegistryUpdated);
@@ -102,6 +142,54 @@ export default function SidebarShell({ bridge }) {
       window.removeEventListener('agentRegistryUpdated', onRegistryUpdated);
     };
   }, []);
+
+  /* Load initial enabled states from config */
+  useEffect(() => {
+    const onConfigLoaded = (e) => {
+      const config = e.detail || {};
+      setEnabledStates(prev => {
+        const next = { ...prev };
+        for (const [configKey, agentName] of Object.entries(CONFIG_KEY_MAP)) {
+          if (configKey in config) {
+            next[agentName] = Boolean(config[configKey]);
+          }
+        }
+        return next;
+      });
+    };
+
+    window.addEventListener('ankiConfigLoaded', onConfigLoaded);
+
+    // Request config on mount
+    window.ankiBridge?.addMessage('getCurrentConfig', null);
+
+    return () => {
+      window.removeEventListener('ankiConfigLoaded', onConfigLoaded);
+    };
+  }, []);
+
+  /* Toggle handler — saves to backend */
+  function handleToggle(agentName) {
+    const agent = agents.find(a => a.name === agentName);
+    if (!agent || agent.isDefault) return;
+
+    const newEnabled = !enabledStates[agentName];
+
+    setEnabledStates(prev => ({ ...prev, [agentName]: newEnabled }));
+
+    if (agentName === 'plusi') {
+      window.ankiBridge?.addMessage('saveMascotEnabled', { enabled: newEnabled });
+    } else {
+      window.ankiBridge?.addMessage('saveSubagentEnabled', { name: agentName, enabled: newEnabled });
+    }
+  }
+
+  const currentAgent = activeTab !== '__settings__'
+    ? agents.find(a => a.name === activeTab)
+    : null;
+  const isEnabled = currentAgent
+    ? (currentAgent.isDefault ? true : (enabledStates[activeTab] ?? true))
+    : true;
 
   return (
     <div
@@ -140,10 +228,20 @@ export default function SidebarShell({ bridge }) {
             animation: 'sidebarContentIn 300ms cubic-bezier(0.25, 1, 0.5, 1) both',
           }}
         >
+          {/* AgentHeader — shown for all agent tabs (not __settings__) */}
+          {currentAgent && (
+            <AgentHeader
+              agent={currentAgent}
+              enabled={isEnabled}
+              onToggle={() => handleToggle(activeTab)}
+            />
+          )}
+
           <ContentPanel
             activeTab={activeTab}
             agents={agents}
             bridge={bridge}
+            enabled={isEnabled}
           />
         </div>
       </div>
