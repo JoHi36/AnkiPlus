@@ -37,8 +37,8 @@ def _fetch_abstracts(id_list: list) -> dict:
             if pmid_el is not None and abstract_el is not None:
                 abstracts[pmid_el.text] = abstract_el.text or ''
         return abstracts
-    except Exception:
-        logger.exception("Failed to fetch PubMed abstracts")
+    except (urllib.error.URLError, ET.ParseError, KeyError) as e:
+        logger.warning("Failed to fetch PubMed abstracts: %s", e)
         return {}
 
 

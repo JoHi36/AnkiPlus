@@ -96,7 +96,7 @@ def search_via_openrouter(query: str, api_key: str,
         body = ''
         try:
             body = e.read().decode('utf-8', errors='replace')[:200]
-        except Exception:
+        except (OSError, AttributeError):
             pass
         logger.warning("OpenRouter HTTP %d for [%s]: %s", e.code, model, body)
         if e.code == 401:

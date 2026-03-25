@@ -63,7 +63,8 @@ def _sources_from_citations(citations: list) -> list:
                 domain=domain,
                 favicon_letter=domain[0].upper() if domain else '?',
             ))
-        except Exception:
+        except (AttributeError, KeyError, ValueError) as e:
+            logger.debug("Skipping malformed citation: %s", e)
             continue
     return sources
 
@@ -165,8 +166,8 @@ def _summarize_pubmed_de(snippets: list, query: str) -> str:
         else:
             logger.warning("_summarize_pubmed_de: HTTP %s", response.status_code)
 
-    except Exception:
-        logger.exception("PubMed Gemini summarization failed")
+    except (requests.RequestException, ValueError, KeyError, IndexError) as e:
+        logger.warning("PubMed Gemini summarization failed: %s", e)
 
     # Fallback: return raw snippets with citation markers
     combined = '\n\n'.join(f'[{i+1}] {s}' for i, s in enumerate(snippets))
@@ -193,8 +194,8 @@ def search(query: str, api_key: str = '', enabled_sources: dict = None) -> Resea
                     query=query,
                     tool_used='pubmed',
                 )
-        except Exception:
-            logger.exception("PubMed search failed, falling back")
+        except (ImportError, KeyError, ValueError) as e:
+            logger.warning("PubMed search failed, falling back: %s", e)
 
     # 2. Wikipedia for definition queries (if enabled)
     if enabled_sources.get('wikipedia', True) and _is_definition_query(query):
@@ -215,8 +216,8 @@ def search(query: str, api_key: str = '', enabled_sources: dict = None) -> Resea
                     query=query,
                     tool_used='wikipedia',
                 )
-        except Exception:
-            logger.exception("Wikipedia search failed, falling back")
+        except (ImportError, KeyError, ValueError) as e:
+            logger.warning("Wikipedia search failed, falling back: %s", e)
 
     # Default: Perplexity Sonar via OpenRouter
     if not api_key:
@@ -239,6 +240,6 @@ def search(query: str, api_key: str = '', enabled_sources: dict = None) -> Resea
             query=query,
             tool_used='perplexity/sonar',
         )
-    except Exception as e:
-        logger.exception("OpenRouter search failed")
+    except (ImportError, ValueError, KeyError) as e:
+        logger.warning("OpenRouter search failed: %s", e)
         return ResearchResult(query=query, error=str(e))

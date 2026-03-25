@@ -205,8 +205,8 @@ class CardTracker:
                 emb_mgr = get_embedding_manager()
                 if emb_mgr:
                     _embed_executor.submit(emb_mgr.ensure_embedded, card.id, context)
-            except Exception:
-                pass  # Don't block card display
+            except Exception as e:
+                logger.debug("Embedding submission failed for card %s: %s", card.id, e)
 
         except Exception as e:
             logger.error(f"Fehler beim Senden des Karten-Kontexts: {e}")

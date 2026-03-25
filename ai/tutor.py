@@ -96,7 +96,7 @@ def run_tutor(situation, emit_step=None, memory=None,
     if memory:
         try:
             memory.set('total_queries', memory.get('total_queries', 0) + 1)
-        except Exception:
+        except (AttributeError, KeyError):
             pass
 
     # ------------------------------------------------------------------
@@ -112,7 +112,7 @@ def run_tutor(situation, emit_step=None, memory=None,
                 from config import is_backend_mode, get_auth_token
             if is_backend_mode() and get_auth_token():
                 use_backend = True
-        except Exception:
+        except (ImportError, AttributeError):
             pass
 
     if not api_key and not use_backend:

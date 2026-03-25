@@ -10,10 +10,10 @@ from aqt.qt import *
 
 try:
     from PyQt6.QtWebEngineWidgets import QWebEngineView
-except Exception:
+except ImportError:
     try:
         from PyQt5.QtWebEngineWidgets import QWebEngineView
-    except Exception:
+    except ImportError:
         QWebEngineView = None
 
 try:
