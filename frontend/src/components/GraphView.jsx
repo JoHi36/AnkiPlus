@@ -1,126 +1,119 @@
-import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import ForceGraph3D from '3d-force-graph';
 import { Search } from 'lucide-react';
-import useKnowledgeGraph from '../hooks/useKnowledgeGraph';
 import { executeAction } from '../actions';
 
-const QUESTION_WORDS = /\b(was|wie|warum|erkläre|welche|wozu|wann|what|how|why|explain|which|when|describe)\b/i;
 const MAX_W = 'var(--ds-content-width)';
 
+// Deck name → color mapping (consistent colors for same decks)
 const DECK_COLORS = ['#0A84FF','#30D158','#FF9F0A','#BF5AF2','#FF453A','#5AC8FA','#FFD60A','#AC8E68'];
-
-function deckTreeToGraph(roots) {
-  const nodes = [];
-  const links = [];
-  let colorIdx = 0;
-
-  function walk(deck, parentId, topColor, depth) {
-    if (!deck || !deck.id) return;
-    const color = depth === 0 ? DECK_COLORS[colorIdx++ % DECK_COLORS.length] : topColor;
-    const total = deck.total || 0;
-    if (total === 0 && (!deck.children || deck.children.length === 0)) return;
-
-    nodes.push({
-      id: String(deck.id),
-      label: deck.display || deck.name,
-      fullName: deck.name,
-      total: total,
-      dueNew: deck.dueNew || 0,
-      dueLearn: deck.dueLearn || 0,
-      dueReview: deck.dueReview || 0,
-      deckColor: color,
-      depth: depth,
-      parentId: parentId,
-    });
-
-    if (parentId) {
-      links.push({ source: parentId, target: String(deck.id), value: 1, type: 'hierarchy' });
-    }
-
-    if (deck.children) {
-      deck.children.forEach(child => walk(child, String(deck.id), color, depth + 1));
-    }
-  }
-
-  roots.forEach(root => walk(root, null, null, 0));
-  return { nodes, links };
+function deckColor(deckName) {
+  let hash = 0;
+  for (let i = 0; i < deckName.length; i++) hash = ((hash << 5) - hash + deckName.charCodeAt(i)) | 0;
+  return DECK_COLORS[Math.abs(hash) % DECK_COLORS.length];
 }
 
-export default function GraphView({ onToggleView, isPremium, deckData }) {
+export default function GraphView({ onToggleView, isPremium }) {
   const containerRef = useRef(null);
   const graphRef = useRef(null);
-  const debounceRef = useRef(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResult, setSearchResult] = useState(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [selectedCard, setSelectedCard] = useState(null);
 
-  const {
-    crossLinks,
-    selectedTerm,
-    setSelectedTerm,
-    searchResult,
-    searchGraph,
-  } = useKnowledgeGraph();
-
-  const graphData = useMemo(() => {
-    if (!deckData?.roots?.length) return null;
-    const { nodes, links } = deckTreeToGraph(deckData.roots);
-    // Merge cross-links (only if both endpoints exist as nodes)
-    const nodeIds = new Set(nodes.map(n => n.id));
-    const allLinks = [
-      ...links,
-      ...crossLinks.filter(cl => nodeIds.has(cl.source) && nodeIds.has(cl.target)),
-    ];
-    return { nodes, links: allLinks };
-  }, [deckData, crossLinks]);
-
-  // Handle node click — fly camera to node
-  const handleNodeClick = useCallback((node) => {
-    if (!node || !graphRef.current) return;
-    setSelectedTerm(node.label);
-
-    const distance = 80;
-    const distRatio = 1 + distance / Math.hypot(node.x || 1, node.y || 1, node.z || 1);
-    graphRef.current.cameraPosition(
-      { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
-      node,
-      1000
-    );
-  }, [setSelectedTerm]);
-
-  // Build / rebuild the graph when data arrives
+  // Listen for search results from backend
   useEffect(() => {
-    if (!containerRef.current || !graphData) return;
+    const onSearchCards = (e) => {
+      setSearchResult(e.detail);
+      setIsSearching(false);
+    };
+    window.addEventListener('graph.searchCards', onSearchCards);
+    return () => {
+      window.removeEventListener('graph.searchCards', onSearchCards);
+    };
+  }, []);
+
+  // Handle search submit
+  const handleSearch = useCallback((e) => {
+    e.preventDefault();
+    const query = searchQuery.trim();
+    if (!query) return;
+
+    setIsSearching(true);
+    setSearchResult(null);
+    setSelectedCard(null);
+
+    // Request card search via backend embedding similarity
+    window.ankiBridge?.addMessage('searchCards', { query, topK: 25 });
+  }, [searchQuery]);
+
+  // Build / rebuild graph when search results arrive
+  useEffect(() => {
+    if (!containerRef.current || !searchResult?.cards?.length) {
+      // Clear graph if no results
+      if (graphRef.current) {
+        graphRef.current.graphData({ nodes: [], links: [] });
+      }
+      return;
+    }
+
+    const nodes = searchResult.cards.map((card, i) => ({
+      id: card.id,
+      label: card.question,
+      deck: card.deck,
+      deckFull: card.deckFull,
+      score: card.score,
+      color: deckColor(card.deck),
+      _delay: i * 40,
+    }));
+
+    const links = searchResult.edges.map(e => ({
+      source: e.source,
+      target: e.target,
+      value: e.similarity,
+    }));
+
+    // Destroy old graph
+    if (graphRef.current?._destructor) graphRef.current._destructor();
 
     const graph = ForceGraph3D()(containerRef.current);
     graphRef.current = graph;
 
     graph
-      .graphData({ nodes: graphData.nodes, links: graphData.links })
+      .graphData({ nodes, links })
       .backgroundColor('rgba(0,0,0,0)')
-      .nodeColor(node => node.deckColor || '#0A84FF')
-      .nodeVal(node => {
-        const base = Math.log2((node.total || 1) + 1);
-        return node.depth === 0 ? base * 3 : base * 1.5;
+      .nodeColor(node => node.color)
+      .nodeVal(node => 1 + node.score * 2)
+      .nodeLabel(node => `${node.label}\n${node.deck}`)
+      .nodeOpacity(0.85)
+      .linkWidth(link => link.value * 2)
+      .linkOpacity(0.12)
+      .linkColor(() => 'rgba(255,255,255,0.15)')
+      .onNodeClick(node => {
+        if (!node) return;
+        setSelectedCard(node);
+        // Fly camera to clicked node
+        const dist = 40;
+        const ratio = 1 + dist / Math.hypot(node.x || 1, node.y || 1, node.z || 1);
+        graph.cameraPosition(
+          { x: node.x * ratio, y: node.y * ratio, z: node.z * ratio },
+          node, 800
+        );
       })
-      .nodeLabel(node => {
-        const due = node.dueNew + node.dueLearn + node.dueReview;
-        return `${node.label} (${node.total} Karten, ${due} fällig)`;
-      })
-      .linkWidth(link => link.type === 'hierarchy' ? 0.5 : Math.min((link.value || 1) / 2, 3))
-      .linkOpacity(link => link.type === 'hierarchy' ? 0.08 : 0.3)
-      .linkColor(link => link.type === 'hierarchy' ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.25)')
-      .onNodeClick(handleNodeClick)
       .enableNodeDrag(false)
-      .d3AlphaDecay(0.04)
-      .d3VelocityDecay(0.4)
+      .warmupTicks(0)
+      .cooldownTicks(200)
+      .d3AlphaDecay(0.03)
+      .d3VelocityDecay(0.3)
       .showNavInfo(false);
 
-    // Auto-rotate
+    // Auto-rotate slowly
     if (graph.controls()) {
       graph.controls().autoRotate = true;
-      graph.controls().autoRotateSpeed = 0.3;
+      graph.controls().autoRotateSpeed = 0.5;
     }
 
-    // Resize observer — keep canvas in sync with window size
+    // Resize observer
     const ro = new ResizeObserver(() => {
       if (containerRef.current && graphRef.current) {
         const { clientWidth, clientHeight } = containerRef.current;
@@ -133,104 +126,24 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       ro.disconnect();
       if (graph._destructor) graph._destructor();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graphData]);
+  }, [searchResult]);
 
-  // Keep the click handler current
-  useEffect(() => {
-    if (!graphRef.current) return;
-    graphRef.current.onNodeClick(handleNodeClick);
-  }, [handleNodeClick]);
-
-  // Focused sub-network search: show only matched decks + parents
-  useEffect(() => {
-    if (!graphRef.current || !graphData) return;
-
-    if (!searchResult?.matchedDeckIds?.length) {
-      // No search — show all nodes, restore default visibility
-      graphRef.current.nodeVisibility(() => true);
-      graphRef.current.linkVisibility(() => true);
-      graphRef.current.nodeColor(node => node.deckColor || '#0A84FF');
-      return;
-    }
-
-    // Build set of matched deck IDs
-    const matched = new Set(searchResult.matchedDeckIds.map(String));
-
-    // Include parent decks of matched decks
-    const visible = new Set(matched);
-    graphData.nodes.forEach(node => {
-      if (matched.has(node.id) && node.parentId) {
-        visible.add(node.parentId);
-      }
-    });
-
-    // Show only the sub-network
-    graphRef.current.nodeVisibility(node => visible.has(node.id));
-    graphRef.current.linkVisibility(link => {
-      const src = link.source?.id || link.source;
-      const tgt = link.target?.id || link.target;
-      return visible.has(src) && visible.has(tgt);
-    });
-    graphRef.current.nodeColor(node =>
-      matched.has(node.id) ? '#FFFFFF' : (node.deckColor || '#0A84FF')
-    );
-
-    // Fly camera to first matched node
-    const firstMatch = graphData.nodes.find(n => matched.has(n.id));
-    if (firstMatch && graphRef.current.graphData().nodes.length > 0) {
-      const nodes3d = graphRef.current.graphData().nodes;
-      const target = nodes3d.find(n => n.id === firstMatch.id);
-      if (target) {
-        graphRef.current.cameraPosition(
-          { x: target.x + 100, y: target.y + 50, z: target.z + 100 },
-          target, 1000
-        );
-      }
-    }
-  }, [searchResult, graphData]);
-
-  // Debounced search
-  const handleSearchChange = useCallback((e) => {
-    const query = e.target.value;
-    setSearchQuery(query);
-
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      if (query.trim()) {
-        searchGraph(query.trim());
-      } else {
-        // Clear search — restore full graph
-        if (graphRef.current) {
-          graphRef.current.nodeVisibility(() => true);
-          graphRef.current.linkVisibility(() => true);
-          graphRef.current.nodeColor(node => node.deckColor || '#0A84FF');
-        }
-      }
-    }, 300);
-  }, [searchGraph]);
-
-  const isLoading = !deckData;
-  const hasGraph = graphData?.nodes?.length > 0;
+  const hasResults = searchResult?.cards?.length > 0;
+  const cardIds = searchResult?.cards?.map(c => c.id) || [];
 
   return (
     <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
-      {/* 3D graph canvas — FULLSCREEN BACKGROUND */}
-      <div
-        ref={containerRef}
-        style={{ position: 'absolute', inset: 0 }}
-      />
+      {/* 3D canvas — fullscreen background */}
+      <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
 
-      {/* Header + search overlaid on top */}
+      {/* Header + search overlaid */}
       <div style={{ position: 'relative', zIndex: 10, pointerEvents: 'none' }}>
-        {/* === HEADER: Anki.plus wordmark === */}
+        {/* Anki.plus header */}
         <div style={{
-          paddingTop: 64,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          gap: 10, marginBottom: 16, width: '100%', maxWidth: MAX_W,
-          margin: '0 auto 16px', padding: '64px 20px 0',
-          position: 'relative',
-          pointerEvents: 'auto',
+          gap: 10, width: '100%', maxWidth: MAX_W,
+          margin: '0 auto', padding: '64px 20px 16px',
+          position: 'relative', pointerEvents: 'auto',
         }}>
           <div style={{ display: 'flex', alignItems: 'baseline', pointerEvents: 'none' }}>
             <span style={{
@@ -258,8 +171,6 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
           >
             {isPremium ? 'Pro' : 'Free'}
           </span>
-
-          {/* Deck list toggle */}
           {onToggleView && (
             <button
               onClick={onToggleView}
@@ -274,25 +185,18 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
                 transition: 'color 0.15s, background 0.15s',
                 pointerEvents: 'auto',
               }}
-              onMouseEnter={e => {
-                e.currentTarget.style.color = 'var(--ds-text-primary)';
-                e.currentTarget.style.background = 'var(--ds-active-tint)';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.color = 'var(--ds-text-secondary)';
-                e.currentTarget.style.background = 'var(--ds-hover-tint)';
-              }}
+              onMouseEnter={e => { e.currentTarget.style.color = 'var(--ds-text-primary)'; e.currentTarget.style.background = 'var(--ds-active-tint)'; }}
+              onMouseLeave={e => { e.currentTarget.style.color = 'var(--ds-text-secondary)'; e.currentTarget.style.background = 'var(--ds-hover-tint)'; }}
             >
               Deck-Liste
             </button>
           )}
         </div>
 
-        {/* === SEARCH BAR === */}
-        <div style={{
+        {/* Search bar */}
+        <form onSubmit={handleSearch} style={{
           width: '100%', maxWidth: MAX_W,
-          padding: '0 20px', marginBottom: 16,
-          margin: '0 auto',
+          padding: '0 20px', margin: '0 auto',
           pointerEvents: 'auto',
         }}>
           <div
@@ -307,86 +211,103 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
             <input
               type="text"
               value={searchQuery}
-              onChange={handleSearchChange}
-              placeholder="Deck suchen..."
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Was willst du lernen?"
               style={{
                 flex: 1, background: 'transparent', border: 'none', outline: 'none',
                 color: 'var(--ds-text-primary)', fontSize: 15,
                 fontFamily: 'var(--ds-font-sans)',
               }}
             />
-            <span style={{ color: 'var(--ds-text-placeholder)', fontSize: 12, fontWeight: 500 }}>⌘K</span>
+            {isSearching && (
+              <div style={{
+                width: 16, height: 16, borderRadius: '50%',
+                border: '2px solid var(--ds-border-subtle)',
+                borderTopColor: 'var(--ds-accent)',
+                animation: 'spin 0.8s linear infinite',
+              }} />
+            )}
+            {!isSearching && <span style={{ color: 'var(--ds-text-placeholder)', fontSize: 12, fontWeight: 500 }}>&#9166;</span>}
           </div>
-        </div>
+        </form>
       </div>
 
-      {/* Loading state */}
-      {isLoading && (
-        <div style={{
-          position: 'absolute', inset: 0,
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          gap: 12, color: 'var(--ds-text-secondary)', fontSize: 14, pointerEvents: 'none',
-          zIndex: 5,
-        }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: '50%',
-            border: '2px solid var(--ds-border-subtle)',
-            borderTopColor: 'var(--ds-accent)',
-            animation: 'spin 0.8s linear infinite',
-          }} />
-          <span>Wissensgraph wird geladen...</span>
-        </div>
-      )}
-
-      {/* Empty state */}
-      {!isLoading && !hasGraph && (
+      {/* Empty state — before any search */}
+      {!hasResults && !isSearching && (
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
           gap: 8, color: 'var(--ds-text-tertiary)', fontSize: 14, pointerEvents: 'none',
           zIndex: 5,
         }}>
-          <span style={{ fontSize: 32, opacity: 0.3 }}>◎</span>
-          <span>Keine Decks vorhanden</span>
+          <span style={{ fontSize: 40, opacity: 0.15 }}>&#8984;</span>
+          <span>Gib ein Thema ein, um einen Stapel zu erstellen</span>
         </div>
       )}
 
-      {/* Selected term badge with Stapel starten action */}
-      {selectedTerm && (
+      {/* Bottom bar — results */}
+      {hasResults && (
         <div style={{
           position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          padding: '8px 20px', borderRadius: 14,
+          padding: '12px 24px', borderRadius: 16,
           background: 'var(--ds-bg-frosted)', backdropFilter: 'blur(20px)',
           border: '1px solid var(--ds-border-subtle)',
-          color: 'var(--ds-text-primary)', fontSize: 14, fontWeight: 500,
-          zIndex: 10, whiteSpace: 'nowrap',
-          display: 'flex', alignItems: 'center', gap: 12,
-          boxShadow: 'var(--ds-shadow-md)',
-          pointerEvents: 'auto',
+          boxShadow: 'var(--ds-shadow-lg)',
+          zIndex: 10, pointerEvents: 'auto',
+          display: 'flex', alignItems: 'center', gap: 16,
+          maxWidth: 500,
         }}>
-          <span>{selectedTerm}</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ds-text-primary)' }}>
+              {searchResult.totalFound} Karten gefunden
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--ds-text-secondary)', marginTop: 2 }}>
+              {searchResult.query}
+            </div>
+          </div>
           <button
             onClick={() => {
-              const node = graphData?.nodes?.find(n => n.label === selectedTerm);
-              if (node) executeAction('deck.study', { deckId: parseInt(node.id) });
+              window.ankiBridge?.addMessage('startTermStack', {
+                term: searchResult.query,
+                cardIds: JSON.stringify(cardIds.map(Number)),
+              });
             }}
             style={{
-              background: 'var(--ds-accent)', color: 'var(--ds-text-on-accent, white)', border: 'none',
-              borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600,
-              cursor: 'pointer', fontFamily: 'inherit',
+              background: 'var(--ds-accent)', color: 'white', border: 'none',
+              borderRadius: 10, padding: '10px 20px', fontSize: 14, fontWeight: 600,
+              cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
             }}
           >
             Stapel starten
           </button>
+        </div>
+      )}
+
+      {/* Selected card tooltip */}
+      {selectedCard && (
+        <div style={{
+          position: 'absolute', top: 200, right: 24,
+          padding: '12px 16px', borderRadius: 12,
+          background: 'var(--ds-bg-overlay)',
+          border: '1px solid var(--ds-border-subtle)',
+          boxShadow: 'var(--ds-shadow-md)',
+          zIndex: 10, pointerEvents: 'auto',
+          maxWidth: 280, fontSize: 13,
+        }}>
+          <div style={{ color: 'var(--ds-text-primary)', fontWeight: 500, marginBottom: 4 }}>
+            {selectedCard.label}
+          </div>
+          <div style={{ color: 'var(--ds-text-tertiary)', fontSize: 11 }}>
+            {selectedCard.deckFull} &middot; Relevanz: {Math.round(selectedCard.score * 100)}%
+          </div>
           <button
-            onClick={() => setSelectedTerm(null)}
+            onClick={() => setSelectedCard(null)}
             style={{
+              position: 'absolute', top: 8, right: 8,
               background: 'none', border: 'none', color: 'var(--ds-text-tertiary)',
-              cursor: 'pointer', fontSize: 16, padding: '0 4px', fontFamily: 'inherit',
+              cursor: 'pointer', fontSize: 14,
             }}
-          >
-            ×
-          </button>
+          >&times;</button>
         </div>
       )}
 
