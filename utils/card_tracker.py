@@ -119,7 +119,7 @@ class CardTracker:
                 # Entferne HTML-Entities
                 clean_front = re.sub(r'&[a-zA-Z]+;', ' ', clean_front)
                 front_field = clean_front.strip()
-                logger.debug(f"card_tracker: frontField bereinigt: {front_field[:100] if front_field else 'leer'}...")
+                logger.debug("card_tracker: frontField bereinigt: %s...", front_field[:100] if front_field else 'leer')
             
             # Hole Deck-Name
             deck_name = None
@@ -180,7 +180,7 @@ class CardTracker:
             }
             
             payload_json = json.dumps(payload)
-            logger.debug(f"card_tracker: 🔴 SENDING cardContext to chat panel for cardId={context.get('cardId')}")
+            logger.debug("card_tracker: 🔴 SENDING cardContext to chat panel for cardId=%s", context.get('cardId'))
             # Use BOTH window.ankiReceive AND CustomEvent for reliability
             js = f"""(function() {{
                 var payload = {payload_json};
@@ -209,7 +209,7 @@ class CardTracker:
                 logger.debug("Embedding submission failed for card %s: %s", card.id, e)
 
         except Exception as e:
-            logger.error(f"Fehler beim Senden des Karten-Kontexts: {e}")
+            logger.error("Fehler beim Senden des Karten-Kontexts: %s", e)
     
     def _inject_card_styles(self, card):
         """Injiziert CSS für modernes Card-Design"""
@@ -219,7 +219,7 @@ class CardTracker:
                 logger.error("❌ card_tracker: mw oder mw.reviewer nicht verfügbar")
                 return
             
-            logger.debug(f"🎨 card_tracker: _inject_card_styles aufgerufen für Karte {card.id}")
+            logger.debug("🎨 card_tracker: _inject_card_styles aufgerufen für Karte %s", card.id)
             
             # Lade Minimal CSS-Datei (CSS-Only Styling) — cached after first read
             global _css_cache
@@ -231,12 +231,12 @@ class CardTracker:
                     with open(css_path, 'r', encoding='utf-8') as f:
                         _css_cache = f.read()
                 except FileNotFoundError:
-                    logger.error(f"❌ card_tracker: CSS-Datei nicht gefunden: {css_path}")
+                    logger.error("❌ card_tracker: CSS-Datei nicht gefunden: %s", css_path)
                     return
 
             css_content = _css_cache
-            
-            logger.debug(f"card_tracker: CSS geladen - {len(css_content)} Zeichen")
+
+            logger.debug("card_tracker: CSS geladen - %s Zeichen", len(css_content))
             
             # CSS + Direktes Inline-Styling für Container (höchste Priorität)
             css_js = f"""
@@ -293,10 +293,10 @@ class CardTracker:
             
             # Verwende reviewer.web.eval() für Injection
             has_web = hasattr(mw.reviewer, 'web') and mw.reviewer.web
-            logger.debug(f"🔍 card_tracker: has_web = {has_web}")
+            logger.debug("🔍 card_tracker: has_web = %s", has_web)
             
             if has_web:
-                logger.debug(f"📝 card_tracker: Führe JavaScript aus ({len(css_js)} Zeichen)")
+                logger.debug("📝 card_tracker: Führe JavaScript aus (%s Zeichen)", len(css_js))
                 mw.reviewer.web.eval(css_js)
                 logger.debug("card_tracker: CSS + JavaScript injiziert")
                 
@@ -312,7 +312,7 @@ class CardTracker:
                 logger.error("❌ card_tracker: Reviewer web nicht verfügbar")
                     
         except Exception as e:
-            logger.error(f"Fehler beim Injizieren von Card-Styles: {e}")
+            logger.error("Fehler beim Injizieren von Card-Styles: %s", e)
     
     def _inject_mc_script(self, card):
         """Injiziert JavaScript für MC-Integration"""
@@ -364,5 +364,5 @@ class CardTracker:
                 logger.debug("card_tracker: Reviewer web nicht verfügbar")
                     
         except Exception as e:
-            logger.error(f"Fehler beim Injizieren von MC-Script: {e}")
+            logger.error("Fehler beim Injizieren von MC-Script: %s", e)
 
