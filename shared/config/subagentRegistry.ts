@@ -3,6 +3,25 @@
  * Populated on app init via bridge.getSubagentRegistry().
  */
 
+export interface Slot {
+  ref: string;
+  mode: 'locked' | 'on' | 'off';
+  label?: string;
+  description?: string;
+}
+
+export interface WorkflowDefinition {
+  name: string;
+  label: string;
+  description: string;
+  triggers: Slot[];
+  tools: Slot[];
+  outputs: Slot[];
+  mode: 'locked' | 'on' | 'off';
+  status: 'active' | 'soon';
+  contextPrompt?: string;
+}
+
 export interface SubagentConfig {
   name: string;
   label: string;
@@ -22,6 +41,7 @@ export interface SubagentConfig {
   submenuComponent?: string;
   toolsConfigurable?: boolean;
   reasoningSteps?: Array<{ id: string; label: string; activeTitle?: string }>;
+  workflows?: WorkflowDefinition[];
 }
 
 export interface ToolConfig {
