@@ -437,6 +437,46 @@ const mergeDef: StepRendererDef = {
     isDone ? <MergeBar data={data} /> : null,
 };
 
+const strategyDef: StepRendererDef = {
+  id: 'strategy',
+  label: 'Strategie',
+  activeTitle: 'Analysiere Anfrage...',
+  doneLabel: (data, status) => {
+    if (status === 'error') return 'Strategie fehlgeschlagen';
+    if (!data.search_needed) return 'Direkte Antwort';
+    const mode = MODE_LABELS[data.retrieval_mode] || data.retrieval_mode || 'Suche';
+    const scope = data.scope === 'current_deck' ? 'im Deck' : data.scope === 'all_decks' ? 'alle Decks' : '';
+    return scope ? `${mode} ${scope}` : mode;
+  },
+  renderContent: ({ data, isDone }) => {
+    if (!isDone) return null;
+    const tags: { label: string; value: string }[] = [];
+    if (data.search_needed) {
+      const mode = MODE_LABELS[data.retrieval_mode] || data.retrieval_mode || '';
+      if (mode) tags.push({ label: 'Suche', value: mode });
+      const scope = data.scope === 'current_deck' ? 'Deck' : data.scope === 'all_decks' ? 'Alle' : data.scope || '';
+      if (scope) tags.push({ label: 'Bereich', value: scope });
+    } else {
+      tags.push({ label: 'Modus', value: 'Direkt' });
+    }
+    const length = RESPONSE_LENGTH_LABELS[data.response_length] || '';
+    if (length) tags.push({ label: 'Länge', value: length });
+    if (tags.length === 0) return null;
+    return (
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+        {tags.map((t, i) => (
+          <span key={i} style={{
+            fontSize: 11, padding: '2px 8px', borderRadius: 6,
+            background: 'var(--ds-hover-tint)', color: 'var(--ds-text-secondary)',
+          }}>
+            {t.label} <span style={{ fontWeight: 600 }}>{t.value}</span>
+          </span>
+        ))}
+      </div>
+    );
+  },
+};
+
 const generatingDef: StepRendererDef = {
   id: 'generating',
   label: 'Generierung',
@@ -462,6 +502,7 @@ export function registerDefaultRenderers(): void {
   registerStepRenderer(sqlSearchDef);
   registerStepRenderer(semanticSearchDef);
   registerStepRenderer(mergeDef);
+  registerStepRenderer(strategyDef);
   registerStepRenderer(generatingDef);
   registerStepRenderer(sourcesReadyDef);
 }

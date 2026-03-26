@@ -442,6 +442,23 @@ class AIHandler:
             enriched['agent'] = agent_name
             self._emit_pipeline_step(step, status, enriched)
 
+        # Emit strategy step — always visible in the agent's reasoning area.
+        # Shows the router's decision so the user sees what approach the agent takes.
+        search_needed = False
+        retrieval_mode = ''
+        search_scope = ''
+        if routing_result:
+            search_needed = getattr(routing_result, 'search_needed', False)
+            retrieval_mode = getattr(routing_result, 'retrieval_mode', '')
+            search_scope = getattr(routing_result, 'search_scope', '')
+        agent_emit_step("strategy", "done", {
+            'search_needed': search_needed,
+            'retrieval_mode': retrieval_mode,
+            'scope': search_scope,
+            'response_length': response_length,
+            'has_card': has_card,
+        })
+
         # Build kwargs — always inject config so every agent has access
         agent_kwargs = dict(extra_kwargs)
         agent_kwargs.setdefault('config', self.config or {})
