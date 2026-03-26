@@ -4,12 +4,34 @@ import { executeAction } from '../actions';
 import KnowledgeHeatmap from './KnowledgeHeatmap';
 import ChatInput from './ChatInput';
 
-// Deck name → color mapping (consistent colors for same decks)
-const DECK_COLORS = ['#0A84FF','#30D158','#FF9F0A','#BF5AF2','#FF453A','#5AC8FA','#FFD60A','#AC8E68'];
+// Muted, darker color palette — brightens on cluster selection
+const CLUSTER_COLORS = [
+  '#3B6EA5', // steel blue
+  '#4A8C5C', // forest green
+  '#B07D3A', // amber
+  '#7B5EA7', // muted purple
+  '#A0524B', // terracotta
+  '#4A9BAE', // teal
+  '#A69550', // olive gold
+  '#7A6B5D', // warm grey
+];
+
+// Brighter variants for selection highlight
+const CLUSTER_BRIGHT = [
+  '#5A9FD4', // bright steel
+  '#5CB878', // bright green
+  '#D4A04A', // bright amber
+  '#A07DD4', // bright purple
+  '#D06B62', // bright terracotta
+  '#5CC4DA', // bright teal
+  '#CDB860', // bright gold
+  '#A0907E', // bright grey
+];
+
 function deckColor(deckName) {
   let hash = 0;
   for (let i = 0; i < deckName.length; i++) hash = ((hash << 5) - hash + deckName.charCodeAt(i)) | 0;
-  return DECK_COLORS[Math.abs(hash) % DECK_COLORS.length];
+  return CLUSTER_COLORS[Math.abs(hash) % CLUSTER_COLORS.length];
 }
 
 export default function GraphView({ onToggleView, isPremium, deckData }) {
@@ -20,15 +42,21 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
   const [isSearching, setIsSearching] = useState(false);
   const [selectedCard, setSelectedCard] = useState(null);
   const [answerText, setAnswerText] = useState(null);
+  const [clusterLabels, setClusterLabels] = useState(null); // LLM-generated labels
 
   // Listen for search results and quick answers from backend
   useEffect(() => {
     const onSearchCards = (e) => {
       setSearchResult(e.detail);
       setIsSearching(false);
+      setClusterLabels(null); // reset until LLM responds
     };
     const onQuickAnswer = (e) => {
       setAnswerText(e.detail?.answer || null);
+      // Update cluster labels from LLM if provided
+      if (e.detail?.clusterLabels && Object.keys(e.detail.clusterLabels).length > 0) {
+        setClusterLabels(e.detail.clusterLabels);
+      }
     };
     window.addEventListener('graph.searchCards', onSearchCards);
     window.addEventListener('graph.quickAnswer', onQuickAnswer);
@@ -38,6 +66,26 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
     };
   }, []);
 
+  // Update graph node labels when LLM cluster labels arrive
+  useEffect(() => {
+    if (!clusterLabels || !graphRef.current || !searchResult?.clusters?.length) return;
+    const graph = graphRef.current;
+    const { nodes } = graph.graphData();
+    nodes.forEach(n => {
+      if (n.isQuery || n.clusterIndex === undefined) return;
+      const clusterId = `cluster_${n.clusterIndex}`;
+      if (clusterLabels[clusterId]) {
+        n.clusterLabel = clusterLabels[clusterId];
+      }
+    });
+    // Refresh labels by touching nodeLabel accessor
+    graph.nodeLabel(n => {
+      if (n.isQuery) return n.label;
+      const cluster = n.clusterLabel ? `[${n.clusterLabel}] ` : '';
+      return `${cluster}${n.label}\n${n.deck}`;
+    });
+  }, [clusterLabels, searchResult]);
+
   // Handle search from ChatInput
   const handleSearchWithQuery = useCallback((query) => {
     setSearchQuery(query);
@@ -45,6 +93,7 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
     setSearchResult(null);
     setAnswerText(null);
     setSelectedCard(null);
+    setClusterLabels(null);
     window.ankiBridge?.addMessage('searchCards', { query: query.trim(), topK: 25 });
   }, []);
 
@@ -54,6 +103,7 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
     setAnswerText(null);
     setSearchQuery('');
     setSelectedCard(null);
+    setClusterLabels(null);
     if (graphRef.current?._destructor) graphRef.current._destructor();
     graphRef.current = null;
   }, []);
@@ -81,23 +131,17 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
     nodes.push({
       id: '__query__',
       label: searchResult.query,
-      color: '#FFFFFF',
+      color: 'var(--ds-text-primary)',
       isQuery: true,
       isCluster: false,
       val: 5,
     });
 
-    // Darker color palette (brightens on cluster selection)
-    const DARK_COLORS = DECK_COLORS.map(c => {
-      const r = parseInt(c.slice(1,3),16), g = parseInt(c.slice(3,5),16), b = parseInt(c.slice(5,7),16);
-      return `rgb(${Math.round(r*0.5)},${Math.round(g*0.5)},${Math.round(b*0.5)})`;
-    });
-
     // Cards colored by cluster, only best card per cluster connects to query
     if (clusters.length > 1) {
       clusters.forEach((cluster, ci) => {
-        const darkColor = DARK_COLORS[ci % DARK_COLORS.length];
-        const brightColor = DECK_COLORS[ci % DECK_COLORS.length];
+        const darkColor = CLUSTER_COLORS[ci % CLUSTER_COLORS.length];
+        const brightColor = CLUSTER_BRIGHT[ci % CLUSTER_BRIGHT.length];
         const clusterCardIds = [];
         let bestCardId = null;
         let bestScore = -1;
@@ -166,7 +210,7 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
 
     graph
       .graphData({ nodes, links })
-      .backgroundColor('rgba(0,0,0,0)')
+      .backgroundColor('transparent')
       .nodeColor(n => n.color)
       .nodeVal(n => n.val)
       .nodeLabel(n => {
@@ -175,16 +219,16 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
         return `${cluster}${n.label}\n${n.deck}`;
       })
       .nodeOpacity(1.0)
-      .linkWidth(l => l.isIntraCluster ? 0.2 : l.isBalloonString ? 0.5 : 0.2)
-      .linkOpacity(l => l.isIntraCluster ? 0.07 : l.isBalloonString ? 0.08 : 0.02)
-      .linkColor(() => 'rgb(70,70,80)')
+      .linkWidth(l => l.isIntraCluster ? 0.15 : l.isBalloonString ? 0.3 : 0.15)
+      .linkOpacity(l => l.isIntraCluster ? 0.04 : l.isBalloonString ? 0.06 : 0.02)
+      .linkColor(() => 'var(--ds-border)')
       .onNodeClick(node => {
         if (!node || node.isQuery) return;
         setSelectedCard(node);
         // Highlight entire cluster: brighten selected cluster, keep others dark
         if (node.clusterIndex !== undefined) {
           graph.nodeColor(n => {
-            if (n.isQuery) return '#FFFFFF';
+            if (n.isQuery) return 'var(--ds-text-primary)';
             if (n.clusterIndex === node.clusterIndex) return n.brightColor || n.color;
             return n.color;
           });
@@ -201,7 +245,11 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       .cooldownTicks(300)
       .d3AlphaDecay(0.015)
       .d3VelocityDecay(0.25)
-      .showNavInfo(false);
+      .showNavInfo(false)
+      .onEngineStop(() => {
+        // Zoom to fit once physics settle — reliable timing
+        if (graphRef.current) graphRef.current.zoomToFit(800, 60);
+      });
 
     graph.d3Force('link').distance(link => {
       if (link.isIntraCluster) return 15;
@@ -211,10 +259,6 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
 
     graph.d3Force('center', null);
     graph.d3Force('charge').strength(-40);
-
-    setTimeout(() => {
-      if (graphRef.current) graphRef.current.zoomToFit(1000, 80);
-    }, 2000);
 
     if (graph.controls()) {
       graph.controls().autoRotate = true;
@@ -238,7 +282,7 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
 
   const hasResults = searchResult?.cards?.length > 0;
 
-  // Compute cluster legend (falls back to deck breakdown if no clusters)
+  // Compute cluster legend — uses LLM labels when available
   const clusterLegend = useMemo(() => {
     if (!searchResult?.clusters?.length) {
       if (!searchResult?.cards?.length) return [];
@@ -253,12 +297,16 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
         .sort((a, b) => b[1] - a[1])
         .map(([deck, count]) => ({ label: deck, count, color: colors[deck] }));
     }
-    return searchResult.clusters.map((c, i) => ({
-      label: c.label,
-      count: c.cards.length,
-      color: DECK_COLORS[i % DECK_COLORS.length],
-    }));
-  }, [searchResult]);
+    return searchResult.clusters.map((c, i) => {
+      const clusterId = `cluster_${i}`;
+      const label = (clusterLabels && clusterLabels[clusterId]) || c.label;
+      return {
+        label,
+        count: c.cards.length,
+        color: CLUSTER_COLORS[i % CLUSTER_COLORS.length],
+      };
+    });
+  }, [searchResult, clusterLabels]);
 
   return (
     <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
@@ -272,29 +320,30 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
         padding: '12px 20px', maxWidth: 'var(--ds-content-width)', margin: '0 auto',
         width: '100%',
       }}>
-        {/* Left: placeholder for future Heatmap ↔ Stapel toggle */}
-        <div style={{ display: 'flex', gap: 4, pointerEvents: 'auto' }} />
+        {/* Left: Deck-Liste button */}
+        <div style={{ display: 'flex', gap: 4, pointerEvents: 'auto' }}>
+          {onToggleView && (
+            <button
+              onClick={onToggleView}
+              style={{
+                background: 'var(--ds-hover-tint)',
+                border: '1px solid var(--ds-border)',
+                borderRadius: 8, padding: '6px 14px',
+                color: 'var(--ds-text-secondary)',
+                fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                fontFamily: 'inherit',
+                transition: 'color 0.15s, background 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = 'var(--ds-text-primary)'; e.currentTarget.style.background = 'var(--ds-active-tint)'; }}
+              onMouseLeave={e => { e.currentTarget.style.color = 'var(--ds-text-secondary)'; e.currentTarget.style.background = 'var(--ds-hover-tint)'; }}
+            >
+              Deck-Liste
+            </button>
+          )}
+        </div>
 
-        {/* Right: Deck-Liste button */}
-        {onToggleView && (
-          <button
-            onClick={onToggleView}
-            style={{
-              background: 'var(--ds-hover-tint)',
-              border: '1px solid var(--ds-border)',
-              borderRadius: 8, padding: '6px 14px',
-              color: 'var(--ds-text-secondary)',
-              fontSize: 12, fontWeight: 500, cursor: 'pointer',
-              fontFamily: 'inherit',
-              transition: 'color 0.15s, background 0.15s',
-              pointerEvents: 'auto',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.color = 'var(--ds-text-primary)'; e.currentTarget.style.background = 'var(--ds-active-tint)'; }}
-            onMouseLeave={e => { e.currentTarget.style.color = 'var(--ds-text-secondary)'; e.currentTarget.style.background = 'var(--ds-hover-tint)'; }}
-          >
-            Deck-Liste
-          </button>
-        )}
+        {/* Right: spacer */}
+        <div />
       </div>
 
       {/* Heatmap — shown when no search results yet */}
@@ -302,7 +351,7 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '40px 24px 100px',
+          padding: '48px 24px 100px',
           zIndex: 5, pointerEvents: 'auto',
           overflowY: 'auto',
         }}>
@@ -395,7 +444,7 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
         position: 'absolute', bottom: 0, left: 0, right: 0,
         zIndex: 15, pointerEvents: 'auto',
         display: 'flex', justifyContent: 'center',
-        padding: '0 16px 16px',
+        padding: '0 20px 20px',
       }}>
         <div style={{ width: '100%', maxWidth: 680 }}>
           <ChatInput

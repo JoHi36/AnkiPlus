@@ -33,7 +33,7 @@ export default function PlusiContent({
 }) {
   const color = (typeof window.getPlusiColor === 'function')
     ? window.getPlusiColor(mood)
-    : '#0a84ff';
+    : 'var(--ds-accent)';
 
   // Build opacity variants using color-mix to avoid hardcoded rgba literals
   const colorMix = (pct) => `color-mix(in srgb, ${color} ${pct}%, transparent)`;

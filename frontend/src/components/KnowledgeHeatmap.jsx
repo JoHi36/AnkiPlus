@@ -47,23 +47,29 @@ function squarify(items, x, y, w, h) {
   return result;
 }
 
-// ─── Color by strength ───────────────────────────────────────────────────────
+// ─── Blue gradient by strength ──────────────────────────────────────────────
 
 function strengthColor(s) {
-  if (s < 0.15) return 'rgba(155,35,38,0.72)';
-  if (s < 0.30) return 'rgba(170,55,42,0.62)';
-  if (s < 0.45) return 'rgba(175,105,38,0.52)';
-  if (s < 0.60) return 'rgba(155,145,42,0.45)';
-  if (s < 0.75) return 'rgba(75,150,65,0.40)';
-  if (s < 0.85) return 'rgba(42,145,85,0.38)';
-  return 'rgba(35,135,90,0.35)';
+  // Semantic strength gradient: red (weak) → yellow (medium) → green (strong)
+  if (s < 0.15) return 'color-mix(in srgb, var(--ds-red) 72%, transparent)';
+  if (s < 0.30) return 'color-mix(in srgb, var(--ds-red) 55%, transparent)';
+  if (s < 0.45) return 'color-mix(in srgb, var(--ds-yellow) 52%, transparent)';
+  if (s < 0.60) return 'color-mix(in srgb, var(--ds-yellow) 44%, transparent)';
+  if (s < 0.75) return 'color-mix(in srgb, var(--ds-green) 40%, transparent)';
+  if (s < 0.85) return 'color-mix(in srgb, var(--ds-green) 37%, transparent)';
+  return 'color-mix(in srgb, var(--ds-green) 34%, transparent)';
 }
 
 // ─── Flatten deck tree ───────────────────────────────────────────────────────
 
 function flattenLevel(roots) {
   return roots.map(deck => {
-    var strength = (deck.mature || 0) / Math.max(1, deck.total || 1);
+    var total = Math.max(1, deck.total || 1);
+    var mature = deck.mature || 0;
+    var young = deck.young || 0;
+    // Strength = fraction of cards that are NOT new (mature + young / total)
+    // Mature cards count full, young cards count half (still being learned)
+    var strength = (mature + young * 0.5) / total;
     var hasChildren = deck.children && deck.children.length > 0;
     return {
       id: deck.id,
@@ -120,8 +126,16 @@ export default function KnowledgeHeatmap({ deckData, onStartStack }) {
 
   useEffect(() => {
     if (deckData?.roots) {
-      setCurrentRoots(deckData.roots);
-      setCurrentPath([]);
+      // Auto-drill into single root deck so treemap shows meaningful children
+      const roots = deckData.roots;
+      const nonEmpty = roots.filter(d => (d.total || 0) > 0);
+      if (nonEmpty.length === 1 && nonEmpty[0].children?.length > 0) {
+        setCurrentRoots(nonEmpty[0].children);
+        setCurrentPath([{ name: nonEmpty[0].display || nonEmpty[0].name, roots: roots }]);
+      } else {
+        setCurrentRoots(roots);
+        setCurrentPath([]);
+      }
       setSelectedDeck(null);
     }
   }, [deckData]);
@@ -206,7 +220,18 @@ export default function KnowledgeHeatmap({ deckData, onStartStack }) {
   const isWeak = selectedDeck && selectedDeck.strength < 0.5;
 
   return (
-    <div style={{ width: '100%', maxWidth: 740, display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ width: '100%', maxWidth: 680, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {/* Logo — always visible, centered */}
+      <div style={{
+        fontFamily: 'var(--ds-font-brand)',
+        fontSize: 36, fontWeight: 700, letterSpacing: '-0.5px',
+        textAlign: 'center',
+        marginBottom: currentPath.length > 0 ? 2 : 8,
+      }}>
+        <span style={{ color: 'var(--ds-text-primary)' }}>Anki</span>
+        <span style={{ color: 'var(--ds-text-tertiary)' }}>.plus</span>
+      </div>
+
       {/* Breadcrumb */}
       {currentPath.length > 0 && (
         <div style={{
@@ -270,7 +295,7 @@ export default function KnowledgeHeatmap({ deckData, onStartStack }) {
             justifyContent: 'flex-end',
             padding: '12px 14px',
             backgroundColor: strengthColor(cell.strength),
-            border: '1px solid rgba(0,0,0,0.18)',
+            border: '1px solid var(--ds-border-subtle)',
             transition: [
               'left 0.55s cubic-bezier(0.4,0,0.15,1)',
               'top 0.55s cubic-bezier(0.4,0,0.15,1)',
@@ -279,7 +304,7 @@ export default function KnowledgeHeatmap({ deckData, onStartStack }) {
               'opacity 0.3s ease',
               'background-color 0.55s ease',
             ].join(', '),
-            outline: selectedDeck?.id === cell.id ? '2px solid rgba(255,255,255,0.35)' : 'none',
+            outline: selectedDeck?.id === cell.id ? '2px solid var(--ds-text-tertiary)' : 'none',
             outlineOffset: -2,
           };
 
@@ -287,7 +312,7 @@ export default function KnowledgeHeatmap({ deckData, onStartStack }) {
             cellStyle = {
               ...cellStyle,
               left: 0, top: 0, width: containerSize.w, height: containerSize.h,
-              backgroundColor: 'rgba(10,10,12,1)',
+              backgroundColor: 'var(--ds-bg-deep)',
               zIndex: 20,
             };
           } else if (isOther) {
@@ -313,7 +338,7 @@ export default function KnowledgeHeatmap({ deckData, onStartStack }) {
                   {showPct && (
                     <div style={{
                       fontSize: 22, fontWeight: 200,
-                      color: 'rgba(255,255,255,0.55)',
+                      color: 'var(--ds-text-secondary)',
                       lineHeight: 1,
                       marginBottom: 4,
                       transition: 'opacity 0.2s',
@@ -324,9 +349,9 @@ export default function KnowledgeHeatmap({ deckData, onStartStack }) {
                   <div style={{
                     fontSize: Math.max(10, Math.min(13, cell.w / 12)),
                     fontWeight: 600,
-                    color: 'rgba(255,255,255,0.9)',
+                    color: 'var(--ds-text-primary)',
                     lineHeight: 1.2,
-                    textShadow: '0 1px 4px rgba(0,0,0,0.6)',
+                    textShadow: '0 1px 4px var(--ds-shadow-sm)',
                     overflow: 'hidden',
                     display: '-webkit-box',
                     WebkitLineClamp: 2,
@@ -341,7 +366,7 @@ export default function KnowledgeHeatmap({ deckData, onStartStack }) {
                   {showMeta && (
                     <div style={{
                       fontSize: 11,
-                      color: 'rgba(255,255,255,0.4)',
+                      color: 'var(--ds-text-tertiary)',
                       marginTop: 3,
                       transition: 'opacity 0.2s',
                     }}>
@@ -404,7 +429,7 @@ export default function KnowledgeHeatmap({ deckData, onStartStack }) {
             }}
             style={{
               background: isWeak ? 'var(--ds-red)' : 'var(--ds-accent)',
-              color: 'rgba(255,255,255,0.95)',
+              color: 'var(--ds-text-primary)',
               border: 'none', borderRadius: 10,
               padding: '9px 18px', fontSize: 13, fontWeight: 600,
               cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
@@ -423,9 +448,9 @@ export default function KnowledgeHeatmap({ deckData, onStartStack }) {
         paddingTop: 2,
       }}>
         {[
-          { label: 'Schwach', color: 'rgba(155,35,38,0.8)' },
-          { label: 'Mittel', color: 'rgba(175,105,38,0.7)' },
-          { label: 'Stark', color: 'rgba(35,135,90,0.6)' },
+          { label: 'Schwach', color: 'color-mix(in srgb, var(--ds-red) 72%, transparent)' },
+          { label: 'Mittel', color: 'color-mix(in srgb, var(--ds-yellow) 44%, transparent)' },
+          { label: 'Stark', color: 'color-mix(in srgb, var(--ds-green) 40%, transparent)' },
         ].map(({ label, color }) => (
           <div key={label} style={{
             display: 'flex', alignItems: 'center', gap: 6,

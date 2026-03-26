@@ -119,7 +119,7 @@ export default function PlusiMenu({ agent, bridge, onNavigateBack }) {
       <div style={{
         flexShrink: 0,
         zIndex: 10,
-        background: 'var(--ds-bg-deep, #141416)',
+        background: 'var(--ds-bg-deep)',
         padding: '12px 20px 0',
       }}>
         <PersonalityGrid
@@ -136,7 +136,7 @@ export default function PlusiMenu({ agent, bridge, onNavigateBack }) {
         <div style={{
           position: 'absolute', top: 0, left: 0, right: 0,
           height: 32, zIndex: 5, pointerEvents: 'none',
-          background: 'linear-gradient(to bottom, var(--ds-bg-deep, #141416) 0%, transparent 100%)',
+          background: 'linear-gradient(to bottom, var(--ds-bg-deep) 0%, transparent 100%)',
         }} />
         <div
           ref={scrollRef}
@@ -161,20 +161,20 @@ export default function PlusiMenu({ agent, bridge, onNavigateBack }) {
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: 'var(--ds-text-muted))',
+                  color: 'var(--ds-text-muted)',
                   fontSize: 11,
                   cursor: 'pointer',
                   padding: '6px 12px',
                   transition: 'color 0.2s',
                 }}
-                onMouseEnter={e => e.target.style.color = 'var(--ds-red, #f87171)'}
-                onMouseLeave={e => e.target.style.color = 'var(--ds-text-muted))'}
+                onMouseEnter={e => e.target.style.color = 'var(--ds-red)'}
+                onMouseLeave={e => e.target.style.color = 'var(--ds-text-muted)'}
               >
                 Plusi zurücksetzen
               </button>
             ) : (
               <div style={{
-                background: 'var(--ds-bg-overlay))',
+                background: 'var(--ds-bg-overlay)',
                 borderRadius: 10,
                 padding: '14px 16px',
                 maxWidth: 280,
@@ -182,7 +182,7 @@ export default function PlusiMenu({ agent, bridge, onNavigateBack }) {
               }}>
                 <p style={{
                   fontSize: 12,
-                  color: 'var(--ds-text-secondary))',
+                  color: 'var(--ds-text-secondary)',
                   margin: '0 0 12px',
                   lineHeight: 1.5,
                 }}>
@@ -192,8 +192,8 @@ export default function PlusiMenu({ agent, bridge, onNavigateBack }) {
                   <button
                     onClick={() => setShowResetConfirm(false)}
                     style={{
-                      background: 'var(--ds-hover-tint))',
-                      border: '1px solid var(--ds-border-subtle))',
+                      background: 'var(--ds-hover-tint)',
+                      border: '1px solid var(--ds-border-subtle)',
                       borderRadius: 6,
                       color: 'var(--ds-text-secondary)',
                       fontSize: 11,

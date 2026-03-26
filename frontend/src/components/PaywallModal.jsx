@@ -17,7 +17,8 @@ export default function PaywallModal({ isOpen, onClose }) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="absolute inset-0 bg-[#09090b]/90 backdrop-blur-md"
+          className="absolute inset-0 backdrop-blur-md"
+          style={{ background: 'var(--ds-bg-deep)', opacity: 0.9 }}
           onClick={onClose}
         />
         <motion.div
@@ -25,7 +26,8 @@ export default function PaywallModal({ isOpen, onClose }) {
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 10 }}
           transition={{ type: "spring", damping: 30, stiffness: 300 }}
-          className="relative w-full max-w-md mx-4 bg-[#09090b]/95 backdrop-blur-xl border border-[#0a84ff]/20 rounded-xl shadow-2xl overflow-hidden"
+          className="ds-frosted relative w-full max-w-md mx-4 rounded-xl shadow-2xl overflow-hidden"
+          style={{ border: '1px solid var(--ds-accent-20)' }}
           onClick={(e) => e.stopPropagation()}
         >
           <button
@@ -57,7 +59,8 @@ export default function PaywallModal({ isOpen, onClose }) {
             </div>
             <motion.button
               onClick={handleUpgrade}
-              className="w-full py-3 px-6 rounded-lg bg-[#0a84ff] hover:bg-[#0a84ff]/90 text-white font-semibold text-sm transition-all"
+              className="w-full py-3 px-6 rounded-lg font-semibold text-sm transition-all"
+              style={{ background: 'var(--ds-accent)', color: '#ffffff' }}
             >
               Pläne vergleichen
             </motion.button>

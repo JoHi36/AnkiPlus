@@ -121,7 +121,7 @@ export default function FreeChatSearchBar({ onOpen }) {
               onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
               onMouseLeave={e => e.currentTarget.style.opacity = '1'}
             >
-              <ArrowUp size={14} color="#fff" strokeWidth={2.5} />
+              <ArrowUp size={14} color="#ffffff" strokeWidth={2.5} />
             </button>
           ) : (
             <kbd style={{
@@ -146,7 +146,7 @@ export default function FreeChatSearchBar({ onOpen }) {
               from var(--snake-angle, 0deg),
               transparent 0deg, transparent 55%,
               var(--ds-accent) 60%, var(--ds-purple) 72%,
-              #38bdf8 81%, var(--ds-accent) 86%,
+              var(--ds-accent) 81%, var(--ds-accent) 86%,
               transparent 92%
             );
           animation: freechat-snake-rotate 2.5s linear infinite;

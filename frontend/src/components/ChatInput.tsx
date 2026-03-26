@@ -312,7 +312,7 @@ export default function ChatInput({
             borderRadius: '17px',
             padding: '1px',
             background: 'conic-gradient(from var(--border-angle, 0deg) at 50% 100%, transparent 0deg, var(--ds-accent-50) 60deg, var(--ds-accent-10) 120deg, transparent 180deg, var(--ds-accent-10) 240deg, var(--ds-accent-50) 300deg, transparent 360deg)',
-            WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+            WebkitMask: 'linear-gradient(white 0 0) content-box, linear-gradient(white 0 0)',
             WebkitMaskComposite: 'xor',
             maskComposite: 'exclude',
             opacity: isFocused ? 1 : 0,

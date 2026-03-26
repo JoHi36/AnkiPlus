@@ -18,7 +18,7 @@ export default function AgenticCell({
   const registry = getRegistry();
   const agent = registry.get(agentName);
 
-  const color = agent?.color || '#888888';
+  const color = agent?.color || 'var(--ds-text-tertiary)';
   const label = agent?.label || agentName;
   const iconType = agent?.iconType || 'svg';
   const iconSvg = agent?.iconSvg || '';
@@ -26,7 +26,15 @@ export default function AgenticCell({
   const hintTemplate = agent?.loadingHintTemplate || `${label} arbeitet...`;
 
   const isTransparent = color === 'transparent';
-  const rgb = useMemo(() => isTransparent ? '0, 0, 0' : hexToRgb(color), [color, isTransparent]);
+  // Derive tinted backgrounds using color-mix (works with both hex and CSS vars)
+  const tint10 = isTransparent ? 'var(--ds-hover-tint)' : `color-mix(in srgb, ${color} 10%, transparent)`;
+  const tint6 = isTransparent ? 'var(--ds-hover-tint)' : `color-mix(in srgb, ${color} 6%, transparent)`;
+  // Keep rgb for CSS custom property (used by .agent-cell-glow in CSS)
+  const rgb = useMemo(() => {
+    if (isTransparent) return '0, 0, 0';
+    if (color.startsWith('var(') || color.startsWith('#') === false) return '0, 0, 0';
+    return hexToRgb(color);
+  }, [color, isTransparent]);
   const hint = loadingHint || hintTemplate;
 
   // Render SVG icon safely via ref (avoids dangerouslySetInnerHTML)
@@ -83,7 +91,7 @@ export default function AgenticCell({
           {iconType === 'none' ? null : iconType === 'svg' && iconSvg ? (
             <div
               className="agent-cell-icon"
-              style={{ background: `rgba(${rgb}, 0.10)` }}
+              style={{ background: tint10 }}
               ref={iconRef}
             />
           ) : iconType === 'emote' ? (
@@ -92,7 +100,7 @@ export default function AgenticCell({
             !isTransparent && (
               <div
                 className="agent-cell-icon agent-cell-icon-letter"
-                style={{ background: `rgba(${rgb}, 0.10)`, color }}
+                style={{ background: tint10, color }}
               >
                 {label[0]}
               </div>
@@ -115,9 +123,9 @@ export default function AgenticCell({
       {isLoading ? (
         <div className="agent-cell-content">
           <div className="agent-cell-loading-hint" style={isTransparent ? {} : { color }}>{hint}</div>
-          <div className="agent-cell-shimmer" style={{ background: isTransparent ? 'var(--ds-hover-tint)' : `rgba(${rgb}, 0.06)` }} />
-          <div className="agent-cell-shimmer" style={{ background: isTransparent ? 'var(--ds-hover-tint)' : `rgba(${rgb}, 0.06)`, width: '78%' }} />
-          <div className="agent-cell-shimmer" style={{ background: isTransparent ? 'var(--ds-hover-tint)' : `rgba(${rgb}, 0.06)`, width: '85%' }} />
+          <div className="agent-cell-shimmer" style={{ background: tint6 }} />
+          <div className="agent-cell-shimmer" style={{ background: tint6, width: '78%' }} />
+          <div className="agent-cell-shimmer" style={{ background: tint6, width: '85%' }} />
         </div>
       ) : (
         <div className="agent-cell-content">{children}</div>

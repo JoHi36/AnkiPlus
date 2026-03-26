@@ -90,7 +90,7 @@ const SOURCES = [
     label: 'Perplexity',
     desc: 'Web-Suche — Standard für alle allgemeinen Fragen',
     badge: 'Standard',
-    badgeColor: '#20B8CD',
+    badgeColor: null,
     alwaysOn: true,
     logo: perplexitySmall,
   },
@@ -184,8 +184,8 @@ export default function ResearchMenu({ agent, bridge, onNavigateBack = null }) {
                     {badge && (
                       <span style={{
                         fontSize: 9, fontWeight: 600, padding: '2px 7px', borderRadius: 5,
-                        background: `${badgeColor}22`,
-                        color: badgeColor,
+                        background: 'var(--ds-accent-10)',
+                        color: 'var(--ds-accent)',
                       }}>
                         {badge}
                       </span>

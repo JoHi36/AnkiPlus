@@ -118,11 +118,11 @@ export default function SettingsSidebar() {
           padding: 1px;
           background: linear-gradient(
             160deg,
-            rgba(10,132,255,0.5) 0%,
-            rgba(10,132,255,0.1) 40%,
-            rgba(10,132,255,0.25) 100%
+            color-mix(in srgb, var(--ds-accent) 50%, transparent) 0%,
+            color-mix(in srgb, var(--ds-accent) 10%, transparent) 40%,
+            color-mix(in srgb, var(--ds-accent) 25%, transparent) 100%
           );
-          -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+          -webkit-mask: linear-gradient(white 0 0) content-box, linear-gradient(white 0 0);
           -webkit-mask-composite: xor;
           mask-composite: exclude;
           pointer-events: none;
@@ -137,11 +137,11 @@ export default function SettingsSidebar() {
           marginBottom: 12,
           borderRadius: 'var(--ds-radius-md)',
           background: isPaid
-            ? 'linear-gradient(135deg, rgba(10,132,255,0.08) 0%, rgba(10,132,255,0.02) 100%)'
+            ? 'linear-gradient(135deg, var(--ds-accent-10) 0%, var(--ds-accent-5, var(--ds-active-tint)) 100%)'
             : 'var(--ds-hover-tint)',
           border: isPaid ? 'none' : '1px solid var(--ds-border-subtle)',
           boxShadow: isPaid
-            ? '0 0 24px rgba(10,132,255,0.06), inset 0 1px 0 rgba(10,132,255,0.08)'
+            ? 'var(--ds-shadow-sm)'
             : 'none',
         }}
       >

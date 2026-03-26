@@ -57,7 +57,7 @@ function StackButton({ onClick }) {
         background: 'var(--ds-accent)',
         border: 'none',
         borderRadius: 10,
-        color: '#fff',
+        color: '#ffffff',
         fontSize: 13,
         fontWeight: 600,
         cursor: 'pointer',

@@ -61,7 +61,7 @@ function CipherSpan({ length }) {
     <span
       style={{
         display: 'inline',
-        color: 'var(--ds-text-muted))',
+        color: 'var(--ds-text-muted)',
         fontSize: 14,
         wordBreak: 'break-all',
         userSelect: 'none',
@@ -163,7 +163,7 @@ function CategoryTag({ category }) {
             height: 0,
             borderLeft: '5px solid transparent',
             borderRight: '5px solid transparent',
-            borderBottom: '5px solid var(--ds-bg-overlay, #3A3A3C)',
+            borderBottom: '5px solid var(--ds-bg-overlay)',
             zIndex: 21,
           }} />
           {/* Tooltip */}
@@ -174,8 +174,8 @@ function CategoryTag({ category }) {
             marginTop: 5,
             padding: '5px 10px',
             borderRadius: 6,
-            background: 'var(--ds-bg-overlay, #3A3A3C)',
-            color: 'var(--ds-text-secondary))',
+            background: 'var(--ds-bg-overlay)',
+            color: 'var(--ds-text-secondary)',
             fontSize: 10,
             lineHeight: 1.4,
             whiteSpace: 'nowrap',
@@ -200,7 +200,7 @@ function DiaryEntry({ entry }) {
       <div
         style={{
           fontSize: 11,
-          color: 'var(--ds-text-quaternary))',
+          color: 'var(--ds-text-quaternary)',
           fontVariantNumeric: 'tabular-nums',
           marginBottom: 4,
           display: 'flex',
@@ -239,8 +239,8 @@ function DiaryEntry({ entry }) {
               key={idx}
               style={{
                 fontSize: 10,
-                color: 'var(--ds-text-tertiary))',
-                background: 'var(--ds-bg-overlay))',
+                color: 'var(--ds-text-tertiary)',
+                background: 'var(--ds-bg-overlay)',
                 borderRadius: 6,
                 padding: '2px 7px',
                 display: 'inline-flex',
@@ -298,8 +298,8 @@ export default function DiaryStream({ entries = [], dayRefs }) {
               fontWeight: 500,
               letterSpacing: '0.5px',
               textTransform: 'uppercase',
-              color: 'var(--ds-text-secondary))',
-              borderBottom: '1px solid var(--ds-border))',
+              color: 'var(--ds-text-secondary)',
+              borderBottom: '1px solid var(--ds-border)',
               paddingBottom: 6,
               marginBottom: 12,
             }}

@@ -244,8 +244,8 @@ export default function DeckSearchBar({ onSubmit, onOpenEmpty }) {
               color-mix(in srgb, var(--ds-accent)  0%, transparent) 360deg
             );
           -webkit-mask:
-            linear-gradient(#fff 0 0) content-box,
-            linear-gradient(#fff 0 0);
+            linear-gradient(white 0 0) content-box,
+            linear-gradient(white 0 0);
           -webkit-mask-composite: xor;
           mask-composite: exclude;
           pointer-events: none;

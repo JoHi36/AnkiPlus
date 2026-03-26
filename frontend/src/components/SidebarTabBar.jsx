@@ -93,13 +93,13 @@ export default function SidebarTabBar({ activeTab, onTabChange, agents = [] }) {
     if (isFirst) setIsFirst(false);
   }, [activeTab, agents]);
 
-  /* Pill background: settings → hover-tint, agent → agent color + '18' hex opacity */
+  /* Pill background: settings → hover-tint, agent → color-mix tint */
   function pillBg(tabId) {
     if (tabId === '__settings__') return 'var(--ds-hover-tint)';
     const agent = agents.find(a => a.name === tabId);
-    const hex   = agent?.color || '#888888';
-    // Append '18' (≈ 9% opacity in 8-digit hex notation)
-    return `${hex.startsWith('#') ? hex : '#' + hex}18`;
+    const c = agent?.color || 'var(--ds-text-tertiary)';
+    // Use color-mix for transparent tint — works with both hex and CSS vars
+    return `color-mix(in srgb, ${c} 10%, transparent)`;
   }
 
   const settingsId = '__settings__';

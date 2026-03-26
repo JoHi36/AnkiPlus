@@ -57,7 +57,7 @@ export default function ToolWidgetRenderer({ toolWidgets, bridge, isStreaming, i
               const plusiMood = tw.result.mood || 'neutral';
               const plusiColor = (typeof window.getPlusiColor === 'function')
                 ? window.getPlusiColor(plusiMood)
-                : '#0a84ff';
+                : 'var(--ds-accent)';
               return (
                 <AgenticCell
                   key={`plusi-${i}`}
