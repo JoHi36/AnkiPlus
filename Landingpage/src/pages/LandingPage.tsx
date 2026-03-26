@@ -85,7 +85,7 @@ export function LandingPage() {
                 </Link>
               </Button>
 
-              <Button variant="outline" size="md" onClick={() => handleScrollTo('demo')}>
+              <Button variant="primary" size="md" onClick={() => handleScrollTo('demo')}>
                 Ausprobieren
               </Button>
             </div>

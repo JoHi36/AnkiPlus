@@ -1287,15 +1287,8 @@ export default function ComponentViewer() {
 
           {/* Buttons */}
           <SubHeader id="buttons" label="Buttons" refs={sectionRefs} />
-          <Showcase label="Button Variants">
+          <Showcase label="Primary Button">
             <div style={{ display: 'flex', gap: 'var(--ds-space-md)', flexWrap: 'wrap', alignItems: 'center' }}>
-              <Button variant="primary">Primary</Button>
-              <Button variant="secondary">Secondary</Button>
-              <Button variant="ghost">Ghost</Button>
-              <Button variant="outline">Outline</Button>
-            </div>
-            <VariantLabel>Sizes</VariantLabel>
-            <div style={{ display: 'flex', gap: 'var(--ds-space-md)', alignItems: 'center' }}>
               <Button variant="primary" size="sm">Small</Button>
               <Button variant="primary" size="md">Medium</Button>
               <Button variant="primary" size="lg">Large</Button>
@@ -1304,8 +1297,11 @@ export default function ComponentViewer() {
             <div style={{ display: 'flex', gap: 'var(--ds-space-md)', alignItems: 'center' }}>
               <Button variant="primary">Default</Button>
               <Button variant="primary" disabled>Disabled</Button>
-              <Button variant="secondary">Default</Button>
-              <Button variant="secondary" disabled>Disabled</Button>
+            </div>
+            <VariantLabel>CSS class (non-React)</VariantLabel>
+            <div style={{ display: 'flex', gap: 'var(--ds-space-md)', alignItems: 'center' }}>
+              <button className="ds-btn-primary">ds-btn-primary</button>
+              <button className="ds-btn-primary" disabled>Disabled</button>
             </div>
           </Showcase>
           <Showcase label="Multiple Choice Options">

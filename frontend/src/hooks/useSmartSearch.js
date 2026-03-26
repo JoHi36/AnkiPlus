@@ -11,7 +11,8 @@ export default function useSmartSearch() {
   const [selectedClusterId, setSelectedClusterId] = useState(null);
   const [subClusters, setSubClusters] = useState(null);
   const [isSubClustering, setIsSubClustering] = useState(false);
-  const [kgSubgraph, setKgSubgraph] = useState(null); // Knowledge Graph subgraph alternative
+  const [kgSubgraph, setKgSubgraph] = useState(null);
+  const [graphMode, setGraphMode] = useState('clusters'); // 'clusters' | 'knowledge' — synced between sidebar tab + graph
 
   // Track if sidebar slide-in has played — survives tab switches (lives in hook, not component)
   const sidebarHasAnimated = useRef(false);
@@ -150,7 +151,7 @@ export default function useSmartSearch() {
     selectedClusterId, setSelectedClusterId: selectCluster,
     selectedCluster, selectedClusterLabel, selectedClusterSummary,
     subClusters, isSubClustering,
-    kgSubgraph,
+    kgSubgraph, graphMode, setGraphMode,
     sidebarHasAnimated,
     search, reset, restoreFromCache,
     hasResults: !!(searchResult?.cards?.length > 0),

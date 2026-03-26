@@ -25,6 +25,7 @@ export default function SearchSidebar({
   isSubClustering,
   sidebarHasAnimated,
   kgSubgraph,
+  onGraphModeChange,
 }) {
   if (!visible) return null;
 
@@ -35,6 +36,10 @@ export default function SearchSidebar({
   const [multiSelect, setMultiSelect] = useState(false);
   const [multiIds, setMultiIds] = useState(new Set());
   const [sidebarTab, setSidebarTab] = useState('clusters'); // 'clusters' | 'terms'
+  const handleTabChange = (tab) => {
+    setSidebarTab(tab);
+    onGraphModeChange?.(tab === 'terms' ? 'knowledge' : 'clusters');
+  };
 
   const clusterColors = [
     '#3B6EA5', '#4A8C5C', '#B07D3A', '#7B5EA7',
@@ -285,7 +290,7 @@ export default function SearchSidebar({
               ].map(tab => (
                 <button
                   key={tab.key}
-                  onClick={() => setSidebarTab(tab.key)}
+                  onClick={() => handleTabChange(tab.key)}
                   style={{
                     flex: 1,
                     padding: '6px 12px',

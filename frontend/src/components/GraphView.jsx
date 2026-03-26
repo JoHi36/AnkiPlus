@@ -57,10 +57,9 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
     answerText, clusterLabels, clusterSummaries, cardRefs,
     selectedClusterId, setSelectedClusterId,
     selectedCluster, selectedClusterLabel, selectedClusterSummary,
-    subClusters, kgSubgraph,
+    subClusters, kgSubgraph, graphMode,
     search, reset,
   } = smartSearch;
-  const [graphMode, setGraphMode] = useState('clusters'); // 'clusters' | 'knowledge'
 
   // Build / rebuild graph when search results arrive
   // Build cluster graph (default mode)
@@ -115,7 +114,9 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
         });
 
         if (bestCardId) {
-          links.push({ source: '__query__', target: bestCardId, value: 0.7, isBalloonString: true });
+          // Average score of cluster cards — higher score = shorter balloon string = closer to query
+          const avgScore = cluster.cards.reduce((s, c) => s + (c.score || 0), 0) / Math.max(1, cluster.cards.length);
+          links.push({ source: '__query__', target: bestCardId, value: avgScore, isBalloonString: true });
         }
 
         for (let i = 0; i < clusterCardIds.length; i++) {
@@ -212,11 +213,12 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
       });
 
     graph.d3Force('link').distance(link => {
-      if (link.isIntraCluster) return 15;
+      if (link.isIntraCluster) return 12;
       // Inter-cluster: closer = more similar (high value → shorter distance)
       if (link.isInterCluster) return 40 + (1 - (link.value || 0.3)) * 80;
+      // Balloon string: higher score = much closer to query center
       const score = link.value || 0.5;
-      return 30 + (1 - score) * 100;
+      return 15 + (1 - score) * 150;
     });
 
     graph.d3Force('center', null);
@@ -551,48 +553,7 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
           </div>
         )}
 
-        {/* Top bar — graph mode toggle when search results visible */}
-        {hasResults && (
-          <div style={{
-            position: 'relative', zIndex: 10, pointerEvents: 'none',
-            display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-            padding: '12px 20px',
-            width: '100%',
-          }}>
-            {/* Graph mode toggle: Clusters ↔ Knowledge Graph */}
-            {kgSubgraph?.nodes?.length > 0 && (
-              <div style={{
-                display: 'flex', gap: 0,
-                background: 'var(--ds-hover-tint)',
-                borderRadius: 6,
-                overflow: 'hidden',
-                pointerEvents: 'auto',
-                border: '1px solid var(--ds-border)',
-              }}>
-                {[
-                  { key: 'clusters', label: 'Cluster' },
-                  { key: 'knowledge', label: 'Knowledge Graph' },
-                ].map(m => (
-                  <button
-                    key={m.key}
-                    onClick={() => setGraphMode(m.key)}
-                    style={{
-                      padding: '5px 12px',
-                      fontSize: 11, fontWeight: 500,
-                      fontFamily: 'inherit',
-                      border: 'none', cursor: 'pointer',
-                      color: graphMode === m.key ? 'var(--ds-text-primary)' : 'var(--ds-text-tertiary)',
-                      background: graphMode === m.key ? 'var(--ds-active-tint)' : 'transparent',
-                      transition: 'color 0.15s, background 0.15s',
-                    }}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        {/* Graph mode toggle removed — controlled by sidebar tab */}
 
         {/* ═══ DEFAULT STATE: DeckBrowser frame with toggle ═══ */}
         {!hasResults && (
