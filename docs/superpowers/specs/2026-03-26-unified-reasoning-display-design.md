@@ -313,6 +313,12 @@ if (payload.type === 'pipeline_step') {
     const streamId = agentPrefix ? `${agentPrefix}-${requestId}` : requestId;
     reasoningDispatch({ type: 'STEP', streamId, ... });
   }
+
+  // Extract citations from sources_ready step
+  if (payload.step === 'sources_ready' && payload.data?.citations) {
+    const agentStreamId = agentPrefix ? `${agentPrefix}-${requestId}` : requestId;
+    reasoningDispatch({ type: 'CITATIONS', streamId: agentStreamId, citations: payload.data.citations });
+  }
 }
 ```
 
@@ -506,8 +512,8 @@ export interface ReasoningDisplayProps {
 // Session chat — orchestration (always first)
 <ReasoningDisplay streamId={`router-${requestId}`} mode="full" />
 
-// Session chat — agent reasoning
-<ReasoningDisplay streamId={`agent-${requestId}`} mode="full" hasOutput={hasText} />
+// Session chat — agent reasoning (streamId = "{agentName}-{requestId}")
+<ReasoningDisplay streamId={`${agentName}-${requestId}`} mode="full" hasOutput={hasText} />
 
 // Smart Search sidebar — same component, same behavior
 <ReasoningDisplay streamId={`search-${searchId}`} mode="full" hasOutput={!!answer} />
@@ -567,6 +573,16 @@ export default function ReasoningDisplay({
 ### Full Mode
 
 Behaves like the current ReasoningStream — step list with expand/collapse, checkmarks, step-specific renderers. Reuses `PhaseRow`, `ExtendingLine`, `ChevronRight`/`ChevronDown` from the current implementation. Text skeleton appears when `phase === 'generating'` and `!hasOutput`.
+
+**Hidden step filtering:** Before rendering, `FullReasoningDisplay` filters out steps where the registry renderer has `hidden: true` (e.g., `generating`). The `merge` step is also filtered — it's an internal detail between search and sources. This matches the current behavior in `ReasoningStream.tsx` (lines 348-362). The filtering happens in the component, not the store or hook — the store keeps all steps for phase detection.
+
+**SourcesCarousel placement:** SourcesCarousel renders below the collapsible step list, outside the collapse boundary. It appears when the `sources_ready` step exists AND citations are loaded. This means sources stay visible even when the step list is collapsed:
+
+```
+┌─ Collapsed summary ("3 Schritte · 4 Quellen")  [collapsible]
+├─ SourcesCarousel                                 [always visible]
+└─ Text skeleton / answer text
+```
 
 ### Compact Mode
 
@@ -713,7 +729,11 @@ Called after the last pipeline step and before text streaming begins. This trigg
 
 **For orchestration streams** (no generating step): The reducer auto-detects completion — when all steps in a stream are `done` and no `generating` step exists, phase transitions to `complete` automatically. No explicit signal needed.
 
-**For agent streams** (with generating step): The `text_chunk` event from streaming already signals that generating has begun. App.jsx dispatches `{ type: 'PHASE', streamId, phase: 'generating' }` on first `text_chunk`, and `{ type: 'PHASE', streamId, phase: 'complete' }` when streaming ends. This reuses existing events — no new backend signal needed for v1.
+**For agent streams** (with generating step): Two mechanisms work together:
+1. The reducer auto-detects `generating` phase when a step named `generating` with `status: 'active'` arrives (from backend pipeline).
+2. App.jsx dispatches `{ type: 'PHASE', streamId, phase: 'complete' }` when streaming ends (on final `text_chunk` or `stream_end` event).
+
+The `generating` step from the backend and the `text_chunk` event naturally sequence these transitions. No new backend signal needed for v1. The `_emit_pipeline_complete()` helper above is reserved for future use (e.g., agents that produce structured output instead of streamed text).
 
 ---
 
