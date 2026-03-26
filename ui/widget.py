@@ -435,7 +435,12 @@ class SearchCardsThread(QThread):
 
             # Adaptive threshold: find threshold that gives 3-5 clusters
             # Start high, decrease until we get enough clusters
-            TARGET_CLUSTERS = min(5, max(3, len(card_ids) // 5))
+            # clamp(3, floor(n/10), 6) — no clustering for very few cards
+            n_cards = len(card_ids)
+            if n_cards < 6:
+                TARGET_CLUSTERS = 1
+            else:
+                TARGET_CLUSTERS = max(3, min(6, n_cards // 10))
             best_threshold = 0.95
             best_clusters = None
 
@@ -2860,7 +2865,7 @@ class ChatbotWidget(QWidget):
     def _msg_search_cards(self, data):
         """Find top-N cards by embedding similarity. Runs in QThread to avoid blocking."""
         query = data.get("query", "") if isinstance(data, dict) else str(data)
-        top_k = data.get("topK", 25) if isinstance(data, dict) else 25
+        top_k = int(data.get("topK", 100)) if isinstance(data, dict) else 100
 
         try:
             from .. import get_embedding_manager
@@ -2892,7 +2897,7 @@ class ChatbotWidget(QWidget):
             # Trigger quick answer from main thread (QThread must be created on main thread)
             data = payload.get("data", {})
             query = data.get("query", "")
-            cards = data.get("cards", [])[:10]
+            cards = data.get("cards", [])[:50]
             clusters = data.get("clusters", [])
             if query and cards:
                 self._start_quick_answer(query, cards, clusters)
