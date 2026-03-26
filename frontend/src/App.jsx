@@ -47,6 +47,7 @@ import ContextTags from './components/ContextTags';
 import ResizeHandle, { loadPersistedWidth, applyWidth } from './components/ResizeHandle';
 import ReasoningStream from './reasoning/ReasoningStream';
 import { registerDefaultRenderers } from './reasoning/defaultRenderers';
+import { ReasoningProvider, useReasoningDispatch } from './reasoning/store';
 import useSmartSearch from './hooks/useSmartSearch';
 
 // Register step renderers once at module load time
@@ -123,7 +124,8 @@ function normalizeSections(sections) {
 function AppInner() {
   const { bridge, isReady } = useAnki();
   const sessionContext = useSessionContext();
-  
+  const reasoningDispatch = useReasoningDispatch();
+
   // Initialize Device-ID for anonymous users
   useEffect(() => {
     const deviceId = getOrCreateDeviceId();
@@ -317,6 +319,7 @@ function AppInner() {
   const insightsHookRef = useRef(insightsHook);
   const sessionContextRef = useRef(sessionContext);
   const handlePerformanceCaptureRef = useRef(null);
+  const reasoningDispatchRef = useRef(reasoningDispatch);
   useEffect(() => {
     cardSessionHookRef.current = cardSessionHook;
     cardContextHookRef.current = cardContextHook;
@@ -327,6 +330,7 @@ function AppInner() {
     insightsHookRef.current = insightsHook;
     sessionContextRef.current = sessionContext;
     handlePerformanceCaptureRef.current = handlePerformanceCapture;
+    reasoningDispatchRef.current = reasoningDispatch;
   });
   // Ref für messages container (für Auto-Scroll)
   const messagesContainerRef = useRef(null);
@@ -788,9 +792,34 @@ function AppInner() {
         return;
       }
 
-      // Search pipeline steps → forward to useSmartSearch via CustomEvent
-      if (payload.type === 'pipeline_step' && payload.requestId && String(payload.requestId).startsWith('search_')) {
-        window.dispatchEvent(new CustomEvent('graph.pipelineStep', { detail: payload }));
+      // Pipeline steps → centralized reasoning store dispatch
+      if (payload.type === 'pipeline_step') {
+        const _rd = reasoningDispatchRef.current;
+        const agentPrefix = payload.data?.agent || payload.agent || '';
+        const requestId = payload.requestId;
+
+        // Orchestration steps → router stream
+        if (payload.step === 'orchestrating' || payload.step === 'router') {
+          _rd({ type: 'STEP', streamId: `router-${requestId}`, step: payload.step, status: payload.status, data: payload.data });
+          // Auto-detect agent metadata
+          if (payload.data?.retrieval_mode) {
+            const rm = payload.data.retrieval_mode;
+            if (rm.startsWith('agent:') || rm.startsWith('subagent:')) {
+              _rd({ type: 'AGENT_META', streamId: `router-${requestId}`, agentName: rm.split(':')[1] });
+            }
+          }
+        }
+        // Agent-internal steps → agent stream
+        else {
+          const streamId = agentPrefix ? `${agentPrefix}-${requestId}` : requestId;
+          _rd({ type: 'STEP', streamId, step: payload.step, status: payload.status, data: payload.data });
+        }
+
+        // Extract citations from sources_ready step
+        if (payload.step === 'sources_ready' && payload.data?.citations) {
+          const agentStreamId = agentPrefix ? `${agentPrefix}-${requestId}` : requestId;
+          _rd({ type: 'CITATIONS', streamId: agentStreamId, citations: payload.data.citations });
+        }
       }
 
       // Knowledge Graph events → forward as CustomEvents
@@ -885,6 +914,36 @@ function AppInner() {
 
         // Models Events
         _models.handleAnkiReceive(payload);
+
+        // Reasoning PHASE dispatches — fire before chat hooks so the store
+        // is up-to-date when components re-render with the chat state change
+        if (payload.type === 'text_chunk' || payload.type === 'streaming') {
+          const _rd = reasoningDispatchRef.current;
+          const agentPrefix = payload.data?.agent || payload.agent || '';
+          const reqId = payload.requestId || '';
+          const streamId = agentPrefix ? `${agentPrefix}-${reqId}` : reqId;
+          if (streamId) {
+            _rd({ type: 'PHASE', streamId, phase: 'generating' });
+          }
+        }
+        if (payload.type === 'msg_done' || payload.type === 'response' || payload.type === 'bot') {
+          const _rd = reasoningDispatchRef.current;
+          const agentPrefix = payload.data?.agent || payload.agent || '';
+          const reqId = payload.requestId || '';
+          const streamId = agentPrefix ? `${agentPrefix}-${reqId}` : reqId;
+          if (streamId) {
+            _rd({ type: 'PHASE', streamId, phase: 'complete' });
+          }
+        }
+        if (payload.type === 'msg_error' || payload.type === 'msg_cancelled') {
+          const _rd = reasoningDispatchRef.current;
+          const agentPrefix = payload.data?.agent || payload.agent || '';
+          const reqId = payload.requestId || '';
+          const streamId = agentPrefix ? `${agentPrefix}-${reqId}` : reqId;
+          if (streamId) {
+            _rd({ type: 'PHASE', streamId, phase: 'complete' });
+          }
+        }
 
         // Chat Events — mutual exclusion: only one hook receives each payload
         const _freeChat = freeChatHookRef.current;
@@ -3155,8 +3214,10 @@ export default function App() {
   const { bridge, isReady } = useAnki();
 
   return (
-    <SessionContextProvider bridge={bridge} isReady={isReady}>
-      <AppInner />
-    </SessionContextProvider>
+    <ReasoningProvider>
+      <SessionContextProvider bridge={bridge} isReady={isReady}>
+        <AppInner />
+      </SessionContextProvider>
+    </ReasoningProvider>
   );
 }
