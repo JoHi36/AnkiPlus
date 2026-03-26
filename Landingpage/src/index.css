@@ -15,6 +15,47 @@
 
   /* Accent */
   --anki-accent: #0a84ff;
+
+  /* ── Design System tokens (needed by shared/frontend components) ── */
+  --ds-accent: #0A84FF;
+  --ds-green: #30D158;
+  --ds-yellow: #FFD60A;
+  --ds-red: #FF453A;
+  --ds-purple: #BF5AF2;
+  --ds-bg-deep: #141416;
+  --ds-bg-canvas: #1C1C1E;
+  --ds-bg-frosted: #161618;
+  --ds-bg-overlay: #3A3A3C;
+  --ds-text-primary: rgba(255, 255, 255, 0.92);
+  --ds-text-secondary: rgba(255, 255, 255, 0.55);
+  --ds-text-tertiary: rgba(255, 255, 255, 0.35);
+  --ds-text-placeholder: rgba(255, 255, 255, 0.30);
+  --ds-text-muted: rgba(255, 255, 255, 0.18);
+  --ds-border-subtle: rgba(255, 255, 255, 0.06);
+  --ds-border-medium: rgba(255, 255, 255, 0.12);
+  --ds-hover-tint: rgba(255, 255, 255, 0.04);
+  --ds-active-tint: rgba(255, 255, 255, 0.08);
+  --ds-accent-10: color-mix(in srgb, #0A84FF 10%, transparent);
+  --ds-accent-20: color-mix(in srgb, #0A84FF 20%, transparent);
+  --ds-radius-sm: 8px;
+  --ds-radius-md: 12px;
+  --ds-radius-lg: 16px;
+  --ds-space-xs: 4px;
+  --ds-space-sm: 8px;
+  --ds-space-md: 12px;
+  --ds-space-lg: 16px;
+  --ds-space-xl: 24px;
+  --ds-text-xs: 11px;
+  --ds-text-sm: 13px;
+  --ds-text-base: 14px;
+  --ds-text-lg: 15px;
+  --ds-font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  --ds-font-mono: 'SF Mono', ui-monospace, monospace;
+  --ds-duration: 200ms;
+  --ds-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ds-shadow-sm: 0 1px 3px rgba(0,0,0,0.12);
+  --ds-shadow-md: 0 4px 12px rgba(0,0,0,0.20);
+  --ds-shadow-lg: 0 8px 32px rgba(0,0,0,0.35);
 }
 
 @tailwind base;
