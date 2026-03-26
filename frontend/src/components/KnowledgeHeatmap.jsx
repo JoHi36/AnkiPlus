@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
 
 // ─── Treemap layout ──────────────────────────────────────────────────────────
 
@@ -47,7 +47,7 @@ function squarify(items, x, y, w, h) {
   return result;
 }
 
-// ─── Blue gradient by strength ──────────────────────────────────────────────
+// ─── Color by strength ──────────────────────────────────────────────────────
 
 function strengthColor(s) {
   // Semantic strength gradient: red (weak) → yellow (medium) → green (strong)
@@ -87,7 +87,7 @@ function flattenLevel(roots) {
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
-export default function KnowledgeHeatmap({ deckData, onStartStack }) {
+const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSelectDeck, selectedDeckId }, ref) {
   const containerRef = useRef(null);
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
 
@@ -95,16 +95,28 @@ export default function KnowledgeHeatmap({ deckData, onStartStack }) {
   const [currentPath, setCurrentPath] = useState([]);
   const [currentRoots, setCurrentRoots] = useState([]);
 
-  const [selectedDeck, setSelectedDeck] = useState(null);
-
   // Animation state: 'idle' | 'morphOut' | 'morphIn'
   const [animState, setAnimState] = useState('idle');
-  const [morphTarget, setMorphTarget] = useState(null); // cell layout rect for the morphing cell
-  const [cells, setCells] = useState([]); // computed layout items
+  const [morphTarget, setMorphTarget] = useState(null);
+  const [cells, setCells] = useState([]);
   const [pendingRoots, setPendingRoots] = useState(null);
 
   // double-tap detection
   const lastTapRef = useRef({ name: null, time: 0 });
+
+  // ── Drill-down method (exposed to parent via ref) ───────────────────────
+
+  const drillInto = useCallback((deck) => {
+    if (!deck?.hasChildren) return;
+    onSelectDeck?.(null);
+    const cellRect = cells.find(c => c.id === deck.id);
+    setMorphTarget(cellRect || null);
+    setAnimState('morphOut');
+    setPendingRoots(deck.children);
+    setCurrentPath(prev => [...prev, { name: deck.name, roots: currentRoots }]);
+  }, [cells, currentRoots, onSelectDeck]);
+
+  useImperativeHandle(ref, () => ({ drillInto }), [drillInto]);
 
   // ── Resize observer ──────────────────────────────────────────────────────
 
@@ -136,7 +148,7 @@ export default function KnowledgeHeatmap({ deckData, onStartStack }) {
         setCurrentRoots(roots);
         setCurrentPath([]);
       }
-      setSelectedDeck(null);
+      onSelectDeck?.(null);
     }
   }, [deckData]);
 
@@ -161,20 +173,14 @@ export default function KnowledgeHeatmap({ deckData, onStartStack }) {
     if (last.name === cell.name && now - last.time < 400 && cell.hasChildren) {
       // Double-click → drill down with morph animation
       lastTapRef.current = { name: null, time: 0 };
-      setSelectedDeck(null);
-
-      // Find cell rect for morph
-      const cellRect = cells.find(c => c.id === cell.id);
-      setMorphTarget(cellRect);
-      setAnimState('morphOut');
-      setPendingRoots(cell.children);
-
-      setCurrentPath(prev => [...prev, { name: cell.name, roots: currentRoots }]);
+      drillInto(cell);
     } else {
       lastTapRef.current = { name: cell.name, time: now };
-      setSelectedDeck(prev => prev?.id === cell.id ? null : cell);
+      // Toggle selection — notify parent
+      const next = selectedDeckId === cell.id ? null : cell;
+      onSelectDeck?.(next);
     }
-  }, [cells, currentRoots]);
+  }, [cells, currentRoots, selectedDeckId, onSelectDeck, drillInto]);
 
   // ── Morph animation timing ───────────────────────────────────────────────
 
@@ -210,14 +216,11 @@ export default function KnowledgeHeatmap({ deckData, onStartStack }) {
       setCurrentRoots(entry.roots);
       setCurrentPath(prev => prev.slice(0, idx));
     }
-    setSelectedDeck(null);
+    onSelectDeck?.(null);
     setAnimState('idle');
-  }, [currentPath, deckData]);
+  }, [currentPath, deckData, onSelectDeck]);
 
   // ── Render ───────────────────────────────────────────────────────────────
-
-  const hasDue = selectedDeck && (selectedDeck.dueNew + selectedDeck.dueLearn + selectedDeck.dueReview) > 0;
-  const isWeak = selectedDeck && selectedDeck.strength < 0.5;
 
   return (
     <div style={{ width: '100%', maxWidth: 680, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -304,7 +307,7 @@ export default function KnowledgeHeatmap({ deckData, onStartStack }) {
               'opacity 0.3s ease',
               'background-color 0.55s ease',
             ].join(', '),
-            outline: selectedDeck?.id === cell.id ? '2px solid var(--ds-text-tertiary)' : 'none',
+            outline: selectedDeckId === cell.id ? '2px solid var(--ds-text-tertiary)' : 'none',
             outlineOffset: -2,
           };
 
@@ -318,8 +321,7 @@ export default function KnowledgeHeatmap({ deckData, onStartStack }) {
           } else if (isOther) {
             cellStyle = { ...cellStyle, opacity: 0, pointerEvents: 'none' };
           } else if (isNew) {
-            // morphIn: cells start center and expand to place
-            // (just let the transition handle it since we set positions immediately after morph)
+            // morphIn: let transition handle it
           }
 
           const textVisible = !(isMorphTarget && animState === 'morphOut');
@@ -351,7 +353,7 @@ export default function KnowledgeHeatmap({ deckData, onStartStack }) {
                     fontWeight: 600,
                     color: 'var(--ds-text-primary)',
                     lineHeight: 1.2,
-                    textShadow: '0 1px 4px var(--ds-shadow-sm)',
+                    textShadow: '0 1px 4px var(--ds-shadow-color, rgba(0,0,0,0.4))',
                     overflow: 'hidden',
                     display: '-webkit-box',
                     WebkitLineClamp: 2,
@@ -391,56 +393,6 @@ export default function KnowledgeHeatmap({ deckData, onStartStack }) {
         )}
       </div>
 
-      {/* Bottom bar — appears when a deck is selected */}
-      {selectedDeck && (
-        <div
-          className="ds-frosted"
-          style={{
-            padding: '12px 16px',
-            borderRadius: 12,
-            border: '1px solid var(--ds-border-subtle)',
-            boxShadow: 'var(--ds-shadow-md)',
-            display: 'flex', alignItems: 'center', gap: 14,
-          }}
-        >
-          <div style={{ flex: 1 }}>
-            <div style={{
-              fontSize: 14, fontWeight: 600,
-              color: 'var(--ds-text-primary)',
-            }}>
-              {selectedDeck.name}
-            </div>
-            <div style={{
-              fontSize: 12, color: 'var(--ds-text-secondary)', marginTop: 2,
-            }}>
-              {selectedDeck.cards} Karten &middot; {Math.round(selectedDeck.strength * 100)}% gelernt
-              {(selectedDeck.dueNew + selectedDeck.dueLearn + selectedDeck.dueReview) > 0 && (
-                <span style={{ color: 'var(--ds-yellow)', marginLeft: 8 }}>
-                  {selectedDeck.dueNew + selectedDeck.dueLearn + selectedDeck.dueReview} fällig
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Action button */}
-          <button
-            onClick={() => {
-              if (onStartStack) onStartStack(selectedDeck.id);
-            }}
-            style={{
-              background: isWeak ? 'var(--ds-red)' : 'var(--ds-accent)',
-              color: 'var(--ds-text-primary)',
-              border: 'none', borderRadius: 10,
-              padding: '9px 18px', fontSize: 13, fontWeight: 600,
-              cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}
-          >
-            {isWeak ? 'Schwächen lernen' : 'Stapel starten'}
-          </button>
-        </div>
-      )}
-
       {/* Legend row */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 16,
@@ -472,4 +424,6 @@ export default function KnowledgeHeatmap({ deckData, onStartStack }) {
       </div>
     </div>
   );
-}
+});
+
+export default KnowledgeHeatmap;

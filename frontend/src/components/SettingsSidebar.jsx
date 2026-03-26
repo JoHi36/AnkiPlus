@@ -3,9 +3,9 @@ import { Settings, Copy, LogOut, ChevronRight, Sun, Moon, Monitor } from 'lucide
 import { bridgeAction } from '../actions';
 
 const PLAN_MAP = {
-  free:  { name: 'Starter',  price: 'Kostenlos' },
-  tier1: { name: 'Student',  price: '4,99€ / Monat' },
-  tier2: { name: 'Exam Pro', price: '14,99€ / Monat' },
+  free:  { name: 'Free',  price: 'Kostenlos' },
+  tier1: { name: 'Pro',   price: '4,99€ / Monat' },
+  tier2: { name: 'Max',   price: '14,99€ / Monat' },
 };
 
 const SHORTCUTS = [

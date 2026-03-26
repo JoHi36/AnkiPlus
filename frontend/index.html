@@ -29,6 +29,8 @@
   <div id="debug-fallback" style="position:fixed;top:0;left:0;right:0;background:#c00;color:#fff;padding:8px;font-size:12px;font-family:monospace;z-index:99999;display:none;word-break:break-all;"></div>
   <script>
     window.onerror = function(msg, src, line, col, err) {
+      // Ignore cross-origin "Script error." from third-party addons (e.g. AMBOSS)
+      if (msg === 'Script error.' || (typeof msg === 'string' && !src)) return;
       var d = document.getElementById('debug-fallback');
       d.style.display = 'block';
       d.textContent = 'JS ERROR: ' + msg + ' @ ' + src + ':' + line;
