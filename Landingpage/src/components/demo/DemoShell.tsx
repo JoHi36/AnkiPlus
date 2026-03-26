@@ -251,11 +251,40 @@ function DemoShellInner() {
 // DemoShell (public export)
 // ───────────────────────────────────────────────
 
+// Error boundary to catch runtime crashes from imported components
+class DemoErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: string | null }
+> {
+  state = { error: null as string | null };
+  static getDerivedStateFromError(err: Error) {
+    return { error: err.message };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'var(--ds-bg-canvas)', borderRadius: 16,
+          color: 'var(--ds-text-secondary)', fontSize: 13, padding: 32,
+          textAlign: 'center',
+        }}>
+          Demo konnte nicht geladen werden: {this.state.error}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export function DemoShell() {
   return (
-    <DemoProvider>
-      <DemoShellInner />
-    </DemoProvider>
+    <DemoErrorBoundary>
+      <DemoProvider>
+        <DemoShellInner />
+      </DemoProvider>
+    </DemoErrorBoundary>
   );
 }
 

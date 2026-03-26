@@ -78,7 +78,7 @@ export function LandingPage() {
             </p>
 
             <div className="flex gap-3 justify-center">
-              <Button variant="primary" size="md" asChild>
+              <Button variant="ghost" size="md" asChild>
                 <Link to="/register">
                   Kostenlos starten
                   <ChevronRight className="w-3.5 h-3.5 ml-1.5" />
