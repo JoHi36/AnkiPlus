@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react'
 import ForceGraph3D from '3d-force-graph';
 import { Search } from 'lucide-react';
 import { executeAction } from '../actions';
+import KnowledgeHeatmap from './KnowledgeHeatmap';
 
 const MAX_W = 'var(--ds-content-width)';
 
@@ -13,7 +14,7 @@ function deckColor(deckName) {
   return DECK_COLORS[Math.abs(hash) % DECK_COLORS.length];
 }
 
-export default function GraphView({ onToggleView, isPremium }) {
+export default function GraphView({ onToggleView, isPremium, deckData }) {
   const containerRef = useRef(null);
   const graphRef = useRef(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -146,10 +147,13 @@ export default function GraphView({ onToggleView, isPremium }) {
       .map(([deck, count]) => ({ deck, count, color: colors[deck] }));
   }, [searchResult]);
 
+  // Only render the 3D canvas when we actually have search results
+  const showGraph = hasResults;
+
   return (
     <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
-      {/* 3D canvas — fullscreen background */}
-      <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
+      {/* 3D canvas — only mounted when search results exist (saves GPU) */}
+      {showGraph && <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />}
 
       {/* Header + search overlaid */}
       <div style={{ position: 'relative', zIndex: 10, pointerEvents: 'none' }}>
@@ -247,8 +251,26 @@ export default function GraphView({ onToggleView, isPremium }) {
         </form>
       </div>
 
-      {/* Empty state — before any search */}
-      {!hasResults && !isSearching && !searchResult?.error && (
+      {/* Heatmap — shown before any search when deck data is available */}
+      {!hasResults && !isSearching && !searchResult?.error && deckData?.roots?.length > 0 && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '160px 24px 48px',
+          zIndex: 5, pointerEvents: 'auto',
+          overflowY: 'auto',
+        }}>
+          <KnowledgeHeatmap
+            deckData={deckData}
+            onStartStack={(deckId) => {
+              executeAction('deck.study', { deckId });
+            }}
+          />
+        </div>
+      )}
+
+      {/* Empty state — no decks yet or loading */}
+      {!hasResults && !isSearching && !searchResult?.error && !deckData?.roots?.length && (
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
