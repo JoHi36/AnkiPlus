@@ -181,3 +181,36 @@ export async function chatCompletionWithRetry(
 
   return retryWithBackoff(() => chatCompletion(req), retryOpts);
 }
+
+// ---------------------------------------------------------------------------
+// Generation cost lookup
+// ---------------------------------------------------------------------------
+
+export interface GenerationCost {
+  totalCost: number;       // USD
+  tokensPrompt: number;
+  tokensCompletion: number;
+}
+
+/**
+ * Fetch the actual cost of a generation from OpenRouter.
+ * Returns null if the lookup fails (non-blocking fallback).
+ */
+export async function fetchGenerationCost(generationId: string): Promise<GenerationCost | null> {
+  try {
+    const apiKey = getApiKey();
+    const resp = await openrouterClient.get(`/generation?id=${generationId}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      timeout: 5000,
+    });
+    const data = resp.data?.data;
+    if (!data || typeof data.total_cost !== 'number') return null;
+    return {
+      totalCost: data.total_cost,
+      tokensPrompt: data.native_tokens_prompt || data.tokens_prompt || 0,
+      tokensCompletion: data.native_tokens_completion || data.tokens_completion || 0,
+    };
+  } catch {
+    return null;
+  }
+}

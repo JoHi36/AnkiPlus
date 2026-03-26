@@ -15,9 +15,9 @@ import { updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthPro
 import { auth } from '../lib/firebase';
 
 const TIER_DISPLAY: Record<string, { name: string; price: string }> = {
-  free:  { name: 'Starter',  price: 'Kostenlos' },
-  tier1: { name: 'Student',  price: '4,99 € / Monat' },
-  tier2: { name: 'Exam Pro', price: '14,99 € / Monat' },
+  free:  { name: 'Free',  price: 'Kostenlos' },
+  tier1: { name: 'Pro',   price: '4,99 € / Monat' },
+  tier2: { name: 'Max',   price: '14,99 € / Monat' },
 };
 
 const API_URL = import.meta.env.VITE_BACKEND_URL || 'https://europe-west1-ankiplus-b0ffb.cloudfunctions.net/api';

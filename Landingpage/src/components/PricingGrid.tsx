@@ -69,7 +69,7 @@ export function PricingGrid({ currentTier = 'free', onPortal, isLoggedIn = false
     if (config.type === 'upgrade') {
       return (
         <CheckoutButton tier={config.tier!} className="w-full" variant="primary">
-          Upgrade auf {config.tier === 'tier1' ? 'Student' : 'Pro'}
+          Upgrade auf {config.tier === 'tier1' ? 'Pro' : 'Max'}
         </CheckoutButton>
       );
     }
@@ -86,12 +86,12 @@ export function PricingGrid({ currentTier = 'free', onPortal, isLoggedIn = false
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-start max-w-5xl mx-auto">
 
-      {/* Starter (Free) */}
+      {/* Free */}
       <div className={getCardStyles('free')}>
         <div className="mb-6">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs font-medium text-white/[0.35] mb-5">
             <Zap size={13} />
-            Starter
+            Free
           </div>
           <div className="flex items-baseline gap-1 mb-2">
             <span className="text-4xl font-bold text-white tracking-tight">0€</span>
@@ -122,7 +122,7 @@ export function PricingGrid({ currentTier = 'free', onPortal, isLoggedIn = false
         <div className="mt-auto">{renderButton('free')}</div>
       </div>
 
-      {/* Student */}
+      {/* Pro */}
       <div className={getCardStyles('tier1')}>
         {currentTier === 'free' && (
           <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-[#0a84ff] text-white text-[10px] font-semibold rounded-md uppercase tracking-wider">
@@ -133,7 +133,7 @@ export function PricingGrid({ currentTier = 'free', onPortal, isLoggedIn = false
         <div className="mb-6">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-[#0a84ff]/10 border border-[#0a84ff]/20 text-xs font-medium text-[#0a84ff]/80 mb-5">
             <GraduationCap size={13} />
-            Student
+            Pro
           </div>
           <div className="flex items-baseline gap-1 mb-2">
             <span className="text-4xl font-bold text-white tracking-tight">4,99€</span>
@@ -149,7 +149,7 @@ export function PricingGrid({ currentTier = 'free', onPortal, isLoggedIn = false
         <ul className="space-y-3 mb-8 text-sm text-white/[0.55] flex-1">
           <li className="flex items-start gap-3">
             <Check size={14} className="text-[#0a84ff]/50 mt-0.5 flex-shrink-0" />
-            <span>Alles aus Starter</span>
+            <span>Alles aus Free</span>
           </li>
           <li className="flex items-start gap-3">
             <Check size={14} className="text-[#0a84ff]/50 mt-0.5 flex-shrink-0" />
@@ -168,7 +168,7 @@ export function PricingGrid({ currentTier = 'free', onPortal, isLoggedIn = false
         <div className="mt-auto">{renderButton('tier1')}</div>
       </div>
 
-      {/* Exam Pro */}
+      {/* Max */}
       <div className={getCardStyles('tier2')}>
         {currentTier === 'tier1' && (
           <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-purple-500 text-white text-[10px] font-semibold rounded-md uppercase tracking-wider">
@@ -179,7 +179,7 @@ export function PricingGrid({ currentTier = 'free', onPortal, isLoggedIn = false
         <div className="mb-6">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-purple-500/10 border border-purple-500/20 text-xs font-medium text-purple-400/80 mb-5">
             <Crown size={13} />
-            Exam Pro
+            Max
           </div>
           <div className="flex items-baseline gap-1 mb-2">
             <span className="text-4xl font-bold text-white tracking-tight">14,99€</span>
@@ -195,7 +195,7 @@ export function PricingGrid({ currentTier = 'free', onPortal, isLoggedIn = false
         <ul className="space-y-3 mb-8 text-sm text-white/[0.55] flex-1">
           <li className="flex items-start gap-3">
             <Check size={14} className="text-purple-400/50 mt-0.5 flex-shrink-0" />
-            <span>Alles aus Student</span>
+            <span>Alles aus Pro</span>
           </li>
           <li className="flex items-start gap-3">
             <Check size={14} className="text-purple-400/50 mt-0.5 flex-shrink-0" />

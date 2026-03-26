@@ -3,8 +3,8 @@ import { createErrorResponse, ErrorCode } from '../utils/errors';
 import { createLogger } from '../utils/logging';
 import { getOrCreateUser, debitTokens, getCurrentDateString, getCurrentWeekString } from '../utils/firestore';
 import { checkTokenQuota } from '../utils/tokenQuota';
-import { calculateNormalizedTokens, calculateCostMicrodollars } from '../utils/tokenPricing';
-import { chatCompletionWithRetry, resolveModel, OpenRouterRequest } from '../utils/openrouter';
+import { calculateNormalizedTokens, calculateCostMicrodollars, normalizeFromCost, costToMicrodollars } from '../utils/tokenPricing';
+import { chatCompletionWithRetry, resolveModel, OpenRouterRequest, fetchGenerationCost } from '../utils/openrouter';
 
 const DEFAULT_MODEL = 'perplexity-sonar';
 
@@ -137,8 +137,13 @@ export async function researchHandler(
     if (data.usage) {
       const inputTokens = data.usage.prompt_tokens || 0;
       const outputTokens = data.usage.completion_tokens || 0;
-      const normalized = calculateNormalizedTokens(resolvedModel, inputTokens, outputTokens);
-      const cost = calculateCostMicrodollars(resolvedModel, inputTokens, outputTokens);
+      const genCost = data.id ? await fetchGenerationCost(data.id) : null;
+      const normalized = genCost && genCost.totalCost > 0
+        ? normalizeFromCost(genCost.totalCost)
+        : calculateNormalizedTokens(resolvedModel, inputTokens, outputTokens);
+      const cost = genCost && genCost.totalCost > 0
+        ? costToMicrodollars(genCost.totalCost)
+        : calculateCostMicrodollars(resolvedModel, inputTokens, outputTokens);
       const date = getCurrentDateString();
       const week = getCurrentWeekString();
 

@@ -31,9 +31,9 @@ export function TestimonialList({ limit = 15, showFallback = true }: Testimonial
   const getTierInfo = (tier: string) => {
     switch (tier) {
       case 'tier2':
-        return { name: 'Exam Pro', icon: Crown, color: 'text-purple-400/70', bg: 'bg-purple-500/10', border: 'border-purple-500/15' };
+        return { name: 'Max', icon: Crown, color: 'text-purple-400/70', bg: 'bg-purple-500/10', border: 'border-purple-500/15' };
       case 'tier1':
-        return { name: 'Student', icon: GraduationCap, color: 'text-[#0a84ff]/70', bg: 'bg-[#0a84ff]/10', border: 'border-[#0a84ff]/15' };
+        return { name: 'Pro', icon: GraduationCap, color: 'text-[#0a84ff]/70', bg: 'bg-[#0a84ff]/10', border: 'border-[#0a84ff]/15' };
       default:
         return null;
     }
@@ -43,7 +43,7 @@ export function TestimonialList({ limit = 15, showFallback = true }: Testimonial
     {
       name: "Sarah M.",
       role: "Medizinstudentin, 4. Jahr",
-      tier: "Exam Pro",
+      tier: "Max",
       useCase: "Staatsexamen",
       text: "Anki+ hat mein Physikum gerettet. Der Deep Mode ist wie ein persönlicher Professor, der 24/7 in meiner Tasche ist. Komplexe Zusammenhänge endlich verstanden.",
       verified: true
@@ -51,7 +51,7 @@ export function TestimonialList({ limit = 15, showFallback = true }: Testimonial
     {
       name: "Jonas K.",
       role: "Jura Student, LMU",
-      tier: "Student",
+      tier: "Pro",
       useCase: "Jura",
       text: "Endlich verstehe ich die Zusammenhänge zwischen den Paragraphen, statt nur auswendig zu lernen. Gamechanger für mein Staatsexamen.",
       verified: false
@@ -59,7 +59,7 @@ export function TestimonialList({ limit = 15, showFallback = true }: Testimonial
     {
       name: "Dr. Lisa Weber",
       role: "Assistenzärztin",
-      tier: "Exam Pro",
+      tier: "Max",
       useCase: "Facharzt",
       text: "Ich nutze ANKI+ zum Auffrischen von Facharztwissen. Die Deep Search Funktion spart mir täglich Stunden an Recherchezeit.",
       verified: true
@@ -83,8 +83,8 @@ export function TestimonialList({ limit = 15, showFallback = true }: Testimonial
   const displayTestimonials = testimonials.length > 0
     ? testimonials.map((t, idx) => ({
         name: `Nutzer ${idx + 1}`,
-        role: t.tier === 'tier2' ? 'Exam Pro Nutzer' : 'Student Nutzer',
-        tier: t.tier === 'tier2' ? 'Exam Pro' : 'Student',
+        role: t.tier === 'tier2' ? 'Max Nutzer' : 'Pro Nutzer',
+        tier: t.tier === 'tier2' ? 'Max' : 'Pro',
         useCase: 'ANKI+',
         text: t.text,
         verified: t.status === 'approved',

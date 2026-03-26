@@ -4,8 +4,8 @@
  */
 import { Request, Response } from 'express';
 import * as functions from 'firebase-functions';
-import { chatCompletionWithRetry } from '../utils/openrouter';
-import { calculateNormalizedTokens, calculateCostMicrodollars } from '../utils/tokenPricing';
+import { chatCompletionWithRetry, fetchGenerationCost } from '../utils/openrouter';
+import { calculateNormalizedTokens, calculateCostMicrodollars, normalizeFromCost, costToMicrodollars } from '../utils/tokenPricing';
 import { debitTokens, getCurrentDateString, getCurrentWeekString } from '../utils/firestore';
 
 const ROUTER_MODEL = 'gemini-2.5-flash';
@@ -63,8 +63,13 @@ Antwort-Schema:
     if (userId && response.usage) {
       const inputTokens = response.usage.prompt_tokens || 0;
       const outputTokens = response.usage.completion_tokens || 0;
-      const normalizedTokens = calculateNormalizedTokens(ROUTER_MODEL, inputTokens, outputTokens);
-      const costMicro = calculateCostMicrodollars(ROUTER_MODEL, inputTokens, outputTokens);
+      const genCost = response.id ? await fetchGenerationCost(response.id) : null;
+      const normalizedTokens = genCost && genCost.totalCost > 0
+        ? normalizeFromCost(genCost.totalCost)
+        : calculateNormalizedTokens(ROUTER_MODEL, inputTokens, outputTokens);
+      const costMicro = genCost && genCost.totalCost > 0
+        ? costToMicrodollars(genCost.totalCost)
+        : calculateCostMicrodollars(ROUTER_MODEL, inputTokens, outputTokens);
       const date = getCurrentDateString();
       const week = getCurrentWeekString();
       debitTokens(userId, date, week, normalizedTokens, inputTokens, outputTokens, costMicro)

@@ -49,6 +49,26 @@ export function calculateCostMicrodollars(
   return Math.ceil(inputTokens * rates.input + outputTokens * rates.output);
 }
 
+/**
+ * Calculate normalized display tokens from actual USD cost (from OpenRouter).
+ * This is the preferred method — no manual MODEL_RATES lookup needed.
+ * Cost is in USD (e.g. 0.0042 = $0.0042).
+ */
+export function normalizeFromCost(costUsd: number): number {
+  if (costUsd <= 0) return 0;
+  // Convert USD cost to "per 1M tokens" equivalent, then normalize
+  // costUsd is the real cost; NORMALIZATION_RATE is $/1M display tokens
+  // displayTokens = costUsd / (NORMALIZATION_RATE / 1_000_000)
+  return Math.ceil((costUsd * 1_000_000) / NORMALIZATION_RATE);
+}
+
+/**
+ * Convert USD cost to microdollars (for storage).
+ */
+export function costToMicrodollars(costUsd: number): number {
+  return Math.ceil(costUsd * 1_000_000);
+}
+
 export interface TokenLimits {
   daily: number;
   weekly: number;

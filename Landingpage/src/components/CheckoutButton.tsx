@@ -69,7 +69,7 @@ export function CheckoutButton({
     }
   };
 
-  const tierName = tier === 'tier1' ? 'Student' : 'Exam Pro';
+  const tierName = tier === 'tier1' ? 'Pro' : 'Max';
   const tierPrice = tier === 'tier1' ? '5€' : '15€';
 
   return (

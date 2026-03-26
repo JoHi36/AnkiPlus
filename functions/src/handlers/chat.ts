@@ -5,9 +5,9 @@ import { createErrorResponse, ErrorCode } from '../utils/errors';
 import { createLogger } from '../utils/logging';
 import { getOrCreateUser, debitTokens, getCurrentDateString, getCurrentWeekString } from '../utils/firestore';
 import { checkTokenQuota, checkAnonymousTokenQuota } from '../utils/tokenQuota';
-import { calculateNormalizedTokens, calculateCostMicrodollars } from '../utils/tokenPricing';
+import { calculateNormalizedTokens, calculateCostMicrodollars, normalizeFromCost, costToMicrodollars } from '../utils/tokenPricing';
 import { logQuotaExceeded, logChatRequest, logChatError } from '../utils/analytics';
-import { chatCompletionWithRetry, resolveModel, OpenRouterRequest } from '../utils/openrouter';
+import { chatCompletionWithRetry, resolveModel, OpenRouterRequest, fetchGenerationCost } from '../utils/openrouter';
 import { buildSystemPrompt, Insight } from '../utils/systemPrompt';
 import {
   geminiToolsToOpenAI,
@@ -211,13 +211,24 @@ export async function chatHandler(
           }
         }
 
-        // Debit tokens
+        // Debit tokens — prefer OpenRouter's actual cost over manual calculation
         let tokenInfo: { used: number; dailyRemaining: number; weeklyRemaining: number } | undefined;
         if (data.usage && effectiveUserId) {
           const inputTokens = data.usage.prompt_tokens || 0;
           const outputTokens = data.usage.completion_tokens || 0;
-          const normalized = calculateNormalizedTokens(resolvedModel, inputTokens, outputTokens);
-          const cost = calculateCostMicrodollars(resolvedModel, inputTokens, outputTokens);
+
+          // Try to get actual cost from OpenRouter generation API
+          let normalized: number;
+          let cost: number;
+          const genCost = data.id ? await fetchGenerationCost(data.id) : null;
+          if (genCost && genCost.totalCost > 0) {
+            normalized = normalizeFromCost(genCost.totalCost);
+            cost = costToMicrodollars(genCost.totalCost);
+          } else {
+            // Fallback to manual calculation
+            normalized = calculateNormalizedTokens(resolvedModel, inputTokens, outputTokens);
+            cost = calculateCostMicrodollars(resolvedModel, inputTokens, outputTokens);
+          }
 
           debitTokens(effectiveUserId, date, week, normalized, inputTokens, outputTokens, cost).catch((error) => {
             logger.error('Failed to debit tokens', error, { effectiveUserId, normalized });
@@ -275,6 +286,7 @@ export async function chatHandler(
     let buffer = '';
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
+    let streamGenerationId = '';
     let pendingToolCalls: Array<{
       id: string;
       type: string;
@@ -302,6 +314,11 @@ export async function chatHandler(
 
         try {
           const data = JSON.parse(payload);
+
+          // Capture generation ID from first chunk for cost lookup
+          if (data.id && !streamGenerationId) {
+            streamGenerationId = data.id;
+          }
 
           // Extract usage from final chunk (OpenRouter may include it)
           if (data.usage) {
@@ -350,7 +367,7 @@ export async function chatHandler(
       }
     });
 
-    stream.on('end', () => {
+    stream.on('end', async () => {
       // Process any remaining buffer
       if (buffer.trim()) {
         const trimmed = buffer.trim();
@@ -370,10 +387,18 @@ export async function chatHandler(
         }
       }
 
-      // Debit tokens and send done signal
+      // Debit tokens and send done signal — prefer OpenRouter actual cost
       if (effectiveUserId && (totalInputTokens > 0 || totalOutputTokens > 0)) {
-        const normalized = calculateNormalizedTokens(resolvedModel, totalInputTokens, totalOutputTokens);
-        const cost = calculateCostMicrodollars(resolvedModel, totalInputTokens, totalOutputTokens);
+        let normalized: number;
+        let cost: number;
+        const genCost = streamGenerationId ? await fetchGenerationCost(streamGenerationId) : null;
+        if (genCost && genCost.totalCost > 0) {
+          normalized = normalizeFromCost(genCost.totalCost);
+          cost = costToMicrodollars(genCost.totalCost);
+        } else {
+          normalized = calculateNormalizedTokens(resolvedModel, totalInputTokens, totalOutputTokens);
+          cost = calculateCostMicrodollars(resolvedModel, totalInputTokens, totalOutputTokens);
+        }
 
         debitTokens(effectiveUserId, date, week, normalized, totalInputTokens, totalOutputTokens, cost).catch((error) => {
           logger.error('Failed to debit tokens', error, { effectiveUserId, normalized });
