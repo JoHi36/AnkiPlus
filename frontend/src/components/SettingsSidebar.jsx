@@ -84,17 +84,14 @@ export default function SettingsSidebar() {
   const openNativeSettings = useCallback(() => bridgeAction('sidebarOpenNativeSettings'), []);
   const copyLogs = useCallback(() => bridgeAction('sidebarCopyLogs'), []);
   const handleUpgrade = useCallback(() => bridgeAction('sidebarOpenUpgrade'), []);
+  const handleConnect = useCallback(() => bridgeAction('sidebarConnect'), []);
   const handleLogout = useCallback(() => bridgeAction('sidebarLogout'), []);
 
   const tokenPct = status.tokenLimit > 0
     ? Math.round((status.tokenUsed / status.tokenLimit) * 100)
     : 0;
 
-  const tierGradient = {
-    free:  'from-[var(--ds-hover-tint)] to-transparent border-[var(--ds-border-subtle)]',
-    tier1: 'from-[var(--ds-accent-5)] to-[var(--ds-accent-5)] border-[var(--ds-accent-10)]',
-    tier2: 'from-[var(--ds-purple-5)] to-[var(--ds-purple-5)] border-[var(--ds-purple-10)]',
-  };
+  const isPaid = status.tier !== 'free';
 
   return (
     <div
@@ -107,15 +104,46 @@ export default function SettingsSidebar() {
         padding: '16px 14px',
       }}
     >
-      {/* Hide scrollbar */}
+      {/* Hide scrollbar + plan card gradient border */}
       <style>{`
         ::-webkit-scrollbar { width: 0; }
+        .plan-card-paid {
+          position: relative;
+        }
+        .plan-card-paid::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          padding: 1px;
+          background: linear-gradient(
+            160deg,
+            rgba(10,132,255,0.5) 0%,
+            rgba(10,132,255,0.1) 40%,
+            rgba(10,132,255,0.25) 100%
+          );
+          -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+          -webkit-mask-composite: xor;
+          mask-composite: exclude;
+          pointer-events: none;
+        }
       `}</style>
 
       {/* Status Card */}
       <div
-        className={`rounded-[var(--ds-radius-md)] bg-gradient-to-br ${tierGradient[status.tier] || tierGradient.free} border`}
-        style={{ padding: 14, marginBottom: 12 }}
+        className={isPaid ? 'plan-card-paid' : ''}
+        style={{
+          padding: 14,
+          marginBottom: 12,
+          borderRadius: 'var(--ds-radius-md)',
+          background: isPaid
+            ? 'linear-gradient(135deg, rgba(10,132,255,0.08) 0%, rgba(10,132,255,0.02) 100%)'
+            : 'var(--ds-hover-tint)',
+          border: isPaid ? 'none' : '1px solid var(--ds-border-subtle)',
+          boxShadow: isPaid
+            ? '0 0 24px rgba(10,132,255,0.06), inset 0 1px 0 rgba(10,132,255,0.08)'
+            : 'none',
+        }}
       >
         <div
           className="uppercase font-semibold tracking-wide"
@@ -144,9 +172,13 @@ export default function SettingsSidebar() {
         </div>
 
         <div className="flex justify-between items-center" style={{ marginBottom: 10 }}>
-          <span style={{ fontSize: 10, color: 'var(--ds-text-tertiary)' }}>{tokenPct}%</span>
+          <span style={{ fontSize: 10, color: 'var(--ds-text-tertiary)' }}>
+            {status.isAuthenticated
+              ? (status.tokenLimit > 0 ? `${tokenPct}%` : 'Verbunden')
+              : 'Nicht verbunden'}
+          </span>
           <button
-            onClick={handleUpgrade}
+            onClick={status.isAuthenticated ? handleUpgrade : handleConnect}
             className="font-semibold transition-opacity hover:opacity-80"
             style={{
               fontSize: 11,
@@ -158,7 +190,9 @@ export default function SettingsSidebar() {
               fontFamily: 'inherit',
             }}
           >
-            {status.tier === 'free' ? 'Upgrade →' : 'Abo verwalten →'}
+            {!status.isAuthenticated
+              ? 'Verbinden →'
+              : status.tier === 'free' ? 'Upgrade →' : 'Abo verwalten →'}
           </button>
         </div>
       </div>

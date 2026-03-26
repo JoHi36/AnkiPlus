@@ -2587,31 +2587,12 @@ class ChatbotWidget(QWidget):
             config = get_config()
             auth_token = config.get('auth_token', '')
             is_authenticated = bool(auth_token and config.get('auth_validated', False))
-            tier = 'free'
+            # Use cached tier as default so it survives restarts
+            tier = config.get('tier', 'free') if is_authenticated else 'free'
             token_used = 0
             token_limit = 0
 
-            if is_authenticated:
-                try:
-                    backend_url = get_backend_url()
-                    if backend_url and auth_token:
-                        import requests as _req
-                        resp = _req.get(
-                            '%s/user/quota' % backend_url.rstrip('/'),
-                            headers={'Authorization': 'Bearer %s' % auth_token.strip()},
-                            timeout=5,
-                        )
-                        if resp.status_code == 200:
-                            qdata = resp.json()
-                            tier = qdata.get('tier', 'free')
-                            tokens = qdata.get('tokens', {})
-                            daily = tokens.get('daily', {})
-                            token_used = daily.get('used', 0)
-                            token_limit = daily.get('limit', 0)
-                            update_config(tier=tier)
-                except Exception as e:
-                    logger.warning("sidebar quota fetch: %s", e)
-
+            # Send cached status immediately so UI doesn't flash "Starter"
             self._send_to_frontend('sidebarStatus', {
                 'tier': tier,
                 'theme': config.get('theme', 'dark'),
@@ -2619,6 +2600,48 @@ class ChatbotWidget(QWidget):
                 'tokenUsed': token_used,
                 'tokenLimit': token_limit,
             })
+
+            # Then fetch live quota in background and update
+            if is_authenticated:
+                import threading
+                def _fetch_quota():
+                    try:
+                        try:
+                            from ..config import get_backend_url
+                        except ImportError:
+                            from config import get_backend_url
+                        backend_url = get_backend_url()
+                        if not backend_url or not auth_token:
+                            return
+                        import requests as _req
+                        resp = _req.get(
+                            '%s/user/quota' % backend_url.rstrip('/'),
+                            headers={'Authorization': 'Bearer %s' % auth_token.strip()},
+                            timeout=8,
+                        )
+                        if resp.status_code == 200:
+                            qdata = resp.json()
+                            live_tier = qdata.get('tier', 'free')
+                            tokens = qdata.get('tokens', {})
+                            daily = tokens.get('daily', {})
+                            live_used = daily.get('used', 0)
+                            live_limit = daily.get('limit', 0)
+                            update_config(tier=live_tier)
+                            # Update UI on main thread
+                            from aqt import mw
+                            if mw:
+                                mw.taskman.run_on_main(lambda: self._send_to_frontend('sidebarStatus', {
+                                    'tier': live_tier,
+                                    'theme': config.get('theme', 'dark'),
+                                    'isAuthenticated': True,
+                                    'tokenUsed': live_used,
+                                    'tokenLimit': live_limit,
+                                }))
+                    except Exception as e:
+                        logger.warning("sidebar quota fetch: %s", e)
+
+                threading.Thread(target=_fetch_quota, daemon=True, name="SidebarQuota").start()
+
         except (AttributeError, RuntimeError) as e:
             logger.warning("get_sidebar_status: %s", e)
 

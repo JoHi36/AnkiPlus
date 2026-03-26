@@ -59,6 +59,7 @@ def _handle_sidebar_message(msg_type, data):
         'sidebarOpenNativeSettings': _msg_open_native_settings,
         'sidebarCopyLogs': _msg_copy_logs,
         'sidebarOpenUpgrade': _msg_open_upgrade,
+        'sidebarConnect': _msg_connect,
         'sidebarLogout': _msg_logout,
         'jsError': _msg_js_error,
     }
@@ -91,14 +92,48 @@ def _msg_get_status(_data):
         auth_token = config.get("auth_token", "")
         auth_validated = config.get("auth_validated", False)
         is_authenticated = bool(auth_token and auth_validated)
-        tier = config.get("tier", "free") if is_authenticated else "free"
+        tier = "free"
+        token_used = 0
+        token_limit = 0
+
+        # Fetch quota from backend if authenticated
+        if is_authenticated:
+            try:
+                from ..config import get_backend_url
+            except ImportError:
+                from config import get_backend_url
+            backend_url = get_backend_url()
+            if backend_url and auth_token:
+                import requests as _requests
+                try:
+                    resp = _requests.get(
+                        '%s/user/quota' % backend_url.rstrip('/'),
+                        headers={'Authorization': 'Bearer %s' % auth_token.strip()},
+                        timeout=5,
+                    )
+                    if resp.status_code == 200:
+                        quota_data = resp.json()
+                        tier = quota_data.get('tier', 'free')
+                        # Backend format: { tier, tokens: { daily: { used, limit } } }
+                        tokens = quota_data.get('tokens', {})
+                        daily = tokens.get('daily', {})
+                        token_used = daily.get('used', 0)
+                        token_limit = daily.get('limit', 0)
+                        # Cache tier in config for other handlers
+                        try:
+                            from ..config import update_config
+                        except ImportError:
+                            from config import update_config
+                        update_config(tier=tier)
+                except Exception as e:
+                    logger.warning("_msg_get_status: quota fetch failed: %s", e)
 
         _send_to_sidebar("sidebarStatus", {
             "tier": tier,
             "theme": theme,
             "isAuthenticated": is_authenticated,
-            "tokenUsed": config.get("token_used", 0),
-            "tokenLimit": config.get("token_limit", 0),
+            "tokenUsed": token_used,
+            "tokenLimit": token_limit,
         })
     except Exception:
         logger.exception("_msg_get_status failed")
@@ -178,8 +213,35 @@ def _msg_open_native_settings(_data):
 
 
 def _msg_open_upgrade(_data):
-    """Open the landing page pricing section in the default browser."""
-    webbrowser.open('https://anki-plus.vercel.app/#pricing')
+    """Open pricing or account management page."""
+    config = get_config()
+    auth_token = config.get("auth_token", "")
+    is_authenticated = bool(auth_token and config.get("auth_validated", False))
+    tier = config.get("tier", "free")
+
+    if is_authenticated and tier != "free":
+        # Paid user → account management
+        webbrowser.open('https://anki-plus.vercel.app/account')
+    else:
+        # Free user → pricing page
+        webbrowser.open('https://anki-plus.vercel.app/#pricing')
+
+
+def _msg_connect(_data):
+    """Start Link-Code auth flow — opens login page and polls for tokens."""
+    try:
+        from ..ui.bridge import WebBridge
+    except ImportError:
+        from ui.bridge import WebBridge
+
+    # Find the active WebBridge instance and call startLinkAuth
+    if mw and hasattr(mw, '_chatbot_widget') and mw._chatbot_widget:
+        bridge = mw._chatbot_widget.bridge
+        if bridge and hasattr(bridge, 'startLinkAuth'):
+            bridge.startLinkAuth()
+            return
+    # Fallback: just open login page directly
+    webbrowser.open('https://anki-plus.vercel.app/login')
 
 
 def _msg_copy_logs(_data):
