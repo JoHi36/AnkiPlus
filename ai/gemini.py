@@ -794,40 +794,31 @@ def generate_quick_answer(query, card_texts, cluster_labels=None, model=None):
 
     config = get_config() or {}
 
-    # Use the SAME streaming infrastructure as the regular chat
+    # Minimal payload — same format as get_section_title (which works)
     try:
-        payload = _build_chat_payload(
-            user_message=prompt,
-            model=model,
-            mode='compact',
-            stream=True,
-            agent='tutor',
-        )
-        # Override temperature for concise answers
-        payload["temperature"] = 0.3
-        payload["maxOutputTokens"] = 400
+        from ..ai.auth import get_auth_headers
+    except ImportError:
+        try:
+            from ai.auth import get_auth_headers
+        except ImportError:
+            get_auth_headers = _get_auth_headers_safe
 
-        # Collect chunks
-        collected_text = []
-        def _collect(chunk, done, is_function_call=False, **kwargs):
-            if chunk:
-                collected_text.append(chunk)
+    url = _get_backend_chat_url()
+    headers = get_auth_headers()
 
-        result = stream_response(
-            urls=[_get_backend_chat_url()],
-            data=None,
-            callback=_collect,
-            use_backend=True,
-            backend_data=payload,
-        )
+    backend_data = {
+        "message": prompt,
+        "model": model,
+        "mode": "compact",
+        "history": [],
+        "stream": False,
+    }
 
-        response_text = "".join(collected_text)
-        if not response_text.strip():
-            # Fallback: stream_response might return the text directly
-            if isinstance(result, tuple):
-                response_text = result[0] or ""
-            elif isinstance(result, str):
-                response_text = result
+    try:
+        response = requests.post(url, json=backend_data, headers=headers, timeout=20)
+        response.raise_for_status()
+        result = response.json()
+        response_text = result.get("text") or result.get("response") or ""
 
         if not response_text.strip():
             logger.warning("generate_quick_answer: Empty response for '%s'", query)
