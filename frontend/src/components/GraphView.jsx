@@ -98,11 +98,22 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       val: 5,
     });
 
-    // All cards connect directly to query — colored by cluster
+    // Darker color palette (brightens on cluster selection)
+    const DARK_COLORS = DECK_COLORS.map(c => {
+      // Darken by 40%
+      const r = parseInt(c.slice(1,3),16), g = parseInt(c.slice(3,5),16), b = parseInt(c.slice(5,7),16);
+      return `rgb(${Math.round(r*0.5)},${Math.round(g*0.5)},${Math.round(b*0.5)})`;
+    });
+
+    // Cards colored by cluster, only best card per cluster connects to query
     if (clusters.length > 1) {
       clusters.forEach((cluster, ci) => {
-        const clusterColor = DECK_COLORS[ci % DECK_COLORS.length];
+        const darkColor = DARK_COLORS[ci % DARK_COLORS.length];
+        const brightColor = DECK_COLORS[ci % DECK_COLORS.length];
         const clusterCardIds = [];
+        let bestCardId = null;
+        let bestScore = -1;
+
         cluster.cards.forEach(card => {
           nodes.push({
             id: card.id,
@@ -110,19 +121,27 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
             deck: card.deck,
             deckFull: card.deckFull,
             score: card.score,
-            color: clusterColor,
+            color: darkColor,
+            brightColor: brightColor,
             clusterLabel: cluster.label,
             clusterIndex: ci,
             isQuery: false,
             isCluster: false,
             val: 1.0 + (card.score || 0.5),
           });
-          links.push({ source: '__query__', target: card.id, value: card.score || 0.5 });
           clusterCardIds.push(card.id);
+          if ((card.score || 0) > bestScore) {
+            bestScore = card.score || 0;
+            bestCardId = card.id;
+          }
         });
 
-        // Intra-cluster edges: connect cards within the same cluster
-        // These pull same-cluster cards together spatially
+        // ONE line per cluster: only the best card connects to query ("balloon string")
+        if (bestCardId) {
+          links.push({ source: '__query__', target: bestCardId, value: 0.7, isBalloonString: true });
+        }
+
+        // Intra-cluster edges: light gray, pull cards together
         for (let i = 0; i < clusterCardIds.length; i++) {
           for (let j = i + 1; j < clusterCardIds.length; j++) {
             links.push({
@@ -135,7 +154,6 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
         }
       });
     } else {
-      // No clusters — all cards same color
       searchResult.cards.forEach(card => {
         nodes.push({
           id: card.id,
@@ -182,12 +200,20 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
         return `${cluster}${n.label}\n${n.deck}`;
       })
       .nodeOpacity(1.0)
-      .linkWidth(l => l.isIntraCluster ? 0.3 : (l.value || 0.5) * 2)
-      .linkOpacity(l => l.isIntraCluster ? 0.04 : 0.15)
-      .linkColor(l => l.isIntraCluster ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.18)')
+      .linkWidth(l => l.isIntraCluster ? 0.3 : l.isBalloonString ? 1.0 : 0.5)
+      .linkOpacity(l => l.isIntraCluster ? 0.06 : l.isBalloonString ? 0.15 : 0.05)
+      .linkColor(l => l.isIntraCluster ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.15)')
       .onNodeClick(node => {
         if (!node || node.isQuery) return;
         setSelectedCard(node);
+        // Highlight entire cluster: brighten selected cluster, keep others dark
+        if (node.clusterIndex !== undefined) {
+          graph.nodeColor(n => {
+            if (n.isQuery) return '#FFFFFF';
+            if (n.clusterIndex === node.clusterIndex) return n.brightColor || n.color;
+            return n.color; // stays dark
+          });
+        }
         const dist = 40;
         const ratio = 1 + dist / Math.hypot(node.x || 1, node.y || 1, node.z || 1);
         graph.cameraPosition(
