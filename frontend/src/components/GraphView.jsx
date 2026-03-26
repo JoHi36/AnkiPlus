@@ -153,6 +153,18 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       });
     }
 
+    // Add inter-cluster links (thin connections between related clusters)
+    if (searchResult.clusterLinks) {
+      searchResult.clusterLinks.forEach(cl => {
+        links.push({
+          source: cl.source,
+          target: cl.target,
+          value: cl.value * 0.5,  // thinner than cluster→card links
+          isInterCluster: true,
+        });
+      });
+    }
+
     // Destroy old graph
     if (graphRef.current?._destructor) graphRef.current._destructor();
 
@@ -170,9 +182,9 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
         return `${n.label}\n${n.deck}`;
       })
       .nodeOpacity(1.0)
-      .linkWidth(l => (l.value || 0.5) * 2)
-      .linkOpacity(0.2)
-      .linkColor(() => 'rgba(255,255,255,0.2)')
+      .linkWidth(l => l.isInterCluster ? 0.8 : (l.value || 0.5) * 2)
+      .linkOpacity(l => l.isInterCluster ? 0.15 : 0.2)
+      .linkColor(l => l.isInterCluster ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.2)')
       .onNodeClick(node => {
         if (!node || node.isQuery) return;
         if (node.isCluster) {

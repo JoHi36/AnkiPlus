@@ -530,12 +530,36 @@ class SearchCardsThread(QThread):
                     "cards": cluster_cards,
                 })
 
+            # Compute inter-cluster similarity (avg pairwise similarity between clusters)
+            cluster_links = []
+            for ci in range(len(clusters)):
+                for cj in range(ci + 1, len(clusters)):
+                    total_sim = 0
+                    count = 0
+                    for a in clusters[ci]:
+                        for b in clusters[cj]:
+                            key = (min(a, b), max(a, b))
+                            s = all_sims.get(key, 0)
+                            if s > 0:
+                                total_sim += s
+                                count += 1
+                    if count > 0:
+                        avg_sim = total_sim / count
+                        if avg_sim > 0.35:  # only show meaningful connections
+                            cluster_links.append({
+                                "source": "cluster_%d" % ci,
+                                "target": "cluster_%d" % cj,
+                                "value": round(avg_sim, 3),
+                                "type": "inter_cluster",
+                            })
+
             self.result_signal.emit(json.dumps({
                 "type": "graph.searchCards",
                 "data": {
                     "clusters": cluster_output,
-                    "cards": cards_data,  # keep flat list for backward compat
-                    "edges": edges,       # keep star edges
+                    "clusterLinks": cluster_links,
+                    "cards": cards_data,
+                    "edges": edges,
                     "query": self.query,
                     "totalFound": len(cards_data),
                 }
