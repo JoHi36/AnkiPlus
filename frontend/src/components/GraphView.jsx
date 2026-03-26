@@ -4,6 +4,11 @@ import { executeAction } from '../actions';
 import KnowledgeHeatmap from './KnowledgeHeatmap';
 import ChatInput from './ChatInput';
 import SearchSidebar from './SearchSidebar';
+import DeckSearchBar from './DeckSearchBar';
+import { DeckNode } from './DeckNode';
+import { useDeckTree } from '../hooks/useDeckTree';
+
+const MAX_W = 'var(--ds-content-width)';
 
 // Muted, darker color palette — brightens on cluster selection
 const CLUSTER_COLORS = [
@@ -40,6 +45,8 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
   const graphRef = useRef(null);
   const heatmapRef = useRef(null);
   const [heatmapDeck, setHeatmapDeck] = useState(null);
+  const [contentMode, setContentMode] = useState('decks'); // 'decks' | 'heatmap'
+  const { isExpanded, toggleExpanded } = useDeckTree();
 
   // Destructure smartSearch
   const {
@@ -139,7 +146,7 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
 
     graph
       .graphData({ nodes, links })
-      .backgroundColor('transparent')
+      .backgroundColor('rgba(0,0,0,0)')
       .nodeColor(n => n.color)
       .nodeVal(n => n.val)
       .nodeLabel(n => {
@@ -377,128 +384,180 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
   return (
     <div style={{ position: 'relative', flex: 1, display: 'flex', overflow: 'hidden' }}>
       {/* Canvas area */}
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        {/* 3D canvas */}
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        {/* 3D canvas — only when search results */}
         {hasResults && <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />}
 
-        {/* Top bar */}
-        <div style={{
-          position: 'relative', zIndex: 10, pointerEvents: 'none',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '12px 20px', maxWidth: 'var(--ds-content-width)', margin: '0 auto',
-          width: '100%',
-        }}>
-          <div style={{ display: 'flex', gap: 4, pointerEvents: 'auto' }}>
-            {onToggleView && (
-              <button
-                onClick={onToggleView}
+        {/* Top bar — only when search results visible */}
+        {hasResults && (
+          <div style={{
+            position: 'relative', zIndex: 10, pointerEvents: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '12px 20px', maxWidth: MAX_W, margin: '0 auto',
+            width: '100%',
+          }}>
+            <div />
+            <div />
+          </div>
+        )}
+
+        {/* ═══ DEFAULT STATE: DeckBrowser frame with toggle ═══ */}
+        {!hasResults && (
+          <div style={{
+            flex: 1, overflow: 'hidden',
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            padding: '0 20px',
+          }}>
+            {/* Wordmark — matches DeckBrowserView exactly */}
+            <div style={{
+              flexShrink: 0, paddingTop: 64,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              gap: 10, marginBottom: 24, width: '100%', maxWidth: MAX_W,
+              position: 'relative',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'baseline' }}>
+                <span style={{
+                  fontFamily: '-apple-system, "SF Pro Display", system-ui, sans-serif',
+                  fontSize: 46, fontWeight: 700, letterSpacing: '-1.8px',
+                  color: 'var(--ds-text-primary)', lineHeight: 1,
+                }}>Anki</span>
+                <span style={{
+                  fontFamily: '-apple-system, "SF Pro Display", system-ui, sans-serif',
+                  fontSize: 46, fontWeight: 300, letterSpacing: '-1px',
+                  color: 'var(--ds-text-muted)', lineHeight: 1,
+                }}>.plus</span>
+              </div>
+              <span
                 style={{
-                  background: 'var(--ds-hover-tint)',
-                  border: '1px solid var(--ds-border)',
-                  borderRadius: 8, padding: '6px 14px',
-                  color: 'var(--ds-text-secondary)',
-                  fontSize: 12, fontWeight: 500, cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  transition: 'color 0.15s, background 0.15s',
+                  fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
+                  padding: '4px 9px', borderRadius: 7, alignSelf: 'center',
+                  marginTop: 4, cursor: 'pointer', whiteSpace: 'nowrap',
+                  ...(isPremium
+                    ? { background: 'var(--ds-accent-10)', border: '1px solid var(--ds-accent-20)', color: 'var(--ds-accent)' }
+                    : { background: 'var(--ds-hover-tint)', border: '1px solid var(--ds-border-medium)', color: 'var(--ds-text-placeholder)' }),
                 }}
-                onMouseEnter={e => { e.currentTarget.style.color = 'var(--ds-text-primary)'; e.currentTarget.style.background = 'var(--ds-active-tint)'; }}
-                onMouseLeave={e => { e.currentTarget.style.color = 'var(--ds-text-secondary)'; e.currentTarget.style.background = 'var(--ds-hover-tint)'; }}
+                onClick={() => executeAction('settings.toggle')}
               >
-                Deck-Liste
-              </button>
-            )}
-          </div>
-          <div />
-        </div>
+                {isPremium ? 'Pro' : 'Free'}
+              </span>
+            </div>
 
-        {/* Heatmap */}
-        {!hasResults && deckData?.roots?.length > 0 && (
-          <div style={{
-            position: 'absolute', inset: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: '48px 24px 100px',
-            zIndex: 5, pointerEvents: 'auto',
-            overflowY: 'auto',
-          }}>
-            <KnowledgeHeatmap
-              ref={heatmapRef}
-              deckData={deckData}
-              selectedDeckId={heatmapDeck?.id ?? null}
-              onSelectDeck={setHeatmapDeck}
-            />
+            {/* Search Bar */}
+            <div style={{
+              flexShrink: 0, width: '100%', maxWidth: MAX_W,
+              marginBottom: 16,
+            }}>
+              <DeckSearchBar
+                onSubmit={(text) => { if (text.trim()) search(text); }}
+                onOpenEmpty={() => {}}
+              />
+            </div>
+
+            {/* Content area — deck list or heatmap (only this part toggles) */}
+            <div style={{
+              flex: 1, overflowY: 'auto',
+              width: '100%', maxWidth: MAX_W,
+              paddingBottom: 60,
+              scrollbarWidth: 'none',
+            }}>
+              {contentMode === 'decks' ? (
+                /* Deck list — same as DeckBrowserView */
+                <>
+                  {(deckData?.roots || []).map((node, idx) => (
+                    <DeckNode
+                      key={node.id}
+                      node={node}
+                      depth={0}
+                      isExpanded={isExpanded}
+                      onToggle={toggleExpanded}
+                      onStudy={(deckId) => executeAction('deck.study', { deckId })}
+                      onSelect={(deckId) => executeAction('deck.select', { deckId })}
+                      index={idx}
+                    />
+                  ))}
+                  {(!deckData?.roots || deckData.roots.length === 0) && (
+                    <div style={{
+                      textAlign: 'center', padding: '40px 0',
+                      color: 'var(--ds-text-muted)', fontSize: 13,
+                    }}>
+                      Keine Stapel vorhanden
+                    </div>
+                  )}
+                </>
+              ) : (
+                /* Heatmap view */
+                <KnowledgeHeatmap
+                  ref={heatmapRef}
+                  deckData={deckData}
+                  selectedDeckId={heatmapDeck?.id ?? null}
+                  onSelectDeck={setHeatmapDeck}
+                />
+              )}
+            </div>
+
+            {/* Toggle — Stapel / Heatmap */}
+            <div style={{
+              flexShrink: 0, width: '100%', maxWidth: MAX_W,
+              display: 'flex', justifyContent: 'center',
+              padding: '12px 0 20px',
+            }}>
+              <div style={{
+                display: 'flex', gap: 0,
+                background: 'var(--ds-hover-tint)',
+                borderRadius: 8,
+                border: '1px solid var(--ds-border)',
+                overflow: 'hidden',
+              }}>
+                {['decks', 'heatmap'].map(mode => (
+                  <button
+                    key={mode}
+                    onClick={() => setContentMode(mode)}
+                    style={{
+                      padding: '6px 16px',
+                      fontSize: 12, fontWeight: 500,
+                      fontFamily: 'inherit',
+                      border: 'none', cursor: 'pointer',
+                      color: contentMode === mode ? 'var(--ds-text-primary)' : 'var(--ds-text-tertiary)',
+                      background: contentMode === mode ? 'var(--ds-active-tint)' : 'transparent',
+                      transition: 'color 0.15s, background 0.15s',
+                    }}
+                  >
+                    {mode === 'decks' ? 'Stapel' : 'Heatmap'}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
-        {/* Empty state */}
-        {!hasResults && !isSearching && !searchResult?.error && !deckData?.roots?.length && (
+        {/* ═══ SEARCH STATE: ChatInput docked at bottom ═══ */}
+        {hasResults && (
           <div style={{
-            position: 'absolute', inset: 0,
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            gap: 8, color: 'var(--ds-text-tertiary)', fontSize: 14, pointerEvents: 'none',
-            zIndex: 5,
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            zIndex: 15, pointerEvents: 'auto',
+            display: 'flex', justifyContent: 'center',
+            padding: '0 20px 20px',
           }}>
-            <span style={{ fontSize: 40, opacity: 0.15 }}>&#8984;</span>
-            <span>Gib ein Thema ein, um einen Stapel zu erstellen</span>
-          </div>
-        )}
-
-        {/* Error state */}
-        {searchResult?.error && (
-          <div style={{
-            position: 'absolute', inset: 0,
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            gap: 8, color: 'var(--ds-text-tertiary)', fontSize: 14, pointerEvents: 'none',
-            zIndex: 5,
-          }}>
-            <span style={{ fontSize: 14, color: 'var(--ds-red)', opacity: 0.7 }}>{searchResult.error}</span>
-            <span style={{ fontSize: 12 }}>Versuche es erneut</span>
-          </div>
-        )}
-
-        {/* Bottom dock — ChatInput with topSlot for deck info or search context */}
-        <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0,
-          zIndex: 15, pointerEvents: 'auto',
-          display: 'flex', justifyContent: 'center',
-          padding: '0 20px 20px',
-        }}>
-          <div style={{ width: '100%', maxWidth: 680 }}>
-            <ChatInput
-              onSend={(text) => {
-                if (text.trim()) search(text);
-              }}
+            <div style={{ width: '100%', maxWidth: 680 }}>
+              <ChatInput
+              onSend={(text) => { if (text.trim()) search(text); }}
               isLoading={isSearching}
               placeholder="Was willst du lernen?"
-              hideInput={!!heatmapDeck && !hasResults}
+              hideInput={true}
               topSlot={topSlotContent}
-              actionPrimary={
-                heatmapDeck && !hasResults
-                  ? {
-                      label: isWeak ? 'Schwächen lernen' : 'Stapel starten',
-                      onClick: () => executeAction('deck.study', { deckId: heatmapDeck.id }),
-                    }
-                  : {
-                      label: hasResults ? `${totalCards} Karten kreuzen` : '',
-                      onClick: startStack,
-                      disabled: !hasResults,
-                    }
-              }
-              actionSecondary={
-                heatmapDeck && !hasResults
-                  ? {
-                      label: heatmapDeck.hasChildren ? 'Reinzoomen' : '',
-                      shortcut: heatmapDeck.hasChildren ? 'Space' : '',
-                      onClick: () => heatmapRef.current?.drillInto(heatmapDeck),
-                    }
-                  : {
-                      label: '',
-                      shortcut: hasResults ? 'Esc' : '',
-                      onClick: reset,
-                    }
-              }
+              actionPrimary={{
+                label: `${clusterCards?.length || totalCards} Karten kreuzen`,
+                onClick: startStack,
+              }}
+              actionSecondary={{
+                label: '',
+                shortcut: 'Esc',
+                onClick: () => { reset(); if (graphRef.current?._destructor) graphRef.current._destructor(); graphRef.current = null; },
+              }}
             />
           </div>
         </div>
+        )}
       </div>
 
       {/* SearchSidebar — right panel, only when results exist */}

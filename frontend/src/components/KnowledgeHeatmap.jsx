@@ -50,14 +50,14 @@ function squarify(items, x, y, w, h) {
 // ─── Color by strength ──────────────────────────────────────────────────────
 
 function strengthColor(s) {
-  // Semantic strength gradient: red (weak) → yellow (medium) → green (strong)
-  if (s < 0.15) return 'color-mix(in srgb, var(--ds-red) 72%, transparent)';
-  if (s < 0.30) return 'color-mix(in srgb, var(--ds-red) 55%, transparent)';
-  if (s < 0.45) return 'color-mix(in srgb, var(--ds-yellow) 52%, transparent)';
-  if (s < 0.60) return 'color-mix(in srgb, var(--ds-yellow) 44%, transparent)';
-  if (s < 0.75) return 'color-mix(in srgb, var(--ds-green) 40%, transparent)';
-  if (s < 0.85) return 'color-mix(in srgb, var(--ds-green) 37%, transparent)';
-  return 'color-mix(in srgb, var(--ds-green) 34%, transparent)';
+  // Subtle, transparent gradient — heatmap is secondary to search bar
+  if (s < 0.15) return 'color-mix(in srgb, var(--ds-red) 25%, transparent)';
+  if (s < 0.30) return 'color-mix(in srgb, var(--ds-red) 20%, transparent)';
+  if (s < 0.45) return 'color-mix(in srgb, var(--ds-yellow) 20%, transparent)';
+  if (s < 0.60) return 'color-mix(in srgb, var(--ds-yellow) 18%, transparent)';
+  if (s < 0.75) return 'color-mix(in srgb, var(--ds-green) 18%, transparent)';
+  if (s < 0.85) return 'color-mix(in srgb, var(--ds-green) 16%, transparent)';
+  return 'color-mix(in srgb, var(--ds-green) 14%, transparent)';
 }
 
 // ─── Flatten deck tree ───────────────────────────────────────────────────────
@@ -224,17 +224,6 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
 
   return (
     <div style={{ width: '100%', maxWidth: 680, display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {/* Logo — always visible, centered */}
-      <div style={{
-        fontFamily: 'var(--ds-font-brand)',
-        fontSize: 36, fontWeight: 700, letterSpacing: '-0.5px',
-        textAlign: 'center',
-        marginBottom: currentPath.length > 0 ? 2 : 8,
-      }}>
-        <span style={{ color: 'var(--ds-text-primary)' }}>Anki</span>
-        <span style={{ color: 'var(--ds-text-tertiary)' }}>.plus</span>
-      </div>
-
       {/* Breadcrumb */}
       {currentPath.length > 0 && (
         <div style={{
@@ -400,9 +389,9 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
         paddingTop: 2,
       }}>
         {[
-          { label: 'Schwach', color: 'color-mix(in srgb, var(--ds-red) 72%, transparent)' },
-          { label: 'Mittel', color: 'color-mix(in srgb, var(--ds-yellow) 44%, transparent)' },
-          { label: 'Stark', color: 'color-mix(in srgb, var(--ds-green) 40%, transparent)' },
+          { label: 'Schwach', color: 'color-mix(in srgb, var(--ds-red) 30%, transparent)' },
+          { label: 'Mittel', color: 'color-mix(in srgb, var(--ds-yellow) 25%, transparent)' },
+          { label: 'Stark', color: 'color-mix(in srgb, var(--ds-green) 22%, transparent)' },
         ].map(({ label, color }) => (
           <div key={label} style={{
             display: 'flex', alignItems: 'center', gap: 6,
