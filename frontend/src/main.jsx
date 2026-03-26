@@ -59,5 +59,4 @@ try {
     );
   }
 } catch (error) {
-  console.error('Fehler beim Rendern der App:', error);
 }

@@ -126,7 +126,6 @@ function AppInner() {
             setAuthStatus(status);
           }
         } catch (e) {
-          console.error('Fehler beim Laden des Auth-Status:', e);
         }
       };
       
@@ -157,7 +156,6 @@ function AppInner() {
               setAuthStatus(status);
             }
           } catch (e) {
-            console.error('Fehler beim Laden des Auth-Status:', e);
           }
         }
         if (bridge && bridge.getAuthToken) {
@@ -546,11 +544,9 @@ function AppInner() {
   // Scroll to Interaction Container: Scrollt den Interaction Container an die Spitze des Viewports
   const scrollToInteractionContainer = useCallback(() => {
     if (!messagesContainerRef.current || !interactionContainerRef.current) {
-      console.warn('🔍 scrollToInteractionContainer: Missing container or interaction container');
       return;
     }
     
-    console.log('🔍 scrollToInteractionContainer: Starting scroll to interaction container');
     
     // Versuche mehrfach, das Element zu finden (mit Retry-Logik)
     const attemptScroll = (attempt = 0, maxAttempts = 10) => {
@@ -563,7 +559,6 @@ function AppInner() {
           setTimeout(() => attemptScroll(attempt + 1, maxAttempts), 50);
           return;
         }
-        console.warn('🔍 scrollToInteractionContainer: Container not found after', maxAttempts, 'attempts');
         return;
       }
       
@@ -600,7 +595,6 @@ function AppInner() {
   // Scroll to Last User Message: Scrollt zur letzten User-Nachricht beim Öffnen einer Session
   const scrollToLastUserMessage = useCallback(() => {
     if (!messagesContainerRef.current) {
-      console.warn('🔍 scrollToLastUserMessage: Missing container');
       return;
     }
     
@@ -617,7 +611,6 @@ function AppInner() {
           setTimeout(() => attemptScroll(attempt + 1, maxAttempts), 100);
           return;
         }
-        console.warn('🔍 scrollToLastUserMessage: No user messages found after', maxAttempts, 'attempts');
         // Fallback: Scroll nach unten
         container.scrollTo({
           top: container.scrollHeight,
@@ -673,7 +666,6 @@ function AppInner() {
     const originalMainHandler = window.ankiReceive;
     window.ankiReceive = (payload) => {
       if (!payload || typeof payload !== 'object') {
-        console.warn('⚠️ App.jsx: Ungültiges Payload:', payload);
         return;
       }
       
@@ -805,7 +797,6 @@ function AppInner() {
         try {
           originalMainHandler(payload);
         } catch (e) {
-          console.error('App.jsx: Error calling original handler', e);
         }
       }
 
@@ -856,13 +847,10 @@ function AppInner() {
 
         // Deck Events
         if (payload.type === 'currentDeck') {
-          console.log('📚 App.jsx: Aktuelles Deck erhalten:', payload.data);
           _deck.setCurrentDeck(payload.data);
           _deck.handleDeckChange(payload.data);
         } else if (payload.type === 'availableDecks') {
-          console.log('📚 App.jsx: Verfügbare Decks erhalten:', payload.data?.decks?.length || 0);
         } else if (payload.type === 'openDeck') {
-          console.log('📚 App.jsx: Deck geöffnet, hole aktuelle Deck-Info...');
           const currentBridge = bridgeRef.current;
           if (currentBridge && currentBridge.getCurrentDeck) {
             setTimeout(() => {
@@ -875,7 +863,6 @@ function AppInner() {
         if (payload.type === 'cardContext') {
           const newCardId = payload.data?.cardId;
           const isQuestion = payload.data?.isQuestion;
-          console.error('🔴 CARD_SWITCH: cardContext for cardId:', newCardId, 'isQuestion:', isQuestion);
 
           // Dedup: skip if this card was already processed (dual dispatch)
           if (newCardId && newCardId === lastProcessedCardRef.current) {
@@ -946,7 +933,6 @@ function AppInner() {
 
         // Review Result Events
         if (payload.type === 'reviewResult' && payload.data) {
-          console.log('📊 App.jsx: Review result received:', payload.data);
           const { cardId, ease, rating, timeSeconds, score } = payload.data;
           if (cardId) {
             const section = _cardCtx.getSectionForCard(cardId);
@@ -980,7 +966,6 @@ function AppInner() {
 
         // Evaluation Result Events
         if (payload.type === 'evaluationResult' && payload.data) {
-          console.log('📊 App.jsx: Evaluation result received:', payload.data);
           const { cardId, score, feedback, userAnswer } = payload.data;
           if (cardId) {
             const section = _cardCtx.getSectionForCard(cardId);
@@ -1035,7 +1020,6 @@ function AppInner() {
 
         // Card Details Events
         if (payload.type === 'cardDetails') {
-          console.log('🔍 App.jsx: Card Details erhalten:', payload.data);
           if (window._getCardDetailsCallbacks && payload.callbackId) {
             const callback = window._getCardDetailsCallbacks[payload.callbackId];
             if (callback) {
@@ -1094,7 +1078,6 @@ function AppInner() {
 
         // AI State Events — route to active chat hook
         if (payload.type === 'ai_state') {
-          console.log('🤖 App.jsx: AI State Update:', payload.message);
           if (activeChatRef.current === 'free') {
             _freeChat.handleAnkiReceive(payload);
           } else {
@@ -1159,7 +1142,6 @@ function AppInner() {
         // Subagent Direct Result — unified handler for all subagent inline messages
         if (payload.type === 'subagent_result') {
           const agentName = payload.agent_name || 'unknown';
-          console.log(`Subagent[${agentName}] result received:`, payload.text?.substring(0, 50));
 
           const _chatForAgent = chatHookRef.current;
           if (_chatForAgent) {
@@ -1176,7 +1158,6 @@ function AppInner() {
 
             if (payload.error && agentName !== 'research') {
               // For non-research agents, error = abort. Research shows error in widget.
-              console.error(`Subagent[${agentName}] error`);
               if (_chatForAgent.setIsLoading) _chatForAgent.setIsLoading(false);
               if (_chatForAgent.setStreamingMessage) _chatForAgent.setStreamingMessage('');
               setActiveAgentColor(null);
@@ -1536,7 +1517,6 @@ function AppInner() {
       const prevLength = prevMessagesLengthRef.current;
       
       if (currentLength > prevLength && lastUserMessageIdRef.current === 'pending') {
-        console.log('🔍 Interaction Container: New user message detected, scrolling to container');
         // Sofort scrollen, dann Observer übernimmt
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
@@ -1783,12 +1763,6 @@ function AppInner() {
     const isFirstMessage = sessionContext.isTemporary && 
                           (!sessionContext.currentSession?.messages || sessionContext.currentSession.messages.length === 0);
     
-    console.log('📤 handleSend: Sending message', { 
-      text: text.substring(0, 50), 
-      currentMessagesCount: chatHook.messages.length,
-      isTemporary: sessionContext.isTemporary,
-      isFirstMessage 
-    });
     
     // Prepare context - use SessionContext's temporary session if available
     const pendingDeckSession = sessionContext.isTemporary && sessionContext.currentSession
@@ -1826,7 +1800,6 @@ function AppInner() {
     if (isFirstMessage) {
       setTimeout(() => {
         if (sessionContext.isTemporary && sessionContext.currentSession) {
-          console.log('💬 App.jsx: Erste Nachricht gesendet, persistiere temporäre Session');
           sessionContext.handleFirstMessage();
         }
       }, 100);
@@ -1964,22 +1937,17 @@ function AppInner() {
 
   // Settings speichern
   const handleSaveSettings = (settings) => {
-    console.log('💾 App.jsx: Settings gespeichert:', settings);
     modelsHook.handleSaveSettings(settings);
   };
 
   // Panel schließen
   const handleClose = () => {
-    console.log('handleClose aufgerufen, bridge:', bridge);
     if (bridge && bridge.closePanel) {
-      console.log('Rufe bridge.closePanel auf');
       try {
         bridge.closePanel();
       } catch (e) {
-        console.error('Fehler beim Schließen:', e);
       }
     } else {
-      console.warn('bridge oder bridge.closePanel nicht verfügbar');
     }
   };
   
@@ -2241,7 +2209,6 @@ function AppInner() {
     try {
       localStorage.setItem('anki_premium_status', 'true');
     } catch (e) {
-      console.warn('Fehler beim Speichern des Premium-Status:', e);
     }
     // Deep-Mode wird automatisch aktiviert, wenn der User den Button erneut klickt
     // Oder wir können es hier direkt aktivieren, wenn ChatInput einen Ref hat
@@ -2254,9 +2221,7 @@ function AppInner() {
     try {
       localStorage.setItem('anki_premium_status', 'false');
     } catch (e) {
-      console.warn('Fehler beim Zurücksetzen des Premium-Status:', e);
     }
-    console.log('🔓 Premium-Status zurückgesetzt (Developer Backdoor)');
   };
 
   // Berechne activeSectionTitle für Header - MEMOIZED für Performance
@@ -2773,13 +2738,11 @@ function AppInner() {
                                   bridge={bridge}
                                   isLastMessage={false}
                                   onAnswerSelect={(letter, isCorrect) => {
-                                    console.log(`User selected ${letter}, correct: ${isCorrect}`);
                                   }}
                                   onAutoFlip={() => {
                                     if (bridge && bridge.showAnswer) {
                                       bridge.showAnswer();
                                     } else {
-                                      console.warn('Bridge showAnswer not available');
                                     }
                                   }}
                                   onPreviewCard={handlePreviewCard}
@@ -2840,13 +2803,11 @@ function AppInner() {
                                 from="user"
                                 cardContext={cardContextHook.cardContext}
                                 onAnswerSelect={(letter, isCorrect) => {
-                                  console.log(`User selected ${letter}, correct: ${isCorrect}`);
                                 }}
                                 onAutoFlip={() => {
                                   if (bridge && bridge.showAnswer) {
                                     bridge.showAnswer();
                                   } else {
-                                    console.warn('Bridge showAnswer not available');
                                   }
                                 }}
                                 onPreviewCard={handlePreviewCard}

@@ -103,7 +103,6 @@ export function useQuotaDisplay(bridge, authStatus, currentAuthToken, isDetailed
               }
               return;
             } catch (e) {
-              console.error('Error creating Device-ID:', e);
               setQuotaDisplay(null);
               return;
             }
@@ -136,7 +135,6 @@ export function useQuotaDisplay(bridge, authStatus, currentAuthToken, isDetailed
           }
         }
       } catch (error) {
-        console.error('Error fetching quota:', error);
         // Fallback: Versuche lokale Quota auch bei Fehler
         const deviceId = getDeviceId();
         if (deviceId) {

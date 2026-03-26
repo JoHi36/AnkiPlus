@@ -94,7 +94,6 @@ function SegmentedBar({ stats, loading }) {
   );
 }
 
-
 /* ── Session row ── */
 function SessionRow({ session, index, onClick }) {
   const title = session.deckName ? session.deckName.split('::').pop() : 'Unbenannt';
@@ -249,7 +248,6 @@ export default function DeckBrowser({
       const result = JSON.parse(bridge.getAvailableDecks());
       setDecks(result.decks || []);
     } catch (e) {
-      console.error('DeckBrowser: Error loading decks', e);
     }
   }, [bridge]);
 

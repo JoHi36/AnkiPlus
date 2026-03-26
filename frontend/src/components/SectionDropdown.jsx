@@ -60,7 +60,6 @@ export default function SectionDropdown({
   // Debug: Log wenn Dropdown gerendert wird
   useEffect(() => {
     if (isOpen) {
-      console.log('📂 SectionDropdown: Dropdown ist geöffnet, Sections:', sections.length);
     }
   }, [isOpen, sections.length]);
 
@@ -70,20 +69,14 @@ export default function SectionDropdown({
     e.preventDefault();
     e.stopPropagation();
     
-    console.log('🔘 SectionDropdown: Section geklickt:', sectionId);
-    console.log('🔘 onScrollToSection Typ:', typeof onScrollToSection);
-    console.log('🔘 onScrollToSection Wert:', onScrollToSection);
     
     // Scrolle ZUERST
     if (onScrollToSection) {
-      console.log('🔘 Rufe onScrollToSection auf mit:', sectionId);
       try {
         onScrollToSection(sectionId);
       } catch (error) {
-        console.error('❌ Fehler beim Aufruf von onScrollToSection:', error);
       }
     } else {
-      console.error('❌ onScrollToSection ist nicht definiert!');
     }
     
     // Dann schließe das Dropdown
@@ -101,7 +94,6 @@ export default function SectionDropdown({
       }}
       onClick={(e) => {
         // Debug: Log wenn Dropdown geklickt wird
-        console.log('📂 SectionDropdown: Dropdown-Container geklickt', e.target);
       }}
     >
       {/* Header */}
@@ -131,15 +123,12 @@ export default function SectionDropdown({
                 <button
                   key={section.id}
                   onClick={(e) => {
-                    console.log('🔴 BUTTON CLICK ERKANNT!', section.id);
                     handleSectionClick(e, section.id);
                   }}
                   onMouseDown={(e) => {
-                    console.log('🔴 BUTTON MOUSEDOWN ERKANNT!', section.id);
                     e.stopPropagation();
                   }}
                   onMouseUp={(e) => {
-                    console.log('🔴 BUTTON MOUSEUP ERKANNT!', section.id);
                   }}
                   className="w-full text-left px-3 py-2.5 rounded-lg transition-all duration-200 group hover:bg-primary/10 hover:border-primary/20 border border-transparent pointer-events-auto cursor-pointer"
                   style={{ pointerEvents: 'auto' }}

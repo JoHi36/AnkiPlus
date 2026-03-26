@@ -36,16 +36,13 @@ export function getOrCreateDeviceId(): string {
     // Store in localStorage
     localStorage.setItem(DEVICE_ID_KEY, newDeviceId);
     
-    console.log('Device ID generated and stored:', newDeviceId);
     
     return newDeviceId;
   } catch (error) {
     // Fallback if localStorage is not available
-    console.error('Error accessing localStorage for device ID:', error);
     
     // Generate a temporary ID (won't persist across sessions)
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    console.warn('Using temporary device ID:', tempId);
     
     return tempId;
   }
@@ -59,7 +56,6 @@ export function getDeviceId(): string | null {
   try {
     return localStorage.getItem(DEVICE_ID_KEY);
   } catch (error) {
-    console.error('Error reading device ID from localStorage:', error);
     return null;
   }
 }
@@ -71,7 +67,6 @@ export function clearDeviceId(): void {
   try {
     localStorage.removeItem(DEVICE_ID_KEY);
   } catch (error) {
-    console.error('Error clearing device ID from localStorage:', error);
   }
 }
 

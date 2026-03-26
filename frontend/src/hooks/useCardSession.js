@@ -39,14 +39,12 @@ export function useCardSession(bridge) {
     if (!cardId) return;
 
     const numericCardId = Number(cardId);
-    console.log('🗂️ useCardSession: Lade Session für Karte:', numericCardId);
 
     setCurrentCardId(numericCardId);
 
     // Cache-Check — dispatch synthetic cardSessionLoaded so App restores messages
     const cached = sessionCacheRef.current.get(numericCardId);
     if (cached) {
-      console.log('🗂️ useCardSession: Cache-Hit für Karte:', numericCardId);
       setCurrentSession(cached);
       // Dispatch event so ankiReceive handler in App.jsx restores chat messages
       setTimeout(() => {
@@ -71,15 +69,11 @@ export function useCardSession(bridge) {
   const handleCardSessionLoaded = useCallback((data) => {
     const cardId = data?.cardId || data?.card_id;
     if (!cardId) {
-      console.warn('🗂️ useCardSession: cardSessionLoaded ohne cardId');
       setIsLoading(false);
       return;
     }
 
     const numericCardId = Number(cardId);
-    console.log('🗂️ useCardSession: Session geladen für Karte:', numericCardId,
-      'Messages:', data?.messages?.length || 0,
-      'Sections:', data?.sections?.length || 0);
 
     const sessionData = {
       session: data.session || null,

@@ -132,7 +132,6 @@ if (!window._imageLoadCallbacks) {
         try {
           callback(event.detail);
         } catch (err) {
-          console.error('Error in image callback:', err);
         }
       });
       window._imageLoadCallbacks.delete(normalizedUrl);
@@ -317,7 +316,6 @@ const ProxyImage = React.memo(({ src, alt }) => {
               try {
                 callback(errorDetail);
               } catch (err) {
-                console.error('Error in timeout callback:', err);
               }
             });
             window._imageLoadCallbacks.delete(urlKey);
@@ -556,14 +554,10 @@ const loadSmilesDrawer = () => {
   smilesDrawerPromise = new Promise((resolve, reject) => {
     // Prüfe ob bereits geladen (wird im HTML eingebunden)
     if (window.SmilesDrawer) {
-      console.log('✅ SmilesDrawer bereits verfügbar (lokal eingebunden)');
       resolve(window.SmilesDrawer);
       return;
     }
     
-    console.log('🧪 Warte auf SmilesDrawer (wird im HTML geladen)...');
-    console.log('   window.SmilesDrawer:', typeof window.SmilesDrawer);
-    console.log('   Verfügbare Scripts:', Array.from(document.scripts).map(s => s.src).filter(s => s.includes('smiles')));
     
     // Warte länger, falls das Script noch lädt (wird im HTML eingebunden)
     let attempts = 0;
@@ -571,14 +565,10 @@ const loadSmilesDrawer = () => {
       attempts++;
       if (window.SmilesDrawer) {
         clearInterval(checkInterval);
-        console.log('✅ SmilesDrawer erfolgreich geladen (lokal eingebunden) nach', attempts * 100, 'ms');
         resolve(window.SmilesDrawer);
       } else if (attempts > 50) {
         // 5 Sekunden gewartet (50 * 100ms)
         clearInterval(checkInterval);
-        console.error('❌ SmilesDrawer konnte nicht geladen werden (Timeout nach 5s)');
-        console.error('   window.SmilesDrawer:', typeof window.SmilesDrawer);
-        console.error('   Verfügbare Scripts:', Array.from(document.scripts).map(s => s.src));
         reject(new Error('SmilesDrawer konnte nicht geladen werden. Bitte prüfe, ob smiles-drawer.min.js im assets-Ordner vorhanden ist und im HTML eingebunden ist.'));
       }
     }, 100);
@@ -641,7 +631,6 @@ const MermaidDiagram = React.memo(({ code, isStreaming = false }) => {
     
     // CRITICAL: Set rendered flag IMMEDIATELY to prevent parallel renders
     if (renderedRef.current) {
-      console.error('📊 MermaidDiagram: Skipping re-render (already rendered)');
       return;
     }
     renderedRef.current = true; // ← SET IMMEDIATELY, not after async!
@@ -738,7 +727,6 @@ const MermaidDiagram = React.memo(({ code, isStreaming = false }) => {
       }
       
       try {
-        console.error('📊 MermaidDiagram: Starting render...', { codeLength: cleanCode.length });
         setIsRendering(true);
         setError(null);
         
@@ -746,7 +734,6 @@ const MermaidDiagram = React.memo(({ code, isStreaming = false }) => {
         const { svg } = await mermaid.render(id, cleanCode);
         
         if (typeof svg === 'string') {
-          console.error('✅ MermaidDiagram: Render successful');
           // Entferne explizite Farben aus dem SVG (überschreibe mit konsistenten Farben)
           // Das CSS mit !important überschreibt bereits alles, aber wir bereinigen trotzdem
           let cleanedSvg = svg;
@@ -794,19 +781,16 @@ const MermaidDiagram = React.memo(({ code, isStreaming = false }) => {
           setSvgContent(cleanedSvg);
         } else {
           const errorMsg = 'Diagramm konnte nicht gerendert werden';
-          console.error('❌ MermaidDiagram: Render failed - invalid SVG');
           mermaidCache.set(cacheKey, { error: errorMsg });
           setError(errorMsg);
         }
       } catch (err) {
-        console.error('❌ MermaidDiagram rendering error:', err);
         const errorMsg = err instanceof Error ? err.message : String(err || 'Unbekannter Fehler');
         const truncatedError = errorMsg.length > 150 ? errorMsg.substring(0, 150) + '...' : errorMsg;
         mermaidCache.set(cacheKey, { error: truncatedError });
         setError(truncatedError);
       } finally {
         setIsRendering(false);
-        console.error('📊 MermaidDiagram: Render complete');
       }
     };
     
@@ -922,17 +906,14 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
     let cancelled = false;
     
     
-    console.log('🧪 MoleculeRenderer: Starte SmilesDrawer-Laden...');
     loadSmilesDrawer()
       .then((SmilesDrawer) => {
         if (!cancelled) {
-          console.log('✅ MoleculeRenderer: SmilesDrawer erfolgreich geladen');
           setSmilesDrawerLoaded(true);
         }
       })
       .catch((err) => {
         if (!cancelled) {
-          console.error('❌ MoleculeRenderer: Failed to load SmilesDrawer:', err);
           setError(`SmilesDrawer-Bibliothek konnte nicht geladen werden: ${err.message}`);
           setIsRendering(false);
         }
@@ -954,7 +935,6 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
     
     // Warte bis Canvas im DOM ist - CRITICAL: Canvas muss im DOM sein, bevor draw() aufgerufen wird
     if (!canvasRef.current) {
-      console.log('🧪 MoleculeRenderer: Warte auf Canvas-Element...');
       setIsRendering(false);
       return;
     }
@@ -976,7 +956,6 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
 
     // CRITICAL: Set rendered flag IMMEDIATELY to prevent parallel renders
     if (renderedRef.current) {
-      console.log('🧪 MoleculeRenderer: Skipping re-render (already rendered)');
       return;
     }
     renderedRef.current = true;
@@ -1059,7 +1038,6 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
                 }
                 setIsRendering(false);
               } catch (drawError) {
-                console.error('❌ MoleculeRenderer: draw() error (cache):', drawError);
                 setError(drawError?.message || 'Fehler beim Zeichnen');
                 setIsRendering(false);
               }
@@ -1078,7 +1056,6 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
       }
 
       try {
-        console.log('🧪 MoleculeRenderer: Starting render...', { smiles: cleanSmiles.substring(0, 50) });
         setIsRendering(true);
         setError(null);
 
@@ -1104,7 +1081,6 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
           
           // CRITICAL: Stelle sicher, dass Canvas-Element vorhanden und initialisiert ist
           if (!canvasRef.current) {
-            console.error('❌ MoleculeRenderer: Canvas-Element nicht gefunden');
             setError('Canvas-Element nicht verfügbar');
             setIsRendering(false);
             return;
@@ -1153,22 +1129,18 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
               }
             } catch (workaroundError) {
               // Fallback: Versuche normalen drawer.draw() Aufruf
-              console.error('❌ MoleculeRenderer: Workaround failed, trying normal draw()', workaroundError);
               drawer.draw(tree, canvasIdRef.current, 'dark', false);
             }
             
-            console.log('✅ MoleculeRenderer: Render successful');
             moleculeCache.set(cacheKey, { rendered: true });
             setIsRendering(false);
           } catch (drawError) {
-            console.error('❌ MoleculeRenderer: draw() error:', drawError);
             const errorMsg = drawError?.message || 'Fehler beim Zeichnen des Moleküls';
             moleculeCache.set(cacheKey, { error: errorMsg });
             setError(errorMsg);
             setIsRendering(false);
           }
         }, (err) => {
-          console.error('❌ MoleculeRenderer parsing error:', err);
           const errorMsg = err?.message || 'Ungültiger SMILES-String';
           const truncatedError = errorMsg.length > 150 ? errorMsg.substring(0, 150) + '...' : errorMsg;
           moleculeCache.set(cacheKey, { error: truncatedError });
@@ -1176,7 +1148,6 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
           setIsRendering(false);
         });
       } catch (err) {
-        console.error('❌ MoleculeRenderer error:', err);
         const errorMsg = err instanceof Error ? err.message : String(err || 'Unbekannter Fehler');
         const truncatedError = errorMsg.length > 150 ? errorMsg.substring(0, 150) + '...' : errorMsg;
         moleculeCache.set(cacheKey, { error: truncatedError });
@@ -1303,13 +1274,10 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
         try {
           const data = JSON.parse(result);
           if (data.success) {
-            console.log('MC-Daten erfolgreich in Card gespeichert');
             sessionStorage.setItem(saveKey, 'true');
           } else {
-            console.error('Fehler beim Speichern von MC-Daten:', data.error);
           }
         } catch (e) {
-          console.error('Fehler beim Parsen von saveMultipleChoice:', e);
         }
       });
     }
@@ -1366,7 +1334,6 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
     
     // Wenn ungerade Anzahl von $, füge ein schließendes $ am Ende hinzu
     if (dollarCount % 2 !== 0) {
-      console.log('ChatMessage: Repariere unvollständigen LaTeX-Block');
       result = result + '$';
     }
     
@@ -1403,10 +1370,8 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                     // Force Intent to REVIEW if data is present
                     setIntent('REVIEW');
                 } else {
-                    console.warn("Invalid Evaluation Data structure", data);
                 }
             } catch (e) {
-                console.error("Failed to parse Evaluation Data", e);
             }
         }
 
@@ -1428,7 +1393,6 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                     setIntent('MC');
                 }
             } catch (e) {
-                console.error("Failed to parse Quiz Data", e);
             }
         }
 
@@ -1459,7 +1423,6 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                             setWebSources(toolData.result.sources);
                         }
                     } catch (e) {
-                        console.warn('Failed to parse TOOL marker:', e);
                     }
                 }
                 return updated;
@@ -2020,7 +1983,6 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
     if (typeof content === 'string') return content;
     // Wenn content ein Objekt ist, konvertiere zu String
     if (typeof content === 'object') {
-      console.warn('SafeMarkdownRenderer: Content ist ein Objekt, konvertiere zu String:', content);
       try {
         return JSON.stringify(content, null, 2);
       } catch {
@@ -2095,7 +2057,6 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                                 if (child === null || child === undefined) return '';
                                 if (React.isValidElement(child)) return child;
                                 // Objekt → String konvertieren
-                                console.warn('SafeMarkdownRenderer: Ungültiges Kind in <p>, konvertiere:', child);
                                 return String(child);
                               });
                               return <p className="mb-5 text-[15px] leading-[1.8] text-base-content/85" {...props}>{safeChildren}</p>;
@@ -2128,7 +2089,6 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                                           if (onPreviewCard) {
                                             onPreviewCard(citation);
                                           } else {
-                                            console.warn('onPreviewCard not available, citation click may not work properly');
                                           }
                                         }}
                                       />
@@ -2297,7 +2257,6 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                                 
                                 // SMILES Molecule Rendering - lädt über CDN
                                 if (!inline && (language === 'smiles' || language === 'molecule')) {
-                                    console.log('🧪 SMILES Code-Block erkannt:', { language, codeString: codeString.substring(0, 50) });
                                     return <MoleculeRenderer smiles={codeString} />;
                                 }
                                 
@@ -2352,7 +2311,6 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                                           if (onPreviewCard) {
                                             onPreviewCard(citation);
                                           } else {
-                                            console.warn('onPreviewCard not available, citation click may not work properly');
                                           }
                                         }}
                                       />
@@ -2390,7 +2348,6 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                                         } else {
                                           // Fallback: try to construct citation object and use bridge.getCardDetails
                                           // This should not close the session
-                                          console.warn('onPreviewCard not available, citation click may not work properly');
                                         }
                                       }}
                                     />
@@ -2437,7 +2394,6 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                 </div>
     );
   } catch (err) {
-    console.error('SafeMarkdownRenderer: Rendering error', err);
     // Zeige Fehler an und aktiviere Fallback
     setTimeout(() => {
       setHasError(true);

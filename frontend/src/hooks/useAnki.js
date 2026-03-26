@@ -9,16 +9,13 @@ export function useAnki() {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    console.log('useAnki: Initialisiere Bridge (Message-Queue System)...');
     
     // Prüfe ob ankiBridge verfügbar ist
     const checkBridge = () => {
       if (window.ankiBridge && window.ankiBridge.addMessage) {
-        console.log('useAnki: ankiBridge gefunden');
         
         const bridgeWrapper = {
           sendMessage: (msg, history = null, mode = 'compact', requestId = null) => {
-            console.log('Bridge: sendMessage aufgerufen:', msg?.substring(0, 50), 'Historie:', history?.length || 0, 'Modus:', mode, 'requestId:', requestId);
             if (window.ankiBridge) {
               // Sende Nachricht mit optionaler Historie, Modus und requestId
               window.ankiBridge.addMessage('sendMessage', {
@@ -30,7 +27,6 @@ export function useAnki() {
             }
           },
           cancelRequest: () => {
-            console.log('Bridge: cancelRequest aufgerufen');
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('cancelRequest', null);
             }
@@ -46,38 +42,32 @@ export function useAnki() {
             }
           },
           closePanel: () => {
-            console.log('Bridge: closePanel aufgerufen');
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('closePanel', null);
             }
           },
           advanceCard: () => {
-            console.log('Bridge: advanceCard aufgerufen');
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('advanceCard', null);
             }
           },
           previewCard: (cardId) => {
-            console.log('Bridge: previewCard aufgerufen für Card:', cardId);
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('previewCard', String(cardId));
             }
           },
           openPreview: (cardId) => {
-            console.log('Bridge: openPreview aufgerufen für Card:', cardId);
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('openPreview', { cardId: String(cardId) });
             }
           },
           getCurrentConfig: () => {
             // Synchroner Aufruf - fordere Config an und warte auf Antwort
-            console.log('Bridge: getCurrentConfig aufgerufen');
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('getCurrentConfig', null);
             }
             // Prüfe ob wir gecachte Config haben
             if (window._cachedConfig) {
-              console.log('Bridge: Verwende gecachte Config');
               return JSON.stringify(window._cachedConfig);
             }
             // Fallback: Leere Config
@@ -85,40 +75,33 @@ export function useAnki() {
           },
           fetchModels: (provider, api_key) => {
             // Synchroner Aufruf - fordere Modelle an und warte auf Antwort
-            console.log('Bridge: fetchModels aufgerufen mit API-Key Länge:', api_key?.length || 0);
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('fetchModels', { provider, api_key });
             }
             // Prüfe ob wir gecachte Modelle haben
             if (window._cachedModels) {
-              console.log('Bridge: Verwende gecachte Modelle');
               return JSON.stringify({ success: true, models: window._cachedModels, error: null });
             }
             // Fallback: Leere Liste
             return JSON.stringify({ success: false, models: [], error: 'Lade Modelle...' });
           },
           saveSettings: (api_key, provider, model_name) => {
-            console.log('Bridge: saveSettings aufgerufen mit API-Key Länge:', api_key?.length || 0);
             if (window.ankiBridge) {
               const payload = { 
                 api_key, 
                 provider, 
                 model_name 
               };
-              console.log('Bridge: Sende saveSettings Payload:', JSON.stringify(payload).substring(0, 100));
               window.ankiBridge.addMessage('saveSettings', payload);
             } else {
-              console.error('Bridge: ankiBridge nicht verfügbar!');
             }
           },
           authenticate: (token, refreshToken) => {
-            console.log('Bridge: authenticate aufgerufen');
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('authenticate', { token, refreshToken });
             }
           },
           getAuthStatus: () => {
-            console.log('Bridge: getAuthStatus aufgerufen');
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('getAuthStatus', null);
             }
@@ -131,7 +114,6 @@ export function useAnki() {
             });
           },
           getAuthToken: () => {
-            console.log('Bridge: getAuthToken aufgerufen');
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('getAuthToken', null);
             }
@@ -139,62 +121,52 @@ export function useAnki() {
             return Promise.resolve("");
           },
           refreshAuth: () => {
-            console.log('Bridge: refreshAuth aufgerufen');
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('refreshAuth', null);
             }
           },
           startLinkAuth: () => {
-            console.log('Bridge: startLinkAuth aufgerufen');
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('startLinkAuth', null);
             }
           },
           logout: () => {
-            console.log('Bridge: logout aufgerufen');
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('logout', null);
             }
           },
           openUrl: (url) => {
-            console.log('Bridge: openUrl aufgerufen:', url);
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('openUrl', url);
             }
           },
           handleAuthDeepLink: (url) => {
-            console.log('Bridge: handleAuthDeepLink aufgerufen:', url?.substring(0, 100));
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('handleAuthDeepLink', url);
             }
           },
           getCurrentDeck: () => {
-            console.log('Bridge: getCurrentDeck aufgerufen');
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('getCurrentDeck', null);
             }
           },
           getAvailableDecks: () => {
-            console.log('Bridge: getAvailableDecks aufgerufen');
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('getAvailableDecks', null);
             }
           },
           openDeck: (deck_id) => {
-            console.log('Bridge: openDeck aufgerufen', deck_id);
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('openDeck', deck_id);
             }
           },
           openDeckBrowser: () => {
-            console.log('Bridge: openDeckBrowser aufgerufen');
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('openDeckBrowser', null);
             }
           },
           getDeckStats: (deck_id) => {
             // Asynchroner Aufruf über Message-Queue System
-            console.log('Bridge: getDeckStats aufgerufen', deck_id);
             if (window.ankiBridge && window.ankiBridge.addMessage) {
               // Verwende Message-Queue System
               window.ankiBridge.addMessage('getDeckStats', deck_id);
@@ -224,7 +196,6 @@ export function useAnki() {
             });
           },
           generateSectionTitle: (question, answer, callback) => {
-            console.log('Bridge: generateSectionTitle aufgerufen');
             if (window.ankiBridge) {
               // Speichere Callback für Antwort
               window._sectionTitleCallback = callback;
@@ -232,13 +203,11 @@ export function useAnki() {
             }
           },
           goToCard: (cardId) => {
-            console.log('Bridge: goToCard aufgerufen', cardId);
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('goToCard', cardId);
             }
           },
           getCardDetails: (cardId) => {
-            console.log('Bridge: getCardDetails aufgerufen', cardId);
             return new Promise((resolve, reject) => {
               // Speichere Callback für Antwort
               const callbackId = `getCardDetails_${Date.now()}_${Math.random()}`;
@@ -261,7 +230,6 @@ export function useAnki() {
             });
           },
           saveMultipleChoice: (cardId, quizDataJson, callback) => {
-            console.log('Bridge: saveMultipleChoice aufgerufen', cardId);
             if (window.ankiBridge) {
               // Speichere Callback für Antwort
               const callbackId = `saveMultipleChoice_${Date.now()}_${Math.random()}`;
@@ -282,7 +250,6 @@ export function useAnki() {
             }
           },
           loadMultipleChoice: (cardId, callback) => {
-            console.log('Bridge: loadMultipleChoice aufgerufen', cardId);
             if (window.ankiBridge) {
               // Speichere Callback für Antwort
               const callbackId = `loadMultipleChoice_${Date.now()}_${Math.random()}`;
@@ -303,7 +270,6 @@ export function useAnki() {
             }
           },
           hasMultipleChoice: (cardId, callback) => {
-            console.log('Bridge: hasMultipleChoice aufgerufen', cardId);
             if (window.ankiBridge) {
               // Speichere Callback für Antwort
               const callbackId = `hasMultipleChoice_${Date.now()}_${Math.random()}`;
@@ -324,50 +290,42 @@ export function useAnki() {
             }
           },
           showAnswer: () => {
-            console.log('Bridge: showAnswer aufgerufen');
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('showAnswer', null);
             }
           },
           hideAnswer: () => {
-            console.log('Bridge: hideAnswer aufgerufen');
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('hideAnswer', null);
             }
           },
           // Per-Card Session Methods (SQLite)
           loadCardSession: (cardId) => {
-            console.log('Bridge: loadCardSession aufgerufen', cardId);
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('loadCardSession', String(cardId));
             }
           },
           saveCardSession: (dataJson) => {
-            console.log('Bridge: saveCardSession aufgerufen');
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('saveCardSession', dataJson);
             }
           },
           saveCardMessage: (dataJson) => {
-            console.log('Bridge: saveCardMessage aufgerufen');
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('saveCardMessage', dataJson);
             }
           },
           saveCardSection: (dataJson) => {
-            console.log('Bridge: saveCardSection aufgerufen');
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('saveCardSection', dataJson);
             }
           },
           navigateToCard: (cardId) => {
-            console.log('Bridge: navigateToCard aufgerufen', cardId);
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('navigateToCard', String(cardId));
             }
           },
           fetchImage: (url, callback) => {
-            console.log('Bridge: fetchImage aufgerufen', url?.substring(0, 50));
             if (window.ankiBridge) {
               // Speichere Callback für Antwort (mit URL als Key)
               if (!window._imageCallbacks) {
@@ -378,13 +336,11 @@ export function useAnki() {
             }
           },
           getAITools: () => {
-            console.log('Bridge: getAITools aufgerufen');
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('getAITools', null);
             }
             // Prüfe ob wir gecachte Tools haben
             if (window._cachedAITools) {
-              console.log('Bridge: Verwende gecachte AI Tools');
               return JSON.stringify(window._cachedAITools);
             }
             // Fallback: Standardwerte
@@ -396,7 +352,6 @@ export function useAnki() {
             return JSON.stringify(defaultTools);
           },
           saveAITools: (toolsJson) => {
-            console.log('Bridge: saveAITools aufgerufen');
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('saveAITools', toolsJson);
             }
@@ -405,7 +360,6 @@ export function useAnki() {
               const tools = JSON.parse(toolsJson);
               window._cachedAITools = tools;
             } catch (e) {
-              console.warn('Bridge: Fehler beim Parsen der Tools:', e);
             }
           },
           saveMascotEnabled: (enabled) => {
@@ -419,13 +373,11 @@ export function useAnki() {
             }
           },
           saveTheme: (theme) => {
-            console.log('Bridge: saveTheme aufgerufen:', theme);
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('saveTheme', theme);
             }
           },
           getTheme: () => {
-            console.log('Bridge: getTheme aufgerufen');
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('getTheme', null);
             }
@@ -434,7 +386,6 @@ export function useAnki() {
         
         setBridge(bridgeWrapper);
         setIsReady(true);
-        console.log('✅ useAnki: Bridge gesetzt, isReady=true');
         
         return true;
       }
@@ -455,15 +406,12 @@ export function useAnki() {
         clearInterval(checkInterval);
       } else if (retryCount >= maxRetries) {
         clearInterval(checkInterval);
-        console.error('useAnki: ankiBridge konnte nach', maxRetries, 'Versuchen nicht gefunden werden');
         // Fallback: Mock-Bridge für Development
-        console.log('useAnki: Verwende Mock-Bridge als Fallback');
         const mockState = {
           currentRequestTimeout: null
         };
         setBridge({
           sendMessage: (msg, history = null, mode = 'compact', requestId = null) => {
-            console.log('Mock: sendMessage', msg, 'Historie:', history?.length || 0, 'Modus:', mode, 'requestId:', requestId);
             if (mockState.currentRequestTimeout) {
               clearTimeout(mockState.currentRequestTimeout);
               mockState.currentRequestTimeout = null;
@@ -485,27 +433,25 @@ export function useAnki() {
             }, 1500);
           },
           cancelRequest: () => {
-            console.log('Mock: cancelRequest');
             if (mockState.currentRequestTimeout) {
               clearTimeout(mockState.currentRequestTimeout);
               mockState.currentRequestTimeout = null;
             }
           },
-          setModel: (model) => console.log('Mock: setModel', model),
-          openSettings: () => console.log('Mock: openSettings'),
-          closePanel: () => console.log('Mock: closePanel'),
-          advanceCard: () => console.log('Mock: advanceCard'),
+          setModel: () => {},
+          openSettings: () => {},
+          closePanel: () => {},
+          advanceCard: () => {},
           getCurrentConfig: () => JSON.stringify({ api_key: '', provider: 'google', model: '' }),
           fetchModels: () => JSON.stringify({ success: true, models: [], error: null }),
-          saveSettings: () => console.log('Mock: saveSettings'),
-          authenticate: () => console.log('Mock: authenticate'),
+          saveSettings: () => {},
+          authenticate: () => {},
           getAuthStatus: () => JSON.stringify({ authenticated: false, hasToken: false, backendUrl: '', backendMode: false }),
-          refreshAuth: () => console.log('Mock: refreshAuth'),
-          handleAuthDeepLink: () => console.log('Mock: handleAuthDeepLink'),
-          showAnswer: () => console.log('Mock: showAnswer'),
-          hideAnswer: () => console.log('Mock: hideAnswer'),
+          refreshAuth: () => {},
+          handleAuthDeepLink: () => {},
+          showAnswer: () => {},
+          hideAnswer: () => {},
           getCurrentDeck: () => {
-            console.log('Mock: getCurrentDeck');
             // Mock: Kein Deck aktiv
             if (window.ankiReceive) {
               window.ankiReceive({
@@ -515,7 +461,6 @@ export function useAnki() {
             }
           },
           getAvailableDecks: () => {
-            console.log('Mock: getAvailableDecks');
             // Mock: Leere Liste
             if (window.ankiReceive) {
               window.ankiReceive({
@@ -524,9 +469,8 @@ export function useAnki() {
               });
             }
           },
-          openDeck: (deck_id) => console.log('Mock: openDeck', deck_id),
+          openDeck: () => {},
           getDeckStats: (deck_id) => {
-            console.log('Mock: getDeckStats', deck_id);
             // Mock: Simuliere Statistiken
             return JSON.stringify({
               totalCards: 100,
@@ -539,7 +483,6 @@ export function useAnki() {
             });
           },
           generateSectionTitle: (question, answer, callback) => {
-            console.log('Mock: generateSectionTitle');
             // Simuliere Titel-Generierung
             setTimeout(() => {
               if (callback) {
@@ -547,9 +490,8 @@ export function useAnki() {
               }
             }, 500);
           },
-          goToCard: (cardId) => console.log('Mock: goToCard', cardId),
+          goToCard: () => {},
           loadCardSession: (cardId) => {
-            console.log('Mock: loadCardSession', cardId);
             if (window.ankiReceive) {
               window.ankiReceive({
                 type: 'cardSessionLoaded',
@@ -557,19 +499,17 @@ export function useAnki() {
               });
             }
           },
-          saveCardSession: (dataJson) => console.log('Mock: saveCardSession'),
-          saveCardMessage: (dataJson) => console.log('Mock: saveCardMessage'),
-          saveCardSection: (dataJson) => console.log('Mock: saveCardSection'),
-          navigateToCard: (cardId) => console.log('Mock: navigateToCard', cardId),
+          saveCardSession: () => {},
+          saveCardMessage: () => {},
+          saveCardSection: () => {},
+          navigateToCard: () => {},
           fetchImage: (url, callback) => {
-            console.log('Mock: fetchImage', url?.substring(0, 50));
             // Mock: Gib Fehler zurück (keine echte Bildladung im Browser-Modus)
             if (callback) {
               callback({ success: false, error: 'Browser-Modus: Keine Bildladung möglich' });
             }
           },
           getAITools: () => {
-            console.log('Mock: getAITools');
             // Mock: Standardwerte
             const defaultTools = {
               images: true,
@@ -579,22 +519,18 @@ export function useAnki() {
             return JSON.stringify(defaultTools);
           },
           saveAITools: (toolsJson) => {
-            console.log('Mock: saveAITools', toolsJson);
             // Mock: Speichere in localStorage als Fallback
             try {
               localStorage.setItem('ankiChatAITools', toolsJson);
             } catch (e) {
-              console.warn('Mock: localStorage nicht verfügbar');
             }
           },
           saveMascotEnabled: (enabled) => {
-            console.log('Mock: saveMascotEnabled', enabled);
             if (window.ankiReceive) {
               window.ankiReceive({ type: 'mascotEnabledSaved', data: { enabled } });
             }
           },
           subagentDirect: (agentName, text, extraJson) => {
-            console.log('Mock: subagentDirect', agentName, text?.substring(0, 50));
             setTimeout(() => {
               if (window.ankiReceive) {
                 window.ankiReceive({ type: 'subagent_result', agent_name: agentName, text: `Mock response from ${agentName}: "${text}"`, error: false });
@@ -602,14 +538,12 @@ export function useAnki() {
             }, 800);
           },
           saveTheme: (theme) => {
-            console.log('Mock: saveTheme', theme);
             document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
             if (window.ankiReceive) {
               window.ankiReceive({ type: 'themeChanged', data: { theme, resolvedTheme: theme === 'light' ? 'light' : 'dark' } });
             }
           },
           getTheme: () => {
-            console.log('Mock: getTheme');
             if (window.ankiReceive) {
               window.ankiReceive({ type: 'themeLoaded', data: { theme: 'dark', resolvedTheme: 'dark' } });
             }

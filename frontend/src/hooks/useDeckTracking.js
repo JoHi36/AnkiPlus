@@ -61,7 +61,6 @@ export function useDeckTracking(bridge, isReady, sessions, forceShowOverview, cu
    * Deck-Änderung behandeln
    */
   const handleDeckChange = useCallback((deckInfo) => {
-    console.log('🔄 useDeckTracking: handleDeckChange aufgerufen:', deckInfo);
     
     // Reset Temporary Tracking wenn Deck gewechselt wird
     // (User verlässt das Deck -> gesehene Karten verfallen, wenn keine Session gestartet wurde)
@@ -69,7 +68,6 @@ export function useDeckTracking(bridge, isReady, sessions, forceShowOverview, cu
     
     // Kein Deck oder unbekannt
     if (!deckInfo || !deckInfo.deckId) {
-      console.log('📋 useDeckTracking: Kein aktives Deck erkannt, Session bleibt erhalten');
       setCurrentDeck(null);
       return;
     }
@@ -117,7 +115,6 @@ export function useDeckTracking(bridge, isReady, sessions, forceShowOverview, cu
         setPendingDeckSession(null);
       } else {
         // Keine Session - New Session Logic
-        console.log('⏳ useDeckTracking: Keine Session für Deck, wird bei erster Nachricht erstellt');
         
         // Only reset session ID — messages/sections are managed by per-card system
         const shouldReset = !currentSessionIdRef.current ||

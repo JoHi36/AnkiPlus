@@ -72,7 +72,6 @@ export default function Header({
   const isButtonActive = showSessionOverview || showSectionDropdown;
 
   // Debug-Logs
-  console.log('📋 Header: activeSectionTitle:', activeSectionTitle);
 
   return (
     <header className="w-full flex items-center justify-between px-4 py-3 pointer-events-none relative" style={{ backgroundColor: 'var(--ds-bg-canvas)', background: 'var(--ds-bg-canvas)' }}>
@@ -108,11 +107,9 @@ export default function Header({
             <SectionDropdown
               sections={sections}
               onScrollToSection={(id) => {
-                console.log('📋 Header übergibt Scroll-Request:', id);
                 if (onScrollToSection) {
                   onScrollToSection(id);
                 } else {
-                  console.error('❌ Header: onScrollToSection ist nicht definiert!');
                 }
               }}
               isOpen={showSectionDropdown}

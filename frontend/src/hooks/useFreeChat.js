@@ -44,13 +44,11 @@ export function useFreeChat({ bridge, onLoadingChange, onCancelComplete }) {
   const loadForDeck = useCallback((deckId) => {
     deckIdRef.current = deckId || 0;
     messagesLoadedRef.current = false;
-    console.error('📦 FREE-CHAT loadForDeck:', deckIdRef.current);
     window.ankiBridge?.addMessage('loadDeckMessages', String(deckIdRef.current));
   }, []);
 
   const handleDeckMessagesLoaded = useCallback((payload) => {
     const raw = payload.messages || [];
-    console.error('📦 FREE-CHAT handleDeckMessagesLoaded:', raw.length, 'messages from DB');
     const msgs = raw.map(m => ({
       id: m.id || `db-${Date.now()}-${Math.random()}`,
       text: m.text,
@@ -66,7 +64,6 @@ export function useFreeChat({ bridge, onLoadingChange, onCancelComplete }) {
     }));
     setMessages(msgs);
     messagesLoadedRef.current = true;
-    console.log('📦 FREE-CHAT messages set:', msgs.length);
   }, []);
 
   // Exposed: set isCancelling before calling bridge.cancelRequest()

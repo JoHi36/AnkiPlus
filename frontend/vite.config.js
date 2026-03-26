@@ -26,6 +26,9 @@ export default defineConfig(({ mode }) => ({
     emptyOutDir: true, // Lösche dist-Ordner vor Build
     minify: false, // DEVELOPMENT BUILD - Keine Minification für bessere Fehler!
     sourcemap: true, // Enable source maps for better debugging
+    esbuild: {
+      drop: ['console', 'debugger'], // Strip console.* and debugger in production builds
+    },
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, 'index.html'),

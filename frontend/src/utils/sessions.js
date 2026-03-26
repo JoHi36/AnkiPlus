@@ -21,7 +21,6 @@ const MAX_SESSIONS = 50;
  * @deprecated Nutze stattdessen bridge.loadSessions() in useSessions
  */
 export function loadSessions() {
-  console.warn('loadSessions: Diese Funktion ist deprecated. Sessions werden via Bridge geladen.');
   return [];
 }
 
@@ -34,7 +33,6 @@ export function loadSessions() {
 export function saveSessions(sessions, bridgeSave = null) {
   // Validierung
   if (!Array.isArray(sessions)) {
-    console.error('saveSessions: Ungültige Daten (kein Array)');
     return false;
   }
   
@@ -57,7 +55,6 @@ export function saveSessions(sessions, bridgeSave = null) {
     return true;
   }
   
-  console.warn('saveSessions: Keine Bridge verfügbar, Sessions nicht persistent gespeichert');
   return false;
 }
 
@@ -96,7 +93,6 @@ export function createSession(sessions, deckId = null, deckName = null, initialS
   const saved = saveSessions(updated);
   
   if (!saved) {
-    console.warn('Session erstellt aber nicht persistent gespeichert');
   }
   
   return session;
@@ -134,7 +130,6 @@ export function getSessionsForDeck(sessions, deckId) {
  */
 export function updateSession(sessions, sessionId, messages, sections = null) {
   if (!Array.isArray(sessions) || !sessionId) {
-    console.warn('updateSession: Ungültige Parameter');
     return sessions;
   }
   
@@ -171,7 +166,6 @@ export function updateSession(sessions, sessionId, messages, sections = null) {
  */
 export function updateSessionSections(sessions, sessionId, sections) {
   if (!Array.isArray(sessions) || !sessionId) {
-    console.warn('updateSessionSections: Ungültige Parameter');
     return sessions;
   }
   
@@ -194,7 +188,6 @@ export function updateSessionSections(sessions, sessionId, sections) {
  */
 export function deleteSession(sessions, sessionId, bridgeSave = null) {
   if (!Array.isArray(sessions) || !sessionId) {
-    console.warn('deleteSession: Ungültige Parameter');
     return sessions;
   }
   
