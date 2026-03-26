@@ -58,15 +58,25 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       return;
     }
 
-    const nodes = searchResult.cards.map((card, i) => ({
+    // Add query node as center
+    const queryNode = {
+      id: '__query__',
+      label: searchResult.query,
+      deck: '',
+      deckFull: '',
+      score: 1.0,
+      color: '#FFFFFF',
+      isQuery: true,
+    };
+    const nodes = [queryNode, ...searchResult.cards.map((card) => ({
       id: card.id,
       label: card.question,
       deck: card.deck,
       deckFull: card.deckFull,
       score: card.score,
       color: deckColor(card.deck),
-      _delay: i * 40,
-    }));
+      isQuery: false,
+    }))];
 
     const links = searchResult.edges.map(e => ({
       source: e.source,
@@ -83,15 +93,17 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
     graph
       .graphData({ nodes, links })
       .backgroundColor('rgba(0,0,0,0)')
-      .nodeColor(node => node.color)
-      .nodeVal(node => 1 + node.score * 2)
-      .nodeLabel(node => `${node.label}\n${node.deck}`)
-      .nodeOpacity(0.85)
+      // Query node is white and larger, card nodes colored by deck
+      .nodeColor(node => node.isQuery ? '#FFFFFF' : node.color)
+      .nodeVal(node => node.isQuery ? 3 : (0.8 + node.score * 1.5))
+      .nodeLabel(node => node.isQuery ? node.label : `${node.label}\n${node.deck}`)
+      .nodeOpacity(node => node.isQuery ? 1.0 : 0.85)
+      // Link width based on relevance score
       .linkWidth(link => link.value * 2)
       .linkOpacity(0.12)
       .linkColor(() => 'rgba(255,255,255,0.15)')
       .onNodeClick(node => {
-        if (!node) return;
+        if (!node || node.isQuery) return;
         setSelectedCard(node);
         // Fly camera to clicked node
         const dist = 40;

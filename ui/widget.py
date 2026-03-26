@@ -402,30 +402,14 @@ class SearchCardsThread(QThread):
             run_on_main_thread(_fetch)
             event.wait(timeout=10)
 
-            # Compute pairwise similarity edges
+            # Create star topology: all cards connect to central query node
             edges = []
-            card_embs = {}
-            with self.emb_mgr._lock:
-                for cid in card_ids:
-                    if cid in self.emb_mgr._card_ids:
-                        idx = self.emb_mgr._card_ids.index(cid)
-                        card_embs[cid] = self.emb_mgr._index[idx]
-
-            cids_list = list(card_embs.keys())
-            for i in range(len(cids_list)):
-                for j in range(i + 1, len(cids_list)):
-                    a = card_embs[cids_list[i]]
-                    b = card_embs[cids_list[j]]
-                    dot = sum(x * y for x, y in zip(a, b))
-                    na = sum(x * x for x in a) ** 0.5
-                    nb = sum(x * x for x in b) ** 0.5
-                    if na > 0 and nb > 0:
-                        sim = dot / (na * nb)
-                        if sim > 0.5:
-                            edges.append({"source": str(cids_list[i]), "target": str(cids_list[j]), "similarity": round(sim, 3)})
-
-            edges.sort(key=lambda e: e["similarity"], reverse=True)
-            edges = edges[:50]
+            for card in cards_data:
+                edges.append({
+                    "source": "__query__",
+                    "target": card["id"],
+                    "similarity": card["score"],
+                })
 
             self.result_signal.emit(json.dumps({
                 "type": "graph.searchCards",
