@@ -766,6 +766,7 @@ def _parse_quick_answer_response(text, has_clusters=False):
         "kann mit deinen Karten nicht beantwortet",
         "Keine Definition in deinen Karten",
         "Nicht genug Karten",
+        "Keine passenden Karten",
     ])
 
     return {
@@ -792,35 +793,50 @@ def generate_quick_answer(query, card_texts, cluster_labels=None, model=None):
         dict: {"answer": str, "answerable": bool, "clusterLabels": dict, "clusterSummaries": dict}
     """
     if not card_texts:
-        return {"answer": "Nicht genug Karten zu diesem Thema.", "answerable": False, "clusterLabels": {}, "clusterSummaries": {}}
+        return {"answer": "Nicht genug Karten zu diesem Thema.", "answerable": False, "clusterLabels": {}, "clusterSummaries": {}, "cardRefs": {}}
 
     if model is None:
         model = DEFINITION_MODEL
 
     cards_str = "\n".join(
-        "Karte %d: %s | %s" % (i + 1, c.get('question', '')[:60], c.get('answer', '')[:60])
-        for i, c in enumerate(card_texts[:10])
+        "[%d] %s | %s" % (i + 1, c.get('question', '')[:80], c.get('answer', '')[:80])
+        for i, c in enumerate(card_texts[:50])
     )
+
+    # Build card ID mapping for frontend references
+    card_refs = {}
+    for i, c in enumerate(card_texts[:50]):
+        card_refs[str(i + 1)] = {
+            "id": c.get("id") or c.get("card_id") or "",
+            "question": (c.get("question") or "")[:60],
+        }
 
     # Detect: single term vs question
     question_words = ['was', 'wie', 'warum', 'welche', 'wozu', 'wann', 'erkläre', 'definiere']
     is_question = any(w in query.lower().split() for w in question_words) or query.strip().endswith('?')
 
+    ref_instruction = (
+        "Referenziere relevante Karten inline mit [1], [2] etc. "
+        "Nutze nur Karten die direkt relevant sind."
+    )
+
     if is_question:
         prompt = (
-            "Beantworte diese Frage in maximal 2 Sätzen basierend auf diesen Lernkarten:\n"
+            "Beantworte diese Frage in 2-3 Sätzen basierend auf diesen Lernkarten:\n"
             "\"%s\"\n\n%s\n\n"
-            "Beantworte NUR den Kern der Frage. Kein Drumherum. "
-            "Wenn die Karten nicht genug Kontext bieten, antworte GENAU: "
-            "\"Diese Frage kann mit deinen Karten nicht beantwortet werden.\""
-        ) % (query, cards_str)
+            "Fasse zusammen was die Karten zu dieser Frage hergeben. "
+            "Auch wenn die Karten die Frage nicht direkt beantworten, "
+            "fasse zusammen was sie Relevantes zum Thema enthalten. "
+            "%s"
+        ) % (query, cards_str, ref_instruction)
     else:
         prompt = (
-            "Definiere '%s' in maximal 2 Sätzen basierend auf diesen Lernkarten:\n\n%s\n\n"
-            "Kein Drumherum. "
-            "Wenn die Karten keine klare Definition liefern, antworte GENAU: "
-            "\"Keine Definition in deinen Karten gefunden.\""
-        ) % (query, cards_str)
+            "Fasse zusammen, was diese Lernkarten über '%s' sagen, in 2-3 Sätzen:\n\n%s\n\n"
+            "Gib eine hilfreiche Zusammenfassung. "
+            "Auch wenn keine Karte das Thema direkt behandelt, "
+            "fasse zusammen was die Karten Relevantes enthalten. "
+            "%s"
+        ) % (query, cards_str, ref_instruction)
 
     # Add cluster labeling + summary request if clusters provided
     if cluster_labels:
@@ -830,11 +846,12 @@ def generate_quick_answer(query, card_texts, cluster_labels=None, model=None):
         )
         prompt += (
             "\n\nBenenne jeden Cluster mit 2-3 Wörtern und schreibe eine "
-            "2-Satz-Zusammenfassung:\n%s\n"
+            "2-Satz-Zusammenfassung. Die Zusammenfassung soll erklären, "
+            "wie dieser Aspekt mit '%s' zusammenhängt:\n%s\n"
             "Format:\nANTWORT: [deine antwort]\n"
             "CLUSTER: cluster_0=Name|Zusammenfassung\n"
             "cluster_1=Name|Zusammenfassung"
-        ) % cluster_str
+        ) % (query, cluster_str)
 
     config = get_config() or {}
 
@@ -869,25 +886,28 @@ def generate_quick_answer(query, card_texts, cluster_labels=None, model=None):
 
         if resp.status_code != 200:
             logger.error("generate_quick_answer: Backend error %d: %s", resp.status_code, resp.text[:300])
-            return {"answer": "", "answerable": False, "clusterLabels": {}, "clusterSummaries": {}}
+            return {"answer": "", "answerable": False, "clusterLabels": {}, "clusterSummaries": {}, "cardRefs": {}}
 
         result = resp.json()
         response_text = result.get("text") or result.get("response") or ""
 
         if not response_text.strip():
             logger.warning("generate_quick_answer: Empty response for '%s'", query)
-            return {"answer": "", "answerable": False, "clusterLabels": {}, "clusterSummaries": {}}
+            return {"answer": "", "answerable": False, "clusterLabels": {}, "clusterSummaries": {}, "cardRefs": {}}
 
     except Exception as e:
         logger.exception("generate_quick_answer: Error for '%s'", query)
-        return {"answer": "", "answerable": False, "clusterLabels": {}, "clusterSummaries": {}}
+        return {"answer": "", "answerable": False, "clusterLabels": {}, "clusterSummaries": {}, "cardRefs": {}}
 
     # Parse response via dedicated function
     parsed = _parse_quick_answer_response(
         response_text, has_clusters=bool(cluster_labels)
     )
 
-    logger.info("generate_quick_answer: Done for '%s', answerable=%s, labels=%d",
-                query, parsed["answerable"], len(parsed["clusterLabels"]))
+    # Attach card references mapping for frontend
+    parsed["cardRefs"] = card_refs
+
+    logger.info("generate_quick_answer: Done for '%s', answerable=%s, labels=%d, refs=%d",
+                query, parsed["answerable"], len(parsed["clusterLabels"]), len(card_refs))
 
     return parsed

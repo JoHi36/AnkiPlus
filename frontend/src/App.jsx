@@ -37,6 +37,7 @@ import InsightsDashboard from './components/InsightsDashboard';
 import useInsights from './hooks/useInsights';
 import SettingsSidebar from './components/SettingsSidebar';
 import SidebarShell from './components/SidebarShell';
+import SearchSidebar from './components/SearchSidebar';
 import AgenticCell from './components/AgenticCell';
 import TopBar from './components/TopBar';
 import DeckBrowserView from './components/DeckBrowserView';
@@ -2357,13 +2358,17 @@ function AppInner() {
       }}>
         {settingsPanel}
         {mascotElement}
-        {persistentTopBar}
 
-        <div style={FLEX_COL_FILL}>
-          {activeView === 'deckBrowser' && (
-            viewMode === 'graph' ? (
-              <React.Suspense fallback={<div style={{ flex: 1 }} />}>
-                <GraphView onToggleView={() => setViewMode('decks')} isPremium={isPremium} deckData={deckBrowserData} smartSearch={smartSearch} bridge={bridgeRef.current} />
+        {/* Flex row: left (TopBar + content) + right (SearchSidebar via GraphView) */}
+        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden', position: 'relative' }}>
+            {persistentTopBar}
+
+            <div style={FLEX_COL_FILL}>
+              {activeView === 'deckBrowser' && (
+                viewMode === 'graph' ? (
+                  <React.Suspense fallback={<div style={{ flex: 1 }} />}>
+                    <GraphView onToggleView={() => setViewMode('decks')} isPremium={isPremium} deckData={deckBrowserData} smartSearch={smartSearch} bridge={bridgeRef.current} />
               </React.Suspense>
             ) : (
               <ComponentErrorBoundary fallback={<div style={FALLBACK_VIEW_STYLE}>View failed to render. Try refreshing.</div>}>
@@ -2489,6 +2494,35 @@ function AppInner() {
                 />
               </div>
             </div>
+          )}
+        </div>
+          </div>
+          {/* SearchSidebar — at flex-row level, pushes TopBar + content */}
+          {activeView === 'deckBrowser' && smartSearch.hasResults && (
+            <SearchSidebar
+              visible={true}
+              query={smartSearch.query}
+              answerText={smartSearch.answerText}
+              clusters={smartSearch.searchResult?.clusters}
+              clusterLabels={smartSearch.clusterLabels}
+              clusterSummaries={smartSearch.clusterSummaries}
+              selectedClusterId={smartSearch.selectedClusterId}
+              onSelectCluster={smartSearch.setSelectedClusterId}
+              bridge={bridgeRef.current}
+              onStartStack={() => {
+                const cards = smartSearch.selectedCluster?.cards || smartSearch.searchResult?.cards;
+                if (cards?.length) {
+                  window.ankiBridge?.addMessage('startTermStack', {
+                    term: smartSearch.query,
+                    cardIds: JSON.stringify(cards.map(c => Number(c.id))),
+                  });
+                }
+              }}
+              onSearch={smartSearch.search}
+              isSearching={smartSearch.isSearching}
+              totalCards={smartSearch.searchResult?.totalFound || 0}
+              cardRefs={smartSearch.cardRefs}
+            />
           )}
         </div>
       </div>

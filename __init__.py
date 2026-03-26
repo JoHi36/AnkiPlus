@@ -230,10 +230,12 @@ def _init_embedding_manager():
                 try:
                     card = mw.col.get_card(cid)
                     note = card.note()
+                    fields = note.fields if note.fields else []
                     cards.append({
                         'card_id': cid,
-                        'question': note.fields[0] if note.fields else '',
-                        'answer': note.fields[1] if len(note.fields) > 1 else '',
+                        'question': fields[0] if fields else '',
+                        'answer': fields[1] if len(fields) > 1 else '',
+                        'extra_fields': fields[2:] if len(fields) > 2 else [],
                         'tags': note.tags,
                         'deck_id': card.did,
                     })

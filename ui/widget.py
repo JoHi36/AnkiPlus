@@ -297,21 +297,74 @@ class SearchCardsThread(QThread):
         self.emb_mgr = emb_mgr
         self._widget_ref = weakref.ref(widget_ref) if widget_ref is not None else None
 
+    def _expand_query(self, query):
+        """Use LLM to generate 3-4 expanded search queries for better recall."""
+        try:
+            try:
+                from ..ai.gemini import _get_backend_chat_url
+                from ..ai.auth import get_auth_headers
+            except ImportError:
+                from ai.gemini import _get_backend_chat_url
+                from ai.auth import get_auth_headers
+
+            import requests
+            url = _get_backend_chat_url()
+            if not url:
+                return []
+
+            prompt = (
+                "Generiere 3 alternative Suchbegriffe für diese Lernkarten-Suche: \"%s\"\n"
+                "Die Begriffe sollen verschiedene Aspekte und Synonyme abdecken.\n"
+                "Antworte NUR mit den 3 Begriffen, einer pro Zeile, ohne Nummerierung."
+            ) % query
+
+            resp = requests.post(
+                url, headers=get_auth_headers(), timeout=8,
+                json={"message": prompt, "model": "gemini-2.5-flash", "mode": "compact",
+                      "history": [], "stream": False}
+            )
+            if resp.status_code == 200:
+                text = resp.json().get("text") or resp.json().get("response") or ""
+                expanded = [line.strip() for line in text.strip().split("\n") if line.strip() and len(line.strip()) > 2]
+                logger.info("Query expansion for '%s': %d queries generated", query, len(expanded))
+                return expanded[:4]
+        except Exception as e:
+            logger.debug("Query expansion failed (non-critical): %s", e)
+        return []
+
     def run(self):
         try:
             import re as _re
 
-            # === HYBRID SEARCH: Vector + SQL Keyword ===
+            # === MULTI-QUERY HYBRID SEARCH ===
 
-            # 1. Vector search (semantic similarity)
+            # 1. Embed original query + expanded queries
+            expanded_queries = self._expand_query(self.query)
+            all_queries = [self.query] + expanded_queries
+            logger.info("SearchCards: Searching with %d queries for '%s'", len(all_queries), self.query)
+
+            # Embed all queries in one batch
+            query_embs = self.emb_mgr.embed_texts(all_queries)
+
+            # 2. Vector search — each query contributes results
             vector_ids = set()
             scores = {}
-            query_embs = self.emb_mgr.embed_texts([self.query])
-            if query_embs and query_embs[0]:
-                results = self.emb_mgr.search(query_embs[0], top_k=self.top_k * 2)
+            hit_count = {}  # how many queries found each card
+            for qi, emb in enumerate(query_embs or []):
+                if not emb:
+                    continue
+                results = self.emb_mgr.search(emb, top_k=self.top_k * 2)
                 for cid, score in (results or []):
                     vector_ids.add(cid)
-                    scores[cid] = score
+                    # Keep the best score across all queries
+                    if score > scores.get(cid, 0):
+                        scores[cid] = score
+                    hit_count[cid] = hit_count.get(cid, 0) + 1
+
+            # Multi-query boost: cards found by multiple queries get boosted
+            for cid, count in hit_count.items():
+                if count > 1:
+                    scores[cid] = scores.get(cid, 0) + 0.05 * (count - 1)
 
             # 2. SQL keyword search (exact matches)
             sql_ids = set()
@@ -491,6 +544,29 @@ class SearchCardsThread(QThread):
                                         best_ci = ci
                             best_clusters[best_ci].append(s)
                     break
+
+            # Merge smallest clusters if we have too many (cap at TARGET_CLUSTERS)
+            if best_clusters and len(best_clusters) > TARGET_CLUSTERS:
+                # Sort by size ascending, merge smallest into their nearest neighbor
+                while len(best_clusters) > TARGET_CLUSTERS:
+                    best_clusters.sort(key=lambda c: len(c))
+                    smallest = best_clusters.pop(0)
+                    # Find most similar cluster
+                    best_sim = -1
+                    best_ci = 0
+                    for ci, cluster in enumerate(best_clusters):
+                        total_sim = 0
+                        count = 0
+                        for s in smallest:
+                            for member in cluster:
+                                key = (min(s, member), max(s, member))
+                                total_sim += all_sims.get(key, 0)
+                                count += 1
+                        avg = total_sim / max(1, count)
+                        if avg > best_sim:
+                            best_sim = avg
+                            best_ci = ci
+                    best_clusters[best_ci].extend(smallest)
 
             # Fallback: if no good split found, split evenly
             if not best_clusters or len(best_clusters) < 2:

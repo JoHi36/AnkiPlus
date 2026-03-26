@@ -223,40 +223,7 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ width: '100%', maxWidth: 680, display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {/* Breadcrumb */}
-      {currentPath.length > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          fontSize: 12, color: 'var(--ds-text-secondary)',
-        }}>
-          <button
-            onClick={() => navigateTo(-1)}
-            style={{
-              background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-              color: 'var(--ds-accent)', fontSize: 12, fontFamily: 'inherit',
-            }}
-          >
-            Alle Stapel
-          </button>
-          {currentPath.map((entry, idx) => (
-            <React.Fragment key={idx}>
-              <span style={{ color: 'var(--ds-text-tertiary)', opacity: 0.5 }}>/</span>
-              <button
-                onClick={() => navigateTo(idx)}
-                style={{
-                  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                  color: idx === currentPath.length - 1 ? 'var(--ds-text-primary)' : 'var(--ds-accent)',
-                  fontSize: 12, fontFamily: 'inherit', fontWeight: idx === currentPath.length - 1 ? 600 : 400,
-                }}
-              >
-                {entry.name}
-              </button>
-            </React.Fragment>
-          ))}
-        </div>
-      )}
-
+    <div style={{ width: '100%', maxWidth: 680, display: 'flex', flexDirection: 'column', gap: 6 }}>
       {/* Treemap container */}
       <div
         ref={containerRef}
@@ -382,35 +349,38 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
         )}
       </div>
 
-      {/* Legend row */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 16,
-        justifyContent: 'center',
-        paddingTop: 2,
-      }}>
-        {[
-          { label: 'Schwach', color: 'color-mix(in srgb, var(--ds-red) 30%, transparent)' },
-          { label: 'Mittel', color: 'color-mix(in srgb, var(--ds-yellow) 25%, transparent)' },
-          { label: 'Stark', color: 'color-mix(in srgb, var(--ds-green) 22%, transparent)' },
-        ].map(({ label, color }) => (
-          <div key={label} style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            fontSize: 11, color: 'var(--ds-text-tertiary)',
-          }}>
-            <div style={{
-              width: 10, height: 10, borderRadius: 3,
-              background: color, flexShrink: 0,
-            }} />
-            {label}
-          </div>
-        ))}
+      {/* Breadcrumb — below treemap */}
+      {currentPath.length > 0 && (
         <div style={{
-          fontSize: 11, color: 'var(--ds-text-tertiary)',
-          marginLeft: 8, opacity: 0.6,
+          display: 'flex', alignItems: 'center', gap: 6,
+          fontSize: 12, color: 'var(--ds-text-secondary)',
         }}>
-          Doppelklick zum Reinzoomen
+          <button
+            onClick={() => navigateTo(-1)}
+            style={{
+              background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+              color: 'var(--ds-accent)', fontSize: 12, fontFamily: 'inherit',
+            }}
+          >
+            Alle Stapel
+          </button>
+          {currentPath.map((entry, idx) => (
+            <React.Fragment key={idx}>
+              <span style={{ color: 'var(--ds-text-tertiary)', opacity: 0.5 }}>/</span>
+              <button
+                onClick={() => navigateTo(idx)}
+                style={{
+                  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                  color: idx === currentPath.length - 1 ? 'var(--ds-text-primary)' : 'var(--ds-accent)',
+                  fontSize: 12, fontFamily: 'inherit', fontWeight: idx === currentPath.length - 1 ? 600 : 400,
+                }}
+              >
+                {entry.name}
+              </button>
+            </React.Fragment>
+          ))}
         </div>
-      </div>
+      )}
     </div>
   );
 });

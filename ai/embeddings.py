@@ -117,19 +117,72 @@ class EmbeddingManager:
             return []
 
     def _card_to_text(self, card_data):
+        """Build embedding text from card content.
+
+        Strategy:
+        - Tags are NOT included (keyword search handles tag-based discovery)
+        - Answer/content fields are weighted higher (appear first, carry the knowledge)
+        - Cloze markers are resolved to reveal hidden text
+        - All content fields are included, not just question/answer
+        - HTML and entities are stripped
+        """
+        def _clean(val):
+            if not val:
+                return ''
+            # Remove sound references: [sound:filename.mp3]
+            clean = re.sub(r'\[sound:[^\]]+\]', '', val)
+            # Remove image references: <img src="..."> (already caught by HTML strip, but be safe)
+            clean = re.sub(r'\[image:[^\]]+\]', '', clean)
+            # Remove LaTeX: \(...\) and \[...\] and $...$ — keep the content inside
+            clean = re.sub(r'\\\((.+?)\\\)', r'\1', clean)
+            clean = re.sub(r'\\\[(.+?)\\\]', r'\1', clean)
+            # Remove MathJax/LaTeX commands but keep text content
+            clean = re.sub(r'\\(?:text|mathrm|textbf|textit)\{([^}]*)\}', r'\1', clean)
+            clean = re.sub(r'\\[a-zA-Z]+', ' ', clean)  # remaining LaTeX commands
+            clean = re.sub(r'[{}]', '', clean)  # leftover braces
+            # Strip HTML tags and entities
+            clean = re.sub(r'<[^>]+>', '', clean)
+            clean = re.sub(r'&[a-zA-Z]+;', ' ', clean)
+            clean = re.sub(r'&#?\w+;', ' ', clean)  # numeric entities too
+            # Resolve cloze markers: {{c1::answer}} → answer, {{c1::answer::hint}} → answer
+            clean = re.sub(r'\{\{c\d+::(.*?)(?:::[^}]*)?\}\}', r'\1', clean)
+            # Remove URLs (not semantic content)
+            clean = re.sub(r'https?://\S+', '', clean)
+            # Normalize whitespace
+            clean = re.sub(r'\s+', ' ', clean).strip()
+            return clean
+
+        # Prefer answer fields first (they contain the actual knowledge)
+        answer = _clean(card_data.get('answer', ''))
+        question = _clean(card_data.get('question', ''))
+
+        # Extra fields — supports both array (get_all_cards) and dict (card_tracker)
+        extra_fields = card_data.get('extra_fields', [])
+        fields_dict = card_data.get('fields', {})
+        if isinstance(fields_dict, dict) and not extra_fields:
+            # card_tracker format: dict of field_name → value
+            # Skip question/answer equivalents, keep the rest
+            skip_names = {'Front', 'Vorderseite', 'Question', 'Frage', 'Back', 'Rückseite', 'Answer', 'Antwort'}
+            extra_fields = [v for k, v in fields_dict.items() if k not in skip_names and v]
+
+        extras = ' '.join(_clean(f) for f in extra_fields if f)
+
+        # Build embedding: answer first (weighted), then question, then extras
         parts = []
-        for field in ['question', 'answer', 'frontField']:
-            val = card_data.get(field, '')
-            if val:
-                clean = re.sub(r'<[^>]+>', '', val)
-                clean = re.sub(r'&[a-zA-Z]+;', ' ', clean)
-                clean = re.sub(r'\s+', ' ', clean).strip()
-                if clean:
-                    parts.append(clean)
-        tags = card_data.get('tags', [])
-        if tags:
-            parts.append(' '.join(tags) if isinstance(tags, list) else str(tags))
-        return ' '.join(parts)[:2000]
+        if answer:
+            parts.append(answer)
+        if question:
+            parts.append(question)
+        if extras:
+            parts.append(extras)
+
+        text = ' '.join(parts)[:2000]
+
+        # Skip cards with too little content (e.g., image-only cards)
+        if len(text) < 10:
+            return ''
+
+        return text
 
     def _content_hash(self, text):
         return hashlib.sha256(text.encode('utf-8')).hexdigest()[:16]

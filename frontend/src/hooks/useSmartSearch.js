@@ -7,6 +7,7 @@ export default function useSmartSearch() {
   const [answerText, setAnswerText] = useState(null);
   const [clusterLabels, setClusterLabels] = useState(null);
   const [clusterSummaries, setClusterSummaries] = useState(null);
+  const [cardRefs, setCardRefs] = useState(null);
   const [selectedClusterId, setSelectedClusterId] = useState(null);
 
   // Cache survives view transitions
@@ -20,6 +21,7 @@ export default function useSmartSearch() {
       setIsSearching(false);
       setClusterLabels(null);
       setClusterSummaries(null);
+      setCardRefs(null);
       setSelectedClusterId(null);
       cacheRef.current = result;
     };
@@ -32,6 +34,9 @@ export default function useSmartSearch() {
       }
       if (data?.clusterSummaries && Object.keys(data.clusterSummaries).length > 0) {
         setClusterSummaries(data.clusterSummaries);
+      }
+      if (data?.cardRefs && Object.keys(data.cardRefs).length > 0) {
+        setCardRefs(data.cardRefs);
       }
     };
 
@@ -50,6 +55,7 @@ export default function useSmartSearch() {
     setAnswerText(null);
     setClusterLabels(null);
     setClusterSummaries(null);
+    setCardRefs(null);
     setSelectedClusterId(null);
     window.ankiBridge?.addMessage('searchCards', { query: q.trim(), topK: 100 });
   }, []);
@@ -61,6 +67,7 @@ export default function useSmartSearch() {
     setAnswerText(null);
     setClusterLabels(null);
     setClusterSummaries(null);
+    setCardRefs(null);
     setSelectedClusterId(null);
     cacheRef.current = null;
   }, []);
@@ -83,7 +90,7 @@ export default function useSmartSearch() {
 
   return {
     query, searchResult, isSearching,
-    answerText, clusterLabels, clusterSummaries,
+    answerText, clusterLabels, clusterSummaries, cardRefs,
     selectedClusterId, setSelectedClusterId,
     selectedCluster, selectedClusterLabel, selectedClusterSummary,
     search, reset, restoreFromCache,

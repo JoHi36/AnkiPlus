@@ -3,7 +3,7 @@ import ForceGraph3D from '3d-force-graph';
 import { executeAction } from '../actions';
 import KnowledgeHeatmap from './KnowledgeHeatmap';
 import ChatInput from './ChatInput';
-import SearchSidebar from './SearchSidebar';
+// SearchSidebar rendered in App.jsx for header-pushing layout
 import DeckSearchBar from './DeckSearchBar';
 import { DeckNode } from './DeckNode';
 import { useDeckTree } from '../hooks/useDeckTree';
@@ -51,7 +51,7 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
   // Destructure smartSearch
   const {
     query, searchResult, isSearching, hasResults,
-    answerText, clusterLabels, clusterSummaries,
+    answerText, clusterLabels, clusterSummaries, cardRefs,
     selectedClusterId, setSelectedClusterId,
     selectedCluster, selectedClusterLabel, selectedClusterSummary,
     search, reset,
@@ -189,10 +189,29 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
     graph.d3Force('center', null);
     graph.d3Force('charge').strength(-40);
 
+    // Staggered node appearance — nodes grow from tiny to full size
+    const realVals = {};
+    nodes.forEach(n => { realVals[n.id] = n.val; n.val = 0.01; });
+    graph.nodeVal(n => n.val);
+    // Reveal nodes one by one, radiating outward from query
+    const sortedNodes = [...nodes].sort((a, b) => {
+      if (a.isQuery) return -1;
+      if (b.isQuery) return 1;
+      return (b.score || 0) - (a.score || 0); // highest relevance first
+    });
+    sortedNodes.forEach((n, i) => {
+      setTimeout(() => {
+        n.val = realVals[n.id];
+        if (graphRef.current) graphRef.current.nodeVal(nd => nd.val);
+      }, i * 30); // 30ms between each node
+    });
+
     if (graph.controls()) {
       graph.controls().autoRotate = true;
       graph.controls().autoRotateSpeed = 0.4;
       graph.controls().enablePan = false;
+      // Query node (0,0,0) as rotation center
+      graph.controls().target.set(0, 0, 0);
     }
 
     const ro = new ResizeObserver(() => {
@@ -233,8 +252,9 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
     if (!graphRef.current) return;
 
     if (!selectedClusterId) {
-      // Reset all nodes to default color
+      // Reset all nodes to default color + zoom out to full view
       graphRef.current.nodeColor(n => n.isQuery ? '#FFFFFF' : n.color);
+      graphRef.current.zoomToFit(800, 60);
       return;
     }
 
@@ -248,14 +268,14 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
       return n.color;
     });
 
-    // Rotate camera to cluster centroid
+    // Zoom into cluster centroid — close enough to feel immersive
     const { nodes } = graph.graphData();
     const clusterNodes = nodes.filter(n => n.clusterIndex === idx);
     if (clusterNodes.length > 0) {
       const cx = clusterNodes.reduce((s, n) => s + (n.x || 0), 0) / clusterNodes.length;
       const cy = clusterNodes.reduce((s, n) => s + (n.y || 0), 0) / clusterNodes.length;
       const cz = clusterNodes.reduce((s, n) => s + (n.z || 0), 0) / clusterNodes.length;
-      const dist = 60;
+      const dist = 30;
       const r = Math.hypot(cx, cy, cz) || 1;
       const ratio = 1 + dist / r;
       graph.cameraPosition(
@@ -495,83 +515,92 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
               )}
             </div>
 
-            {/* Toggle — Stapel / Heatmap */}
+            {/* Bottom dock — frosted: toggle + deck action */}
             <div style={{
               flexShrink: 0, width: '100%', maxWidth: MAX_W,
-              display: 'flex', justifyContent: 'center',
-              padding: '12px 0 20px',
+              padding: '8px 0 20px',
             }}>
-              <div style={{
-                display: 'flex', gap: 0,
-                background: 'var(--ds-hover-tint)',
-                borderRadius: 8,
-                border: '1px solid var(--ds-border)',
-                overflow: 'hidden',
-              }}>
-                {['decks', 'heatmap'].map(mode => (
-                  <button
-                    key={mode}
-                    onClick={() => setContentMode(mode)}
-                    style={{
-                      padding: '6px 16px',
-                      fontSize: 12, fontWeight: 500,
-                      fontFamily: 'inherit',
-                      border: 'none', cursor: 'pointer',
-                      color: contentMode === mode ? 'var(--ds-text-primary)' : 'var(--ds-text-tertiary)',
-                      background: contentMode === mode ? 'var(--ds-active-tint)' : 'transparent',
-                      transition: 'color 0.15s, background 0.15s',
-                    }}
-                  >
-                    {mode === 'decks' ? 'Stapel' : 'Heatmap'}
-                  </button>
-                ))}
+              <div
+                className="ds-frosted"
+                style={{
+                  borderRadius: 14,
+                  border: '1px solid var(--ds-border-subtle)',
+                  boxShadow: 'var(--ds-shadow-md)',
+                  display: 'flex', alignItems: 'center',
+                  padding: '10px 14px',
+                  gap: 12,
+                }}
+              >
+                {/* Toggle: Stapel / Heatmap */}
+                <div style={{
+                  display: 'flex', gap: 0,
+                  background: 'var(--ds-hover-tint)',
+                  borderRadius: 6,
+                  overflow: 'hidden',
+                  flexShrink: 0,
+                }}>
+                  {['decks', 'heatmap'].map(mode => (
+                    <button
+                      key={mode}
+                      onClick={() => setContentMode(mode)}
+                      style={{
+                        padding: '5px 12px',
+                        fontSize: 11, fontWeight: 500,
+                        fontFamily: 'inherit',
+                        border: 'none', cursor: 'pointer',
+                        color: contentMode === mode ? 'var(--ds-text-primary)' : 'var(--ds-text-tertiary)',
+                        background: contentMode === mode ? 'var(--ds-active-tint)' : 'transparent',
+                        transition: 'color 0.15s, background 0.15s',
+                      }}
+                    >
+                      {mode === 'decks' ? 'Stapel' : 'Heatmap'}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Selected deck info (if heatmap deck selected) */}
+                {heatmapDeck ? (
+                  <>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: 13, fontWeight: 600,
+                        color: 'var(--ds-text-primary)',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {heatmapDeck.name}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--ds-text-tertiary)' }}>
+                        {heatmapDeck.cards} Karten · {Math.round(heatmapDeck.strength * 100)}%
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => executeAction('deck.study', { deckId: heatmapDeck.id })}
+                      style={{
+                        background: isWeak ? 'var(--ds-red)' : 'var(--ds-accent)',
+                        color: 'var(--ds-text-primary)',
+                        border: 'none', borderRadius: 8,
+                        padding: '7px 16px', fontSize: 12, fontWeight: 600,
+                        cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                        flexShrink: 0,
+                      }}
+                    >
+                      Loslegen
+                    </button>
+                  </>
+                ) : (
+                  <div style={{ flex: 1, fontSize: 12, color: 'var(--ds-text-tertiary)' }}>
+                    Wähle einen Stapel
+                  </div>
+                )}
               </div>
             </div>
           </div>
         )}
 
-        {/* ═══ SEARCH STATE: ChatInput docked at bottom ═══ */}
-        {hasResults && (
-          <div style={{
-            position: 'absolute', bottom: 0, left: 0, right: 0,
-            zIndex: 15, pointerEvents: 'auto',
-            display: 'flex', justifyContent: 'center',
-            padding: '0 20px 20px',
-          }}>
-            <div style={{ width: '100%', maxWidth: 680 }}>
-              <ChatInput
-              onSend={(text) => { if (text.trim()) search(text); }}
-              isLoading={isSearching}
-              placeholder="Was willst du lernen?"
-              hideInput={true}
-              topSlot={topSlotContent}
-              actionPrimary={{
-                label: `${clusterCards?.length || totalCards} Karten kreuzen`,
-                onClick: startStack,
-              }}
-              actionSecondary={{
-                label: '',
-                shortcut: 'Esc',
-                onClick: () => { reset(); if (graphRef.current?._destructor) graphRef.current._destructor(); graphRef.current = null; },
-              }}
-            />
-          </div>
-        </div>
-        )}
+        {/* ChatInput removed from canvas — lives in SearchSidebar now */}
       </div>
 
-      {/* SearchSidebar — right panel, only when results exist */}
-      <SearchSidebar
-        visible={hasResults}
-        query={query}
-        answerText={answerText}
-        clusters={searchResult?.clusters}
-        clusterLabels={clusterLabels}
-        clusterSummaries={clusterSummaries}
-        selectedClusterId={selectedClusterId}
-        onSelectCluster={setSelectedClusterId}
-        bridge={bridge}
-      />
+      {/* SearchSidebar moved to App.jsx for proper header-pushing layout */}
     </div>
   );
 }
