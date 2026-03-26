@@ -87,6 +87,7 @@ export default function useAgenticMessage() {
           citations: {},
           sources: [],
           toolWidgets: [],
+          pipelineSteps: [],
           loadingHint: payload.data?.loadingHint || '',
           ...payload.data,
         });
@@ -96,10 +97,12 @@ export default function useAgenticMessage() {
     });
   }, [updateMsg]);
 
-  // Pipeline step handler — pipeline data now lives in the centralized reasoning store.
-  // This handler only maintains cell status transitions and early citation extraction.
+  // Pipeline step handler — accumulates steps on cells for persistence (finalize reads cell.pipelineSteps).
+  // Also maintains cell status transitions and early citation extraction.
   const handlePipelineStep = useCallback((payload) => {
     const targetAgent = payload.agent || payload.data?.agent;
+    // Skip orchestrating/router steps — those are handled separately
+    const isAgentStep = payload.step !== 'orchestrating' && payload.step !== 'router';
     updateMsg(prev => {
       if (!prev) return prev;
       const cells = prev.agentCells.map(c => {
@@ -115,8 +118,18 @@ export default function useAgenticMessage() {
         const newCitations = payload.step === 'sources_ready' && payload.data?.citations
           ? { ...(c.citations || {}), ...payload.data.citations }
           : c.citations;
-        if (newStatus === c.status && newCitations === c.citations) return c;
-        return { ...c, status: newStatus, citations: newCitations };
+        // Accumulate pipeline steps on cell for persistence
+        let newPipelineSteps = c.pipelineSteps || [];
+        if (isAgentStep) {
+          const stepObj = { step: payload.step, status: payload.status, data: payload.data || {}, timestamp: Date.now() };
+          const existing = newPipelineSteps.findIndex(s => s.step === payload.step);
+          if (existing >= 0) {
+            newPipelineSteps = newPipelineSteps.map((s, i) => i === existing ? stepObj : s);
+          } else {
+            newPipelineSteps = [...newPipelineSteps, stepObj];
+          }
+        }
+        return { ...c, status: newStatus, citations: newCitations, pipelineSteps: newPipelineSteps };
       });
       return { ...prev, agentCells: cells };
     });
