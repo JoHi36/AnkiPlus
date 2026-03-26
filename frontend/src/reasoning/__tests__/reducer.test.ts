@@ -104,7 +104,7 @@ describe('reasoningReducer', () => {
       expect(next.streams['s1'].phase).toBe('generating');
     });
 
-    it('auto-completes orchestration stream (all steps done, no generating step)', () => {
+    it('auto-completes orchestration-only stream (only orchestrating/router steps, all done)', () => {
       const now = 2000;
       vi.spyOn(Date, 'now').mockReturnValue(now);
 
@@ -114,8 +114,7 @@ describe('reasoningReducer', () => {
             streamId: 's1',
             phase: 'accumulating',
             steps: [
-              { step: 'routing', status: 'done', data: {}, timestamp: 100 },
-              { step: 'retrieval', status: 'active', data: {}, timestamp: 200 },
+              { step: 'orchestrating', status: 'active', data: {}, timestamp: 100 },
             ],
             createdAt: 100,
           },
@@ -125,7 +124,7 @@ describe('reasoningReducer', () => {
       const next = reasoningReducer(state, {
         type: 'STEP',
         streamId: 's1',
-        step: 'retrieval',
+        step: 'orchestrating',
         status: 'done',
       });
 
@@ -133,31 +132,56 @@ describe('reasoningReducer', () => {
       expect(next.streams['s1'].completedAt).toBe(now);
     });
 
-    it('does NOT auto-complete when generating step exists', () => {
+    it('does NOT auto-complete agent streams (non-orchestrating steps)', () => {
+      // strategy step is done, but it's not orchestrating/router — should NOT auto-complete
       const state: ReasoningStoreState = {
         streams: {
           s1: {
             streamId: 's1',
-            phase: 'generating',
+            phase: 'accumulating',
             steps: [
-              { step: 'routing', status: 'done', data: {}, timestamp: 100 },
-              { step: 'generating', status: 'done', data: {}, timestamp: 200 },
+              { step: 'strategy', status: 'active', data: {}, timestamp: 100 },
             ],
             createdAt: 100,
           },
         },
       };
 
-      // Even though all steps are 'done', a 'generating' step exists
       const next = reasoningReducer(state, {
         type: 'STEP',
         streamId: 's1',
-        step: 'routing',
+        step: 'strategy',
         status: 'done',
       });
 
-      // Should NOT be 'complete' because a generating step exists
-      expect(next.streams['s1'].phase).not.toBe('complete');
+      // Should stay accumulating — agent streams need explicit PHASE dispatch
+      expect(next.streams['s1'].phase).toBe('accumulating');
+    });
+
+    it('re-activates completed stream when new active step arrives', () => {
+      const state: ReasoningStoreState = {
+        streams: {
+          s1: {
+            streamId: 's1',
+            phase: 'complete',
+            steps: [
+              { step: 'orchestrating', status: 'done', data: {}, timestamp: 100 },
+            ],
+            createdAt: 100,
+            completedAt: 200,
+          },
+        },
+      };
+
+      const next = reasoningReducer(state, {
+        type: 'STEP',
+        streamId: 's1',
+        step: 'sql_search',
+        status: 'active',
+      });
+
+      expect(next.streams['s1'].phase).toBe('accumulating');
+      expect(next.streams['s1'].completedAt).toBeUndefined();
     });
 
     it('uses provided timestamp when given, falls back to Date.now()', () => {

@@ -24,12 +24,25 @@ export function reasoningReducer(state: ReasoningStoreState, action: ReasoningAc
       let phase = stream.phase;
       let completedAt = stream.completedAt;
 
+      // Re-activate a completed stream when new active steps arrive
+      // (e.g., strategy step auto-completes, then sql_search arrives)
+      if (action.status === 'active' && phase === 'complete') {
+        phase = 'accumulating';
+        completedAt = undefined;
+      }
+
       if (action.step === 'generating' && action.status === 'active') {
         phase = 'generating';
       }
-      if (updatedSteps.length > 0 &&
-          updatedSteps.every(s => s.status === 'done') &&
-          !updatedSteps.some(s => s.step === 'generating')) {
+
+      // Auto-complete: only for orchestration-only streams (orchestrating/router steps)
+      // Agent streams should NOT auto-complete — they wait for explicit PHASE dispatch
+      const isOrchestrationOnly = updatedSteps.every(s =>
+        s.step === 'orchestrating' || s.step === 'router'
+      );
+      if (isOrchestrationOnly &&
+          updatedSteps.length > 0 &&
+          updatedSteps.every(s => s.status === 'done')) {
         phase = 'complete';
         completedAt = Date.now();
       }
