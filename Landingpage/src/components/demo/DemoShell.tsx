@@ -1,189 +1,169 @@
-import React, { useMemo } from 'react';
+import React, { useState, useCallback, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { DemoProvider, useDemoContext } from './DemoContext';
-import { useDemoBridgeStub } from './demoAdapters';
-import ChatInput from '@frontend/components/ChatInput.tsx';
-import ReviewFeedback from '@frontend/components/ReviewFeedback.jsx';
-import { QuizCard } from '@shared/components/QuizCard';
+import { DEMO_SCENARIOS, type DemoScenario } from './DemoData';
 
 // ───────────────────────────────────────────────
-// Constants — all styles as module-level objects
+// Styles (module-level, no external deps)
 // ───────────────────────────────────────────────
 
-const SHELL_STYLE: React.CSSProperties = {
-  position: 'absolute',
-  inset: 0,
-  display: 'flex',
-  flexDirection: 'column',
-  background: 'var(--ds-bg-canvas)',
-  borderRadius: 16,
-  overflow: 'hidden',
+const SHELL: React.CSSProperties = {
+  position: 'absolute', inset: 0,
+  display: 'flex', flexDirection: 'column',
+  background: '#1C1C1E',
+  borderRadius: 16, overflow: 'hidden',
+  fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
 };
 
-const HEADER_STYLE: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
+const HEADER: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 6,
   padding: '12px 16px',
-  borderBottom: '1px solid var(--ds-border-subtle)',
+  borderBottom: '1px solid rgba(255,255,255,0.06)',
   flexShrink: 0,
 };
 
-const TRAFFIC_DOT: React.CSSProperties = {
-  width: 10,
-  height: 10,
-  borderRadius: '50%',
+const DOT: React.CSSProperties = {
+  width: 10, height: 10, borderRadius: '50%',
   background: 'rgba(255,255,255,0.08)',
 };
 
-const TABS_STYLE: React.CSSProperties = {
-  display: 'flex',
-  gap: 2,
-  marginLeft: 'auto',
-  marginRight: 'auto',
+const TABS: React.CSSProperties = {
+  display: 'flex', gap: 2, margin: '0 auto',
 };
 
-const TAB_BASE: React.CSSProperties = {
-  padding: '4px 14px',
-  borderRadius: 8,
-  fontSize: 12,
-  fontWeight: 500,
-  cursor: 'pointer',
-  border: 'none',
-  background: 'transparent',
-  color: 'var(--ds-text-tertiary)',
-  transition: 'all 0.15s ease',
-  fontFamily: 'inherit',
+const TAB: React.CSSProperties = {
+  padding: '4px 14px', borderRadius: 8, fontSize: 12, fontWeight: 500,
+  cursor: 'pointer', border: 'none', background: 'transparent',
+  color: 'rgba(255,255,255,0.35)', fontFamily: 'inherit',
 };
 
-const TAB_ACTIVE: React.CSSProperties = {
-  ...TAB_BASE,
-  background: 'var(--ds-hover-tint)',
-  color: 'var(--ds-text-primary)',
+const TAB_ON: React.CSSProperties = {
+  ...TAB,
+  background: 'rgba(255,255,255,0.04)',
+  color: 'rgba(255,255,255,0.92)',
 };
 
-const SCROLL_AREA_STYLE: React.CSSProperties = {
-  flex: 1,
-  overflow: 'auto',
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: '32px 48px',
-  gap: 20,
+const CENTER: React.CSSProperties = {
+  flex: 1, overflow: 'auto',
+  display: 'flex', flexDirection: 'column',
+  alignItems: 'center', justifyContent: 'center',
+  padding: '32px 48px', gap: 20,
 };
 
-const CARD_FRONT_STYLE: React.CSSProperties = {
-  fontSize: 20,
-  color: 'var(--ds-text-primary)',
-  lineHeight: 1.55,
-  textAlign: 'center',
-  maxWidth: 600,
+const BADGE: React.CSSProperties = {
+  display: 'inline-block', fontSize: 10, fontWeight: 600,
+  letterSpacing: '0.12em', textTransform: 'uppercase',
+  color: 'rgba(255,255,255,0.35)',
+  border: '1px solid rgba(255,255,255,0.12)',
+  borderRadius: 6, padding: '2px 8px',
 };
 
-const TAG_BADGE_STYLE: React.CSSProperties = {
-  display: 'inline-block',
-  fontSize: 10,
-  fontWeight: 600,
-  letterSpacing: '0.12em',
-  textTransform: 'uppercase',
-  color: 'var(--ds-text-tertiary)',
-  border: '1px solid var(--ds-border-medium)',
-  borderRadius: 6,
-  padding: '2px 8px',
+const FRONT: React.CSSProperties = {
+  fontSize: 20, color: 'rgba(255,255,255,0.92)',
+  lineHeight: 1.55, textAlign: 'center', maxWidth: 600,
 };
 
-const DOCK_STYLE: React.CSSProperties = {
-  flexShrink: 0,
-  padding: '0 16px 16px',
+const DOCK: React.CSSProperties = {
+  flexShrink: 0, padding: '0 16px 16px',
 };
 
-const SCENARIO_TABS = [
+const INPUT_DOCK: React.CSSProperties = {
+  background: 'linear-gradient(165deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%), rgba(28,28,30,0.82)',
+  backdropFilter: 'blur(40px) saturate(1.8)',
+  border: '1px solid rgba(255,255,255,0.12)',
+  borderRadius: 16, overflow: 'hidden',
+  boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.15), 0 4px 24px rgba(0,0,0,0.25)',
+};
+
+const TEXTAREA: React.CSSProperties = {
+  background: 'transparent', border: 'none', outline: 'none', resize: 'none',
+  color: 'rgba(255,255,255,0.92)', fontFamily: 'inherit',
+  fontSize: 15, padding: '14px 18px', width: '100%', boxSizing: 'border-box',
+};
+
+const ACTIONS_ROW: React.CSSProperties = {
+  display: 'flex', alignItems: 'center',
+  borderTop: '1px solid rgba(255,255,255,0.06)',
+};
+
+const ACTION_BTN: React.CSSProperties = {
+  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+  gap: 4, height: 44, background: 'transparent', border: 'none',
+  cursor: 'pointer', fontFamily: 'inherit', fontSize: 13,
+  fontWeight: 500, color: 'rgba(255,255,255,0.35)',
+};
+
+const ACTION_BTN_PRIMARY: React.CSSProperties = {
+  ...ACTION_BTN,
+  fontWeight: 600, color: 'rgba(255,255,255,0.88)',
+};
+
+const KBD: React.CSSProperties = {
+  fontFamily: 'ui-monospace, monospace', fontSize: 10,
+  color: 'rgba(255,255,255,0.18)', marginLeft: 4,
+};
+
+const DIVIDER: React.CSSProperties = {
+  width: 1, height: 16, background: 'rgba(255,255,255,0.06)', flexShrink: 0,
+};
+
+const SCENARIOS = [
   { key: 'medicine', label: 'Medizin' },
   { key: 'law',      label: 'Jura' },
   { key: 'business', label: 'BWL' },
 ];
 
 // ───────────────────────────────────────────────
-// DemoShellInner
+// DemoShell — self-contained, zero external imports
 // ───────────────────────────────────────────────
 
-function DemoShellInner() {
-  useDemoBridgeStub();
+export function DemoShell() {
+  const [scenarioKey, setScenarioKey] = useState('medicine');
+  const [showBack, setShowBack] = useState(false);
 
-  const {
-    scenario,
-    scenarioKey,
-    setScenarioKey,
-    phase,
-    showBack,
-    isStreaming,
-    evalScore,
-    handleShowAnswer,
-    handleSubmitText,
-    handleStartMC,
-    handleMCSelect,
-    handleSendChat,
-    setInputText,
-  } = useDemoContext();
+  const scenario = DEMO_SCENARIOS[scenarioKey];
 
-  const isEvaluated = phase === 'EVALUATED' || phase === 'ANSWER';
-  const isMCPhase = phase === 'MC_ACTIVE' || phase === 'MC_RESULT';
-  const isLoading = phase === 'EVALUATING' || phase === 'MC_LOADING' || isStreaming;
+  const handleShowAnswer = useCallback(() => {
+    setShowBack(true);
+  }, []);
 
-  const handleSend = (text: string) => {
-    if (phase === 'QUESTION') {
-      setInputText(text);
-      setTimeout(() => handleSubmitText(), 0);
-    } else {
-      handleSendChat(text);
-    }
-  };
-
-  const quizOptions = scenario.mc.options.map(opt => ({
-    id: opt.id,
-    text: opt.text,
-    isCorrect: opt.correct,
-    explanation: opt.explanation,
-  }));
+  const switchScenario = useCallback((key: string) => {
+    setShowBack(false);
+    setScenarioKey(key);
+  }, []);
 
   return (
-    <div style={SHELL_STYLE}>
+    <div style={SHELL}>
 
-      {/* ── Window chrome: traffic lights + scenario tabs ── */}
-      <div style={HEADER_STYLE}>
-        <div style={TRAFFIC_DOT} />
-        <div style={TRAFFIC_DOT} />
-        <div style={TRAFFIC_DOT} />
-        <div style={TABS_STYLE}>
-          {SCENARIO_TABS.map(tab => (
+      {/* Window chrome */}
+      <div style={HEADER}>
+        <div style={DOT} />
+        <div style={DOT} />
+        <div style={DOT} />
+        <div style={TABS}>
+          {SCENARIOS.map(s => (
             <button
-              key={tab.key}
-              style={scenarioKey === tab.key ? TAB_ACTIVE : TAB_BASE}
-              onClick={() => setScenarioKey(tab.key)}
+              key={s.key}
+              style={scenarioKey === s.key ? TAB_ON : TAB}
+              onClick={() => switchScenario(s.key)}
             >
-              {tab.label}
+              {s.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* ── Scrollable content area ── */}
-      <div style={SCROLL_AREA_STYLE}>
-
-        {/* Tag badge */}
-        <span style={TAG_BADGE_STYLE}>
+      {/* Card area */}
+      <div style={CENTER}>
+        <span style={BADGE}>
           {scenario.card.tags[0] || scenario.card.deckName}
         </span>
 
-        {/* Card front */}
-        <div style={CARD_FRONT_STYLE} dangerouslySetInnerHTML={{ __html: scenario.card.front }} />
+        <div style={FRONT} dangerouslySetInnerHTML={{ __html: scenario.card.front }} />
 
-        {/* Card back — animated reveal */}
         <AnimatePresence>
           {showBack && (
             <motion.div
-              key="card-back"
+              key="back"
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
@@ -192,99 +172,38 @@ function DemoShellInner() {
             >
               <div
                 style={{
-                  borderTop: '1px solid var(--ds-border-subtle)',
-                  paddingTop: 16,
-                  fontSize: 14,
-                  color: 'var(--ds-text-secondary)',
-                  lineHeight: 1.7,
+                  borderTop: '1px solid rgba(255,255,255,0.06)',
+                  paddingTop: 16, fontSize: 14,
+                  color: 'rgba(255,255,255,0.55)', lineHeight: 1.7,
                 }}
                 dangerouslySetInnerHTML={{ __html: scenario.card.back }}
               />
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Evaluation feedback */}
-        {isEvaluated && evalScore > 0 && (
-          <div style={{ width: '100%', maxWidth: 500 }}>
-            <ReviewFeedback score={evalScore} />
-          </div>
-        )}
-
-        {/* MC quiz */}
-        {isMCPhase && (
-          <div style={{ width: '100%', maxWidth: 500 }}>
-            <QuizCard
-              question=""
-              options={quizOptions}
-              onSelect={handleMCSelect}
-            />
-          </div>
-        )}
       </div>
 
-      {/* ── Bottom dock: ChatInput ── */}
-      <div style={DOCK_STYLE}>
-        <ChatInput
-          onSend={handleSend}
-          isLoading={isLoading}
-          placeholder="Stelle eine Frage..."
-          actionPrimary={{
-            label: 'Antwort zeigen',
-            shortcut: 'SPACE',
-            onClick: handleShowAnswer,
-            disabled: phase !== 'QUESTION',
-          }}
-          actionSecondary={{
-            label: 'Multiple Choice',
-            shortcut: 'ENTER',
-            onClick: handleStartMC,
-            disabled: phase !== 'QUESTION',
-          }}
-        />
+      {/* Input dock — built inline, no ChatInput import */}
+      <div style={DOCK}>
+        <div style={INPUT_DOCK}>
+          <textarea
+            rows={1}
+            placeholder="Stelle eine Frage..."
+            style={TEXTAREA}
+            readOnly
+          />
+          <div style={ACTIONS_ROW}>
+            <button style={ACTION_BTN_PRIMARY} onClick={handleShowAnswer}>
+              Antwort zeigen<span style={KBD}>SPACE</span>
+            </button>
+            <div style={DIVIDER} />
+            <button style={ACTION_BTN}>
+              Multiple Choice<span style={KBD}>ENTER</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
-  );
-}
-
-// ───────────────────────────────────────────────
-// DemoShell (public export)
-// ───────────────────────────────────────────────
-
-// Error boundary to catch runtime crashes from imported components
-class DemoErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { error: string | null }
-> {
-  state = { error: null as string | null };
-  static getDerivedStateFromError(err: Error) {
-    return { error: err.message };
-  }
-  render() {
-    if (this.state.error) {
-      return (
-        <div style={{
-          position: 'absolute', inset: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'var(--ds-bg-canvas)', borderRadius: 16,
-          color: 'var(--ds-text-secondary)', fontSize: 13, padding: 32,
-          textAlign: 'center',
-        }}>
-          Demo konnte nicht geladen werden: {this.state.error}
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-export function DemoShell() {
-  return (
-    <DemoErrorBoundary>
-      <DemoProvider>
-        <DemoShellInner />
-      </DemoProvider>
-    </DemoErrorBoundary>
   );
 }
 
