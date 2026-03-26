@@ -377,3 +377,9 @@ body.sidebar-resizing * {
   border-bottom-color: var(--ds-accent);
   background: var(--ds-accent-10);
 }
+
+/* ── SearchSidebar slide-in ── */
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
