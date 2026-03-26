@@ -13,7 +13,7 @@ import MultipleChoiceCard from './MultipleChoiceCard';
 import CitationBadge from './CitationBadge';
 import WebCitationBadge from './WebCitationBadge';
 import ThoughtStream from './ThoughtStream';
-import ReasoningStream from '../reasoning/ReasoningStream';
+import ReasoningDisplay from '../reasoning/ReasoningDisplay';
 import ToolWidgetRenderer from './ToolWidgetRenderer';
 import { ComponentErrorBoundary } from './ErrorBoundary';
 import AgenticCell from './AgenticCell';
@@ -1835,13 +1835,10 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
               <>
                 {/* Router Orchestration */}
                 {orchestrationSteps.length > 0 && (
-                  <ReasoningStream
-                    variant="router"
+                  <ReasoningDisplay
                     steps={orchestrationSteps}
-                    isStreaming={message_prop.status !== 'done'}
+                    mode="full"
                     agentColor={'var(--ds-text-muted)'}
-                    citations={{}}
-                    message=""
                   />
                 )}
                 {/* Agent Cells — ordered blocks */}
@@ -1854,12 +1851,10 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                   >
                     {/* Tutor-style ThoughtStream */}
                     {cell.pipelineSteps && cell.pipelineSteps.length > 0 && (
-                      <ReasoningStream
+                      <ReasoningDisplay
                         steps={cell.pipelineSteps}
-                        pipelineGeneration={message_prop.pipelineGeneration}
-                        citations={cell.citations || {}}
-                        isStreaming={cell.status === 'streaming' || cell.status === 'thinking'}
-                        message={cell.text || ''}
+                        mode="full"
+                        hasOutput={Boolean(cell.text)}
                         bridge={bridge}
                         onPreviewCard={onPreviewCard}
                       />
