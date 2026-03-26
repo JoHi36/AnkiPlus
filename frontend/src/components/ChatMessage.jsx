@@ -1855,6 +1855,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                         steps={cell.pipelineSteps?.length > 0 ? cell.pipelineSteps : agentSteps}
                         mode="full"
                         hasOutput={Boolean(cell.text)}
+                        citations={cell.citations || citations}
                         bridge={bridge}
                         onPreviewCard={onPreviewCard}
                       />

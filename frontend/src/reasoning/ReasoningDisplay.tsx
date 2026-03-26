@@ -11,6 +11,7 @@ export interface ReasoningDisplayProps {
   hasOutput?: boolean;
   agentColor?: string;
   label?: string;
+  citations?: Record<string, any>;
   bridge?: any;
   onPreviewCard?: (citation: any) => void;
 }
@@ -22,6 +23,7 @@ export default function ReasoningDisplay({
   hasOutput = false,
   agentColor: colorOverride,
   label,
+  citations: citationsProp,
   bridge,
   onPreviewCard,
 }: ReasoningDisplayProps) {
@@ -32,11 +34,13 @@ export default function ReasoningDisplay({
     toggleCollapse,
     agentName,
     agentColor: storeColor,
-    citations,
+    citations: storeCitations,
     hasContent,
   } = useReasoningStream({ streamId, steps: staticSteps, mode, hasOutput });
 
   const agentColor = colorOverride || storeColor;
+  // Citations: prefer prop (from cell/message data), fall back to store
+  const citations = (citationsProp && Object.keys(citationsProp).length > 0) ? citationsProp : storeCitations;
 
   if (!hasContent) return null;
 
