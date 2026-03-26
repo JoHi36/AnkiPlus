@@ -794,63 +794,46 @@ def generate_quick_answer(query, card_texts, cluster_labels=None, model=None):
 
     config = get_config() or {}
 
-    # Backend call — streaming (same path as regular chat)
-    url = _get_backend_chat_url()
-    headers = _get_auth_headers_safe()
-
-    backend_payload = {
-        "message": prompt,
-        "history": [],
-        "agent": "tutor",
-        "mode": "free_chat",
-        "responseStyle": "compact",
-        "model": model,
-        "stream": True,
-        "temperature": 0.3,
-        "maxOutputTokens": 400,
-    }
-
+    # Use the SAME streaming infrastructure as the regular chat
     try:
-        response = requests.post(url, json=backend_payload, headers=headers, timeout=30, stream=True)
-        response.raise_for_status()
+        payload = _build_chat_payload(
+            user_message=prompt,
+            model=model,
+            mode='compact',
+            stream=True,
+            agent='tutor',
+        )
+        # Override temperature for concise answers
+        payload["temperature"] = 0.3
+        payload["maxOutputTokens"] = 400
 
-        # Collect streamed chunks into full text
-        response_text = ""
-        for line in response.iter_lines(decode_unicode=True):
-            if not line:
-                continue
-            # SSE format: "data: {...}"
-            if line.startswith("data: "):
-                chunk_str = line[6:]
-                if chunk_str.strip() == "[DONE]":
-                    break
-                try:
-                    import json as _json
-                    chunk = _json.loads(chunk_str)
-                    # Extract text from various response formats
-                    text = ""
-                    if "choices" in chunk:
-                        delta = chunk["choices"][0].get("delta", {})
-                        text = delta.get("content", "")
-                    elif "text" in chunk:
-                        text = chunk["text"]
-                    elif "chunk" in chunk:
-                        text = chunk["chunk"]
-                    response_text += text
-                except (ValueError, KeyError, IndexError):
-                    pass
-            elif not line.startswith(":"):
-                # Non-SSE: might be plain text chunks
-                response_text += line
+        # Collect chunks
+        collected_text = []
+        def _collect(chunk, done, is_function_call=False, **kwargs):
+            if chunk:
+                collected_text.append(chunk)
+
+        result = stream_response(
+            urls=[_get_backend_chat_url()],
+            data=None,
+            callback=_collect,
+            use_backend=True,
+            backend_data=payload,
+        )
+
+        response_text = "".join(collected_text)
+        if not response_text.strip():
+            # Fallback: stream_response might return the text directly
+            if isinstance(result, tuple):
+                response_text = result[0] or ""
+            elif isinstance(result, str):
+                response_text = result
 
         if not response_text.strip():
-            logger.warning("generate_quick_answer: Empty streaming response for '%s'", query)
+            logger.warning("generate_quick_answer: Empty response for '%s'", query)
             return {"answer": "", "answerable": False, "clusterLabels": {}}
 
-    except requests.exceptions.RequestException as e:
-        logger.error("generate_quick_answer: Network error for '%s': %s", query, str(e))
-        return {"answer": "", "answerable": False, "clusterLabels": {}}
-    except Exception:
+    except Exception as e:
         logger.exception("generate_quick_answer: Error for '%s'", query)
         return {"answer": "", "answerable": False, "clusterLabels": {}}
 
