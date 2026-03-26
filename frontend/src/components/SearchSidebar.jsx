@@ -22,16 +22,13 @@ export default function SearchSidebar({
   bridge,
   subClusters,
   isSubClustering,
+  sidebarHasAnimated,
 }) {
-  // Track if slide-in animation has played — don't replay on tab switch
-  const hasAnimatedRef = useRef(false);
-  useEffect(() => {
-    if (visible) hasAnimatedRef.current = true;
-  }, [visible]);
-
   if (!visible) return null;
 
-  const shouldAnimate = !hasAnimatedRef.current;
+  // Animation only on first appearance — ref lives in useSmartSearch (survives tab switches)
+  const shouldAnimate = sidebarHasAnimated ? !sidebarHasAnimated.current : false;
+  if (sidebarHasAnimated) sidebarHasAnimated.current = true;
 
   const [multiSelect, setMultiSelect] = useState(false);
   const [multiIds, setMultiIds] = useState(new Set());
@@ -357,7 +354,6 @@ export default function SearchSidebar({
                       .map(({ cluster, i, avgScore }) => {
                       const cId = `cluster_${i}`;
                       const color = clusterColors[i % clusterColors.length];
-                      const hasLLMLabel = !!clusterLabels?.[cId];
                       const label = clusterLabels?.[cId] || cluster.label;
                       const pct = Math.round(avgScore * 100);
                       const isMultiSelected = multiIds.has(cId);
@@ -390,23 +386,14 @@ export default function SearchSidebar({
                             background: color, flexShrink: 0,
                           }} />
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            {hasLLMLabel ? (
-                              <div style={{
-                                fontSize: 13, fontWeight: 500,
-                                color: isMultiSelected ? 'var(--ds-text-primary)' : 'var(--ds-text-secondary)',
-                              }}>
-                                {label}
-                              </div>
-                            ) : (
-                              <div style={{
-                                height: 13, borderRadius: 4,
-                                background: 'var(--ds-hover-tint)',
-                                width: `${50 + (i * 13) % 30}%`,
-                                animation: 'pulse 1.5s ease-in-out infinite',
-                                animationDelay: `${i * 0.1}s`,
-                              }} />
-                            )}
-                            <div style={{ fontSize: 11, color: 'var(--ds-text-tertiary)', marginTop: hasLLMLabel ? 0 : 4 }}>
+                            <div style={{
+                              fontSize: 13, fontWeight: 500,
+                              color: isMultiSelected ? 'var(--ds-text-primary)' : 'var(--ds-text-secondary)',
+                              transition: 'opacity 0.3s',
+                            }}>
+                              {label}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--ds-text-tertiary)' }}>
                               {cluster.cards.length} Karten
                             </div>
                           </div>

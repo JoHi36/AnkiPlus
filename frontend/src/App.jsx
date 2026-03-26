@@ -216,6 +216,26 @@ function AppInner() {
   const reviewTrailHook = useReviewTrail();
   const insightsHook = useInsights();
   const smartSearch = useSmartSearch();
+
+  // SearchSidebar delayed unmount — slide out before removing
+  const searchSidebarShouldShow = smartSearch.hasResults || smartSearch.isSearching;
+  const [searchSidebarMounted, setSearchSidebarMounted] = useState(false);
+  const [searchSidebarExiting, setSearchSidebarExiting] = useState(false);
+  useEffect(() => {
+    if (searchSidebarShouldShow) {
+      setSearchSidebarMounted(true);
+      setSearchSidebarExiting(false);
+    } else if (searchSidebarMounted) {
+      // Start exit animation, then unmount after 300ms
+      setSearchSidebarExiting(true);
+      const t = setTimeout(() => {
+        setSearchSidebarMounted(false);
+        setSearchSidebarExiting(false);
+      }, 300);
+      return () => clearTimeout(t);
+    }
+  }, [searchSidebarShouldShow]);
+
   const [activeView, setActiveView] = useState('chat'); // 'chat' | 'deckBrowser' | 'overview' | 'freeChat' | 'review' | 'statistik'
   const activeViewRef = useRef('chat');
   useEffect(() => { activeViewRef.current = activeView; }, [activeView]);
@@ -2498,9 +2518,10 @@ function AppInner() {
         </div>
           </div>
           {/* SearchSidebar — at flex-row level, pushes TopBar + content */}
-          {activeView === 'deckBrowser' && smartSearch.hasResults && (
+          {searchSidebarMounted && (
             <SearchSidebar
               visible={true}
+              isExiting={searchSidebarExiting}
               query={smartSearch.query}
               answerText={smartSearch.answerText}
               clusters={smartSearch.searchResult?.clusters}
@@ -2524,6 +2545,7 @@ function AppInner() {
               cardRefs={smartSearch.cardRefs}
               subClusters={smartSearch.subClusters}
               isSubClustering={smartSearch.isSubClustering}
+              sidebarHasAnimated={smartSearch.sidebarHasAnimated}
             />
           )}
         </div>

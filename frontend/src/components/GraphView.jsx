@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import ForceGraph3D from '3d-force-graph';
+import SpriteText from 'three-spritetext';
 import { executeAction } from '../actions';
 import KnowledgeHeatmap from './KnowledgeHeatmap';
 import ChatInput from './ChatInput';
@@ -7,6 +8,7 @@ import ChatInput from './ChatInput';
 import DeckSearchBar from './DeckSearchBar';
 import { DeckNode } from './DeckNode';
 import { useDeckTree } from '../hooks/useDeckTree';
+import PlusLoader from './PlusLoader';
 
 const MAX_W = 'var(--ds-content-width)';
 
@@ -55,12 +57,15 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
     answerText, clusterLabels, clusterSummaries, cardRefs,
     selectedClusterId, setSelectedClusterId,
     selectedCluster, selectedClusterLabel, selectedClusterSummary,
-    subClusters,
+    subClusters, kgSubgraph,
     search, reset,
   } = smartSearch;
+  const [graphMode, setGraphMode] = useState('clusters'); // 'clusters' | 'knowledge'
 
   // Build / rebuild graph when search results arrive
+  // Build cluster graph (default mode)
   useEffect(() => {
+    if (graphMode !== 'clusters') return;
     if (!containerRef.current || !searchResult?.cards?.length) {
       if (graphRef.current) graphRef.current.graphData({ nodes: [], links: [] });
       return;
@@ -257,7 +262,103 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
       ro.disconnect();
       if (graph._destructor) graph._destructor();
     };
-  }, [searchResult]);
+  }, [searchResult, graphMode]);
+
+  // Build Knowledge Graph subgraph when mode switches or data arrives
+  useEffect(() => {
+    if (graphMode !== 'knowledge' || !containerRef.current || !kgSubgraph?.nodes?.length) {
+      return;
+    }
+
+    const kgNodes = kgSubgraph.nodes.map(n => ({
+      id: n.id,
+      label: n.label,
+      color: n.color || '#4A9BAE',
+      val: Math.max(1, Math.log2(n.subsetCount || 1) * 2),
+      isKg: true,
+      cardIds: n.cardIds || [],
+      subsetCount: n.subsetCount || 0,
+    }));
+
+    const kgLinks = kgSubgraph.edges.map(e => ({
+      source: e.source,
+      target: e.target,
+      value: e.weight || 1,
+    }));
+
+    // Destroy old graph if exists
+    if (graphRef.current?._destructor) graphRef.current._destructor();
+
+    const graph = ForceGraph3D()(containerRef.current);
+    graphRef.current = graph;
+
+    graph
+      .graphData({ nodes: kgNodes, links: kgLinks })
+      .backgroundColor('rgba(0,0,0,0)')
+      .nodeColor(n => n.color)
+      .nodeVal(n => n.val)
+      .nodeLabel(n => `${n.label}\n${n.subsetCount} Karten`)
+      .nodeOpacity(0.9)
+      // Render labels as 3D text sprites on nodes
+      .nodeThreeObject(node => {
+        if (node.val < 2) return undefined; // too small for label
+        const sprite = new SpriteText(node.label);
+        sprite.color = 'rgba(255,255,255,0.8)';
+        sprite.textHeight = Math.max(2, node.val * 0.8);
+        sprite.backgroundColor = 'rgba(0,0,0,0.3)';
+        sprite.padding = 1;
+        sprite.borderRadius = 2;
+        return sprite;
+      })
+      .nodeThreeObjectExtend(true) // show both sphere + label
+      .linkWidth(l => Math.max(0.1, Math.min(0.5, (l.value || 1) * 0.05)))
+      .linkOpacity(0.08)
+      .linkColor(() => '#3A3A3C')
+      .onNodeClick(node => {
+        if (!node) return;
+        // Zoom to clicked term
+        const dist = 40;
+        const r = Math.hypot(node.x || 1, node.y || 1, node.z || 1) || 1;
+        const ratio = 1 + dist / r;
+        graph.cameraPosition(
+          { x: node.x * ratio, y: node.y * ratio, z: node.z * ratio },
+          node, 800
+        );
+      })
+      .enableNodeDrag(false)
+      .warmupTicks(0)
+      .cooldownTicks(200)
+      .d3AlphaDecay(0.02)
+      .d3VelocityDecay(0.3)
+      .showNavInfo(false)
+      .onEngineStop(() => {
+        if (graphRef.current) graphRef.current.zoomToFit(800, 40);
+      });
+
+    graph.d3Force('link').distance(link => {
+      return 20 + (1 / Math.max(1, link.value)) * 40;
+    });
+    graph.d3Force('charge').strength(-30);
+
+    if (graph.controls()) {
+      graph.controls().autoRotate = true;
+      graph.controls().autoRotateSpeed = 0.3;
+      graph.controls().enablePan = false;
+    }
+
+    const ro = new ResizeObserver(() => {
+      if (containerRef.current && graphRef.current) {
+        const { clientWidth, clientHeight } = containerRef.current;
+        graphRef.current.width(clientWidth).height(clientHeight);
+      }
+    });
+    ro.observe(containerRef.current);
+
+    return () => {
+      ro.disconnect();
+      if (graph._destructor) graph._destructor();
+    };
+  }, [kgSubgraph, graphMode]);
 
   // Update graph node labels when LLM cluster labels arrive
   useEffect(() => {
@@ -439,16 +540,57 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
         {/* 3D canvas — only when search results */}
         {hasResults && <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />}
 
-        {/* Top bar — only when search results visible */}
+        {/* Loading state — Invisible Addiction plus animation */}
+        {isSearching && !hasResults && (
+          <div style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 5,
+          }}>
+            <PlusLoader size={100} speed={6} />
+          </div>
+        )}
+
+        {/* Top bar — graph mode toggle when search results visible */}
         {hasResults && (
           <div style={{
             position: 'relative', zIndex: 10, pointerEvents: 'none',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '12px 20px', maxWidth: MAX_W, margin: '0 auto',
+            display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+            padding: '12px 20px',
             width: '100%',
           }}>
-            <div />
-            <div />
+            {/* Graph mode toggle: Clusters ↔ Knowledge Graph */}
+            {kgSubgraph?.nodes?.length > 0 && (
+              <div style={{
+                display: 'flex', gap: 0,
+                background: 'var(--ds-hover-tint)',
+                borderRadius: 6,
+                overflow: 'hidden',
+                pointerEvents: 'auto',
+                border: '1px solid var(--ds-border)',
+              }}>
+                {[
+                  { key: 'clusters', label: 'Cluster' },
+                  { key: 'knowledge', label: 'Knowledge Graph' },
+                ].map(m => (
+                  <button
+                    key={m.key}
+                    onClick={() => setGraphMode(m.key)}
+                    style={{
+                      padding: '5px 12px',
+                      fontSize: 11, fontWeight: 500,
+                      fontFamily: 'inherit',
+                      border: 'none', cursor: 'pointer',
+                      color: graphMode === m.key ? 'var(--ds-text-primary)' : 'var(--ds-text-tertiary)',
+                      background: graphMode === m.key ? 'var(--ds-active-tint)' : 'transparent',
+                      transition: 'color 0.15s, background 0.15s',
+                    }}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -458,6 +600,9 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
             flex: 1, overflow: 'hidden',
             display: 'flex', flexDirection: 'column', alignItems: 'center',
             padding: '0 20px',
+            opacity: isSearching ? 0 : 1,
+            transition: 'opacity 0.25s ease-out',
+            pointerEvents: isSearching ? 'none' : 'auto',
           }}>
             {/* Wordmark — matches DeckBrowserView exactly */}
             <div style={{

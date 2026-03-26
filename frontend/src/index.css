@@ -378,14 +378,27 @@ body.sidebar-resizing * {
   background: var(--ds-accent-10);
 }
 
-/* ── SearchSidebar slide-in ── */
+/* ── SearchSidebar slide-in/out ── */
 @keyframes slideInRight {
   from { transform: translateX(100%); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
+}
+@keyframes slideOutRight {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(100%); opacity: 0; }
 }
 
 /* ── Skeleton loading pulse ── */
 @keyframes pulse {
   0%, 100% { opacity: 0.4; }
   50% { opacity: 0.15; }
+}
+
+/* ── L-shape line trace animation ── */
+@keyframes traceLine {
+  0% { stroke-dashoffset: 40; opacity: 0; }
+  15% { opacity: 1; }
+  50% { stroke-dashoffset: 0; opacity: 1; }
+  75% { stroke-dashoffset: 0; opacity: 0.3; }
+  100% { stroke-dashoffset: -40; opacity: 0; }
 }

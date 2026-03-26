@@ -162,13 +162,20 @@ export default function TopBar({
     return () => clearTimeout(timer);
   }, [activeTab]);
 
+  // Float only on Stapel tab — solid bar elsewhere (Session, Review, etc.)
+  const isFloating = activeView === 'deckBrowser';
+
   return (
     <div style={{
+      ...(isFloating
+        ? { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20, pointerEvents: 'none' }
+        : { flexShrink: 0 }
+      ),
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '0 20px', height: 56, paddingTop: 4, flexShrink: 0,
+      padding: '0 20px', height: isFloating ? 48 : 56, paddingTop: 4,
       background: 'transparent',
     }}>
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>{leftContent}</div>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', ...(isFloating && { pointerEvents: 'auto' }) }}>{leftContent}</div>
       <div
         ref={tabContainerRef}
         style={{
@@ -176,6 +183,7 @@ export default function TopBar({
           display: 'flex', alignItems: 'center', gap: 2,
           padding: 3, borderRadius: 8,
           background: 'var(--ds-hover-tint)',
+          ...(isFloating && { pointerEvents: 'auto' }),
         }}
       >
         {/* Sliding indicator — the "pill" that glides between tabs */}
@@ -212,7 +220,7 @@ export default function TopBar({
           );
         })}
       </div>
-      <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>{rightContent}</div>
+      <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', ...(isFloating && { pointerEvents: 'auto' }) }}>{rightContent}</div>
     </div>
   );
 }

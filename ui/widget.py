@@ -1108,6 +1108,7 @@ class ChatbotWidget(QWidget):
             'getDeckCrossLinks': self._msg_get_deck_cross_links,
             'startTermStack': self._msg_start_term_stack,
             'searchCards': self._msg_search_cards,
+            'searchKgSubgraph': self._msg_search_kg_subgraph,
             'subClusterCards': self._msg_sub_cluster,
             'quickAnswer': lambda data: None,  # Reserved — triggered internally by searchCards
         }
@@ -2941,6 +2942,114 @@ class ChatbotWidget(QWidget):
         except Exception:
             logger.exception("getDeckCrossLinks failed")
             self._send_to_js({"type": "graph.crossLinks", "data": []})
+
+    def _msg_search_kg_subgraph(self, data):
+        """Build a Knowledge Graph subgraph from search result card IDs."""
+        try:
+            card_ids_str = data.get("cardIds", "[]") if isinstance(data, dict) else "[]"
+            card_ids = json.loads(card_ids_str)
+            query = data.get("query", "") if isinstance(data, dict) else ""
+
+            if not card_ids:
+                self._send_to_js({"type": "graph.kgSubgraph", "data": {"nodes": [], "edges": [], "query": query}})
+                return
+
+            try:
+                from ..storage.kg_store import _get_db as kg_get_db
+            except ImportError:
+                from storage.kg_store import _get_db as kg_get_db
+
+            db = kg_get_db()
+
+            # 1. Get all terms from these cards with counts
+            placeholders = ','.join('?' * len(card_ids))
+            term_rows = db.execute(
+                "SELECT term, COUNT(DISTINCT card_id) as card_count "
+                "FROM kg_card_terms WHERE card_id IN (%s) "
+                "GROUP BY term ORDER BY card_count DESC" % placeholders,
+                card_ids
+            ).fetchall()
+
+            if not term_rows:
+                self._send_to_js({"type": "graph.kgSubgraph", "data": {"nodes": [], "edges": [], "query": query}})
+                return
+
+            # Filter: only terms that appear in at least 2 cards (reduces noise)
+            terms = [r[0] for r in term_rows if r[1] >= 2]
+            term_counts = {r[0]: r[1] for r in term_rows if r[1] >= 2}
+
+            # Limit to top 40 terms by card count (keeps graph readable)
+            terms = terms[:40]
+
+            if not terms:
+                self._send_to_js({"type": "graph.kgSubgraph", "data": {"nodes": [], "edges": [], "query": query}})
+                return
+
+            # 2. Get edges between these terms
+            term_placeholders = ','.join('?' * len(terms))
+            edge_rows = db.execute(
+                "SELECT term_a, term_b, weight FROM kg_edges "
+                "WHERE term_a IN (%s) AND term_b IN (%s)" % (term_placeholders, term_placeholders),
+                terms + terms
+            ).fetchall()
+
+            # 3. Get global frequencies for node sizing
+            freq_rows = db.execute(
+                "SELECT term, frequency FROM kg_terms WHERE term IN (%s)" % term_placeholders,
+                terms
+            ).fetchall()
+            global_freqs = {r[0]: r[1] for r in freq_rows}
+
+            # 4. Assign colors by clustering (simple: group by dominant deck)
+            deck_rows = db.execute(
+                "SELECT term, deck_id, COUNT(*) as cnt FROM kg_card_terms "
+                "WHERE card_id IN (%s) AND term IN (%s) "
+                "GROUP BY term, deck_id ORDER BY cnt DESC" % (placeholders, term_placeholders),
+                card_ids + terms
+            ).fetchall()
+
+            term_deck = {}
+            for r in deck_rows:
+                if r[0] not in term_deck:
+                    term_deck[r[0]] = r[1]
+
+            deck_colors = ['#3B6EA5', '#4A8C5C', '#B07D3A', '#7B5EA7', '#A0524B', '#4A9BAE', '#A69550', '#7A6B5D']
+            unique_decks = list(set(term_deck.values()))
+            deck_to_color = {d: deck_colors[i % len(deck_colors)] for i, d in enumerate(unique_decks)}
+
+            # 5. Get card IDs per term (for the "kreuzen" feature)
+            term_card_ids = {}
+            card_rows = db.execute(
+                "SELECT term, card_id FROM kg_card_terms "
+                "WHERE card_id IN (%s) AND term IN (%s)" % (placeholders, term_placeholders),
+                card_ids + terms
+            ).fetchall()
+            for r in card_rows:
+                term_card_ids.setdefault(r[0], []).append(r[1])
+
+            # Build response
+            nodes = []
+            for term in terms:
+                nodes.append({
+                    "id": term,
+                    "label": term,
+                    "frequency": global_freqs.get(term, 0),
+                    "subsetCount": term_counts.get(term, 0),
+                    "color": deck_to_color.get(term_deck.get(term, 0), '#7A6B5D'),
+                    "cardIds": list(set(term_card_ids.get(term, [])))[:50],
+                })
+
+            edges = [{"source": r[0], "target": r[1], "weight": r[2]} for r in edge_rows]
+
+            logger.info("KG subgraph for '%s': %d nodes, %d edges from %d cards",
+                        query, len(nodes), len(edges), len(card_ids))
+
+            self._send_to_js({"type": "graph.kgSubgraph", "data": {
+                "nodes": nodes, "edges": edges, "query": query, "totalCards": len(card_ids)}})
+
+        except Exception:
+            logger.exception("KG subgraph failed")
+            self._send_to_js({"type": "graph.kgSubgraph", "data": {"nodes": [], "edges": [], "query": query if 'query' in dir() else ""}})
 
     def _msg_search_cards(self, data):
         """Find top-N cards by embedding similarity. Runs in QThread to avoid blocking."""

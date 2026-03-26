@@ -9,8 +9,12 @@ export default function useSmartSearch() {
   const [clusterSummaries, setClusterSummaries] = useState(null);
   const [cardRefs, setCardRefs] = useState(null);
   const [selectedClusterId, setSelectedClusterId] = useState(null);
-  const [subClusters, setSubClusters] = useState(null); // sub-clusters for selected cluster
+  const [subClusters, setSubClusters] = useState(null);
   const [isSubClustering, setIsSubClustering] = useState(false);
+  const [kgSubgraph, setKgSubgraph] = useState(null); // Knowledge Graph subgraph alternative
+
+  // Track if sidebar slide-in has played — survives tab switches (lives in hook, not component)
+  const sidebarHasAnimated = useRef(false);
 
   // Cache survives view transitions
   const cacheRef = useRef(null);
@@ -26,7 +30,16 @@ export default function useSmartSearch() {
       setCardRefs(null);
       setSelectedClusterId(null);
       setSubClusters(null);
+      setKgSubgraph(null);
       cacheRef.current = result;
+
+      // Request KG subgraph in parallel (for alternative visualization)
+      if (result?.cards?.length > 0) {
+        window.ankiBridge?.addMessage('searchKgSubgraph', {
+          cardIds: JSON.stringify(result.cards.map(c => Number(c.id))),
+          query: result.query || '',
+        });
+      }
     };
 
     const onQuickAnswer = (e) => {
@@ -53,13 +66,19 @@ export default function useSmartSearch() {
       }
     };
 
+    const onKgSubgraph = (e) => {
+      setKgSubgraph(e.detail);
+    };
+
     window.addEventListener('graph.searchCards', onSearchCards);
     window.addEventListener('graph.quickAnswer', onQuickAnswer);
     window.addEventListener('graph.subClusters', onSubClusters);
+    window.addEventListener('graph.kgSubgraph', onKgSubgraph);
     return () => {
       window.removeEventListener('graph.searchCards', onSearchCards);
       window.removeEventListener('graph.quickAnswer', onQuickAnswer);
       window.removeEventListener('graph.subClusters', onSubClusters);
+      window.removeEventListener('graph.kgSubgraph', onKgSubgraph);
     };
   }, []);
 
@@ -106,6 +125,7 @@ export default function useSmartSearch() {
     setSelectedClusterId(null);
     setSubClusters(null);
     cacheRef.current = null;
+    sidebarHasAnimated.current = false;
   }, []);
 
   const restoreFromCache = useCallback(() => {
@@ -130,6 +150,8 @@ export default function useSmartSearch() {
     selectedClusterId, setSelectedClusterId: selectCluster,
     selectedCluster, selectedClusterLabel, selectedClusterSummary,
     subClusters, isSubClustering,
+    kgSubgraph,
+    sidebarHasAnimated,
     search, reset, restoreFromCache,
     hasResults: !!(searchResult?.cards?.length > 0),
   };
