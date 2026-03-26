@@ -1,23 +1,25 @@
-import React, { useState, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { DEMO_SCENARIOS, type DemoScenario } from './DemoData';
+import { DEMO_SCENARIOS } from './DemoData';
+import ChatInput from '@frontend/components/ChatInput.tsx';
+import ReviewFeedback from '@frontend/components/ReviewFeedback.jsx';
+import { QuizCard } from '@shared/components/QuizCard';
 
 // ───────────────────────────────────────────────
-// Styles (module-level, no external deps)
+// Styles
 // ───────────────────────────────────────────────
 
 const SHELL: React.CSSProperties = {
   width: '100%', height: '100%',
   display: 'flex', flexDirection: 'column',
-  background: '#1C1C1E',
-  borderRadius: 16, overflow: 'hidden',
-  fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
+  background: 'var(--ds-bg-canvas, #1C1C1E)',
+  overflow: 'hidden',
 };
 
 const HEADER: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 6,
-  padding: '12px 16px',
-  borderBottom: '1px solid rgba(255,255,255,0.06)',
+  padding: '10px 16px',
+  borderBottom: '1px solid var(--ds-border-subtle, rgba(255,255,255,0.06))',
   flexShrink: 0,
 };
 
@@ -34,19 +36,22 @@ const TAB: React.CSSProperties = {
   padding: '4px 14px', borderRadius: 8, fontSize: 12, fontWeight: 500,
   cursor: 'pointer', border: 'none', background: 'transparent',
   color: 'rgba(255,255,255,0.35)', fontFamily: 'inherit',
+  transition: 'all 0.15s ease',
 };
 
 const TAB_ON: React.CSSProperties = {
   ...TAB,
-  background: 'rgba(255,255,255,0.04)',
+  background: 'rgba(255,255,255,0.06)',
   color: 'rgba(255,255,255,0.92)',
 };
 
-const CENTER: React.CSSProperties = {
+/* The scrollable content area mirrors the real app's reviewer layout */
+const CONTENT: React.CSSProperties = {
   flex: 1, overflow: 'auto',
   display: 'flex', flexDirection: 'column',
   alignItems: 'center', justifyContent: 'center',
-  padding: '32px 48px', gap: 20,
+  padding: '40px 24px 24px',
+  gap: 16,
 };
 
 const BADGE: React.CSSProperties = {
@@ -58,52 +63,16 @@ const BADGE: React.CSSProperties = {
 };
 
 const FRONT: React.CSSProperties = {
-  fontSize: 20, color: 'rgba(255,255,255,0.92)',
-  lineHeight: 1.55, textAlign: 'center', maxWidth: 600,
+  fontSize: 22, color: 'rgba(255,255,255,0.92)',
+  lineHeight: 1.5, textAlign: 'center', maxWidth: 560,
 };
 
+/* Bottom dock — matches the real app: centered, max-width, padding */
 const DOCK: React.CSSProperties = {
-  flexShrink: 0, padding: '0 16px 16px',
-};
-
-const INPUT_DOCK: React.CSSProperties = {
-  background: 'linear-gradient(165deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%), rgba(28,28,30,0.82)',
-  backdropFilter: 'blur(40px) saturate(1.8)',
-  border: '1px solid rgba(255,255,255,0.12)',
-  borderRadius: 16, overflow: 'hidden',
-  boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.15), 0 4px 24px rgba(0,0,0,0.25)',
-};
-
-const TEXTAREA: React.CSSProperties = {
-  background: 'transparent', border: 'none', outline: 'none', resize: 'none',
-  color: 'rgba(255,255,255,0.92)', fontFamily: 'inherit',
-  fontSize: 15, padding: '14px 18px', width: '100%', boxSizing: 'border-box',
-};
-
-const ACTIONS_ROW: React.CSSProperties = {
-  display: 'flex', alignItems: 'center',
-  borderTop: '1px solid rgba(255,255,255,0.06)',
-};
-
-const ACTION_BTN: React.CSSProperties = {
-  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-  gap: 4, height: 44, background: 'transparent', border: 'none',
-  cursor: 'pointer', fontFamily: 'inherit', fontSize: 13,
-  fontWeight: 500, color: 'rgba(255,255,255,0.35)',
-};
-
-const ACTION_BTN_PRIMARY: React.CSSProperties = {
-  ...ACTION_BTN,
-  fontWeight: 600, color: 'rgba(255,255,255,0.88)',
-};
-
-const KBD: React.CSSProperties = {
-  fontFamily: 'ui-monospace, monospace', fontSize: 10,
-  color: 'rgba(255,255,255,0.18)', marginLeft: 4,
-};
-
-const DIVIDER: React.CSSProperties = {
-  width: 1, height: 16, background: 'rgba(255,255,255,0.06)', flexShrink: 0,
+  flexShrink: 0,
+  width: '100%', maxWidth: 680,
+  margin: '0 auto',
+  padding: '0 24px 20px',
 };
 
 const SCENARIOS = [
@@ -113,28 +82,55 @@ const SCENARIOS = [
 ];
 
 // ───────────────────────────────────────────────
-// DemoShell — self-contained, zero external imports
+// DemoShell
 // ───────────────────────────────────────────────
 
 export function DemoShell() {
   const [scenarioKey, setScenarioKey] = useState('medicine');
+  const [phase, setPhase] = useState<'question' | 'evaluating' | 'evaluated' | 'mc'>('question');
   const [showBack, setShowBack] = useState(false);
 
   const scenario = DEMO_SCENARIOS[scenarioKey];
 
+  const switchScenario = useCallback((key: string) => {
+    setShowBack(false);
+    setPhase('question');
+    setScenarioKey(key);
+  }, []);
+
   const handleShowAnswer = useCallback(() => {
+    if (phase !== 'question') return;
+    setShowBack(true);
+    setPhase('evaluated');
+  }, [phase]);
+
+  const handleStartMC = useCallback(() => {
+    if (phase !== 'question') return;
+    setPhase('mc');
+  }, [phase]);
+
+  const handleMCSelect = useCallback((_id: string, _correct: boolean) => {
     setShowBack(true);
   }, []);
 
-  const switchScenario = useCallback((key: string) => {
-    setShowBack(false);
-    setScenarioKey(key);
-  }, []);
+  const handleSend = useCallback((text: string) => {
+    if (phase === 'question' && text.trim()) {
+      setPhase('evaluating');
+      setTimeout(() => {
+        setShowBack(true);
+        setPhase('evaluated');
+      }, 1500);
+    }
+  }, [phase]);
+
+  const quizOptions = scenario.mc.options.map(o => ({
+    id: o.id, text: o.text, isCorrect: o.correct, explanation: o.explanation,
+  }));
 
   return (
     <div style={SHELL}>
 
-      {/* Window chrome */}
+      {/* ── Title bar ── */}
       <div style={HEADER}>
         <div style={DOT} />
         <div style={DOT} />
@@ -152,14 +148,15 @@ export function DemoShell() {
         </div>
       </div>
 
-      {/* Card area */}
-      <div style={CENTER}>
+      {/* ── Card content ── */}
+      <div style={CONTENT}>
         <span style={BADGE}>
           {scenario.card.tags[0] || scenario.card.deckName}
         </span>
 
         <div style={FRONT} dangerouslySetInnerHTML={{ __html: scenario.card.front }} />
 
+        {/* Answer reveal */}
         <AnimatePresence>
           {showBack && (
             <motion.div
@@ -168,7 +165,7 @@ export function DemoShell() {
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-              style={{ overflow: 'hidden', width: '100%', maxWidth: 600 }}
+              style={{ overflow: 'hidden', width: '100%', maxWidth: 560 }}
             >
               <div
                 style={{
@@ -181,27 +178,41 @@ export function DemoShell() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Evaluation bar */}
+        {phase === 'evaluated' && (
+          <div style={{ width: '100%', maxWidth: 480 }}>
+            <ReviewFeedback score={scenario.evaluation.score} />
+          </div>
+        )}
+
+        {/* MC Quiz */}
+        {phase === 'mc' && (
+          <div style={{ width: '100%', maxWidth: 480 }}>
+            <QuizCard question="" options={quizOptions} onSelect={handleMCSelect} />
+          </div>
+        )}
       </div>
 
-      {/* Input dock — built inline, no ChatInput import */}
+      {/* ── Input dock — real ChatInput, max-width centered like the app ── */}
       <div style={DOCK}>
-        <div style={INPUT_DOCK}>
-          <textarea
-            rows={1}
-            placeholder="Stelle eine Frage..."
-            style={TEXTAREA}
-            readOnly
-          />
-          <div style={ACTIONS_ROW}>
-            <button style={ACTION_BTN_PRIMARY} onClick={handleShowAnswer}>
-              Antwort zeigen<span style={KBD}>SPACE</span>
-            </button>
-            <div style={DIVIDER} />
-            <button style={ACTION_BTN}>
-              Multiple Choice<span style={KBD}>ENTER</span>
-            </button>
-          </div>
-        </div>
+        <ChatInput
+          onSend={handleSend}
+          isLoading={phase === 'evaluating'}
+          placeholder="Stelle eine Frage..."
+          actionPrimary={{
+            label: 'Antwort zeigen',
+            shortcut: 'SPACE',
+            onClick: handleShowAnswer,
+            disabled: phase !== 'question',
+          }}
+          actionSecondary={{
+            label: 'Multiple Choice',
+            shortcut: 'ENTER',
+            onClick: handleStartMC,
+            disabled: phase !== 'question',
+          }}
+        />
       </div>
     </div>
   );
