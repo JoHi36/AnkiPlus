@@ -7,7 +7,7 @@ import { DEMO_SCENARIOS, type DemoScenario } from './DemoData';
 // ───────────────────────────────────────────────
 
 const SHELL: React.CSSProperties = {
-  position: 'absolute', inset: 0,
+  width: '100%', height: '100%',
   display: 'flex', flexDirection: 'column',
   background: '#1C1C1E',
   borderRadius: 16, overflow: 'hidden',
