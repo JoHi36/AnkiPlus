@@ -176,9 +176,9 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     const requestId = crypto.randomUUID?.() ||
                       `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     activeRequestIdRef.current = requestId;
-    // Reset local pipeline refs for new request
-    livePipelineStepsRef.current = [];
-    liveCitationsRef.current = {};
+    // Reset pipeline globals for new request
+    window._livePipelineSteps = [];
+    window._livePipelineCitations = {};
 
     const {
       pendingDeckSession, 
@@ -448,10 +448,10 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
         const primaryCell = finalMsg.agentCells[0];
         const agentName = primaryCell?.agent || 'tutor';
         const reqId = payload.requestId || activeRequestIdRef.current || '';
-        // Use local pipeline refs (synchronously updated) — store ref may be stale
-        const pipelineSteps = livePipelineStepsRef.current;
-        const pipelineCitations = liveCitationsRef.current;
-        // Try store as fallback (in case local ref was missed somehow)
+        // Read pipeline data from window globals (synchronous, no closure issues)
+        const pipelineSteps = window._livePipelineSteps || [];
+        const pipelineCitations = window._livePipelineCitations || {};
+        // Fallback: try store ref (may be stale but better than nothing)
         const _rs = reasoningStateRef.current;
         const agentStreamId = agentName ? `${agentName}-${reqId}` : reqId;
         const agentStream = _rs.streams[agentStreamId];
@@ -471,9 +471,9 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
         };
         // Add saved message FIRST, then clear live message in same batch
         setMessages(prev => [...prev, savedMsg]);
-        // Reset local pipeline refs for next request
-        livePipelineStepsRef.current = [];
-        liveCitationsRef.current = {};
+        // Reset window globals for next request
+        window._livePipelineSteps = [];
+        window._livePipelineCitations = {};
       }
       // currentMessage stays alive (status='done') — cleanup effect clears it next render
       // Clean up v1 loading state
@@ -504,18 +504,17 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       // Pipeline steps are now handled by the centralized reasoning store (dispatched in App.jsx).
       // Still forward to agenticMsg for agent cell status transitions (loading → thinking).
       agenticMsg.handlePipelineStep(payload);
-      // Accumulate steps locally for finalize (store ref may be stale at msg_done time)
+      // Accumulate steps on window for finalize — guaranteed synchronous, no closure issues
       if (payload.step !== 'orchestrating' && payload.step !== 'router') {
-        const existing = livePipelineStepsRef.current.findIndex(s => s.step === payload.step);
+        if (!window._livePipelineSteps) window._livePipelineSteps = [];
+        const arr = window._livePipelineSteps;
         const stepObj = { step: payload.step, status: payload.status, data: payload.data || {}, timestamp: Date.now() };
-        if (existing >= 0) {
-          livePipelineStepsRef.current = livePipelineStepsRef.current.map((s, i) => i === existing ? stepObj : s);
-        } else {
-          livePipelineStepsRef.current = [...livePipelineStepsRef.current, stepObj];
-        }
+        const existing = arr.findIndex(s => s.step === payload.step);
+        if (existing >= 0) arr[existing] = stepObj;
+        else arr.push(stepObj);
         // Capture citations from sources_ready
         if (payload.step === 'sources_ready' && payload.data?.citations) {
-          liveCitationsRef.current = { ...liveCitationsRef.current, ...payload.data.citations };
+          window._livePipelineCitations = { ...(window._livePipelineCitations || {}), ...payload.data.citations };
         }
       }
       return;
