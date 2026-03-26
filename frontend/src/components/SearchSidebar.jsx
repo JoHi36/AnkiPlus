@@ -1,10 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ChatInput from './ChatInput';
 import ResizeHandle from './ResizeHandle';
 import AgenticCell from './AgenticCell';
 import ReasoningDisplay from '../reasoning/ReasoningDisplay';
+import { useReasoningStore } from '../reasoning/store';
 
 export default function SearchSidebar({
   query,
@@ -24,7 +25,6 @@ export default function SearchSidebar({
   bridge,
   subClusters,
   isSubClustering,
-  pipelineSteps = [],
   sidebarHasAnimated,
   kgSubgraph,
   onGraphModeChange,
@@ -32,6 +32,21 @@ export default function SearchSidebar({
   onSelectTerm,
   termDefinition,
 }) {
+  // Read pipeline steps from the reasoning store — find the latest search stream
+  const { state: reasoningState } = useReasoningStore();
+  const pipelineSteps = useMemo(() => {
+    const entries = Object.entries(reasoningState.streams);
+    // Collect all steps from streams that look like search streams (router + agent)
+    const allSteps = [];
+    for (const [id, stream] of entries) {
+      if (id.startsWith('router-') || id.startsWith('tutor-') || stream.phase !== 'complete') {
+        allSteps.push(...stream.steps);
+      }
+    }
+    // Only return steps if there are active/recent ones
+    return allSteps.length > 0 ? allSteps : [];
+  }, [reasoningState.streams]);
+
   if (!visible) return null;
 
   // Animation only on first appearance — ref lives in useSmartSearch (survives tab switches)
