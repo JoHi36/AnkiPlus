@@ -8,7 +8,9 @@
 
 **Tech Stack:** React 18, Vite, Tailwind CSS, DaisyUI, TypeScript (new files), Vitest (new)
 
-**Prerequisite:** User's parallel frontend work (Unified Reasoning Display, AMBOSS, etc.) must be committed before starting React-touching tasks.
+**Prerequisite:** User's parallel frontend work must be committed before starting. Check `git status` — if uncommitted changes exist in frontend/src/, ask user to commit first.
+
+**Updated:** 2026-03-26 — numbers refreshed from current codebase state.
 
 ---
 
@@ -16,31 +18,33 @@
 
 ### Task 1: Strip console statements + Vite auto-strip
 
-**Current state:** 26 files with console.log/error/warn in `frontend/src/`. No esbuild.drop configured — console calls ship to production.
+**Current state:** ~303 console statements across 30+ files. No esbuild.drop configured — console calls ship to production.
+
+**Top offenders:** useAnki.js (82), useChat.js (44), ChatMessage.jsx (44), App.jsx (34), useCardContext.js (14), useAgenticMessage.js (11), SectionDropdown.jsx (11), SessionContext.jsx (10), useModels.js (9)
 
 **Files:**
-- Modify: ALL files in `frontend/src/` containing `console.` (~26 files)
+- Modify: ALL files in `frontend/src/` containing `console.` (~30 files)
 - Modify: `frontend/vite.config.js` — add `esbuild.drop`
 
 **Strategy:**
-- First, add Vite auto-strip (future-proof):
+- First, add Vite auto-strip (future-proof — prevents regressions):
 ```js
 // vite.config.js build section:
 esbuild: {
   drop: ['console', 'debugger'],
 }
 ```
-- Then manually remove console statements for code hygiene (they won't ship to production after the Vite change, but they clutter source code)
-- Exception: Keep `console.error` in `ErrorBoundary.jsx`
+- Then manually remove console statements for code hygiene
+- Exception: Keep `console.error` in `ErrorBoundary.jsx` (that's its job)
 
-- [ ] **Step 1:** Run `grep -rn 'console\.' frontend/src/ --include='*.jsx' --include='*.tsx' --include='*.js' --include='*.ts' | grep -v node_modules | wc -l` to get exact count
+- [ ] **Step 1:** Run grep to get exact current count
 - [ ] **Step 2:** Add `esbuild: { drop: ['console', 'debugger'] }` to vite.config.js build section
-- [ ] **Step 3:** Remove console statements from hooks (useAnki.js, useChat.js, useAgenticMessage.js, useModels.js, useCardSession.js, etc.)
-- [ ] **Step 4:** Remove console statements from components (ChatMessage.jsx, SectionDropdown.jsx, Header.jsx, etc.)
-- [ ] **Step 5:** Remove console statements from App.jsx, contexts, utils
+- [ ] **Step 3:** Remove console statements from hooks (useAnki.js ~82, useChat.js ~44, useAgenticMessage.js ~11, useModels.js ~9, useCardSession.js, useCardContext.js ~14, etc.)
+- [ ] **Step 4:** Remove console statements from components (ChatMessage.jsx ~44, SectionDropdown.jsx ~11, Header.jsx, etc.)
+- [ ] **Step 5:** Remove console statements from App.jsx (~34), SessionContext.jsx (~10), utils/sessions.js, utils/deviceId.js/ts
 - [ ] **Step 6:** Verify ErrorBoundary.jsx still has its console.error (keep it)
 - [ ] **Step 7:** Build: `cd frontend && npm run build`
-- [ ] **Step 8:** Commit: `chore: remove console statements and add Vite auto-strip for production`
+- [ ] **Step 8:** Commit: `chore: remove ~303 console statements and add Vite auto-strip for production`
 
 ---
 
@@ -68,7 +72,7 @@ esbuild: {
 
 ### Task 3: Extract inline style objects to constants
 
-**Current state:** 638 `style={{}}` instances across components. Each creates a new object on every render, defeating React's diffing.
+**Current state:** ~692 `style={{}}` instances across components. Each creates a new object on every render, defeating React's diffing.
 
 **Priority targets** (components in .map() loops or re-rendered frequently):
 - `frontend/src/components/DeckBrowser.jsx` (~29 inline styles)
@@ -99,18 +103,9 @@ const ROW_STYLE = { padding: '8px 0', display: 'flex', gap: 8 };
 
 ---
 
-### Task 4: Fix Mermaid color reference errors
+### ~~Task 4: Fix Mermaid color reference errors~~ DONE
 
-**Current state:** ChatMessage.jsx references `MERMAID_NODE_BG`, `MERMAID_NODE_ALT_A`, `MERMAID_NODE_ALT_B`, `MERMAID_DEEP_BG` which are undefined (will cause ReferenceError if code executes).
-
-**Files:**
-- Modify: `frontend/src/components/ChatMessage.jsx`
-
-- [ ] **Step 1:** Read ChatMessage.jsx — find where MERMAID_ACCENT etc. are defined (~line 456)
-- [ ] **Step 2:** Find the undefined references (~lines 752-791)
-- [ ] **Step 3:** Define missing constants or connect them to getMermaidPalette() return values
-- [ ] **Step 4:** Build: `cd frontend && npm run build`
-- [ ] **Step 5:** Commit: `fix: define missing Mermaid color constants`
+Mermaid constants are now properly defined (MERMAID_ACCENT, MERMAID_ACCENT2 at lines 457-458, palette validation at line 754). No action needed.
 
 ---
 
@@ -118,7 +113,7 @@ const ROW_STYLE = { padding: '8px 0', display: 'flex', gap: 8 };
 
 ### Task 5: Audit and fix hardcoded colors
 
-**Current state:** Multiple components use `rgba()`, `#hex`, or named colors instead of `var(--ds-*)` tokens. These break light mode.
+**Current state:** ~100 hardcoded color instances across 26+ component files. Key offenders: AgentHeader.jsx (rgba violations), AgenticCell.jsx (dynamic rgba construction), plus scattered violations. ChatMessage.jsx Mermaid palette is an acceptable exception.
 
 - [ ] **Step 1:** Run full audit: `grep -rn "rgba\|rgb(\|#[0-9a-fA-F]\{3,8\}" frontend/src/components/ --include='*.jsx' --include='*.tsx'` — get actual violations
 - [ ] **Step 2:** Exclude acceptable exceptions (Mermaid palette constants)
@@ -328,24 +323,24 @@ export function invokeCallbacks(channel: string, ...args: any[]) {
 
 | # | Task | Risk | Effort | Impact | Depends on |
 |---|------|------|--------|--------|------------|
-| 1 | Console strip + Vite auto-drop | Low | 45min | High | User's frontend committed |
-| 2 | React.memo (3 components) | Medium | 30min | High | — |
-| 3 | Extract inline styles | Low | 60min | Medium | — |
-| 4 | Mermaid color fixes | Low | 15min | Medium | — |
-| 5 | Design system compliance | Medium | 60min | High | — |
+| 1 | Console strip (~303) + Vite auto-drop | Low | 60min | High | User's frontend committed |
+| 2 | React.memo (3+ components) | Medium | 30min | High | — |
+| 3 | Extract inline styles (top offenders) | Low | 60min | Medium | — |
+| ~~4~~ | ~~Mermaid color fixes~~ | — | — | DONE | — |
+| 5 | Design system compliance (~100 colors) | Medium | 60min | High | — |
 | 6 | Granular Error Boundaries | Medium | 45min | High | — |
 | 7 | Dead code removal | Low | 20min | Medium | — |
 | 8 | Vitest setup | Low | 30min | High | — |
 | 9 | Hook tests | Medium | 60min | High | Task 8 |
 | 10 | Window globals cleanup | Medium | 45min | Medium | — |
 
-**Total: ~7 hours**
+**Total: ~6.5 hours (Task 4 done)**
 
 **Parallelization:**
 - Tasks 2-7 can run in any order (independent file changes)
-- Task 4 before Task 5 (both touch ChatMessage.jsx)
 - Task 9 requires Task 8
 - Task 1 should be FIRST (makes all diffs cleaner)
+- Task 5 after Task 3 if they touch the same files (inline styles may contain hardcoded colors)
 
 ---
 
