@@ -2,12 +2,12 @@ import React, { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DemoProvider, useDemoContext } from './DemoContext';
 import { useDemoBridgeStub } from './demoAdapters';
-import ChatInput from '@frontend/components/ChatInput';
-import ReviewFeedback from '@frontend/components/ReviewFeedback';
+import ChatInput from '@frontend/components/ChatInput.tsx';
+import ReviewFeedback from '@frontend/components/ReviewFeedback.jsx';
 import { QuizCard } from '@shared/components/QuizCard';
-import ReasoningStream from '@frontend/reasoning/ReasoningStream';
-import SourcesCarousel from '@frontend/components/SourcesCarousel';
-import AgenticCell from '@frontend/components/AgenticCell';
+import ReasoningDisplay from '@frontend/reasoning/ReasoningDisplay.tsx';
+import SourcesCarousel from '@frontend/components/SourcesCarousel.tsx';
+import AgenticCell from '@frontend/components/AgenticCell.jsx';
 
 // ───────────────────────────────────────────────
 // Constants
@@ -241,15 +241,13 @@ function DemoShellInner() {
           )}
         </AnimatePresence>
 
-        {/* ReasoningStream — shown during EVALUATING (streaming) and EVALUATED (done) */}
+        {/* ReasoningDisplay — shown during EVALUATING (streaming) and EVALUATED (done) */}
         {(phase === 'EVALUATING' || phase === 'EVALUATED') && reasoningStepsForStream.length > 0 && (
           <div style={{ padding: '4px 0 0' }}>
-            <ReasoningStream
+            <ReasoningDisplay
               steps={reasoningStepsForStream}
-              pipelineGeneration={1}
-              isStreaming={phase === 'EVALUATING'}
-              message=""
-              variant="agent"
+              mode="compact"
+              hasOutput={phase === 'EVALUATED'}
             />
           </div>
         )}
