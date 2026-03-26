@@ -12,16 +12,10 @@ import { useCardSession } from './hooks/useCardSession';
 import { useReviewTrail } from './hooks/useReviewTrail';
 import { useModels } from './hooks/useModels';
 import { SessionContextProvider, useSessionContext } from './contexts/SessionContext';
-import Header from './components/Header';
-import SessionHeader from './components/SessionView/SessionHeader';
 import ChatMessage from './components/ChatMessage';
 import StreamingChatMessage from './components/StreamingChatMessage';
 import { getOrCreateDeviceId } from './utils/deviceId';
 import ChatInput from './components/ChatInput';
-import ThoughtStream from './components/ThoughtStream';
-import SessionOverview from './components/SessionOverview';
-// CardPreviewModal removed — replaced by universal Preview Mode (bridge.openPreview)
-import SessionList from './components/SessionView/SessionList';
 import ContextSurface from './components/ContextSurface';
 import DeckBrowser from './components/DeckBrowser';
 import ErrorBoundary, { ComponentErrorBoundary } from './components/ErrorBoundary';
@@ -31,7 +25,7 @@ import SectionDivider from './components/SectionDivider';
 import ReviewTrailIndicator from './components/ReviewTrailIndicator';
 import { useFreeChat } from './hooks/useFreeChat';
 import { useHoldToReset } from './hooks/useHoldToReset';
-import { setRegistry, findAgent, getRegistry } from '@shared/config/subagentRegistry';
+import { setRegistry, findAgent } from '@shared/config/subagentRegistry';
 import { registerAction, executeAction, bridgeAction } from './actions';
 import { emit } from './eventBus';
 import { classifyCard } from './utils/cardClassifier';
@@ -39,7 +33,6 @@ import MascotShell from './components/MascotShell';
 import { useMascot } from './hooks/useMascot';
 import InsightsDashboard from './components/InsightsDashboard';
 import useInsights from './hooks/useInsights';
-import TokenBudgetSlider from './components/TokenBudgetSlider';
 import SettingsSidebar from './components/SettingsSidebar';
 import SidebarShell from './components/SidebarShell';
 import AgenticCell from './components/AgenticCell';
@@ -2948,16 +2941,6 @@ function AppInner() {
         )}
 
       </main>
-
-      {/* Mascot moved to main Anki window (plusi_dock.py) — no longer rendered in React */}
-
-      {!showSessionOverview && (
-        <>
-          {/* Old chat input removed — unified ChatInput is rendered below */}
-        </>
-      )}
-
-      {/* Card Preview Modal removed — replaced by universal Preview Mode */}
 
       {/* Paywall Modal */}
       <PaywallModal
