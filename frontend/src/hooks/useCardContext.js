@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { consumePendingPerformance } from '../utils/pendingPerformance';
 
 /**
  * Hook für Card-Context und Sections
@@ -64,9 +65,9 @@ export function useCardContext() {
     };
 
     // Attach pending performance data if available (from reviewer-side rating)
-    if (typeof window !== 'undefined' && window._pendingPerformanceData && window._pendingPerformanceData[cardId]) {
-      newSection.performanceData = window._pendingPerformanceData[cardId];
-      delete window._pendingPerformanceData[cardId];
+    const pendingPerf = consumePendingPerformance(String(cardId));
+    if (pendingPerf) {
+      newSection.performanceData = pendingPerf;
     }
 
     setSections(prev => [...prev, newSection]);

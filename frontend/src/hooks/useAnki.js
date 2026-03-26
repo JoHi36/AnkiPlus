@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { registerCallback, invokeAndRemove } from '../utils/callbackRegistry';
 
 /**
  * Hook für die Anki-Bridge (Message-Queue System)
@@ -195,10 +196,10 @@ export function useAnki() {
               level3Percent: 0
             });
           },
-          generateSectionTitle: (question, answer, callback) => {
+          generateSectionTitle: (question, answer, _callback) => {
             if (window.ankiBridge) {
-              // Speichere Callback für Antwort
-              window._sectionTitleCallback = callback;
+              // Section title result is handled by useChat via sectionTitleGenerated event.
+              // No callback storage needed.
               window.ankiBridge.addMessage('generateSectionTitle', { question, answer });
             }
           },
@@ -209,19 +210,22 @@ export function useAnki() {
           },
           getCardDetails: (cardId) => {
             return new Promise((resolve, reject) => {
-              // Speichere Callback für Antwort
               const callbackId = `getCardDetails_${Date.now()}_${Math.random()}`;
-              window._getCardDetailsCallbacks = window._getCardDetailsCallbacks || {};
-              window._getCardDetailsCallbacks[callbackId] = { resolve, reject };
-              
-              // Setze Timeout für Fehlerbehandlung
-              setTimeout(() => {
-                if (window._getCardDetailsCallbacks && window._getCardDetailsCallbacks[callbackId]) {
-                  delete window._getCardDetailsCallbacks[callbackId];
+              // App.jsx calls invokeAndRemove('getCardDetails', callbackId, resolvedJson)
+              // on the 'cardDetails' response event.
+              registerCallback('getCardDetails', callbackId, (resultJson) => {
+                if (resultJson === null) {
                   reject(new Error('getCardDetails timeout'));
+                } else {
+                  resolve(resultJson);
                 }
+              });
+
+              // Timeout: pass null to signal rejection
+              setTimeout(() => {
+                invokeAndRemove('getCardDetails', callbackId, null);
               }, 10000); // 10 Sekunden Timeout
-              
+
               if (window.ankiBridge) {
                 window.ankiBridge.addMessage('getCardDetails', { cardId, callbackId });
               } else {
@@ -231,19 +235,18 @@ export function useAnki() {
           },
           saveMultipleChoice: (cardId, quizDataJson, callback) => {
             if (window.ankiBridge) {
-              // Speichere Callback für Antwort
               const callbackId = `saveMultipleChoice_${Date.now()}_${Math.random()}`;
-              window._saveMultipleChoiceCallbacks = window._saveMultipleChoiceCallbacks || {};
-              window._saveMultipleChoiceCallbacks[callbackId] = callback;
-              
+              registerCallback('saveMultipleChoice', callbackId, (resultJson) => {
+                if (callback) callback(resultJson);
+              });
+
               // Setze Timeout für Fehlerbehandlung
               setTimeout(() => {
-                if (window._saveMultipleChoiceCallbacks && window._saveMultipleChoiceCallbacks[callbackId]) {
-                  delete window._saveMultipleChoiceCallbacks[callbackId];
-                  if (callback) callback(JSON.stringify({ success: false, error: 'Timeout' }));
-                }
+                const removed = invokeAndRemove('saveMultipleChoice', callbackId, JSON.stringify({ success: false, error: 'Timeout' }));
+                // Only fires callback if not yet resolved
+                void removed;
               }, 5000); // 5 Sekunden Timeout
-              
+
               window.ankiBridge.addMessage('saveMultipleChoice', { cardId, quizDataJson, callbackId });
             } else if (callback) {
               callback(JSON.stringify({ success: false, error: 'Bridge nicht verfügbar' }));
@@ -251,19 +254,17 @@ export function useAnki() {
           },
           loadMultipleChoice: (cardId, callback) => {
             if (window.ankiBridge) {
-              // Speichere Callback für Antwort
               const callbackId = `loadMultipleChoice_${Date.now()}_${Math.random()}`;
-              window._loadMultipleChoiceCallbacks = window._loadMultipleChoiceCallbacks || {};
-              window._loadMultipleChoiceCallbacks[callbackId] = callback;
-              
+              registerCallback('loadMultipleChoice', callbackId, (resultJson) => {
+                if (callback) callback(resultJson);
+              });
+
               // Setze Timeout für Fehlerbehandlung
               setTimeout(() => {
-                if (window._loadMultipleChoiceCallbacks && window._loadMultipleChoiceCallbacks[callbackId]) {
-                  delete window._loadMultipleChoiceCallbacks[callbackId];
-                  if (callback) callback(JSON.stringify({ success: false, quizData: null, error: 'Timeout' }));
-                }
+                const removed = invokeAndRemove('loadMultipleChoice', callbackId, JSON.stringify({ success: false, quizData: null, error: 'Timeout' }));
+                void removed;
               }, 5000); // 5 Sekunden Timeout
-              
+
               window.ankiBridge.addMessage('loadMultipleChoice', { cardId, callbackId });
             } else if (callback) {
               callback(JSON.stringify({ success: false, quizData: null, error: 'Bridge nicht verfügbar' }));
@@ -271,19 +272,17 @@ export function useAnki() {
           },
           hasMultipleChoice: (cardId, callback) => {
             if (window.ankiBridge) {
-              // Speichere Callback für Antwort
               const callbackId = `hasMultipleChoice_${Date.now()}_${Math.random()}`;
-              window._hasMultipleChoiceCallbacks = window._hasMultipleChoiceCallbacks || {};
-              window._hasMultipleChoiceCallbacks[callbackId] = callback;
-              
+              registerCallback('hasMultipleChoice', callbackId, (resultJson) => {
+                if (callback) callback(resultJson);
+              });
+
               // Setze Timeout für Fehlerbehandlung
               setTimeout(() => {
-                if (window._hasMultipleChoiceCallbacks && window._hasMultipleChoiceCallbacks[callbackId]) {
-                  delete window._hasMultipleChoiceCallbacks[callbackId];
-                  if (callback) callback(JSON.stringify({ hasMC: false }));
-                }
+                const removed = invokeAndRemove('hasMultipleChoice', callbackId, JSON.stringify({ hasMC: false }));
+                void removed;
               }, 5000); // 5 Sekunden Timeout
-              
+
               window.ankiBridge.addMessage('hasMultipleChoice', { cardId, callbackId });
             } else if (callback) {
               callback(JSON.stringify({ hasMC: false }));
@@ -325,13 +324,10 @@ export function useAnki() {
               window.ankiBridge.addMessage('navigateToCard', String(cardId));
             }
           },
-          fetchImage: (url, callback) => {
+          fetchImage: (url, _callback) => {
             if (window.ankiBridge) {
-              // Speichere Callback für Antwort (mit URL als Key)
-              if (!window._imageCallbacks) {
-                window._imageCallbacks = {};
-              }
-              window._imageCallbacks[url] = callback;
+              // Response is delivered via the 'imageLoaded' CustomEvent (dispatched in App.jsx).
+              // No window._ callback storage needed.
               window.ankiBridge.addMessage('fetchImage', url);
             }
           },

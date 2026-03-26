@@ -28,6 +28,8 @@ import { useHoldToReset } from './hooks/useHoldToReset';
 import { setRegistry, findAgent } from '@shared/config/subagentRegistry';
 import { registerAction, executeAction, bridgeAction } from './actions';
 import { emit } from './eventBus';
+import { invokeAndRemove } from './utils/callbackRegistry';
+import { setPendingPerformance } from './utils/pendingPerformance';
 import { classifyCard } from './utils/cardClassifier';
 import MascotShell from './components/MascotShell';
 import { useMascot } from './hooks/useMascot';
@@ -965,8 +967,7 @@ function AppInner() {
             if (section) {
               _perfCapture(section.id, perfData);
             } else {
-              window._pendingPerformanceData = window._pendingPerformanceData || {};
-              window._pendingPerformanceData[cardId] = perfData;
+              setPendingPerformance(String(cardId), perfData);
             }
           }
           // Mascot mood: ease 1=Again, 2=Hard, 3=Good, 4=Easy
@@ -998,8 +999,7 @@ function AppInner() {
             if (section) {
               _perfCapture(section.id, perfData);
             } else {
-              window._pendingPerformanceData = window._pendingPerformanceData || {};
-              window._pendingPerformanceData[cardId] = perfData;
+              setPendingPerformance(String(cardId), perfData);
             }
           }
         }
@@ -1038,47 +1038,23 @@ function AppInner() {
         }
 
         // Card Details Events
-        if (payload.type === 'cardDetails') {
-          if (window._getCardDetailsCallbacks && payload.callbackId) {
-            const callback = window._getCardDetailsCallbacks[payload.callbackId];
-            if (callback) {
-              delete window._getCardDetailsCallbacks[payload.callbackId];
-              callback.resolve(JSON.stringify(payload.data));
-            }
-          }
+        if (payload.type === 'cardDetails' && payload.callbackId) {
+          invokeAndRemove('getCardDetails', payload.callbackId, JSON.stringify(payload.data));
         }
 
         // Save Multiple Choice Result
-        if (payload.type === 'saveMultipleChoiceResult') {
-          if (window._saveMultipleChoiceCallbacks && payload.callbackId) {
-            const callback = window._saveMultipleChoiceCallbacks[payload.callbackId];
-            if (callback) {
-              delete window._saveMultipleChoiceCallbacks[payload.callbackId];
-              callback(JSON.stringify(payload.data));
-            }
-          }
+        if (payload.type === 'saveMultipleChoiceResult' && payload.callbackId) {
+          invokeAndRemove('saveMultipleChoice', payload.callbackId, JSON.stringify(payload.data));
         }
 
         // Load Multiple Choice Result
-        if (payload.type === 'loadMultipleChoiceResult') {
-          if (window._loadMultipleChoiceCallbacks && payload.callbackId) {
-            const callback = window._loadMultipleChoiceCallbacks[payload.callbackId];
-            if (callback) {
-              delete window._loadMultipleChoiceCallbacks[payload.callbackId];
-              callback(JSON.stringify(payload.data));
-            }
-          }
+        if (payload.type === 'loadMultipleChoiceResult' && payload.callbackId) {
+          invokeAndRemove('loadMultipleChoice', payload.callbackId, JSON.stringify(payload.data));
         }
 
         // Has Multiple Choice Result
-        if (payload.type === 'hasMultipleChoiceResult') {
-          if (window._hasMultipleChoiceCallbacks && payload.callbackId) {
-            const callback = window._hasMultipleChoiceCallbacks[payload.callbackId];
-            if (callback) {
-              delete window._hasMultipleChoiceCallbacks[payload.callbackId];
-              callback(JSON.stringify(payload.data));
-            }
-          }
+        if (payload.type === 'hasMultipleChoiceResult' && payload.callbackId) {
+          invokeAndRemove('hasMultipleChoice', payload.callbackId, JSON.stringify(payload.data));
         }
 
         // Deck Stats Events
