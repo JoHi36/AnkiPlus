@@ -489,8 +489,8 @@ export default function SearchSidebar({
 
             {/* ── Terms tab (Knowledge Graph) ── */}
             {sidebarTab === 'terms' && selectedTerm ? (
-              /* Term drill-down view */
-              <div>
+              /* Term drill-down view — identical layout to cluster drill-down */
+              <>
                 <button
                   onClick={() => onSelectTerm?.(null)}
                   style={{
@@ -504,20 +504,28 @@ export default function SearchSidebar({
                 </button>
 
                 <div style={{
-                  fontSize: 16, fontWeight: 600,
-                  color: 'var(--ds-text-primary)',
-                  marginBottom: 4,
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  marginBottom: 10,
                 }}>
-                  {selectedTerm.label}
-                </div>
-                <div style={{
-                  fontSize: 11, color: 'var(--ds-text-tertiary)',
-                  marginBottom: 12,
-                }}>
-                  {selectedTerm.cardIds?.length || selectedTerm.subsetCount || 0} Karten
+                  <div style={{
+                    width: 10, height: 10, borderRadius: '50%',
+                    background: selectedTerm.color || 'var(--ds-accent)',
+                    flexShrink: 0,
+                  }} />
+                  <span style={{
+                    fontSize: 16, fontWeight: 600,
+                    color: 'var(--ds-text-primary)',
+                  }}>
+                    {selectedTerm.label}
+                  </span>
+                  <span style={{
+                    fontSize: 12, color: 'var(--ds-text-tertiary)',
+                  }}>
+                    {selectedTerm.cardIds?.length || selectedTerm.subsetCount || 0} Karten
+                  </span>
                 </div>
 
-                {/* Definition */}
+                {/* Definition — with source attribution */}
                 {termDefinition?.definition ? (
                   <div style={{
                     fontSize: 13,
@@ -525,16 +533,35 @@ export default function SearchSidebar({
                     lineHeight: 1.6,
                   }}>
                     {renderMarkdownWithRefs(termDefinition.definition)}
+                    {/* Source info */}
+                    <div style={{
+                      fontSize: 10, color: 'var(--ds-text-tertiary)',
+                      marginTop: 8, fontStyle: 'italic',
+                    }}>
+                      Quelle: {termDefinition.generated_by === 'llm' ? 'Tutor (aus deinen Karten)'
+                        : termDefinition.generated_by === 'research' ? 'Research Agent'
+                        : 'Karten-Analyse'}
+                    </div>
                   </div>
                 ) : (
-                  <div style={{
-                    fontSize: 12, color: 'var(--ds-text-tertiary)',
-                    fontStyle: 'italic',
-                  }}>
-                    Definition wird generiert...
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {[0.9, 0.7, 0.5].map((w, i) => (
+                      <div key={i} style={{
+                        height: 12, borderRadius: 3,
+                        background: 'var(--ds-hover-tint)',
+                        width: `${w * 100}%`,
+                        animation: 'pulse 1.5s ease-in-out infinite',
+                      }} />
+                    ))}
+                    <div style={{
+                      fontSize: 10, color: 'var(--ds-text-tertiary)',
+                      marginTop: 4, fontStyle: 'italic',
+                    }}>
+                      Tutor generiert Definition aus deinen Karten...
+                    </div>
                   </div>
                 )}
-              </div>
+              </>
             ) : sidebarTab === 'terms' && kgSubgraph?.nodes?.length > 0 ? (() => {
               // Group terms by deck, sort by subsetCount within each group
               const deckGroups = {};
