@@ -95,16 +95,16 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       color: '#FFFFFF',
       isQuery: true,
       isCluster: false,
-      val: 6,
+      val: 5,
     });
 
-    if (clusters.length > 0) {
+    if (clusters.length > 1) {
       // Cluster-based topology: Query → Clusters → Cards
       clusters.forEach((cluster, ci) => {
         const cid = cluster.id;
         const clusterColor = DECK_COLORS[ci % DECK_COLORS.length];
 
-        // Cluster node
+        // Cluster node (smaller than query, acts as labeled hub)
         nodes.push({
           id: cid,
           label: cluster.label,
@@ -112,7 +112,7 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
           isQuery: false,
           isCluster: true,
           cardCount: cluster.cards.length,
-          val: 3 + cluster.cards.length * 0.4,
+          val: 2.5,
         });
 
         // Link query → cluster
@@ -129,7 +129,7 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
             color: deckColor(card.deck),
             isQuery: false,
             isCluster: false,
-            val: 1.2 + (card.score || 0.5) * 1.5,
+            val: 1.0 + (card.score || 0.5),
           });
           // Link cluster → card
           links.push({ source: cid, target: card.id, value: card.score || 0.5 });

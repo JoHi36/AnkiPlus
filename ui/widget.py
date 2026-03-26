@@ -420,9 +420,9 @@ class SearchCardsThread(QThread):
                         idx = self.emb_mgr._card_ids.index(cid)
                         card_embs[cid] = self.emb_mgr._index[idx]
 
-            # Build similarity graph (threshold > 0.45)
-            sim_pairs = {}
+            # Compute all pairwise similarities
             cids_list = list(card_embs.keys())
+            all_sims = {}
             for i in range(len(cids_list)):
                 for j in range(i + 1, len(cids_list)):
                     a = card_embs[cids_list[i]]
@@ -431,28 +431,71 @@ class SearchCardsThread(QThread):
                     na = sum(x * x for x in a) ** 0.5
                     nb = sum(x * x for x in b) ** 0.5
                     if na > 0 and nb > 0:
-                        sim = dot / (na * nb)
-                        if sim > 0.70:
-                            sim_pairs.setdefault(cids_list[i], set()).add(cids_list[j])
-                            sim_pairs.setdefault(cids_list[j], set()).add(cids_list[i])
+                        all_sims[(cids_list[i], cids_list[j])] = dot / (na * nb)
 
-            # Connected components → clusters
-            assigned = set()
-            clusters = []
-            for cid in card_ids:
-                if cid in assigned:
-                    continue
-                cluster = []
-                queue = [cid]
-                assigned.add(cid)
-                while queue:
-                    current = queue.pop(0)
-                    cluster.append(current)
-                    for neighbor in sim_pairs.get(current, set()):
-                        if neighbor not in assigned:
-                            assigned.add(neighbor)
-                            queue.append(neighbor)
-                clusters.append(cluster)
+            # Adaptive threshold: find threshold that gives 3-5 clusters
+            # Start high, decrease until we get enough clusters
+            TARGET_CLUSTERS = min(5, max(3, len(card_ids) // 5))
+            best_threshold = 0.95
+            best_clusters = None
+
+            for threshold_10x in range(95, 40, -5):  # 0.95, 0.90, 0.85, ...
+                threshold = threshold_10x / 100.0
+                sim_pairs = {}
+                for (ci, cj), sim in all_sims.items():
+                    if sim > threshold:
+                        sim_pairs.setdefault(ci, set()).add(cj)
+                        sim_pairs.setdefault(cj, set()).add(ci)
+
+                # Connected components
+                assigned = set()
+                trial_clusters = []
+                for cid in card_ids:
+                    if cid in assigned:
+                        continue
+                    cluster = []
+                    queue = [cid]
+                    assigned.add(cid)
+                    while queue:
+                        current = queue.pop(0)
+                        cluster.append(current)
+                        for neighbor in sim_pairs.get(current, set()):
+                            if neighbor not in assigned:
+                                assigned.add(neighbor)
+                                queue.append(neighbor)
+                    trial_clusters.append(cluster)
+
+                # Filter out singleton clusters (merge into nearest)
+                real_clusters = [c for c in trial_clusters if len(c) >= 2]
+                singletons = [c[0] for c in trial_clusters if len(c) == 1]
+
+                if len(real_clusters) >= TARGET_CLUSTERS:
+                    best_clusters = real_clusters
+                    best_threshold = threshold
+                    # Assign singletons to nearest cluster
+                    for s in singletons:
+                        if s in card_embs:
+                            best_sim = -1
+                            best_ci = 0
+                            for ci, cluster in enumerate(best_clusters):
+                                for member in cluster:
+                                    key = (min(s, member), max(s, member))
+                                    sim = all_sims.get(key, 0)
+                                    if sim > best_sim:
+                                        best_sim = sim
+                                        best_ci = ci
+                            best_clusters[best_ci].append(s)
+                    break
+
+            # Fallback: if no good split found, split evenly
+            if not best_clusters or len(best_clusters) < 2:
+                chunk_size = max(2, len(card_ids) // TARGET_CLUSTERS)
+                best_clusters = []
+                for i in range(0, len(card_ids), chunk_size):
+                    best_clusters.append(card_ids[i:i + chunk_size])
+
+            clusters = best_clusters
+            logger.debug("Clustering: %d clusters at threshold %.2f", len(clusters), best_threshold)
 
             # Build cluster output
             cards_by_id = {c["id"]: c for c in cards_data}
