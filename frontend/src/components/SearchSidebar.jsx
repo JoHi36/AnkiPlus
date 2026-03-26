@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ChatInput from './ChatInput';
 import ResizeHandle from './ResizeHandle';
+import AgenticCell from './AgenticCell';
 
 export default function SearchSidebar({
   query,
@@ -32,6 +33,7 @@ export default function SearchSidebar({
 
   const [multiSelect, setMultiSelect] = useState(false);
   const [multiIds, setMultiIds] = useState(new Set());
+  const [sidebarTab, setSidebarTab] = useState('clusters'); // 'clusters' | 'terms'
 
   const clusterColors = [
     '#3B6EA5', '#4A8C5C', '#B07D3A', '#7B5EA7',
@@ -192,27 +194,31 @@ export default function SearchSidebar({
           {query}
         </div>
 
-        {/* Answer / Definition — rendered as Markdown */}
-        {answerText ? (
-          <div style={{
-            fontSize: 14,
-            color: 'var(--ds-text-secondary)',
-            lineHeight: 1.65,
-          }}>
-            {renderMarkdownWithRefs(answerText)}
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {[1, 0.7, 0.85].map((w, i) => (
-              <div key={i} style={{
-                height: 14, borderRadius: 4,
-                background: 'var(--ds-hover-tint)',
-                width: `${w * 100}%`,
-                animation: 'pulse 1.5s ease-in-out infinite',
-              }} />
-            ))}
-          </div>
-        )}
+        {/* Tutor AgenticCell — standard agent signature */}
+        <AgenticCell
+          agentName="tutor"
+          isLoading={!answerText}
+          loadingHint="Analysiert deine Karten..."
+          headerMeta={
+            <span style={{
+              fontSize: 11, fontWeight: 500,
+              color: 'var(--ds-text-tertiary)',
+              letterSpacing: '0.2px',
+            }}>
+              aus {totalCards || '...'} Karten
+            </span>
+          }
+        >
+          {answerText && (
+            <div style={{
+              fontSize: 14,
+              color: 'var(--ds-text-secondary)',
+              lineHeight: 1.65,
+            }}>
+              {renderMarkdownWithRefs(answerText)}
+            </div>
+          )}
+        </AgenticCell>
 
         {/* Cluster skeleton — shown while searching, before clusters arrive */}
         {!clusters && isSearching && (
@@ -259,12 +265,43 @@ export default function SearchSidebar({
           </div>
         )}
 
-        {/* ═══ Cluster list OR selected cluster detail ═══ */}
-        {clusters && clusters.length > 1 && (
+        {/* ═══ Tab Bar: Cluster / Begriffe ═══ */}
+        {(clusters?.length > 1 || kgSubgraph?.nodes?.length > 0) && (
           <div style={{
             borderTop: '1px solid var(--ds-border-subtle)',
             paddingTop: 12,
           }}>
+            {/* Tab bar */}
+            <div style={{
+              display: 'flex', gap: 0, marginBottom: 12,
+              background: 'var(--ds-hover-tint)',
+              borderRadius: 6,
+              overflow: 'hidden',
+            }}>
+              {[
+                { key: 'clusters', label: 'Perspektiven' },
+                { key: 'terms', label: 'Begriffe' },
+              ].map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setSidebarTab(tab.key)}
+                  style={{
+                    flex: 1,
+                    padding: '6px 12px',
+                    fontSize: 11, fontWeight: 500,
+                    fontFamily: 'inherit',
+                    border: 'none', cursor: 'pointer',
+                    color: sidebarTab === tab.key ? 'var(--ds-text-primary)' : 'var(--ds-text-tertiary)',
+                    background: sidebarTab === tab.key ? 'var(--ds-active-tint)' : 'transparent',
+                    transition: 'color 0.15s, background 0.15s',
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            {/* ── Clusters tab ── */}
+            {sidebarTab === 'clusters' && clusters?.length > 1 && (
             <div style={{
               transition: 'opacity 0.25s ease, transform 0.25s ease',
               opacity: animating ? 0.3 : 1,
@@ -424,6 +461,102 @@ export default function SearchSidebar({
                 </>
               )}
             </div>
+            )}
+
+            {/* ── Terms tab (Knowledge Graph) ── */}
+            {sidebarTab === 'terms' && kgSubgraph?.nodes?.length > 0 && (() => {
+              // Group terms by deck, sort by subsetCount within each group
+              const deckGroups = {};
+              kgSubgraph.nodes.forEach(node => {
+                const deck = node.deckName || 'Sonstige';
+                if (!deckGroups[deck]) deckGroups[deck] = { color: node.color, terms: [] };
+                deckGroups[deck].terms.push(node);
+              });
+              // Sort groups by total term count (most terms first)
+              const sortedGroups = Object.entries(deckGroups)
+                .sort((a, b) => b[1].terms.length - a[1].terms.length);
+              // Sort terms within each group by subsetCount
+              sortedGroups.forEach(([, group]) => {
+                group.terms.sort((a, b) => b.subsetCount - a.subsetCount);
+              });
+              const maxCount = Math.max(...kgSubgraph.nodes.map(n => n.subsetCount), 1);
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {sortedGroups.map(([deckName, group]) => (
+                    <div key={deckName}>
+                      {/* Deck header */}
+                      <div style={{
+                        fontSize: 10, fontWeight: 600,
+                        color: group.color,
+                        letterSpacing: '0.5px',
+                        marginBottom: 6,
+                        textTransform: 'uppercase',
+                      }}>
+                        {deckName}
+                      </div>
+
+                      {/* Terms in this deck */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        {group.terms.slice(0, 15).map(term => {
+                          const pct = (term.subsetCount / maxCount) * 100;
+                          // Darker blue for higher relevance
+                          const alpha = 0.15 + (term.subsetCount / maxCount) * 0.45;
+                          return (
+                            <div
+                              key={term.id}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: 8,
+                                padding: '4px 8px', borderRadius: 6,
+                                cursor: 'pointer',
+                                transition: 'background 0.15s',
+                              }}
+                              onMouseEnter={e => { e.currentTarget.style.background = 'var(--ds-hover-tint)'; }}
+                              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                            >
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{
+                                  display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+                                  marginBottom: 2,
+                                }}>
+                                  <span style={{
+                                    fontSize: 12, fontWeight: 500,
+                                    color: 'var(--ds-text-secondary)',
+                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                  }}>
+                                    {term.label}
+                                  </span>
+                                  <span style={{
+                                    fontSize: 10, color: 'var(--ds-text-tertiary)',
+                                    flexShrink: 0, marginLeft: 8,
+                                  }}>
+                                    {term.subsetCount}
+                                  </span>
+                                </div>
+                                {/* Relevance bar */}
+                                <div style={{
+                                  height: 3, borderRadius: 1.5,
+                                  background: 'var(--ds-hover-tint)',
+                                  overflow: 'hidden',
+                                }}>
+                                  <div style={{
+                                    height: '100%', borderRadius: 1.5,
+                                    width: `${pct}%`,
+                                    background: `color-mix(in srgb, ${group.color} ${Math.round(alpha * 100)}%, transparent)`,
+                                    transition: 'width 0.3s ease',
+                                  }} />
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
           </div>
         )}
       </div>

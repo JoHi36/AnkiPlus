@@ -2546,6 +2546,7 @@ function AppInner() {
               subClusters={smartSearch.subClusters}
               isSubClustering={smartSearch.isSubClustering}
               sidebarHasAnimated={smartSearch.sidebarHasAnimated}
+              kgSubgraph={smartSearch.kgSubgraph}
             />
           )}
         </div>

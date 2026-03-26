@@ -3017,6 +3017,16 @@ class ChatbotWidget(QWidget):
             unique_decks = list(set(term_deck.values()))
             deck_to_color = {d: deck_colors[i % len(deck_colors)] for i, d in enumerate(unique_decks)}
 
+            # Resolve deck names
+            from aqt import mw
+            deck_to_name = {}
+            for did in unique_decks:
+                try:
+                    name = mw.col.decks.name(did)
+                    deck_to_name[did] = name.split('::')[-1]  # short name
+                except Exception:
+                    deck_to_name[did] = "Deck %d" % did
+
             # 5. Get card IDs per term (for the "kreuzen" feature)
             term_card_ids = {}
             card_rows = db.execute(
@@ -3030,12 +3040,15 @@ class ChatbotWidget(QWidget):
             # Build response
             nodes = []
             for term in terms:
+                did = term_deck.get(term, 0)
                 nodes.append({
                     "id": term,
                     "label": term,
                     "frequency": global_freqs.get(term, 0),
                     "subsetCount": term_counts.get(term, 0),
-                    "color": deck_to_color.get(term_deck.get(term, 0), '#7A6B5D'),
+                    "color": deck_to_color.get(did, '#7A6B5D'),
+                    "deckName": deck_to_name.get(did, ''),
+                    "deckId": did,
                     "cardIds": list(set(term_card_ids.get(term, [])))[:50],
                 })
 
