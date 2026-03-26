@@ -46,6 +46,7 @@ import ContextTags from './components/ContextTags';
 import ResizeHandle, { loadPersistedWidth, applyWidth } from './components/ResizeHandle';
 import ReasoningStream from './reasoning/ReasoningStream';
 import { registerDefaultRenderers } from './reasoning/defaultRenderers';
+import useSmartSearch from './hooks/useSmartSearch';
 
 // Register step renderers once at module load time
 registerDefaultRenderers();
@@ -213,6 +214,7 @@ function AppInner() {
   const cardSessionHook = useCardSession(bridge);
   const reviewTrailHook = useReviewTrail();
   const insightsHook = useInsights();
+  const smartSearch = useSmartSearch();
   const [activeView, setActiveView] = useState('chat'); // 'chat' | 'deckBrowser' | 'overview' | 'freeChat' | 'review' | 'statistik'
   const activeViewRef = useRef('chat');
   useEffect(() => { activeViewRef.current = activeView; }, [activeView]);
@@ -2361,7 +2363,7 @@ function AppInner() {
           {activeView === 'deckBrowser' && (
             viewMode === 'graph' ? (
               <React.Suspense fallback={<div style={{ flex: 1 }} />}>
-                <GraphView onToggleView={() => setViewMode('decks')} isPremium={isPremium} deckData={deckBrowserData} />
+                <GraphView onToggleView={() => setViewMode('decks')} isPremium={isPremium} deckData={deckBrowserData} smartSearch={smartSearch} bridge={bridgeRef.current} />
               </React.Suspense>
             ) : (
               <ComponentErrorBoundary fallback={<div style={FALLBACK_VIEW_STYLE}>View failed to render. Try refreshing.</div>}>

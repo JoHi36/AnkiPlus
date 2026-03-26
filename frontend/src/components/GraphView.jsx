@@ -1,8 +1,9 @@
-import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import ForceGraph3D from '3d-force-graph';
 import { executeAction } from '../actions';
 import KnowledgeHeatmap from './KnowledgeHeatmap';
 import ChatInput from './ChatInput';
+import SearchSidebar from './SearchSidebar';
 
 // Muted, darker color palette — brightens on cluster selection
 const CLUSTER_COLORS = [
@@ -34,87 +35,20 @@ function deckColor(deckName) {
   return CLUSTER_COLORS[Math.abs(hash) % CLUSTER_COLORS.length];
 }
 
-export default function GraphView({ onToggleView, isPremium, deckData }) {
+export default function GraphView({ onToggleView, isPremium, deckData, smartSearch, bridge }) {
   const containerRef = useRef(null);
   const graphRef = useRef(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResult, setSearchResult] = useState(null);
-  const [isSearching, setIsSearching] = useState(false);
-  const [selectedCard, setSelectedCard] = useState(null);
-  const [answerText, setAnswerText] = useState(null);
-  const [clusterLabels, setClusterLabels] = useState(null); // LLM-generated labels
+  const heatmapRef = useRef(null);
+  const [heatmapDeck, setHeatmapDeck] = useState(null);
 
-  // Listen for search results and quick answers from backend
-  useEffect(() => {
-    const onSearchCards = (e) => {
-      setSearchResult(e.detail);
-      setIsSearching(false);
-      setClusterLabels(null); // reset until LLM responds
-    };
-    const onQuickAnswer = (e) => {
-      setAnswerText(e.detail?.answer || null);
-      // Update cluster labels from LLM if provided
-      if (e.detail?.clusterLabels && Object.keys(e.detail.clusterLabels).length > 0) {
-        setClusterLabels(e.detail.clusterLabels);
-      }
-    };
-    window.addEventListener('graph.searchCards', onSearchCards);
-    window.addEventListener('graph.quickAnswer', onQuickAnswer);
-    return () => {
-      window.removeEventListener('graph.searchCards', onSearchCards);
-      window.removeEventListener('graph.quickAnswer', onQuickAnswer);
-    };
-  }, []);
-
-  // Update graph node labels when LLM cluster labels arrive
-  useEffect(() => {
-    if (!clusterLabels || !graphRef.current || !searchResult?.clusters?.length) return;
-    const graph = graphRef.current;
-    const { nodes } = graph.graphData();
-    nodes.forEach(n => {
-      if (n.isQuery || n.clusterIndex === undefined) return;
-      const clusterId = `cluster_${n.clusterIndex}`;
-      if (clusterLabels[clusterId]) {
-        n.clusterLabel = clusterLabels[clusterId];
-      }
-    });
-    // Refresh labels by touching nodeLabel accessor
-    graph.nodeLabel(n => {
-      if (n.isQuery) return n.label;
-      const cluster = n.clusterLabel ? `[${n.clusterLabel}] ` : '';
-      return `${cluster}${n.label}\n${n.deck}`;
-    });
-  }, [clusterLabels, searchResult]);
-
-  // Handle search from ChatInput
-  const handleSearchWithQuery = useCallback((query) => {
-    setSearchQuery(query);
-    setIsSearching(true);
-    setSearchResult(null);
-    setAnswerText(null);
-    setSelectedCard(null);
-    setClusterLabels(null);
-    window.ankiBridge?.addMessage('searchCards', { query: query.trim(), topK: 25 });
-  }, []);
-
-  // Reset to heatmap state
-  const handleReset = useCallback(() => {
-    setSearchResult(null);
-    setAnswerText(null);
-    setSearchQuery('');
-    setSelectedCard(null);
-    setClusterLabels(null);
-    if (graphRef.current?._destructor) graphRef.current._destructor();
-    graphRef.current = null;
-  }, []);
-
-  const startStack = useCallback(() => {
-    if (!searchResult?.cards?.length) return;
-    window.ankiBridge?.addMessage('startTermStack', {
-      term: searchResult.query,
-      cardIds: JSON.stringify(searchResult.cards.map(c => Number(c.id))),
-    });
-  }, [searchResult]);
+  // Destructure smartSearch
+  const {
+    query, searchResult, isSearching, hasResults,
+    answerText, clusterLabels, clusterSummaries,
+    selectedClusterId, setSelectedClusterId,
+    selectedCluster, selectedClusterLabel, selectedClusterSummary,
+    search, reset,
+  } = smartSearch;
 
   // Build / rebuild graph when search results arrive
   useEffect(() => {
@@ -127,7 +61,6 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
     const nodes = [];
     const links = [];
 
-    // Query center node
     nodes.push({
       id: '__query__',
       label: searchResult.query,
@@ -137,7 +70,6 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       val: 5,
     });
 
-    // Cards colored by cluster, only best card per cluster connects to query
     if (clusters.length > 1) {
       clusters.forEach((cluster, ci) => {
         const darkColor = CLUSTER_COLORS[ci % CLUSTER_COLORS.length];
@@ -168,12 +100,10 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
           }
         });
 
-        // ONE line per cluster: only the best card connects to query ("balloon string")
         if (bestCardId) {
           links.push({ source: '__query__', target: bestCardId, value: 0.7, isBalloonString: true });
         }
 
-        // Intra-cluster edges: pull cards together
         for (let i = 0; i < clusterCardIds.length; i++) {
           for (let j = i + 1; j < clusterCardIds.length; j++) {
             links.push({
@@ -202,7 +132,6 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       });
     }
 
-    // Destroy old graph
     if (graphRef.current?._destructor) graphRef.current._destructor();
 
     const graph = ForceGraph3D()(containerRef.current);
@@ -224,14 +153,8 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       .linkColor(() => 'var(--ds-border)')
       .onNodeClick(node => {
         if (!node || node.isQuery) return;
-        setSelectedCard(node);
-        // Highlight entire cluster: brighten selected cluster, keep others dark
         if (node.clusterIndex !== undefined) {
-          graph.nodeColor(n => {
-            if (n.isQuery) return 'var(--ds-text-primary)';
-            if (n.clusterIndex === node.clusterIndex) return n.brightColor || n.color;
-            return n.color;
-          });
+          setSelectedClusterId(`cluster_${node.clusterIndex}`);
         }
         const dist = 40;
         const ratio = 1 + dist / Math.hypot(node.x || 1, node.y || 1, node.z || 1);
@@ -247,7 +170,6 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       .d3VelocityDecay(0.25)
       .showNavInfo(false)
       .onEngineStop(() => {
-        // Zoom to fit once physics settle — reliable timing
         if (graphRef.current) graphRef.current.zoomToFit(800, 60);
       });
 
@@ -280,201 +202,317 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
     };
   }, [searchResult]);
 
-  const hasResults = searchResult?.cards?.length > 0;
-
-  // Compute cluster legend — uses LLM labels when available
-  const clusterLegend = useMemo(() => {
-    if (!searchResult?.clusters?.length) {
-      if (!searchResult?.cards?.length) return [];
-      const counts = {};
-      const colors = {};
-      searchResult.cards.forEach(c => {
-        const deck = c.deck || 'Unbekannt';
-        counts[deck] = (counts[deck] || 0) + 1;
-        if (!colors[deck]) colors[deck] = deckColor(deck);
-      });
-      return Object.entries(counts)
-        .sort((a, b) => b[1] - a[1])
-        .map(([deck, count]) => ({ label: deck, count, color: colors[deck] }));
-    }
-    return searchResult.clusters.map((c, i) => {
-      const clusterId = `cluster_${i}`;
-      const label = (clusterLabels && clusterLabels[clusterId]) || c.label;
-      return {
-        label,
-        count: c.cards.length,
-        color: CLUSTER_COLORS[i % CLUSTER_COLORS.length],
-      };
+  // Update graph node labels when LLM cluster labels arrive
+  useEffect(() => {
+    if (!clusterLabels || !graphRef.current || !searchResult?.clusters?.length) return;
+    const graph = graphRef.current;
+    const { nodes } = graph.graphData();
+    nodes.forEach(n => {
+      if (n.isQuery || n.clusterIndex === undefined) return;
+      const clusterId = `cluster_${n.clusterIndex}`;
+      if (clusterLabels[clusterId]) {
+        n.clusterLabel = clusterLabels[clusterId];
+      }
     });
-  }, [searchResult, clusterLabels]);
+    graph.nodeLabel(n => {
+      if (n.isQuery) return n.label;
+      const cluster = n.clusterLabel ? `[${n.clusterLabel}] ` : '';
+      return `${cluster}${n.label}\n${n.deck}`;
+    });
+  }, [clusterLabels, searchResult]);
+
+  // Cluster selection → camera rotation + node highlighting
+  useEffect(() => {
+    if (!graphRef.current) return;
+
+    if (!selectedClusterId) {
+      // Reset all nodes to default color
+      graphRef.current.nodeColor(n => n.isQuery ? '#FFFFFF' : n.color);
+      return;
+    }
+
+    const graph = graphRef.current;
+    const idx = parseInt(selectedClusterId.replace('cluster_', ''), 10);
+
+    // Brighten selected cluster, dim others
+    graph.nodeColor(n => {
+      if (n.isQuery) return '#FFFFFF';
+      if (n.clusterIndex === idx) return n.brightColor || n.color;
+      return n.color;
+    });
+
+    // Rotate camera to cluster centroid
+    const { nodes } = graph.graphData();
+    const clusterNodes = nodes.filter(n => n.clusterIndex === idx);
+    if (clusterNodes.length > 0) {
+      const cx = clusterNodes.reduce((s, n) => s + (n.x || 0), 0) / clusterNodes.length;
+      const cy = clusterNodes.reduce((s, n) => s + (n.y || 0), 0) / clusterNodes.length;
+      const cz = clusterNodes.reduce((s, n) => s + (n.z || 0), 0) / clusterNodes.length;
+      const dist = 60;
+      const r = Math.hypot(cx, cy, cz) || 1;
+      const ratio = 1 + dist / r;
+      graph.cameraPosition(
+        { x: cx * ratio, y: cy * ratio, z: cz * ratio },
+        { x: 0, y: 0, z: 0 },
+        800
+      );
+    }
+  }, [selectedClusterId]);
+
+  // Start stack — uses selected cluster cards or full result
+  const startStack = useCallback(() => {
+    const cards = selectedCluster?.cards || searchResult?.cards;
+    if (!cards?.length) return;
+    window.ankiBridge?.addMessage('startTermStack', {
+      term: query,
+      cardIds: JSON.stringify(cards.map(c => Number(c.id))),
+    });
+  }, [selectedCluster, searchResult, query]);
+
+  // Keyboard handlers
+  useEffect(() => {
+    const onKey = (e) => {
+      if (hasResults) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          if (selectedClusterId) {
+            setSelectedClusterId(null);
+          } else {
+            reset();
+            if (graphRef.current?._destructor) graphRef.current._destructor();
+            graphRef.current = null;
+          }
+          return;
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          startStack();
+          return;
+        }
+        const clusters = searchResult?.clusters;
+        if (clusters?.length > 1) {
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            const currentIdx = selectedClusterId
+              ? parseInt(selectedClusterId.replace('cluster_', ''), 10)
+              : -1;
+            const next = e.key === 'ArrowDown'
+              ? Math.min(currentIdx + 1, clusters.length - 1)
+              : Math.max(currentIdx - 1, 0);
+            setSelectedClusterId(`cluster_${next}`);
+          }
+          if (e.key >= '1' && e.key <= '6') {
+            const idx = parseInt(e.key, 10) - 1;
+            if (idx < clusters.length) {
+              setSelectedClusterId(`cluster_${idx}`);
+            }
+          }
+        }
+        return;
+      }
+      // Heatmap keyboard
+      if (e.key === 'Escape' && heatmapDeck) {
+        e.preventDefault();
+        setHeatmapDeck(null);
+      }
+      if (e.key === ' ' && heatmapDeck?.hasChildren) {
+        e.preventDefault();
+        heatmapRef.current?.drillInto(heatmapDeck);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [hasResults, selectedClusterId, heatmapDeck, searchResult, reset, setSelectedClusterId, startStack]);
+
+  // Heatmap deck selection info
+  const isWeak = heatmapDeck && heatmapDeck.strength < 0.5;
+  const deckDue = heatmapDeck ? (heatmapDeck.dueNew + heatmapDeck.dueLearn + heatmapDeck.dueReview) : 0;
+  const clusterCards = selectedCluster?.cards;
+  const totalCards = searchResult?.totalFound || 0;
+
+  // topSlot content
+  const topSlotContent = (() => {
+    if (heatmapDeck && !hasResults) {
+      return (
+        <div style={{
+          padding: '12px 16px', textAlign: 'center',
+          borderBottom: '1px solid var(--ds-border-subtle)',
+        }}>
+          <div style={{
+            fontSize: 15, fontWeight: 600,
+            color: 'var(--ds-text-primary)',
+          }}>
+            {heatmapDeck.name}
+          </div>
+          <div style={{
+            fontSize: 12, color: 'var(--ds-text-secondary)', marginTop: 4,
+          }}>
+            {heatmapDeck.cards} Karten &middot; {Math.round(heatmapDeck.strength * 100)}% gelernt
+            {deckDue > 0 && (
+              <span style={{ color: 'var(--ds-yellow)', marginLeft: 8 }}>
+                {deckDue} fällig
+              </span>
+            )}
+          </div>
+        </div>
+      );
+    }
+    if (hasResults) {
+      return (
+        <div style={{
+          padding: '8px 14px', fontSize: 13,
+          color: 'var(--ds-text-primary)',
+          borderBottom: '1px solid var(--ds-border-subtle)',
+        }}>
+          {selectedClusterId
+            ? `${selectedClusterLabel} \u00B7 ${clusterCards?.length || 0} Karten`
+            : `${query} \u00B7 ${searchResult?.clusters?.length || 0} Cluster \u00B7 ${totalCards} Karten`
+          }
+        </div>
+      );
+    }
+    return null;
+  })();
 
   return (
-    <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
-      {/* 3D canvas — only mounted when search results exist (saves GPU) */}
-      {hasResults && <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />}
+    <div style={{ position: 'relative', flex: 1, display: 'flex', overflow: 'hidden' }}>
+      {/* Canvas area */}
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        {/* 3D canvas */}
+        {hasResults && <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />}
 
-      {/* Top bar — minimal: toggle + Deck-Liste */}
-      <div style={{
-        position: 'relative', zIndex: 10, pointerEvents: 'none',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '12px 20px', maxWidth: 'var(--ds-content-width)', margin: '0 auto',
-        width: '100%',
-      }}>
-        {/* Left: Deck-Liste button */}
-        <div style={{ display: 'flex', gap: 4, pointerEvents: 'auto' }}>
-          {onToggleView && (
-            <button
-              onClick={onToggleView}
-              style={{
-                background: 'var(--ds-hover-tint)',
-                border: '1px solid var(--ds-border)',
-                borderRadius: 8, padding: '6px 14px',
-                color: 'var(--ds-text-secondary)',
-                fontSize: 12, fontWeight: 500, cursor: 'pointer',
-                fontFamily: 'inherit',
-                transition: 'color 0.15s, background 0.15s',
+        {/* Top bar */}
+        <div style={{
+          position: 'relative', zIndex: 10, pointerEvents: 'none',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '12px 20px', maxWidth: 'var(--ds-content-width)', margin: '0 auto',
+          width: '100%',
+        }}>
+          <div style={{ display: 'flex', gap: 4, pointerEvents: 'auto' }}>
+            {onToggleView && (
+              <button
+                onClick={onToggleView}
+                style={{
+                  background: 'var(--ds-hover-tint)',
+                  border: '1px solid var(--ds-border)',
+                  borderRadius: 8, padding: '6px 14px',
+                  color: 'var(--ds-text-secondary)',
+                  fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  transition: 'color 0.15s, background 0.15s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.color = 'var(--ds-text-primary)'; e.currentTarget.style.background = 'var(--ds-active-tint)'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = 'var(--ds-text-secondary)'; e.currentTarget.style.background = 'var(--ds-hover-tint)'; }}
+              >
+                Deck-Liste
+              </button>
+            )}
+          </div>
+          <div />
+        </div>
+
+        {/* Heatmap */}
+        {!hasResults && deckData?.roots?.length > 0 && (
+          <div style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '48px 24px 100px',
+            zIndex: 5, pointerEvents: 'auto',
+            overflowY: 'auto',
+          }}>
+            <KnowledgeHeatmap
+              ref={heatmapRef}
+              deckData={deckData}
+              selectedDeckId={heatmapDeck?.id ?? null}
+              onSelectDeck={setHeatmapDeck}
+            />
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!hasResults && !isSearching && !searchResult?.error && !deckData?.roots?.length && (
+          <div style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            gap: 8, color: 'var(--ds-text-tertiary)', fontSize: 14, pointerEvents: 'none',
+            zIndex: 5,
+          }}>
+            <span style={{ fontSize: 40, opacity: 0.15 }}>&#8984;</span>
+            <span>Gib ein Thema ein, um einen Stapel zu erstellen</span>
+          </div>
+        )}
+
+        {/* Error state */}
+        {searchResult?.error && (
+          <div style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            gap: 8, color: 'var(--ds-text-tertiary)', fontSize: 14, pointerEvents: 'none',
+            zIndex: 5,
+          }}>
+            <span style={{ fontSize: 14, color: 'var(--ds-red)', opacity: 0.7 }}>{searchResult.error}</span>
+            <span style={{ fontSize: 12 }}>Versuche es erneut</span>
+          </div>
+        )}
+
+        {/* Bottom dock — ChatInput with topSlot for deck info or search context */}
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          zIndex: 15, pointerEvents: 'auto',
+          display: 'flex', justifyContent: 'center',
+          padding: '0 20px 20px',
+        }}>
+          <div style={{ width: '100%', maxWidth: 680 }}>
+            <ChatInput
+              onSend={(text) => {
+                if (text.trim()) search(text);
               }}
-              onMouseEnter={e => { e.currentTarget.style.color = 'var(--ds-text-primary)'; e.currentTarget.style.background = 'var(--ds-active-tint)'; }}
-              onMouseLeave={e => { e.currentTarget.style.color = 'var(--ds-text-secondary)'; e.currentTarget.style.background = 'var(--ds-hover-tint)'; }}
-            >
-              Deck-Liste
-            </button>
-          )}
+              isLoading={isSearching}
+              placeholder="Was willst du lernen?"
+              hideInput={!!heatmapDeck && !hasResults}
+              topSlot={topSlotContent}
+              actionPrimary={
+                heatmapDeck && !hasResults
+                  ? {
+                      label: isWeak ? 'Schwächen lernen' : 'Stapel starten',
+                      onClick: () => executeAction('deck.study', { deckId: heatmapDeck.id }),
+                    }
+                  : {
+                      label: hasResults ? `${totalCards} Karten kreuzen` : '',
+                      onClick: startStack,
+                      disabled: !hasResults,
+                    }
+              }
+              actionSecondary={
+                heatmapDeck && !hasResults
+                  ? {
+                      label: heatmapDeck.hasChildren ? 'Reinzoomen' : '',
+                      shortcut: heatmapDeck.hasChildren ? 'Space' : '',
+                      onClick: () => heatmapRef.current?.drillInto(heatmapDeck),
+                    }
+                  : {
+                      label: '',
+                      shortcut: hasResults ? 'Esc' : '',
+                      onClick: reset,
+                    }
+              }
+            />
+          </div>
         </div>
-
-        {/* Right: spacer */}
-        <div />
       </div>
 
-      {/* Heatmap — shown when no search results yet */}
-      {!hasResults && deckData?.roots?.length > 0 && (
-        <div style={{
-          position: 'absolute', inset: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '48px 24px 100px',
-          zIndex: 5, pointerEvents: 'auto',
-          overflowY: 'auto',
-        }}>
-          <KnowledgeHeatmap
-            deckData={deckData}
-            onStartStack={(deckId) => executeAction('deck.study', { deckId })}
-          />
-        </div>
-      )}
-
-      {/* Empty state — no decks yet */}
-      {!hasResults && !isSearching && !searchResult?.error && !deckData?.roots?.length && (
-        <div style={{
-          position: 'absolute', inset: 0,
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          gap: 8, color: 'var(--ds-text-tertiary)', fontSize: 14, pointerEvents: 'none',
-          zIndex: 5,
-        }}>
-          <span style={{ fontSize: 40, opacity: 0.15 }}>&#8984;</span>
-          <span>Gib ein Thema ein, um einen Stapel zu erstellen</span>
-        </div>
-      )}
-
-      {/* Error state */}
-      {searchResult?.error && (
-        <div style={{
-          position: 'absolute', inset: 0,
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          gap: 8, color: 'var(--ds-text-tertiary)', fontSize: 14, pointerEvents: 'none',
-          zIndex: 5,
-        }}>
-          <span style={{ fontSize: 14, color: 'var(--ds-red)', opacity: 0.7 }}>{searchResult.error}</span>
-          <span style={{ fontSize: 12 }}>Versuche es erneut</span>
-        </div>
-      )}
-
-      {/* Cluster/Deck legend — right side (visible when search results exist) */}
-      {hasResults && clusterLegend.length > 0 && (
-        <div style={{
-          position: 'absolute', right: 20, top: '50%', transform: 'translateY(-50%)',
-          display: 'flex', flexDirection: 'column', gap: 6,
-          zIndex: 10, pointerEvents: 'none',
-        }}>
-          {clusterLegend.map(({ label, count, color }) => (
-            <div key={label} style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              fontSize: 11, color: 'var(--ds-text-secondary)',
-            }}>
-              <div style={{
-                width: 8, height: 8, borderRadius: '50%',
-                background: color, flexShrink: 0,
-              }} />
-              <span>{label}</span>
-              <span style={{ color: 'var(--ds-text-tertiary)' }}>{count}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Selected card tooltip */}
-      {selectedCard && (
-        <div style={{
-          position: 'absolute', top: 200, right: 24,
-          padding: '12px 16px', borderRadius: 12,
-          background: 'var(--ds-bg-overlay)',
-          border: '1px solid var(--ds-border-subtle)',
-          boxShadow: 'var(--ds-shadow-md)',
-          zIndex: 10, pointerEvents: 'auto',
-          maxWidth: 280, fontSize: 13,
-        }}>
-          <div style={{ color: 'var(--ds-text-primary)', fontWeight: 500, marginBottom: 4 }}>
-            {selectedCard.label}
-          </div>
-          <div style={{ color: 'var(--ds-text-tertiary)', fontSize: 11 }}>
-            {selectedCard.deckFull} &middot; Relevanz: {Math.round(selectedCard.score * 100)}%
-          </div>
-          <button
-            onClick={() => setSelectedCard(null)}
-            style={{
-              position: 'absolute', top: 8, right: 8,
-              background: 'none', border: 'none', color: 'var(--ds-text-tertiary)',
-              cursor: 'pointer', fontSize: 14,
-            }}
-          >&times;</button>
-        </div>
-      )}
-
-      {/* ChatInput — always docked at bottom */}
-      <div style={{
-        position: 'absolute', bottom: 0, left: 0, right: 0,
-        zIndex: 15, pointerEvents: 'auto',
-        display: 'flex', justifyContent: 'center',
-        padding: '0 20px 20px',
-      }}>
-        <div style={{ width: '100%', maxWidth: 680 }}>
-          <ChatInput
-            onSend={(text) => {
-              if (text.trim()) handleSearchWithQuery(text);
-            }}
-            isLoading={isSearching}
-            placeholder="Was willst du lernen?"
-            topSlot={answerText ? (
-              <div style={{
-                padding: '8px 14px', fontSize: 13,
-                color: 'var(--ds-text-primary)', lineHeight: 1.5,
-                borderBottom: '1px solid var(--ds-border-subtle)',
-              }}>
-                {answerText}
-              </div>
-            ) : null}
-            actionPrimary={{
-              label: hasResults ? `${searchResult.totalFound} Karten kreuzen` : '',
-              onClick: startStack,
-              disabled: !hasResults,
-            }}
-            actionSecondary={{
-              label: '',
-              shortcut: hasResults ? 'Esc' : '',
-              onClick: handleReset,
-            }}
-          />
-        </div>
-      </div>
+      {/* SearchSidebar — right panel, only when results exist */}
+      <SearchSidebar
+        visible={hasResults}
+        query={query}
+        answerText={answerText}
+        clusters={searchResult?.clusters}
+        clusterLabels={clusterLabels}
+        clusterSummaries={clusterSummaries}
+        selectedClusterId={selectedClusterId}
+        onSelectCluster={setSelectedClusterId}
+        bridge={bridge}
+      />
     </div>
   );
 }
