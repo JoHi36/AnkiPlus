@@ -313,8 +313,8 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
         return sprite;
       })
       .nodeThreeObjectExtend(true) // show both sphere + label
-      .linkWidth(l => Math.max(0.1, Math.min(0.5, (l.value || 1) * 0.05)))
-      .linkOpacity(0.08)
+      .linkWidth(l => Math.max(0.2, Math.min(0.8, (l.value || 1) * 0.15)))
+      .linkOpacity(0.15)
       .linkColor(() => '#3A3A3C')
       .onNodeClick(node => {
         if (!node) return;
@@ -338,9 +338,10 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
       });
 
     graph.d3Force('link').distance(link => {
-      return 20 + (1 / Math.max(1, link.value)) * 40;
+      // Higher weight = closer (more shared cards = stronger connection)
+      return 15 + (1 / Math.max(1, link.value)) * 30;
     });
-    graph.d3Force('charge').strength(-30);
+    graph.d3Force('charge').strength(-50); // stronger repulsion for better spread
 
     if (graph.controls()) {
       graph.controls().autoRotate = true;
