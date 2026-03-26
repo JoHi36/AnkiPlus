@@ -806,29 +806,29 @@ def generate_quick_answer(query, card_texts, cluster_labels=None, model=None):
     url = _get_backend_chat_url()
     headers = get_auth_headers()
 
+    # Truncate prompt to avoid oversized payloads
+    if len(prompt) > 2000:
+        prompt = prompt[:2000]
+
     backend_data = {
         "message": prompt,
         "model": model,
         "mode": "compact",
         "history": [],
-        "stream": True,
+        "stream": False,
     }
 
     try:
-        # Collect streaming response
-        collected = []
-        def _collect(chunk, done, is_function_call=False, **kw):
-            if chunk:
-                collected.append(chunk)
+        logger.info("generate_quick_answer: POST %s (prompt len=%d)", url, len(prompt))
+        resp = requests.post(url, json=backend_data, headers=headers, timeout=20)
+        logger.info("generate_quick_answer: response status=%d", resp.status_code)
 
-        stream_response(
-            urls=[url],
-            data=None,
-            callback=_collect,
-            use_backend=True,
-            backend_data=backend_data,
-        )
-        response_text = "".join(collected)
+        if resp.status_code != 200:
+            logger.error("generate_quick_answer: Backend error %d: %s", resp.status_code, resp.text[:300])
+            return {"answer": "", "answerable": False, "clusterLabels": {}}
+
+        result = resp.json()
+        response_text = result.get("text") or result.get("response") or ""
 
         if not response_text.strip():
             logger.warning("generate_quick_answer: Empty response for '%s'", query)
