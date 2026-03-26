@@ -735,6 +735,48 @@ def generate_definition(term, card_texts, model=None):
 
 
 # ---------------------------------------------------------------------------
+# _parse_quick_answer_response — parse LLM output into structured result
+# ---------------------------------------------------------------------------
+def _parse_quick_answer_response(text, has_clusters=False):
+    """Parse LLM response into answer + cluster labels + cluster summaries."""
+    text = text.strip()
+    parsed_labels = {}
+    parsed_summaries = {}
+
+    if has_clusters and "ANTWORT:" in text:
+        parts = text.split("CLUSTER:")
+        answer = parts[0].replace("ANTWORT:", "").strip()
+        if len(parts) > 1:
+            for line in parts[1].strip().split("\n"):
+                line = line.strip()
+                if "=" not in line:
+                    continue
+                key, rest = line.split("=", 1)
+                key = key.strip()
+                if "|" in rest:
+                    name, summary = rest.split("|", 1)
+                    parsed_labels[key] = name.strip()
+                    parsed_summaries[key] = summary.strip()
+                else:
+                    parsed_labels[key] = rest.strip()
+    else:
+        answer = text.replace("ANTWORT:", "").strip()
+
+    answerable = not any(phrase in answer for phrase in [
+        "kann mit deinen Karten nicht beantwortet",
+        "Keine Definition in deinen Karten",
+        "Nicht genug Karten",
+    ])
+
+    return {
+        "answer": answer,
+        "answerable": answerable,
+        "clusterLabels": parsed_labels,
+        "clusterSummaries": parsed_summaries,
+    }
+
+
+# ---------------------------------------------------------------------------
 # generate_quick_answer — concise 2-3 sentence answer from card texts
 # ---------------------------------------------------------------------------
 def generate_quick_answer(query, card_texts, cluster_labels=None, model=None):
@@ -747,10 +789,10 @@ def generate_quick_answer(query, card_texts, cluster_labels=None, model=None):
         model: Model override (defaults to DEFINITION_MODEL).
 
     Returns:
-        dict: {"answer": str, "answerable": bool, "clusterLabels": dict}
+        dict: {"answer": str, "answerable": bool, "clusterLabels": dict, "clusterSummaries": dict}
     """
     if not card_texts:
-        return {"answer": "Nicht genug Karten zu diesem Thema.", "answerable": False, "clusterLabels": {}}
+        return {"answer": "Nicht genug Karten zu diesem Thema.", "answerable": False, "clusterLabels": {}, "clusterSummaries": {}}
 
     if model is None:
         model = DEFINITION_MODEL
@@ -780,16 +822,18 @@ def generate_quick_answer(query, card_texts, cluster_labels=None, model=None):
             "\"Keine Definition in deinen Karten gefunden.\""
         ) % (query, cards_str)
 
-    # Add cluster labeling request if clusters provided
-    parsed_labels = {}
+    # Add cluster labeling + summary request if clusters provided
     if cluster_labels:
         cluster_str = "\n".join(
             "Cluster %s: %s" % (k, ", ".join(str(s)[:30] for s in v[:3]))
             for k, v in cluster_labels.items()
         )
         prompt += (
-            "\n\nBenenne außerdem jeden Cluster mit 2-3 Wörtern:\n%s\n"
-            "\nAntworte im Format:\nANTWORT: [deine antwort]\nCLUSTER: cluster_0=Name, cluster_1=Name"
+            "\n\nBenenne jeden Cluster mit 2-3 Wörtern und schreibe eine "
+            "2-Satz-Zusammenfassung:\n%s\n"
+            "Format:\nANTWORT: [deine antwort]\n"
+            "CLUSTER: cluster_0=Name|Zusammenfassung\n"
+            "cluster_1=Name|Zusammenfassung"
         ) % cluster_str
 
     config = get_config() or {}
@@ -807,8 +851,8 @@ def generate_quick_answer(query, card_texts, cluster_labels=None, model=None):
     headers = get_auth_headers()
 
     # Truncate prompt to avoid oversized payloads
-    if len(prompt) > 2000:
-        prompt = prompt[:2000]
+    if len(prompt) > 12000:
+        prompt = prompt[:12000]
 
     backend_data = {
         "message": prompt,
@@ -825,46 +869,25 @@ def generate_quick_answer(query, card_texts, cluster_labels=None, model=None):
 
         if resp.status_code != 200:
             logger.error("generate_quick_answer: Backend error %d: %s", resp.status_code, resp.text[:300])
-            return {"answer": "", "answerable": False, "clusterLabels": {}}
+            return {"answer": "", "answerable": False, "clusterLabels": {}, "clusterSummaries": {}}
 
         result = resp.json()
         response_text = result.get("text") or result.get("response") or ""
 
         if not response_text.strip():
             logger.warning("generate_quick_answer: Empty response for '%s'", query)
-            return {"answer": "", "answerable": False, "clusterLabels": {}}
+            return {"answer": "", "answerable": False, "clusterLabels": {}, "clusterSummaries": {}}
 
     except Exception as e:
         logger.exception("generate_quick_answer: Error for '%s'", query)
-        return {"answer": "", "answerable": False, "clusterLabels": {}}
+        return {"answer": "", "answerable": False, "clusterLabels": {}, "clusterSummaries": {}}
 
-    # Parse response
-    text = response_text.strip()
+    # Parse response via dedicated function
+    parsed = _parse_quick_answer_response(
+        response_text, has_clusters=bool(cluster_labels)
+    )
 
-    if cluster_labels and "ANTWORT:" in text:
-        # Parse structured response
-        parts = text.split("CLUSTER:")
-        answer = parts[0].replace("ANTWORT:", "").strip()
-        if len(parts) > 1:
-            for pair in parts[1].strip().split(","):
-                pair = pair.strip()
-                if "=" in pair:
-                    k, v = pair.split("=", 1)
-                    parsed_labels[k.strip()] = v.strip()
-    else:
-        answer = text
+    logger.info("generate_quick_answer: Done for '%s', answerable=%s, labels=%d",
+                query, parsed["answerable"], len(parsed["clusterLabels"]))
 
-    answerable = not any(phrase in answer for phrase in [
-        "kann mit deinen Karten nicht beantwortet",
-        "Keine Definition in deinen Karten",
-        "Nicht genug Karten",
-    ])
-
-    logger.info("generate_quick_answer: Done for '%s', answerable=%s, labels=%s",
-                query, answerable, len(parsed_labels))
-
-    return {
-        "answer": answer,
-        "answerable": answerable,
-        "clusterLabels": parsed_labels,
-    }
+    return parsed
