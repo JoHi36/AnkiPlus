@@ -102,6 +102,7 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
     if (clusters.length > 1) {
       clusters.forEach((cluster, ci) => {
         const clusterColor = DECK_COLORS[ci % DECK_COLORS.length];
+        const clusterCardIds = [];
         cluster.cards.forEach(card => {
           nodes.push({
             id: card.id,
@@ -117,7 +118,21 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
             val: 1.0 + (card.score || 0.5),
           });
           links.push({ source: '__query__', target: card.id, value: card.score || 0.5 });
+          clusterCardIds.push(card.id);
         });
+
+        // Intra-cluster edges: connect cards within the same cluster
+        // These pull same-cluster cards together spatially
+        for (let i = 0; i < clusterCardIds.length; i++) {
+          for (let j = i + 1; j < clusterCardIds.length; j++) {
+            links.push({
+              source: clusterCardIds[i],
+              target: clusterCardIds[j],
+              value: 0.15,
+              isIntraCluster: true,
+            });
+          }
+        }
       });
     } else {
       // No clusters — all cards same color
@@ -167,9 +182,9 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
         return `${cluster}${n.label}\n${n.deck}`;
       })
       .nodeOpacity(1.0)
-      .linkWidth(l => l.isInterCluster ? 0.8 : (l.value || 0.5) * 2)
-      .linkOpacity(l => l.isInterCluster ? 0.15 : 0.2)
-      .linkColor(l => l.isInterCluster ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.2)')
+      .linkWidth(l => l.isIntraCluster ? 0.3 : (l.value || 0.5) * 2)
+      .linkOpacity(l => l.isIntraCluster ? 0.04 : 0.15)
+      .linkColor(l => l.isIntraCluster ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.18)')
       .onNodeClick(node => {
         if (!node || node.isQuery) return;
         setSelectedCard(node);
@@ -187,12 +202,11 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       .d3VelocityDecay(0.25)
       .showNavInfo(false);
 
-    // Distance from center = relevance (closer = more relevant)
+    // Distance: query→card = relevance, intra-cluster = short (pulls together)
     graph.d3Force('link').distance(link => {
+      if (link.isIntraCluster) return 15; // pull cluster members close
       const score = link.value || 0.5;
-      // High relevance (0.9) → distance 25 (close to center)
-      // Low relevance (0.3) → distance 100 (far out)
-      return 20 + (1 - score) * 120;
+      return 30 + (1 - score) * 100;
     });
 
     // Stronger center gravity to keep it compact
