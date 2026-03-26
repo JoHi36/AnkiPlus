@@ -426,16 +426,16 @@ export default function FullReasoningDisplay({
               />
             ))}
           </div>
-        </div>
-      )}
 
-      {/* Sources carousel — ALWAYS visible below collapsible area */}
-      {sourcesReady && (
-        <SourcesCarousel
-          citations={citations}
-          bridge={bridge}
-          onPreviewCard={onPreviewCard}
-        />
+          {/* Sources carousel — inside collapsible area, collapses with steps */}
+          {sourcesReady && (
+            <SourcesCarousel
+              citations={citations}
+              bridge={bridge}
+              onPreviewCard={onPreviewCard}
+            />
+          )}
+        </div>
       )}
     </div>
   );
