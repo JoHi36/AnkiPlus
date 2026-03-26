@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import ChatInput from './ChatInput';
 import ResizeHandle from './ResizeHandle';
 import AgenticCell from './AgenticCell';
-import ReasoningStream from '../reasoning/ReasoningStream';
+import ReasoningDisplay from '../reasoning/ReasoningDisplay';
 
 export default function SearchSidebar({
   query,
@@ -25,7 +25,6 @@ export default function SearchSidebar({
   subClusters,
   isSubClustering,
   pipelineSteps = [],
-  pipelineGeneration = 0,
   sidebarHasAnimated,
   kgSubgraph,
   onGraphModeChange,
@@ -207,14 +206,11 @@ export default function SearchSidebar({
           {query}
         </div>
 
-        {/* Pipeline reasoning steps — same ReasoningStream as session chat */}
-        {pipelineSteps.length > 0 && (
-          <ReasoningStream
-            steps={pipelineSteps}
-            pipelineGeneration={pipelineGeneration}
-            isStreaming={isSearching || !answerText}
-            message={answerText || ''}
-            variant="compact"
+        {/* Orchestration step — ABOVE agent (like session router) */}
+        {pipelineSteps.some(s => s.step === 'orchestrating') && (
+          <ReasoningDisplay
+            steps={pipelineSteps.filter(s => ['orchestrating', 'router'].includes(s.step))}
+            mode="full"
           />
         )}
 
@@ -233,6 +229,15 @@ export default function SearchSidebar({
             </span>
           }
         >
+          {/* Agent-internal pipeline steps — INSIDE the agent (like session) */}
+          {pipelineSteps.filter(s => !['orchestrating', 'router'].includes(s.step)).length > 0 && (
+            <ReasoningDisplay
+              steps={pipelineSteps.filter(s => !['orchestrating', 'router'].includes(s.step))}
+              mode="full"
+              hasOutput={Boolean(answerText)}
+              bridge={bridge}
+            />
+          )}
           {answerText && (
             <div style={{
               fontSize: 14,

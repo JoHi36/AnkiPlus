@@ -2620,7 +2620,6 @@ function AppInner() {
               isSubClustering={smartSearch.isSubClustering}
               sidebarHasAnimated={smartSearch.sidebarHasAnimated}
               pipelineSteps={smartSearch.pipelineSteps}
-              pipelineGeneration={smartSearch.pipelineGeneration}
               kgSubgraph={smartSearch.kgSubgraph}
               onGraphModeChange={smartSearch.setGraphMode}
               selectedTerm={smartSearch.selectedTerm}

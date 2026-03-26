@@ -19,9 +19,8 @@ export default function useSmartSearch() {
   // Track if sidebar slide-in has played — survives tab switches (lives in hook, not component)
   const sidebarHasAnimated = useRef(false);
 
-  // Pipeline steps — same system as session chat ReasoningStream
+  // Pipeline steps — same system as session chat ReasoningDisplay
   const [pipelineSteps, setPipelineSteps] = useState([]);
-  const [pipelineGeneration, setPipelineGeneration] = useState(0);
 
   // Cache survives view transitions
   const cacheRef = useRef(null);
@@ -161,7 +160,6 @@ export default function useSmartSearch() {
     setSelectedClusterId(null);
     setSubClusters(null);
     setPipelineSteps([]);
-    setPipelineGeneration(g => g + 1);
     window.ankiBridge?.addMessage('searchCards', { query: q.trim(), topK: 100 });
   }, []);
 
@@ -198,7 +196,7 @@ export default function useSmartSearch() {
   return {
     query, searchResult, isSearching,
     answerText, clusterLabels, clusterSummaries, cardRefs,
-    pipelineSteps, pipelineGeneration,
+    pipelineSteps,
     selectedClusterId, setSelectedClusterId: selectCluster,
     selectedCluster, selectedClusterLabel, selectedClusterSummary,
     subClusters, isSubClustering,
