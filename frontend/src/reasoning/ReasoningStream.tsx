@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import SourcesCarousel from '../components/SourcesCarousel';
-import { ReasoningStep, DisplayStep, MIN_STEP_INTERVAL } from './types';
+import { ReasoningStep, DisplayStep } from './types';
+
+// Local constant — ReasoningStream.tsx will be deleted in Task 9 of the migration
+const MIN_STEP_INTERVAL = 800;
 import { getStepRenderer, getFallbackRenderer } from './stepRegistry';
 
 /* ═══════════════════════════════════════════════════
