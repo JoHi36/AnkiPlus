@@ -454,14 +454,18 @@ def get_google_response_streaming(user_message, model, api_key, context=None, hi
     url = _get_backend_chat_url()
 
     try:
-        text_result = stream_response(
+        result = stream_response(
             urls=[url],
             data=None,
             callback=callback,
             use_backend=True,
             backend_data=payload,
         )
-        return text_result
+        # stream_response returns (full_text, function_call_data) tuple
+        # Callers expect a plain string
+        if isinstance(result, tuple):
+            return result[0] or ""
+        return result or ""
     except Exception as e:
         error_msg = f"Streaming request error: {str(e)}"
         logger.exception("Streaming error: %s", error_msg)
@@ -728,3 +732,151 @@ def generate_definition(term, card_texts, model=None):
     except Exception as e:
         logger.exception("generate_definition: Unknown error for '%s'", term)
         return ""
+
+
+# ---------------------------------------------------------------------------
+# generate_quick_answer — concise 2-3 sentence answer from card texts
+# ---------------------------------------------------------------------------
+def generate_quick_answer(query, card_texts, cluster_labels=None, model=None):
+    """Generate a concise 2-3 sentence answer from card texts.
+
+    Args:
+        query: The user's search query.
+        card_texts: List of dicts with 'question' and 'answer' keys (max 10).
+        cluster_labels: Optional dict of cluster_id → [card_question_snippets] for naming.
+        model: Model override (defaults to DEFINITION_MODEL).
+
+    Returns:
+        dict: {"answer": str, "answerable": bool, "clusterLabels": dict}
+    """
+    if not card_texts:
+        return {"answer": "Nicht genug Karten zu diesem Thema.", "answerable": False, "clusterLabels": {}}
+
+    if model is None:
+        model = DEFINITION_MODEL
+
+    cards_str = "\n".join(
+        "Karte %d: %s | %s" % (i + 1, c.get('question', '')[:60], c.get('answer', '')[:60])
+        for i, c in enumerate(card_texts[:10])
+    )
+
+    # Detect: single term vs question
+    question_words = ['was', 'wie', 'warum', 'welche', 'wozu', 'wann', 'erkläre', 'definiere']
+    is_question = any(w in query.lower().split() for w in question_words) or query.strip().endswith('?')
+
+    if is_question:
+        prompt = (
+            "Beantworte diese Frage in maximal 2 Sätzen basierend auf diesen Lernkarten:\n"
+            "\"%s\"\n\n%s\n\n"
+            "Beantworte NUR den Kern der Frage. Kein Drumherum. "
+            "Wenn die Karten nicht genug Kontext bieten, antworte GENAU: "
+            "\"Diese Frage kann mit deinen Karten nicht beantwortet werden.\""
+        ) % (query, cards_str)
+    else:
+        prompt = (
+            "Definiere '%s' in maximal 2 Sätzen basierend auf diesen Lernkarten:\n\n%s\n\n"
+            "Kein Drumherum. "
+            "Wenn die Karten keine klare Definition liefern, antworte GENAU: "
+            "\"Keine Definition in deinen Karten gefunden.\""
+        ) % (query, cards_str)
+
+    # Add cluster labeling request if clusters provided
+    parsed_labels = {}
+    if cluster_labels:
+        cluster_str = "\n".join(
+            "Cluster %s: %s" % (k, ", ".join(str(s)[:30] for s in v[:3]))
+            for k, v in cluster_labels.items()
+        )
+        prompt += (
+            "\n\nBenenne außerdem jeden Cluster mit 2-3 Wörtern:\n%s\n"
+            "\nAntworte im Format:\nANTWORT: [deine antwort]\nCLUSTER: cluster_0=Name, cluster_1=Name"
+        ) % cluster_str
+
+    config = get_config() or {}
+
+    # Dev-only OpenRouter bypass
+    payload = {
+        "message": prompt,
+        "model": model,
+        "temperature": 0.3,
+        "maxOutputTokens": 400,
+    }
+    or_result = _maybe_call_openrouter(payload, config)
+    if or_result is not None:
+        response_text = or_result
+    else:
+        # Backend call
+        url = _get_backend_chat_url()
+        headers = _get_auth_headers_safe()
+
+        backend_payload = {
+            "message": prompt,
+            "history": [],
+            "agent": "tutor",
+            "mode": "free_chat",
+            "responseStyle": "compact",
+            "model": model,
+            "stream": False,
+            "temperature": 0.3,
+            "maxOutputTokens": 400,
+        }
+
+        try:
+            response = requests.post(url, json=backend_payload, headers=headers, timeout=20)
+            response.raise_for_status()
+            result = response.json()
+
+            # Extract text from backend response
+            response_text = result.get("text") or result.get("response") or ""
+            if not response_text:
+                # Fallback: check candidates format
+                candidates = result.get("candidates", [])
+                if candidates:
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    if parts:
+                        response_text = parts[0].get("text", "").strip()
+
+            if not response_text:
+                logger.warning("generate_quick_answer: No text response for query '%s'", query)
+                return {"answer": "", "answerable": False, "clusterLabels": {}}
+
+        except requests.exceptions.RequestException as e:
+            logger.error("generate_quick_answer: Network error for '%s': %s", query, str(e))
+            return {"answer": "", "answerable": False, "clusterLabels": {}}
+        except (ValueError, KeyError) as e:
+            logger.error("generate_quick_answer: Parse error for '%s': %s", query, str(e))
+            return {"answer": "", "answerable": False, "clusterLabels": {}}
+        except Exception:
+            logger.exception("generate_quick_answer: Unknown error for '%s'", query)
+            return {"answer": "", "answerable": False, "clusterLabels": {}}
+
+    # Parse response
+    text = response_text.strip()
+
+    if cluster_labels and "ANTWORT:" in text:
+        # Parse structured response
+        parts = text.split("CLUSTER:")
+        answer = parts[0].replace("ANTWORT:", "").strip()
+        if len(parts) > 1:
+            for pair in parts[1].strip().split(","):
+                pair = pair.strip()
+                if "=" in pair:
+                    k, v = pair.split("=", 1)
+                    parsed_labels[k.strip()] = v.strip()
+    else:
+        answer = text
+
+    answerable = not any(phrase in answer for phrase in [
+        "kann mit deinen Karten nicht beantwortet",
+        "Keine Definition in deinen Karten",
+        "Nicht genug Karten",
+    ])
+
+    logger.info("generate_quick_answer: Done for '%s', answerable=%s, labels=%s",
+                query, answerable, len(parsed_labels))
+
+    return {
+        "answer": answer,
+        "answerable": answerable,
+        "clusterLabels": parsed_labels,
+    }

@@ -615,6 +615,35 @@ class KGDefinitionThread(QThread):
             }))
 
 
+class QuickAnswerThread(QThread):
+    """Background thread for generating quick AI answers from card search results."""
+    result_signal = pyqtSignal(str)
+
+    def __init__(self, query, cards_data, cluster_info):
+        super().__init__()
+        self.query = query
+        self.cards_data = cards_data
+        self.cluster_info = cluster_info
+
+    def run(self):
+        try:
+            try:
+                from ..ai.gemini import generate_quick_answer
+            except ImportError:
+                from ai.gemini import generate_quick_answer
+            result = generate_quick_answer(self.query, self.cards_data, self.cluster_info)
+            self.result_signal.emit(json.dumps({
+                "type": "graph.quickAnswer",
+                "data": result
+            }))
+        except Exception:
+            logger.exception("QuickAnswer failed for: %s", self.query)
+            self.result_signal.emit(json.dumps({
+                "type": "graph.quickAnswer",
+                "data": {"answer": "", "answerable": False, "clusterLabels": {}}
+            }))
+
+
 class ChatbotWidget(QWidget):
     """Web-basierte Chat-UI über QWebEngineView"""
 
@@ -887,6 +916,7 @@ class ChatbotWidget(QWidget):
             'getDeckCrossLinks': self._msg_get_deck_cross_links,
             'startTermStack': self._msg_start_term_stack,
             'searchCards': self._msg_search_cards,
+            'quickAnswer': lambda data: None,  # Reserved — triggered internally by searchCards
         }
         return handlers.get(msg_type)
 
@@ -2685,6 +2715,22 @@ class ChatbotWidget(QWidget):
             self._send_to_js(payload)
         except Exception:
             logger.exception("Failed to send search cards result")
+
+    def _start_quick_answer(self, query, cards_data, clusters):
+        """Launch QuickAnswerThread after search completes."""
+        cluster_info = {}
+        for c in clusters:
+            cluster_info[c["id"]] = [card.get("question", "")[:40] for card in c.get("cards", [])[:3]]
+        self._quick_answer_thread = QuickAnswerThread(query, cards_data, cluster_info)
+        self._quick_answer_thread.result_signal.connect(self._on_quick_answer_result)
+        self._quick_answer_thread.start()
+
+    def _on_quick_answer_result(self, result_json):
+        """Handle QuickAnswerThread result."""
+        try:
+            self._send_to_js(json.loads(result_json))
+        except Exception:
+            logger.exception("Failed to send quick answer")
 
     def _msg_start_term_stack(self, data):
         """Create filtered deck from card IDs and enter reviewer."""

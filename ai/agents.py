@@ -6,7 +6,10 @@ Architecture: router-orchestrated agent platform with AgentDefinition dataclass.
 from dataclasses import dataclass, field
 from typing import Optional, Callable, List
 
-from ai.workflows import Workflow, Slot
+try:
+    from .workflows import Workflow, Slot
+except ImportError:
+    from ai.workflows import Workflow, Slot
 
 try:
     from ..utils.logging import get_logger
@@ -136,7 +139,10 @@ def get_non_default_agents(config: dict) -> List[AgentDefinition]:
 
 def get_registry_for_frontend(config: dict) -> List[dict]:
     """Return ALL registered agents as dicts for JSON serialization to frontend."""
-    from ai.capabilities import capability_registry as cap_reg
+    try:
+        from .capabilities import capability_registry as cap_reg
+    except ImportError:
+        from ai.capabilities import capability_registry as cap_reg
     result = []
     for a in AGENT_REGISTRY.values():
         is_enabled = a.is_default or config.get(a.enabled_key, False)

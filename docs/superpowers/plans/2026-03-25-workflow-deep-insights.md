@@ -30,15 +30,14 @@
 
 | File | Change |
 |------|--------|
-| `ai/agents.py` (lines 21-79) | Add `workflows: list` field to `AgentDefinition`, add backward-compat `tools` property |
+| `ai/agents.py` (lines 21-79) | Add `workflows: list` field to `AgentDefinition`, add `active_tools` property (parallel to existing `tools` field — migration to single source later) |
 | `ai/agents.py` (lines 119-150) | Extend `get_registry_for_frontend()` to serialize workflows with user config overrides |
 | `ai/agents.py` (lines 308-507) | Add `workflows=[...]` to all 4 agent registrations |
 | `ai/tools.py` (lines 81-112) | Add `category` field to `ToolDefinition`, default `'tool'` |
 | `shared/config/subagentRegistry.ts` (lines 6-35) | Add `Slot`, `Workflow` interfaces, add `workflows` to `SubagentConfig` |
 | `shared/styles/design-system.css` | Add `--ds-yellow-10`, `--ds-green-10` tint tokens if missing |
 | `frontend/src/components/SidebarShell.jsx` (lines 61-96) | Add inner tab bar logic, route to `WorkflowList` for Deep Insights |
-| `ui/bridge.py` | Add `saveWorkflowConfig` pyqtSlot method |
-| `ui/widget.py` (line 609) | Add `saveWorkflowConfig` to message handler dict |
+| `ui/widget.py` (line 609) | Add `saveWorkflowConfig` to message handler dict + handler method |
 
 ---
 
@@ -284,8 +283,14 @@ class Slot:
     ref: str
     mode: str = 'on'  # 'locked' | 'on' | 'off'
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {'ref': self.ref, 'mode': self.mode}
+    def to_dict(self, capability_registry=None) -> Dict[str, Any]:
+        d = {'ref': self.ref, 'mode': self.mode}
+        if capability_registry:
+            cap = capability_registry.get(self.ref)
+            if cap:
+                d['label'] = cap.label
+                d['description'] = cap.description
+        return d
 
 
 @dataclass
@@ -300,14 +305,14 @@ class Workflow:
     status: str = 'active'  # 'active' | 'soon'
     context_prompt: str = ''
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self, capability_registry=None) -> Dict[str, Any]:
         return {
             'name': self.name,
             'label': self.label,
             'description': self.description,
-            'triggers': [s.to_dict() for s in self.triggers],
-            'tools': [s.to_dict() for s in self.tools],
-            'outputs': [s.to_dict() for s in self.outputs],
+            'triggers': [s.to_dict(capability_registry) for s in self.triggers],
+            'tools': [s.to_dict(capability_registry) for s in self.tools],
+            'outputs': [s.to_dict(capability_registry) for s in self.outputs],
             'mode': self.mode,
             'status': self.status,
             'contextPrompt': self.context_prompt,
@@ -415,10 +420,12 @@ Add field to AgentDefinition dataclass (after `fallback_model` field, ~line 79):
 In `ai/agents.py`, `get_registry_for_frontend()` (~line 119-150), add workflows serialization to the dict being built for each agent. After existing fields, add:
 
 ```python
-            'workflows': [wf.to_dict() for wf in agent.workflows],
+from ai.capabilities import capability_registry as cap_reg
+# ...
+            'workflows': [wf.to_dict(cap_reg) for wf in agent.workflows],
 ```
 
-Also apply user config overrides: read `workflow_config` from config, merge modes for non-locked items.
+Also apply user config overrides: read `workflow_config` from config, merge modes for non-locked slots/workflows before serializing. For each non-locked workflow, check `config.get('workflow_config', {}).get(agent.name, {}).get(wf.name, {})` and override modes accordingly.
 
 - [ ] **Step 5: Run test to verify it passes**
 
@@ -472,11 +479,11 @@ git commit -m "feat: register workflows on all 4 agents (tutor, research, plusi,
 
 ---
 
-### Task 5: Bridge Method for Workflow Config (Python)
+### Task 5: Message Handler for Workflow Config (Python)
 
 **Files:**
-- Modify: `ui/bridge.py` — add `saveWorkflowConfig` method
-- Modify: `ui/widget.py` (line 609) — add to message handler dict
+- Modify: `ui/widget.py` (line 609) — add to message handler dict + handler method
+- Note: This uses the message queue pattern (like `saveSubagentEnabled`), NOT a `@pyqtSlot` in bridge.py
 
 - [ ] **Step 1: Add saveWorkflowConfig to message handler in widget.py**
 
@@ -505,6 +512,8 @@ def _msg_save_workflow_config(self, data):
     else:
         wf['_enabled'] = (mode != 'off')
 
+    # Note: verify update_config accepts arbitrary kwargs. If not, use the same
+    # pattern as _msg_save_ai_tools: get_config() → mutate → save_config(config).
     update_config(workflow_config=wf_config)
     logger.info("Saved workflow config: %s/%s/%s = %s", agent_name, workflow_name, slot_ref or '_enabled', mode)
 ```
@@ -576,21 +585,9 @@ git commit -m "feat: add Slot and Workflow TypeScript interfaces to subagentRegi
 
 Search `design-system.css` for `--ds-yellow-10`, `--ds-green-10`, `--ds-accent-10`.
 
-- [ ] **Step 2: Add missing tint tokens**
+- [ ] **Step 2: Skip if tokens already exist (likely — they use `color-mix()`)**
 
-If missing, add to both `:root` (dark) and `[data-theme="light"]` blocks:
-
-```css
-/* Dark */
---ds-yellow-10: rgba(255, 214, 10, 0.10);
---ds-green-10: rgba(48, 209, 88, 0.10);
---ds-accent-10: rgba(10, 132, 255, 0.10);
-
-/* Light */
---ds-yellow-10: rgba(255, 149, 0, 0.10);
---ds-green-10: rgba(52, 199, 89, 0.10);
---ds-accent-10: rgba(0, 122, 255, 0.10);
-```
+The tokens likely already exist as `color-mix(in srgb, var(--ds-accent) 10%, transparent)`. If so, this task is done — do NOT replace `color-mix()` with hardcoded `rgba()`. Only add tokens if they are genuinely missing.
 
 - [ ] **Step 3: Commit**
 
@@ -685,7 +682,7 @@ const CATEGORY_LABELS = {
   output:  { label: 'Output',  color: 'var(--ds-green)'  },
 };
 
-export default function SlotChips({ slots, category, capabilityRegistry, onSlotToggle }) {
+export default function SlotChips({ slots, category, onSlotToggle }) {
   const cat = CATEGORY_LABELS[category] || CATEGORY_LABELS.tool;
   if (!slots || slots.length === 0) return null;
 
@@ -703,19 +700,15 @@ export default function SlotChips({ slots, category, capabilityRegistry, onSlotT
         {cat.label}
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
-        {slots.map(slot => {
-          const cap = capabilityRegistry?.[slot.ref];
-          const label = cap?.label || slot.ref;
-          return (
-            <SlotChip
-              key={slot.ref}
-              label={label}
-              mode={slot.mode}
-              category={category}
-              onToggle={() => onSlotToggle?.(slot.ref, slot.mode === 'off' ? 'on' : 'off')}
-            />
-          );
-        })}
+        {slots.map(slot => (
+          <SlotChip
+            key={slot.ref}
+            label={slot.label || slot.ref}
+            mode={slot.mode}
+            category={category}
+            onToggle={() => onSlotToggle?.(slot.ref, slot.mode === 'off' ? 'on' : 'off')}
+          />
+        ))}
       </div>
     </div>
   );
@@ -769,7 +762,7 @@ git commit -m "feat: add WorkflowCard component with collapsed/expanded/locked/s
 import React, { useState } from 'react';
 import WorkflowCard from './WorkflowCard';
 
-export default function WorkflowList({ agent, bridge, capabilityRegistry }) {
+export default function WorkflowList({ agent, bridge }) {
   const [expandedWorkflow, setExpandedWorkflow] = useState(null);
   const workflows = agent?.workflows || [];
 
@@ -821,8 +814,7 @@ export default function WorkflowList({ agent, bridge, capabilityRegistry }) {
             )}
             onToggleWorkflow={(newMode) => handleToggleWorkflow(wf.name, newMode)}
             onSlotToggle={(slotRef, newMode) => handleSlotToggle(wf.name, slotRef, newMode)}
-            capabilityRegistry={capabilityRegistry}
-          />
+                      />
         ))}
       </div>
     </div>
@@ -857,12 +849,12 @@ In `SidebarShell.jsx`:
 5. Route content:
    - If `innerTab === 'special'` AND agent is plusi → `<PlusiMenu>`
    - If `innerTab === 'special'` AND agent is research → `<ResearchMenu>`
-   - Else → `<WorkflowList agent={agent} bridge={bridge} capabilityRegistry={capRegistry} />`
+   - Else → `<WorkflowList agent={agent} bridge={bridge}  />`
 6. For agents WITHOUT special tab (tutor, help): render `<WorkflowList>` directly, no inner tabs.
 
-- [ ] **Step 2: Add capability registry state**
+- [ ] **Step 2: No separate capability registry needed on frontend**
 
-Listen for `subagent_registry` event and extract capability data. The Python backend sends capabilities alongside agents. Store in state and pass to WorkflowList.
+Labels are inlined into each Slot's serialized dict by `Slot.to_dict(capability_registry)` on the Python side. The frontend reads `slot.label` directly — no separate capability lookup needed.
 
 - [ ] **Step 3: Test in browser with `npm run dev`**
 
