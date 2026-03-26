@@ -1,16 +1,13 @@
 """
-Globales Anki-Theming
-Styled ALLE Anki-Komponenten über Qt
+Global Anki theming — styles ALL Anki components via Qt.
 
-CRASH-FIX: Keine Timer während der Startphase!
-Stattdessen werden gui_hooks verwendet, die erst feuern wenn Anki bereit ist.
+Crash-safe: no timers during startup phase.
+Uses gui_hooks that fire only when Anki is ready.
 """
 
 from aqt import mw, gui_hooks
 from aqt.qt import QTimer, QApplication
 import re
-import time
-import json
 
 try:
     from ..utils.logging import get_logger
@@ -28,7 +25,6 @@ try:
 except ImportError:
     from theme import get_resolved_theme
 
-# Pre-compiled regex patterns for HTML processing (hot path)
 _RE_HR = re.compile(r'<hr[^>]*/?>',  re.IGNORECASE)
 _RE_BOTTOM_TABLE = re.compile(
     r'<div[^>]*id=["\']bottom["\'][^>]*>.*?<table[^>]*>.*?</table>.*?</div>',
@@ -52,40 +48,7 @@ _RE_BUTTON_FIND = re.compile(r'<button[^>]*>.*?</button>', re.DOTALL | re.IGNORE
 _RE_INPUT_BUTTON = re.compile(r'<input[^>]*type=["\']button["\'][^>]*>', re.IGNORECASE)
 _RE_STYLE_ATTR = re.compile(r'style=["\']([^"\']*)["\']')
 
-# Debug-Start-Zeit für Crash-Analyse
-_startup_time = time.time()
-
-# #region agent log
-_DEBUG_LOG_PATH = None  # Disabled — set to a path to enable debug logging
-
-def _write_debug_log(hypothesis_id, location, message, data=None):
-    """Schreibt Debug-Log als NDJSON in die Log-Datei"""
-    if not _DEBUG_LOG_PATH:
-        return
-    try:
-        elapsed = time.time() - _startup_time
-        log_entry = {
-            "timestamp": int(time.time() * 1000),
-            "sessionId": "debug-session",
-            "runId": "run1",
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "message": message,
-            "elapsed_seconds": round(elapsed, 3),
-            "data": data or {}
-        }
-        with open(_DEBUG_LOG_PATH, "a") as f:
-            f.write(json.dumps(log_entry) + "\n")
-    except Exception as e:
-        logger.error("[DEBUG LOG ERROR] %s", e)
-# #endregion
-
-def _debug_log(msg):
-    """Debug-Logging mit Zeitstempel seit Start"""
-    elapsed = time.time() - _startup_time
-    logger.debug("[THEME DEBUG %.3fs] %s", elapsed, msg)
-
-# Globale Flagge: Ist die Anwendung noch aktiv?
+# Global flags
 _app_running = True
 _app_initialized = False
 _theme_applied = False  # NEU: Wurde das Theme schon angewendet?
@@ -94,9 +57,7 @@ _timers = []
 
 
 def is_qapplication_valid():
-    """
-    Prüft SICHER ob QApplication noch gültig und benutzbar ist.
-    """
+    """Safely check whether QApplication is still valid and usable."""
     try:
         app = QApplication.instance()
         if app is None:
@@ -122,9 +83,7 @@ def is_qapplication_valid():
 
 
 def is_main_window_valid():
-    """
-    Prüft SICHER ob das Main Window noch gültig und benutzbar ist.
-    """
+    """Safely check whether the main window is still valid and usable."""
     try:
         if mw is None:
             return False
@@ -146,28 +105,21 @@ def is_main_window_valid():
 
 
 def stop_all_timers():
-    """Stoppt alle aktiven Timer"""
+    """Stop all active timers."""
     global _timers, _app_running
-    _debug_log("🛑 stop_all_timers() aufgerufen")
     _app_running = False
-    stopped_count = 0
     for timer in _timers:
         try:
             if timer and timer.isActive():
                 timer.stop()
                 timer.deleteLater()
-                stopped_count += 1
         except (RuntimeError, AttributeError):
             pass
     _timers.clear()
-    _debug_log(f"🛑 {stopped_count} Timer gestoppt")
 
 
 def create_safe_timer(ms, callback):
-    """
-    Erstellt einen Timer NUR wenn die App komplett initialisiert ist.
-    KRITISCH: Wird NICHT während der Startphase aufgerufen!
-    """
+    """Create a timer only when the app is fully initialized — never during startup."""
     global _timers, _app_running, _app_initialized
     
     if not _app_running or not _app_initialized:
@@ -196,9 +148,9 @@ def create_safe_timer(ms, callback):
             callback()
         except RuntimeError as e:
             _app_running = False
-            _debug_log(f"❌ Timer callback RuntimeError: {e}")
+            logger.error("Timer callback RuntimeError: %s", e)
         except Exception as e:
-            _debug_log(f"❌ Timer callback failed: {e}")
+            logger.error("Timer callback failed: %s", e)
     
     timer.timeout.connect(safe_callback)
     timer.start(ms)
@@ -612,56 +564,37 @@ def apply_global_dark_theme():
     """
     
     try:
-        _debug_log("🎨 apply_global_dark_theme() START")
-        _write_debug_log("B", "apply_global_dark_theme:entry", "Function entered", {
-            "_app_running": _app_running, 
-            "_app_initialized": _app_initialized,
-            "_theme_applied": _theme_applied
-        })
-        
         if not _app_running:
-            _debug_log("🎨 ABBRUCH: _app_running=False")
             return
-            
+
         if not is_qapplication_valid():
-            _debug_log("🎨 ABBRUCH: QApplication nicht valid")
             _app_running = False
             return
-        
+
         app = QApplication.instance()
         if not app:
-            _debug_log("🎨 ABBRUCH: QApplication.instance() ist None")
             _app_running = False
             return
-        
-        _debug_log("🎨 ALLE CHECKS BESTANDEN - setStyleSheet() wird aufgerufen...")
-        _write_debug_log("B", "apply_global_dark_theme:pre_setStyleSheet", "About to call setStyleSheet", {
-            "stylesheet_length": len(global_stylesheet)
-        })
-        
+
         try:
             app.setStyleSheet(global_stylesheet)
-            _write_debug_log("B", "apply_global_dark_theme:post_setStyleSheet", "setStyleSheet SUCCESS", {})
-            _debug_log("✅ QApplication.setStyleSheet() erfolgreich!")
             _theme_applied = True
         except RuntimeError as e:
             _app_running = False
-            _debug_log(f"❌ QApplication.setStyleSheet() RuntimeError: {e}")
-            _write_debug_log("B", "apply_global_dark_theme:error", f"RuntimeError: {e}", {})
+            logger.error("QApplication.setStyleSheet() RuntimeError: %s", e)
             return
         except (AttributeError, TypeError) as e:
             _app_running = False
-            _debug_log(f"❌ QApplication.setStyleSheet() error: {e}")
-            _write_debug_log("B", "apply_global_dark_theme:error", f"Exception: {e}", {})
+            logger.error("QApplication.setStyleSheet() error: %s", e)
             return
-        
+
         if not is_main_window_valid():
             return
-        
+
         try:
             mw.setStyleSheet(global_stylesheet)
         except (RuntimeError, AttributeError) as e:
-            _debug_log(f"⚠️ mw.setStyleSheet() fehlgeschlagen: {e}")
+            logger.warning("mw.setStyleSheet() failed: %s", e)
         
         from aqt.qt import QToolBar, QMenuBar, QStatusBar, QWidget, QPalette, QColor
 
@@ -725,11 +658,11 @@ def apply_global_dark_theme():
             pass
                 
     except Exception as e:
-        logger.exception("❌ Fehler beim Anwenden des Themes: %s", e)
+        logger.exception("Failed to apply global theme: %s", e)
 
 
 def on_webview_will_set_content(web_content, context):
-    """Hook: Wird aufgerufen, bevor Content in ein WebView geladen wird"""
+    """Hook: called before content is loaded into a WebView."""
     try:
         is_reviewer = False
         if hasattr(context, 'view'):
@@ -863,7 +796,6 @@ def on_webview_will_set_content(web_content, context):
         """
     except Exception as e:
         logger.warning("HTML modification in on_webview_will_set_content failed: %s", e)
-        _debug_log(f"⚠️ Fehler bei HTML-Modifikation: {e}")
         _resolved_theme = get_resolved_theme()
         _wt = get_tokens(_resolved_theme)
         _text_color = "rgba(255, 255, 255, 0.9)" if _resolved_theme == "dark" else "rgba(0, 0, 0, 0.85)"
@@ -881,52 +813,35 @@ def on_webview_will_set_content(web_content, context):
 
 
 def on_state_change(new_state, old_state):
-    """
-    Hook: Wird bei jedem State-Change aufgerufen.
-    KRITISCH: Dies ist unser SICHERER Einstiegspunkt - keine Timer nötig!
-    """
+    """Hook: called on every Anki state change — safe entry point, no timers needed."""
     global _app_running, _app_initialized, _theme_applied
-    
-    elapsed = time.time() - _startup_time
-    _debug_log(f"🔄 State Change: {old_state} → {new_state} (nach {elapsed:.2f}s)")
-    _write_debug_log("C", "on_state_change", f"State change: {old_state} -> {new_state}", {
-        "elapsed": elapsed,
-        "_app_initialized": _app_initialized,
-        "_theme_applied": _theme_applied
-    })
-    
+
     if not _app_running:
         return
-    
-    # Prüfe ob Anki noch gültig ist
+
     if not is_qapplication_valid():
         _app_running = False
         return
-    
+
     if not is_main_window_valid():
         return
-    
-    # KRITISCH: Erste echte Initialisierung beim ersten State-Change
-    # Dies ist SICHER, weil state_did_change nur feuert wenn Anki bereit ist!
+
+    # First real initialization on first state change — safe because state_did_change
+    # only fires when Anki is fully ready.
     if not _app_initialized:
-        _debug_log("✅ ERSTE INITIALISIERUNG via state_did_change Hook")
-        _write_debug_log("C", "on_state_change:first_init", "First initialization triggered", {"elapsed": elapsed})
         _app_initialized = True
-    
-    # Theme anwenden (sofort, ohne Timer!)
+
     try:
         apply_global_dark_theme()
     except Exception as e:
         logger.warning("apply_global_dark_theme failed in on_state_change: %s", e)
-        _debug_log(f"⚠️ apply_global_dark_theme() failed: {e}")
-    
-    # Nach erfolgreicher Initialisierung: Starte kontinuierliches Restyling
+
     if _theme_applied and _app_initialized:
         start_continuous_restyle()
 
 
 def start_continuous_restyle():
-    """Startet das kontinuierliche Restyling (nur nach erfolgreicher Initialisierung)"""
+    """Start the continuous restyle timer (only after successful initialization)."""
     global _continuous_restyle_timer, _app_running, _app_initialized
     
     # Nur einmal starten
@@ -954,48 +869,34 @@ def start_continuous_restyle():
         except Exception as e:
             _app_running = False
             logger.warning("Continuous restyle stopped due to error: %s", e)
-            _debug_log(f"❌ Continuous restyle stopped: {e}")
-    
-    _debug_log("🎨 Starte kontinuierliches Restyling...")
+
     _continuous_restyle_timer = create_safe_timer(15000, continuous_restyle)
 
 
 def setup_global_theme():
     """
-    Initialisiert das globale Theme.
-    
-    CRASH-FIX: Wir erstellen KEINE Timer während der Startphase!
-    Stattdessen warten wir auf den state_did_change Hook, der erst feuert
-    wenn Anki wirklich bereit ist.
+    Initialize the global theme.
+
+    Crash-safe: no timers during startup. Waits for state_did_change hook,
+    which fires only when Anki is fully ready.
     """
-    global _app_running, _app_initialized, _startup_time, _theme_applied
-    
-    _startup_time = time.time()
+    global _app_running, _app_initialized, _theme_applied
+
     _app_running = True
-    _app_initialized = False  # Wird erst bei state_did_change auf True gesetzt
+    _app_initialized = False
     _theme_applied = False
-    
-    _write_debug_log("C", "setup_global_theme:entry", "Theme setup started - NO TIMERS", {})
-    _debug_log("🎨 ===== GLOBAL THEME SETUP (CRASH-SAFE) =====")
-    _debug_log("🎨 KEINE Timer während Startphase - warte auf state_did_change Hook")
-    
-    # Hook für WebView-Content
+
     try:
         gui_hooks.webview_will_set_content.append(on_webview_will_set_content)
-        _debug_log("  ✅ webview_will_set_content Hook registriert")
     except (AttributeError, TypeError) as e:
         logger.warning("Could not register webview_will_set_content hook: %s", e)
-        _debug_log(f"  ⚠️ webview_will_set_content Hook fehlgeschlagen: {e}")
 
-    # Hook für State-Changes - DAS ist unser sicherer Einstiegspunkt!
     try:
         gui_hooks.state_did_change.append(on_state_change)
-        _debug_log("  ✅ state_did_change Hook registriert (HAUPTEINSTIEGSPUNKT)")
     except (AttributeError, TypeError) as e:
         logger.warning("Could not register state_did_change hook: %s", e)
-        _debug_log(f"  ⚠️ state_did_change Hook fehlgeschlagen: {e}")
     
-    # Hook für Cleanup beim Schließen
+    # Cleanup hook
     def cleanup_theme():
         """Stoppt alle Timer und setzt Flagge beim Schließen der Anwendung"""
         global _app_running, _app_initialized, _continuous_restyle_timer
@@ -1012,10 +913,8 @@ def setup_global_theme():
             except (RuntimeError, AttributeError):
                 pass
             _continuous_restyle_timer = None
-        
-        _debug_log("🛑 Global Theme Cleanup: Alle Timer gestoppt")
     
-    # Registriere Cleanup-Hook
+    # Register cleanup hooks
     try:
         if hasattr(gui_hooks, 'profile_will_close'):
             gui_hooks.profile_will_close.append(cleanup_theme)
@@ -1034,4 +933,4 @@ def setup_global_theme():
     except (AttributeError,):
         pass
     
-    _debug_log("✅ Global Theme Setup abgeschlossen (wartend auf ersten State-Change)")
+
