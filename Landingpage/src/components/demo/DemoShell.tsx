@@ -11,6 +11,7 @@ import { QuizCard } from '@shared/components/QuizCard';
 
 const SHELL: React.CSSProperties = {
   width: '100%', height: '100%',
+  position: 'relative',
   display: 'flex', flexDirection: 'column',
   background: 'var(--ds-bg-canvas, #1C1C1E)',
   overflow: 'hidden',
@@ -50,7 +51,7 @@ const CONTENT: React.CSSProperties = {
   flex: 1, overflow: 'auto',
   display: 'flex', flexDirection: 'column',
   alignItems: 'center', justifyContent: 'center',
-  padding: '40px 24px 24px',
+  padding: '40px 24px 120px',  /* 120px bottom = space for docked ChatInput */
   gap: 16,
 };
 
@@ -67,10 +68,11 @@ const FRONT: React.CSSProperties = {
   lineHeight: 1.5, textAlign: 'center', maxWidth: 560,
 };
 
-/* Bottom dock — matches the real app: centered, max-width, padding */
+/* Bottom dock — pinned to bottom, centered like the real app */
 const DOCK: React.CSSProperties = {
-  flexShrink: 0,
-  width: '100%', maxWidth: 680,
+  position: 'absolute',
+  bottom: 0, left: 0, right: 0,
+  maxWidth: 680,
   margin: '0 auto',
   padding: '0 24px 20px',
 };
