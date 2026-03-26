@@ -516,19 +516,48 @@ class SearchCardsThread(QThread):
                     leaf = parts[-1].strip() if parts else d
                     if leaf and not leaf.startswith("KG"):
                         deck_counts[leaf] = deck_counts.get(leaf, 0) + 1
-                # Best label: most common non-KG deck leaf, or first card question snippet
+                # Best label: use card content for uniqueness
+                # First try deck name, but if duplicate → use card snippet
+                best_card = max(cluster_cards, key=lambda c: c.get("score", 0))
+                q = best_card.get("question", "")
+                # Clean question text: strip cloze markers, take first meaningful words
+                import re as _re
+                q_clean = _re.sub(r'\{\{c\d+::', '', q)
+                q_clean = _re.sub(r'\}\}', '', q_clean)
+                q_clean = q_clean.strip()
+                card_snippet = " ".join(q_clean.split()[:4]) if q_clean else "Cluster %d" % (i + 1)
+
                 if deck_counts:
-                    label = max(deck_counts, key=deck_counts.get)
+                    deck_label = max(deck_counts, key=deck_counts.get)
+                    label = deck_label
                 else:
-                    # Fallback: first few words of the most relevant card
-                    best_card = max(cluster_cards, key=lambda c: c.get("score", 0))
-                    q = best_card.get("question", "Cluster %d" % (i + 1))
-                    label = " ".join(q.split()[:3])
+                    label = card_snippet
                 cluster_output.append({
                     "id": "cluster_%d" % i,
                     "label": label,
                     "cards": cluster_cards,
                 })
+
+            # Deduplicate cluster labels — if multiple clusters have same label, add card snippet
+            seen_labels = {}
+            for co in cluster_output:
+                if co["label"] in seen_labels:
+                    # Both the duplicate and the original get card-based labels
+                    orig = seen_labels[co["label"]]
+                    if orig.get("_snippet"):
+                        orig["label"] = orig["_snippet"]
+                    best = max(co["cards"], key=lambda c: c.get("score", 0))
+                    q = best.get("question", "")
+                    q = _re.sub(r'\{\{c\d+::', '', q)
+                    q = _re.sub(r'\}\}', '', q).strip()
+                    co["label"] = " ".join(q.split()[:4]) or co["label"]
+                else:
+                    seen_labels[co["label"]] = co
+                    co["_snippet"] = card_snippet  # store for potential dedup
+
+            # Clean up temp fields
+            for co in cluster_output:
+                co.pop("_snippet", None)
 
             # Compute inter-cluster similarity (avg pairwise similarity between clusters)
             cluster_links = []
@@ -985,7 +1014,8 @@ class ChatbotWidget(QWidget):
             'sidebarGetStatus': self._msg_get_sidebar_status,
             'sidebarSetTheme': self._msg_set_theme,
             'sidebarOpenNativeSettings': lambda d: __import__('aqt', fromlist=['mw']).mw.onPrefs(),
-            'sidebarOpenUpgrade': lambda d: __import__('webbrowser').open('https://anki-plus.vercel.app/#pricing'),
+            'sidebarOpenUpgrade': self._msg_sidebar_upgrade,
+            'sidebarConnect': self._msg_sidebar_connect,
             'sidebarLogout': self._msg_sidebar_logout,
             # Knowledge Graph
             'getGraphData': self._msg_get_graph_data,
@@ -2555,17 +2585,43 @@ class ChatbotWidget(QWidget):
             logger.error("_send_card_data error: %s", e)
 
     def _msg_get_sidebar_status(self, data=None):
-        """Send settings status to React."""
+        """Send settings status to React — fetches quota from backend."""
         try:
             config = get_config()
-            status = {
-                'tier': config.get('tier', 'free'),
+            auth_token = config.get('auth_token', '')
+            is_authenticated = bool(auth_token and config.get('auth_validated', False))
+            tier = 'free'
+            token_used = 0
+            token_limit = 0
+
+            if is_authenticated:
+                try:
+                    backend_url = get_backend_url()
+                    if backend_url and auth_token:
+                        import requests as _req
+                        resp = _req.get(
+                            '%s/user/quota' % backend_url.rstrip('/'),
+                            headers={'Authorization': 'Bearer %s' % auth_token.strip()},
+                            timeout=5,
+                        )
+                        if resp.status_code == 200:
+                            qdata = resp.json()
+                            tier = qdata.get('tier', 'free')
+                            tokens = qdata.get('tokens', {})
+                            daily = tokens.get('daily', {})
+                            token_used = daily.get('used', 0)
+                            token_limit = daily.get('limit', 0)
+                            update_config(tier=tier)
+                except Exception as e:
+                    logger.warning("sidebar quota fetch: %s", e)
+
+            self._send_to_frontend('sidebarStatus', {
+                'tier': tier,
                 'theme': config.get('theme', 'dark'),
-                'isAuthenticated': config.get('auth_validated', False),
-                'tokenUsed': config.get('token_used', 0),
-                'tokenLimit': config.get('token_limit', 0),
-            }
-            self._send_to_frontend('sidebarStatus', status)
+                'isAuthenticated': is_authenticated,
+                'tokenUsed': token_used,
+                'tokenLimit': token_limit,
+            })
         except (AttributeError, RuntimeError) as e:
             logger.warning("get_sidebar_status: %s", e)
 
@@ -2577,6 +2633,25 @@ class ChatbotWidget(QWidget):
             self._send_to_frontend('themeChanged', {'theme': theme})
         except (AttributeError, RuntimeError, json.JSONDecodeError) as e:
             logger.warning("set_theme: %s", e)
+
+    def _msg_sidebar_upgrade(self, data=None):
+        """Open upgrade or account management page."""
+        import webbrowser
+        config = get_config()
+        tier = config.get('tier', 'free')
+        is_auth = bool(config.get('auth_token') and config.get('auth_validated'))
+        if is_auth and tier != 'free':
+            webbrowser.open('https://anki-plus.vercel.app/account')
+        else:
+            webbrowser.open('https://anki-plus.vercel.app/login')
+
+    def _msg_sidebar_connect(self, data=None):
+        """Start link-auth flow."""
+        if self.bridge and hasattr(self.bridge, 'startLinkAuth'):
+            self.bridge.startLinkAuth()
+        else:
+            import webbrowser
+            webbrowser.open('https://anki-plus.vercel.app/login')
 
     def _msg_sidebar_logout(self, data=None):
         """Clear auth tokens."""

@@ -200,9 +200,9 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
         return `${cluster}${n.label}\n${n.deck}`;
       })
       .nodeOpacity(1.0)
-      .linkWidth(l => l.isIntraCluster ? 0.3 : l.isBalloonString ? 1.0 : 0.5)
-      .linkOpacity(l => l.isIntraCluster ? 0.06 : l.isBalloonString ? 0.15 : 0.05)
-      .linkColor(l => l.isIntraCluster ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.15)')
+      .linkWidth(l => l.isIntraCluster ? 0.2 : l.isBalloonString ? 0.6 : 0.3)
+      .linkOpacity(l => l.isIntraCluster ? 0.08 : l.isBalloonString ? 0.12 : 0.03)
+      .linkColor(() => 'rgba(180,180,190,0.12)')
       .onNodeClick(node => {
         if (!node || node.isQuery) return;
         setSelectedCard(node);
