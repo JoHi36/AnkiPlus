@@ -196,20 +196,21 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       })
       .enableNodeDrag(false)
       .warmupTicks(0)
-      .cooldownTicks(200)
-      .d3AlphaDecay(0.03)
-      .d3VelocityDecay(0.3)
+      .cooldownTicks(300)
+      .d3AlphaDecay(0.015)
+      .d3VelocityDecay(0.25)
       .showNavInfo(false);
 
     // Zoom to fit all nodes after settling
     setTimeout(() => {
-      if (graphRef.current) graphRef.current.zoomToFit(800, 60);
-    }, 1500);
+      if (graphRef.current) graphRef.current.zoomToFit(1000, 80);
+    }, 2000);
 
-    // Auto-rotate
+    // Controls: rotate only, no pan
     if (graph.controls()) {
       graph.controls().autoRotate = true;
-      graph.controls().autoRotateSpeed = 0.5;
+      graph.controls().autoRotateSpeed = 0.4;
+      graph.controls().enablePan = false;
     }
 
     // Resize observer

@@ -504,12 +504,26 @@ class SearchCardsThread(QThread):
                 cluster_cards = [cards_by_id[str(cid)] for cid in cluster_cids if str(cid) in cards_by_id]
                 if not cluster_cards:
                     continue
-                # Label: most common deck name
+                # Label: use original deck path (skip "KG:" filtered decks)
                 deck_counts = {}
                 for c in cluster_cards:
-                    d = c.get("deck", "")
-                    deck_counts[d] = deck_counts.get(d, 0) + 1
-                label = max(deck_counts, key=deck_counts.get) if deck_counts else "Cluster %d" % (i + 1)
+                    d = c.get("deckFull", c.get("deck", ""))
+                    # Skip filtered deck names
+                    if d.startswith("KG:") or d.startswith("KG "):
+                        d = c.get("deck", "")
+                    # Use deepest sub-deck name
+                    parts = d.split("::")
+                    leaf = parts[-1].strip() if parts else d
+                    if leaf and not leaf.startswith("KG"):
+                        deck_counts[leaf] = deck_counts.get(leaf, 0) + 1
+                # Best label: most common non-KG deck leaf, or first card question snippet
+                if deck_counts:
+                    label = max(deck_counts, key=deck_counts.get)
+                else:
+                    # Fallback: first few words of the most relevant card
+                    best_card = max(cluster_cards, key=lambda c: c.get("score", 0))
+                    q = best_card.get("question", "Cluster %d" % (i + 1))
+                    label = " ".join(q.split()[:3])
                 cluster_output.append({
                     "id": "cluster_%d" % i,
                     "label": label,
