@@ -12,6 +12,7 @@ const MascotCharacter = forwardRef(function MascotCharacter(
   const plusiRef = useRef(null);
   const prevTapRef = useRef(tapKey);
   const basePupilsRef = useRef([]);
+  const sideRef = useRef(null); // tracks createPlusiSide instance when in side view
 
   function cachePupilBases() {
     if (!containerRef.current) return;
@@ -83,6 +84,37 @@ const MascotCharacter = forwardRef(function MascotCharacter(
     },
     getContainer() {
       return containerRef.current;
+    },
+    setSideView(flip) {
+      // Destroy front-view animation engine
+      if (plusiRef.current) {
+        plusiRef.current.destroy();
+        plusiRef.current = null;
+      }
+      // Render static side SVG
+      if (containerRef.current) {
+        sideRef.current = window.createPlusiSide(containerRef.current, {
+          size, integrity, flip
+        });
+      }
+    },
+    setFrontView() {
+      // Destroy side view
+      if (sideRef.current) {
+        sideRef.current.destroy();
+        sideRef.current = null;
+      }
+      // Recreate front view with animation
+      if (containerRef.current) {
+        plusiRef.current = window.createPlusi(containerRef.current, {
+          mood, size, animated: true, integrity
+        });
+        requestAnimationFrame(() => cachePupilBases());
+      }
+    },
+    getSideNubs() {
+      if (sideRef.current) return sideRef.current.getNubs();
+      return null;
     },
   }));
 
