@@ -120,6 +120,13 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       .d3VelocityDecay(0.3)
       .showNavInfo(false);
 
+    // Zoom to fit all nodes after simulation settles
+    setTimeout(() => {
+      if (graphRef.current) {
+        graphRef.current.zoomToFit(800, 60);
+      }
+    }, 1500);
+
     // Auto-rotate slowly
     if (graph.controls()) {
       graph.controls().autoRotate = true;
