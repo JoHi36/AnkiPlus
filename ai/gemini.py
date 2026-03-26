@@ -811,14 +811,24 @@ def generate_quick_answer(query, card_texts, cluster_labels=None, model=None):
         "model": model,
         "mode": "compact",
         "history": [],
-        "stream": False,
+        "stream": True,
     }
 
     try:
-        response = requests.post(url, json=backend_data, headers=headers, timeout=20)
-        response.raise_for_status()
-        result = response.json()
-        response_text = result.get("text") or result.get("response") or ""
+        # Collect streaming response
+        collected = []
+        def _collect(chunk, done, is_function_call=False, **kw):
+            if chunk:
+                collected.append(chunk)
+
+        stream_response(
+            urls=[url],
+            data=None,
+            callback=_collect,
+            use_backend=True,
+            backend_data=backend_data,
+        )
+        response_text = "".join(collected)
 
         if not response_text.strip():
             logger.warning("generate_quick_answer: Empty response for '%s'", query)
