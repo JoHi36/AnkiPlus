@@ -12,6 +12,13 @@ import StatsWidget from './components/StatsWidget';
 import CompactWidget from './components/CompactWidget';
 import ImageWidget from './components/ImageWidget';
 import MascotCharacter from './components/MascotCharacter';
+import ReasoningStream from './reasoning/ReasoningStream';
+import ReviewFeedback from './components/ReviewFeedback';
+import { DockEvalResult, DockTimer, DockStars, DockLoading } from './components/ReviewerDock';
+import SourceCard from './components/SourceCard';
+import CitationBadge from './components/CitationBadge';
+import AgenticCell from './components/AgenticCell';
+import { setRegistry } from '../../shared/config/subagentRegistry';
 
 /**
  * ComponentViewer — Premium Design System Reference
@@ -41,6 +48,67 @@ const MOCK_BRIDGE = {
   goToCard: () => {}, openPreview: () => {},
 };
 
+/* ── Demo data for new showcases ── */
+
+const DEMO_REASONING_STEPS = [
+  { step: 'routing', status: 'done', data: { agent: 'Tutor' }, timestamp: Date.now() - 3000 },
+  { step: 'rag_search', status: 'done', data: { mode: 'hybrid', count: 4 }, timestamp: Date.now() - 2000 },
+  { step: 'generating', status: 'active', data: {}, timestamp: Date.now() - 1000 },
+];
+
+const DEMO_SOURCE_KEYWORD = {
+  noteId: 1001,
+  deckName: 'Medizin::Anatomie',
+  front: 'Was ist der <b>Tractus iliotibialis</b>?',
+  sources: ['keyword'],
+};
+const DEMO_SOURCE_SEMANTIC = {
+  noteId: 1002,
+  deckName: 'Medizin::Physiologie',
+  front: 'Welche Muskeln stabilisieren das Kniegelenk lateral?',
+  sources: ['semantic'],
+};
+const DEMO_SOURCE_DUAL = {
+  noteId: 1003,
+  deckName: 'Medizin::Anatomie',
+  front: '{{c1::M. tensor fasciae latae}} inseriert am Tractus iliotibialis.',
+  sources: ['keyword', 'semantic'],
+};
+
+const DEMO_CITATION = {
+  noteId: 42,
+  deckName: 'Medizin::Anatomie',
+  front: 'Welche Funktion hat der <b>M. quadriceps femoris</b>?',
+  sources: ['keyword'],
+};
+
+// Seed registry for AgenticCell demos
+setRegistry([
+  {
+    name: 'tutor',
+    label: '@Tutor',
+    color: '#30D158',
+    enabled: true,
+    pipelineLabel: 'Tutor arbeitet...',
+    iconType: 'letter',
+    loadingHintTemplate: '@Tutor analysiert die Karte...',
+  },
+  {
+    name: 'research',
+    label: '@Research',
+    color: '#0A84FF',
+    enabled: true,
+    pipelineLabel: 'Research arbeitet...',
+    iconType: 'letter',
+    loadingHintTemplate: '@Research durchsucht Quellen...',
+  },
+]);
+
+const DOCK_LOADING_STEPS = [{ label: 'KI bewertet...' }];
+
+const SOURCE_CARD_STYLE = { width: 192, height: 110 };
+const SOURCE_CARDS_ROW_STYLE = { display: 'flex', gap: 'var(--ds-space-md)', flexWrap: 'wrap', alignItems: 'flex-start' };
+
 /* ── Navigation structure ── */
 const NAV = [
   { id: 'philosophy', label: 'Philosophy' },
@@ -59,6 +127,12 @@ const NAV = [
     { id: 'topbar', label: 'TopBar' },
     { id: 'thoughtstream', label: 'ThoughtStream' },
     { id: 'chatmessage', label: 'ChatMessage' },
+    { id: 'reasoning', label: 'ReasoningStream' },
+    { id: 'reviewfeedback', label: 'ReviewFeedback' },
+    { id: 'dockwidgets', label: 'Dock Widgets' },
+    { id: 'sourcecard', label: 'SourceCard' },
+    { id: 'citationbadge', label: 'CitationBadge' },
+    { id: 'agenticcell', label: 'AgenticCell' },
     { id: 'multiplechoice', label: 'MultipleChoiceCard' },
   ]},
   { id: 'blocks', label: 'Blocks', children: [
@@ -1588,6 +1662,129 @@ export default function ComponentViewer() {
               steps={[]} citations={{}} pipelineSteps={[]}
               bridge={MOCK_BRIDGE}
             />
+          </Showcase>
+
+          {/* ReasoningStream */}
+          <SubHeader id="reasoning" label="Reasoning Stream" refs={sectionRefs} />
+          <Showcase label="Live Pipeline (agent variant)">
+            <ReasoningStream
+              steps={DEMO_REASONING_STEPS}
+              pipelineGeneration={1}
+              agentColor="var(--ds-green)"
+              isStreaming={true}
+              message=""
+              variant="agent"
+            />
+          </Showcase>
+          <VariantLabel>Router variant (collapsed when done)</VariantLabel>
+          <Showcase>
+            <ReasoningStream
+              steps={[
+                { step: 'routing', status: 'done', data: { agent: 'Tutor' }, timestamp: Date.now() - 2000 },
+                { step: 'rag_search', status: 'done', data: { mode: 'semantic', count: 6 }, timestamp: Date.now() - 1000 },
+              ]}
+              pipelineGeneration={2}
+              agentColor="var(--ds-accent)"
+              isStreaming={false}
+              message="Der M. quadriceps femoris wird vom N. femoralis innerviert."
+              variant="router"
+            />
+          </Showcase>
+
+          {/* ReviewFeedback */}
+          <SubHeader id="reviewfeedback" label="Review Feedback" refs={sectionRefs} />
+          <Showcase label="Score states">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ds-space-md)', maxWidth: 400 }}>
+              <ReviewFeedback score={30} />
+              <ReviewFeedback score={70} />
+              <ReviewFeedback score={100} />
+            </div>
+          </Showcase>
+
+          {/* Dock Widgets */}
+          <SubHeader id="dockwidgets" label="Dock Widgets" refs={sectionRefs} />
+          <Showcase label="DockLoading — AI evaluating">
+            <DockLoading steps={DOCK_LOADING_STEPS} />
+          </Showcase>
+          <VariantLabel>DockEvalResult — score display</VariantLabel>
+          <Showcase>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ds-space-sm)' }}>
+              <DockEvalResult result={{ score: 20, feedback: 'Teilweise richtig, wichtige Details fehlen.' }} />
+              <DockEvalResult result={{ score: 65, feedback: 'Gut! Kleiner Fehler bei der Innervation.' }} />
+              <DockEvalResult result={{ score: 95, feedback: 'Ausgezeichnet!' }} />
+            </div>
+          </Showcase>
+          <VariantLabel>DockTimer — elapsed + rating</VariantLabel>
+          <Showcase>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ds-space-sm)' }}>
+              <DockTimer frozenElapsed={4200} rating={1} onCycleRating={() => {}} />
+              <DockTimer frozenElapsed={8900} rating={3} onCycleRating={() => {}} />
+              <DockTimer frozenElapsed={12400} rating={4} onCycleRating={() => {}} />
+            </div>
+          </Showcase>
+          <VariantLabel>DockStars — star count</VariantLabel>
+          <Showcase>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ds-space-sm)' }}>
+              <DockStars stars={1} rating={1} isResult={false} />
+              <DockStars stars={2} rating={2} isResult={false} />
+              <DockStars stars={3} rating={4} isResult={true} />
+            </div>
+          </Showcase>
+
+          {/* SourceCard */}
+          <SubHeader id="sourcecard" label="Source Card" refs={sectionRefs} />
+          <Showcase label="Match types">
+            <div style={SOURCE_CARDS_ROW_STYLE}>
+              <div style={SOURCE_CARD_STYLE}>
+                <SourceCard citation={DEMO_SOURCE_KEYWORD} index={1} />
+              </div>
+              <div style={SOURCE_CARD_STYLE}>
+                <SourceCard citation={DEMO_SOURCE_SEMANTIC} index={2} />
+              </div>
+              <div style={SOURCE_CARD_STYLE}>
+                <SourceCard citation={DEMO_SOURCE_DUAL} index={3} />
+              </div>
+            </div>
+          </Showcase>
+
+          {/* CitationBadge */}
+          <SubHeader id="citationbadge" label="Citation Badge" refs={sectionRefs} />
+          <Showcase label="Inline citation pills">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--ds-space-xs)', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 'var(--ds-text-lg)', color: 'var(--ds-text-primary)' }}>
+                Der Tractus iliotibialis
+              </span>
+              <CitationBadge cardId={42} citation={DEMO_CITATION} index={1} />
+              <span style={{ fontSize: 'var(--ds-text-lg)', color: 'var(--ds-text-primary)' }}>
+                stabilisiert das Kniegelenk
+              </span>
+              <CitationBadge cardId={43} citation={DEMO_SOURCE_SEMANTIC} index={2} />
+              <CitationBadge cardId={44} citation={DEMO_SOURCE_KEYWORD} index={3} />
+            </div>
+          </Showcase>
+
+          {/* AgenticCell */}
+          <SubHeader id="agenticcell" label="Agentic Cell" refs={sectionRefs} />
+          <Showcase label="Loading state">
+            <AgenticCell agentName="tutor" isLoading={true} loadingHint="@Tutor analysiert die Karte..." />
+          </Showcase>
+          <VariantLabel>Loaded — with content</VariantLabel>
+          <Showcase>
+            <AgenticCell agentName="tutor" isLoading={false}>
+              <div style={{ fontSize: 'var(--ds-text-base)', color: 'var(--ds-text-secondary)', lineHeight: 1.6 }}>
+                Der <strong style={{ color: 'var(--ds-text-primary)' }}>M. quadriceps femoris</strong> besteht aus
+                vier Köpfen und wird vom N. femoralis (L2–L4) innerviert.
+              </div>
+            </AgenticCell>
+          </Showcase>
+          <VariantLabel>Research agent</VariantLabel>
+          <Showcase>
+            <AgenticCell agentName="research" isLoading={false}>
+              <div style={{ fontSize: 'var(--ds-text-base)', color: 'var(--ds-text-secondary)', lineHeight: 1.6 }}>
+                Aktuelle Studien bestätigen den klinischen Zusammenhang zwischen
+                IT-Band-Syndrom und lateralem Knieschmerz bei Läufern.
+              </div>
+            </AgenticCell>
           </Showcase>
 
           {/* MultipleChoiceCard */}
