@@ -289,6 +289,7 @@ class InsightExtractionThread(QThread):
 class SearchCardsThread(QThread):
     """Background thread for embedding-based card search."""
     result_signal = pyqtSignal(str)  # JSON result string
+    pipeline_signal = pyqtSignal(str, str, str, object)  # requestId, step, status, data
 
     def __init__(self, query, top_k, emb_mgr, widget_ref):
         super().__init__()
@@ -296,6 +297,11 @@ class SearchCardsThread(QThread):
         self.top_k = top_k
         self.emb_mgr = emb_mgr
         self._widget_ref = weakref.ref(widget_ref) if widget_ref is not None else None
+        self._request_id = "search_%s" % id(self)
+
+    def _emit_step(self, step, status, data=None):
+        """Emit pipeline step — same format as session AI pipeline."""
+        self.pipeline_signal.emit(self._request_id, step, status, data or {})
 
     def _expand_query(self, query):
         """Use LLM to generate 3-4 expanded search queries for better recall."""
@@ -337,8 +343,11 @@ class SearchCardsThread(QThread):
             import re as _re
 
             # === MULTI-QUERY HYBRID SEARCH ===
+            self._emit_step("orchestrating", "active", {"query": self.query})
+            self._emit_step("orchestrating", "done", {"agent": "tutor"})
 
             # 1. Embed original query + expanded queries
+            self._emit_step("semantic_search", "active", {"query": self.query})
             expanded_queries = self._expand_query(self.query)
             all_queries = [self.query] + expanded_queries
             logger.info("SearchCards: Searching with %d queries for '%s'", len(all_queries), self.query)
@@ -366,7 +375,10 @@ class SearchCardsThread(QThread):
                 if count > 1:
                     scores[cid] = scores.get(cid, 0) + 0.05 * (count - 1)
 
+            self._emit_step("semantic_search", "done", {"total_hits": len(vector_ids)})
+
             # 2. SQL keyword search (exact matches)
+            self._emit_step("sql_search", "active")
             sql_ids = set()
             try:
                 try:
@@ -386,7 +398,10 @@ class SearchCardsThread(QThread):
             except Exception as e:
                 logger.debug("SQL keyword search failed (non-critical): %s", e)
 
+            self._emit_step("sql_search", "done", {"total_hits": len(sql_ids)})
+
             # 3. Merge: dual-match cards first, then vector-only, then sql-only
+            self._emit_step("merge", "active")
             dual = vector_ids & sql_ids
             vector_only = vector_ids - sql_ids
             sql_only = sql_ids - vector_ids
@@ -400,6 +415,7 @@ class SearchCardsThread(QThread):
             # Rank all candidates by score, take top-K
             all_candidates = list(dual) + sorted(vector_only, key=lambda c: scores.get(c, 0), reverse=True) + sorted(sql_only, key=lambda c: scores.get(c, 0), reverse=True)
             card_ids = list(dict.fromkeys(all_candidates))[:self.top_k]  # dedupe, limit
+            self._emit_step("merge", "done", {"total": len(card_ids), "keyword_count": len(sql_ids), "semantic_count": len(vector_ids)})
 
             if not card_ids:
                 self.result_signal.emit(json.dumps({"type": "graph.searchCards", "data": {
@@ -809,20 +825,24 @@ class KGDefinitionThread(QThread):
 class QuickAnswerThread(QThread):
     """Background thread for generating quick AI answers from card search results."""
     result_signal = pyqtSignal(str)
+    pipeline_signal = pyqtSignal(str, str, str, object)  # requestId, step, status, data
 
     def __init__(self, query, cards_data, cluster_info):
         super().__init__()
         self.query = query
         self.cards_data = cards_data
         self.cluster_info = cluster_info
+        self._request_id = "search_%s" % id(self)
 
     def run(self):
         try:
+            self.pipeline_signal.emit(self._request_id, "generating", "active", {"query": self.query})
             try:
                 from ..ai.gemini import generate_quick_answer
             except ImportError:
                 from ai.gemini import generate_quick_answer
             result = generate_quick_answer(self.query, self.cards_data, self.cluster_info)
+            self.pipeline_signal.emit(self._request_id, "generating", "done", {})
             self.result_signal.emit(json.dumps({
                 "type": "graph.quickAnswer",
                 "data": result
@@ -3088,6 +3108,7 @@ class ChatbotWidget(QWidget):
         # Launch in background thread so embed_texts() doesn't block the UI
         thread = SearchCardsThread(query, top_k, emb_mgr, self)
         thread.result_signal.connect(self._on_search_cards_result)
+        thread.pipeline_signal.connect(self.on_pipeline_step)
         self._search_cards_thread = thread  # prevent GC
         thread.start()
 
@@ -3114,6 +3135,7 @@ class ChatbotWidget(QWidget):
             cluster_info[c["id"]] = [card.get("question", "")[:40] for card in c.get("cards", [])[:3]]
         self._quick_answer_thread = QuickAnswerThread(query, cards_data, cluster_info)
         self._quick_answer_thread.result_signal.connect(self._on_quick_answer_result)
+        self._quick_answer_thread.pipeline_signal.connect(self.on_pipeline_step)
         self._quick_answer_thread.start()
 
     def _on_quick_answer_result(self, result_json):

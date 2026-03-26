@@ -788,6 +788,11 @@ function AppInner() {
         return;
       }
 
+      // Search pipeline steps → forward to useSmartSearch via CustomEvent
+      if (payload.type === 'pipeline_step' && payload.requestId && String(payload.requestId).startsWith('search_')) {
+        window.dispatchEvent(new CustomEvent('graph.pipelineStep', { detail: payload }));
+      }
+
       // Knowledge Graph events → forward as CustomEvents
       if (payload.type && payload.type.startsWith('graph.')) {
         window.dispatchEvent(new CustomEvent(payload.type, { detail: payload.data }));
@@ -2531,6 +2536,15 @@ function AppInner() {
               onSelectCluster={smartSearch.setSelectedClusterId}
               bridge={bridgeRef.current}
               onStartStack={() => {
+                // Term cards (KG mode) → cluster cards → all search cards
+                const termCardIds = smartSearch.selectedTerm?.cardIds;
+                if (termCardIds?.length) {
+                  window.ankiBridge?.addMessage('startTermStack', {
+                    term: smartSearch.selectedTerm.label,
+                    cardIds: JSON.stringify(termCardIds.map(Number)),
+                  });
+                  return;
+                }
                 const cards = smartSearch.selectedCluster?.cards || smartSearch.searchResult?.cards;
                 if (cards?.length) {
                   window.ankiBridge?.addMessage('startTermStack', {
@@ -2546,8 +2560,13 @@ function AppInner() {
               subClusters={smartSearch.subClusters}
               isSubClustering={smartSearch.isSubClustering}
               sidebarHasAnimated={smartSearch.sidebarHasAnimated}
+              pipelineSteps={smartSearch.pipelineSteps}
+              pipelineGeneration={smartSearch.pipelineGeneration}
               kgSubgraph={smartSearch.kgSubgraph}
               onGraphModeChange={smartSearch.setGraphMode}
+              selectedTerm={smartSearch.selectedTerm}
+              onSelectTerm={smartSearch.selectTerm}
+              termDefinition={smartSearch.termDefinition}
             />
           )}
         </div>

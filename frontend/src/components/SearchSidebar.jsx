@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import ChatInput from './ChatInput';
 import ResizeHandle from './ResizeHandle';
 import AgenticCell from './AgenticCell';
+import ReasoningStream from '../reasoning/ReasoningStream';
 
 export default function SearchSidebar({
   query,
@@ -23,9 +24,14 @@ export default function SearchSidebar({
   bridge,
   subClusters,
   isSubClustering,
+  pipelineSteps = [],
+  pipelineGeneration = 0,
   sidebarHasAnimated,
   kgSubgraph,
   onGraphModeChange,
+  selectedTerm,
+  onSelectTerm,
+  termDefinition,
 }) {
   if (!visible) return null;
 
@@ -65,10 +71,11 @@ export default function SearchSidebar({
     ? clusters?.filter((_, i) => multiIds.has(`cluster_${i}`)).flatMap(c => c.cards) || []
     : null;
 
-  const stackCardCount = multiCards?.length || selectedCluster?.cards?.length || totalCards || 0;
-  const stackLabel = multiCards
+  const termCardCount = selectedTerm?.cardIds?.length || selectedTerm?.subsetCount || 0;
+  const stackCardCount = selectedTerm ? termCardCount : (multiCards?.length || selectedCluster?.cards?.length || totalCards || 0);
+  const stackLabel = selectedTerm ? selectedTerm.label : (multiCards
     ? `${multiIds.size} Perspektiven`
-    : selectedLabel || query;
+    : selectedLabel || query);
 
   // Handle cluster click — single or multi mode
   const handleClusterClick = (cId, e) => {
@@ -199,6 +206,17 @@ export default function SearchSidebar({
         }}>
           {query}
         </div>
+
+        {/* Pipeline reasoning steps — same ReasoningStream as session chat */}
+        {pipelineSteps.length > 0 && (
+          <ReasoningStream
+            steps={pipelineSteps}
+            pipelineGeneration={pipelineGeneration}
+            isStreaming={isSearching || !answerText}
+            message={answerText || ''}
+            variant="compact"
+          />
+        )}
 
         {/* Tutor AgenticCell — standard agent signature */}
         <AgenticCell
@@ -470,7 +488,54 @@ export default function SearchSidebar({
             )}
 
             {/* ── Terms tab (Knowledge Graph) ── */}
-            {sidebarTab === 'terms' && kgSubgraph?.nodes?.length > 0 && (() => {
+            {sidebarTab === 'terms' && selectedTerm ? (
+              /* Term drill-down view */
+              <div>
+                <button
+                  onClick={() => onSelectTerm?.(null)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    fontFamily: 'inherit', padding: '0 0 10px',
+                    color: 'var(--ds-text-tertiary)', fontSize: 12,
+                  }}
+                >
+                  ← Alle Begriffe
+                </button>
+
+                <div style={{
+                  fontSize: 16, fontWeight: 600,
+                  color: 'var(--ds-text-primary)',
+                  marginBottom: 4,
+                }}>
+                  {selectedTerm.label}
+                </div>
+                <div style={{
+                  fontSize: 11, color: 'var(--ds-text-tertiary)',
+                  marginBottom: 12,
+                }}>
+                  {selectedTerm.cardIds?.length || selectedTerm.subsetCount || 0} Karten
+                </div>
+
+                {/* Definition */}
+                {termDefinition?.definition ? (
+                  <div style={{
+                    fontSize: 13,
+                    color: 'var(--ds-text-secondary)',
+                    lineHeight: 1.6,
+                  }}>
+                    {renderMarkdownWithRefs(termDefinition.definition)}
+                  </div>
+                ) : (
+                  <div style={{
+                    fontSize: 12, color: 'var(--ds-text-tertiary)',
+                    fontStyle: 'italic',
+                  }}>
+                    Definition wird generiert...
+                  </div>
+                )}
+              </div>
+            ) : sidebarTab === 'terms' && kgSubgraph?.nodes?.length > 0 ? (() => {
               // Group terms by deck, sort by subsetCount within each group
               const deckGroups = {};
               kgSubgraph.nodes.forEach(node => {
@@ -511,6 +576,7 @@ export default function SearchSidebar({
                           return (
                             <div
                               key={term.id}
+                              onClick={() => onSelectTerm?.(term)}
                               style={{
                                 display: 'flex', alignItems: 'center', gap: 8,
                                 padding: '4px 8px', borderRadius: 6,
@@ -561,7 +627,7 @@ export default function SearchSidebar({
                   ))}
                 </div>
               );
-            })()}
+            })() : null}
 
           </div>
         )}

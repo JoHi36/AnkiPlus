@@ -12,10 +12,16 @@ export default function useSmartSearch() {
   const [subClusters, setSubClusters] = useState(null);
   const [isSubClustering, setIsSubClustering] = useState(false);
   const [kgSubgraph, setKgSubgraph] = useState(null);
-  const [graphMode, setGraphMode] = useState('clusters'); // 'clusters' | 'knowledge' — synced between sidebar tab + graph
+  const [graphMode, setGraphMode] = useState('clusters');
+  const [selectedTerm, setSelectedTerm] = useState(null); // { id, label, cardIds, color }
+  const [termDefinition, setTermDefinition] = useState(null); // { term, definition, sources }
 
   // Track if sidebar slide-in has played — survives tab switches (lives in hook, not component)
   const sidebarHasAnimated = useRef(false);
+
+  // Pipeline steps — same system as session chat ReasoningStream
+  const [pipelineSteps, setPipelineSteps] = useState([]);
+  const [pipelineGeneration, setPipelineGeneration] = useState(0);
 
   // Cache survives view transitions
   const cacheRef = useRef(null);
@@ -71,16 +77,58 @@ export default function useSmartSearch() {
       setKgSubgraph(e.detail);
     };
 
+    const onTermDefinition = (e) => {
+      const data = e.detail;
+      if (data?.term) setTermDefinition(data);
+    };
+
+    // Pipeline steps — same format as session chat
+    const onPipelineStep = (e) => {
+      const payload = e.detail;
+      setPipelineSteps(prev => {
+        const existing = prev.findIndex(s => s.step === payload.step);
+        const newStep = {
+          step: payload.step,
+          status: payload.status,
+          data: payload.data || {},
+          timestamp: Date.now(),
+        };
+        if (existing >= 0) {
+          const next = [...prev];
+          next[existing] = newStep;
+          return next;
+        }
+        return [...prev, newStep];
+      });
+    };
+
     window.addEventListener('graph.searchCards', onSearchCards);
     window.addEventListener('graph.quickAnswer', onQuickAnswer);
     window.addEventListener('graph.subClusters', onSubClusters);
     window.addEventListener('graph.kgSubgraph', onKgSubgraph);
+    window.addEventListener('graph.termDefinition', onTermDefinition);
+    window.addEventListener('graph.pipelineStep', onPipelineStep);
     return () => {
       window.removeEventListener('graph.searchCards', onSearchCards);
       window.removeEventListener('graph.quickAnswer', onQuickAnswer);
       window.removeEventListener('graph.subClusters', onSubClusters);
       window.removeEventListener('graph.kgSubgraph', onKgSubgraph);
+      window.removeEventListener('graph.termDefinition', onTermDefinition);
+      window.removeEventListener('graph.pipelineStep', onPipelineStep);
     };
+  }, []);
+
+  // Select a KG term — request definition
+  const selectTerm = useCallback((termNode) => {
+    if (!termNode) {
+      setSelectedTerm(null);
+      setTermDefinition(null);
+      return;
+    }
+    setSelectedTerm(termNode);
+    setTermDefinition(null);
+    // Request definition from backend (will check cache first)
+    window.ankiBridge?.addMessage('getTermDefinition', { term: termNode.label || termNode.id });
   }, []);
 
   // Request sub-clusters when a cluster is selected
@@ -112,6 +160,8 @@ export default function useSmartSearch() {
     setCardRefs(null);
     setSelectedClusterId(null);
     setSubClusters(null);
+    setPipelineSteps([]);
+    setPipelineGeneration(g => g + 1);
     window.ankiBridge?.addMessage('searchCards', { query: q.trim(), topK: 100 });
   }, []);
 
@@ -148,10 +198,12 @@ export default function useSmartSearch() {
   return {
     query, searchResult, isSearching,
     answerText, clusterLabels, clusterSummaries, cardRefs,
+    pipelineSteps, pipelineGeneration,
     selectedClusterId, setSelectedClusterId: selectCluster,
     selectedCluster, selectedClusterLabel, selectedClusterSummary,
     subClusters, isSubClustering,
     kgSubgraph, graphMode, setGraphMode,
+    selectedTerm, selectTerm, termDefinition,
     sidebarHasAnimated,
     search, reset, restoreFromCache,
     hasResults: !!(searchResult?.cards?.length > 0),
