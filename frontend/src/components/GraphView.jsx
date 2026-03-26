@@ -201,6 +201,18 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       .d3VelocityDecay(0.25)
       .showNavInfo(false);
 
+    // Distance from center = relevance (closer = more relevant)
+    graph.d3Force('link').distance(link => {
+      const score = link.value || 0.5;
+      // High relevance (0.9) → distance 25 (close to center)
+      // Low relevance (0.3) → distance 100 (far out)
+      return 20 + (1 - score) * 120;
+    });
+
+    // Stronger center gravity to keep it compact
+    graph.d3Force('center', null); // remove default center force
+    graph.d3Force('charge').strength(-40); // gentler repulsion
+
     // Zoom to fit all nodes after settling
     setTimeout(() => {
       if (graphRef.current) graphRef.current.zoomToFit(1000, 80);
