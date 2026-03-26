@@ -486,14 +486,17 @@ class SearchCardsThread(QThread):
                     if na > 0 and nb > 0:
                         all_sims[(cids_list[i], cids_list[j])] = dot / (na * nb)
 
-            # Adaptive threshold: find threshold that gives 3-5 clusters
-            # Start high, decrease until we get enough clusters
-            # clamp(3, floor(n/10), 6) — no clustering for very few cards
+            # Dynamic clustering — find the NATURAL number of clusters
+            # Instead of forcing a fixed target, find the threshold that gives
+            # the best cluster structure (reasonable size, not too many singletons).
+            # Range: 3-8 clusters for varied, interesting graphs.
             n_cards = len(card_ids)
             if n_cards < 6:
                 TARGET_CLUSTERS = 1
             else:
-                TARGET_CLUSTERS = max(3, min(6, n_cards // 10))
+                # Dynamic: aim for clusters of avg 8-15 cards
+                # This gives 3 clusters for 30 cards, 5 for 60, 8 for 100
+                TARGET_CLUSTERS = max(3, min(8, round(n_cards / 12)))
             best_threshold = 0.95
             best_clusters = None
 

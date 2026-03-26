@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ChatInput from './ChatInput';
+import ResizeHandle from './ResizeHandle';
 
 export default function SearchSidebar({
   query,
@@ -172,6 +173,9 @@ export default function SearchSidebar({
         ? 'slideOutRight 0.3s ease-in forwards'
         : shouldAnimate ? 'slideInRight 0.3s ease-out' : 'none',
     }}>
+      {/* Resize handle — same as session sidebar */}
+      <ResizeHandle />
+
       {/* Scrollable content */}
       <div style={{
         flex: 1,
@@ -328,66 +332,7 @@ export default function SearchSidebar({
                     </div>
                   )}
 
-                  {/* Numbered card list */}
-                  {selectedCluster.cards?.length > 0 && (
-                    <div style={{ marginTop: 12, borderTop: '1px solid var(--ds-border-subtle)', paddingTop: 10 }}>
-                      <div style={{
-                        fontSize: 10, fontWeight: 600,
-                        color: 'var(--ds-text-tertiary)',
-                        letterSpacing: '0.5px',
-                        marginBottom: 6,
-                      }}>
-                        KARTEN
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        {selectedCluster.cards.map((card, ci) => {
-                          // Find this card's reference number from cardRefs
-                          let refNum = null;
-                          if (cardRefs) {
-                            for (const [num, ref] of Object.entries(cardRefs)) {
-                              if (String(ref.id) === String(card.id)) { refNum = num; break; }
-                            }
-                          }
-                          return (
-                            <div
-                              key={card.id}
-                              onClick={() => bridge?.openPreview?.(String(card.id))}
-                              style={{
-                                display: 'flex', alignItems: 'center', gap: 8,
-                                padding: '5px 8px', borderRadius: 6,
-                                cursor: 'pointer',
-                                transition: 'background 0.15s',
-                                fontSize: 12,
-                              }}
-                              onMouseEnter={e => { e.currentTarget.style.background = 'var(--ds-hover-tint)'; }}
-                              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                            >
-                              {/* Reference number badge */}
-                              {refNum && (
-                                <span style={{
-                                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                  width: 20, height: 20, borderRadius: 4,
-                                  background: 'var(--ds-accent-10)',
-                                  color: 'var(--ds-accent)',
-                                  fontSize: 9, fontWeight: 700,
-                                  flexShrink: 0,
-                                }}>
-                                  {refNum}
-                                </span>
-                              )}
-                              <span style={{
-                                color: 'var(--ds-text-secondary)',
-                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                                flex: 1,
-                              }}>
-                                {card.question || `Karte ${card.id}`}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
+                  {/* Card list removed — references in text are sufficient */}
                 </>
               ) : (
                 /* ── Cluster list view ── */
@@ -412,6 +357,7 @@ export default function SearchSidebar({
                       .map(({ cluster, i, avgScore }) => {
                       const cId = `cluster_${i}`;
                       const color = clusterColors[i % clusterColors.length];
+                      const hasLLMLabel = !!clusterLabels?.[cId];
                       const label = clusterLabels?.[cId] || cluster.label;
                       const pct = Math.round(avgScore * 100);
                       const isMultiSelected = multiIds.has(cId);
@@ -444,13 +390,23 @@ export default function SearchSidebar({
                             background: color, flexShrink: 0,
                           }} />
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{
-                              fontSize: 13, fontWeight: 500,
-                              color: isMultiSelected ? 'var(--ds-text-primary)' : 'var(--ds-text-secondary)',
-                            }}>
-                              {label}
-                            </div>
-                            <div style={{ fontSize: 11, color: 'var(--ds-text-tertiary)' }}>
+                            {hasLLMLabel ? (
+                              <div style={{
+                                fontSize: 13, fontWeight: 500,
+                                color: isMultiSelected ? 'var(--ds-text-primary)' : 'var(--ds-text-secondary)',
+                              }}>
+                                {label}
+                              </div>
+                            ) : (
+                              <div style={{
+                                height: 13, borderRadius: 4,
+                                background: 'var(--ds-hover-tint)',
+                                width: `${50 + (i * 13) % 30}%`,
+                                animation: 'pulse 1.5s ease-in-out infinite',
+                                animationDelay: `${i * 0.1}s`,
+                              }} />
+                            )}
+                            <div style={{ fontSize: 11, color: 'var(--ds-text-tertiary)', marginTop: hasLLMLabel ? 0 : 4 }}>
                               {cluster.cards.length} Karten
                             </div>
                           </div>
