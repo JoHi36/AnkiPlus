@@ -2863,6 +2863,8 @@ function AppInner() {
                                   steps={msg.steps || EMPTY_STEPS}
                                   citations={msg.citations || EMPTY_CITATIONS}
                                   pipelineSteps={msg.pipeline_data || []}
+                                  agentCells={msg.agentCells}
+                                  orchestration={msg.orchestration}
                                   webSources={msg.webSources || null}
                                   bridge={bridge}
                                   isLastMessage={false}
