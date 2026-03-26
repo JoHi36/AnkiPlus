@@ -1,10 +1,13 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DemoProvider, useDemoContext } from './DemoContext';
 import { useDemoBridgeStub } from './demoAdapters';
 import ChatInput from '@frontend/components/ChatInput';
 import ReviewFeedback from '@frontend/components/ReviewFeedback';
 import { QuizCard } from '@shared/components/QuizCard';
+import ReasoningStream from '@frontend/reasoning/ReasoningStream';
+import SourcesCarousel from '@frontend/components/SourcesCarousel';
+import AgenticCell from '@frontend/components/AgenticCell';
 
 // ───────────────────────────────────────────────
 // Constants
@@ -86,6 +89,7 @@ function DemoShellInner() {
     showBack,
     isStreaming,
     evalScore,
+    chatMessages,
     handleShowAnswer,
     handleSubmitText,
     handleStartMC,
@@ -93,6 +97,44 @@ function DemoShellInner() {
     handleSendChat,
     setInputText,
   } = useDemoContext();
+
+  // ─── Transform DemoData reasoningSteps → ReasoningStep[] format ───
+  const reasoningStepsForStream = useMemo(() => {
+    return (scenario.reasoningSteps || []).map(s => ({
+      step: s.id,
+      status: s.status as 'active' | 'done' | 'error',
+      data: { label: s.label, detail: s.detail || '' },
+      timestamp: Date.now(),
+    }));
+  }, [scenario.reasoningSteps]);
+
+  // ─── Transform DemoData sources array → citations Record format ───
+  const citationsRecord = useMemo(() => {
+    const result: Record<string, any> = {};
+    (scenario.sources || []).forEach((src, idx) => {
+      const key = String(src.cardId);
+      result[key] = {
+        id: key,
+        cardId: src.cardId,
+        noteId: src.cardId,
+        front: src.front,
+        deckName: src.deckName,
+        matchType: src.matchType,
+        score: src.score,
+        sources: src.matchType === 'both' ? [{ type: 'keyword' }, { type: 'semantic' }] : [{ type: src.matchType }],
+        index: idx + 1,
+      };
+    });
+    return result;
+  }, [scenario.sources]);
+
+  const citationIndices = useMemo(() => {
+    const result: Record<string, number> = {};
+    (scenario.sources || []).forEach((src, idx) => {
+      result[String(src.cardId)] = idx + 1;
+    });
+    return result;
+  }, [scenario.sources]);
 
   // ─── Derived ───
   const isEvaluated = phase === 'EVALUATED' || phase === 'ANSWER';
@@ -199,9 +241,31 @@ function DemoShellInner() {
           )}
         </AnimatePresence>
 
+        {/* ReasoningStream — shown during EVALUATING (streaming) and EVALUATED (done) */}
+        {(phase === 'EVALUATING' || phase === 'EVALUATED') && reasoningStepsForStream.length > 0 && (
+          <div style={{ padding: '4px 0 0' }}>
+            <ReasoningStream
+              steps={reasoningStepsForStream}
+              pipelineGeneration={1}
+              isStreaming={phase === 'EVALUATING'}
+              message=""
+              variant="agent"
+            />
+          </div>
+        )}
+
         {/* Evaluation feedback */}
         {isEvaluated && evalScore > 0 && (
           <ReviewFeedback score={evalScore} />
+        )}
+
+        {/* SourcesCarousel — shown when EVALUATED and sources exist */}
+        {phase === 'EVALUATED' && Object.keys(citationsRecord).length > 0 && (
+          <SourcesCarousel
+            citations={citationsRecord}
+            citationIndices={citationIndices}
+            onPreviewCard={() => {}}
+          />
         )}
 
         {/* MC quiz */}
@@ -213,6 +277,36 @@ function DemoShellInner() {
           />
         )}
       </div>
+
+      {/* Chat messages — AI responses wrapped in AgenticCell */}
+      {chatMessages.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {chatMessages.map((msg, idx) =>
+            msg.role === 'ai' ? (
+              <AgenticCell key={idx} agentName="tutor" isLoading={isStreaming && idx === chatMessages.length - 1}>
+                <div style={{ fontSize: 14, color: 'var(--ds-text-primary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                  {msg.text}
+                </div>
+              </AgenticCell>
+            ) : (
+              <div
+                key={idx}
+                style={{
+                  alignSelf: 'flex-end',
+                  background: 'var(--ds-accent-10)',
+                  borderRadius: 12,
+                  padding: '8px 14px',
+                  fontSize: 14,
+                  color: 'var(--ds-text-primary)',
+                  maxWidth: '85%',
+                }}
+              >
+                {msg.text}
+              </div>
+            )
+          )}
+        </div>
+      )}
 
       {/* ChatInput */}
       <ChatInput
