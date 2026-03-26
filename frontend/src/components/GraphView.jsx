@@ -95,7 +95,7 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       color: '#FFFFFF',
       isQuery: true,
       isCluster: false,
-      val: 4,
+      val: 6,
     });
 
     if (clusters.length > 0) {
@@ -112,7 +112,7 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
           isQuery: false,
           isCluster: true,
           cardCount: cluster.cards.length,
-          val: 2 + cluster.cards.length * 0.3,
+          val: 3 + cluster.cards.length * 0.4,
         });
 
         // Link query → cluster
@@ -129,7 +129,7 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
             color: deckColor(card.deck),
             isQuery: false,
             isCluster: false,
-            val: 0.6 + (card.score || 0.5),
+            val: 1.2 + (card.score || 0.5) * 1.5,
           });
           // Link cluster → card
           links.push({ source: cid, target: card.id, value: card.score || 0.5 });
@@ -169,10 +169,10 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
         if (n.isCluster) return `${n.label} (${n.cardCount} Karten)`;
         return `${n.label}\n${n.deck}`;
       })
-      .nodeOpacity(n => n.isQuery ? 1.0 : n.isCluster ? 0.9 : 0.75)
-      .linkWidth(l => (l.value || 0.5) * 1.5)
-      .linkOpacity(0.1)
-      .linkColor(() => 'rgba(255,255,255,0.12)')
+      .nodeOpacity(1.0)
+      .linkWidth(l => (l.value || 0.5) * 2)
+      .linkOpacity(0.2)
+      .linkColor(() => 'rgba(255,255,255,0.2)')
       .onNodeClick(node => {
         if (!node || node.isQuery) return;
         if (node.isCluster) {

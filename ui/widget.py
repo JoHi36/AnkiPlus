@@ -432,7 +432,7 @@ class SearchCardsThread(QThread):
                     nb = sum(x * x for x in b) ** 0.5
                     if na > 0 and nb > 0:
                         sim = dot / (na * nb)
-                        if sim > 0.45:
+                        if sim > 0.70:
                             sim_pairs.setdefault(cids_list[i], set()).add(cids_list[j])
                             sim_pairs.setdefault(cids_list[j], set()).add(cids_list[i])
 
