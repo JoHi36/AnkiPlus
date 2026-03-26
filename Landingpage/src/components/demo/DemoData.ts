@@ -32,6 +32,19 @@ export interface DemoScenario {
     userQuestion: string;
     aiResponse: string;
   };
+  reasoningSteps: Array<{
+    id: string;
+    label: string;
+    status: 'done' | 'active' | 'pending';
+    detail?: string;
+  }>;
+  sources: Array<{
+    cardId: number;
+    deckName: string;
+    front: string;
+    matchType: 'keyword' | 'semantic' | 'both';
+    score: number;
+  }>;
 }
 
 export const DEMO_SCENARIOS: Record<string, DemoScenario> = {
@@ -69,6 +82,16 @@ export const DEMO_SCENARIOS: Record<string, DemoScenario> = {
       userQuestion: 'Was genau passiert mit der Bandscheibe bei Belastung?',
       aiResponse: "### Bandscheibe unter Belastung\n\nDie **Bandscheibe** (Discus intervertebralis) besteht aus zwei Hauptkomponenten:\n\n1. **Äußerer Faserring (Anulus fibrosus):** Zähe, faserige Hülle, die wie ein fester Ring die Bandscheibe umschließt und Stabilität gibt.\n2. **Gallertkern (Nucleus pulposus):** Weicher, gelartiger Kern im Inneren \u2013 sehr elastisch und wasserreich.\n\n#### Bei langfristiger Belastung (tagsüber):\n- Der Nucleus pulposus gibt **Flüssigkeit an die Umgebung ab**\n- Die Bandscheibe wird dadurch flacher\n- Die **Körpergröße nimmt um 1\u20132 cm ab**\n\n#### Bei Entlastung (nachts):\n- Der Nucleus pulposus **saugt Flüssigkeit zurück**\n- Die Bandscheibe quillt wieder auf\n- Morgens ist man daher etwas größer\n\n> **Merksatz:** Die Bandscheibe funktioniert wie ein Schwamm \u2013 tagsüber wird sie ausgepresst, nachts saugt sie sich wieder voll.",
     },
+    reasoningSteps: [
+      { id: 'router', label: 'Anfrage analysieren', status: 'done', detail: 'Kartenkontext erkannt → Tutor' },
+      { id: 'search', label: '4 Karten durchsucht', status: 'done', detail: 'Wirbelsäule-Deck' },
+      { id: 'merge', label: 'Antwort zusammenführen', status: 'done' },
+    ],
+    sources: [
+      { cardId: 1, deckName: 'Wirbelsäule', front: 'Aufbau der Bandscheibe', matchType: 'both', score: 0.92 },
+      { cardId: 2, deckName: 'Wirbelsäule', front: 'Nucleus pulposus Funktion', matchType: 'semantic', score: 0.85 },
+      { cardId: 3, deckName: 'Wirbelsäule', front: 'Stoßdämpferfunktion', matchType: 'keyword', score: 0.78 },
+    ],
   },
   law: {
     id: 'law',
@@ -104,6 +127,16 @@ export const DEMO_SCENARIOS: Record<string, DemoScenario> = {
       userQuestion: 'Was genau bedeutet Heimtücke?',
       aiResponse: "### Heimtücke (§ 211 Abs. 2 Gr. 2 Var. 1 StGB)\n\nHeimtücke ist das klausurrelevanteste Mordmerkmal.\n\n#### Definition (BGH)\nHeimtückisch handelt, wer die **Arg- und Wehrlosigkeit** des Opfers in feindlicher Willensrichtung bewusst zur Tötung ausnutzt.\n\n- **Arglos:** Wer sich zum Zeitpunkt der Tat keines Angriffs auf Leib oder Leben versieht.\n- **Wehrlos:** Wer infolge seiner Arglosigkeit in seiner Verteidigungsfähigkeit stark eingeschränkt ist.\n\n#### Wichtige Fallgruppen\n1. **Schlafende** \u2192 arglos (nehmen Arglosigkeit \"mit in den Schlaf\")\n2. **Bewusstlose** \u2192 nicht arglos (können keine Arglosigkeit bilden)\n3. **Kleinkinder** \u2192 str., h.M. (+) analog\n\n> **Klausur-Tipp:** Immer zuerst die Arglosigkeit prüfen. Die Wehrlosigkeit folgt daraus.",
     },
+    reasoningSteps: [
+      { id: 'router', label: 'Anfrage analysieren', status: 'done', detail: 'Kartenkontext erkannt → Tutor' },
+      { id: 'search', label: '6 Karten durchsucht', status: 'done', detail: 'Strafrecht BT-Deck' },
+      { id: 'merge', label: 'Antwort zusammenführen', status: 'done' },
+    ],
+    sources: [
+      { cardId: 4, deckName: 'Strafrecht BT', front: 'Mordmerkmale § 211 StGB Überblick', matchType: 'both', score: 0.94 },
+      { cardId: 5, deckName: 'Strafrecht BT', front: 'Heimtücke — Definition BGH', matchType: 'semantic', score: 0.89 },
+      { cardId: 6, deckName: 'Strafrecht BT', front: 'Gemeingefährliche Mittel Beispiele', matchType: 'keyword', score: 0.76 },
+    ],
   },
   business: {
     id: 'business',
@@ -139,5 +172,15 @@ export const DEMO_SCENARIOS: Record<string, DemoScenario> = {
       userQuestion: 'Wie berechnet man den WACC konkret?',
       aiResponse: "### WACC-Berechnung\n\nDer **Weighted Average Cost of Capital** berechnet sich als:\n\n`WACC = (E/V) \u00d7 Re + (D/V) \u00d7 Rd \u00d7 (1 \u2013 Tc)`\n\n#### Variablen:\n- **E/V** = Eigenkapitalanteil am Gesamtkapital\n- **Re** = Eigenkapitalkosten (via **CAPM**: `Re = Rf + \u03b2 \u00d7 (Rm \u2013 Rf)`)\n- **D/V** = Fremdkapitalanteil\n- **Rd** = Fremdkapitalkosten (Zinssatz)\n- **Tc** = Unternehmenssteuersatz (Tax Shield)\n\n#### Praxisbeispiel:\n- EK-Quote: 60%, FK-Quote: 40%\n- CAPM-Rendite: 8%, FK-Zins: 4%, Steuersatz: 30%\n- **WACC** = 0,6 \u00d7 8% + 0,4 \u00d7 4% \u00d7 0,7 = **5,92%**\n\n> **Merksatz:** Der WACC ist der Diskontierungssatz für die DCF-Bewertung \u2013 er spiegelt das Risiko des gesamten Unternehmens wider.",
     },
+    reasoningSteps: [
+      { id: 'router', label: 'Anfrage analysieren', status: 'done', detail: 'Kartenkontext erkannt → Tutor' },
+      { id: 'search', label: '5 Karten durchsucht', status: 'done', detail: 'Corporate Finance-Deck' },
+      { id: 'merge', label: 'Antwort zusammenführen', status: 'done' },
+    ],
+    sources: [
+      { cardId: 7, deckName: 'Corporate Finance', front: 'WACC Formel und Komponenten', matchType: 'both', score: 0.95 },
+      { cardId: 8, deckName: 'Corporate Finance', front: 'CAPM — Capital Asset Pricing Model', matchType: 'semantic', score: 0.88 },
+      { cardId: 9, deckName: 'Corporate Finance', front: 'Tax Shield Fremdkapital', matchType: 'keyword', score: 0.72 },
+    ],
   },
 };
