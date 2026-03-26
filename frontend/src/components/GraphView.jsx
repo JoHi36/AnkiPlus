@@ -3,6 +3,7 @@ import ForceGraph3D from '3d-force-graph';
 import { Search } from 'lucide-react';
 import { executeAction } from '../actions';
 import KnowledgeHeatmap from './KnowledgeHeatmap';
+import ChatInput from './ChatInput';
 
 const MAX_W = 'var(--ds-content-width)';
 
@@ -21,32 +22,60 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
   const [searchResult, setSearchResult] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedCard, setSelectedCard] = useState(null);
+  const [searchActive, setSearchActive] = useState(false);
+  const [answerText, setAnswerText] = useState(null);
 
-  // Listen for search results from backend
+  // Listen for search results and quick answers from backend
   useEffect(() => {
     const onSearchCards = (e) => {
       setSearchResult(e.detail);
       setIsSearching(false);
     };
+    const onQuickAnswer = (e) => {
+      setAnswerText(e.detail?.answer || null);
+    };
     window.addEventListener('graph.searchCards', onSearchCards);
+    window.addEventListener('graph.quickAnswer', onQuickAnswer);
     return () => {
       window.removeEventListener('graph.searchCards', onSearchCards);
+      window.removeEventListener('graph.quickAnswer', onQuickAnswer);
     };
   }, []);
 
-  // Handle search submit
-  const handleSearch = useCallback((e) => {
-    e.preventDefault();
+  // Handle search submit from State A (centered search bar)
+  const handleSearch = useCallback(() => {
     const query = searchQuery.trim();
     if (!query) return;
-
+    setSearchActive(true);
     setIsSearching(true);
     setSearchResult(null);
+    setAnswerText(null);
     setSelectedCard(null);
-
-    // Request card search via backend embedding similarity
     window.ankiBridge?.addMessage('searchCards', { query, topK: 25 });
+    window.ankiBridge?.addMessage('quickAnswer', { query });
   }, [searchQuery]);
+
+  // Handle search from State B (ChatInput at bottom)
+  const handleSearchWithQuery = useCallback((query) => {
+    setSearchQuery(query);
+    setIsSearching(true);
+    setSearchResult(null);
+    setAnswerText(null);
+    setSelectedCard(null);
+    window.ankiBridge?.addMessage('searchCards', { query: query.trim(), topK: 25 });
+    window.ankiBridge?.addMessage('quickAnswer', { query: query.trim() });
+  }, []);
+
+  // Reset to State A
+  const handleReset = useCallback(() => {
+    setSearchActive(false);
+    setSearchResult(null);
+    setAnswerText(null);
+    setSearchQuery('');
+    setSelectedCard(null);
+    if (graphRef.current?._destructor) graphRef.current._destructor();
+    graphRef.current = null;
+  }, []);
 
   // Build / rebuild graph when search results arrive
   useEffect(() => {
@@ -166,17 +195,16 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       .map(([deck, count]) => ({ deck, count, color: colors[deck] }));
   }, [searchResult]);
 
-  // Only render the 3D canvas when we actually have search results
-  const showGraph = hasResults;
+  // Only render the 3D canvas when we actually have search results and search is active
+  const showGraph = searchActive && hasResults;
 
   return (
     <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
-      {/* 3D canvas — only mounted when search results exist (saves GPU) */}
+      {/* 3D canvas — only mounted when search is active and results exist (saves GPU) */}
       {showGraph && <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />}
 
-      {/* Header + search overlaid */}
+      {/* Header — logo + Deck-Liste toggle, always visible */}
       <div style={{ position: 'relative', zIndex: 10, pointerEvents: 'none' }}>
-        {/* Anki.plus header */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           gap: 10, width: '100%', maxWidth: MAX_W,
@@ -231,47 +259,52 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
           )}
         </div>
 
-        {/* Search bar */}
-        <form onSubmit={handleSearch} style={{
-          width: '100%', maxWidth: MAX_W,
-          padding: '0 20px', margin: '0 auto',
-          pointerEvents: 'auto',
-        }}>
-          <div
-            className="ds-frosted"
+        {/* State A: Centered search bar — only when not search active */}
+        {!searchActive && (
+          <form
+            onSubmit={(e) => { e.preventDefault(); handleSearch(); }}
             style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '12px 16px', borderRadius: 12,
-              border: '1px solid var(--ds-border-subtle)',
+              width: '100%', maxWidth: MAX_W,
+              padding: '0 20px', margin: '0 auto',
+              pointerEvents: 'auto',
             }}
           >
-            <Search size={16} style={{ color: 'var(--ds-accent)', flexShrink: 0 }} />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Was willst du lernen?"
+            <div
+              className="ds-frosted"
               style={{
-                flex: 1, background: 'transparent', border: 'none', outline: 'none',
-                color: 'var(--ds-text-primary)', fontSize: 15,
-                fontFamily: 'var(--ds-font-sans)',
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '12px 16px', borderRadius: 12,
+                border: '1px solid var(--ds-border-subtle)',
               }}
-            />
-            {isSearching && (
-              <div style={{
-                width: 16, height: 16, borderRadius: '50%',
-                border: '2px solid var(--ds-border-subtle)',
-                borderTopColor: 'var(--ds-accent)',
-                animation: 'spin 0.8s linear infinite',
-              }} />
-            )}
-            {!isSearching && <span style={{ color: 'var(--ds-text-placeholder)', fontSize: 12, fontWeight: 500 }}>&#9166;</span>}
-          </div>
-        </form>
+            >
+              <Search size={16} style={{ color: 'var(--ds-accent)', flexShrink: 0 }} />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Was willst du lernen?"
+                style={{
+                  flex: 1, background: 'transparent', border: 'none', outline: 'none',
+                  color: 'var(--ds-text-primary)', fontSize: 15,
+                  fontFamily: 'var(--ds-font-sans)',
+                }}
+              />
+              {isSearching && (
+                <div style={{
+                  width: 16, height: 16, borderRadius: '50%',
+                  border: '2px solid var(--ds-border-subtle)',
+                  borderTopColor: 'var(--ds-accent)',
+                  animation: 'spin 0.8s linear infinite',
+                }} />
+              )}
+              {!isSearching && <span style={{ color: 'var(--ds-text-placeholder)', fontSize: 12, fontWeight: 500 }}>&#9166;</span>}
+            </div>
+          </form>
+        )}
       </div>
 
-      {/* Heatmap — shown before any search when deck data is available */}
-      {!hasResults && !isSearching && !searchResult?.error && deckData?.roots?.length > 0 && (
+      {/* State A: Heatmap — shown before any search when deck data is available */}
+      {!searchActive && !isSearching && !searchResult?.error && deckData?.roots?.length > 0 && (
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -288,8 +321,8 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
         </div>
       )}
 
-      {/* Empty state — no decks yet or loading */}
-      {!hasResults && !isSearching && !searchResult?.error && !deckData?.roots?.length && (
+      {/* State A: Empty state — no decks yet or loading */}
+      {!searchActive && !isSearching && !searchResult?.error && !deckData?.roots?.length && (
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -314,8 +347,8 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
         </div>
       )}
 
-      {/* Deck legend — right side */}
-      {hasResults && deckBreakdown.length > 0 && (
+      {/* State B: Deck legend — right side (visible when search active + results) */}
+      {searchActive && hasResults && deckBreakdown.length > 0 && (
         <div style={{
           position: 'absolute', right: 20, top: '50%', transform: 'translateY(-50%)',
           display: 'flex', flexDirection: 'column', gap: 6,
@@ -334,66 +367,6 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
               <span style={{ color: 'var(--ds-text-tertiary)' }}>{count}</span>
             </div>
           ))}
-        </div>
-      )}
-
-      {/* Bottom bar — results + deck breakdown */}
-      {hasResults && (
-        <div style={{
-          position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          padding: '14px 24px', borderRadius: 16,
-          background: 'var(--ds-bg-frosted)', backdropFilter: 'blur(20px)',
-          border: '1px solid var(--ds-border-subtle)',
-          boxShadow: 'var(--ds-shadow-lg)',
-          zIndex: 10, pointerEvents: 'auto',
-          maxWidth: 560,
-        }}>
-          {/* Header row */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--ds-text-primary)' }}>
-                {searchResult.totalFound} Karten gefunden
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--ds-text-secondary)', marginTop: 2 }}>
-                {searchResult.query}
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                window.ankiBridge?.addMessage('startTermStack', {
-                  term: searchResult.query,
-                  cardIds: JSON.stringify(cardIds.map(Number)),
-                });
-              }}
-              style={{
-                background: 'var(--ds-accent)', color: 'white', border: 'none',
-                borderRadius: 10, padding: '10px 20px', fontSize: 14, fontWeight: 600,
-                cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-              }}
-            >
-              Stapel starten
-            </button>
-          </div>
-
-          {/* Deck breakdown bar */}
-          {deckBreakdown.length > 1 && (
-            <div style={{
-              display: 'flex', gap: 3, marginTop: 10, borderRadius: 6, overflow: 'hidden',
-              height: 6,
-            }}>
-              {deckBreakdown.map(({ deck, count, color }) => (
-                <div
-                  key={deck}
-                  title={`${deck}: ${count} Karten`}
-                  style={{
-                    flex: count,
-                    background: color,
-                    minWidth: 4,
-                  }}
-                />
-              ))}
-            </div>
-          )}
         </div>
       )}
 
@@ -422,6 +395,53 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
               cursor: 'pointer', fontSize: 14,
             }}
           >&times;</button>
+        </div>
+      )}
+
+      {/* State B: ChatInput docked at bottom */}
+      {searchActive && (
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          zIndex: 15, pointerEvents: 'auto',
+        }}>
+          <ChatInput
+            onSend={(text) => {
+              if (text.trim()) {
+                setSearchQuery(text);
+                handleSearchWithQuery(text);
+              }
+            }}
+            isLoading={isSearching}
+            placeholder="Nächste Suche..."
+            topSlot={answerText ? (
+              <div style={{
+                padding: '8px 14px',
+                fontSize: 13,
+                color: 'var(--ds-text-primary)',
+                lineHeight: 1.5,
+                borderBottom: '1px solid var(--ds-border-subtle)',
+              }}>
+                {answerText}
+              </div>
+            ) : null}
+            actionPrimary={{
+              label: searchResult?.totalFound ? `${searchResult.totalFound} Karten kreuzen` : '',
+              onClick: () => {
+                if (searchResult?.cards?.length) {
+                  window.ankiBridge?.addMessage('startTermStack', {
+                    term: searchResult.query,
+                    cardIds: JSON.stringify(searchResult.cards.map(c => Number(c.id))),
+                  });
+                }
+              },
+              disabled: !searchResult?.totalFound,
+            }}
+            actionSecondary={{
+              label: '',
+              shortcut: 'Esc',
+              onClick: handleReset,
+            }}
+          />
         </div>
       )}
 
