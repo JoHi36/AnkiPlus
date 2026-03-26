@@ -498,7 +498,7 @@ Rules:
 ### Constants
 
 - No magic numbers — define named constants at module level
-- Example: `MAX_MESSAGES_PER_CARD = 200`, `DOCK_DEFAULT_WIDTH = 450`
+- Example: `MAX_MESSAGES_PER_CARD = 200`, `POLL_INTERVAL_MS = 200`
 
 ### Imports
 
@@ -510,6 +510,36 @@ try:
 except ImportError:
     from config import get_config      # Standalone / testing
 ```
+
+### React Code Standards
+
+**Console statements:** NEVER add `console.log/error/warn` to production code. Vite's `esbuild.drop` strips them from builds, but they clutter source. If you need debugging, use it temporarily and remove before committing.
+
+**React.memo:** Components rendered inside `.map()` loops MUST be wrapped in `React.memo`. Extract inline JSX to named components first, then wrap.
+
+**Inline styles:** Static `style={{}}` objects MUST be extracted to module-level constants (UPPER_SNAKE_CASE). Dynamic styles (depending on props/state) may remain inline.
+```jsx
+// Wrong (new object every render):
+<div style={{ padding: 8, display: 'flex' }}>
+
+// Right (stable reference):
+const ROW_STYLE = { padding: 8, display: 'flex' };
+<div style={ROW_STYLE}>
+```
+
+**Error Boundaries:** Risky renderers (Mermaid, Molecule, Tool Widgets) MUST be wrapped in `<ComponentErrorBoundary>`. Major views in App.jsx MUST be wrapped.
+
+**Callback registration:** Use `callbackRegistry.ts` (`registerCallback`, `invokeAndRemove`) for bridge response callbacks. NEVER use `window._*` globals for callbacks. Caches (`window._cachedConfig`, `window._cachedModels`) are the only acceptable window globals.
+
+**TypeScript:** New files MUST be `.tsx`/`.ts`. Existing `.jsx` files stay as-is until touched for significant changes.
+
+### Testing Requirements
+
+**Python:** Run `python3 run_tests.py` before committing. All tests must pass (currently 481+). When adding new pure-logic functions, add corresponding tests.
+
+**Frontend:** Run `cd frontend && npm test` before committing. All tests must pass (currently 107+). When adding new hooks or utility functions, add corresponding tests in `__tests__/` directories.
+
+**Test isolation:** If a test file stubs `sys.modules`, restore originals IMMEDIATELY after import (see `test_gemini.py` pattern). Never leave stubs for subsequent test files.
 
 ## References
 
