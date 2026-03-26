@@ -12,7 +12,7 @@ import StatsWidget from './components/StatsWidget';
 import CompactWidget from './components/CompactWidget';
 import ImageWidget from './components/ImageWidget';
 import MascotCharacter from './components/MascotCharacter';
-import ReasoningStream from './reasoning/ReasoningStream';
+import ReasoningDisplay from './reasoning/ReasoningDisplay';
 import ReviewFeedback from './components/ReviewFeedback';
 import { DockEvalResult, DockTimer, DockStars, DockLoading } from './components/ReviewerDock';
 import SourceCard from './components/SourceCard';
@@ -127,7 +127,7 @@ const NAV = [
     { id: 'topbar', label: 'TopBar' },
     { id: 'thoughtstream', label: 'ThoughtStream' },
     { id: 'chatmessage', label: 'ChatMessage' },
-    { id: 'reasoning', label: 'ReasoningStream' },
+    { id: 'reasoning', label: 'ReasoningDisplay' },
     { id: 'reviewfeedback', label: 'ReviewFeedback' },
     { id: 'dockwidgets', label: 'Dock Widgets' },
     { id: 'sourcecard', label: 'SourceCard' },
@@ -1664,30 +1664,32 @@ export default function ComponentViewer() {
             />
           </Showcase>
 
-          {/* ReasoningStream */}
-          <SubHeader id="reasoning" label="Reasoning Stream" refs={sectionRefs} />
-          <Showcase label="Live Pipeline (agent variant)">
-            <ReasoningStream
+          {/* ReasoningDisplay */}
+          <SubHeader id="reasoning" label="Reasoning Display" refs={sectionRefs} />
+          <Showcase label="Full mode (agent steps)">
+            <ReasoningDisplay
               steps={DEMO_REASONING_STEPS}
-              pipelineGeneration={1}
+              mode="full"
               agentColor="var(--ds-green)"
-              isStreaming={true}
-              message=""
-              variant="agent"
             />
           </Showcase>
-          <VariantLabel>Router variant (collapsed when done)</VariantLabel>
+          <VariantLabel>Full mode (router steps, collapsed)</VariantLabel>
           <Showcase>
-            <ReasoningStream
+            <ReasoningDisplay
               steps={[
                 { step: 'routing', status: 'done', data: { agent: 'Tutor' }, timestamp: Date.now() - 2000 },
                 { step: 'rag_search', status: 'done', data: { mode: 'semantic', count: 6 }, timestamp: Date.now() - 1000 },
               ]}
-              pipelineGeneration={2}
+              mode="full"
               agentColor="var(--ds-accent)"
-              isStreaming={false}
-              message="Der M. quadriceps femoris wird vom N. femoralis innerviert."
-              variant="router"
+            />
+          </Showcase>
+          <VariantLabel>Compact mode</VariantLabel>
+          <Showcase>
+            <ReasoningDisplay
+              steps={DEMO_REASONING_STEPS}
+              mode="compact"
+              agentColor="var(--ds-accent)"
             />
           </Showcase>
 

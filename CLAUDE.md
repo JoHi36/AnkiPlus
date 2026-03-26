@@ -8,6 +8,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **The user is a designer/product person, not a Qt/Python expert.** Explain architectural constraints in plain terms. When Anki/Qt limitations affect what's possible in React, explain WHY before proposing solutions. Never let the user discover architectural mismatches through broken builds.
 
+## Agentisches System — Architektonisches Grundprinzip
+
+**AnkiPlus ist eine agentische Lernplattform.** Es gibt EIN agentisches System mit Agenten (Tutor, Research, Plusi, Help) die plattformweit operieren — nicht an Views gebunden. Jedes neue Feature MUSS als Teil des agentischen Systems gedacht werden: "Welcher Agent macht das?" → über den Agent-Loop (`ai/handler.py`) implementieren, nicht als standalone Funktion.
+
+**Canvas + State-Modell:** Der Stapel-Tab ist ein Canvas auf dem Agenten visuelle Ergebnisse darstellen. Daneben ein State-basierter Bereich (kein Chat-Verlauf). Ein Zustand = die gesamte Ansicht. Neuer Zustand nur durch bewusste Vertiefung/neue Anfrage.
+
+**Agent-Handoff:** Tutor kann an Research übergeben wenn Karten nicht reichen (`ai/handoff.py`). Visuell: jeder Agent als eigene `AgenticCell` mit Icon + Name. Pipeline-Steps sichtbar via `ReasoningStream`.
+
 ## Overview
 
 This is an Anki addon that provides AI-powered learning assistance through a chat interface. The addon integrates a modern React frontend (built with Vite) into Anki using PyQt6's QWebEngineView. **The goal is a fullscreen React app that replaces Anki's native UI entirely** — no native Anki views visible. Currently the React app's QWebEngineView covers the full window via setCentralWidget, hiding Anki's native web view.

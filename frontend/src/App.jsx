@@ -45,7 +45,7 @@ import OverviewView from './components/OverviewView';
 import StatistikView from './components/StatistikView';
 import ContextTags from './components/ContextTags';
 import ResizeHandle, { loadPersistedWidth, applyWidth } from './components/ResizeHandle';
-import ReasoningStream from './reasoning/ReasoningStream';
+import ReasoningDisplay from './reasoning/ReasoningDisplay';
 import { registerDefaultRenderers } from './reasoning/defaultRenderers';
 import { ReasoningProvider, useReasoningDispatch, useReasoningStore } from './reasoning/store';
 import useSmartSearch from './hooks/useSmartSearch';
@@ -3002,29 +3002,25 @@ function AppInner() {
                           const liveAgentName = storeAgentName;
                           return (
                             <div className="w-full flex-none mb-2" style={CONTENT_WIDTH_CENTERED}>
-                              {/* Router ReasoningStream (before agent) */}
+                              {/* Router ReasoningDisplay (before agent) */}
                               {rSteps.length > 0 && (
-                                <ReasoningStream
+                                <ReasoningDisplay
                                   steps={rSteps}
+                                  mode="full"
                                   agentColor={activeAgentColor}
-                                  citations={{}}
-                                  isStreaming={true}
-                                  message=""
-                                  variant="router"
                                 />
                               )}
-                              {/* Agent ReasoningStream inside AgenticCell */}
+                              {/* Agent ReasoningDisplay inside AgenticCell */}
                               {(aSteps.length > 0 || chatHook.streamingMessage) && (
                                 <AgenticCell agentName={liveAgentName} isLoading={aSteps.length === 0 && !chatHook.streamingMessage}>
                                   {aSteps.length > 0 && (
-                                    <ReasoningStream
+                                    <ReasoningDisplay
                                       steps={aSteps}
+                                      mode="full"
+                                      hasOutput={Boolean(chatHook.streamingMessage)}
                                       agentColor={activeAgentColor}
-                                      citations={storeCitations}
-                                      isStreaming={true}
                                       bridge={bridge}
                                       onPreviewCard={handlePreviewCard}
-                                      message={chatHook.streamingMessage || ''}
                                     />
                                   )}
                                 </AgenticCell>
