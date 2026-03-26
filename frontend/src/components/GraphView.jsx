@@ -64,7 +64,7 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
     nodes.push({
       id: '__query__',
       label: searchResult.query,
-      color: 'var(--ds-text-primary)',
+      color: '#ffffff',  // WebGL node — CSS vars not supported by 3d-force-graph
       isQuery: true,
       isCluster: false,
       val: 5,
@@ -150,7 +150,7 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
       .nodeOpacity(1.0)
       .linkWidth(l => l.isIntraCluster ? 0.15 : l.isBalloonString ? 0.3 : 0.15)
       .linkOpacity(l => l.isIntraCluster ? 0.04 : l.isBalloonString ? 0.06 : 0.02)
-      .linkColor(() => 'var(--ds-border)')
+      .linkColor(() => '#3A3A3C')  // WebGL link — CSS vars not supported by 3d-force-graph
       .onNodeClick(node => {
         if (!node || node.isQuery) return;
         if (node.clusterIndex !== undefined) {
