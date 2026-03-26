@@ -1849,10 +1849,10 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                     isLoading={cell.status === 'loading'}
                     loadingHint={cell.loadingHint || ''}
                   >
-                    {/* Tutor-style ThoughtStream */}
-                    {cell.pipelineSteps && cell.pipelineSteps.length > 0 && (
+                    {/* Agent reasoning steps — from cell (saved) or from pipelineSteps prop (live, via store) */}
+                    {(cell.pipelineSteps?.length > 0 || agentSteps.length > 0) && (
                       <ReasoningDisplay
-                        steps={cell.pipelineSteps}
+                        steps={cell.pipelineSteps?.length > 0 ? cell.pipelineSteps : agentSteps}
                         mode="full"
                         hasOutput={Boolean(cell.text)}
                         bridge={bridge}
