@@ -411,15 +411,86 @@ class SearchCardsThread(QThread):
                     "similarity": card["score"],
                 })
 
+            # === CLUSTER COMPUTATION ===
+            # Compute pairwise similarity to find semantic clusters
+            card_embs = {}
+            with self.emb_mgr._lock:
+                for cid in card_ids:
+                    if cid in self.emb_mgr._card_ids:
+                        idx = self.emb_mgr._card_ids.index(cid)
+                        card_embs[cid] = self.emb_mgr._index[idx]
+
+            # Build similarity graph (threshold > 0.45)
+            sim_pairs = {}
+            cids_list = list(card_embs.keys())
+            for i in range(len(cids_list)):
+                for j in range(i + 1, len(cids_list)):
+                    a = card_embs[cids_list[i]]
+                    b = card_embs[cids_list[j]]
+                    dot = sum(x * y for x, y in zip(a, b))
+                    na = sum(x * x for x in a) ** 0.5
+                    nb = sum(x * x for x in b) ** 0.5
+                    if na > 0 and nb > 0:
+                        sim = dot / (na * nb)
+                        if sim > 0.45:
+                            sim_pairs.setdefault(cids_list[i], set()).add(cids_list[j])
+                            sim_pairs.setdefault(cids_list[j], set()).add(cids_list[i])
+
+            # Connected components → clusters
+            assigned = set()
+            clusters = []
+            for cid in card_ids:
+                if cid in assigned:
+                    continue
+                cluster = []
+                queue = [cid]
+                assigned.add(cid)
+                while queue:
+                    current = queue.pop(0)
+                    cluster.append(current)
+                    for neighbor in sim_pairs.get(current, set()):
+                        if neighbor not in assigned:
+                            assigned.add(neighbor)
+                            queue.append(neighbor)
+                clusters.append(cluster)
+
+            # Build cluster output
+            cards_by_id = {c["id"]: c for c in cards_data}
+            cluster_output = []
+            for i, cluster_cids in enumerate(clusters):
+                cluster_cards = [cards_by_id[str(cid)] for cid in cluster_cids if str(cid) in cards_by_id]
+                if not cluster_cards:
+                    continue
+                # Label: most common deck name
+                deck_counts = {}
+                for c in cluster_cards:
+                    d = c.get("deck", "")
+                    deck_counts[d] = deck_counts.get(d, 0) + 1
+                label = max(deck_counts, key=deck_counts.get) if deck_counts else "Cluster %d" % (i + 1)
+                cluster_output.append({
+                    "id": "cluster_%d" % i,
+                    "label": label,
+                    "cards": cluster_cards,
+                })
+
             self.result_signal.emit(json.dumps({
                 "type": "graph.searchCards",
                 "data": {
-                    "cards": cards_data,
-                    "edges": edges,
+                    "clusters": cluster_output,
+                    "cards": cards_data,  # keep flat list for backward compat
+                    "edges": edges,       # keep star edges
                     "query": self.query,
                     "totalFound": len(cards_data),
                 }
             }))
+
+            # Trigger quick answer with found cards
+            try:
+                widget = self._widget_ref() if self._widget_ref else None
+                if widget and hasattr(widget, '_start_quick_answer'):
+                    widget._start_quick_answer(self.query, cards_data[:10], cluster_output)
+            except Exception:
+                pass
         except Exception as e:
             logger.exception("SearchCardsThread failed for query: %s", self.query)
             self.result_signal.emit(json.dumps({"type": "graph.searchCards", "data": {
