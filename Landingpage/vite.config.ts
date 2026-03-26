@@ -17,16 +17,19 @@ function fixSharedComponentResolution() {
       }
       
       // Check if this is one of the problematic packages
-      const problematicPackages = ['react-markdown', 'remark-math', 'rehype-katex', 'framer-motion', 'lucide-react'];
-      if (problematicPackages.includes(source) || 
-          source.startsWith('react-markdown/') || 
-          source.startsWith('remark-math/') || 
+      const problematicPackages = ['react-markdown', 'remark-math', 'rehype-katex', 'framer-motion', 'lucide-react', 'react-syntax-highlighter', 'remark-gfm', 'mermaid'];
+      if (problematicPackages.includes(source) ||
+          source.startsWith('react-markdown/') ||
+          source.startsWith('remark-math/') ||
           source.startsWith('rehype-katex/') ||
           source.startsWith('framer-motion/') ||
-          source.startsWith('lucide-react/')) {
-        
-        // If importer is from shared directory, resolve from Landingpage node_modules
-        if (importer && importer.includes('/shared/')) {
+          source.startsWith('lucide-react/') ||
+          source.startsWith('react-syntax-highlighter/') ||
+          source.startsWith('remark-gfm/') ||
+          source.startsWith('mermaid/')) {
+
+        // If importer is from shared or frontend/src directory, resolve from Landingpage node_modules
+        if (importer && (importer.includes('/shared/') || importer.includes('/frontend/src/'))) {
           const resolvedPath = path.resolve(landingpageNodeModules, source);
           
           if (existsSync(resolvedPath)) {
@@ -73,6 +76,7 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
           '@shared': path.resolve(__dirname, '../shared'),
+          '@frontend': path.resolve(__dirname, '../frontend/src'),
           // Explicitly resolve problematic packages from Landingpage node_modules
           'react-markdown': path.resolve(__dirname, 'node_modules/react-markdown'),
           'remark-math': path.resolve(__dirname, 'node_modules/remark-math'),
@@ -82,7 +86,7 @@ export default defineConfig(({ mode }) => {
         },
         // Ensure node_modules are resolved from Landingpage directory, not from shared components
         modules: [path.resolve(__dirname, 'node_modules'), 'node_modules'],
-        dedupe: ['react', 'react-dom'],
+        dedupe: ['react', 'react-dom', 'framer-motion', 'lucide-react'],
       },
       build: {
         outDir: 'dist',
@@ -98,7 +102,7 @@ export default defineConfig(({ mode }) => {
         },
       },
       optimizeDeps: {
-        include: ['react-markdown', 'remark-math', 'rehype-katex', 'react', 'react-dom', 'framer-motion', 'lucide-react'],
+        include: ['react-markdown', 'remark-math', 'rehype-katex', 'react', 'react-dom', 'framer-motion', 'lucide-react', 'react-syntax-highlighter', 'remark-gfm', 'mermaid'],
       },
     };
 });
