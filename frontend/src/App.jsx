@@ -2522,6 +2522,8 @@ function AppInner() {
               isSearching={smartSearch.isSearching}
               totalCards={smartSearch.searchResult?.totalFound || 0}
               cardRefs={smartSearch.cardRefs}
+              subClusters={smartSearch.subClusters}
+              isSubClustering={smartSearch.isSubClustering}
             />
           )}
         </div>

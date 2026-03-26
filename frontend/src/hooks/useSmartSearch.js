@@ -9,6 +9,8 @@ export default function useSmartSearch() {
   const [clusterSummaries, setClusterSummaries] = useState(null);
   const [cardRefs, setCardRefs] = useState(null);
   const [selectedClusterId, setSelectedClusterId] = useState(null);
+  const [subClusters, setSubClusters] = useState(null); // sub-clusters for selected cluster
+  const [isSubClustering, setIsSubClustering] = useState(false);
 
   // Cache survives view transitions
   const cacheRef = useRef(null);
@@ -23,6 +25,7 @@ export default function useSmartSearch() {
       setClusterSummaries(null);
       setCardRefs(null);
       setSelectedClusterId(null);
+      setSubClusters(null);
       cacheRef.current = result;
     };
 
@@ -40,13 +43,44 @@ export default function useSmartSearch() {
       }
     };
 
+    const onSubClusters = (e) => {
+      const data = e.detail;
+      setIsSubClustering(false);
+      if (data?.subClusters?.length > 0) {
+        setSubClusters(data.subClusters);
+      } else {
+        setSubClusters(null);
+      }
+    };
+
     window.addEventListener('graph.searchCards', onSearchCards);
     window.addEventListener('graph.quickAnswer', onQuickAnswer);
+    window.addEventListener('graph.subClusters', onSubClusters);
     return () => {
       window.removeEventListener('graph.searchCards', onSearchCards);
       window.removeEventListener('graph.quickAnswer', onQuickAnswer);
+      window.removeEventListener('graph.subClusters', onSubClusters);
     };
   }, []);
+
+  // Request sub-clusters when a cluster is selected
+  const selectCluster = useCallback((clusterId) => {
+    setSelectedClusterId(clusterId);
+    setSubClusters(null);
+
+    if (clusterId && searchResult?.clusters) {
+      const idx = parseInt(clusterId.replace('cluster_', ''), 10);
+      const cluster = searchResult.clusters[idx];
+      if (cluster?.cards?.length >= 4) {
+        setIsSubClustering(true);
+        window.ankiBridge?.addMessage('subClusterCards', {
+          cardIds: JSON.stringify(cluster.cards.map(c => Number(c.id))),
+          clusterId: clusterId,
+          query: query,
+        });
+      }
+    }
+  }, [searchResult, query]);
 
   const search = useCallback((q) => {
     setQuery(q);
@@ -57,6 +91,7 @@ export default function useSmartSearch() {
     setClusterSummaries(null);
     setCardRefs(null);
     setSelectedClusterId(null);
+    setSubClusters(null);
     window.ankiBridge?.addMessage('searchCards', { query: q.trim(), topK: 100 });
   }, []);
 
@@ -69,6 +104,7 @@ export default function useSmartSearch() {
     setClusterSummaries(null);
     setCardRefs(null);
     setSelectedClusterId(null);
+    setSubClusters(null);
     cacheRef.current = null;
   }, []);
 
@@ -91,8 +127,9 @@ export default function useSmartSearch() {
   return {
     query, searchResult, isSearching,
     answerText, clusterLabels, clusterSummaries, cardRefs,
-    selectedClusterId, setSelectedClusterId,
+    selectedClusterId, setSelectedClusterId: selectCluster,
     selectedCluster, selectedClusterLabel, selectedClusterSummary,
+    subClusters, isSubClustering,
     search, reset, restoreFromCache,
     hasResults: !!(searchResult?.cards?.length > 0),
   };

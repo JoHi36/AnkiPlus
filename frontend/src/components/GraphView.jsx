@@ -44,6 +44,7 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
   const containerRef = useRef(null);
   const graphRef = useRef(null);
   const heatmapRef = useRef(null);
+  const animatedQueryRef = useRef(null); // tracks which query has been animated
   const [heatmapDeck, setHeatmapDeck] = useState(null);
   const [contentMode, setContentMode] = useState('decks'); // 'decks' | 'heatmap'
   const { isExpanded, toggleExpanded } = useDeckTree();
@@ -54,6 +55,7 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
     answerText, clusterLabels, clusterSummaries, cardRefs,
     selectedClusterId, setSelectedClusterId,
     selectedCluster, selectedClusterLabel, selectedClusterSummary,
+    subClusters,
     search, reset,
   } = smartSearch;
 
@@ -189,22 +191,25 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
     graph.d3Force('center', null);
     graph.d3Force('charge').strength(-40);
 
-    // Staggered node appearance — nodes grow from tiny to full size
-    const realVals = {};
-    nodes.forEach(n => { realVals[n.id] = n.val; n.val = 0.01; });
-    graph.nodeVal(n => n.val);
-    // Reveal nodes one by one, radiating outward from query
-    const sortedNodes = [...nodes].sort((a, b) => {
-      if (a.isQuery) return -1;
-      if (b.isQuery) return 1;
-      return (b.score || 0) - (a.score || 0); // highest relevance first
-    });
-    sortedNodes.forEach((n, i) => {
-      setTimeout(() => {
-        n.val = realVals[n.id];
-        if (graphRef.current) graphRef.current.nodeVal(nd => nd.val);
-      }, i * 30); // 30ms between each node
-    });
+    // Staggered node appearance — only on initial search, not on tab revisit
+    const currentQuery = searchResult?.query || '';
+    if (animatedQueryRef.current !== currentQuery) {
+      animatedQueryRef.current = currentQuery;
+      const realVals = {};
+      nodes.forEach(n => { realVals[n.id] = n.val; n.val = 0.01; });
+      graph.nodeVal(n => n.val);
+      const sortedNodes = [...nodes].sort((a, b) => {
+        if (a.isQuery) return -1;
+        if (b.isQuery) return 1;
+        return (b.score || 0) - (a.score || 0);
+      });
+      sortedNodes.forEach((n, i) => {
+        setTimeout(() => {
+          n.val = realVals[n.id];
+          if (graphRef.current) graphRef.current.nodeVal(nd => nd.val);
+        }, i * 30);
+      });
+    }
 
     if (graph.controls()) {
       graph.controls().autoRotate = true;
@@ -285,6 +290,37 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
       );
     }
   }, [selectedClusterId]);
+
+  // Sub-cluster coloring — when sub-clusters arrive, color nodes by sub-cluster
+  useEffect(() => {
+    if (!graphRef.current || !subClusters?.length || !selectedClusterId) return;
+    const graph = graphRef.current;
+    const { nodes } = graph.graphData();
+    const idx = parseInt(selectedClusterId.replace('cluster_', ''), 10);
+    const parentColor = CLUSTER_COLORS[idx % CLUSTER_COLORS.length];
+    const parentBright = CLUSTER_BRIGHT[idx % CLUSTER_BRIGHT.length];
+
+    // Build card → sub-cluster index mapping
+    const cardToSub = {};
+    subClusters.forEach((sub, si) => {
+      sub.cards.forEach(c => { cardToSub[String(c.id)] = si; });
+    });
+
+    // Sub-cluster color shades (vary hue slightly from parent)
+    const subColors = subClusters.map((_, si) => {
+      // Rotate hue by spreading sub-clusters across a narrow range
+      const baseIdx = (idx * CLUSTER_COLORS.length + si + 1) % CLUSTER_COLORS.length;
+      return CLUSTER_BRIGHT[baseIdx % CLUSTER_BRIGHT.length];
+    });
+
+    graph.nodeColor(n => {
+      if (n.isQuery) return '#FFFFFF';
+      if (n.clusterIndex !== idx) return n.color; // dim non-selected
+      const si = cardToSub[String(n.id)];
+      if (si !== undefined) return subColors[si];
+      return parentBright;
+    });
+  }, [subClusters, selectedClusterId]);
 
   // Start stack — uses selected cluster cards or full result
   const startStack = useCallback(() => {

@@ -1105,6 +1105,7 @@ class ChatbotWidget(QWidget):
             'getDeckCrossLinks': self._msg_get_deck_cross_links,
             'startTermStack': self._msg_start_term_stack,
             'searchCards': self._msg_search_cards,
+            'subClusterCards': self._msg_sub_cluster,
             'quickAnswer': lambda data: None,  # Reserved — triggered internally by searchCards
         }
         return handlers.get(msg_type)
@@ -2996,6 +2997,164 @@ class ChatbotWidget(QWidget):
             self._send_to_js(json.loads(result_json))
         except Exception:
             logger.exception("Failed to send quick answer")
+
+    def _msg_sub_cluster(self, data):
+        """Re-cluster a subset of cards into finer sub-clusters."""
+        try:
+            card_ids_str = data.get("cardIds", "[]") if isinstance(data, dict) else "[]"
+            card_ids = json.loads(card_ids_str)
+            cluster_id = data.get("clusterId", "") if isinstance(data, dict) else ""
+            parent_query = data.get("query", "") if isinstance(data, dict) else ""
+
+            if not card_ids or len(card_ids) < 4:
+                self._send_to_js({"type": "graph.subClusters", "data": {
+                    "clusterId": cluster_id, "subClusters": [], "tooFew": True}})
+                return
+
+            try:
+                from .. import get_embedding_manager
+            except ImportError:
+                from __init__ import get_embedding_manager
+
+            emb_mgr = get_embedding_manager()
+            if not emb_mgr:
+                self._send_to_js({"type": "graph.subClusters", "data": {
+                    "clusterId": cluster_id, "subClusters": [], "error": "No embeddings"}})
+                return
+
+            # Load embeddings for these cards
+            card_embs = {}
+            with emb_mgr._lock:
+                for i, cid in enumerate(emb_mgr._card_ids):
+                    if cid in card_ids:
+                        card_embs[cid] = emb_mgr._index[i]
+
+            if len(card_embs) < 4:
+                self._send_to_js({"type": "graph.subClusters", "data": {
+                    "clusterId": cluster_id, "subClusters": [], "tooFew": True}})
+                return
+
+            # Compute pairwise similarities
+            cids_list = list(card_embs.keys())
+            all_sims = {}
+            for i in range(len(cids_list)):
+                for j in range(i + 1, len(cids_list)):
+                    a, b = card_embs[cids_list[i]], card_embs[cids_list[j]]
+                    dot = sum(x * y for x, y in zip(a, b))
+                    na = sum(x * x for x in a) ** 0.5
+                    nb = sum(x * x for x in b) ** 0.5
+                    if na > 0 and nb > 0:
+                        all_sims[(cids_list[i], cids_list[j])] = dot / (na * nb)
+
+            # Target 2-4 sub-clusters
+            n = len(cids_list)
+            target = max(2, min(4, n // 4))
+
+            best_clusters = None
+            for threshold_10x in range(95, 40, -5):
+                threshold = threshold_10x / 100.0
+                sim_pairs = {}
+                for (ci, cj), sim in all_sims.items():
+                    if sim > threshold:
+                        sim_pairs.setdefault(ci, set()).add(cj)
+                        sim_pairs.setdefault(cj, set()).add(ci)
+
+                assigned = set()
+                trial_clusters = []
+                for cid in cids_list:
+                    if cid in assigned:
+                        continue
+                    cluster = []
+                    queue = [cid]
+                    assigned.add(cid)
+                    while queue:
+                        current = queue.pop(0)
+                        cluster.append(current)
+                        for neighbor in sim_pairs.get(current, set()):
+                            if neighbor not in assigned:
+                                assigned.add(neighbor)
+                                queue.append(neighbor)
+                    trial_clusters.append(cluster)
+
+                real = [c for c in trial_clusters if len(c) >= 2]
+                if len(real) >= target:
+                    best_clusters = real
+                    # Merge singletons
+                    for c in trial_clusters:
+                        if len(c) == 1:
+                            s = c[0]
+                            best_sim = -1
+                            best_ci = 0
+                            for ci, cl in enumerate(best_clusters):
+                                for m in cl:
+                                    key = (min(s, m), max(s, m))
+                                    sim = all_sims.get(key, 0)
+                                    if sim > best_sim:
+                                        best_sim = sim
+                                        best_ci = ci
+                            best_clusters[best_ci].append(s)
+                    break
+
+            if not best_clusters or len(best_clusters) < 2:
+                # Can't sub-cluster meaningfully
+                self._send_to_js({"type": "graph.subClusters", "data": {
+                    "clusterId": cluster_id, "subClusters": [], "tooFew": True}})
+                return
+
+            # Cap at target
+            while len(best_clusters) > target:
+                best_clusters.sort(key=lambda c: len(c))
+                smallest = best_clusters.pop(0)
+                best_sim = -1
+                best_ci = 0
+                for ci, cl in enumerate(best_clusters):
+                    total_sim = sum(all_sims.get((min(s, m), max(s, m)), 0)
+                                    for s in smallest for m in cl) / max(1, len(smallest) * len(cl))
+                    if total_sim > best_sim:
+                        best_sim = total_sim
+                        best_ci = ci
+                best_clusters[best_ci].extend(smallest)
+
+            # Build response with card data
+            from aqt import mw
+            sub_output = []
+            for si, sub_cids in enumerate(best_clusters):
+                cards = []
+                label_parts = []
+                for cid in sub_cids:
+                    try:
+                        card = mw.col.get_card(cid)
+                        note = card.note()
+                        q = note.fields[0] if note.fields else ''
+                        import re as _re
+                        q_clean = _re.sub(r'<[^>]+>', '', q)[:60]
+                        deck = mw.col.decks.name(card.did).split('::')[-1]
+                        cards.append({"id": str(cid), "question": q_clean, "deck": deck})
+                        if len(label_parts) < 2:
+                            label_parts.append(q_clean[:25])
+                    except Exception:
+                        cards.append({"id": str(cid), "question": "", "deck": ""})
+
+                sub_output.append({
+                    "id": "sub_%d" % si,
+                    "label": " / ".join(label_parts) if label_parts else "Sub %d" % (si + 1),
+                    "cards": cards,
+                })
+
+            logger.info("Sub-clustering for %s: %d cards → %d sub-clusters",
+                        cluster_id, len(card_ids), len(sub_output))
+
+            self._send_to_js({"type": "graph.subClusters", "data": {
+                "clusterId": cluster_id,
+                "subClusters": sub_output,
+                "query": parent_query,
+            }})
+
+        except Exception:
+            logger.exception("Sub-clustering failed")
+            self._send_to_js({"type": "graph.subClusters", "data": {
+                "clusterId": cluster_id if 'cluster_id' in dir() else "",
+                "subClusters": [], "error": "Sub-clustering failed"}})
 
     def _msg_start_term_stack(self, data):
         """Create filtered deck from card IDs and enter reviewer."""

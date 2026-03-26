@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ChatInput from './ChatInput';
@@ -18,8 +18,18 @@ export default function SearchSidebar({
   totalCards,
   cardRefs,
   bridge,
+  subClusters,
+  isSubClustering,
 }) {
+  // Track if slide-in animation has played — don't replay on tab switch
+  const hasAnimatedRef = useRef(false);
+  useEffect(() => {
+    if (visible) hasAnimatedRef.current = true;
+  }, [visible]);
+
   if (!visible) return null;
+
+  const shouldAnimate = !hasAnimatedRef.current;
 
   const [multiSelect, setMultiSelect] = useState(false);
   const [multiIds, setMultiIds] = useState(new Set());
@@ -152,7 +162,7 @@ export default function SearchSidebar({
       display: 'flex',
       flexDirection: 'column',
       overflow: 'hidden',
-      animation: 'slideInRight 0.3s ease-out',
+      animation: shouldAnimate ? 'slideInRight 0.3s ease-out' : 'none',
     }}>
       {/* Scrollable content */}
       <div style={{
@@ -262,6 +272,63 @@ export default function SearchSidebar({
                           animation: 'pulse 1.5s ease-in-out infinite',
                         }} />
                       ))}
+                    </div>
+                  )}
+
+                  {/* Sub-clusters (Level 2) */}
+                  {isSubClustering && (
+                    <div style={{
+                      fontSize: 12, color: 'var(--ds-text-tertiary)',
+                      fontStyle: 'italic', marginTop: 10,
+                    }}>
+                      Sub-Perspektiven werden berechnet...
+                    </div>
+                  )}
+                  {subClusters && subClusters.length > 0 && (
+                    <div style={{ marginTop: 12, borderTop: '1px solid var(--ds-border-subtle)', paddingTop: 10 }}>
+                      <div style={{
+                        fontSize: 10, fontWeight: 600,
+                        color: 'var(--ds-text-tertiary)',
+                        letterSpacing: '0.5px',
+                        marginBottom: 6,
+                      }}>
+                        SUB-PERSPEKTIVEN
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        {subClusters.map((sub, si) => {
+                          const parentColor = clusterColors[selectedIdx % clusterColors.length];
+                          // Lighten/darken the parent color for sub-cluster shades
+                          const opacity = 0.5 + (si / subClusters.length) * 0.5;
+                          return (
+                            <div
+                              key={sub.id}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: 8,
+                                padding: '6px 8px', borderRadius: 6,
+                                fontSize: 12,
+                              }}
+                            >
+                              <div style={{
+                                width: 6, height: 6, borderRadius: '50%',
+                                background: parentColor, opacity: opacity,
+                                flexShrink: 0,
+                              }} />
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{
+                                  color: 'var(--ds-text-secondary)',
+                                  fontWeight: 500,
+                                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                }}>
+                                  {sub.label}
+                                </div>
+                                <div style={{ fontSize: 10, color: 'var(--ds-text-tertiary)' }}>
+                                  {sub.cards.length} Karten
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </>
