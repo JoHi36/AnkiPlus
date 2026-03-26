@@ -19,9 +19,6 @@ export default function useSmartSearch() {
   // Track if sidebar slide-in has played — survives tab switches (lives in hook, not component)
   const sidebarHasAnimated = useRef(false);
 
-  // Pipeline steps — same system as session chat ReasoningDisplay
-  const [pipelineSteps, setPipelineSteps] = useState([]);
-
   // Cache survives view transitions
   const cacheRef = useRef(null);
 
@@ -81,39 +78,17 @@ export default function useSmartSearch() {
       if (data?.term) setTermDefinition(data);
     };
 
-    // Pipeline steps — same format as session chat
-    const onPipelineStep = (e) => {
-      const payload = e.detail;
-      setPipelineSteps(prev => {
-        const existing = prev.findIndex(s => s.step === payload.step);
-        const newStep = {
-          step: payload.step,
-          status: payload.status,
-          data: payload.data || {},
-          timestamp: Date.now(),
-        };
-        if (existing >= 0) {
-          const next = [...prev];
-          next[existing] = newStep;
-          return next;
-        }
-        return [...prev, newStep];
-      });
-    };
-
     window.addEventListener('graph.searchCards', onSearchCards);
     window.addEventListener('graph.quickAnswer', onQuickAnswer);
     window.addEventListener('graph.subClusters', onSubClusters);
     window.addEventListener('graph.kgSubgraph', onKgSubgraph);
     window.addEventListener('graph.termDefinition', onTermDefinition);
-    window.addEventListener('graph.pipelineStep', onPipelineStep);
     return () => {
       window.removeEventListener('graph.searchCards', onSearchCards);
       window.removeEventListener('graph.quickAnswer', onQuickAnswer);
       window.removeEventListener('graph.subClusters', onSubClusters);
       window.removeEventListener('graph.kgSubgraph', onKgSubgraph);
       window.removeEventListener('graph.termDefinition', onTermDefinition);
-      window.removeEventListener('graph.pipelineStep', onPipelineStep);
     };
   }, []);
 
@@ -159,7 +134,6 @@ export default function useSmartSearch() {
     setCardRefs(null);
     setSelectedClusterId(null);
     setSubClusters(null);
-    setPipelineSteps([]);
     window.ankiBridge?.addMessage('searchCards', { query: q.trim(), topK: 100 });
   }, []);
 
@@ -196,7 +170,6 @@ export default function useSmartSearch() {
   return {
     query, searchResult, isSearching,
     answerText, clusterLabels, clusterSummaries, cardRefs,
-    pipelineSteps,
     selectedClusterId, setSelectedClusterId: selectCluster,
     selectedCluster, selectedClusterLabel, selectedClusterSummary,
     subClusters, isSubClustering,

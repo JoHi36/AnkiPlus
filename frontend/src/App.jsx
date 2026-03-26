@@ -47,7 +47,7 @@ import ContextTags from './components/ContextTags';
 import ResizeHandle, { loadPersistedWidth, applyWidth } from './components/ResizeHandle';
 import ReasoningStream from './reasoning/ReasoningStream';
 import { registerDefaultRenderers } from './reasoning/defaultRenderers';
-import { ReasoningProvider, useReasoningDispatch } from './reasoning/store';
+import { ReasoningProvider, useReasoningDispatch, useReasoningStore } from './reasoning/store';
 import useSmartSearch from './hooks/useSmartSearch';
 
 // Register step renderers once at module load time
@@ -125,6 +125,7 @@ function AppInner() {
   const { bridge, isReady } = useAnki();
   const sessionContext = useSessionContext();
   const reasoningDispatch = useReasoningDispatch();
+  const { state: reasoningState } = useReasoningStore();
 
   // Initialize Device-ID for anonymous users
   useEffect(() => {
@@ -486,19 +487,18 @@ function AppInner() {
   const [activeAgentName, setActiveAgentName] = useState(null);
   const [stickyAgent, setStickyAgent] = useState(null);
 
-  // Detect subagent routing from pipeline steps (covers both direct @Name and router delegation)
+  // Detect subagent routing from reasoning store (covers both direct @Name and router delegation)
   useEffect(() => {
-    const steps = chatHook?.pipelineSteps || [];
-    const routerDone = steps.find(s => s.step === 'router' && s.status === 'done');
-    if (routerDone) {
-      const rm = routerDone.data?.retrieval_mode || '';
-      if (rm.startsWith('subagent:')) {
-        const name = rm.split(':')[1];
+    // Look for any router stream with agent metadata
+    for (const [sid, stream] of Object.entries(reasoningState.streams)) {
+      if (sid.startsWith('router-') && stream.agentName) {
+        const name = stream.agentName;
         const agent = findAgent(name);
         if (agent && activeAgentName !== name) {
           setActiveAgentName(name);
           setActiveAgentColor(agent.color);
         }
+        break;
       }
     }
     // Clear when not loading
@@ -506,7 +506,7 @@ function AppInner() {
       setActiveAgentName(null);
       setActiveAgentColor(null);
     }
-  }, [chatHook?.pipelineSteps, chatHook?.isLoading]);
+  }, [reasoningState.streams, chatHook?.isLoading]);
 
   const [consecutiveWrong, setConsecutiveWrong] = useState(0);
   const activationCountRef = useRef(0);
@@ -1227,15 +1227,15 @@ function AppInner() {
 
           const _chatForAgent = chatHookRef.current;
           if (_chatForAgent) {
-            // Mark pipeline steps as done
-            if (_chatForAgent.updatePipelineSteps) {
-              _chatForAgent.updatePipelineSteps(prev => {
-                return prev.map(s => s.status === 'active' ? {
-                  ...s, status: 'done',
-                  data: { ...s.data, search_needed: false, retrieval_mode: `subagent:${agentName}` },
-                  timestamp: Date.now()
-                } : s);
+            // Mark router pipeline steps as done via reasoning store
+            const _rd = reasoningDispatchRef.current;
+            const reqId = payload.requestId || '';
+            if (reqId) {
+              _rd({
+                type: 'STEP', streamId: `router-${reqId}`, step: 'orchestrating', status: 'done',
+                data: { search_needed: false, retrieval_mode: `subagent:${agentName}` }
               });
+              _rd({ type: 'AGENT_META', streamId: `router-${reqId}`, agentName });
             }
 
             if (payload.error && agentName !== 'research') {
@@ -2619,7 +2619,6 @@ function AppInner() {
               subClusters={smartSearch.subClusters}
               isSubClustering={smartSearch.isSubClustering}
               sidebarHasAnimated={smartSearch.sidebarHasAnimated}
-              pipelineSteps={smartSearch.pipelineSteps}
               kgSubgraph={smartSearch.kgSubgraph}
               onGraphModeChange={smartSearch.setGraphMode}
               selectedTerm={smartSearch.selectedTerm}
@@ -2983,21 +2982,24 @@ function AppInner() {
                         {/* CRITICAL: Only render StreamingChatMessage if no saved bot message exists yet */}
                         {/* This prevents double-rendering when message is saved but timeout hasn't cleared streamingMessage */}
                         {/* Robust: Text-Vergleich verhindert Dopplung auch bei Race Conditions */}
-                        {/* Pipeline ReasoningStream — Router + Agent split */}
+                        {/* Pipeline ReasoningStream — Router + Agent split (data from reasoning store) */}
                         {chatHook.isLoading && !chatHook.currentMessage && !(nextMsg && nextMsg.from === 'bot' && nextMsg.text) && (() => {
-                          const allSteps = chatHook.pipelineSteps || [];
-                          const rSteps = allSteps.filter(s => s.step === 'orchestrating');
-                          const aSteps = allSteps.filter(s => s.step !== 'orchestrating');
-                          // Detect agent name from orchestrating step data
-                          const liveAgentName = (() => {
-                            for (const s of rSteps) {
-                              const rm = s.data?.retrieval_mode || '';
-                              const m = rm.match(/^(?:subagent|agent):(\w+)$/);
-                              if (m) return m[1];
-                              if (s.data?.agent) return s.data.agent;
+                          // Collect steps from all active reasoning store streams
+                          const rSteps = [];
+                          const aSteps = [];
+                          let storeAgentName = activeAgentName || 'tutor';
+                          let storeCitations = {};
+                          for (const [sid, stream] of Object.entries(reasoningState.streams)) {
+                            if (stream.phase === 'complete') continue;
+                            if (sid.startsWith('router-')) {
+                              rSteps.push(...stream.steps);
+                              if (stream.agentName) storeAgentName = stream.agentName;
+                            } else {
+                              aSteps.push(...stream.steps);
+                              if (stream.citations) storeCitations = { ...storeCitations, ...stream.citations };
                             }
-                            return activeAgentName || 'tutor';
-                          })();
+                          }
+                          const liveAgentName = storeAgentName;
                           return (
                             <div className="w-full flex-none mb-2" style={CONTENT_WIDTH_CENTERED}>
                               {/* Router ReasoningStream (before agent) */}
@@ -3017,9 +3019,8 @@ function AppInner() {
                                   {aSteps.length > 0 && (
                                     <ReasoningStream
                                       steps={aSteps}
-                                      pipelineGeneration={chatHook.pipelineGeneration}
                                       agentColor={activeAgentColor}
-                                      citations={chatHook.currentCitations || {}}
+                                      citations={storeCitations}
                                       isStreaming={true}
                                       bridge={bridge}
                                       onPreviewCard={handlePreviewCard}
@@ -3043,9 +3044,9 @@ function AppInner() {
                               message={chatHook.streamingMessage || ''}
                               isStreaming={chatHook.isLoading}
                               cardContext={cardContextHook.cardContext}
-                              steps={chatHook.currentSteps || []}
-                              citations={chatHook.currentCitations || {}}
-                              pipelineSteps={chatHook.pipelineSteps || []}
+                              steps={[]}
+                              citations={{}}
+                              pipelineSteps={[]}
                               bridge={bridge}
                               onPreviewCard={handlePreviewCard}
                             />

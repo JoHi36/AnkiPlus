@@ -84,7 +84,6 @@ export default function useAgenticMessage() {
           agent: payload.agent,
           status: payload.status,
           text: '',
-          pipelineSteps: [],
           citations: {},
           sources: [],
           toolWidgets: [],
@@ -97,6 +96,8 @@ export default function useAgenticMessage() {
     });
   }, [updateMsg]);
 
+  // Pipeline step handler — pipeline data now lives in the centralized reasoning store.
+  // This handler only maintains cell status transitions and early citation extraction.
   const handlePipelineStep = useCallback((payload) => {
     const targetAgent = payload.agent || payload.data?.agent;
     updateMsg(prev => {
@@ -108,20 +109,14 @@ export default function useAgenticMessage() {
         } else {
           if (!['thinking', 'streaming', 'loading'].includes(c.status)) return c;
         }
-        const steps = [...(c.pipelineSteps || [])];
-        const idx = steps.findIndex(s => s.step === payload.step);
-        if (idx >= 0) {
-          steps[idx] = { ...steps[idx], status: payload.status, data: payload.data, timestamp: payload.timestamp || Date.now() };
-        } else {
-          steps.push({ step: payload.step, status: payload.status, data: payload.data || {}, timestamp: payload.timestamp || Date.now() });
-        }
-        // Transition loading → thinking so AgenticCell renders ThoughtStream instead of shimmer
+        // Transition loading → thinking so AgenticCell renders content instead of shimmer
         const newStatus = c.status === 'loading' ? 'thinking' : c.status;
         // Extract early citations from sources_ready step
         const newCitations = payload.step === 'sources_ready' && payload.data?.citations
           ? { ...(c.citations || {}), ...payload.data.citations }
           : c.citations;
-        return { ...c, pipelineSteps: steps, status: newStatus, citations: newCitations };
+        if (newStatus === c.status && newCitations === c.citations) return c;
+        return { ...c, status: newStatus, citations: newCitations };
       });
       return { ...prev, agentCells: cells };
     });

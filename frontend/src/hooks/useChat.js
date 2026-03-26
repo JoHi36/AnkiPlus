@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, startTransition } from 'react
 import { updateSession, updateSessionSections, createSession, findSessionByDeck } from '../utils/sessions';
 import { getDirectCallPattern, findAgent, getDefaultAgent } from '@shared/config/subagentRegistry';
 import useAgenticMessage from './useAgenticMessage';
+import { useReasoningStore, useReasoningDispatch } from '../reasoning/store';
 
 // REMOVED: Auto-scroll helper functions - no longer needed with Interaction Container approach
 
@@ -20,61 +21,20 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
   const freeChatPushRef = useRef(null); // set by App.jsx to push messages to Free Chat
   const [isLoading, setIsLoading] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState('');
-  const [currentSteps, setCurrentSteps] = useState([]);  // NEW: Track RAG steps during generation
-  const [currentCitations, setCurrentCitations] = useState({});  // NEW: Track citations during generation
   const [error, setError] = useState(null);  // NEW: Error state
   const [connectionStatus, setConnectionStatus] = useState('connected');  // NEW: Connection status: 'connected', 'connecting', 'error', 'disconnected'
   const [lastFailedMessage, setLastFailedMessage] = useState(null);  // NEW: Store last failed message for retry
   const [tokenInfo, setTokenInfo] = useState(null);  // Token usage info from backend
-  
-  // Refs to access latest state inside stable callbacks (handleAnkiReceive)
-  const currentStepsRef = useRef([]);
-  const currentCitationsRef = useRef({});
-  
-  // Wrapper functions that update both state and refs synchronously
-  const updateCurrentSteps = useCallback((updater) => {
-    if (typeof updater === 'function') {
-      setCurrentSteps((prev) => {
-        const newSteps = updater(prev);
-        currentStepsRef.current = newSteps; // Synchron update
-        return newSteps;
-      });
-    } else {
-      currentStepsRef.current = updater; // Synchron update
-      setCurrentSteps(updater);
-    }
-  }, []);
-  
-  const updateCurrentCitations = useCallback((updater) => {
-    if (typeof updater === 'function') {
-      setCurrentCitations((prev) => {
-        const newCitations = updater(prev);
-        currentCitationsRef.current = newCitations; // Synchron update
-        return newCitations;
-      });
-    } else {
-      currentCitationsRef.current = updater; // Synchron update
-      setCurrentCitations(updater);
-    }
-  }, []);
-  
-  const [pipelineSteps, setPipelineSteps] = useState([]);
-  // Each: { step: 'orchestrating'|'sql_search'|..., status: 'active'|'done'|'error', data: {}, timestamp: number }
-  const pipelineStepsRef = useRef([]);
 
   // v2: Structured message state
   const agenticMsg = useAgenticMessage();
   const v2ActiveRef = useRef(false); // Ref for stale-closure-safe check in streaming handler
-  // Generation counter — increments on each new pipeline to signal ThoughtStream to reset refs
-  const [pipelineGeneration, setPipelineGeneration] = useState(0);
 
-  const updatePipelineSteps = useCallback((updater) => {
-    setPipelineSteps(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      pipelineStepsRef.current = next;
-      return next;
-    });
-  }, []);
+  // Reasoning store — pipeline steps are now centralized here
+  const { state: reasoningState } = useReasoningStore();
+  const reasoningDispatch = useReasoningDispatch();
+  const reasoningStateRef = useRef(reasoningState);
+  reasoningStateRef.current = reasoningState;
 
   // Ref für cardSessionHook (per-card persistence)
   const cardSessionHookRef = useRef(cardSessionHook);
@@ -283,12 +243,6 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     };
     
     // ── CRITICAL PATH: These must fire FIRST to unblock the UI ──
-    // Pipeline generation increment signals ThoughtStream to reset its internal refs
-    // (seenRef, activeRef, etc.) even when React batches the [] and new steps together.
-    setPipelineGeneration(g => g + 1);
-    updatePipelineSteps([]);
-    updateCurrentSteps([]);
-    updateCurrentCitations({});
     setMessages((prev) => [...prev, newMessage]);
     setIsLoading(true);
     setStreamingMessage('');
@@ -384,23 +338,17 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       // Default agent (Tutor) goes through normal sendMessage → handler.py routing
       // Only non-default agents use subagentDirect
       if (agent && !agent.isDefault) {
-        // Emit synthetic orchestrating-active immediately
-        updatePipelineSteps([{ step: 'orchestrating', status: 'active', data: {}, timestamp: Date.now() }]);
+        // Emit synthetic orchestrating step via reasoning store
+        const routerStreamId = `router-${requestId}`;
+        reasoningDispatch({ type: 'STEP', streamId: routerStreamId, step: 'orchestrating', status: 'active', data: {} });
 
-        // After 700ms, emit orchestrating-done with subagent info
+        // After 700ms, mark orchestrating as done with subagent info
         setTimeout(() => {
-          updatePipelineSteps(prev => prev.map(s => s.step === 'orchestrating' ? {
-            ...s,
-            status: 'done',
-            data: {
-              search_needed: false,
-              retrieval_mode: `subagent:${agentName}`,
-              response_length: 'short',
-              scope: 'none',
-              scope_label: ''
-            },
-            timestamp: Date.now()
-          } : s));
+          reasoningDispatch({
+            type: 'STEP', streamId: routerStreamId, step: 'orchestrating', status: 'done',
+            data: { search_needed: false, retrieval_mode: `subagent:${agentName}`, response_length: 'short', scope: 'none', scope_label: '' }
+          });
+          reasoningDispatch({ type: 'AGENT_META', streamId: routerStreamId, agentName });
         }, 700);
 
         // Strip @Name prefix and route via generic bridge method
@@ -489,13 +437,21 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       const finalMsg = agenticMsg.finalize();
       if (finalMsg) {
         const primaryCell = finalMsg.agentCells[0];
+        const agentName = primaryCell?.agent || 'tutor';
+        const reqId = payload.requestId || activeRequestIdRef.current || '';
+        // Read pipeline data from reasoning store instead of agent cell local state
+        const _rs = reasoningStateRef.current;
+        const agentStreamId = agentName ? `${agentName}-${reqId}` : reqId;
+        const agentStream = _rs.streams[agentStreamId];
+        const routerStream = _rs.streams[`router-${reqId}`];
         const savedMsg = {
           id: finalMsg.id,
           text: primaryCell?.text || '',
           from: 'bot',
-          steps: primaryCell?.pipelineSteps?.map(s => ({ state: s.data?.label || s.step, timestamp: s.timestamp })) || [],
-          citations: primaryCell?.citations || {},
-          pipeline_data: primaryCell?.pipelineSteps || [],
+          steps: (agentStream?.steps || []).map(s => ({ state: s.data?.label || s.step, timestamp: s.timestamp })),
+          citations: primaryCell?.citations || agentStream?.citations || {},
+          pipeline_data: agentStream?.steps || [],
+          orchestration_steps: routerStream?.steps || [],
           agentCells: finalMsg.agentCells,
           orchestration: finalMsg.orchestration,
         };
@@ -506,7 +462,6 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       // Clean up v1 loading state
       setIsLoading(false);
       setStreamingMessage('');
-      updatePipelineSteps([]);
       v2ActiveRef.current = false;
       return;
     }
@@ -514,7 +469,6 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       agenticMsg.cancel();
       setIsLoading(false);
       setStreamingMessage('');
-      updatePipelineSteps([]);
       v2ActiveRef.current = false;
       return;
     }
@@ -522,7 +476,6 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       agenticMsg.cancel();
       setIsLoading(false);
       setStreamingMessage('');
-      updatePipelineSteps([]);
       v2ActiveRef.current = false;
       return;
     }
@@ -530,29 +483,9 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     if (payload.type === 'loading') {
       setIsLoading(true);
       setStreamingMessage('');
-      updateCurrentSteps([]);  // Reset steps
-      updateCurrentCitations({});  // Reset citations
-      updatePipelineSteps([]);
     } else if (payload.type === 'pipeline_step') {
-      if (payload.requestId && payload.requestId !== activeRequestIdRef.current) return;
-
-      // generating steps now handled by ReasoningStream's step registry (hidden: true)
-      updatePipelineSteps(prev => {
-        const existing = prev.findIndex(s => s.step === payload.step);
-        const newStep = {
-          step: payload.step,
-          status: payload.status,
-          data: payload.data || {},
-          timestamp: Date.now()
-        };
-        if (existing >= 0) {
-          const updated = [...prev];
-          updated[existing] = newStep;
-          return updated;
-        }
-        return [...prev, newStep];
-      });
-      // v2: Also forward to structured message hook
+      // Pipeline steps are now handled by the centralized reasoning store (dispatched in App.jsx).
+      // Still forward to agenticMsg for agent cell status transitions (loading → thinking).
       agenticMsg.handlePipelineStep(payload);
       return;
     } else if (payload.type === 'ai_state') {
@@ -560,41 +493,33 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       // Any that still arrive are ignored — pipeline_step events handle the UI now.
       return;
     } else if (payload.type === 'rag_sources') {
-      // NEW: Live citations from backend
+      // Live citations from backend
       if (payload.data) {
-        updateCurrentCitations(payload.data);
-        
         // CRITICAL: If message was already saved (streaming done), update it with citations
         // This handles the case where rag_sources arrives after payload.done
         setMessages((prev) => {
           if (prev.length === 0) return prev;
-          
+
           // Find the last bot message (most recent)
           const lastBotMessageIndex = prev.length - 1;
           const lastMessage = prev[lastBotMessageIndex];
-          
+
           // Only update if it's a bot message and doesn't have citations yet OR has fewer citations
           const oldCitationsCount = Object.keys(lastMessage.citations || {}).length;
           const newCitationsCount = Object.keys(payload.data).length;
-          const shouldUpdate = lastMessage.from === 'bot' && 
+          const shouldUpdate = lastMessage.from === 'bot' &&
               (oldCitationsCount === 0 || newCitationsCount > oldCitationsCount);
-              
+
           if (shouldUpdate) {
             const updated = [...prev];
             // Merge citations (don't overwrite, merge in case some were already there)
             const mergedCitations = { ...(lastMessage.citations || {}), ...payload.data };
-            // Use steps from message if available, otherwise from ref
-            const finalSteps = (lastMessage.steps && lastMessage.steps.length > 0) 
-              ? lastMessage.steps 
-              : (currentStepsRef.current.length > 0 ? currentStepsRef.current : []);
-            
+
             updated[lastBotMessageIndex] = {
               ...lastMessage,
               citations: mergedCitations,
-              steps: finalSteps
             };
-            
-            
+
             // Save to session
             const sessionId = currentSessionIdRef.current;
             if (sessionId) {
@@ -607,28 +532,18 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
                 }
               });
             }
-            
+
             return updated;
           }
-          
+
           return prev;
         });
         // v2: Forward citations to structured message hook
         agenticMsg.handleCitations({ data: payload.data });
       }
     } else if (payload.type === 'metadata') {
-      // Handle metadata payloads (steps/citations from backend)
-      if (payload.requestId === activeRequestIdRef.current) {
-        // Prefer stepLabels (clean pipeline labels) over old-format steps
-        if (payload.stepLabels && payload.stepLabels.length > 0) {
-          updateCurrentSteps(payload.stepLabels);
-        } else if (payload.steps && payload.steps.length > 0) {
-          updateCurrentSteps(payload.steps);
-        }
-        if (payload.citations) {
-          updateCurrentCitations(payload.citations);
-        }
-      }
+      // Metadata payloads — steps/citations now handled by reasoning store.
+      // Keep handler for any future metadata fields.
     } else if (payload.type === 'error') {
       // Handle error payloads - match by requestId if provided
       if (!payload.requestId || payload.requestId === activeRequestIdRef.current) {
@@ -677,17 +592,6 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
         setIsLoading(true);
       }
       
-      // Handle steps and citations from payload (when done=True or during streaming)
-      // Prefer stepLabels (clean pipeline labels) over old-format steps
-      if (payload.stepLabels && payload.stepLabels.length > 0) {
-        updateCurrentSteps(payload.stepLabels);
-      } else if (payload.steps && payload.steps.length > 0) {
-        updateCurrentSteps(payload.steps);
-      }
-      if (payload.citations && Object.keys(payload.citations).length > 0) {
-        updateCurrentCitations(payload.citations);
-      }
-      
       if (payload.chunk) {
         // ... (logging omitted for brevity)
         setStreamingMessage((prev) => {
@@ -708,83 +612,55 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
           setTokenInfo(payload.tokens);
         }
         // CRITICAL: Don't set isLoading to false immediately - keep it true until message is saved
-        // This ensures StreamingChatMessage continues to render with currentSteps/currentCitations
-        // until the saved message is available with the same data
+        // This ensures StreamingChatMessage continues to render until the saved message is available
         setStreamingMessage((prev) => {
           if (prev && appendMessageRef.current) {
             // Ignoriere Function Call Indikator beim Speichern
             if (prev !== '⏳') {
-              // CRITICAL: Keep isLoading true during this callback to maintain StreamingChatMessage
-              // It will be set to false after message is saved (see below)
-              // Attach accumulated steps and citations to final message
-              // Priority: 
-              // 1. Payload from backend (final authoritative source)
-              // 2. Local tracking (currentStepsRef/currentCitationsRef) - CRITICAL FALLBACK
-              // Refs are now updated synchronously, so they should have the latest values
-              
-              const localSteps = (currentStepsRef.current && currentStepsRef.current.length > 0) 
-                ? currentStepsRef.current 
-                : (currentSteps.length > 0 ? currentSteps : []); // Backup: Use state if ref is empty
-                
-              const localCitations = currentCitationsRef.current || {};
-              
-              let finalSteps = (payload.steps && payload.steps.length > 0) 
-                ? payload.steps 
-                : (localSteps.length > 0 ? localSteps : []);
-                
-              const finalCitations = (payload.citations && Object.keys(payload.citations).length > 0) 
-                ? payload.citations 
-                : (Object.keys(localCitations).length > 0 ? localCitations : {});
-              
-              // ROBUST FALLBACK: If steps are missing but we have citations, generate synthetic steps NOW
-              // This ensures the saved message has persisted steps and doesn't rely on UI-side fallback
+              // Read pipeline data from reasoning store for persistence
+              const _rs = reasoningStateRef.current;
+              const reqId = activeRequestIdRef.current || '';
+              // Find agent stream — look for any stream matching the request ID
+              let storeSteps = [];
+              let storeCitations = {};
+              for (const [sid, stream] of Object.entries(_rs.streams)) {
+                if (sid.endsWith(`-${reqId}`) && sid !== `router-${reqId}`) {
+                  storeSteps = stream.steps || [];
+                  storeCitations = stream.citations || {};
+                  break;
+                }
+              }
+
+              // Build final steps: prefer payload, fallback to store
+              let finalSteps = (payload.steps && payload.steps.length > 0)
+                ? payload.steps
+                : storeSteps.map(s => ({ state: s.data?.label || s.step, timestamp: s.timestamp }));
+
+              const finalCitations = (payload.citations && Object.keys(payload.citations).length > 0)
+                ? payload.citations
+                : (Object.keys(storeCitations).length > 0 ? storeCitations : {});
+
+              // ROBUST FALLBACK: If steps are missing but we have citations, generate synthetic steps
               if (finalSteps.length === 0 && Object.keys(finalCitations).length > 0) {
                 finalSteps = [
-                  {
-                    state: 'Intent: Analyse',
-                    timestamp: Date.now() - 2000
-                  },
-                  {
-                    state: `Wissensabruf: ${Object.keys(finalCitations).length} relevante Karten gefunden`,
-                    timestamp: Date.now() - 1000
-                  }
+                  { state: 'Intent: Analyse', timestamp: Date.now() - 2000 },
+                  { state: `Wissensabruf: ${Object.keys(finalCitations).length} relevante Karten gefunden`, timestamp: Date.now() - 1000 }
                 ];
               } else if (finalSteps.length === 0) {
-                 // Even if no citations, add a generic "Finished" step if we have a message
-                 // to prevent "Simplified Version" / empty box
-                 finalSteps = [{
-                    state: 'Antwort generiert',
-                    timestamp: Date.now()
-                 }];
+                finalSteps = [{ state: 'Antwort generiert', timestamp: Date.now() }];
               }
-              
-              // Enhanced logging for debugging
-              
-              const finalStepLabels = payload.stepLabels || [];
 
-              // CRITICAL: Always save steps and citations, even if empty, to maintain consistency
-              // This ensures the ThoughtStream has the same data during streaming and after saving
-              // Save full pipeline data for persistent ThoughtStream v5
-              const finalPipelineData = pipelineStepsRef.current && pipelineStepsRef.current.length > 0
-                ? pipelineStepsRef.current
-                : null;
+              const finalStepLabels = payload.stepLabels || [];
+              const finalPipelineData = storeSteps.length > 0 ? storeSteps : null;
               appendMessageRef.current(prev, 'bot', finalSteps, finalCitations, activeRequestIdRef.current, finalStepLabels, finalPipelineData);
 
               // CRITICAL: Set isLoading to false AFTER message is saved
-              // This ensures StreamingChatMessage continues to render until saved message is available
               setTimeout(() => {
                 setIsLoading(false);
-                // Reset tracking state after a delay to ensure message is saved
-                updateCurrentSteps([]);
-                updateCurrentCitations({});
-                activeRequestIdRef.current = null; // Clear active request
-                // CRITICAL: Clear streaming message AFTER isLoading is set to false
-                // This prevents the "white screen gap" where text disappears before saved message appears
+                activeRequestIdRef.current = null;
                 setStreamingMessage('');
-              }, 500); // Wait 500ms to ensure message is saved before switching to saved message
-              
-              // CRITICAL: Keep the text in state until timeout clears it
-              // This prevents the text from disappearing before the saved message is rendered
+              }, 500);
+
               return prev; // Keep streaming message visible until timeout
             }
           }
@@ -863,19 +739,14 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     setIsLoading,
     streamingMessage,
     freeChatPushRef,
-    currentSteps,  // NEW: Expose current steps for streaming
-    currentCitations,  // NEW: Expose current citations for streaming
-    pipelineSteps,  // NEW: Expose pipeline steps for ThoughtStream
-    pipelineGeneration,  // Generation counter for ThoughtStream reset
-    updatePipelineSteps,  // Expose for @Plusi synthetic pipeline in App.jsx
-    error,  // NEW: Error state
-    connectionStatus,  // NEW: Connection status
+    error,
+    connectionStatus,
     appendMessage,
     appendMessageRef,
     handleSend,
     handleStopRequest,
-    handleRetry,  // NEW: Retry function
-    clearError,  // NEW: Clear error function
+    handleRetry,
+    clearError,
     handleAnkiReceive,
     tokenInfo,
     // v2 structured message
