@@ -175,9 +175,9 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
         return `${cluster}${n.label}\n${n.deck}`;
       })
       .nodeOpacity(1.0)
-      .linkWidth(l => l.isIntraCluster ? 0.2 : l.isBalloonString ? 0.6 : 0.3)
-      .linkOpacity(l => l.isIntraCluster ? 0.08 : l.isBalloonString ? 0.12 : 0.03)
-      .linkColor(() => 'rgba(150,150,160,0.10)')
+      .linkWidth(l => l.isIntraCluster ? 0.2 : l.isBalloonString ? 0.5 : 0.2)
+      .linkOpacity(l => l.isIntraCluster ? 0.07 : l.isBalloonString ? 0.08 : 0.02)
+      .linkColor(() => 'rgb(70,70,80)')
       .onNodeClick(node => {
         if (!node || node.isQuery) return;
         setSelectedCard(node);
@@ -302,7 +302,7 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '50px 24px 80px',
+          padding: '40px 24px 100px',
           zIndex: 5, pointerEvents: 'auto',
           overflowY: 'auto',
         }}>
@@ -395,6 +395,7 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
         position: 'absolute', bottom: 0, left: 0, right: 0,
         zIndex: 15, pointerEvents: 'auto',
         display: 'flex', justifyContent: 'center',
+        padding: '0 16px 16px',
       }}>
         <div style={{ width: '100%', maxWidth: 680 }}>
           <ChatInput
