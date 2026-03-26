@@ -794,61 +794,65 @@ def generate_quick_answer(query, card_texts, cluster_labels=None, model=None):
 
     config = get_config() or {}
 
-    # Dev-only OpenRouter bypass
-    payload = {
+    # Backend call — streaming (same path as regular chat)
+    url = _get_backend_chat_url()
+    headers = _get_auth_headers_safe()
+
+    backend_payload = {
         "message": prompt,
+        "history": [],
+        "agent": "tutor",
+        "mode": "free_chat",
+        "responseStyle": "compact",
         "model": model,
+        "stream": True,
         "temperature": 0.3,
         "maxOutputTokens": 400,
     }
-    or_result = _maybe_call_openrouter(payload, config)
-    if or_result is not None:
-        response_text = or_result
-    else:
-        # Backend call
-        url = _get_backend_chat_url()
-        headers = _get_auth_headers_safe()
 
-        backend_payload = {
-            "message": prompt,
-            "history": [],
-            "agent": "tutor",
-            "mode": "free_chat",
-            "responseStyle": "compact",
-            "model": model,
-            "stream": False,
-            "temperature": 0.3,
-            "maxOutputTokens": 400,
-        }
+    try:
+        response = requests.post(url, json=backend_payload, headers=headers, timeout=30, stream=True)
+        response.raise_for_status()
 
-        try:
-            response = requests.post(url, json=backend_payload, headers=headers, timeout=20)
-            response.raise_for_status()
-            result = response.json()
+        # Collect streamed chunks into full text
+        response_text = ""
+        for line in response.iter_lines(decode_unicode=True):
+            if not line:
+                continue
+            # SSE format: "data: {...}"
+            if line.startswith("data: "):
+                chunk_str = line[6:]
+                if chunk_str.strip() == "[DONE]":
+                    break
+                try:
+                    import json as _json
+                    chunk = _json.loads(chunk_str)
+                    # Extract text from various response formats
+                    text = ""
+                    if "choices" in chunk:
+                        delta = chunk["choices"][0].get("delta", {})
+                        text = delta.get("content", "")
+                    elif "text" in chunk:
+                        text = chunk["text"]
+                    elif "chunk" in chunk:
+                        text = chunk["chunk"]
+                    response_text += text
+                except (ValueError, KeyError, IndexError):
+                    pass
+            elif not line.startswith(":"):
+                # Non-SSE: might be plain text chunks
+                response_text += line
 
-            # Extract text from backend response
-            response_text = result.get("text") or result.get("response") or ""
-            if not response_text:
-                # Fallback: check candidates format
-                candidates = result.get("candidates", [])
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    if parts:
-                        response_text = parts[0].get("text", "").strip()
-
-            if not response_text:
-                logger.warning("generate_quick_answer: No text response for query '%s'", query)
-                return {"answer": "", "answerable": False, "clusterLabels": {}}
-
-        except requests.exceptions.RequestException as e:
-            logger.error("generate_quick_answer: Network error for '%s': %s", query, str(e))
+        if not response_text.strip():
+            logger.warning("generate_quick_answer: Empty streaming response for '%s'", query)
             return {"answer": "", "answerable": False, "clusterLabels": {}}
-        except (ValueError, KeyError) as e:
-            logger.error("generate_quick_answer: Parse error for '%s': %s", query, str(e))
-            return {"answer": "", "answerable": False, "clusterLabels": {}}
-        except Exception:
-            logger.exception("generate_quick_answer: Unknown error for '%s'", query)
-            return {"answer": "", "answerable": False, "clusterLabels": {}}
+
+    except requests.exceptions.RequestException as e:
+        logger.error("generate_quick_answer: Network error for '%s': %s", query, str(e))
+        return {"answer": "", "answerable": False, "clusterLabels": {}}
+    except Exception:
+        logger.exception("generate_quick_answer: Error for '%s'", query)
+        return {"answer": "", "answerable": False, "clusterLabels": {}}
 
     # Parse response
     text = response_text.strip()
