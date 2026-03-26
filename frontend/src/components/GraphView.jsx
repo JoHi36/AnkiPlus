@@ -98,27 +98,10 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       val: 5,
     });
 
+    // All cards connect directly to query — colored by cluster
     if (clusters.length > 1) {
-      // Cluster-based topology: Query → Clusters → Cards
       clusters.forEach((cluster, ci) => {
-        const cid = cluster.id;
         const clusterColor = DECK_COLORS[ci % DECK_COLORS.length];
-
-        // Cluster node (smaller than query, acts as labeled hub)
-        nodes.push({
-          id: cid,
-          label: cluster.label,
-          color: clusterColor,
-          isQuery: false,
-          isCluster: true,
-          cardCount: cluster.cards.length,
-          val: 2.5,
-        });
-
-        // Link query → cluster
-        links.push({ source: '__query__', target: cid, value: 0.8 });
-
-        // Card nodes within cluster
         cluster.cards.forEach(card => {
           nodes.push({
             id: card.id,
@@ -126,17 +109,18 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
             deck: card.deck,
             deckFull: card.deckFull,
             score: card.score,
-            color: deckColor(card.deck),
+            color: clusterColor,
+            clusterLabel: cluster.label,
+            clusterIndex: ci,
             isQuery: false,
             isCluster: false,
             val: 1.0 + (card.score || 0.5),
           });
-          // Link cluster → card
-          links.push({ source: cid, target: card.id, value: card.score || 0.5 });
+          links.push({ source: '__query__', target: card.id, value: card.score || 0.5 });
         });
       });
     } else {
-      // Fallback: flat star topology (no clusters)
+      // No clusters — all cards same color
       searchResult.cards.forEach(card => {
         nodes.push({
           id: card.id,
@@ -147,14 +131,15 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
           color: deckColor(card.deck),
           isQuery: false,
           isCluster: false,
-          val: 0.8 + (card.score || 0.5) * 1.5,
+          val: 1.0 + (card.score || 0.5),
         });
         links.push({ source: '__query__', target: card.id, value: card.score || 0.5 });
       });
     }
 
-    // Add inter-cluster links (thin connections between related clusters)
-    if (searchResult.clusterLinks) {
+    // Inter-cluster links removed (no cluster nodes to connect)
+    // Cards of same cluster naturally group via force physics
+    if (false && searchResult.clusterLinks) {
       searchResult.clusterLinks.forEach(cl => {
         links.push({
           source: cl.source,
@@ -178,8 +163,8 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       .nodeVal(n => n.val)
       .nodeLabel(n => {
         if (n.isQuery) return n.label;
-        if (n.isCluster) return `${n.label} (${n.cardCount} Karten)`;
-        return `${n.label}\n${n.deck}`;
+        const cluster = n.clusterLabel ? `[${n.clusterLabel}] ` : '';
+        return `${cluster}${n.label}\n${n.deck}`;
       })
       .nodeOpacity(1.0)
       .linkWidth(l => l.isInterCluster ? 0.8 : (l.value || 0.5) * 2)
@@ -187,17 +172,6 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       .linkColor(l => l.isInterCluster ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.2)')
       .onNodeClick(node => {
         if (!node || node.isQuery) return;
-        if (node.isCluster) {
-          // Zoom to cluster and its children
-          const clusterChildIds = new Set();
-          clusterChildIds.add(node.id);
-          links.forEach(l => {
-            const src = l.source?.id || l.source;
-            if (src === node.id) clusterChildIds.add(l.target?.id || l.target);
-          });
-          graph.zoomToFit(800, 40, n => clusterChildIds.has(n.id));
-          return;
-        }
         setSelectedCard(node);
         const dist = 40;
         const ratio = 1 + dist / Math.hypot(node.x || 1, node.y || 1, node.z || 1);
