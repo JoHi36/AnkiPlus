@@ -640,7 +640,7 @@ def stream_response(urls, data, callback=None, use_backend=False, backend_data=N
 # ---------------------------------------------------------------------------
 # generate_definition — lightweight call for KG definitions (via backend)
 # ---------------------------------------------------------------------------
-DEFINITION_MODEL = "gemini-2.0-flash"
+DEFINITION_MODEL = "gemini-2.5-flash"
 
 
 def generate_definition(term, card_texts, model=None):
