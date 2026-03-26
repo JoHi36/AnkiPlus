@@ -24,7 +24,7 @@ import SessionOverview from './components/SessionOverview';
 import SessionList from './components/SessionView/SessionList';
 import ContextSurface from './components/ContextSurface';
 import DeckBrowser from './components/DeckBrowser';
-import ErrorBoundary from './components/ErrorBoundary';
+import ErrorBoundary, { ComponentErrorBoundary } from './components/ErrorBoundary';
 import PaywallModal from './components/PaywallModal';
 import TokenBar from './components/TokenBar';
 import SectionDivider from './components/SectionDivider';
@@ -2373,23 +2373,29 @@ function AppInner() {
                 <GraphView onToggleView={() => setViewMode('decks')} isPremium={isPremium} deckData={deckBrowserData} />
               </React.Suspense>
             ) : (
-              <DeckBrowserView
-                data={deckBrowserData}
-                isPremium={isPremium}
-                onToggleView={() => setViewMode('graph')}
-              />
+              <ComponentErrorBoundary fallback={<div style={{ padding: 24, color: 'var(--ds-text-secondary)' }}>View failed to render. Try refreshing.</div>}>
+                <DeckBrowserView
+                  data={deckBrowserData}
+                  isPremium={isPremium}
+                  onToggleView={() => setViewMode('graph')}
+                />
+              </ComponentErrorBoundary>
             )
           )}
           {activeView === 'overview' && (
-            <OverviewView
-              data={overviewData}
-              onStudy={() => executeAction('deck.study', { deckId: overviewData?.deckId })}
-              onBack={() => executeAction('view.navigate', 'deckBrowser')}
-              onOptions={() => bridgeAction('deck.options')}
-            />
+            <ComponentErrorBoundary fallback={<div style={{ padding: 24, color: 'var(--ds-text-secondary)' }}>View failed to render. Try refreshing.</div>}>
+              <OverviewView
+                data={overviewData}
+                onStudy={() => executeAction('deck.study', { deckId: overviewData?.deckId })}
+                onBack={() => executeAction('view.navigate', 'deckBrowser')}
+                onOptions={() => bridgeAction('deck.options')}
+              />
+            </ComponentErrorBoundary>
           )}
           {activeView === 'statistik' && (
-            <StatistikView />
+            <ComponentErrorBoundary fallback={<div style={{ padding: 24, color: 'var(--ds-text-secondary)' }}>View failed to render. Try refreshing.</div>}>
+              <StatistikView />
+            </ComponentErrorBoundary>
           )}
           {showFreeChat && (
             <div style={{
@@ -2547,7 +2553,9 @@ function AppInner() {
         <div className="ds-canvas-surface" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
           {persistentTopBar}
           <div key="review-content" className="view-enter" style={{ flex: 1, overflow: 'hidden' }}>
-            <ReviewerView cardData={cardData} reviewer={reviewer} />
+            <ComponentErrorBoundary fallback={<div style={{ padding: 24, color: 'var(--ds-text-secondary)' }}>View failed to render. Try refreshing.</div>}>
+              <ReviewerView cardData={cardData} reviewer={reviewer} />
+            </ComponentErrorBoundary>
           </div>
         </div>
       )}
@@ -2650,15 +2658,17 @@ function AppInner() {
               >
 
                 {chatHook.messages.length === 0 && !chatHook.isLoading && !chatHook.streamingMessage ? (
-            <InsightsDashboard
-              insights={insightsHook.insights}
-              cardStats={cardContextHook.cardContext?.stats || {}}
-              chartData={insightsHook.chartData}
-              isExtracting={insightsHook.isExtracting}
-              newInsightIds={insightsHook.newInsightIds}
-              noNewInsights={insightsHook.noNewInsights}
-              onCitationClick={(cardId) => bridge.goToCard?.(String(cardId))}
-            />
+            <ComponentErrorBoundary fallback={<div style={{ padding: 24, color: 'var(--ds-text-secondary)' }}>View failed to render. Try refreshing.</div>}>
+              <InsightsDashboard
+                insights={insightsHook.insights}
+                cardStats={cardContextHook.cardContext?.stats || {}}
+                chartData={insightsHook.chartData}
+                isExtracting={insightsHook.isExtracting}
+                newInsightIds={insightsHook.newInsightIds}
+                noNewInsights={insightsHook.noNewInsights}
+                onCitationClick={(cardId) => bridge.goToCard?.(String(cardId))}
+              />
+            </ComponentErrorBoundary>
           ) : (
             <>
               {/* Finde letzte User-Nachricht für Interaction Container */}

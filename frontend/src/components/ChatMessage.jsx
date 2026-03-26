@@ -15,6 +15,7 @@ import WebCitationBadge from './WebCitationBadge';
 import ThoughtStream from './ThoughtStream';
 import ReasoningStream from '../reasoning/ReasoningStream';
 import ToolWidgetRenderer from './ToolWidgetRenderer';
+import { ComponentErrorBoundary } from './ErrorBoundary';
 import AgenticCell from './AgenticCell';
 import ResearchContent from './ResearchContent';
 import mermaid from 'mermaid';
@@ -1763,12 +1764,14 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
 
             {/* Tool Widgets (Plusi, Cards, Stats, etc.) — excludes agent_handoff which renders after text */}
             {toolWidgets.filter(tw => tw.name !== 'agent_handoff').length > 0 && (
-                <ToolWidgetRenderer
-                    toolWidgets={toolWidgets.filter(tw => tw.name !== 'agent_handoff')}
-                    bridge={bridge}
-                    isStreaming={isStreaming}
-                    isLastMessage={isLastMessage}
-                />
+                <ComponentErrorBoundary fallback={<div style={{ color: 'var(--ds-text-tertiary)', fontSize: 'var(--ds-text-sm)', padding: '8px 12px' }}>Widget render failed</div>}>
+                    <ToolWidgetRenderer
+                        toolWidgets={toolWidgets.filter(tw => tw.name !== 'agent_handoff')}
+                        bridge={bridge}
+                        isStreaming={isStreaming}
+                        isLastMessage={isLastMessage}
+                    />
+                </ComponentErrorBoundary>
             )}
 
             {/* Fallback Progress Bar */}
@@ -1884,12 +1887,14 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                     )}
                     {/* Tool widgets (Plusi, Cards, Stats) */}
                     {cell.toolWidgets && cell.toolWidgets.length > 0 && (
-                      <ToolWidgetRenderer
-                        toolWidgets={cell.toolWidgets}
-                        bridge={bridge}
-                        isStreaming={cell.status === 'streaming'}
-                        isLastMessage={isLastMessage}
-                      />
+                      <ComponentErrorBoundary fallback={<div style={{ color: 'var(--ds-text-tertiary)', fontSize: 'var(--ds-text-sm)', padding: '8px 12px' }}>Widget render failed</div>}>
+                        <ToolWidgetRenderer
+                          toolWidgets={cell.toolWidgets}
+                          bridge={bridge}
+                          isStreaming={cell.status === 'streaming'}
+                          isLastMessage={isLastMessage}
+                        />
+                      </ComponentErrorBoundary>
                     )}
                     {/* Text skeleton — managed by ThoughtStream's onAllDone callback */}
                   </AgenticCell>
@@ -1926,12 +1931,14 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
             {/* Agent Handoff Widget — renders AFTER the agent's text, flush against it */}
             {!hasV2Data && toolWidgets.filter(tw => tw.name === 'agent_handoff').length > 0 && (
                 <div style={{ marginTop: -8 }}>
-                  <ToolWidgetRenderer
-                      toolWidgets={toolWidgets.filter(tw => tw.name === 'agent_handoff')}
-                      bridge={bridge}
-                      isStreaming={isStreaming}
-                      isLastMessage={isLastMessage}
-                  />
+                  <ComponentErrorBoundary fallback={<div style={{ color: 'var(--ds-text-tertiary)', fontSize: 'var(--ds-text-sm)', padding: '8px 12px' }}>Widget render failed</div>}>
+                    <ToolWidgetRenderer
+                        toolWidgets={toolWidgets.filter(tw => tw.name === 'agent_handoff')}
+                        bridge={bridge}
+                        isStreaming={isStreaming}
+                        isLastMessage={isLastMessage}
+                    />
+                  </ComponentErrorBoundary>
                 </div>
             )}
             {processedMessageWithCitations && isUser && (
@@ -2252,12 +2259,20 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                                 // WICHTIG: Rendere Mermaid-Diagramme NICHT während des Streamings
                                 // Das blockiert das Streaming und verursacht Fehler bei unvollständigem Code
                                 if (!inline && language === 'mermaid') {
-                                    return <MermaidDiagram code={codeString} isStreaming={isStreaming} />;
+                                    return (
+                                        <ComponentErrorBoundary fallback={<div style={{ color: 'var(--ds-text-tertiary)', fontSize: 'var(--ds-text-sm)', padding: '8px 12px' }}>Diagram render failed</div>}>
+                                            <MermaidDiagram code={codeString} isStreaming={isStreaming} />
+                                        </ComponentErrorBoundary>
+                                    );
                                 }
-                                
+
                                 // SMILES Molecule Rendering - lädt über CDN
                                 if (!inline && (language === 'smiles' || language === 'molecule')) {
-                                    return <MoleculeRenderer smiles={codeString} />;
+                                    return (
+                                        <ComponentErrorBoundary fallback={<div style={{ color: 'var(--ds-text-tertiary)', fontSize: 'var(--ds-text-sm)', padding: '8px 12px' }}>Molecule render failed</div>}>
+                                            <MoleculeRenderer smiles={codeString} />
+                                        </ComponentErrorBoundary>
+                                    );
                                 }
                                 
                                 // Block Code - Simple rendering without SyntaxHighlighter to avoid React conflicts

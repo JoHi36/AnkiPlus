@@ -2,6 +2,48 @@ import React from 'react';
 import { AlertCircle, RefreshCw, Home } from 'lucide-react';
 
 /**
+ * Lightweight error boundary for isolating individual risky components.
+ * Use around MermaidDiagram, MoleculeRenderer, ToolWidgetRenderer, and major views.
+ */
+export class ComponentErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    try {
+      if (window.ankiBridge?.addMessage) {
+        window.ankiBridge.addMessage('jsError', {
+          message: error?.message || 'Component render error',
+          stack: error?.stack?.substring(0, 300) || '',
+          component: errorInfo?.componentStack?.substring(0, 200) || '',
+        });
+      }
+    } catch (_) { /* silently handled */ }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback || (
+        <div style={{
+          padding: '8px 12px',
+          color: 'var(--ds-text-tertiary)',
+          fontSize: 'var(--ds-text-sm)',
+        }}>
+          Render error
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+/**
  * Error Boundary Komponente
  * Fängt React-Fehler ab und verhindert, dass die gesamte App crasht
  */
