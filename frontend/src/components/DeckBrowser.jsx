@@ -95,7 +95,7 @@ function SegmentedBar({ stats, loading }) {
 }
 
 /* ── Session row ── */
-function SessionRow({ session, index, onClick }) {
+const SessionRow = React.memo(function SessionRow({ session, index, onClick }) {
   const title = session.deckName ? session.deckName.split('::').pop() : 'Unbenannt';
   const path = session.deckName && session.deckName.includes('::')
     ? session.deckName.split('::').slice(0, -1).join(' › ')
@@ -169,7 +169,7 @@ function SessionRow({ session, index, onClick }) {
       </div>
     </motion.button>
   );
-}
+});
 
 /* ── Section label ── */
 function SectionLabel({ children, count }) {

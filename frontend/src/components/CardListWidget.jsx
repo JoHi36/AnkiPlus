@@ -1,6 +1,53 @@
 import React from 'react';
 import CardWidget from './CardWidget';
 
+const CardRow = React.memo(function CardRow({ card, index, onCardClick }) {
+  return (
+    <div
+      key={card.card_id}
+      onClick={() => onCardClick && onCardClick(card.card_id)}
+      style={{
+        padding: '12px 20px',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        borderTop: index > 0 ? '1px solid var(--ds-hover-tint)' : 'none',
+        transition: 'background 0.15s ease',
+      }}
+      onMouseEnter={e => e.currentTarget.style.background = 'var(--ds-hover-tint)'}
+      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+    >
+      <span style={{
+        fontSize: 11,
+        color: 'var(--ds-text-muted)',
+        fontWeight: 500,
+        minWidth: 16,
+        fontVariantNumeric: 'tabular-nums',
+      }}>{index + 1}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: 13,
+          color: 'var(--ds-text-primary)',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          lineHeight: 1.4,
+        }}>{card.front}</div>
+        <div style={{
+          fontSize: 11,
+          color: 'var(--ds-text-placeholder)',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          marginTop: 2,
+        }}>{card.back}</div>
+      </div>
+      <span style={{ color: 'var(--ds-text-muted)', fontSize: 14, flexShrink: 0 }}>›</span>
+    </div>
+  );
+});
+
 export default function CardListWidget({ query, cards, totalFound, showing, onCardClick }) {
   if (!cards || cards.length === 0) {
     return (
@@ -45,48 +92,12 @@ export default function CardListWidget({ query, cards, totalFound, showing, onCa
 
       <div style={{ maxHeight: 280, overflowY: 'auto' }}>
         {cards.map((card, i) => (
-          <div
+          <CardRow
             key={card.card_id}
-            onClick={() => onCardClick && onCardClick(card.card_id)}
-            style={{
-              padding: '12px 20px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              borderTop: i > 0 ? '1px solid var(--ds-hover-tint)' : 'none',
-              transition: 'background 0.15s ease',
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--ds-hover-tint)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-          >
-            <span style={{
-              fontSize: 11,
-              color: 'var(--ds-text-muted)',
-              fontWeight: 500,
-              minWidth: 16,
-              fontVariantNumeric: 'tabular-nums',
-            }}>{i + 1}</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                fontSize: 13,
-                color: 'var(--ds-text-primary)',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                lineHeight: 1.4,
-              }}>{card.front}</div>
-              <div style={{
-                fontSize: 11,
-                color: 'var(--ds-text-placeholder)',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                marginTop: 2,
-              }}>{card.back}</div>
-            </div>
-            <span style={{ color: 'var(--ds-text-muted)', fontSize: 14, flexShrink: 0 }}>›</span>
-          </div>
+            card={card}
+            index={i}
+            onCardClick={onCardClick}
+          />
         ))}
       </div>
 

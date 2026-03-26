@@ -119,7 +119,7 @@ function SlotDots({ workflow }) {
 }
 
 /* ── WorkflowCard ────────────────────────────────────────────────────────── */
-export default function WorkflowCard({
+function WorkflowCard({
   workflow,
   expanded,
   onToggleExpand,
@@ -258,3 +258,5 @@ export default function WorkflowCard({
     </div>
   );
 }
+
+export default React.memo(WorkflowCard);
