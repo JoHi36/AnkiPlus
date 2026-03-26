@@ -845,9 +845,12 @@ def generate_quick_answer(query, card_texts, cluster_labels=None, model=None):
             for k, v in cluster_labels.items()
         )
         prompt += (
-            "\n\nBenenne jeden Cluster mit 2-3 Wörtern und schreibe eine "
-            "2-Satz-Zusammenfassung. Die Zusammenfassung soll erklären, "
-            "wie dieser Aspekt mit '%s' zusammenhängt:\n%s\n"
+            "\n\nBenenne jeden Cluster mit 2-3 Wörtern basierend auf dem Inhalt "
+            "der Karten in diesem Cluster. Jeder Cluster MUSS einen inhaltlich "
+            "beschreibenden Namen bekommen (z.B. 'Hormonelle Regulation', "
+            "'Zellstruktur', 'Klinische Befunde'). Schreibe NIEMALS 'Keine Relevanz' "
+            "oder ähnliches — finde immer das Thema der Karten.\n"
+            "Schreibe zu jedem Cluster eine 2-Satz-Zusammenfassung im Kontext von '%s':\n%s\n"
             "Format:\nANTWORT: [deine antwort]\n"
             "CLUSTER: cluster_0=Name|Zusammenfassung\n"
             "cluster_1=Name|Zusammenfassung"

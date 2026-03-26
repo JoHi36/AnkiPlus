@@ -24,6 +24,7 @@ export default function SearchSidebar({
   subClusters,
   isSubClustering,
   sidebarHasAnimated,
+  kgSubgraph,
 }) {
   if (!visible) return null;
 
