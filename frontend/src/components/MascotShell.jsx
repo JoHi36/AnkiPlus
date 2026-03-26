@@ -24,8 +24,8 @@ const SHAKE_WINDOW = 1000;
 const GRAVITY = 1800;
 /** Walking speed in px/s */
 const WALK_SPEED = 80;
-/** Step frequency — full cycles per second */
-const STEP_FREQ = 5;
+/** Step frequency — full cycles per second (lower = smoother) */
+const STEP_FREQ = 1.25;
 /** Step bounce height in px */
 const STEP_BOUNCE = 8;
 /** Shoulder sway angle in degrees */
@@ -192,7 +192,7 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true 
           ph.t = 0;
           dock.style.transition = 'transform 0.08s ease-out';
           dock.style.transform = 'scaleY(0.75) scaleX(1.15)';
-          setOverrideMood('annoyed');
+          char?.setMoodInstant?.('annoyed');
         }
         break;
       }
@@ -216,7 +216,7 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true 
           ph.facing = 'side';
           const flip = ph.walkDirection < 0; // flip when walking left
           char?.setSideView?.(flip);
-          setOverrideMood(null); // neutral during walk
+          // No mood change needed — side view has no mood expression
         }
         if (ph.t > 0.3) {
           dock.style.transition = 'none';
@@ -284,7 +284,7 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true 
           ph.facing = 'front';
           char?.setFrontView?.();
           dock.style.transform = 'scaleY(1.08) scaleX(0.94)';
-          setOverrideMood('happy');
+          char?.setMoodInstant?.('happy');
         }
         break;
       }
@@ -341,6 +341,31 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true 
     }
   };
 
+  // Stop any running physics and restore to grabbable state
+  const stopPhysics = () => {
+    if (physicsRAFRef.current) {
+      cancelAnimationFrame(physicsRAFRef.current);
+      physicsRAFRef.current = null;
+    }
+    const ph = physicsRef.current;
+    if (ph.phase === 'idle') return false; // wasn't running
+
+    // If in side view, swap back to front
+    if (ph.facing === 'side') {
+      ph.facing = 'front';
+      charRef.current?.setFrontView?.();
+    }
+    ph.phase = 'idle';
+
+    // Restore dock to fixed positioning at current visual position
+    const dock = dockRef.current;
+    if (dock) {
+      dock.style.transition = 'none';
+      dock.style.transform = 'none';
+    }
+    return true; // was running
+  };
+
   // Start physics fall + walk-back sequence from a screen position
   const startPhysicsSequence = (dropScreenX, dropScreenY) => {
     const dock = dockRef.current;
@@ -374,8 +399,8 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true 
     dock.style.bottom = ph.y + 'px';
     dock.style.transform = 'none';
 
-    // Set surprised mood for falling
-    setOverrideMood('surprised');
+    // Set surprised mood for falling — instant, no fade
+    charRef.current?.setMoodInstant?.('surprised');
 
     lastFrameRef.current = performance.now();
     physicsRAFRef.current = requestAnimationFrame(physicsTickRef.current);
@@ -415,6 +440,9 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true 
   const handlePointerDown = useCallback((e) => {
     if (e.button !== 0) return;
     e.preventDefault();
+
+    // If physics is running (walking, falling, etc.), interrupt it
+    stopPhysics();
 
     const ds = dragStateRef.current;
     ds.pending = true;

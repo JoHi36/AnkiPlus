@@ -942,6 +942,21 @@
         }, 250);
       },
 
+      /** Swap mood instantly — no crossfade. Used during physics animations. */
+      setMoodInstant: function (newMood) {
+        if (newMood === currentMood) return;
+        if (transitionTimer) {
+          clearTimeout(transitionTimer);
+          transitionTimer = null;
+        }
+        stopEngine();
+        currentMood = newMood;
+        wrapper.style.transition = 'none';
+        wrapper.style.opacity = '1';
+        render();
+        startEngine();
+      },
+
       setIntegrity: function (value) {
         currentIntegrity = Math.max(0, Math.min(1, value));
         state.integrity = currentIntegrity;

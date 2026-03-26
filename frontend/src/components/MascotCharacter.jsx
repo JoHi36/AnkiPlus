@@ -116,6 +116,10 @@ const MascotCharacter = forwardRef(function MascotCharacter(
       if (sideRef.current) return sideRef.current.getNubs();
       return null;
     },
+    /** Swap mood without crossfade — for physics animation */
+    setMoodInstant(newMood) {
+      if (plusiRef.current) plusiRef.current.setMoodInstant(newMood);
+    },
   }));
 
   const glowStyle = active ? { filter: 'drop-shadow(0 0 6px var(--ds-accent-50))' } : {};
