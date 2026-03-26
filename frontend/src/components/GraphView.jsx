@@ -80,38 +80,78 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
   // Build / rebuild graph when search results arrive
   useEffect(() => {
     if (!containerRef.current || !searchResult?.cards?.length) {
-      // Clear graph if no results
-      if (graphRef.current) {
-        graphRef.current.graphData({ nodes: [], links: [] });
-      }
+      if (graphRef.current) graphRef.current.graphData({ nodes: [], links: [] });
       return;
     }
 
-    // Add query node as center
-    const queryNode = {
+    const clusters = searchResult.clusters || [];
+    const nodes = [];
+    const links = [];
+
+    // Query center node
+    nodes.push({
       id: '__query__',
       label: searchResult.query,
-      deck: '',
-      deckFull: '',
-      score: 1.0,
       color: '#FFFFFF',
       isQuery: true,
-    };
-    const nodes = [queryNode, ...searchResult.cards.map((card) => ({
-      id: card.id,
-      label: card.question,
-      deck: card.deck,
-      deckFull: card.deckFull,
-      score: card.score,
-      color: deckColor(card.deck),
-      isQuery: false,
-    }))];
+      isCluster: false,
+      val: 4,
+    });
 
-    const links = searchResult.edges.map(e => ({
-      source: e.source,
-      target: e.target,
-      value: e.similarity,
-    }));
+    if (clusters.length > 0) {
+      // Cluster-based topology: Query → Clusters → Cards
+      clusters.forEach((cluster, ci) => {
+        const cid = cluster.id;
+        const clusterColor = DECK_COLORS[ci % DECK_COLORS.length];
+
+        // Cluster node
+        nodes.push({
+          id: cid,
+          label: cluster.label,
+          color: clusterColor,
+          isQuery: false,
+          isCluster: true,
+          cardCount: cluster.cards.length,
+          val: 2 + cluster.cards.length * 0.3,
+        });
+
+        // Link query → cluster
+        links.push({ source: '__query__', target: cid, value: 0.8 });
+
+        // Card nodes within cluster
+        cluster.cards.forEach(card => {
+          nodes.push({
+            id: card.id,
+            label: card.question,
+            deck: card.deck,
+            deckFull: card.deckFull,
+            score: card.score,
+            color: deckColor(card.deck),
+            isQuery: false,
+            isCluster: false,
+            val: 0.6 + (card.score || 0.5),
+          });
+          // Link cluster → card
+          links.push({ source: cid, target: card.id, value: card.score || 0.5 });
+        });
+      });
+    } else {
+      // Fallback: flat star topology (no clusters)
+      searchResult.cards.forEach(card => {
+        nodes.push({
+          id: card.id,
+          label: card.question,
+          deck: card.deck,
+          deckFull: card.deckFull,
+          score: card.score,
+          color: deckColor(card.deck),
+          isQuery: false,
+          isCluster: false,
+          val: 0.8 + (card.score || 0.5) * 1.5,
+        });
+        links.push({ source: '__query__', target: card.id, value: card.score || 0.5 });
+      });
+    }
 
     // Destroy old graph
     if (graphRef.current?._destructor) graphRef.current._destructor();
@@ -122,19 +162,31 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
     graph
       .graphData({ nodes, links })
       .backgroundColor('rgba(0,0,0,0)')
-      // Query node is white and larger, card nodes colored by deck
-      .nodeColor(node => node.isQuery ? '#FFFFFF' : node.color)
-      .nodeVal(node => node.isQuery ? 3 : (0.8 + node.score * 1.5))
-      .nodeLabel(node => node.isQuery ? node.label : `${node.label}\n${node.deck}`)
-      .nodeOpacity(node => node.isQuery ? 1.0 : 0.85)
-      // Link width based on relevance score
-      .linkWidth(link => link.value * 2)
-      .linkOpacity(0.12)
-      .linkColor(() => 'rgba(255,255,255,0.15)')
+      .nodeColor(n => n.color)
+      .nodeVal(n => n.val)
+      .nodeLabel(n => {
+        if (n.isQuery) return n.label;
+        if (n.isCluster) return `${n.label} (${n.cardCount} Karten)`;
+        return `${n.label}\n${n.deck}`;
+      })
+      .nodeOpacity(n => n.isQuery ? 1.0 : n.isCluster ? 0.9 : 0.75)
+      .linkWidth(l => (l.value || 0.5) * 1.5)
+      .linkOpacity(0.1)
+      .linkColor(() => 'rgba(255,255,255,0.12)')
       .onNodeClick(node => {
         if (!node || node.isQuery) return;
+        if (node.isCluster) {
+          // Zoom to cluster and its children
+          const clusterChildIds = new Set();
+          clusterChildIds.add(node.id);
+          links.forEach(l => {
+            const src = l.source?.id || l.source;
+            if (src === node.id) clusterChildIds.add(l.target?.id || l.target);
+          });
+          graph.zoomToFit(800, 40, n => clusterChildIds.has(n.id));
+          return;
+        }
         setSelectedCard(node);
-        // Fly camera to clicked node
         const dist = 40;
         const ratio = 1 + dist / Math.hypot(node.x || 1, node.y || 1, node.z || 1);
         graph.cameraPosition(
@@ -149,14 +201,12 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       .d3VelocityDecay(0.3)
       .showNavInfo(false);
 
-    // Zoom to fit all nodes after simulation settles
+    // Zoom to fit all nodes after settling
     setTimeout(() => {
-      if (graphRef.current) {
-        graphRef.current.zoomToFit(800, 60);
-      }
+      if (graphRef.current) graphRef.current.zoomToFit(800, 60);
     }, 1500);
 
-    // Auto-rotate slowly
+    // Auto-rotate
     if (graph.controls()) {
       graph.controls().autoRotate = true;
       graph.controls().autoRotateSpeed = 0.5;
@@ -180,19 +230,27 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
   const hasResults = searchResult?.cards?.length > 0;
   const cardIds = searchResult?.cards?.map(c => c.id) || [];
 
-  // Compute deck breakdown for legend
-  const deckBreakdown = useMemo(() => {
-    if (!searchResult?.cards?.length) return [];
-    const counts = {};
-    const colors = {};
-    searchResult.cards.forEach(c => {
-      const deck = c.deck || 'Unbekannt';
-      counts[deck] = (counts[deck] || 0) + 1;
-      if (!colors[deck]) colors[deck] = deckColor(deck);
-    });
-    return Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-      .map(([deck, count]) => ({ deck, count, color: colors[deck] }));
+  // Compute cluster legend (falls back to deck breakdown if no clusters)
+  const clusterLegend = useMemo(() => {
+    if (!searchResult?.clusters?.length) {
+      // Fallback to deck breakdown
+      if (!searchResult?.cards?.length) return [];
+      const counts = {};
+      const colors = {};
+      searchResult.cards.forEach(c => {
+        const deck = c.deck || 'Unbekannt';
+        counts[deck] = (counts[deck] || 0) + 1;
+        if (!colors[deck]) colors[deck] = deckColor(deck);
+      });
+      return Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .map(([deck, count]) => ({ label: deck, count, color: colors[deck] }));
+    }
+    return searchResult.clusters.map((c, i) => ({
+      label: c.label,
+      count: c.cards.length,
+      color: DECK_COLORS[i % DECK_COLORS.length],
+    }));
   }, [searchResult]);
 
   // Only render the 3D canvas when we actually have search results and search is active
@@ -347,15 +405,15 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
         </div>
       )}
 
-      {/* State B: Deck legend — right side (visible when search active + results) */}
-      {searchActive && hasResults && deckBreakdown.length > 0 && (
+      {/* State B: Cluster/Deck legend — right side (visible when search active + results) */}
+      {searchActive && hasResults && clusterLegend.length > 0 && (
         <div style={{
           position: 'absolute', right: 20, top: '50%', transform: 'translateY(-50%)',
           display: 'flex', flexDirection: 'column', gap: 6,
           zIndex: 10, pointerEvents: 'none',
         }}>
-          {deckBreakdown.map(({ deck, count, color }) => (
-            <div key={deck} style={{
+          {clusterLegend.map(({ label, count, color }) => (
+            <div key={label} style={{
               display: 'flex', alignItems: 'center', gap: 8,
               fontSize: 11, color: 'var(--ds-text-secondary)',
             }}>
@@ -363,7 +421,7 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
                 width: 8, height: 8, borderRadius: '50%',
                 background: color, flexShrink: 0,
               }} />
-              <span>{deck}</span>
+              <span>{label}</span>
               <span style={{ color: 'var(--ds-text-tertiary)' }}>{count}</span>
             </div>
           ))}
