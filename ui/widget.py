@@ -525,13 +525,17 @@ class SearchCardsThread(QThread):
                 q_clean = _re.sub(r'\{\{c\d+::', '', q)
                 q_clean = _re.sub(r'\}\}', '', q_clean)
                 q_clean = q_clean.strip()
-                card_snippet = " ".join(q_clean.split()[:4]) if q_clean else "Cluster %d" % (i + 1)
+                card_snippet = " ".join(q_clean.split()[:3]) if q_clean else "Cluster %d" % (i + 1)
 
                 if deck_counts:
                     deck_label = max(deck_counts, key=deck_counts.get)
                     label = deck_label
                 else:
                     label = card_snippet
+                # Truncate label to max 3 words
+                label_words = label.split()
+                if len(label_words) > 3:
+                    label = " ".join(label_words[:3])
                 cluster_output.append({
                     "id": "cluster_%d" % i,
                     "label": label,
@@ -550,7 +554,7 @@ class SearchCardsThread(QThread):
                     q = best.get("question", "")
                     q = _re.sub(r'\{\{c\d+::', '', q)
                     q = _re.sub(r'\}\}', '', q).strip()
-                    co["label"] = " ".join(q.split()[:4]) or co["label"]
+                    co["label"] = " ".join(q.split()[:3]) or co["label"]
                 else:
                     seen_labels[co["label"]] = co
                     co["_snippet"] = card_snippet  # store for potential dedup
@@ -594,13 +598,6 @@ class SearchCardsThread(QThread):
                 }
             }))
 
-            # Trigger quick answer with found cards
-            try:
-                widget = self._widget_ref() if self._widget_ref else None
-                if widget and hasattr(widget, '_start_quick_answer'):
-                    widget._start_quick_answer(self.query, cards_data[:10], cluster_output)
-            except Exception:
-                pass
         except Exception as e:
             logger.exception("SearchCardsThread failed for query: %s", self.query)
             self.result_signal.emit(json.dumps({"type": "graph.searchCards", "data": {
@@ -2865,15 +2862,23 @@ class ChatbotWidget(QWidget):
         thread.start()
 
     def _on_search_cards_result(self, result_json):
-        """Handle SearchCardsThread result."""
+        """Handle SearchCardsThread result — runs on main thread via signal."""
         try:
             payload = json.loads(result_json)
             self._send_to_js(payload)
+            # Trigger quick answer from main thread (QThread must be created on main thread)
+            data = payload.get("data", {})
+            query = data.get("query", "")
+            cards = data.get("cards", [])[:10]
+            clusters = data.get("clusters", [])
+            if query and cards:
+                self._start_quick_answer(query, cards, clusters)
         except Exception:
             logger.exception("Failed to send search cards result")
 
     def _start_quick_answer(self, query, cards_data, clusters):
-        """Launch QuickAnswerThread after search completes."""
+        """Launch QuickAnswerThread after search completes (must be called on main thread)."""
+        logger.info("Starting quick answer for: %s (%d cards, %d clusters)", query, len(cards_data), len(clusters))
         cluster_info = {}
         for c in clusters:
             cluster_info[c["id"]] = [card.get("question", "")[:40] for card in c.get("cards", [])[:3]]

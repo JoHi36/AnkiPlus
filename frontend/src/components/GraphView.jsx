@@ -1,11 +1,8 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import ForceGraph3D from '3d-force-graph';
-import { Search } from 'lucide-react';
 import { executeAction } from '../actions';
 import KnowledgeHeatmap from './KnowledgeHeatmap';
 import ChatInput from './ChatInput';
-
-const MAX_W = 'var(--ds-content-width)';
 
 // Deck name → color mapping (consistent colors for same decks)
 const DECK_COLORS = ['#0A84FF','#30D158','#FF9F0A','#BF5AF2','#FF453A','#5AC8FA','#FFD60A','#AC8E68'];
@@ -22,7 +19,6 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
   const [searchResult, setSearchResult] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedCard, setSelectedCard] = useState(null);
-  const [searchActive, setSearchActive] = useState(false);
   const [answerText, setAnswerText] = useState(null);
 
   // Listen for search results and quick answers from backend
@@ -42,20 +38,7 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
     };
   }, []);
 
-  // Handle search submit from State A (centered search bar)
-  const handleSearch = useCallback(() => {
-    const query = searchQuery.trim();
-    if (!query) return;
-    setSearchActive(true);
-    setIsSearching(true);
-    setSearchResult(null);
-    setAnswerText(null);
-    setSelectedCard(null);
-    window.ankiBridge?.addMessage('searchCards', { query, topK: 25 });
-    window.ankiBridge?.addMessage('quickAnswer', { query });
-  }, [searchQuery]);
-
-  // Handle search from State B (ChatInput at bottom)
+  // Handle search from ChatInput
   const handleSearchWithQuery = useCallback((query) => {
     setSearchQuery(query);
     setIsSearching(true);
@@ -63,12 +46,10 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
     setAnswerText(null);
     setSelectedCard(null);
     window.ankiBridge?.addMessage('searchCards', { query: query.trim(), topK: 25 });
-    window.ankiBridge?.addMessage('quickAnswer', { query: query.trim() });
   }, []);
 
-  // Reset to State A
+  // Reset to heatmap state
   const handleReset = useCallback(() => {
-    setSearchActive(false);
     setSearchResult(null);
     setAnswerText(null);
     setSearchQuery('');
@@ -76,6 +57,14 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
     if (graphRef.current?._destructor) graphRef.current._destructor();
     graphRef.current = null;
   }, []);
+
+  const startStack = useCallback(() => {
+    if (!searchResult?.cards?.length) return;
+    window.ankiBridge?.addMessage('startTermStack', {
+      term: searchResult.query,
+      cardIds: JSON.stringify(searchResult.cards.map(c => Number(c.id))),
+    });
+  }, [searchResult]);
 
   // Build / rebuild graph when search results arrive
   useEffect(() => {
@@ -100,7 +89,6 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
 
     // Darker color palette (brightens on cluster selection)
     const DARK_COLORS = DECK_COLORS.map(c => {
-      // Darken by 40%
       const r = parseInt(c.slice(1,3),16), g = parseInt(c.slice(3,5),16), b = parseInt(c.slice(5,7),16);
       return `rgb(${Math.round(r*0.5)},${Math.round(g*0.5)},${Math.round(b*0.5)})`;
     });
@@ -141,7 +129,7 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
           links.push({ source: '__query__', target: bestCardId, value: 0.7, isBalloonString: true });
         }
 
-        // Intra-cluster edges: light gray, pull cards together
+        // Intra-cluster edges: pull cards together
         for (let i = 0; i < clusterCardIds.length; i++) {
           for (let j = i + 1; j < clusterCardIds.length; j++) {
             links.push({
@@ -170,19 +158,6 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       });
     }
 
-    // Inter-cluster links removed (no cluster nodes to connect)
-    // Cards of same cluster naturally group via force physics
-    if (false && searchResult.clusterLinks) {
-      searchResult.clusterLinks.forEach(cl => {
-        links.push({
-          source: cl.source,
-          target: cl.target,
-          value: cl.value * 0.5,  // thinner than cluster→card links
-          isInterCluster: true,
-        });
-      });
-    }
-
     // Destroy old graph
     if (graphRef.current?._destructor) graphRef.current._destructor();
 
@@ -202,7 +177,7 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       .nodeOpacity(1.0)
       .linkWidth(l => l.isIntraCluster ? 0.2 : l.isBalloonString ? 0.6 : 0.3)
       .linkOpacity(l => l.isIntraCluster ? 0.08 : l.isBalloonString ? 0.12 : 0.03)
-      .linkColor(() => 'rgba(180,180,190,0.12)')
+      .linkColor(() => 'rgba(150,150,160,0.10)')
       .onNodeClick(node => {
         if (!node || node.isQuery) return;
         setSelectedCard(node);
@@ -211,7 +186,7 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
           graph.nodeColor(n => {
             if (n.isQuery) return '#FFFFFF';
             if (n.clusterIndex === node.clusterIndex) return n.brightColor || n.color;
-            return n.color; // stays dark
+            return n.color;
           });
         }
         const dist = 40;
@@ -228,30 +203,25 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
       .d3VelocityDecay(0.25)
       .showNavInfo(false);
 
-    // Distance: query→card = relevance, intra-cluster = short (pulls together)
     graph.d3Force('link').distance(link => {
-      if (link.isIntraCluster) return 15; // pull cluster members close
+      if (link.isIntraCluster) return 15;
       const score = link.value || 0.5;
       return 30 + (1 - score) * 100;
     });
 
-    // Stronger center gravity to keep it compact
-    graph.d3Force('center', null); // remove default center force
-    graph.d3Force('charge').strength(-40); // gentler repulsion
+    graph.d3Force('center', null);
+    graph.d3Force('charge').strength(-40);
 
-    // Zoom to fit all nodes after settling
     setTimeout(() => {
       if (graphRef.current) graphRef.current.zoomToFit(1000, 80);
     }, 2000);
 
-    // Controls: rotate only, no pan
     if (graph.controls()) {
       graph.controls().autoRotate = true;
       graph.controls().autoRotateSpeed = 0.4;
       graph.controls().enablePan = false;
     }
 
-    // Resize observer
     const ro = new ResizeObserver(() => {
       if (containerRef.current && graphRef.current) {
         const { clientWidth, clientHeight } = containerRef.current;
@@ -267,12 +237,10 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
   }, [searchResult]);
 
   const hasResults = searchResult?.cards?.length > 0;
-  const cardIds = searchResult?.cards?.map(c => c.id) || [];
 
   // Compute cluster legend (falls back to deck breakdown if no clusters)
   const clusterLegend = useMemo(() => {
     if (!searchResult?.clusters?.length) {
-      // Fallback to deck breakdown
       if (!searchResult?.cards?.length) return [];
       const counts = {};
       const colors = {};
@@ -292,134 +260,61 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
     }));
   }, [searchResult]);
 
-  // Only render the 3D canvas when we actually have search results and search is active
-  const showGraph = searchActive && hasResults;
-
   return (
     <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
-      {/* 3D canvas — only mounted when search is active and results exist (saves GPU) */}
-      {showGraph && <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />}
+      {/* 3D canvas — only mounted when search results exist (saves GPU) */}
+      {hasResults && <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />}
 
-      {/* Header — logo + Deck-Liste toggle, always visible */}
-      <div style={{ position: 'relative', zIndex: 10, pointerEvents: 'none' }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          gap: 10, width: '100%', maxWidth: MAX_W,
-          margin: '0 auto', padding: '64px 20px 16px',
-          position: 'relative', pointerEvents: 'auto',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', pointerEvents: 'none' }}>
-            <span style={{
-              fontFamily: '-apple-system, "SF Pro Display", system-ui, sans-serif',
-              fontSize: 46, fontWeight: 700, letterSpacing: '-1.8px',
-              color: 'var(--ds-text-primary)', lineHeight: 1,
-            }}>Anki</span>
-            <span style={{
-              fontFamily: '-apple-system, "SF Pro Display", system-ui, sans-serif',
-              fontSize: 46, fontWeight: 300, letterSpacing: '-1px',
-              color: 'var(--ds-text-muted)', lineHeight: 1,
-            }}>.plus</span>
-          </div>
-          <span
-            style={{
-              fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
-              padding: '4px 9px', borderRadius: 7, alignSelf: 'center',
-              marginTop: 4, cursor: 'pointer', whiteSpace: 'nowrap',
-              pointerEvents: 'auto',
-              ...(isPremium
-                ? { background: 'var(--ds-accent-10)', border: '1px solid var(--ds-accent-20)', color: 'var(--ds-accent)' }
-                : { background: 'var(--ds-hover-tint)', border: '1px solid var(--ds-border-medium)', color: 'var(--ds-text-placeholder)' }),
-            }}
-            onClick={() => executeAction('settings.toggle')}
-          >
-            {isPremium ? 'Pro' : 'Free'}
-          </span>
-          {onToggleView && (
-            <button
-              onClick={onToggleView}
-              style={{
-                position: 'absolute', right: 20, bottom: 0,
-                background: 'var(--ds-hover-tint)',
-                border: '1px solid var(--ds-border)',
-                borderRadius: 8, padding: '6px 14px',
-                color: 'var(--ds-text-secondary)',
-                fontSize: 12, fontWeight: 500, cursor: 'pointer',
-                fontFamily: 'inherit',
-                transition: 'color 0.15s, background 0.15s',
-                pointerEvents: 'auto',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.color = 'var(--ds-text-primary)'; e.currentTarget.style.background = 'var(--ds-active-tint)'; }}
-              onMouseLeave={e => { e.currentTarget.style.color = 'var(--ds-text-secondary)'; e.currentTarget.style.background = 'var(--ds-hover-tint)'; }}
-            >
-              Deck-Liste
-            </button>
-          )}
-        </div>
+      {/* Top bar — minimal: toggle + Deck-Liste */}
+      <div style={{
+        position: 'relative', zIndex: 10, pointerEvents: 'none',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '12px 20px', maxWidth: 'var(--ds-content-width)', margin: '0 auto',
+        width: '100%',
+      }}>
+        {/* Left: placeholder for future Heatmap ↔ Stapel toggle */}
+        <div style={{ display: 'flex', gap: 4, pointerEvents: 'auto' }} />
 
-        {/* State A: Centered search bar — only when not search active */}
-        {!searchActive && (
-          <form
-            onSubmit={(e) => { e.preventDefault(); handleSearch(); }}
+        {/* Right: Deck-Liste button */}
+        {onToggleView && (
+          <button
+            onClick={onToggleView}
             style={{
-              width: '100%', maxWidth: MAX_W,
-              padding: '0 20px', margin: '0 auto',
+              background: 'var(--ds-hover-tint)',
+              border: '1px solid var(--ds-border)',
+              borderRadius: 8, padding: '6px 14px',
+              color: 'var(--ds-text-secondary)',
+              fontSize: 12, fontWeight: 500, cursor: 'pointer',
+              fontFamily: 'inherit',
+              transition: 'color 0.15s, background 0.15s',
               pointerEvents: 'auto',
             }}
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--ds-text-primary)'; e.currentTarget.style.background = 'var(--ds-active-tint)'; }}
+            onMouseLeave={e => { e.currentTarget.style.color = 'var(--ds-text-secondary)'; e.currentTarget.style.background = 'var(--ds-hover-tint)'; }}
           >
-            <div
-              className="ds-frosted"
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '12px 16px', borderRadius: 12,
-                border: '1px solid var(--ds-border-subtle)',
-              }}
-            >
-              <Search size={16} style={{ color: 'var(--ds-accent)', flexShrink: 0 }} />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Was willst du lernen?"
-                style={{
-                  flex: 1, background: 'transparent', border: 'none', outline: 'none',
-                  color: 'var(--ds-text-primary)', fontSize: 15,
-                  fontFamily: 'var(--ds-font-sans)',
-                }}
-              />
-              {isSearching && (
-                <div style={{
-                  width: 16, height: 16, borderRadius: '50%',
-                  border: '2px solid var(--ds-border-subtle)',
-                  borderTopColor: 'var(--ds-accent)',
-                  animation: 'spin 0.8s linear infinite',
-                }} />
-              )}
-              {!isSearching && <span style={{ color: 'var(--ds-text-placeholder)', fontSize: 12, fontWeight: 500 }}>&#9166;</span>}
-            </div>
-          </form>
+            Deck-Liste
+          </button>
         )}
       </div>
 
-      {/* State A: Heatmap — shown before any search when deck data is available */}
-      {!searchActive && !isSearching && !searchResult?.error && deckData?.roots?.length > 0 && (
+      {/* Heatmap — shown when no search results yet */}
+      {!hasResults && deckData?.roots?.length > 0 && (
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '160px 24px 48px',
+          padding: '50px 24px 80px',
           zIndex: 5, pointerEvents: 'auto',
           overflowY: 'auto',
         }}>
           <KnowledgeHeatmap
             deckData={deckData}
-            onStartStack={(deckId) => {
-              executeAction('deck.study', { deckId });
-            }}
+            onStartStack={(deckId) => executeAction('deck.study', { deckId })}
           />
         </div>
       )}
 
-      {/* State A: Empty state — no decks yet or loading */}
-      {!searchActive && !isSearching && !searchResult?.error && !deckData?.roots?.length && (
+      {/* Empty state — no decks yet */}
+      {!hasResults && !isSearching && !searchResult?.error && !deckData?.roots?.length && (
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -444,8 +339,8 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
         </div>
       )}
 
-      {/* State B: Cluster/Deck legend — right side (visible when search active + results) */}
-      {searchActive && hasResults && clusterLegend.length > 0 && (
+      {/* Cluster/Deck legend — right side (visible when search results exist) */}
+      {hasResults && clusterLegend.length > 0 && (
         <div style={{
           position: 'absolute', right: 20, top: '50%', transform: 'translateY(-50%)',
           display: 'flex', flexDirection: 'column', gap: 6,
@@ -495,54 +390,41 @@ export default function GraphView({ onToggleView, isPremium, deckData }) {
         </div>
       )}
 
-      {/* State B: ChatInput docked at bottom */}
-      {searchActive && (
-        <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0,
-          zIndex: 15, pointerEvents: 'auto',
-        }}>
+      {/* ChatInput — always docked at bottom */}
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0,
+        zIndex: 15, pointerEvents: 'auto',
+        display: 'flex', justifyContent: 'center',
+      }}>
+        <div style={{ width: '100%', maxWidth: 680 }}>
           <ChatInput
             onSend={(text) => {
-              if (text.trim()) {
-                setSearchQuery(text);
-                handleSearchWithQuery(text);
-              }
+              if (text.trim()) handleSearchWithQuery(text);
             }}
             isLoading={isSearching}
-            placeholder="Nächste Suche..."
+            placeholder="Was willst du lernen?"
             topSlot={answerText ? (
               <div style={{
-                padding: '8px 14px',
-                fontSize: 13,
-                color: 'var(--ds-text-primary)',
-                lineHeight: 1.5,
+                padding: '8px 14px', fontSize: 13,
+                color: 'var(--ds-text-primary)', lineHeight: 1.5,
                 borderBottom: '1px solid var(--ds-border-subtle)',
               }}>
                 {answerText}
               </div>
             ) : null}
             actionPrimary={{
-              label: searchResult?.totalFound ? `${searchResult.totalFound} Karten kreuzen` : '',
-              onClick: () => {
-                if (searchResult?.cards?.length) {
-                  window.ankiBridge?.addMessage('startTermStack', {
-                    term: searchResult.query,
-                    cardIds: JSON.stringify(searchResult.cards.map(c => Number(c.id))),
-                  });
-                }
-              },
-              disabled: !searchResult?.totalFound,
+              label: hasResults ? `${searchResult.totalFound} Karten kreuzen` : '',
+              onClick: startStack,
+              disabled: !hasResults,
             }}
             actionSecondary={{
               label: '',
-              shortcut: 'Esc',
+              shortcut: hasResults ? 'Esc' : '',
               onClick: handleReset,
             }}
           />
         </div>
-      )}
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
     </div>
   );
 }
