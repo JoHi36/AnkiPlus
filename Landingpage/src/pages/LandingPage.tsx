@@ -8,7 +8,7 @@ import { Button } from '@shared/components/Button';
 import { PricingComparisonTable } from '../components/PricingComparisonTable';
 import { PricingFAQ } from '../components/PricingFAQ';
 import { PricingGrid } from '../components/PricingGrid';
-import { InteractivePlayground } from '../components/demo/InteractivePlayground';
+import { DemoShell } from '../components/demo/DemoShell';
 import { TestimonialList } from '../components/TestimonialList';
 import { ParticlePlus } from '../components/ParticlePlus';
 import { OldAnkiMock } from '../components/demo/OldAnkiMock';
@@ -145,7 +145,7 @@ export function LandingPage() {
                 willChange: 'opacity',
               }}
             >
-              <InteractivePlayground />
+              <DemoShell />
             </div>
 
           </div>
