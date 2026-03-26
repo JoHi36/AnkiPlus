@@ -55,6 +55,32 @@ const GraphView = React.lazy(() => import('./components/GraphView'));
 const EMPTY_STEPS = [];
 const EMPTY_CITATIONS = {};
 
+/* ── module-level style constants ── */
+const SETTINGS_PANEL_STYLE = {
+  position: 'fixed', top: 0, left: 0, zIndex: 70,
+  width: 'var(--ds-settings-width)', height: '100vh',
+  background: 'var(--ds-bg-deep)',
+  borderRight: '1px solid var(--ds-border-subtle)',
+  display: 'flex', flexDirection: 'column', overflow: 'hidden',
+};
+const FREECHAT_MESSAGES_AREA = {
+  flex: 1, overflowY: 'auto', padding: '20px 16px 120px',
+  maxWidth: 'var(--ds-content-width)', width: '100%', margin: '0 auto',
+};
+const FREECHAT_EMPTY_STATE = {
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  height: '100%', color: 'var(--ds-text-muted)', fontSize: 13,
+};
+const CONTENT_WIDTH_CENTERED = { maxWidth: 'var(--ds-content-width)', margin: '0 auto' };
+const FLEX_COL_FILL = { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' };
+const FALLBACK_VIEW_STYLE = { padding: 24, color: 'var(--ds-text-secondary)' };
+const DECK_BROWSER_INNER = { position: 'relative', flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' };
+const FADE_MASK_STYLE = {
+  position: 'absolute', bottom: -56, left: 0, right: 0,
+  height: 56, pointerEvents: 'none', zIndex: 10,
+  background: 'linear-gradient(to bottom, var(--ds-bg-deep) 0%, var(--ds-bg-deep) 30%, transparent 100%)',
+};
+
 // Map domain.past event names to useFreeChat's expected names (for fullscreen FreeChat)
 const EVENT_NAME_MAP = {
   'chat.loadingChanged': 'loading',
@@ -2301,11 +2327,7 @@ function AppInner() {
   // Settings panel — rendered as fixed overlay, visible on ALL views
   const settingsPanel = (
     <div style={{
-      position: 'fixed', top: 0, left: 0, zIndex: 70,
-      width: 'var(--ds-settings-width)', height: '100vh',
-      background: 'var(--ds-bg-deep)',
-      borderRight: '1px solid var(--ds-border-subtle)',
-      display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      ...SETTINGS_PANEL_STYLE,
       transform: settingsOpen ? 'translateX(0)' : 'translateX(-100%)',
       pointerEvents: settingsOpen ? 'auto' : 'none',
       transition: 'transform 0.35s cubic-bezier(0.25, 1, 0.5, 1)',
@@ -2359,14 +2381,14 @@ function AppInner() {
         {mascotElement}
         {persistentTopBar}
 
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={FLEX_COL_FILL}>
           {activeView === 'deckBrowser' && (
             viewMode === 'graph' ? (
               <React.Suspense fallback={<div style={{ flex: 1 }} />}>
                 <GraphView onToggleView={() => setViewMode('decks')} isPremium={isPremium} deckData={deckBrowserData} />
               </React.Suspense>
             ) : (
-              <ComponentErrorBoundary fallback={<div style={{ padding: 24, color: 'var(--ds-text-secondary)' }}>View failed to render. Try refreshing.</div>}>
+              <ComponentErrorBoundary fallback={<div style={FALLBACK_VIEW_STYLE}>View failed to render. Try refreshing.</div>}>
                 <DeckBrowserView
                   data={deckBrowserData}
                   isPremium={isPremium}
@@ -2376,7 +2398,7 @@ function AppInner() {
             )
           )}
           {activeView === 'overview' && (
-            <ComponentErrorBoundary fallback={<div style={{ padding: 24, color: 'var(--ds-text-secondary)' }}>View failed to render. Try refreshing.</div>}>
+            <ComponentErrorBoundary fallback={<div style={FALLBACK_VIEW_STYLE}>View failed to render. Try refreshing.</div>}>
               <OverviewView
                 data={overviewData}
                 onStudy={() => executeAction('deck.study', { deckId: overviewData?.deckId })}
@@ -2386,7 +2408,7 @@ function AppInner() {
             </ComponentErrorBoundary>
           )}
           {activeView === 'statistik' && (
-            <ComponentErrorBoundary fallback={<div style={{ padding: 24, color: 'var(--ds-text-secondary)' }}>View failed to render. Try refreshing.</div>}>
+            <ComponentErrorBoundary fallback={<div style={FALLBACK_VIEW_STYLE}>View failed to render. Try refreshing.</div>}>
               <StatistikView />
             </ComponentErrorBoundary>
           )}
@@ -2398,15 +2420,9 @@ function AppInner() {
               transition: 'opacity 350ms cubic-bezier(0.25, 0.1, 0.25, 1) 50ms, transform 350ms cubic-bezier(0.25, 0.1, 0.25, 1) 50ms',
             }}>
               {/* Messages area */}
-              <div style={{
-                flex: 1, overflowY: 'auto', padding: '20px 16px 120px',
-                maxWidth: 'var(--ds-content-width)', width: '100%', margin: '0 auto',
-              }}>
+              <div style={FREECHAT_MESSAGES_AREA}>
                 {freeChatHook.messages.length === 0 && !freeChatHook.isLoading && !freeChatHook.streamingMessage && (
-                  <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    height: '100%', color: 'var(--ds-text-muted)', fontSize: 13,
-                  }}>
+                  <div style={FREECHAT_EMPTY_STATE}>
                     Stelle eine Frage...
                   </div>
                 )}
@@ -2546,7 +2562,7 @@ function AppInner() {
         <div className="ds-canvas-surface" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
           {persistentTopBar}
           <div key="review-content" className="view-enter" style={{ flex: 1, overflow: 'hidden' }}>
-            <ComponentErrorBoundary fallback={<div style={{ padding: 24, color: 'var(--ds-text-secondary)' }}>View failed to render. Try refreshing.</div>}>
+            <ComponentErrorBoundary fallback={<div style={FALLBACK_VIEW_STYLE}>View failed to render. Try refreshing.</div>}>
               <ReviewerView cardData={cardData} reviewer={reviewer} />
             </ComponentErrorBoundary>
           </div>
@@ -2594,11 +2610,7 @@ function AppInner() {
         {activeView === 'chat' && (
         <div
           aria-hidden="true"
-          style={{
-            position: 'absolute', bottom: -56, left: 0, right: 0,
-            height: 56, pointerEvents: 'none', zIndex: 10,
-            background: 'linear-gradient(to bottom, var(--ds-bg-deep) 0%, var(--ds-bg-deep) 30%, transparent 100%)',
-          }}
+          style={FADE_MASK_STYLE}
         />
         )}
       </div>
@@ -2608,7 +2620,7 @@ function AppInner() {
       <main key={activeView === 'review' ? 'main-review' : `main-${activeView}`} className={`flex-1 overflow-hidden relative flex flex-col min-h-0 ${activeView !== 'review' ? 'view-enter' : ''}`} style={{ height: '100%' }}>
         {showSessionOverview ? (
           /* Deck Browser — flex column container for in-place chat transformation */
-          <div style={{ position: 'relative', flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div style={DECK_BROWSER_INNER}>
             <DeckBrowser
               bridge={bridge}
               sessions={sessionContext.sessions}
@@ -2651,7 +2663,7 @@ function AppInner() {
               >
 
                 {chatHook.messages.length === 0 && !chatHook.isLoading && !chatHook.streamingMessage ? (
-            <ComponentErrorBoundary fallback={<div style={{ padding: 24, color: 'var(--ds-text-secondary)' }}>View failed to render. Try refreshing.</div>}>
+            <ComponentErrorBoundary fallback={<div style={FALLBACK_VIEW_STYLE}>View failed to render. Try refreshing.</div>}>
               <InsightsDashboard
                 insights={insightsHook.insights}
                 cardStats={cardContextHook.cardContext?.stats || {}}
@@ -2872,7 +2884,7 @@ function AppInner() {
                             return activeAgentName || 'tutor';
                           })();
                           return (
-                            <div className="w-full flex-none mb-2" style={{ maxWidth: 'var(--ds-content-width)', margin: '0 auto' }}>
+                            <div className="w-full flex-none mb-2" style={CONTENT_WIDTH_CENTERED}>
                               {/* Router ReasoningStream (before agent) */}
                               {rSteps.length > 0 && (
                                 <ReasoningStream
@@ -2911,7 +2923,7 @@ function AppInner() {
                           typeof nextMsg.text === 'string' &&
                           nextMsg.text
                         ) && (
-                          <div className="w-full flex-none" style={{ maxWidth: 'var(--ds-content-width)', margin: '0 auto' }}>
+                          <div className="w-full flex-none" style={CONTENT_WIDTH_CENTERED}>
                             <StreamingChatMessage
                               message={chatHook.streamingMessage || ''}
                               isStreaming={chatHook.isLoading}
