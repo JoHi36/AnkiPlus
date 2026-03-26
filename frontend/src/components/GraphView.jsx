@@ -124,6 +124,30 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
           }
         }
       });
+
+      // Inter-cluster links — similar clusters attract each other for spatial proximity
+      const clusterLinks = searchResult.clusterLinks || [];
+      const bestCards = {}; // cluster_id → best card id
+      clusters.forEach((cluster, ci) => {
+        let best = null;
+        let bestScore = -1;
+        cluster.cards.forEach(c => {
+          if ((c.score || 0) > bestScore) { bestScore = c.score || 0; best = c.id; }
+        });
+        if (best) bestCards[`cluster_${ci}`] = best;
+      });
+      clusterLinks.forEach(cl => {
+        const srcCard = bestCards[cl.source];
+        const tgtCard = bestCards[cl.target];
+        if (srcCard && tgtCard) {
+          links.push({
+            source: srcCard,
+            target: tgtCard,
+            value: cl.value || 0.3,
+            isInterCluster: true,
+          });
+        }
+      });
     } else {
       searchResult.cards.forEach(card => {
         nodes.push({
@@ -157,8 +181,8 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
         return `${cluster}${n.label}\n${n.deck}`;
       })
       .nodeOpacity(1.0)
-      .linkWidth(l => l.isIntraCluster ? 0.15 : l.isBalloonString ? 0.3 : 0.15)
-      .linkOpacity(l => l.isIntraCluster ? 0.04 : l.isBalloonString ? 0.06 : 0.02)
+      .linkWidth(l => l.isInterCluster ? 0.1 : l.isIntraCluster ? 0.15 : l.isBalloonString ? 0.3 : 0.15)
+      .linkOpacity(l => l.isInterCluster ? 0.03 : l.isIntraCluster ? 0.04 : l.isBalloonString ? 0.06 : 0.02)
       .linkColor(() => '#3A3A3C')  // WebGL link — CSS vars not supported by 3d-force-graph
       .onNodeClick(node => {
         if (!node || node.isQuery) return;
@@ -184,6 +208,8 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
 
     graph.d3Force('link').distance(link => {
       if (link.isIntraCluster) return 15;
+      // Inter-cluster: closer = more similar (high value → shorter distance)
+      if (link.isInterCluster) return 40 + (1 - (link.value || 0.3)) * 80;
       const score = link.value || 0.5;
       return 30 + (1 - score) * 100;
     });
@@ -290,37 +316,6 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
       );
     }
   }, [selectedClusterId]);
-
-  // Sub-cluster coloring — when sub-clusters arrive, color nodes by sub-cluster
-  useEffect(() => {
-    if (!graphRef.current || !subClusters?.length || !selectedClusterId) return;
-    const graph = graphRef.current;
-    const { nodes } = graph.graphData();
-    const idx = parseInt(selectedClusterId.replace('cluster_', ''), 10);
-    const parentColor = CLUSTER_COLORS[idx % CLUSTER_COLORS.length];
-    const parentBright = CLUSTER_BRIGHT[idx % CLUSTER_BRIGHT.length];
-
-    // Build card → sub-cluster index mapping
-    const cardToSub = {};
-    subClusters.forEach((sub, si) => {
-      sub.cards.forEach(c => { cardToSub[String(c.id)] = si; });
-    });
-
-    // Sub-cluster color shades (vary hue slightly from parent)
-    const subColors = subClusters.map((_, si) => {
-      // Rotate hue by spreading sub-clusters across a narrow range
-      const baseIdx = (idx * CLUSTER_COLORS.length + si + 1) % CLUSTER_COLORS.length;
-      return CLUSTER_BRIGHT[baseIdx % CLUSTER_BRIGHT.length];
-    });
-
-    graph.nodeColor(n => {
-      if (n.isQuery) return '#FFFFFF';
-      if (n.clusterIndex !== idx) return n.color; // dim non-selected
-      const si = cardToSub[String(n.id)];
-      if (si !== undefined) return subColors[si];
-      return parentBright;
-    });
-  }, [subClusters, selectedClusterId]);
 
   // Start stack — uses selected cluster cards or full result
   const startStack = useCallback(() => {
