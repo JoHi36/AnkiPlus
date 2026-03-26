@@ -1,3 +1,6 @@
+/* Import design system for .ds-* component classes used by frontend components */
+@import '../../shared/styles/design-system.css';
+
 /* CSS Variables - Landing Page Theme */
 :root {
   /* Page bg is darker than app, so app surfaces "pop" */
