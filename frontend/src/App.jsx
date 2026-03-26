@@ -2957,6 +2957,19 @@ function AppInner() {
                           // 'done' status means finalize() kept the message alive for smooth
                           // transition — treat it as saved (not live) for rendering purposes.
                           const isLive = !!chatHook.currentMessage && chatHook.currentMessage.status !== 'done';
+
+                          // For live v2 messages, read pipeline steps from the reasoning store
+                          // (cell.pipelineSteps was removed — store is the single source of truth)
+                          let livePipelineSteps = msg.agentCells?.[0]?.pipelineSteps || msg.pipeline_data || [];
+                          if (isLive && livePipelineSteps.length === 0) {
+                            const allSteps = [];
+                            for (const [sid, stream] of Object.entries(reasoningState.streams)) {
+                              if (stream.phase === 'complete') continue;
+                              allSteps.push(...stream.steps);
+                            }
+                            livePipelineSteps = allSteps;
+                          }
+
                           return (
                             <div className="w-full flex-none">
                               <ChatMessage
@@ -2968,7 +2981,7 @@ function AppInner() {
                                 status={isLive ? msg.status : 'done'}
                                 pipelineGeneration={chatHook.pipelineGenerationV2}
                                 citations={msg.agentCells?.[0]?.citations || msg.citations || {}}
-                                pipelineSteps={msg.agentCells?.[0]?.pipelineSteps || msg.pipeline_data || []}
+                                pipelineSteps={livePipelineSteps}
                                 webSources={msg.webSources || null}
                                 bridge={bridge}
                                 isStreaming={isLive}
