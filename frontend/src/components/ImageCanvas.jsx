@@ -586,7 +586,7 @@ export default function ImageCanvas({
       ...CANVAS_STYLE,
       overflowY: isLightboxOpen ? 'hidden' : 'auto',
     }}>
-      <div style={CANVAS_INNER}>
+      <div style={{ ...CANVAS_INNER, display: isLightboxOpen ? 'none' : 'block' }}>
         {deckGroups.map(group => {
           const rows = chunkIntoRows(group.images, IMAGES_PER_ROW);
           return (
