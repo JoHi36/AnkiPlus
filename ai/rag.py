@@ -72,7 +72,10 @@ def extract_card_keywords(context):
 
 
 def is_standalone_question(user_message, context):
-    """Detect if a question is about a DIFFERENT topic than the current card.
+    """DEPRECATED: Router's resolved_intent handles context resolution now.
+    Kept for backwards compatibility during migration.
+
+    Detect if a question is about a DIFFERENT topic than the current card.
 
     Logic is inverted: assume context-dependent by default when a card is open.
     Only return True (standalone) if the question contains domain-specific words
@@ -126,7 +129,10 @@ def is_standalone_question(user_message, context):
 
 
 def fix_router_queries(router_result, user_message, context):
-    """Post-process router result: if question is context-dependent but queries don't contain card keywords, fix them."""
+    """DEPRECATED: KG enrichment (ai/kg_enrichment.py) handles query quality now.
+    Kept for backwards compatibility during migration.
+
+    Post-process router result: if question is context-dependent but queries don't contain card keywords, fix them."""
     logger.debug("_fix_router_queries: router_result=%s, context=%s, search_needed=%s", bool(router_result), bool(context), router_result.get('search_needed') if router_result else None)
     if not router_result or not context:
         logger.debug("_fix_router_queries: Skipping (no router_result or no context)")
@@ -187,9 +193,8 @@ def fix_router_queries(router_result, user_message, context):
 
 
 def rag_router(user_message, context=None, config=None, emit_step=None):
-    """DEPRECATED: Use unified_route() in router.py instead.
-    Kept as fallback for Level 1/2 routing (lock/heuristic) where search
-    strategy is not included in the routing result.
+    """DEPRECATED: Replaced by Router (ai/router.py) + KG Enrichment (ai/kg_enrichment.py).
+    Kept as fallback. Will be removed in future version.
 
     Stage 1: Router - Analysiert die Anfrage und entscheidet ob und wie gesucht werden soll.
 
