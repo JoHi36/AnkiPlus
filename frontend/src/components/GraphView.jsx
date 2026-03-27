@@ -617,6 +617,7 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
           <ImageCanvas
             searchResult={searchResult}
             clusterLabels={clusterLabels}
+            kgSubgraph={kgSubgraph}
             onSelectionChange={setImageSelectedCardIds}
           />
         )}
@@ -688,7 +689,6 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
             }}>
               <DeckSearchBar
                 onSubmit={(text) => { if (text.trim()) search(text); }}
-                onOpenEmpty={() => {}}
               />
             </div>
 

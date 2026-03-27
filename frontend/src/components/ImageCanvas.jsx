@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 const CANVAS_STYLE = {
   flex: 1,
   overflowY: 'auto',
-  padding: '72px 20px 20px',  // top padding clears TopBar header
+  padding: '72px 16px 16px',
   background: 'var(--ds-bg-deep)',
   scrollbarWidth: 'none',
   display: 'flex',
@@ -13,84 +13,54 @@ const CANVAS_STYLE = {
 };
 
 const DECK_HEADER_STYLE = {
-  display: 'flex',
-  alignItems: 'baseline',
-  gap: 6,
-  marginBottom: 8,
-  paddingTop: 8,
-};
-
-const DECK_LABEL_STYLE = {
   fontSize: 11,
   fontWeight: 600,
   color: 'var(--ds-text-tertiary)',
-  letterSpacing: '0.02em',
+  marginBottom: 8,
+  paddingLeft: 2,
 };
 
 const DECK_COUNT_STYLE = {
-  fontSize: 10,
+  fontWeight: 400,
   color: 'var(--ds-text-muted)',
+  marginLeft: 4,
 };
 
-const GRID_STYLE = {
+const GRID_ROW_STYLE = {
   display: 'flex',
-  flexWrap: 'wrap',
-  gap: 6,
+  gap: 4,
+  marginBottom: 4,
 };
 
-const TILE_BASE = {
-  position: 'relative',
-  cursor: 'pointer',
+const TILE_STYLE = {
+  height: 140,
+  flex: 1,
+  minWidth: 100,
   borderRadius: 8,
   overflow: 'hidden',
-  transition: 'all 0.25s ease',
-  flexShrink: 0,
+  cursor: 'pointer',
+  position: 'relative',
+  transition: 'transform 0.15s ease, box-shadow 0.2s ease',
+  border: '1px solid var(--ds-border-subtle)',
 };
 
-const THUMB_IMG = {
-  display: 'block',
-  height: 80,
-  width: 'auto',
-  minWidth: 60,
-  maxWidth: 160,
+const TILE_IMG_STYLE = {
+  width: '100%',
+  height: '100%',
   objectFit: 'cover',
-};
-
-const EXPANDED_IMG = {
   display: 'block',
-  maxHeight: 320,
-  maxWidth: '100%',
-  width: 'auto',
-  objectFit: 'contain',
 };
 
 const BADGE_STYLE = {
   position: 'absolute',
+  bottom: 4,
+  right: 4,
   background: 'var(--ds-bg-overlay)',
   backdropFilter: 'blur(4px)',
   borderRadius: 4,
   padding: '1px 5px',
   fontSize: 8,
   color: 'var(--ds-text-tertiary)',
-};
-
-const DECK_BADGE_STYLE = { ...BADGE_STYLE, top: 4, left: 4 };
-const MULTI_BADGE_STYLE = { ...BADGE_STYLE, bottom: 4, right: 4 };
-
-const CHECK_STYLE = {
-  position: 'absolute',
-  top: -3,
-  right: -3,
-  width: 16,
-  height: 16,
-  background: 'var(--ds-accent)',
-  borderRadius: '50%',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  fontSize: 9,
-  color: 'var(--ds-bg-deep)',
-  zIndex: 2,
 };
 
 const EMPTY_STYLE = {
@@ -102,131 +72,359 @@ const EMPTY_STYLE = {
   fontSize: 13,
 };
 
-const SKELETON_STYLE = {
-  height: 80,
-  borderRadius: 8,
-  background: 'var(--ds-hover-tint)',
-  animation: 'pulse 1.5s ease-in-out infinite',
+const SKELETON_ROW = {
+  display: 'flex',
+  gap: 4,
+  marginBottom: 4,
 };
 
-const EXPANDED_CONTAINER = {
-  width: '100%',
-  borderRadius: 10,
-  border: '2px solid var(--ds-accent)',
-  boxShadow: '0 0 0 1px var(--ds-accent-10)',
-  overflow: 'hidden',
-  position: 'relative',
-  background: 'var(--ds-bg-canvas)',
+// --- Lightbox styles ---
+
+const LB_OVERLAY = {
+  position: 'fixed',
+  inset: 0,
+  background: 'rgba(0,0,0,0.88)',
+  backdropFilter: 'blur(16px)',
+  zIndex: 100,
+  display: 'flex',
+  flexDirection: 'column',
+  transition: 'opacity 0.25s ease',
+};
+
+const LB_HEADER = {
+  flexShrink: 0,
+  padding: '72px 56px 10px', // top padding for transparent app header
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+};
+
+const LB_BREADCRUMB = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  fontSize: 12,
+};
+
+const LB_SOURCE = {
+  fontSize: 11,
+  color: 'var(--ds-accent)',
+  opacity: 0.7,
+  cursor: 'pointer',
+  textDecoration: 'none',
+  transition: 'opacity 0.15s',
+};
+
+const LB_CENTER = {
+  flex: 1,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  padding: 8,
-  cursor: 'pointer',
+  position: 'relative',
+  padding: '0 60px',
+  minHeight: 0,
 };
 
-const EXPANDED_QUESTION = {
+const LB_IMAGE_BOX = {
+  width: '88vw',
+  maxWidth: 950,
+  height: '100%',
+  maxHeight: '74vh',
+  borderRadius: 12,
+  overflow: 'hidden',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  position: 'relative',
+  background: 'var(--ds-bg-canvas)',
+};
+
+const LB_IMG = {
+  maxWidth: '100%',
+  maxHeight: '100%',
+  objectFit: 'contain',
+};
+
+const LB_COUNTER = {
+  position: 'absolute',
+  bottom: 10,
+  right: 10,
   fontSize: 11,
-  color: 'var(--ds-text-secondary)',
-  padding: '6px 8px',
-  lineHeight: 1.4,
+  color: 'var(--ds-text-muted)',
+  background: 'var(--ds-bg-overlay)',
+  padding: '2px 8px',
+  borderRadius: 5,
 };
 
-// --- Group images by deck ---
+const LB_NAV = {
+  position: 'absolute',
+  top: '50%',
+  transform: 'translateY(-50%)',
+  width: 40,
+  height: 40,
+  borderRadius: '50%',
+  background: 'var(--ds-hover-tint)',
+  backdropFilter: 'blur(8px)',
+  border: 'none',
+  color: 'var(--ds-text-tertiary)',
+  fontSize: 18,
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  transition: 'background 0.15s, color 0.15s',
+};
+
+const LB_FILMSTRIP_WRAP = {
+  flexShrink: 0,
+  padding: '12px 40px 22px',
+  display: 'flex',
+  justifyContent: 'center',
+};
+
+const LB_FILMSTRIP = {
+  display: 'flex',
+  gap: 6,
+  overflowX: 'auto',
+  scrollbarWidth: 'none',
+  maxWidth: '88vw',
+  padding: 4,
+};
+
+const LB_THUMB_BASE = {
+  width: 96,
+  height: 72,
+  borderRadius: 8,
+  overflow: 'hidden',
+  cursor: 'pointer',
+  flexShrink: 0,
+  transition: 'border-color 0.2s ease, transform 0.15s ease, opacity 0.2s ease',
+  border: '2px solid transparent',
+};
+
+const LB_THUMB_IMG = {
+  width: '100%',
+  height: '100%',
+  objectFit: 'cover',
+  display: 'block',
+};
+
+// --- Helpers ---
+
+const IMAGES_PER_ROW = 4;
+
+function chunkIntoRows(images, perRow) {
+  const rows = [];
+  for (let i = 0; i < images.length; i += perRow) {
+    rows.push(images.slice(i, i + perRow));
+  }
+  return rows;
+}
 
 function groupByDeck(images) {
   const groups = {};
   images.forEach(img => {
-    // Use the first card's deck as the group key
     const firstCardId = img.cardIds[0];
     const deck = img.decks?.[String(firstCardId)] || 'Sonstige';
     if (!groups[deck]) groups[deck] = { deck, images: [] };
     groups[deck].images.push(img);
   });
-  // Sort by image count descending
-  return Object.values(groups).sort((a, b) => b.images.length - a.images.length);
+  return Object.values(groups);
+}
+
+function sortDecksByKgRelevance(deckGroups, kgSubgraph) {
+  if (!kgSubgraph?.nodes?.length) {
+    return deckGroups.sort((a, b) => b.images.length - a.images.length);
+  }
+  // Count KG terms per deck
+  const termCountByDeck = {};
+  kgSubgraph.nodes.forEach(node => {
+    const deck = node.deckName || '';
+    // Match by last segment (short deck name)
+    const shortDeck = deck.split('::').pop();
+    termCountByDeck[shortDeck] = (termCountByDeck[shortDeck] || 0) + (node.subsetCount || 1);
+  });
+
+  return deckGroups.sort((a, b) => {
+    const aScore = termCountByDeck[a.deck] || 0;
+    const bScore = termCountByDeck[b.deck] || 0;
+    if (bScore !== aScore) return bScore - aScore;
+    return b.images.length - a.images.length;
+  });
+}
+
+function getClusterForImage(image, searchResult, clusterLabels) {
+  const clusters = searchResult?.clusters || [];
+  for (let ci = 0; ci < clusters.length; ci++) {
+    const ids = new Set(clusters[ci].cards.map(c => Number(c.id)));
+    if (image.cardIds.some(id => ids.has(Number(id)))) {
+      const key = `cluster_${ci}`;
+      return clusterLabels?.[key] || clusters[ci]?.label || '';
+    }
+  }
+  return '';
 }
 
 // --- ImageTile (memoized) ---
 
-const ImageTile = React.memo(function ImageTile({ image, isExpanded, isMultiSelected, isOtherExpanded, onClick }) {
-  const firstCardId = image.cardIds[0];
-  const question = image.questions?.[String(firstCardId)] || '';
-  const deck = image.decks?.[String(firstCardId)] || '';
+const ImageTile = React.memo(function ImageTile({ image, isSelected, onClick }) {
   const multiCount = image.cardIds.length;
-
-  // Expanded view — large image with question
-  if (isExpanded) {
-    return (
-      <div style={{ width: '100%', marginBottom: 4 }}>
-        <div
-          style={EXPANDED_CONTAINER}
-          onClick={onClick}
-        >
-          <img src={image.src} alt={question} style={EXPANDED_IMG} loading="lazy" />
-          {multiCount > 1 && <div style={MULTI_BADGE_STYLE}>{multiCount} Karten</div>}
-          <div style={CHECK_STYLE}>✓</div>
-        </div>
-        {question && <div style={EXPANDED_QUESTION}>{question}</div>}
-      </div>
-    );
-  }
-
-  // Thumbnail — shrinks when another is expanded
-  const shrunk = isOtherExpanded;
 
   return (
     <div
       style={{
-        ...TILE_BASE,
-        border: isMultiSelected
-          ? '2px solid var(--ds-accent)'
-          : '1px solid var(--ds-border-subtle)',
-        boxShadow: isMultiSelected ? '0 0 0 1px var(--ds-accent-10)' : 'none',
-        opacity: shrunk ? 0.6 : 1,
-        transform: shrunk ? 'scale(0.92)' : 'scale(1)',
+        ...TILE_STYLE,
+        boxShadow: isSelected
+          ? '0 0 0 2px var(--ds-accent), 0 0 16px var(--ds-accent-10)'
+          : 'none',
       }}
       onClick={onClick}
-      onMouseEnter={e => { if (!shrunk) e.currentTarget.style.transform = 'scale(1.03)'; }}
-      onMouseLeave={e => { e.currentTarget.style.transform = shrunk ? 'scale(0.92)' : 'scale(1)'; }}
-      title={question}
+      onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.02)'; e.currentTarget.style.zIndex = '1'; }}
+      onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.zIndex = '0'; }}
     >
-      <img src={image.src} alt={question} style={THUMB_IMG} loading="lazy" />
-      {deck && <div style={DECK_BADGE_STYLE}>{deck}</div>}
-      {multiCount > 1 && <div style={MULTI_BADGE_STYLE}>{multiCount} Karten</div>}
-      {isMultiSelected && <div style={CHECK_STYLE}>✓</div>}
+      <img src={image.src} alt="" style={TILE_IMG_STYLE} loading="lazy" />
+      {multiCount > 1 && <div style={BADGE_STYLE}>{multiCount} Karten</div>}
     </div>
   );
 });
+
+// --- Lightbox ---
+
+function Lightbox({ images, currentIdx, clusterLabel, deckName, onNav, onClose }) {
+  const image = images[currentIdx];
+  if (!image) return null;
+
+  const filmstripRef = React.useRef(null);
+
+  // Scroll active thumb into view
+  useEffect(() => {
+    const fs = filmstripRef.current;
+    if (!fs) return;
+    const active = fs.children[currentIdx];
+    if (active) active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }, [currentIdx]);
+
+  return (
+    <div
+      style={{ ...LB_OVERLAY, opacity: 1, pointerEvents: 'auto' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      {/* Header: Deck › Perspektive | Quelle */}
+      <div style={LB_HEADER}>
+        <div style={LB_BREADCRUMB}>
+          <span style={{ color: 'var(--ds-text-secondary)', fontWeight: 500 }}>{deckName}</span>
+          {clusterLabel && (
+            <>
+              <span style={{ color: 'var(--ds-text-muted)', fontSize: 10 }}>›</span>
+              <span style={{ color: 'var(--ds-text-tertiary)' }}>{clusterLabel}</span>
+            </>
+          )}
+        </div>
+        <span
+          style={LB_SOURCE}
+          onMouseEnter={e => { e.currentTarget.style.opacity = '1'; }}
+          onMouseLeave={e => { e.currentTarget.style.opacity = '0.7'; }}
+        >
+          Quelle aufrufen
+        </span>
+      </div>
+
+      {/* Big image */}
+      <div style={LB_CENTER}>
+        <button
+          style={{ ...LB_NAV, left: 10 }}
+          onClick={(e) => { e.stopPropagation(); onNav(-1); }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'var(--ds-active-tint)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'var(--ds-hover-tint)'; }}
+        >
+          ‹
+        </button>
+
+        <div style={LB_IMAGE_BOX}>
+          <img src={image.src} alt="" style={LB_IMG} />
+          <div style={LB_COUNTER}>{currentIdx + 1} / {images.length}</div>
+        </div>
+
+        <button
+          style={{ ...LB_NAV, right: 10 }}
+          onClick={(e) => { e.stopPropagation(); onNav(1); }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'var(--ds-active-tint)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'var(--ds-hover-tint)'; }}
+        >
+          ›
+        </button>
+      </div>
+
+      {/* Filmstrip */}
+      <div style={LB_FILMSTRIP_WRAP}>
+        <div style={LB_FILMSTRIP} ref={filmstripRef}>
+          {images.map((img, i) => (
+            <div
+              key={img.filename}
+              style={{
+                ...LB_THUMB_BASE,
+                borderColor: i === currentIdx ? 'var(--ds-accent)' : 'transparent',
+                opacity: i === currentIdx ? 1 : 0.5,
+                transform: i === currentIdx ? 'scale(1.04)' : 'scale(1)',
+              }}
+              onClick={(e) => { e.stopPropagation(); onNav(i - currentIdx); }}
+              onMouseEnter={e => {
+                if (i !== currentIdx) {
+                  e.currentTarget.style.opacity = '0.8';
+                  e.currentTarget.style.transform = 'scale(1.06)';
+                }
+              }}
+              onMouseLeave={e => {
+                if (i !== currentIdx) {
+                  e.currentTarget.style.opacity = '0.5';
+                  e.currentTarget.style.transform = 'scale(1)';
+                }
+              }}
+            >
+              <img src={img.src} alt="" style={LB_THUMB_IMG} loading="lazy" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // --- Main component ---
 
 export default function ImageCanvas({
   searchResult,
   clusterLabels,
+  kgSubgraph,
   onSelectionChange,
 }) {
   const [images, setImages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [expandedImage, setExpandedImage] = useState(null);     // single focused image filename
-  const [multiSelected, setMultiSelected] = useState(new Set()); // cmd+click multi-select
+  const [lightboxIdx, setLightboxIdx] = useState(null); // null = closed, number = open at index
+
+  // Flat list of all images for lightbox navigation
+  const allImages = useMemo(() => {
+    if (!images.length) return [];
+    const groups = groupByDeck(images);
+    const sorted = sortDecksByKgRelevance(groups, kgSubgraph);
+    return sorted.flatMap(g => g.images);
+  }, [images, kgSubgraph]);
 
   // Request images when search results change
   useEffect(() => {
     if (!searchResult?.cards?.length) {
       setImages([]);
-      setExpandedImage(null);
-      setMultiSelected(new Set());
+      setLightboxIdx(null);
       return;
     }
 
-    const cardIds = searchResult.cards
+    const cardIds = [...searchResult.cards]
       .sort((a, b) => (b.score || 0) - (a.score || 0))
       .slice(0, 30)
       .map(c => Number(c.id));
 
     setIsLoading(true);
-    setExpandedImage(null);
-    setMultiSelected(new Set());
+    setLightboxIdx(null);
     window.ankiBridge?.addMessage('getCardImages', {
       cardIds: JSON.stringify(cardIds),
     });
@@ -245,88 +443,71 @@ export default function ImageCanvas({
     return () => window.removeEventListener('graph.cardImages', handler);
   }, []);
 
-  // Group images by deck
+  // Grouped + sorted deck groups
   const deckGroups = useMemo(() => {
     if (!images.length) return [];
-    return groupByDeck(images);
-  }, [images]);
+    const groups = groupByDeck(images);
+    return sortDecksByKgRelevance(groups, kgSubgraph);
+  }, [images, kgSubgraph]);
 
-  // Handle click — normal click expands, cmd+click multi-selects
-  const handleClick = useCallback((filename, e) => {
-    if (e?.metaKey || e?.ctrlKey) {
-      // Multi-select mode
-      setMultiSelected(prev => {
-        const next = new Set(prev);
-        if (next.has(filename)) next.delete(filename);
-        else next.add(filename);
-        return next;
-      });
-    } else {
-      // Single expand — toggle
-      setExpandedImage(prev => prev === filename ? null : filename);
-      setMultiSelected(new Set());
-    }
+  // Open lightbox — find index in allImages
+  const openLightbox = useCallback((image) => {
+    const idx = allImages.findIndex(i => i.filename === image.filename);
+    setLightboxIdx(idx >= 0 ? idx : 0);
+  }, [allImages]);
+
+  // Lightbox navigation
+  const navLightbox = useCallback((delta) => {
+    setLightboxIdx(prev => {
+      if (prev == null) return null;
+      return (prev + delta + allImages.length) % allImages.length;
+    });
+  }, [allImages]);
+
+  const closeLightbox = useCallback(() => {
+    setLightboxIdx(null);
   }, []);
 
-  // Compute selected card IDs (expanded + multi-selected)
+  // Compute selected card IDs from lightbox image
   const selectedCardIds = useMemo(() => {
-    const ids = new Set();
-    const selectedFilenames = multiSelected.size > 0
-      ? multiSelected
-      : expandedImage ? new Set([expandedImage]) : new Set();
-
-    selectedFilenames.forEach(filename => {
-      const img = images.find(i => i.filename === filename);
-      img?.cardIds?.forEach(id => ids.add(Number(id)));
-    });
-    return [...ids];
-  }, [expandedImage, multiSelected, images]);
+    if (lightboxIdx == null || !allImages[lightboxIdx]) return [];
+    return allImages[lightboxIdx].cardIds.map(Number);
+  }, [lightboxIdx, allImages]);
 
   // Notify parent
   useEffect(() => {
     onSelectionChange?.(selectedCardIds);
   }, [selectedCardIds, onSelectionChange]);
 
-  // Escape to deselect
+  // Keyboard: Escape, ArrowLeft, ArrowRight
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'Escape' && (expandedImage || multiSelected.size > 0)) {
-        e.preventDefault();
-        setExpandedImage(null);
-        setMultiSelected(new Set());
-      }
+      if (lightboxIdx == null) return;
+      if (e.key === 'Escape') { e.preventDefault(); closeLightbox(); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); navLightbox(-1); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); navLightbox(1); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [expandedImage, multiSelected]);
-
-  // Arrow keys to navigate between images when one is expanded
-  useEffect(() => {
-    if (!expandedImage || !images.length) return;
-    const onKey = (e) => {
-      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-      e.preventDefault();
-      const idx = images.findIndex(i => i.filename === expandedImage);
-      if (idx < 0) return;
-      const next = e.key === 'ArrowRight'
-        ? (idx + 1) % images.length
-        : (idx - 1 + images.length) % images.length;
-      setExpandedImage(images[next].filename);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [expandedImage, images]);
+  }, [lightboxIdx, closeLightbox, navLightbox]);
 
   // --- Render ---
 
   if (isLoading) {
     return (
       <div style={CANVAS_STYLE}>
-        <div style={GRID_STYLE}>
-          {[100, 80, 120, 90, 110, 85, 95, 105].map((w, i) => (
-            <div key={i} style={{ ...SKELETON_STYLE, width: w, animationDelay: `${i * 0.08}s` }} />
-          ))}
-        </div>
+        {[0, 1, 2].map(r => (
+          <div key={r} style={SKELETON_ROW}>
+            {[1, 1.3, 1.1, 1.2].map((f, i) => (
+              <div key={i} style={{
+                height: 140, flex: f, borderRadius: 8,
+                background: 'var(--ds-hover-tint)',
+                animation: 'pulse 1.5s ease-in-out infinite',
+                animationDelay: `${(r * 4 + i) * 0.08}s`,
+              }} />
+            ))}
+          </div>
+        ))}
       </div>
     );
   }
@@ -339,31 +520,48 @@ export default function ImageCanvas({
     );
   }
 
+  // Current lightbox image info
+  const lbImage = lightboxIdx != null ? allImages[lightboxIdx] : null;
+  const lbDeck = lbImage ? (lbImage.decks?.[String(lbImage.cardIds[0])] || '') : '';
+  const lbCluster = lbImage ? getClusterForImage(lbImage, searchResult, clusterLabels) : '';
+
   return (
     <div style={CANVAS_STYLE}>
-      {deckGroups.map(group => (
-        <div key={group.deck} style={{ marginBottom: 16 }}>
-          {/* Deck header */}
-          <div style={DECK_HEADER_STYLE}>
-            <span style={DECK_LABEL_STYLE}>{group.deck}</span>
-            <span style={DECK_COUNT_STYLE}>{group.images.length}</span>
-          </div>
-
-          {/* Image tiles */}
-          <div style={GRID_STYLE}>
-            {group.images.map(img => (
-              <ImageTile
-                key={img.filename}
-                image={img}
-                isExpanded={expandedImage === img.filename}
-                isMultiSelected={multiSelected.has(img.filename)}
-                isOtherExpanded={expandedImage != null && expandedImage !== img.filename}
-                onClick={(e) => handleClick(img.filename, e)}
-              />
+      {deckGroups.map(group => {
+        const rows = chunkIntoRows(group.images, IMAGES_PER_ROW);
+        return (
+          <div key={group.deck} style={{ marginBottom: 16 }}>
+            <div style={DECK_HEADER_STYLE}>
+              {group.deck}
+              <span style={DECK_COUNT_STYLE}>{group.images.length}</span>
+            </div>
+            {rows.map((row, ri) => (
+              <div key={ri} style={GRID_ROW_STYLE}>
+                {row.map(img => (
+                  <ImageTile
+                    key={img.filename}
+                    image={img}
+                    isSelected={lbImage?.filename === img.filename}
+                    onClick={() => openLightbox(img)}
+                  />
+                ))}
+              </div>
             ))}
           </div>
-        </div>
-      ))}
+        );
+      })}
+
+      {/* Lightbox overlay */}
+      {lightboxIdx != null && lbImage && (
+        <Lightbox
+          images={allImages}
+          currentIdx={lightboxIdx}
+          deckName={lbDeck}
+          clusterLabel={lbCluster}
+          onNav={navLightbox}
+          onClose={closeLightbox}
+        />
+      )}
     </div>
   );
 }
