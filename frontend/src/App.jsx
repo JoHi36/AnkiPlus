@@ -2249,6 +2249,54 @@ function AppInner() {
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden', position: 'relative' }}>
             {persistentTopBar}
 
+            {/* Compact search bar — slides under TopBar when search is active */}
+            {activeView === 'deckBrowser' && viewMode === 'graph' && (
+              <div style={{
+                flexShrink: 0,
+                maxHeight: (smartSearch.hasResults || smartSearch.isSearching) ? 52 : 0,
+                opacity: (smartSearch.hasResults || smartSearch.isSearching) ? 1 : 0,
+                overflow: 'hidden',
+                transition: 'max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease',
+                display: 'flex', justifyContent: 'center',
+                padding: (smartSearch.hasResults || smartSearch.isSearching) ? '0 20px 8px' : '0 20px',
+              }}>
+                <div style={{
+                  width: '100%', maxWidth: 560,
+                  position: 'relative',
+                  display: 'flex', alignItems: 'center',
+                  background: 'var(--ds-bg-frosted)',
+                  backdropFilter: 'blur(20px)',
+                  WebkitBackdropFilter: 'blur(20px)',
+                  border: '1px solid var(--ds-border-subtle)',
+                  borderRadius: 10,
+                  padding: '8px 14px',
+                  gap: 8,
+                }}>
+                  <span style={{
+                    color: 'var(--ds-text-tertiary)', fontSize: 13,
+                    userSelect: 'none', flexShrink: 0,
+                  }}>✦</span>
+                  <input
+                    defaultValue={smartSearch.query}
+                    key={smartSearch.query}
+                    placeholder="Neue Suche..."
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && e.target.value.trim()) {
+                        smartSearch.search(e.target.value.trim());
+                      }
+                      if (e.key === 'Escape') {
+                        smartSearch.reset();
+                      }
+                    }}
+                    style={{
+                      flex: 1, background: 'transparent', border: 'none', outline: 'none',
+                      color: 'var(--ds-text-primary)', fontSize: 13,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
             <div style={FLEX_COL_FILL}>
               {activeView === 'deckBrowser' && (
                 viewMode === 'graph' ? (
