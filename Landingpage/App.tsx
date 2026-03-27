@@ -5,6 +5,8 @@ import { LandingPage } from './src/pages/LandingPage';
 import { AuthPage } from './src/pages/AuthPage';
 import { AccountPage } from './src/pages/AccountPage';
 import { AuthCallbackPage } from './src/pages/AuthCallbackPage';
+import { DatenschutzPage } from './src/pages/DatenschutzPage';
+import { ImpressumPage } from './src/pages/ImpressumPage';
 
 /** Redirect that preserves query params (needed for ?link= forwarding) */
 function RedirectWithParams({ to }: { to: string }) {
@@ -21,6 +23,8 @@ function App() {
         <Route path="/login" element={<AuthPage />} />
         <Route path="/account" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
         <Route path="/auth/callback" element={<ProtectedRoute><AuthCallbackPage /></ProtectedRoute>} />
+        <Route path="/datenschutz" element={<DatenschutzPage />} />
+        <Route path="/impressum" element={<ImpressumPage />} />
 
         {/* Redirects for old routes */}
         <Route path="/register" element={<RedirectWithParams to="/login" />} />

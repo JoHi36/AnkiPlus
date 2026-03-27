@@ -204,11 +204,11 @@ export function LandingPage() {
       <footer className="border-t border-white/[0.06] py-8">
         <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="text-white/[0.18] text-xs">
-            &copy; 2025 ANKI+
+            &copy; 2026 ANKI+
           </div>
           <div className="flex gap-6 text-white/[0.18] text-xs">
-            <a href="#" className="hover:text-white/[0.35] transition-colors">Privacy</a>
-            <a href="#" className="hover:text-white/[0.35] transition-colors">Terms</a>
+            <Link to="/datenschutz" className="hover:text-white/[0.35] transition-colors">Datenschutz</Link>
+            <Link to="/impressum" className="hover:text-white/[0.35] transition-colors">Impressum</Link>
           </div>
         </div>
       </footer>
