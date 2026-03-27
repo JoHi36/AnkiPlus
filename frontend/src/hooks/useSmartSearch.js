@@ -13,6 +13,7 @@ export default function useSmartSearch() {
   const [isSubClustering, setIsSubClustering] = useState(false);
   const [kgSubgraph, setKgSubgraph] = useState(null);
   const [graphMode, setGraphMode] = useState('clusters');
+  const [imageSelectedCardIds, setImageSelectedCardIds] = useState([]);
   const [selectedTerm, setSelectedTerm] = useState(null); // { id, label, cardIds, color }
   const [termDefinition, setTermDefinition] = useState(null); // { term, definition, sources }
 
@@ -92,7 +93,7 @@ export default function useSmartSearch() {
     };
   }, []);
 
-  // Select a KG term — request definition
+  // Select a KG term — request definition with search context
   const selectTerm = useCallback((termNode) => {
     if (!termNode) {
       setSelectedTerm(null);
@@ -101,9 +102,12 @@ export default function useSmartSearch() {
     }
     setSelectedTerm(termNode);
     setTermDefinition(null);
-    // Request definition from backend (will check cache first)
-    window.ankiBridge?.addMessage('getTermDefinition', { term: termNode.label || termNode.id });
-  }, []);
+    // Request definition from backend with search query for contextual explanation
+    window.ankiBridge?.addMessage('getTermDefinition', {
+      term: termNode.label || termNode.id,
+      searchQuery: query || '',
+    });
+  }, [query]);
 
   // Request sub-clusters when a cluster is selected
   const selectCluster = useCallback((clusterId) => {
@@ -174,6 +178,7 @@ export default function useSmartSearch() {
     selectedCluster, selectedClusterLabel, selectedClusterSummary,
     subClusters, isSubClustering,
     kgSubgraph, graphMode, setGraphMode,
+    imageSelectedCardIds, setImageSelectedCardIds,
     selectedTerm, selectTerm, termDefinition,
     sidebarHasAnimated,
     search, reset, restoreFromCache,

@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import ForceGraph3D from '3d-force-graph';
 import SpriteText from 'three-spritetext';
 import { executeAction } from '../actions';
@@ -9,6 +9,7 @@ import DeckSearchBar from './DeckSearchBar';
 import { DeckNode } from './DeckNode';
 import { useDeckTree } from '../hooks/useDeckTree';
 import PlusLoader from './PlusLoader';
+import ImageCanvas from './ImageCanvas';
 
 const MAX_W = 'var(--ds-content-width)';
 
@@ -58,8 +59,36 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
     selectedClusterId, setSelectedClusterId,
     selectedCluster, selectedClusterLabel, selectedClusterSummary,
     subClusters, kgSubgraph, graphMode,
-    search, reset,
+    search, reset, selectTerm,
+    imageSelectedCardIds, setImageSelectedCardIds,  // NEW
   } = smartSearch;
+
+  const [activeDeckFilter, setActiveDeckFilter] = useState(null);
+
+  // Compute deck groups for filter chips from KG subgraph
+  const deckGroups = useMemo(() => {
+    if (!kgSubgraph?.nodes?.length) return [];
+    const groups = {};
+    kgSubgraph.nodes.forEach(n => {
+      const key = n.deckId || 0;
+      if (!groups[key]) {
+        groups[key] = { deckId: n.deckId, deckName: n.deckName || '', color: n.color, terms: [] };
+      }
+      groups[key].terms.push(n);
+    });
+    return Object.values(groups)
+      .sort((a, b) => b.terms.length - a.terms.length)
+      .slice(0, 5)
+      .map(g => {
+        const topTerm = [...g.terms].sort((a, b) => (b.subsetCount || 0) - (a.subsetCount || 0))[0];
+        return {
+          deckId: g.deckId,
+          label: topTerm?.label || g.deckName,
+          color: g.color,
+          count: g.terms.length,
+        };
+      });
+  }, [kgSubgraph]);
 
   // Build / rebuild graph when search results arrive
   // Build cluster graph (default mode)
@@ -272,14 +301,18 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
       return;
     }
 
+    setActiveDeckFilter(null);
+
     const kgNodes = kgSubgraph.nodes.map(n => ({
       id: n.id,
       label: n.label,
-      color: n.color || '#4A9BAE',
-      val: Math.max(1, Math.log2(n.subsetCount || 1) * 2),
+      color: n.color || '#5AC8FA',
+      val: Math.max(1.5, Math.log2(n.subsetCount || 1) * 2.5),
       isKg: true,
       cardIds: n.cardIds || [],
       subsetCount: n.subsetCount || 0,
+      deckId: n.deckId,
+      deckName: n.deckName || '',
     }));
 
     const kgLinks = kgSubgraph.edges.map(e => ({
@@ -297,29 +330,34 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
     graph
       .graphData({ nodes: kgNodes, links: kgLinks })
       .backgroundColor('rgba(0,0,0,0)')
+      .numDimensions(3)
       .nodeColor(n => n.color)
       .nodeVal(n => n.val)
       .nodeLabel(n => `${n.label}\n${n.subsetCount} Karten`)
-      .nodeOpacity(0.9)
-      // Render labels as 3D text sprites on nodes
+      .nodeOpacity(0.95)
+      // Render labels as floating text sprites
       .nodeThreeObject(node => {
-        if (node.val < 2) return undefined; // too small for label
+        if (node.val < 1.8) return undefined;
         const sprite = new SpriteText(node.label);
-        sprite.color = 'rgba(255,255,255,0.8)';
-        sprite.textHeight = Math.max(2, node.val * 0.8);
-        sprite.backgroundColor = 'rgba(0,0,0,0.3)';
-        sprite.padding = 1;
-        sprite.borderRadius = 2;
+        sprite.color = 'rgba(255,255,255,0.85)';
+        sprite.textHeight = Math.max(2.5, node.val * 0.9);
+        sprite.backgroundColor = false;
+        sprite.padding = 0;
+        sprite.position.set(0, node.val * 1.8, 0);
         return sprite;
       })
-      .nodeThreeObjectExtend(true) // show both sphere + label
-      .linkWidth(l => Math.max(0.2, Math.min(0.8, (l.value || 1) * 0.15)))
-      .linkOpacity(0.15)
-      .linkColor(() => '#3A3A3C')
+      .nodeThreeObjectExtend(true)
+      .linkWidth(l => Math.max(0.3, Math.min(1.2, (l.value || 1) * 0.25)))
+      .linkOpacity(0.2)
+      .linkColor(() => 'rgba(255,255,255,0.6)')
       .onNodeClick(node => {
         if (!node) return;
-        // Zoom to clicked term
-        const dist = 40;
+        // Select term in sidebar + trigger definition
+        if (node.isKg && selectTerm) {
+          selectTerm(node);
+        }
+        // Zoom camera to clicked node
+        const dist = 60;
         const r = Math.hypot(node.x || 1, node.y || 1, node.z || 1) || 1;
         const ratio = 1 + dist / r;
         graph.cameraPosition(
@@ -329,19 +367,19 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
       })
       .enableNodeDrag(false)
       .warmupTicks(0)
-      .cooldownTicks(200)
-      .d3AlphaDecay(0.02)
+      .cooldownTicks(250)
+      .d3AlphaDecay(0.018)
       .d3VelocityDecay(0.3)
       .showNavInfo(false)
       .onEngineStop(() => {
-        if (graphRef.current) graphRef.current.zoomToFit(800, 40);
+        if (graphRef.current) graphRef.current.zoomToFit(800, 60);
       });
 
+    // Spread nodes out more for 2D readability
     graph.d3Force('link').distance(link => {
-      // Higher weight = closer (more shared cards = stronger connection)
-      return 15 + (1 / Math.max(1, link.value)) * 30;
+      return 35 + (1 / Math.max(1, link.value)) * 50;
     });
-    graph.d3Force('charge').strength(-50); // stronger repulsion for better spread
+    graph.d3Force('charge').strength(-100);
 
     if (graph.controls()) {
       graph.controls().autoRotate = true;
@@ -362,6 +400,40 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
       if (graph._destructor) graph._destructor();
     };
   }, [kgSubgraph, graphMode]);
+
+  // Cleanup 3D graph when switching to image mode
+  useEffect(() => {
+    if (graphMode === 'images' && graphRef.current?._destructor) {
+      graphRef.current._destructor();
+      graphRef.current = null;
+    }
+  }, [graphMode]);
+
+  // Deck filter highlighting
+  useEffect(() => {
+    if (!graphRef.current || graphMode !== 'knowledge') return;
+    const graph = graphRef.current;
+
+    if (activeDeckFilter === null) {
+      graph.nodeColor(n => n.isKg ? n.color : (n.isQuery ? '#FFFFFF' : n.color));
+      graph.linkColor(() => 'rgba(255,255,255,0.6)');
+      graph.linkOpacity(0.2);
+    } else {
+      graph.nodeColor(n => {
+        if (!n.isKg) return n.color;
+        return n.deckId === activeDeckFilter ? n.color : '#2A2A2C';
+      });
+      graph.linkColor(l => {
+        const src = typeof l.source === 'object' ? l.source : {};
+        const tgt = typeof l.target === 'object' ? l.target : {};
+        if (src.deckId === activeDeckFilter || tgt.deckId === activeDeckFilter) {
+          return 'rgba(255,255,255,0.6)';
+        }
+        return 'rgba(255,255,255,0.05)';
+      });
+      graph.linkOpacity(0.25);
+    }
+  }, [activeDeckFilter, graphMode]);
 
   // Update graph node labels when LLM cluster labels arrive
   useEffect(() => {
@@ -540,8 +612,17 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
     <div style={{ position: 'relative', flex: 1, display: 'flex', overflow: 'hidden' }}>
       {/* Canvas area */}
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        {/* 3D canvas — only when search results */}
-        {hasResults && <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />}
+        {/* Canvas content — switches based on graphMode */}
+        {hasResults && graphMode === 'images' && (
+          <ImageCanvas
+            searchResult={searchResult}
+            clusterLabels={clusterLabels}
+            onSelectionChange={setImageSelectedCardIds}
+          />
+        )}
+        {hasResults && graphMode !== 'images' && (
+          <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
+        )}
 
         {/* Loading state — Invisible Addiction plus animation */}
         {isSearching && !hasResults && (
