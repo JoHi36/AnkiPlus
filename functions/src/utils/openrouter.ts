@@ -6,7 +6,6 @@
 
 import axios, { AxiosInstance } from 'axios';
 import https from 'https';
-import * as functions from 'firebase-functions';
 import { retryWithBackoff, RetryOptions } from './retry';
 
 // ---------------------------------------------------------------------------
@@ -91,17 +90,7 @@ function getApiKey(): string {
     return process.env.OPENROUTER_API_KEY;
   }
 
-  // Fall back to Firebase runtime config
-  try {
-    const cfg = functions.config();
-    if (cfg.openrouter?.api_key) {
-      return cfg.openrouter.api_key;
-    }
-  } catch {
-    // functions.config() may throw outside Firebase context
-  }
-
-  throw new Error('OpenRouter API key not configured. Set OPENROUTER_API_KEY env var or openrouter.api_key config.');
+  throw new Error('OpenRouter API key not configured. Set OPENROUTER_API_KEY environment variable.');
 }
 
 // ---------------------------------------------------------------------------
@@ -154,6 +143,7 @@ export async function chatCompletion(req: OpenRouterRequest): Promise<any> {
   const axiosConfig: any = {
     headers: {
       Authorization: `Bearer ${apiKey}`,
+      'X-No-Store': 'true',  // GDPR: Zero Data Retention — OpenRouter won't log prompts/responses
     },
   };
 
