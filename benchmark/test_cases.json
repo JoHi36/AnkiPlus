@@ -1,0 +1,2962 @@
+[
+  {
+    "id": "direct_001",
+    "category": "direct",
+    "query": "Was passiert bei Sekret?",
+    "card_context": null,
+    "expected_card_id": 1581353008827,
+    "expected_terms": [
+      "Autosomal-rezessiv",
+      "CFTR-Gen",
+      "Chloridionen",
+      "Chloridkanal",
+      "Chronischen Entzündungen",
+      "Lunge",
+      "Mukoviszidose",
+      "Organschädigung",
+      "Pankreas",
+      "Sekret",
+      "Wasser-Salzhaushalts",
+      "exokrinen Drüsengeweben",
+      "zystische Fibrose"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Autosomal-rezessiv",
+        "CFTR-Gen",
+        "Chloridionen",
+        "Chloridkanal",
+        "Chronischen Entzündungen",
+        "Lunge",
+        "Mukoviszidose",
+        "Organschädigung",
+        "Pankreas",
+        "Sekret",
+        "Wasser-Salzhaushalts",
+        "exokrinen Drüsengeweben",
+        "zystische Fibrose"
+      ],
+      "deck_id": 1736519912535,
+      "template": "Was passiert bei {t1}?"
+    }
+  },
+  {
+    "id": "direct_002",
+    "category": "direct",
+    "query": "Was verbindet rechter Vorhof mit A. pulmonalis dextra?",
+    "card_context": null,
+    "expected_card_id": 1574418307214,
+    "expected_terms": [
+      "A. pulmonalis dextra",
+      "Aorta ascendens",
+      "Sternum",
+      "V. brachiocephalica",
+      "V. cava inferior",
+      "V. cava superior",
+      "Venenklappen",
+      "rechter Vorhof"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "A. pulmonalis dextra",
+        "Aorta ascendens",
+        "Sternum",
+        "V. brachiocephalica",
+        "V. cava inferior",
+        "V. cava superior",
+        "Venenklappen",
+        "rechter Vorhof"
+      ],
+      "deck_id": 1736519912708,
+      "template": "Was verbindet {t1} mit {t2}?"
+    }
+  },
+  {
+    "id": "direct_003",
+    "category": "direct",
+    "query": "Beschreibe Sauerstoffbindungskurve.",
+    "card_context": null,
+    "expected_card_id": 1555067989687,
+    "expected_terms": [
+      "O2-Affinität",
+      "O2-Halbsättigungsdruck",
+      "Rechtsverschiebung",
+      "Sauerstoffbindungskurve"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "O2-Affinität",
+        "O2-Halbsättigungsdruck",
+        "Rechtsverschiebung",
+        "Sauerstoffbindungskurve"
+      ],
+      "deck_id": 1736519912576,
+      "template": "Beschreibe {t1}."
+    }
+  },
+  {
+    "id": "direct_004",
+    "category": "direct",
+    "query": "Was löst Tunica mucosa aus?",
+    "card_context": null,
+    "expected_card_id": 1560875220644,
+    "expected_terms": [
+      "Drüsenzellen",
+      "Epithel",
+      "Flimmerzellen",
+      "Tuba uterina",
+      "Tunica mucosa"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Drüsenzellen",
+        "Epithel",
+        "Flimmerzellen",
+        "Tuba uterina",
+        "Tunica mucosa"
+      ],
+      "deck_id": 1736519912846,
+      "template": "Was löst {t1} aus?"
+    }
+  },
+  {
+    "id": "direct_005",
+    "category": "direct",
+    "query": "Wo liegt V. cava superior?",
+    "card_context": null,
+    "expected_card_id": 1686733490583,
+    "expected_terms": [
+      "Plexus venosi vertebrales",
+      "V. azygos",
+      "V. cava inferior",
+      "V. cava superior",
+      "V. hemiazygos",
+      "V. lumbalis ascendens",
+      "Vv. intercostales posteriores",
+      "Vv. lumbales",
+      "cavocavale Anastomosen",
+      "dorsale Rumpfwand"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Plexus venosi vertebrales",
+        "V. azygos",
+        "V. cava inferior",
+        "V. cava superior",
+        "V. hemiazygos",
+        "V. lumbalis ascendens",
+        "Vv. intercostales posteriores",
+        "Vv. lumbales",
+        "cavocavale Anastomosen",
+        "dorsale Rumpfwand"
+      ],
+      "deck_id": 1736519912740,
+      "template": "Wo liegt {t1}?"
+    }
+  },
+  {
+    "id": "direct_006",
+    "category": "direct",
+    "query": "Erkläre Cyclohexan.",
+    "card_context": null,
+    "expected_card_id": 1596573989043,
+    "expected_terms": [
+      "Achsial",
+      "Cyclohexan",
+      "Ring-Inversion",
+      "Sesselform",
+      "Äquatorial"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Achsial",
+        "Cyclohexan",
+        "Ring-Inversion",
+        "Sesselform",
+        "Äquatorial"
+      ],
+      "deck_id": 1736519912527,
+      "template": "Erkläre {t1}."
+    }
+  },
+  {
+    "id": "direct_007",
+    "category": "direct",
+    "query": "Wo liegt Aromatase?",
+    "card_context": null,
+    "expected_card_id": 1585596642820,
+    "expected_terms": [
+      "Androgene",
+      "Aromatase",
+      "Aromatisierung",
+      "Testosteron",
+      "Östradiol",
+      "Östrogene"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Androgene",
+        "Aromatase",
+        "Aromatisierung",
+        "Testosteron",
+        "Östradiol",
+        "Östrogene"
+      ],
+      "deck_id": 1736519912596,
+      "template": "Wo liegt {t1}?"
+    }
+  },
+  {
+    "id": "direct_008",
+    "category": "direct",
+    "query": "Welche Bedeutung hat Vv. hepaticae in Bezug auf V. renalis dextra sinistra?",
+    "card_context": null,
+    "expected_card_id": 1588628650276,
+    "expected_terms": [
+      "Portalkreislauf",
+      "V. cava inferior",
+      "V. ovarica dextra",
+      "V. ovarica/testicularis sinistra",
+      "V. phrenica inferior dextra sinistra",
+      "V. renalis dextra sinistra",
+      "V. suprarenalis dextra",
+      "V. suprarenalis sinistra",
+      "V. testicularis dextra",
+      "Vv. hepaticae",
+      "Vv. lumbales"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Portalkreislauf",
+        "V. cava inferior",
+        "V. ovarica dextra",
+        "V. ovarica/testicularis sinistra",
+        "V. phrenica inferior dextra sinistra",
+        "V. renalis dextra sinistra",
+        "V. suprarenalis dextra",
+        "V. suprarenalis sinistra",
+        "V. testicularis dextra",
+        "Vv. hepaticae",
+        "Vv. lumbales"
+      ],
+      "deck_id": 1736519912740,
+      "template": "Welche Bedeutung hat {t1} in Bezug auf {t2}?"
+    }
+  },
+  {
+    "id": "direct_009",
+    "category": "direct",
+    "query": "Wie hängen Hyperventilation und pH-Normbereiche zusammen?",
+    "card_context": null,
+    "expected_card_id": 1593362396369,
+    "expected_terms": [
+      "BE",
+      "HCO3−",
+      "Hyperventilation",
+      "Metabolische Kompensation",
+      "Respiratorische Alkalose",
+      "pCO2",
+      "pH-Normbereiche"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "BE",
+        "HCO3−",
+        "Hyperventilation",
+        "Metabolische Kompensation",
+        "Respiratorische Alkalose",
+        "pCO2",
+        "pH-Normbereiche"
+      ],
+      "deck_id": 1736519912614,
+      "template": "Wie hängen {t1} und {t2} zusammen?"
+    }
+  },
+  {
+    "id": "direct_010",
+    "category": "direct",
+    "query": "Beschreibe Ncll. tractus solitarii.",
+    "card_context": null,
+    "expected_card_id": 1593867795485,
+    "expected_terms": [
+      "Agoutirelated-Peptide-Neurone",
+      "GLP-1",
+      "Ghrelin",
+      "Glucagon-Like Peptide 1",
+      "Hungerhormon",
+      "NPY-AgRP-Neurone",
+      "Ncl. arcuatus",
+      "Ncl. paraventricularis",
+      "Ncll. tractus solitarii",
+      "Neuropeptid Y"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Agoutirelated-Peptide-Neurone",
+        "GLP-1",
+        "Ghrelin",
+        "Glucagon-Like Peptide 1",
+        "Hungerhormon",
+        "NPY-AgRP-Neurone",
+        "Ncl. arcuatus",
+        "Ncl. paraventricularis",
+        "Ncll. tractus solitarii",
+        "Neuropeptid Y"
+      ],
+      "deck_id": 1736519912591,
+      "template": "Beschreibe {t1}."
+    }
+  },
+  {
+    "id": "direct_011",
+    "category": "direct",
+    "query": "Wie ist Interneurone aufgebaut?",
+    "card_context": null,
+    "expected_card_id": 1590337303573,
+    "expected_terms": [
+      "GABA",
+      "Glutamat-Freisetzung",
+      "Interneurone",
+      "Ncl. caeruleus",
+      "Ncl. raphe magnus",
+      "Noradrenerge Efferenzen",
+      "Opioidrezeptoren",
+      "Schmerzhemmung",
+      "Serotonerge Efferenzen",
+      "absteigende nozizeptive Bahn",
+      "endogene Opioide",
+      "periaquäduktales Grau",
+      "zentrales Höhlengrau"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "GABA",
+        "Glutamat-Freisetzung",
+        "Interneurone",
+        "Ncl. caeruleus",
+        "Ncl. raphe magnus",
+        "Noradrenerge Efferenzen",
+        "Opioidrezeptoren",
+        "Schmerzhemmung",
+        "Serotonerge Efferenzen",
+        "absteigende nozizeptive Bahn",
+        "endogene Opioide",
+        "periaquäduktales Grau",
+        "zentrales Höhlengrau"
+      ],
+      "deck_id": 1736519912703,
+      "template": "Wie ist {t1} aufgebaut?"
+    }
+  },
+  {
+    "id": "direct_012",
+    "category": "direct",
+    "query": "Erkläre den Zusammenhang von Lustprinzip, Ich und Persönlichkeitsinstanzen nach Freud.",
+    "card_context": null,
+    "expected_card_id": 1586113500422,
+    "expected_terms": [
+      "Es",
+      "Ich",
+      "Lustprinzip",
+      "Persönlichkeitsinstanzen nach Freud",
+      "Über-Ich"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Es",
+        "Ich",
+        "Lustprinzip",
+        "Persönlichkeitsinstanzen nach Freud",
+        "Über-Ich"
+      ],
+      "deck_id": 1736519912572,
+      "template": "Erkläre den Zusammenhang von {t1}, {t2} und {t3}."
+    }
+  },
+  {
+    "id": "direct_013",
+    "category": "direct",
+    "query": "Wie ist Protonen aufgebaut?",
+    "card_context": null,
+    "expected_card_id": 1583509608068,
+    "expected_terms": [
+      "Atomhülle",
+      "Elektronen",
+      "Elementarteilchen",
+      "Protonen"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Atomhülle",
+        "Elektronen",
+        "Elementarteilchen",
+        "Protonen"
+      ],
+      "deck_id": 1736519912531,
+      "template": "Wie ist {t1} aufgebaut?"
+    }
+  },
+  {
+    "id": "direct_014",
+    "category": "direct",
+    "query": "Warum ist Diffusionsleitfähigkeit wichtig?",
+    "card_context": null,
+    "expected_card_id": 1586947238304,
+    "expected_terms": [
+      "Diffusion der Atemgase",
+      "Diffusionsleitfähigkeit",
+      "Diffusionsstrecke",
+      "Fick'sches Gesetz",
+      "Partialdruckunterschied"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Diffusion der Atemgase",
+        "Diffusionsleitfähigkeit",
+        "Diffusionsstrecke",
+        "Fick'sches Gesetz",
+        "Partialdruckunterschied"
+      ],
+      "deck_id": 1736519912672,
+      "template": "Warum ist {t1} wichtig?"
+    }
+  },
+  {
+    "id": "direct_015",
+    "category": "direct",
+    "query": "Was ist der Unterschied zwischen Fick'sches Gesetz und Herzfrequenz?",
+    "card_context": null,
+    "expected_card_id": 1547840787921,
+    "expected_terms": [
+      "Fick'sches Gesetz",
+      "HZV",
+      "Herzfrequenz",
+      "Herzzeitvolumen",
+      "SV",
+      "Ventrikel"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Fick'sches Gesetz",
+        "HZV",
+        "Herzfrequenz",
+        "Herzzeitvolumen",
+        "SV",
+        "Ventrikel"
+      ],
+      "deck_id": 1736519912669,
+      "template": "Was ist der Unterschied zwischen {t1} und {t2}?"
+    }
+  },
+  {
+    "id": "direct_016",
+    "category": "direct",
+    "query": "Was versteht man unter Racemat und Polarimetrie?",
+    "card_context": null,
+    "expected_card_id": 1678563029839,
+    "expected_terms": [
+      "(+)-Enantiomer",
+      "(–)-Enantiomer",
+      "Enantiomere",
+      "Polarimetrie",
+      "Racemat",
+      "optische Aktivität"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "(+)-Enantiomer",
+        "(–)-Enantiomer",
+        "Enantiomere",
+        "Polarimetrie",
+        "Racemat",
+        "optische Aktivität"
+      ],
+      "deck_id": 1736519912527,
+      "template": "Was versteht man unter {t1} und {t2}?"
+    }
+  },
+  {
+    "id": "direct_017",
+    "category": "direct",
+    "query": "Nenne die Eigenschaften von A. carotis interna.",
+    "card_context": null,
+    "expected_card_id": 1578504498314,
+    "expected_terms": [
+      "A. angularis",
+      "A. carotis externa",
+      "A. carotis interna",
+      "A. dorsalis nasi",
+      "A. facialis",
+      "A. ophthalmica"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "A. angularis",
+        "A. carotis externa",
+        "A. carotis interna",
+        "A. dorsalis nasi",
+        "A. facialis",
+        "A. ophthalmica"
+      ],
+      "deck_id": 1736519912753,
+      "template": "Nenne die Eigenschaften von {t1}."
+    }
+  },
+  {
+    "id": "direct_018",
+    "category": "direct",
+    "query": "Beschreibe Richtungshören.",
+    "card_context": null,
+    "expected_card_id": 1555690029705,
+    "expected_terms": [
+      "Binaurales Hören",
+      "Colliculi inferiores",
+      "Laufzeitdifferenz",
+      "Nucleus olivaris superior",
+      "Richtungshören"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Binaurales Hören",
+        "Colliculi inferiores",
+        "Laufzeitdifferenz",
+        "Nucleus olivaris superior",
+        "Richtungshören"
+      ],
+      "deck_id": 1736519912694,
+      "template": "Beschreibe {t1}."
+    }
+  },
+  {
+    "id": "direct_019",
+    "category": "direct",
+    "query": "Was ist der Unterschied zwischen M. piriformis und M. quadratus femoris?",
+    "card_context": null,
+    "expected_card_id": 1571582761930,
+    "expected_terms": [
+      "M. gemellus inferior",
+      "M. gemellus superior",
+      "M. obturatorius internus",
+      "M. piriformis",
+      "M. quadratus femoris",
+      "Plexus sacralis"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "M. gemellus inferior",
+        "M. gemellus superior",
+        "M. obturatorius internus",
+        "M. piriformis",
+        "M. quadratus femoris",
+        "Plexus sacralis"
+      ],
+      "deck_id": 1736519912819,
+      "template": "Was ist der Unterschied zwischen {t1} und {t2}?"
+    }
+  },
+  {
+    "id": "direct_020",
+    "category": "direct",
+    "query": "Was passiert bei Terminalzotten?",
+    "card_context": null,
+    "expected_card_id": 1560983789218,
+    "expected_terms": [
+      "Fetomaternaler Gas- Stoffaustausch",
+      "Intervillöser Raum",
+      "Terminalzotten",
+      "Zottenbäume"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Fetomaternaler Gas- Stoffaustausch",
+        "Intervillöser Raum",
+        "Terminalzotten",
+        "Zottenbäume"
+      ],
+      "deck_id": 1736519912604,
+      "template": "Was passiert bei {t1}?"
+    }
+  },
+  {
+    "id": "direct_021",
+    "category": "direct",
+    "query": "Was passiert bei DOPA?",
+    "card_context": null,
+    "expected_card_id": 1585829038151,
+    "expected_terms": [
+      "Adrenalin",
+      "DOPA",
+      "Decarboxylase",
+      "Dopamin",
+      "Dopaminhydroxylase",
+      "Katecholaminbiosynthese",
+      "Noradrenalin",
+      "PALP",
+      "Phenylalaninhydroxylase",
+      "Phenylethanolamin-N-Methyltransferase",
+      "SAM",
+      "Tetrahydrobiopterin",
+      "Tyrosin",
+      "Tyrosinhydroxylase",
+      "Vitamin C"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Adrenalin",
+        "DOPA",
+        "Decarboxylase",
+        "Dopamin",
+        "Dopaminhydroxylase",
+        "Katecholaminbiosynthese",
+        "Noradrenalin",
+        "PALP",
+        "Phenylalaninhydroxylase",
+        "Phenylethanolamin-N-Methyltransferase",
+        "SAM",
+        "Tetrahydrobiopterin",
+        "Tyrosin",
+        "Tyrosinhydroxylase",
+        "Vitamin C"
+      ],
+      "deck_id": 1736519912593,
+      "template": "Was passiert bei {t1}?"
+    }
+  },
+  {
+    "id": "direct_022",
+    "category": "direct",
+    "query": "Was ist Chemorezeptoren?",
+    "card_context": null,
+    "expected_card_id": 1687258531299,
+    "expected_terms": [
+      "A. carotis",
+      "Aorta",
+      "CO2-Anstieg",
+      "Chemorezeptoren",
+      "Glomus caroticum",
+      "Medulla oblongata",
+      "O2-Partialdruck",
+      "chemische Atemregulation",
+      "pH-Abfall"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "A. carotis",
+        "Aorta",
+        "CO2-Anstieg",
+        "Chemorezeptoren",
+        "Glomus caroticum",
+        "Medulla oblongata",
+        "O2-Partialdruck",
+        "chemische Atemregulation",
+        "pH-Abfall"
+      ],
+      "deck_id": 1736519912672,
+      "template": "Was ist {t1}?"
+    }
+  },
+  {
+    "id": "direct_023",
+    "category": "direct",
+    "query": "Erkläre Epithelzellen.",
+    "card_context": null,
+    "expected_card_id": 1593242131150,
+    "expected_terms": [
+      "Atemarbeit",
+      "Epithelzellen",
+      "Oberflächenspannung",
+      "Phosphatidylcholin",
+      "Phospholipide",
+      "Pneumozyten Typ 2",
+      "Proteine",
+      "Surfactant",
+      "Vakuolen"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Atemarbeit",
+        "Epithelzellen",
+        "Oberflächenspannung",
+        "Phosphatidylcholin",
+        "Phospholipide",
+        "Pneumozyten Typ 2",
+        "Proteine",
+        "Surfactant",
+        "Vakuolen"
+      ],
+      "deck_id": 1736519912696,
+      "template": "Erkläre {t1}."
+    }
+  },
+  {
+    "id": "direct_024",
+    "category": "direct",
+    "query": "Was passiert bei Eisenhydroxid?",
+    "card_context": null,
+    "expected_card_id": 1585135113193,
+    "expected_terms": [
+      "Apoferritin",
+      "Berliner-Blau-Färbung",
+      "Eisenhydroxid",
+      "Ferritin",
+      "Hämosiderin",
+      "Siderosomen"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Apoferritin",
+        "Berliner-Blau-Färbung",
+        "Eisenhydroxid",
+        "Ferritin",
+        "Hämosiderin",
+        "Siderosomen"
+      ],
+      "deck_id": 1736519912589,
+      "template": "Was passiert bei {t1}?"
+    }
+  },
+  {
+    "id": "direct_025",
+    "category": "direct",
+    "query": "Wo liegt Butanol?",
+    "card_context": null,
+    "expected_card_id": 1583672165401,
+    "expected_terms": [
+      "Additionsreaktion",
+      "Butanol",
+      "Butanon",
+      "Prochirale Moleküle",
+      "Prochiralität",
+      "Substitutionsreaktion"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Additionsreaktion",
+        "Butanol",
+        "Butanon",
+        "Prochirale Moleküle",
+        "Prochiralität",
+        "Substitutionsreaktion"
+      ],
+      "deck_id": 1736519912527,
+      "template": "Wo liegt {t1}?"
+    }
+  },
+  {
+    "id": "direct_026",
+    "category": "direct",
+    "query": "Welche Rolle spielt Kreislaufzentren?",
+    "card_context": null,
+    "expected_card_id": 1547897866979,
+    "expected_terms": [
+      "Füllungsdruck",
+      "Gefäßtonus",
+      "Herzfrequenz",
+      "Inotropie",
+      "Kapazitätsgefäße",
+      "Kreislauf",
+      "Kreislaufzentren",
+      "Parasympathikusstimulation",
+      "Schlagvolumen",
+      "Sympathikusaktivierung",
+      "Totaler peripherer Widerstand",
+      "Vorlast",
+      "Widerstandsgefäßen",
+      "Zentrales Blutvolumen"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Füllungsdruck",
+        "Gefäßtonus",
+        "Herzfrequenz",
+        "Inotropie",
+        "Kapazitätsgefäße",
+        "Kreislauf",
+        "Kreislaufzentren",
+        "Parasympathikusstimulation",
+        "Schlagvolumen",
+        "Sympathikusaktivierung",
+        "Totaler peripherer Widerstand",
+        "Vorlast",
+        "Widerstandsgefäßen",
+        "Zentrales Blutvolumen"
+      ],
+      "deck_id": 1736519912668,
+      "template": "Welche Rolle spielt {t1}?"
+    }
+  },
+  {
+    "id": "direct_027",
+    "category": "direct",
+    "query": "Nenne die Eigenschaften von Boyle-Mariotte.",
+    "card_context": null,
+    "expected_card_id": 1583176202974,
+    "expected_terms": [
+      "Boyle-Mariotte",
+      "Dekompressionskrankheit",
+      "Gasembolie",
+      "Tiefenrausch"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Boyle-Mariotte",
+        "Dekompressionskrankheit",
+        "Gasembolie",
+        "Tiefenrausch"
+      ],
+      "deck_id": 1736519912514,
+      "template": "Nenne die Eigenschaften von {t1}."
+    }
+  },
+  {
+    "id": "direct_028",
+    "category": "direct",
+    "query": "Beschreibe Tomes-Fortsatz.",
+    "card_context": null,
+    "expected_card_id": 1595442448734,
+    "expected_terms": [
+      "Ameloblasten",
+      "Hydroxylapatit-Kristalle",
+      "Schmelz-Dentin-Grenze",
+      "Tomes-Fortsatz",
+      "Zahnschmelz"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Ameloblasten",
+        "Hydroxylapatit-Kristalle",
+        "Schmelz-Dentin-Grenze",
+        "Tomes-Fortsatz",
+        "Zahnschmelz"
+      ],
+      "deck_id": 1736519912715,
+      "template": "Beschreibe {t1}."
+    }
+  },
+  {
+    "id": "direct_029",
+    "category": "direct",
+    "query": "Wie funktioniert Nervenzellen?",
+    "card_context": null,
+    "expected_card_id": 1584279060597,
+    "expected_terms": [
+      "Affinität",
+      "Blut-Hirn-Schranke",
+      "Fructose",
+      "GLUT-Transporter",
+      "GLUT1",
+      "GLUT2",
+      "GLUT3",
+      "GLUT4",
+      "GLUT5",
+      "Glucose",
+      "Glykogen",
+      "Hepatozyten",
+      "K m",
+      "Mukosazellen",
+      "Nervenzellen",
+      "Spermien"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Affinität",
+        "Blut-Hirn-Schranke",
+        "Fructose",
+        "GLUT-Transporter",
+        "GLUT1",
+        "GLUT2",
+        "GLUT3",
+        "GLUT4",
+        "GLUT5",
+        "Glucose",
+        "Glykogen",
+        "Hepatozyten",
+        "K m",
+        "Mukosazellen",
+        "Nervenzellen",
+        "Spermien"
+      ],
+      "deck_id": 1736519912587,
+      "template": "Wie funktioniert {t1}?"
+    }
+  },
+  {
+    "id": "direct_030",
+    "category": "direct",
+    "query": "Was löst Henle-Schleife aus?",
+    "card_context": null,
+    "expected_card_id": 1562354287703,
+    "expected_terms": [
+      "Harnkonzentrierung",
+      "Henle-Schleife",
+      "Interstitium",
+      "NKCC2",
+      "Na+/K+/2Cl–-Transporter",
+      "Osmolaritätsgradienten",
+      "Tubuluslumen",
+      "Wasserresorption",
+      "corticomedullärer Osmolaritätsgradient"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Harnkonzentrierung",
+        "Henle-Schleife",
+        "Interstitium",
+        "NKCC2",
+        "Na+/K+/2Cl–-Transporter",
+        "Osmolaritätsgradienten",
+        "Tubuluslumen",
+        "Wasserresorption",
+        "corticomedullärer Osmolaritätsgradient"
+      ],
+      "deck_id": 1736519912615,
+      "template": "Was löst {t1} aus?"
+    }
+  },
+  {
+    "id": "direct_031",
+    "category": "direct",
+    "query": "Was versteht man unter Hepatozyten und Plasmin?",
+    "card_context": null,
+    "expected_card_id": 1591523225543,
+    "expected_terms": [
+      "Antifibrinolytika",
+      "Fibrinolyse",
+      "Hepatozyten",
+      "Plasmin",
+      "Plasmin-Inhibitor",
+      "α2-Antiplasmin"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Antifibrinolytika",
+        "Fibrinolyse",
+        "Hepatozyten",
+        "Plasmin",
+        "Plasmin-Inhibitor",
+        "α2-Antiplasmin"
+      ],
+      "deck_id": 1736519912683,
+      "template": "Was versteht man unter {t1} und {t2}?"
+    }
+  },
+  {
+    "id": "direct_032",
+    "category": "direct",
+    "query": "Welche Rolle spielt β-Kette?",
+    "card_context": null,
+    "expected_card_id": 1589729725409,
+    "expected_terms": [
+      "MHC-I-Rezeptor",
+      "MHC-II-Rezeptor",
+      "Peptid-Bindungsstellen",
+      "α-Kette",
+      "β-Kette"
+    ],
+    "expected_in_top_k": 3,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "MHC-I-Rezeptor",
+        "MHC-II-Rezeptor",
+        "Peptid-Bindungsstellen",
+        "α-Kette",
+        "β-Kette"
+      ],
+      "deck_id": 1736519912644,
+      "template": "Welche Rolle spielt {t1}?"
+    }
+  },
+  {
+    "id": "synonym_001",
+    "category": "synonym",
+    "query": "Was ist 3-Phosphoglycerat?",
+    "card_context": null,
+    "expected_card_id": 1586621133953,
+    "expected_terms": [
+      "2",
+      "3-BPG",
+      "Blut",
+      "Hyperventilation",
+      "O2-Partialdruck",
+      "Respiratorische Alkalose",
+      "Sauerstoffbindungskurve",
+      "pH-Wert"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "2",
+        "3-BPG",
+        "Blut",
+        "Hyperventilation",
+        "O2-Partialdruck",
+        "Respiratorische Alkalose",
+        "Sauerstoffbindungskurve",
+        "pH-Wert"
+      ],
+      "deck_id": 1736519912678,
+      "substitute_terms": [
+        "3-Phosphoglycerat",
+        "Erythrozyten"
+      ],
+      "template": "Was ist {t1}?"
+    }
+  },
+  {
+    "id": "synonym_002",
+    "category": "synonym",
+    "query": "Wie hängen Uracil und Translation zusammen?",
+    "card_context": null,
+    "expected_card_id": 1581350970471,
+    "expected_terms": [
+      "CpG-Inseln",
+      "Cytosin",
+      "DNA-Methylierung",
+      "DNA-Methyltransferasen",
+      "DNMTs",
+      "Guanin-Rest",
+      "Nukleotidsequenz 5'-CpG-3'",
+      "Promotorbereichen",
+      "Transkription",
+      "epigenetischer Regulationsmechanismus"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "CpG-Inseln",
+        "Cytosin",
+        "DNA-Methylierung",
+        "DNA-Methyltransferasen",
+        "DNMTs",
+        "Guanin-Rest",
+        "Nukleotidsequenz 5'-CpG-3'",
+        "Promotorbereichen",
+        "Transkription",
+        "epigenetischer Regulationsmechanismus"
+      ],
+      "deck_id": 1736519912535,
+      "substitute_terms": [
+        "Uracil",
+        "Translation"
+      ],
+      "template": "Wie hängen {t1} und {t2} zusammen?"
+    }
+  },
+  {
+    "id": "synonym_003",
+    "category": "synonym",
+    "query": "Was ist der Zusammenhang zwischen Hiatus oesophageus und N. glossopharyngeus?",
+    "card_context": null,
+    "expected_card_id": 1574423744437,
+    "expected_terms": [
+      "N. laryngeus recurrens dexter",
+      "N. laryngeus recurrens sinister",
+      "N. vagus",
+      "Nn. cardiaci thoracici",
+      "Plexus cardiacus",
+      "Plexus oesophageus",
+      "Plexus pulmonalis",
+      "Rr. bronchiales",
+      "Rr. cardiaci thoracici",
+      "Rr. pulmonales thoracici",
+      "Truncus vagalis anterior",
+      "Truncus vagalis posterior"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "N. laryngeus recurrens dexter",
+        "N. laryngeus recurrens sinister",
+        "N. vagus",
+        "Nn. cardiaci thoracici",
+        "Plexus cardiacus",
+        "Plexus oesophageus",
+        "Plexus pulmonalis",
+        "Rr. bronchiales",
+        "Rr. cardiaci thoracici",
+        "Rr. pulmonales thoracici",
+        "Truncus vagalis anterior",
+        "Truncus vagalis posterior"
+      ],
+      "deck_id": 1736519912708,
+      "substitute_terms": [
+        "Hiatus oesophageus",
+        "N. glossopharyngeus"
+      ],
+      "template": "Was ist der Zusammenhang zwischen {t1} und {t2}?"
+    }
+  },
+  {
+    "id": "synonym_004",
+    "category": "synonym",
+    "query": "Wie hängen Atemfrequenz und Respiratorische Alkalose zusammen?",
+    "card_context": null,
+    "expected_card_id": 1552740009596,
+    "expected_terms": [
+      "Atemzugvolumen",
+      "Hyperventilation",
+      "Metabolische Azidose",
+      "Respiratorische Kompensation"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "Atemzugvolumen",
+        "Hyperventilation",
+        "Metabolische Azidose",
+        "Respiratorische Kompensation"
+      ],
+      "deck_id": 1736519912614,
+      "substitute_terms": [
+        "Atemfrequenz",
+        "Respiratorische Alkalose"
+      ],
+      "template": "Wie hängen {t1} und {t2} zusammen?"
+    }
+  },
+  {
+    "id": "synonym_005",
+    "category": "synonym",
+    "query": "Was verbindet Repolarisation mit cGMP?",
+    "card_context": null,
+    "expected_card_id": 1548488547975,
+    "expected_terms": [
+      "Anionenkanal",
+      "Cl–-Ionen",
+      "GABA A",
+      "GABA B",
+      "Glycin",
+      "Hyperpolarisation",
+      "IPSP",
+      "K+-Ausstrom",
+      "Ruhemembranpotential",
+      "inhibitorische Wirkung"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "Anionenkanal",
+        "Cl–-Ionen",
+        "GABA A",
+        "GABA B",
+        "Glycin",
+        "Hyperpolarisation",
+        "IPSP",
+        "K+-Ausstrom",
+        "Ruhemembranpotential",
+        "inhibitorische Wirkung"
+      ],
+      "deck_id": 1736519912600,
+      "substitute_terms": [
+        "Repolarisation",
+        "cGMP"
+      ],
+      "template": "Was verbindet {t1} mit {t2}?"
+    }
+  },
+  {
+    "id": "synonym_006",
+    "category": "synonym",
+    "query": "Welche Funktion hat Clathrin?",
+    "card_context": null,
+    "expected_card_id": 1591633756341,
+    "expected_terms": [
+      "ACAT",
+      "Acyl-CoA-Cholesterin-Acyltransferase",
+      "ApoB-100",
+      "Apolipoproteine",
+      "Cholesterin",
+      "Cholesterinbiosynthese",
+      "Cholesterinester",
+      "Endosomen",
+      "Endozytose",
+      "HMG-CoA-Reduktase",
+      "LDL",
+      "LDL-Rezeptor",
+      "Low Density Lipoprotein",
+      "Lysosomen",
+      "extrahepatischen Gewebe",
+      "gER",
+      "saure Lipasen",
+      "saure Proteasen"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "ACAT",
+        "Acyl-CoA-Cholesterin-Acyltransferase",
+        "ApoB-100",
+        "Apolipoproteine",
+        "Cholesterin",
+        "Cholesterinbiosynthese",
+        "Cholesterinester",
+        "Endosomen",
+        "Endozytose",
+        "HMG-CoA-Reduktase",
+        "LDL",
+        "LDL-Rezeptor",
+        "Low Density Lipoprotein",
+        "Lysosomen",
+        "extrahepatischen Gewebe",
+        "gER",
+        "saure Lipasen",
+        "saure Proteasen"
+      ],
+      "deck_id": 1736519912588,
+      "substitute_terms": [
+        "Clathrin",
+        "Acetyl-CoA"
+      ],
+      "template": "Welche Funktion hat {t1}?"
+    }
+  },
+  {
+    "id": "synonym_007",
+    "category": "synonym",
+    "query": "Beschreibe ATP.",
+    "card_context": null,
+    "expected_card_id": 1591541213414,
+    "expected_terms": [
+      "APP",
+      "Acetylcholinesterase",
+      "Amyloid Precursor Protein",
+      "Amyloidplaques",
+      "Aβ 40",
+      "Aβ 42",
+      "Aβ-Plaques",
+      "Hyperphosphorylierung",
+      "Mikrogliazellen",
+      "Mikrotubuli",
+      "Morbus Alzheimer",
+      "Ncl. basalis Meynert",
+      "Neuronale Inflammation",
+      "Tau-Protein",
+      "Zytoskelett",
+      "cholinerge Neuronen",
+      "neurofibrilläre Tangles",
+      "α-Sekretase",
+      "β-Amyloid-Peptid",
+      "β-Sekretase",
+      "γ-Sekretase"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "APP",
+        "Acetylcholinesterase",
+        "Amyloid Precursor Protein",
+        "Amyloidplaques",
+        "Aβ 40",
+        "Aβ 42",
+        "Aβ-Plaques",
+        "Hyperphosphorylierung",
+        "Mikrogliazellen",
+        "Mikrotubuli",
+        "Morbus Alzheimer",
+        "Ncl. basalis Meynert",
+        "Neuronale Inflammation",
+        "Tau-Protein",
+        "Zytoskelett",
+        "cholinerge Neuronen",
+        "neurofibrilläre Tangles",
+        "α-Sekretase",
+        "β-Amyloid-Peptid",
+        "β-Sekretase",
+        "γ-Sekretase"
+      ],
+      "deck_id": 1736519912577,
+      "substitute_terms": [
+        "ATP"
+      ],
+      "template": "Beschreibe {t1}."
+    }
+  },
+  {
+    "id": "synonym_008",
+    "category": "synonym",
+    "query": "Was ist der Zusammenhang zwischen Sinus cavernosus und Orbita?",
+    "card_context": null,
+    "expected_card_id": 1578745153850,
+    "expected_terms": [
+      "Anulus tendineus communis",
+      "Fissura orbitalis superior",
+      "N. abducens",
+      "N. frontalis",
+      "N. lacrimalis",
+      "N. nasociliaris",
+      "N. oculomotorius",
+      "N. trochlearis",
+      "V. ophthalmica superior"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "Anulus tendineus communis",
+        "Fissura orbitalis superior",
+        "N. abducens",
+        "N. frontalis",
+        "N. lacrimalis",
+        "N. nasociliaris",
+        "N. oculomotorius",
+        "N. trochlearis",
+        "V. ophthalmica superior"
+      ],
+      "deck_id": 1736519912747,
+      "substitute_terms": [
+        "Sinus cavernosus",
+        "Orbita"
+      ],
+      "template": "Was ist der Zusammenhang zwischen {t1} und {t2}?"
+    }
+  },
+  {
+    "id": "synonym_009",
+    "category": "synonym",
+    "query": "Beschreibe unbewusste Konflikte.",
+    "card_context": null,
+    "expected_card_id": 1586443499201,
+    "expected_terms": [
+      "Deutung des Widerstands",
+      "Deutung von Übertragung",
+      "Freies Assoziieren",
+      "Förderung von Regression",
+      "Gegenübertragung",
+      "Traumdeutung",
+      "klassische Psychoanalyse nach Freud"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "Deutung des Widerstands",
+        "Deutung von Übertragung",
+        "Freies Assoziieren",
+        "Förderung von Regression",
+        "Gegenübertragung",
+        "Traumdeutung",
+        "klassische Psychoanalyse nach Freud"
+      ],
+      "deck_id": 1736519912568,
+      "substitute_terms": [
+        "unbewusste Konflikte"
+      ],
+      "template": "Beschreibe {t1}."
+    }
+  },
+  {
+    "id": "synonym_010",
+    "category": "synonym",
+    "query": "Erkläre Endolymphe.",
+    "card_context": null,
+    "expected_card_id": 1686684092084,
+    "expected_terms": [
+      "Henle-Schleife",
+      "NKCC1",
+      "Na+/K+/2Cl−-Cotransporter",
+      "Schleifendiuretika",
+      "Stria vascularis",
+      "ototoxische Nebenwirkungen",
+      "Ödeme"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "Henle-Schleife",
+        "NKCC1",
+        "Na+/K+/2Cl−-Cotransporter",
+        "Schleifendiuretika",
+        "Stria vascularis",
+        "ototoxische Nebenwirkungen",
+        "Ödeme"
+      ],
+      "deck_id": 1736519912746,
+      "substitute_terms": [
+        "Endolymphe",
+        "NKCC2"
+      ],
+      "template": "Erkläre {t1}."
+    }
+  },
+  {
+    "id": "synonym_011",
+    "category": "synonym",
+    "query": "Beschreibe A. mesenterica inferior.",
+    "card_context": null,
+    "expected_card_id": 1575890006755,
+    "expected_terms": [
+      "A. rectalis superior",
+      "Corpus cavernosum recti",
+      "Hämorrhoiden",
+      "Steinschnittlage"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "A. rectalis superior",
+        "Corpus cavernosum recti",
+        "Hämorrhoiden",
+        "Steinschnittlage"
+      ],
+      "deck_id": 1736519912787,
+      "substitute_terms": [
+        "A. mesenterica inferior"
+      ],
+      "template": "Beschreibe {t1}."
+    }
+  },
+  {
+    "id": "synonym_012",
+    "category": "synonym",
+    "query": "Welche Funktion hat B-Lymphozyten?",
+    "card_context": null,
+    "expected_card_id": 1557164184702,
+    "expected_terms": [
+      "Ammenzellen",
+      "Hassall-Körperchen",
+      "Kortex",
+      "Mark",
+      "Medulla",
+      "Parenchym",
+      "Rinde",
+      "T-Lymphozyten",
+      "Thymozyten",
+      "Thymus",
+      "Thymusepithel",
+      "Thymusepithelzellen"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "Ammenzellen",
+        "Hassall-Körperchen",
+        "Kortex",
+        "Mark",
+        "Medulla",
+        "Parenchym",
+        "Rinde",
+        "T-Lymphozyten",
+        "Thymozyten",
+        "Thymus",
+        "Thymusepithel",
+        "Thymusepithelzellen"
+      ],
+      "deck_id": 1736519912782,
+      "substitute_terms": [
+        "B-Lymphozyten"
+      ],
+      "template": "Welche Funktion hat {t1}?"
+    }
+  },
+  {
+    "id": "synonym_013",
+    "category": "synonym",
+    "query": "Was verbindet Vasokonstriktion mit Nn. splanchnici pelvici?",
+    "card_context": null,
+    "expected_card_id": 1560894881762,
+    "expected_terms": [
+      "Erektion",
+      "Parasympathisches Erektionszentrum",
+      "Plexus hypogastricus inferior",
+      "Tunica albuginea",
+      "V. dorsalis profunda penis",
+      "Vasodilatation",
+      "venöser Abfluss"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "Erektion",
+        "Parasympathisches Erektionszentrum",
+        "Plexus hypogastricus inferior",
+        "Tunica albuginea",
+        "V. dorsalis profunda penis",
+        "Vasodilatation",
+        "venöser Abfluss"
+      ],
+      "deck_id": 1736519912796,
+      "substitute_terms": [
+        "Vasokonstriktion",
+        "Nn. splanchnici pelvici"
+      ],
+      "template": "Was verbindet {t1} mit {t2}?"
+    }
+  },
+  {
+    "id": "synonym_014",
+    "category": "synonym",
+    "query": "Was ist der Zusammenhang zwischen Globus pallidus medialis und Kleinhirn?",
+    "card_context": null,
+    "expected_card_id": 1589184751869,
+    "expected_terms": [
+      "Basalganglien",
+      "Claustrum",
+      "Corpus amygdaloideum",
+      "Diencephalon",
+      "Globus pallidus",
+      "Nc. basalis",
+      "Ncl. subthalamicus",
+      "Nucleus caudatus",
+      "Pallidum",
+      "Putamen",
+      "Striatum",
+      "Subkortikale Kerngebiete",
+      "Substantia nigra",
+      "Subthalamus",
+      "Tegmentum mesencephali",
+      "Telencephalon"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "Basalganglien",
+        "Claustrum",
+        "Corpus amygdaloideum",
+        "Diencephalon",
+        "Globus pallidus",
+        "Nc. basalis",
+        "Ncl. subthalamicus",
+        "Nucleus caudatus",
+        "Pallidum",
+        "Putamen",
+        "Striatum",
+        "Subkortikale Kerngebiete",
+        "Substantia nigra",
+        "Subthalamus",
+        "Tegmentum mesencephali",
+        "Telencephalon"
+      ],
+      "deck_id": 1736519912709,
+      "substitute_terms": [
+        "Globus pallidus medialis",
+        "Kleinhirn"
+      ],
+      "template": "Was ist der Zusammenhang zwischen {t1} und {t2}?"
+    }
+  },
+  {
+    "id": "synonym_015",
+    "category": "synonym",
+    "query": "Was ist Wernicke-Zentrum?",
+    "card_context": null,
+    "expected_card_id": 1579366727643,
+    "expected_terms": [
+      "Broca-Aphasie",
+      "Broca-Zentrum",
+      "Expressive Sprachstörung",
+      "Motorische Aphasie",
+      "Sprachduktus",
+      "Sprachproduktion",
+      "Sprachverständnis",
+      "agrammatikalischer Sprache"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "Broca-Aphasie",
+        "Broca-Zentrum",
+        "Expressive Sprachstörung",
+        "Motorische Aphasie",
+        "Sprachduktus",
+        "Sprachproduktion",
+        "Sprachverständnis",
+        "agrammatikalischer Sprache"
+      ],
+      "deck_id": 1736519912694,
+      "substitute_terms": [
+        "Wernicke-Zentrum"
+      ],
+      "template": "Was ist {t1}?"
+    }
+  },
+  {
+    "id": "synonym_016",
+    "category": "synonym",
+    "query": "Was ist Symphysis pubica?",
+    "card_context": null,
+    "expected_card_id": 1581092987479,
+    "expected_terms": [
+      "Cartilago articularis",
+      "Faserknorpel",
+      "Gelenkknorpel",
+      "Hyaliner Knorpel",
+      "Kiefergelenk",
+      "Sternoklavikulargelenk"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "Cartilago articularis",
+        "Faserknorpel",
+        "Gelenkknorpel",
+        "Hyaliner Knorpel",
+        "Kiefergelenk",
+        "Sternoklavikulargelenk"
+      ],
+      "deck_id": 1736519912519,
+      "substitute_terms": [
+        "Symphysis pubica",
+        "Allgemein somatoafferent"
+      ],
+      "template": "Was ist {t1}?"
+    }
+  },
+  {
+    "id": "context_001",
+    "category": "context",
+    "query": "Gibt es weitere relevante Aspekte?",
+    "card_context": {
+      "card_id": 1585744063988,
+      "terms": [
+        "Cholesterin",
+        "Cholesterindesmolase",
+        "Glucocorticoide",
+        "Mineralocorticoide",
+        "Pregnenolon",
+        "Sexualhormone",
+        "Steroidhormonsynthese"
+      ],
+      "deck_id": 1736519912593
+    },
+    "expected_card_id": 1585744063988,
+    "expected_terms": [
+      "Cholesterin",
+      "Cholesterindesmolase",
+      "Glucocorticoide",
+      "Mineralocorticoide",
+      "Pregnenolon",
+      "Sexualhormone",
+      "Steroidhormonsynthese"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "Cholesterin",
+        "Cholesterindesmolase",
+        "Glucocorticoide",
+        "Mineralocorticoide",
+        "Pregnenolon",
+        "Sexualhormone",
+        "Steroidhormonsynthese"
+      ],
+      "deck_id": 1736519912593
+    }
+  },
+  {
+    "id": "context_002",
+    "category": "context",
+    "query": "Welche Konzepte sind hier zentral?",
+    "card_context": {
+      "card_id": 1586278625656,
+      "terms": [
+        "Arzt-Patient-Beziehung",
+        "Echtheit",
+        "Empathie",
+        "Kongruenz",
+        "Rogers",
+        "Transparenz",
+        "Wertschätzung",
+        "klientenzentrierte nondirektive Gesprächstherapie"
+      ],
+      "deck_id": 1736519912638
+    },
+    "expected_card_id": 1586278625656,
+    "expected_terms": [
+      "Arzt-Patient-Beziehung",
+      "Echtheit",
+      "Empathie",
+      "Kongruenz",
+      "Rogers",
+      "Transparenz",
+      "Wertschätzung",
+      "klientenzentrierte nondirektive Gesprächstherapie"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "Arzt-Patient-Beziehung",
+        "Echtheit",
+        "Empathie",
+        "Kongruenz",
+        "Rogers",
+        "Transparenz",
+        "Wertschätzung",
+        "klientenzentrierte nondirektive Gesprächstherapie"
+      ],
+      "deck_id": 1736519912638
+    }
+  },
+  {
+    "id": "context_003",
+    "category": "context",
+    "query": "Wie hängt das zusammen?",
+    "card_context": {
+      "card_id": 1589213139815,
+      "terms": [
+        "ADP",
+        "ADP-Rezeptoren",
+        "Aktivierung",
+        "COX",
+        "Cyclooxygenase",
+        "Degranulation",
+        "Pseudopodien",
+        "Thromboxan-A2-Synthese",
+        "Thrombozyten",
+        "primäre Hämostase",
+        "δ-Granula"
+      ],
+      "deck_id": 1736519912683
+    },
+    "expected_card_id": 1589213139815,
+    "expected_terms": [
+      "ADP",
+      "ADP-Rezeptoren",
+      "Aktivierung",
+      "COX",
+      "Cyclooxygenase",
+      "Degranulation",
+      "Pseudopodien",
+      "Thromboxan-A2-Synthese",
+      "Thrombozyten",
+      "primäre Hämostase",
+      "δ-Granula"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "ADP",
+        "ADP-Rezeptoren",
+        "Aktivierung",
+        "COX",
+        "Cyclooxygenase",
+        "Degranulation",
+        "Pseudopodien",
+        "Thromboxan-A2-Synthese",
+        "Thrombozyten",
+        "primäre Hämostase",
+        "δ-Granula"
+      ],
+      "deck_id": 1736519912683
+    }
+  },
+  {
+    "id": "context_004",
+    "category": "context",
+    "query": "Kannst du das ausführlicher erklären?",
+    "card_context": {
+      "card_id": 1548500744854,
+      "terms": [
+        "AC",
+        "Ca2+-ATPasen",
+        "Ca2+-Kanäle",
+        "GC",
+        "Gs-Protein",
+        "Hyperpolarisation",
+        "K+-Kanäle",
+        "MLKK",
+        "MLKP",
+        "Myosin-leichte-Ketten-Phosphatase",
+        "NO",
+        "Na+-Ca2+-Austauscher",
+        "PKA",
+        "PKG",
+        "cAMP",
+        "cGMP",
+        "glatte Muskulatur",
+        "β2-Innervation"
+      ],
+      "deck_id": 1736519912665
+    },
+    "expected_card_id": 1548500744854,
+    "expected_terms": [
+      "AC",
+      "Ca2+-ATPasen",
+      "Ca2+-Kanäle",
+      "GC",
+      "Gs-Protein",
+      "Hyperpolarisation",
+      "K+-Kanäle",
+      "MLKK",
+      "MLKP",
+      "Myosin-leichte-Ketten-Phosphatase",
+      "NO",
+      "Na+-Ca2+-Austauscher",
+      "PKA",
+      "PKG",
+      "cAMP",
+      "cGMP",
+      "glatte Muskulatur",
+      "β2-Innervation"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "AC",
+        "Ca2+-ATPasen",
+        "Ca2+-Kanäle",
+        "GC",
+        "Gs-Protein",
+        "Hyperpolarisation",
+        "K+-Kanäle",
+        "MLKK",
+        "MLKP",
+        "Myosin-leichte-Ketten-Phosphatase",
+        "NO",
+        "Na+-Ca2+-Austauscher",
+        "PKA",
+        "PKG",
+        "cAMP",
+        "cGMP",
+        "glatte Muskulatur",
+        "β2-Innervation"
+      ],
+      "deck_id": 1736519912665
+    }
+  },
+  {
+    "id": "context_005",
+    "category": "context",
+    "query": "Welche Zusammenhänge gibt es hier?",
+    "card_context": {
+      "card_id": 1591532253913,
+      "terms": [
+        "Aminogruppe",
+        "Aminosäuren",
+        "Ampholyten",
+        "Carboxylgruppe",
+        "Seitengruppe",
+        "pKS-Normwerte"
+      ],
+      "deck_id": 1736519912577
+    },
+    "expected_card_id": 1591532253913,
+    "expected_terms": [
+      "Aminogruppe",
+      "Aminosäuren",
+      "Ampholyten",
+      "Carboxylgruppe",
+      "Seitengruppe",
+      "pKS-Normwerte"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "Aminogruppe",
+        "Aminosäuren",
+        "Ampholyten",
+        "Carboxylgruppe",
+        "Seitengruppe",
+        "pKS-Normwerte"
+      ],
+      "deck_id": 1736519912577
+    }
+  },
+  {
+    "id": "context_006",
+    "category": "context",
+    "query": "Wie hängt das zusammen?",
+    "card_context": {
+      "card_id": 1586347073412,
+      "terms": [
+        "Aktivität",
+        "Disability",
+        "Handicap",
+        "ICF-Klassifikation",
+        "Impairment",
+        "Kontextfaktoren",
+        "Körperfunktionen",
+        "Körperstrukturen",
+        "Partizipation"
+      ],
+      "deck_id": 1736519912565
+    },
+    "expected_card_id": 1586347073412,
+    "expected_terms": [
+      "Aktivität",
+      "Disability",
+      "Handicap",
+      "ICF-Klassifikation",
+      "Impairment",
+      "Kontextfaktoren",
+      "Körperfunktionen",
+      "Körperstrukturen",
+      "Partizipation"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "Aktivität",
+        "Disability",
+        "Handicap",
+        "ICF-Klassifikation",
+        "Impairment",
+        "Kontextfaktoren",
+        "Körperfunktionen",
+        "Körperstrukturen",
+        "Partizipation"
+      ],
+      "deck_id": 1736519912565
+    }
+  },
+  {
+    "id": "context_007",
+    "category": "context",
+    "query": "Gibt es weitere relevante Aspekte?",
+    "card_context": {
+      "card_id": 1635358399459,
+      "terms": [
+        "Ileum",
+        "Jejunum",
+        "Krypten",
+        "Paneth-Zellen",
+        "Peyer-Plaques",
+        "Plicae circulares",
+        "Zotten"
+      ],
+      "deck_id": 1736519912695
+    },
+    "expected_card_id": 1635358399459,
+    "expected_terms": [
+      "Ileum",
+      "Jejunum",
+      "Krypten",
+      "Paneth-Zellen",
+      "Peyer-Plaques",
+      "Plicae circulares",
+      "Zotten"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "Ileum",
+        "Jejunum",
+        "Krypten",
+        "Paneth-Zellen",
+        "Peyer-Plaques",
+        "Plicae circulares",
+        "Zotten"
+      ],
+      "deck_id": 1736519912695
+    }
+  },
+  {
+    "id": "context_008",
+    "category": "context",
+    "query": "Was bedeutet das?",
+    "card_context": {
+      "card_id": 1571834729899,
+      "terms": [
+        "M. longus capitis",
+        "M. longus colli",
+        "Mm. scaleni",
+        "Plexus brachialis",
+        "Plexus cervicalis"
+      ],
+      "deck_id": 1736519912756
+    },
+    "expected_card_id": 1571834729899,
+    "expected_terms": [
+      "M. longus capitis",
+      "M. longus colli",
+      "Mm. scaleni",
+      "Plexus brachialis",
+      "Plexus cervicalis"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "M. longus capitis",
+        "M. longus colli",
+        "Mm. scaleni",
+        "Plexus brachialis",
+        "Plexus cervicalis"
+      ],
+      "deck_id": 1736519912756
+    }
+  },
+  {
+    "id": "context_009",
+    "category": "context",
+    "query": "Kannst du das vertiefen?",
+    "card_context": {
+      "card_id": 1581159682248,
+      "terms": [
+        "Atmungskette",
+        "Mitochondrienmatrix",
+        "Ribosomen",
+        "mitochondriale DNA",
+        "mitochondriale Proteine",
+        "mtDNA"
+      ],
+      "deck_id": 1736519912610
+    },
+    "expected_card_id": 1581159682248,
+    "expected_terms": [
+      "Atmungskette",
+      "Mitochondrienmatrix",
+      "Ribosomen",
+      "mitochondriale DNA",
+      "mitochondriale Proteine",
+      "mtDNA"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "Atmungskette",
+        "Mitochondrienmatrix",
+        "Ribosomen",
+        "mitochondriale DNA",
+        "mitochondriale Proteine",
+        "mtDNA"
+      ],
+      "deck_id": 1736519912610
+    }
+  },
+  {
+    "id": "context_010",
+    "category": "context",
+    "query": "Was sollte ich darüber wissen?",
+    "card_context": {
+      "card_id": 1634152625543,
+      "terms": [
+        "A. carotis interna",
+        "Basis cranii interna",
+        "Canalis caroticus",
+        "Foramen lacerum",
+        "Fossa cranii media",
+        "N. petrosus major",
+        "N. petrosus profundus",
+        "Os temporale"
+      ],
+      "deck_id": 1736519912616
+    },
+    "expected_card_id": 1634152625543,
+    "expected_terms": [
+      "A. carotis interna",
+      "Basis cranii interna",
+      "Canalis caroticus",
+      "Foramen lacerum",
+      "Fossa cranii media",
+      "N. petrosus major",
+      "N. petrosus profundus",
+      "Os temporale"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "A. carotis interna",
+        "Basis cranii interna",
+        "Canalis caroticus",
+        "Foramen lacerum",
+        "Fossa cranii media",
+        "N. petrosus major",
+        "N. petrosus profundus",
+        "Os temporale"
+      ],
+      "deck_id": 1736519912616
+    }
+  },
+  {
+    "id": "context_011",
+    "category": "context",
+    "query": "Welche Konzepte sind hier zentral?",
+    "card_context": {
+      "card_id": 1560853338212,
+      "terms": [
+        "Blut-Luft-Schranke",
+        "Pneumozyten Typ 1",
+        "Tight Junctions",
+        "Typ-2-Pneumozyten"
+      ],
+      "deck_id": 1736519912696
+    },
+    "expected_card_id": 1560853338212,
+    "expected_terms": [
+      "Blut-Luft-Schranke",
+      "Pneumozyten Typ 1",
+      "Tight Junctions",
+      "Typ-2-Pneumozyten"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "Blut-Luft-Schranke",
+        "Pneumozyten Typ 1",
+        "Tight Junctions",
+        "Typ-2-Pneumozyten"
+      ],
+      "deck_id": 1736519912696
+    }
+  },
+  {
+    "id": "context_012",
+    "category": "context",
+    "query": "Was steckt dahinter?",
+    "card_context": {
+      "card_id": 1578138179488,
+      "terms": [
+        "A. stylomastoidea",
+        "A. tympanica anterior",
+        "Canaliculus mastoideus",
+        "Chorda tympanica",
+        "Fissura petrotympanica",
+        "Foramen lacerum",
+        "Foramen stylomastoideum",
+        "N. facialis"
+      ],
+      "deck_id": 1736519912616
+    },
+    "expected_card_id": 1578138179488,
+    "expected_terms": [
+      "A. stylomastoidea",
+      "A. tympanica anterior",
+      "Canaliculus mastoideus",
+      "Chorda tympanica",
+      "Fissura petrotympanica",
+      "Foramen lacerum",
+      "Foramen stylomastoideum",
+      "N. facialis"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "medium",
+    "metadata": {
+      "source_terms": [
+        "A. stylomastoidea",
+        "A. tympanica anterior",
+        "Canaliculus mastoideus",
+        "Chorda tympanica",
+        "Fissura petrotympanica",
+        "Foramen lacerum",
+        "Foramen stylomastoideum",
+        "N. facialis"
+      ],
+      "deck_id": 1736519912616
+    }
+  },
+  {
+    "id": "cross_deck_001",
+    "category": "cross_deck",
+    "query": "Welche Bedeutung hat A. suprascapularis?",
+    "card_context": null,
+    "expected_card_id": 1638310312028,
+    "expected_terms": [
+      "A. suprascapularis",
+      "Clavicula",
+      "Fossa infraspinata",
+      "Fossa supraspinata",
+      "Lig. transversum scapulae inferius",
+      "Lig. transversum scapulae superius",
+      "M. trapezius",
+      "N. suprascapularis"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "A. suprascapularis",
+        "Clavicula",
+        "Fossa infraspinata",
+        "Fossa supraspinata",
+        "Lig. transversum scapulae inferius",
+        "Lig. transversum scapulae superius",
+        "M. trapezius",
+        "N. suprascapularis"
+      ],
+      "deck_id": 1736519912834,
+      "focus_term": "A. suprascapularis",
+      "template": "Welche Bedeutung hat {t1}?"
+    }
+  },
+  {
+    "id": "cross_deck_002",
+    "category": "cross_deck",
+    "query": "Was versteht man unter Magensäuresekretion?",
+    "card_context": null,
+    "expected_card_id": 1698577955892,
+    "expected_terms": [
+      "Gastroduodenale Ulkuskrankheit",
+      "H⁺/K⁺-ATPase",
+      "H₂-Rezeptor-Blocker",
+      "Magensäuresekretion",
+      "Medikamentöse Therapie",
+      "Protonenpumpeninhibitoren"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Gastroduodenale Ulkuskrankheit",
+        "H⁺/K⁺-ATPase",
+        "H₂-Rezeptor-Blocker",
+        "Magensäuresekretion",
+        "Medikamentöse Therapie",
+        "Protonenpumpeninhibitoren"
+      ],
+      "deck_id": 1736519912598,
+      "focus_term": "Magensäuresekretion",
+      "template": "Was versteht man unter {t1}?"
+    }
+  },
+  {
+    "id": "cross_deck_003",
+    "category": "cross_deck",
+    "query": "Wie funktioniert pH-Wert?",
+    "card_context": null,
+    "expected_card_id": 1548323563193,
+    "expected_terms": [
+      "Alkalose",
+      "CO2-Atemantrieb",
+      "Hyperventilation",
+      "Hypokapnie",
+      "pH-Atemantrieb",
+      "pH-Wert"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Alkalose",
+        "CO2-Atemantrieb",
+        "Hyperventilation",
+        "Hypokapnie",
+        "pH-Atemantrieb",
+        "pH-Wert"
+      ],
+      "deck_id": 1736519912614,
+      "focus_term": "pH-Wert",
+      "template": "Wie funktioniert {t1}?"
+    }
+  },
+  {
+    "id": "cross_deck_004",
+    "category": "cross_deck",
+    "query": "Erkläre Komplementsystem.",
+    "card_context": null,
+    "expected_card_id": 1589733315762,
+    "expected_terms": [
+      "C3-Konvertase",
+      "Ficoline",
+      "Kohlenhydratreste",
+      "Komplementsystem",
+      "Lektinweg",
+      "MASP-1+2",
+      "MBL",
+      "Mannose",
+      "Mannose-bindendes Lektin",
+      "PAMPs",
+      "Pathogen Associated Molecular Patterns",
+      "Pathogenoberfläche",
+      "Proteasen"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "C3-Konvertase",
+        "Ficoline",
+        "Kohlenhydratreste",
+        "Komplementsystem",
+        "Lektinweg",
+        "MASP-1+2",
+        "MBL",
+        "Mannose",
+        "Mannose-bindendes Lektin",
+        "PAMPs",
+        "Pathogen Associated Molecular Patterns",
+        "Pathogenoberfläche",
+        "Proteasen"
+      ],
+      "deck_id": 1736519912644,
+      "focus_term": "Komplementsystem",
+      "template": "Erkläre {t1}."
+    }
+  },
+  {
+    "id": "cross_deck_005",
+    "category": "cross_deck",
+    "query": "Erkläre A. basilaris.",
+    "card_context": null,
+    "expected_card_id": 1589359755697,
+    "expected_terms": [
+      "A. basilaris",
+      "Aa. cerebelli",
+      "Colliculi inferiores",
+      "Colliculi superiores",
+      "Crura cerebri",
+      "Lamina quadrigemina",
+      "Lamina tecti",
+      "Mesencephalon",
+      "Mittelhirndach",
+      "Nucleus ruber",
+      "Substantia nigra",
+      "Tectum mesencephali",
+      "Tegmentum mesencephali",
+      "V. basalis",
+      "V. magna cerebri",
+      "Vierhügelplatte"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "A. basilaris",
+        "Aa. cerebelli",
+        "Colliculi inferiores",
+        "Colliculi superiores",
+        "Crura cerebri",
+        "Lamina quadrigemina",
+        "Lamina tecti",
+        "Mesencephalon",
+        "Mittelhirndach",
+        "Nucleus ruber",
+        "Substantia nigra",
+        "Tectum mesencephali",
+        "Tegmentum mesencephali",
+        "V. basalis",
+        "V. magna cerebri",
+        "Vierhügelplatte"
+      ],
+      "deck_id": 1736519912721,
+      "focus_term": "A. basilaris",
+      "template": "Erkläre {t1}."
+    }
+  },
+  {
+    "id": "cross_deck_006",
+    "category": "cross_deck",
+    "query": "Nenne Beispiele für N-Glykosylierung.",
+    "card_context": null,
+    "expected_card_id": 1581763109335,
+    "expected_terms": [
+      "Glykierung",
+      "Glykosylierung",
+      "N-Glykosylierung",
+      "O-Glykosylierung",
+      "Schiff-Base-Reaktion"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Glykierung",
+        "Glykosylierung",
+        "N-Glykosylierung",
+        "O-Glykosylierung",
+        "Schiff-Base-Reaktion"
+      ],
+      "deck_id": 1736519912533,
+      "focus_term": "N-Glykosylierung",
+      "template": "Nenne Beispiele für {t1}."
+    }
+  },
+  {
+    "id": "cross_deck_007",
+    "category": "cross_deck",
+    "query": "Erkläre Gl. submandibularis.",
+    "card_context": null,
+    "expected_card_id": 1579525094038,
+    "expected_terms": [
+      "Ebner-Halbmonde",
+      "Endstücke",
+      "Gl. parotidea",
+      "Gl. sublingualis",
+      "Gl. submandibularis",
+      "Speicheldrüsen",
+      "azinös",
+      "tubuloazinös"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Ebner-Halbmonde",
+        "Endstücke",
+        "Gl. parotidea",
+        "Gl. sublingualis",
+        "Gl. submandibularis",
+        "Speicheldrüsen",
+        "azinös",
+        "tubuloazinös"
+      ],
+      "deck_id": 1736519912713,
+      "focus_term": "Gl. submandibularis",
+      "template": "Erkläre {t1}."
+    }
+  },
+  {
+    "id": "cross_deck_008",
+    "category": "cross_deck",
+    "query": "Wie funktioniert Kohlenstoff?",
+    "card_context": null,
+    "expected_card_id": 1583506237682,
+    "expected_terms": [
+      "Isotope",
+      "Kohlenstoff",
+      "Neutronenzahl",
+      "Nukleonen"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Isotope",
+        "Kohlenstoff",
+        "Neutronenzahl",
+        "Nukleonen"
+      ],
+      "deck_id": 1736519912531,
+      "focus_term": "Kohlenstoff",
+      "template": "Wie funktioniert {t1}?"
+    }
+  },
+  {
+    "id": "cross_deck_009",
+    "category": "cross_deck",
+    "query": "Wie funktioniert N. ethmoidalis posterior?",
+    "card_context": null,
+    "expected_card_id": 1578987841439,
+    "expected_terms": [
+      "Augenhäuten",
+      "Bindehaut",
+      "Fissura orbitalis superior",
+      "Ganglion trigeminale",
+      "Hirnhaut",
+      "Keilbeinhöhle",
+      "N. ethmoidalis anterior",
+      "N. ethmoidalis posterior",
+      "N. frontalis",
+      "N. lacrimalis",
+      "N. nasociliaris",
+      "N. ophthalmicus (V1)",
+      "N. supraorbitalis",
+      "Orbita",
+      "R. meningeus recurrens",
+      "Siebbeinzellen",
+      "Sinus cavernosus",
+      "Stirnbeinhöhle",
+      "Tränendrüse",
+      "Tränensack"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Augenhäuten",
+        "Bindehaut",
+        "Fissura orbitalis superior",
+        "Ganglion trigeminale",
+        "Hirnhaut",
+        "Keilbeinhöhle",
+        "N. ethmoidalis anterior",
+        "N. ethmoidalis posterior",
+        "N. frontalis",
+        "N. lacrimalis",
+        "N. nasociliaris",
+        "N. ophthalmicus (V1)",
+        "N. supraorbitalis",
+        "Orbita",
+        "R. meningeus recurrens",
+        "Siebbeinzellen",
+        "Sinus cavernosus",
+        "Stirnbeinhöhle",
+        "Tränendrüse",
+        "Tränensack"
+      ],
+      "deck_id": 1736519912765,
+      "focus_term": "N. ethmoidalis posterior",
+      "template": "Wie funktioniert {t1}?"
+    }
+  },
+  {
+    "id": "cross_deck_010",
+    "category": "cross_deck",
+    "query": "Erkläre Proportional-Differential-Sensor.",
+    "card_context": null,
+    "expected_card_id": 1585915569185,
+    "expected_terms": [
+      "Adaptationsverhalten",
+      "Differentialsensoren",
+      "Meissner-Körperchen",
+      "Merkelzellen",
+      "Muskelspindel",
+      "PD",
+      "Proportional-Differential-Sensor",
+      "Proportionalsensoren",
+      "RA",
+      "RA-Sensoren",
+      "Ruffini-Körperchen",
+      "SA",
+      "Vater-Pacini-Körperchen"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Adaptationsverhalten",
+        "Differentialsensoren",
+        "Meissner-Körperchen",
+        "Merkelzellen",
+        "Muskelspindel",
+        "PD",
+        "Proportional-Differential-Sensor",
+        "Proportionalsensoren",
+        "RA",
+        "RA-Sensoren",
+        "Ruffini-Körperchen",
+        "SA",
+        "Vater-Pacini-Körperchen"
+      ],
+      "deck_id": 1736519912620,
+      "focus_term": "Proportional-Differential-Sensor",
+      "template": "Erkläre {t1}."
+    }
+  },
+  {
+    "id": "cross_deck_011",
+    "category": "cross_deck",
+    "query": "Was ist Zellkern?",
+    "card_context": null,
+    "expected_card_id": 1581151464307,
+    "expected_terms": [
+      "GDP",
+      "GTP",
+      "Importine",
+      "Ran-Protein",
+      "Zellkern",
+      "nucleozytoplasmatischen Transport"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "GDP",
+        "GTP",
+        "Importine",
+        "Ran-Protein",
+        "Zellkern",
+        "nucleozytoplasmatischen Transport"
+      ],
+      "deck_id": 1736519912610,
+      "focus_term": "Zellkern",
+      "template": "Was ist {t1}?"
+    }
+  },
+  {
+    "id": "cross_deck_012",
+    "category": "cross_deck",
+    "query": "Welche Rolle spielt Gyrus postcentralis im Körper?",
+    "card_context": null,
+    "expected_card_id": 1589620229116,
+    "expected_terms": [
+      "Grobe Berührungsempfindung",
+      "Grobe Druck- und Tastempfindung",
+      "Gyrus postcentralis",
+      "Mesencephalon",
+      "Thalamus",
+      "Tractus spinothalamicus anterior",
+      "VPL"
+    ],
+    "expected_in_top_k": 5,
+    "difficulty": "easy",
+    "metadata": {
+      "source_terms": [
+        "Grobe Berührungsempfindung",
+        "Grobe Druck- und Tastempfindung",
+        "Gyrus postcentralis",
+        "Mesencephalon",
+        "Thalamus",
+        "Tractus spinothalamicus anterior",
+        "VPL"
+      ],
+      "deck_id": 1736519912721,
+      "focus_term": "Gyrus postcentralis",
+      "template": "Welche Rolle spielt {t1} im Körper?"
+    }
+  },
+  {
+    "id": "typo_001",
+    "category": "typo",
+    "query": "Was versteht man unter Neurouskuläre Endplatte?",
+    "card_context": null,
+    "expected_card_id": 1677538304883,
+    "expected_terms": [
+      "Aktionspotential",
+      "EPSP",
+      "Motorische Endplatte",
+      "Neuromuskuläre Endplatte",
+      "Räumliche Summation",
+      "Zeitliche Summation"
+    ],
+    "expected_in_top_k": 10,
+    "difficulty": "hard",
+    "metadata": {
+      "source_terms": [
+        "Aktionspotential",
+        "EPSP",
+        "Motorische Endplatte",
+        "Neuromuskuläre Endplatte",
+        "Räumliche Summation",
+        "Zeitliche Summation"
+      ],
+      "deck_id": 1736519912600,
+      "original_term": "Neuromuskuläre Endplatte",
+      "typo_term": "Neurouskuläre Endplatte"
+    }
+  },
+  {
+    "id": "typo_002",
+    "category": "typo",
+    "query": "Was ist Handwurzelnknochen?",
+    "card_context": null,
+    "expected_card_id": 1573399825783,
+    "expected_terms": [
+      "Amphiarthrose",
+      "Art. carpometacarpales",
+      "Handwurzelknochen",
+      "Mittelhandknochen II–V"
+    ],
+    "expected_in_top_k": 10,
+    "difficulty": "hard",
+    "metadata": {
+      "source_terms": [
+        "Amphiarthrose",
+        "Art. carpometacarpales",
+        "Handwurzelknochen",
+        "Mittelhandknochen II–V"
+      ],
+      "deck_id": 1736519912838,
+      "original_term": "Handwurzelknochen",
+      "typo_term": "Handwurzelnknochen"
+    }
+  },
+  {
+    "id": "typo_003",
+    "category": "typo",
+    "query": "Erkläre V portae hepatis.",
+    "card_context": null,
+    "expected_card_id": 1686732775719,
+    "expected_terms": [
+      "Hohlvenen",
+      "Kolonvenen",
+      "Leberzirrhose",
+      "V. azygos",
+      "V. cava superior",
+      "V. hemiazygos",
+      "V. mesenterica inferior",
+      "V. mesenterica superior",
+      "V. portae hepatis",
+      "Vv. colicae",
+      "Vv. lumbales ascendentes",
+      "portokavale Anastomose"
+    ],
+    "expected_in_top_k": 10,
+    "difficulty": "hard",
+    "metadata": {
+      "source_terms": [
+        "Hohlvenen",
+        "Kolonvenen",
+        "Leberzirrhose",
+        "V. azygos",
+        "V. cava superior",
+        "V. hemiazygos",
+        "V. mesenterica inferior",
+        "V. mesenterica superior",
+        "V. portae hepatis",
+        "Vv. colicae",
+        "Vv. lumbales ascendentes",
+        "portokavale Anastomose"
+      ],
+      "deck_id": 1736519912740,
+      "original_term": "V. portae hepatis",
+      "typo_term": "V portae hepatis"
+    }
+  },
+  {
+    "id": "typo_004",
+    "category": "typo",
+    "query": "Welche Funktion hat N. mandbiularis?",
+    "card_context": null,
+    "expected_card_id": 1577049135507,
+    "expected_terms": [
+      "A. maxillaris",
+      "A. meningea media",
+      "Ala major",
+      "Arcus zygomaticus",
+      "Fossa infratemporalis",
+      "Ganglion oticum",
+      "M. pterygoideus lateralis",
+      "M. pterygoideus medialis",
+      "N. mandibularis",
+      "Os sphenoidale",
+      "Os temporale",
+      "Plexus venosus pterygoideus",
+      "R. mandibulae",
+      "Unterschläfengrube"
+    ],
+    "expected_in_top_k": 10,
+    "difficulty": "hard",
+    "metadata": {
+      "source_terms": [
+        "A. maxillaris",
+        "A. meningea media",
+        "Ala major",
+        "Arcus zygomaticus",
+        "Fossa infratemporalis",
+        "Ganglion oticum",
+        "M. pterygoideus lateralis",
+        "M. pterygoideus medialis",
+        "N. mandibularis",
+        "Os sphenoidale",
+        "Os temporale",
+        "Plexus venosus pterygoideus",
+        "R. mandibulae",
+        "Unterschläfengrube"
+      ],
+      "deck_id": 1736519912616,
+      "original_term": "N. mandibularis",
+      "typo_term": "N. mandbiularis"
+    }
+  },
+  {
+    "id": "typo_005",
+    "category": "typo",
+    "query": "Was ist Cholestrinbiosynthese?",
+    "card_context": null,
+    "expected_card_id": 1584438458051,
+    "expected_terms": [
+      "Acetyl-CoA",
+      "Aktives Isopren",
+      "Cholesterin",
+      "Cholesterinbiosynthese",
+      "DMAPP",
+      "Dimethylallylpyrophosphat",
+      "IPP",
+      "Isopentenylpyrophosphat",
+      "Ketonkörpersynthese",
+      "Mevalonatweg",
+      "Mitochondrium"
+    ],
+    "expected_in_top_k": 10,
+    "difficulty": "hard",
+    "metadata": {
+      "source_terms": [
+        "Acetyl-CoA",
+        "Aktives Isopren",
+        "Cholesterin",
+        "Cholesterinbiosynthese",
+        "DMAPP",
+        "Dimethylallylpyrophosphat",
+        "IPP",
+        "Isopentenylpyrophosphat",
+        "Ketonkörpersynthese",
+        "Mevalonatweg",
+        "Mitochondrium"
+      ],
+      "deck_id": 1736519912581,
+      "original_term": "Cholesterinbiosynthese",
+      "typo_term": "Cholestrinbiosynthese"
+    }
+  },
+  {
+    "id": "typo_006",
+    "category": "typo",
+    "query": "Was versteht man unter Pyrimidinnucleotde?",
+    "card_context": null,
+    "expected_card_id": 1581498726408,
+    "expected_terms": [
+      "CMP",
+      "Cytidin",
+      "Desoxythymidin",
+      "Dihydrothymin",
+      "Dihydrouracil",
+      "Purinnucleotide",
+      "Pyrimidinnucleotide",
+      "Thymin",
+      "UMP",
+      "Uracil",
+      "Uridin",
+      "dTMP",
+      "β-Alanin",
+      "β-Aminoisobutyrat",
+      "β-Ureidoisobutyrat",
+      "β-Ureidopropionat"
+    ],
+    "expected_in_top_k": 10,
+    "difficulty": "hard",
+    "metadata": {
+      "source_terms": [
+        "CMP",
+        "Cytidin",
+        "Desoxythymidin",
+        "Dihydrothymin",
+        "Dihydrouracil",
+        "Purinnucleotide",
+        "Pyrimidinnucleotide",
+        "Thymin",
+        "UMP",
+        "Uracil",
+        "Uridin",
+        "dTMP",
+        "β-Alanin",
+        "β-Aminoisobutyrat",
+        "β-Ureidoisobutyrat",
+        "β-Ureidopropionat"
+      ],
+      "deck_id": 1736519912603,
+      "original_term": "Pyrimidinnucleotide",
+      "typo_term": "Pyrimidinnucleotde"
+    }
+  },
+  {
+    "id": "typo_007",
+    "category": "typo",
+    "query": "Welche Funktion hat Schwestercrhromatiden?",
+    "card_context": null,
+    "expected_card_id": 1581277098255,
+    "expected_terms": [
+      "Aneuploidie",
+      "Klinefelter-Syndrom",
+      "Meiose",
+      "Monosomie",
+      "Non-Disjunction",
+      "Schwesterchromatiden",
+      "Trisomie",
+      "homologe Chromosomen",
+      "numerische Chromosomenaberrationen"
+    ],
+    "expected_in_top_k": 10,
+    "difficulty": "hard",
+    "metadata": {
+      "source_terms": [
+        "Aneuploidie",
+        "Klinefelter-Syndrom",
+        "Meiose",
+        "Monosomie",
+        "Non-Disjunction",
+        "Schwesterchromatiden",
+        "Trisomie",
+        "homologe Chromosomen",
+        "numerische Chromosomenaberrationen"
+      ],
+      "deck_id": 1736519912512,
+      "original_term": "Schwesterchromatiden",
+      "typo_term": "Schwestercrhromatiden"
+    }
+  },
+  {
+    "id": "typo_008",
+    "category": "typo",
+    "query": "Was ist Brechkratf?",
+    "card_context": null,
+    "expected_card_id": 1555528425475,
+    "expected_terms": [
+      "Bildweite",
+      "Brechkraft",
+      "Brennweite",
+      "Gegenstandsweite",
+      "Linsengleichung"
+    ],
+    "expected_in_top_k": 10,
+    "difficulty": "hard",
+    "metadata": {
+      "source_terms": [
+        "Bildweite",
+        "Brechkraft",
+        "Brennweite",
+        "Gegenstandsweite",
+        "Linsengleichung"
+      ],
+      "deck_id": 1736519912515,
+      "original_term": "Brechkraft",
+      "typo_term": "Brechkratf"
+    }
+  }
+]
