@@ -85,8 +85,7 @@ const SKELETON_ROW = {
 const LB_OVERLAY = {
   position: 'absolute',
   inset: 0,
-  background: 'rgba(0,0,0,0.88)',
-  backdropFilter: 'blur(16px)',
+  background: 'var(--ds-bg-deep)',
   zIndex: 10,
   display: 'flex',
   flexDirection: 'column',
@@ -129,9 +128,7 @@ const LB_CENTER = {
 };
 
 const LB_IMAGE_BOX = {
-  width: '88vw',
-  maxWidth: 950,
-  height: '100%',
+  maxWidth: '90%',
   maxHeight: '74vh',
   borderRadius: 12,
   overflow: 'hidden',
@@ -139,13 +136,13 @@ const LB_IMAGE_BOX = {
   alignItems: 'center',
   justifyContent: 'center',
   position: 'relative',
-  background: 'var(--ds-bg-canvas)',
 };
 
 const LB_IMG = {
   maxWidth: '100%',
-  maxHeight: '100%',
+  maxHeight: '74vh',
   objectFit: 'contain',
+  borderRadius: 12,
 };
 
 const LB_COUNTER = {
@@ -193,7 +190,7 @@ const LB_FILMSTRIP_FADE_LEFT = {
   top: 0,
   bottom: 0,
   width: 40,
-  background: 'linear-gradient(to right, rgba(0,0,0,0.88), transparent)',
+  background: 'linear-gradient(to right, var(--ds-bg-deep), transparent)',
   zIndex: 1,
   pointerEvents: 'none',
 };
@@ -204,7 +201,7 @@ const LB_FILMSTRIP_FADE_RIGHT = {
   top: 0,
   bottom: 0,
   width: 40,
-  background: 'linear-gradient(to left, rgba(0,0,0,0.88), transparent)',
+  background: 'linear-gradient(to left, var(--ds-bg-deep), transparent)',
   zIndex: 1,
   pointerEvents: 'none',
 };
