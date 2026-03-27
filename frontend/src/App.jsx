@@ -701,6 +701,16 @@ function AppInner() {
         return;
       }
 
+      // Smart Search events — route to useSmartSearch, NOT to session reasoning store
+      const _ssReqId = payload.requestId || payload.messageId || '';
+      if (_ssReqId.startsWith('search_') && [
+        'pipeline_step', 'text_chunk', 'streaming', 'agent_cell',
+        'orchestration', 'msg_start', 'msg_done', 'msg_error', 'msg_cancelled'
+      ].includes(payload.type)) {
+        window.dispatchEvent(new CustomEvent('smart_search.msg_event', { detail: payload }));
+        return;  // Don't let search events pollute session reasoning store
+      }
+
       // Pipeline steps → centralized reasoning store dispatch
       if (payload.type === 'pipeline_step') {
         const _rd = reasoningDispatchRef.current;
@@ -1701,7 +1711,6 @@ function AppInner() {
     if (previewModeRef.current?.stage === 'peek') {
       const peekCardId = previewModeRef.current.cardId;
       setPreviewMode(prev => prev ? { ...prev, stage: 'card_chat' } : prev);
-      setActiveChat('session');
       const currentBridge = bridgeRef.current;
       if (currentBridge?.loadCardSession) {
         currentBridge.loadCardSession(String(peekCardId));
@@ -1856,7 +1865,6 @@ function AppInner() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [headerHeight, handleTrailNavigateLeft, handleTrailNavigateRight]);
 
-  // ⌘X — reset free chat history (stay in chat mode)
   // Report text field focus state to Python for global shortcut routing
   useEffect(() => {
     const onFocusIn = (e) => {
@@ -1997,7 +2005,7 @@ function AppInner() {
     setSettingsOpen(prev => !prev);
   }, []);
 
-  // ── Keyboard shortcuts for fullscreen FreeChat (merged from MainApp) ──
+  // ── Keyboard shortcuts (merged from MainApp) ──
   useEffect(() => {
     const handler = (e) => {
       // ESC closes review chat sidebar
@@ -2180,7 +2188,7 @@ function AppInner() {
     }
   }, [sessionContext.currentSessionId, sessionContext.isTemporary, chatHook.messages.length, scrollToLastUserMessage]);
 
-  // ── Fullscreen views (DeckBrowser, Overview, FreeChat) — merged from MainApp ──
+  // ── Fullscreen views (DeckBrowser, Overview) — merged from MainApp ──
 
   // Settings panel — rendered as fixed overlay, visible on ALL views
   const settingsPanel = (
