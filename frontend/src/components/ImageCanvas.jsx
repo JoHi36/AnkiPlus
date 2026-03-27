@@ -1,58 +1,67 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 
-// --- Static styles (no inline object creation per render) ---
+// --- Static styles ---
 
 const CANVAS_STYLE = {
   flex: 1,
   overflowY: 'auto',
-  padding: 20,
+  padding: '72px 20px 20px',  // top padding clears TopBar header
   background: 'var(--ds-bg-deep)',
   scrollbarWidth: 'none',
   display: 'flex',
   flexDirection: 'column',
 };
 
-const CLUSTER_HEADER_STYLE = {
+const DECK_HEADER_STYLE = {
   display: 'flex',
-  alignItems: 'center',
+  alignItems: 'baseline',
   gap: 6,
-  marginBottom: 10,
+  marginBottom: 8,
+  paddingTop: 8,
 };
 
-const CLUSTER_LABEL_STYLE = {
-  fontSize: 10,
+const DECK_LABEL_STYLE = {
+  fontSize: 11,
   fontWeight: 600,
-  textTransform: 'uppercase',
-  letterSpacing: '0.5px',
+  color: 'var(--ds-text-tertiary)',
+  letterSpacing: '0.02em',
 };
 
-const CLUSTER_COUNT_STYLE = {
+const DECK_COUNT_STYLE = {
   fontSize: 10,
   color: 'var(--ds-text-muted)',
 };
 
-const TILE_GRID_STYLE = {
+const GRID_STYLE = {
   display: 'flex',
   flexWrap: 'wrap',
-  gap: 8,
+  gap: 6,
 };
 
-const TILE_STYLE = {
+const TILE_BASE = {
   position: 'relative',
   cursor: 'pointer',
-  borderRadius: 10,
+  borderRadius: 8,
   overflow: 'hidden',
-  transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+  transition: 'all 0.25s ease',
+  flexShrink: 0,
 };
 
-const TILE_IMG_STYLE = {
+const THUMB_IMG = {
   display: 'block',
-  height: 100,
+  height: 80,
   width: 'auto',
-  minWidth: 80,
-  maxWidth: 200,
+  minWidth: 60,
+  maxWidth: 160,
   objectFit: 'cover',
-  borderRadius: 10,
+};
+
+const EXPANDED_IMG = {
+  display: 'block',
+  maxHeight: 320,
+  maxWidth: '100%',
+  width: 'auto',
+  objectFit: 'contain',
 };
 
 const BADGE_STYLE = {
@@ -65,22 +74,23 @@ const BADGE_STYLE = {
   color: 'var(--ds-text-tertiary)',
 };
 
-const DECK_BADGE_STYLE = { ...BADGE_STYLE, top: 5, left: 5 };
-const MULTI_BADGE_STYLE = { ...BADGE_STYLE, bottom: 5, right: 5 };
+const DECK_BADGE_STYLE = { ...BADGE_STYLE, top: 4, left: 4 };
+const MULTI_BADGE_STYLE = { ...BADGE_STYLE, bottom: 4, right: 4 };
 
 const CHECK_STYLE = {
   position: 'absolute',
-  top: -4,
-  right: -4,
-  width: 18,
-  height: 18,
+  top: -3,
+  right: -3,
+  width: 16,
+  height: 16,
   background: 'var(--ds-accent)',
   borderRadius: '50%',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  fontSize: 10,
+  fontSize: 9,
   color: 'var(--ds-bg-deep)',
+  zIndex: 2,
 };
 
 const EMPTY_STYLE = {
@@ -92,73 +102,98 @@ const EMPTY_STYLE = {
   fontSize: 13,
 };
 
-const HINT_STYLE = {
-  textAlign: 'center',
-  padding: 12,
-  fontSize: 10,
-  color: 'var(--ds-text-muted)',
-  opacity: 0.5,
-};
-
 const SKELETON_STYLE = {
-  height: 100,
-  borderRadius: 10,
+  height: 80,
+  borderRadius: 8,
   background: 'var(--ds-hover-tint)',
   animation: 'pulse 1.5s ease-in-out infinite',
 };
 
-// Cluster colors — same as SearchSidebar
-const CLUSTER_COLORS = [
-  '#3B6EA5', '#4A8C5C', '#B07D3A', '#7B5EA7',
-  '#A0524B', '#4A9BAE', '#A69550', '#7A6B5D',
-];
+const EXPANDED_CONTAINER = {
+  width: '100%',
+  borderRadius: 10,
+  border: '2px solid var(--ds-accent)',
+  boxShadow: '0 0 0 1px var(--ds-accent-10)',
+  overflow: 'hidden',
+  position: 'relative',
+  background: 'var(--ds-bg-canvas)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 8,
+  cursor: 'pointer',
+};
 
-// --- Cluster assignment ---
+const EXPANDED_QUESTION = {
+  fontSize: 11,
+  color: 'var(--ds-text-secondary)',
+  padding: '6px 8px',
+  lineHeight: 1.4,
+};
 
-function assignCluster(image, searchResult) {
-  const clusters = searchResult?.clusters || [];
-  for (let ci = 0; ci < clusters.length; ci++) {
-    const clusterCardIds = new Set(clusters[ci].cards.map(c => Number(c.id)));
-    if (image.cardIds.some(id => clusterCardIds.has(Number(id)))) {
-      return `cluster_${ci}`;
-    }
-  }
-  return null;
+// --- Group images by deck ---
+
+function groupByDeck(images) {
+  const groups = {};
+  images.forEach(img => {
+    // Use the first card's deck as the group key
+    const firstCardId = img.cardIds[0];
+    const deck = img.decks?.[String(firstCardId)] || 'Sonstige';
+    if (!groups[deck]) groups[deck] = { deck, images: [] };
+    groups[deck].images.push(img);
+  });
+  // Sort by image count descending
+  return Object.values(groups).sort((a, b) => b.images.length - a.images.length);
 }
 
-// --- ImageTile (memoized for .map() usage) ---
+// --- ImageTile (memoized) ---
 
-const ImageTile = React.memo(function ImageTile({ image, isSelected, onToggle }) {
+const ImageTile = React.memo(function ImageTile({ image, isExpanded, isMultiSelected, isOtherExpanded, onClick }) {
   const firstCardId = image.cardIds[0];
   const question = image.questions?.[String(firstCardId)] || '';
   const deck = image.decks?.[String(firstCardId)] || '';
   const multiCount = image.cardIds.length;
 
+  // Expanded view — large image with question
+  if (isExpanded) {
+    return (
+      <div style={{ width: '100%', marginBottom: 4 }}>
+        <div
+          style={EXPANDED_CONTAINER}
+          onClick={onClick}
+        >
+          <img src={image.src} alt={question} style={EXPANDED_IMG} loading="lazy" />
+          {multiCount > 1 && <div style={MULTI_BADGE_STYLE}>{multiCount} Karten</div>}
+          <div style={CHECK_STYLE}>✓</div>
+        </div>
+        {question && <div style={EXPANDED_QUESTION}>{question}</div>}
+      </div>
+    );
+  }
+
+  // Thumbnail — shrinks when another is expanded
+  const shrunk = isOtherExpanded;
+
   return (
     <div
       style={{
-        ...TILE_STYLE,
-        border: isSelected
+        ...TILE_BASE,
+        border: isMultiSelected
           ? '2px solid var(--ds-accent)'
           : '1px solid var(--ds-border-subtle)',
-        boxShadow: isSelected ? '0 0 0 1px var(--ds-accent-10)' : 'none',
+        boxShadow: isMultiSelected ? '0 0 0 1px var(--ds-accent-10)' : 'none',
+        opacity: shrunk ? 0.6 : 1,
+        transform: shrunk ? 'scale(0.92)' : 'scale(1)',
       }}
-      onClick={() => onToggle(image.filename)}
-      onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.03)'; }}
-      onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+      onClick={onClick}
+      onMouseEnter={e => { if (!shrunk) e.currentTarget.style.transform = 'scale(1.03)'; }}
+      onMouseLeave={e => { e.currentTarget.style.transform = shrunk ? 'scale(0.92)' : 'scale(1)'; }}
       title={question}
     >
-      <img
-        src={image.src}
-        alt={question}
-        style={TILE_IMG_STYLE}
-        loading="lazy"
-      />
+      <img src={image.src} alt={question} style={THUMB_IMG} loading="lazy" />
       {deck && <div style={DECK_BADGE_STYLE}>{deck}</div>}
-      {multiCount > 1 && (
-        <div style={MULTI_BADGE_STYLE}>{multiCount} Karten</div>
-      )}
-      {isSelected && <div style={CHECK_STYLE}>✓</div>}
+      {multiCount > 1 && <div style={MULTI_BADGE_STYLE}>{multiCount} Karten</div>}
+      {isMultiSelected && <div style={CHECK_STYLE}>✓</div>}
     </div>
   );
 });
@@ -172,13 +207,15 @@ export default function ImageCanvas({
 }) {
   const [images, setImages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedImages, setSelectedImages] = useState(new Set());
+  const [expandedImage, setExpandedImage] = useState(null);     // single focused image filename
+  const [multiSelected, setMultiSelected] = useState(new Set()); // cmd+click multi-select
 
   // Request images when search results change
   useEffect(() => {
     if (!searchResult?.cards?.length) {
       setImages([]);
-      setSelectedImages(new Set());
+      setExpandedImage(null);
+      setMultiSelected(new Set());
       return;
     }
 
@@ -188,7 +225,8 @@ export default function ImageCanvas({
       .map(c => Number(c.id));
 
     setIsLoading(true);
-    setSelectedImages(new Set());
+    setExpandedImage(null);
+    setMultiSelected(new Set());
     window.ankiBridge?.addMessage('getCardImages', {
       cardIds: JSON.stringify(cardIds),
     });
@@ -207,48 +245,44 @@ export default function ImageCanvas({
     return () => window.removeEventListener('graph.cardImages', handler);
   }, []);
 
-  // Group images by cluster
-  const clusteredImages = useMemo(() => {
-    if (!images.length || !searchResult) return [];
+  // Group images by deck
+  const deckGroups = useMemo(() => {
+    if (!images.length) return [];
+    return groupByDeck(images);
+  }, [images]);
 
-    const groups = {};
-    images.forEach(img => {
-      const clusterId = assignCluster(img, searchResult);
-      const key = clusterId || '__unclustered__';
-      if (!groups[key]) groups[key] = { clusterId: key, images: [] };
-      groups[key].images.push(img);
-    });
-
-    // Sort clusters by index (cluster_0 first)
-    return Object.values(groups).sort((a, b) => {
-      if (a.clusterId === '__unclustered__') return 1;
-      if (b.clusterId === '__unclustered__') return -1;
-      const ai = parseInt(a.clusterId.replace('cluster_', ''), 10);
-      const bi = parseInt(b.clusterId.replace('cluster_', ''), 10);
-      return ai - bi;
-    });
-  }, [images, searchResult]);
-
-  // Toggle image selection
-  const toggleImage = useCallback((filename) => {
-    setSelectedImages(prev => {
-      const next = new Set(prev);
-      if (next.has(filename)) next.delete(filename);
-      else next.add(filename);
-      return next;
-    });
+  // Handle click — normal click expands, cmd+click multi-selects
+  const handleClick = useCallback((filename, e) => {
+    if (e?.metaKey || e?.ctrlKey) {
+      // Multi-select mode
+      setMultiSelected(prev => {
+        const next = new Set(prev);
+        if (next.has(filename)) next.delete(filename);
+        else next.add(filename);
+        return next;
+      });
+    } else {
+      // Single expand — toggle
+      setExpandedImage(prev => prev === filename ? null : filename);
+      setMultiSelected(new Set());
+    }
   }, []);
 
-  // Notify parent of selection changes
+  // Compute selected card IDs (expanded + multi-selected)
   const selectedCardIds = useMemo(() => {
     const ids = new Set();
-    selectedImages.forEach(filename => {
+    const selectedFilenames = multiSelected.size > 0
+      ? multiSelected
+      : expandedImage ? new Set([expandedImage]) : new Set();
+
+    selectedFilenames.forEach(filename => {
       const img = images.find(i => i.filename === filename);
       img?.cardIds?.forEach(id => ids.add(Number(id)));
     });
     return [...ids];
-  }, [selectedImages, images]);
+  }, [expandedImage, multiSelected, images]);
 
+  // Notify parent
   useEffect(() => {
     onSelectionChange?.(selectedCardIds);
   }, [selectedCardIds, onSelectionChange]);
@@ -256,39 +290,47 @@ export default function ImageCanvas({
   // Escape to deselect
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'Escape' && selectedImages.size > 0) {
+      if (e.key === 'Escape' && (expandedImage || multiSelected.size > 0)) {
         e.preventDefault();
-        setSelectedImages(new Set());
+        setExpandedImage(null);
+        setMultiSelected(new Set());
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedImages]);
+  }, [expandedImage, multiSelected]);
+
+  // Arrow keys to navigate between images when one is expanded
+  useEffect(() => {
+    if (!expandedImage || !images.length) return;
+    const onKey = (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      const idx = images.findIndex(i => i.filename === expandedImage);
+      if (idx < 0) return;
+      const next = e.key === 'ArrowRight'
+        ? (idx + 1) % images.length
+        : (idx - 1 + images.length) % images.length;
+      setExpandedImage(images[next].filename);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [expandedImage, images]);
 
   // --- Render ---
 
-  // Loading skeleton
   if (isLoading) {
     return (
       <div style={CANVAS_STYLE}>
-        {[0, 1].map(g => (
-          <div key={g} style={{ marginBottom: 24 }}>
-            <div style={{ ...CLUSTER_HEADER_STYLE, marginBottom: 10 }}>
-              <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ds-hover-tint)' }} />
-              <div style={{ height: 10, width: 80, borderRadius: 3, background: 'var(--ds-hover-tint)', animation: 'pulse 1.5s ease-in-out infinite' }} />
-            </div>
-            <div style={TILE_GRID_STYLE}>
-              {[120, 100, 140, 90].map((w, i) => (
-                <div key={i} style={{ ...SKELETON_STYLE, width: w, animationDelay: `${i * 0.1}s` }} />
-              ))}
-            </div>
-          </div>
-        ))}
+        <div style={GRID_STYLE}>
+          {[100, 80, 120, 90, 110, 85, 95, 105].map((w, i) => (
+            <div key={i} style={{ ...SKELETON_STYLE, width: w, animationDelay: `${i * 0.08}s` }} />
+          ))}
+        </div>
       </div>
     );
   }
 
-  // Empty state
   if (!images.length) {
     return (
       <div style={CANVAS_STYLE}>
@@ -297,45 +339,31 @@ export default function ImageCanvas({
     );
   }
 
-  // Cluster-grouped grid
   return (
     <div style={CANVAS_STYLE}>
-      {clusteredImages.map(group => {
-        const ci = group.clusterId !== '__unclustered__'
-          ? parseInt(group.clusterId.replace('cluster_', ''), 10)
-          : -1;
-        const color = ci >= 0 ? CLUSTER_COLORS[ci % CLUSTER_COLORS.length] : 'var(--ds-text-muted)';
-        const label = ci >= 0
-          ? (clusterLabels?.[group.clusterId] || searchResult?.clusters?.[ci]?.label || `Cluster ${ci + 1}`)
-          : 'Sonstige';
-
-        return (
-          <div key={group.clusterId} style={{ marginBottom: 24 }}>
-            {/* Cluster header */}
-            <div style={CLUSTER_HEADER_STYLE}>
-              <div style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />
-              <span style={{ ...CLUSTER_LABEL_STYLE, color }}>{label}</span>
-              <span style={CLUSTER_COUNT_STYLE}>{group.images.length} Bilder</span>
-            </div>
-
-            {/* Image tiles */}
-            <div style={TILE_GRID_STYLE}>
-              {group.images.map(img => (
-                <ImageTile
-                  key={img.filename}
-                  image={img}
-                  isSelected={selectedImages.has(img.filename)}
-                  onToggle={toggleImage}
-                />
-              ))}
-            </div>
+      {deckGroups.map(group => (
+        <div key={group.deck} style={{ marginBottom: 16 }}>
+          {/* Deck header */}
+          <div style={DECK_HEADER_STYLE}>
+            <span style={DECK_LABEL_STYLE}>{group.deck}</span>
+            <span style={DECK_COUNT_STYLE}>{group.images.length}</span>
           </div>
-        );
-      })}
 
-      <div style={HINT_STYLE}>
-        Klick → auswählen · Hover → Kartenfrage
-      </div>
+          {/* Image tiles */}
+          <div style={GRID_STYLE}>
+            {group.images.map(img => (
+              <ImageTile
+                key={img.filename}
+                image={img}
+                isExpanded={expandedImage === img.filename}
+                isMultiSelected={multiSelected.has(img.filename)}
+                isOtherExpanded={expandedImage != null && expandedImage !== img.filename}
+                onClick={(e) => handleClick(img.filename, e)}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
