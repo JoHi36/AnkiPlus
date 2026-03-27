@@ -99,14 +99,6 @@ const LB_OVERLAY = {
   borderRadius: 0,
 };
 
-const LB_HEADER = {
-  flexShrink: 0,
-  padding: '16px 24px 10px',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-};
-
 const LB_BREADCRUMB = {
   display: 'flex',
   alignItems: 'center',
@@ -360,28 +352,7 @@ function Lightbox({ images, currentIdx, clusterLabel, deckName, onNav, onClose }
       style={{ ...LB_OVERLAY, opacity: 1, pointerEvents: 'auto' }}
       onClick={handleOverlayClick}
     >
-      {/* Header: Deck › Perspektive | Quelle */}
-      <div style={LB_HEADER}>
-        <div style={LB_BREADCRUMB}>
-          <span style={{ color: 'var(--ds-text-secondary)', fontWeight: 500 }}>{deckName}</span>
-          {clusterLabel && (
-            <>
-              <span style={{ color: 'var(--ds-text-muted)', fontSize: 10 }}>›</span>
-              <span style={{ color: 'var(--ds-text-tertiary)' }}>{clusterLabel}</span>
-            </>
-          )}
-        </div>
-        <span
-          style={LB_SOURCE}
-          onClick={handleSourceClick}
-          onMouseEnter={e => { e.currentTarget.style.opacity = '1'; }}
-          onMouseLeave={e => { e.currentTarget.style.opacity = '0.7'; }}
-        >
-          Quelle aufrufen
-        </span>
-      </div>
-
-      {/* Big image — data-close-zone on the padding area */}
+      {/* Center: header + image as one aligned block */}
       <div style={LB_CENTER} data-close-zone="true">
         <button
           style={{ ...LB_NAV, left: 10 }}
@@ -392,9 +363,39 @@ function Lightbox({ images, currentIdx, clusterLabel, deckName, onNav, onClose }
           ‹
         </button>
 
-        <div style={LB_IMAGE_BOX}>
-          <img src={image.src} alt="" style={LB_IMG} />
-          <div style={LB_COUNTER}>{currentIdx + 1} / {images.length}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '90%', maxHeight: '80vh' }}>
+          {/* Header aligned to image width */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 8,
+            minHeight: 20,
+          }}>
+            <div style={LB_BREADCRUMB}>
+              <span style={{ color: 'var(--ds-text-secondary)', fontWeight: 500 }}>{deckName}</span>
+              {clusterLabel && (
+                <>
+                  <span style={{ color: 'var(--ds-text-muted)', fontSize: 10 }}>›</span>
+                  <span style={{ color: 'var(--ds-text-tertiary)' }}>{clusterLabel}</span>
+                </>
+              )}
+            </div>
+            <span
+              style={LB_SOURCE}
+              onClick={handleSourceClick}
+              onMouseEnter={e => { e.currentTarget.style.opacity = '1'; }}
+              onMouseLeave={e => { e.currentTarget.style.opacity = '0.7'; }}
+            >
+              Quelle aufrufen
+            </span>
+          </div>
+
+          {/* Image */}
+          <div style={LB_IMAGE_BOX}>
+            <img src={image.src} alt="" style={LB_IMG} />
+            <div style={LB_COUNTER}>{currentIdx + 1} / {images.length}</div>
+          </div>
         </div>
 
         <button
