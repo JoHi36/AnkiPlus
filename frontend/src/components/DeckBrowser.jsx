@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, Layers } from 'lucide-react';
 import TreeList from '../../../shared/components/TreeList';
-import FreeChatSearchBar from './FreeChatSearchBar';
+// FreeChatSearchBar removed — component was deleted
 import ChatMessage from './ChatMessage';
 import CardRefChip from './CardRefChip';
 import DeckSectionDivider from './DeckSectionDivider';
@@ -365,10 +365,7 @@ export default function DeckBrowser({
           paddingTop: (headerHeight || 60) + 12,
         }}
       >
-        {/* ── Free Chat Search Bar ── */}
-        {onFreeChatOpen && (
-          <FreeChatSearchBar onOpen={onFreeChatOpen} />
-        )}
+        {/* Free Chat Search Bar removed */}
 
         {/* ── Decks ── */}
         <div style={DECK_SECTION_MARGIN}>
