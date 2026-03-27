@@ -31,6 +31,7 @@ export default function SearchSidebar({
   selectedTerm,
   onSelectTerm,
   termDefinition,
+  imageSelectedCardIds = [],  // NEW — from ImageCanvas selection
 }) {
   // Read pipeline steps from the reasoning store — find the latest search stream
   const { state: reasoningState } = useReasoningStore();
@@ -47,19 +48,29 @@ export default function SearchSidebar({
     return allSteps.length > 0 ? allSteps : [];
   }, [reasoningState.streams]);
 
+  // All hooks must be called unconditionally (before any early return)
+  const [multiSelect, setMultiSelect] = useState(false);
+  const [multiIds, setMultiIds] = useState(new Set());
+  const [sidebarTab, setSidebarTab] = useState('definition'); // 'definition' | 'clusters' | 'terms'
+  const [animating, setAnimating] = useState(false);
+  const TAB_TO_GRAPH_MODE = { definition: 'images', clusters: 'clusters', terms: 'knowledge' };
+  const handleTabChange = (tab) => {
+    setSidebarTab(tab);
+    onGraphModeChange?.(TAB_TO_GRAPH_MODE[tab] || 'clusters');
+  };
+
+  // Emit graphMode when sidebar becomes visible or tab changes
+  useEffect(() => {
+    if (visible) {
+      onGraphModeChange?.(TAB_TO_GRAPH_MODE[sidebarTab] || 'clusters');
+    }
+  }, [visible, sidebarTab, onGraphModeChange]);
+
   if (!visible) return null;
 
   // Animation only on first appearance — ref lives in useSmartSearch (survives tab switches)
   const shouldAnimate = sidebarHasAnimated ? !sidebarHasAnimated.current : false;
   if (sidebarHasAnimated) sidebarHasAnimated.current = true;
-
-  const [multiSelect, setMultiSelect] = useState(false);
-  const [multiIds, setMultiIds] = useState(new Set());
-  const [sidebarTab, setSidebarTab] = useState('clusters'); // 'clusters' | 'terms'
-  const handleTabChange = (tab) => {
-    setSidebarTab(tab);
-    onGraphModeChange?.(tab === 'terms' ? 'knowledge' : 'clusters');
-  };
 
   const clusterColors = [
     '#3B6EA5', '#4A8C5C', '#B07D3A', '#7B5EA7',
@@ -86,10 +97,29 @@ export default function SearchSidebar({
     : null;
 
   const termCardCount = selectedTerm?.cardIds?.length || selectedTerm?.subsetCount || 0;
-  const stackCardCount = selectedTerm ? termCardCount : (multiCards?.length || selectedCluster?.cards?.length || totalCards || 0);
-  const stackLabel = selectedTerm ? selectedTerm.label : (multiCards
-    ? `${multiIds.size} Perspektiven`
-    : selectedLabel || query);
+  const imageCardCount = imageSelectedCardIds?.length || 0;
+  const stackCardCount = sidebarTab === 'definition' && imageCardCount > 0
+    ? imageCardCount
+    : selectedTerm ? termCardCount : (multiCards?.length || selectedCluster?.cards?.length || totalCards || 0);
+
+  const stackLabel = sidebarTab === 'definition' && imageCardCount > 0
+    ? query  // Use search query as title — count is shown separately by dock
+    : selectedTerm ? selectedTerm.label : (multiCards
+      ? `${multiIds.size} Perspektiven`
+      : selectedLabel || query);
+
+  // Compute learning progress from card review data
+  const stackCards = selectedTerm ? null
+    : multiCards || selectedCluster?.cards || (clusters?.flatMap(c => c.cards) || []);
+  const learnStats = useMemo(() => {
+    const cards = stackCards || [];
+    if (!cards.length) return null;
+    const total = cards.length;
+    const learned = cards.filter(c => c.cardType === 2).length; // type 2 = review/mature
+    const due = cards.filter(c => c.isDue).length;
+    const pct = total > 0 ? Math.round((learned / total) * 100) : 0;
+    return { total, learned, due, pct };
+  }, [stackCards]);
 
   // Handle cluster click — single or multi mode
   const handleClusterClick = (cId, e) => {
@@ -113,8 +143,9 @@ export default function SearchSidebar({
   };
 
   // Render markdown text with inline [1], [2] card references as clickable badges
-  const renderMarkdownWithRefs = (text) => {
+  const renderMarkdownWithRefs = (text, refsOverride) => {
     if (!text) return null;
+    const refs = refsOverride || cardRefs;
 
     // Pre-process: convert [1, 2, 44] → [1] [2] [44] and [1,4,5] → [1] [4] [5]
     let processed = text.replace(/\[(\d+(?:\s*,\s*\d+)+)\]/g, (match, inner) => {
@@ -127,8 +158,8 @@ export default function SearchSidebar({
       <span>
         {parts.map((part, i) => {
           const match = part.match(/^\[(\d+)\]$/);
-          if (match && cardRefs?.[match[1]]) {
-            const ref = cardRefs[match[1]];
+          if (match && refs?.[match[1]]) {
+            const ref = refs[match[1]];
             return (
               <span
                 key={i}
@@ -165,9 +196,6 @@ export default function SearchSidebar({
       </span>
     );
   };
-
-  // Animation state for cluster drill-down
-  const [animating, setAnimating] = useState(false);
 
   const handleDrillDown = (cId, e) => {
     if (e?.metaKey || e?.ctrlKey || multiSelect) {
@@ -221,48 +249,53 @@ export default function SearchSidebar({
           {query}
         </div>
 
-        {/* Orchestration step — ABOVE agent (like session router) */}
-        {pipelineSteps.some(s => s.step === 'orchestrating') && (
-          <ReasoningDisplay
-            steps={pipelineSteps.filter(s => ['orchestrating', 'router'].includes(s.step))}
-            mode="full"
-          />
-        )}
+        {/* Definition tab content — Tutor answer + pipeline steps */}
+        {sidebarTab === 'definition' && (
+          <>
+            {/* Orchestration step — ABOVE agent (like session router) */}
+            {pipelineSteps.some(s => s.step === 'orchestrating') && (
+              <ReasoningDisplay
+                steps={pipelineSteps.filter(s => ['orchestrating', 'router'].includes(s.step))}
+                mode="full"
+              />
+            )}
 
-        {/* Tutor AgenticCell — standard agent signature */}
-        <AgenticCell
-          agentName="tutor"
-          isLoading={!answerText}
-          loadingHint="Analysiert deine Karten..."
-          headerMeta={
-            <span style={{
-              fontSize: 11, fontWeight: 500,
-              color: 'var(--ds-text-tertiary)',
-              letterSpacing: '0.2px',
-            }}>
-              aus {totalCards || '...'} Karten
-            </span>
-          }
-        >
-          {/* Agent-internal pipeline steps — INSIDE the agent (like session) */}
-          {pipelineSteps.filter(s => !['orchestrating', 'router'].includes(s.step)).length > 0 && (
-            <ReasoningDisplay
-              steps={pipelineSteps.filter(s => !['orchestrating', 'router'].includes(s.step))}
-              mode="full"
-              hasOutput={Boolean(answerText)}
-              bridge={bridge}
-            />
-          )}
-          {answerText && (
-            <div style={{
-              fontSize: 14,
-              color: 'var(--ds-text-secondary)',
-              lineHeight: 1.65,
-            }}>
-              {renderMarkdownWithRefs(answerText)}
-            </div>
-          )}
-        </AgenticCell>
+            {/* Tutor AgenticCell — standard agent signature */}
+            <AgenticCell
+              agentName="tutor"
+              isLoading={!answerText}
+              loadingHint="Analysiert deine Karten..."
+              headerMeta={
+                <span style={{
+                  fontSize: 11, fontWeight: 500,
+                  color: 'var(--ds-text-tertiary)',
+                  letterSpacing: '0.2px',
+                }}>
+                  aus {totalCards || '...'} Karten
+                </span>
+              }
+            >
+              {/* Agent-internal pipeline steps — INSIDE the agent (like session) */}
+              {pipelineSteps.filter(s => !['orchestrating', 'router'].includes(s.step)).length > 0 && (
+                <ReasoningDisplay
+                  steps={pipelineSteps.filter(s => !['orchestrating', 'router'].includes(s.step))}
+                  mode="full"
+                  hasOutput={Boolean(answerText)}
+                  bridge={bridge}
+                />
+              )}
+              {answerText && (
+                <div style={{
+                  fontSize: 14,
+                  color: 'var(--ds-text-secondary)',
+                  lineHeight: 1.65,
+                }}>
+                  {renderMarkdownWithRefs(answerText)}
+                </div>
+              )}
+            </AgenticCell>
+          </>
+        )}
 
         {/* Cluster skeleton — shown while searching, before clusters arrive */}
         {!clusters && isSearching && (
@@ -310,7 +343,7 @@ export default function SearchSidebar({
         )}
 
         {/* ═══ Tab Bar: Cluster / Begriffe ═══ */}
-        {(clusters?.length > 1 || kgSubgraph?.nodes?.length > 0) && (
+        {(answerText || clusters?.length > 1 || kgSubgraph?.nodes?.length > 0) && (
           <div style={{
             borderTop: '1px solid var(--ds-border-subtle)',
             paddingTop: 12,
@@ -323,6 +356,7 @@ export default function SearchSidebar({
               overflow: 'hidden',
             }}>
               {[
+                { key: 'definition', label: 'Definition' },
                 { key: 'clusters', label: 'Perspektiven' },
                 { key: 'terms', label: 'Begriffe' },
               ].map(tab => (
@@ -545,23 +579,32 @@ export default function SearchSidebar({
                   </span>
                 </div>
 
-                {/* Definition — with source attribution */}
+                {/* Definition — with card refs and source attribution */}
                 {termDefinition?.definition ? (
                   <div style={{
                     fontSize: 13,
                     color: 'var(--ds-text-secondary)',
                     lineHeight: 1.6,
                   }}>
-                    {renderMarkdownWithRefs(termDefinition.definition)}
+                    {renderMarkdownWithRefs(termDefinition.definition, termDefinition.cardRefs)}
                     {/* Source info */}
                     <div style={{
                       fontSize: 10, color: 'var(--ds-text-tertiary)',
                       marginTop: 8, fontStyle: 'italic',
                     }}>
-                      Quelle: {termDefinition.generated_by === 'llm' ? 'Tutor (aus deinen Karten)'
-                        : termDefinition.generated_by === 'research' ? 'Research Agent'
+                      Quelle: {termDefinition.generatedBy === 'llm' || termDefinition.generated_by === 'llm'
+                        ? 'Tutor (aus deinen Karten)'
+                        : termDefinition.generatedBy === 'research' || termDefinition.generated_by === 'research'
+                        ? 'Research Agent'
                         : 'Karten-Analyse'}
                     </div>
+                  </div>
+                ) : termDefinition?.error ? (
+                  <div style={{
+                    fontSize: 12, color: 'var(--ds-text-tertiary)',
+                    fontStyle: 'italic',
+                  }}>
+                    {termDefinition.error}
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -577,7 +620,54 @@ export default function SearchSidebar({
                       fontSize: 10, color: 'var(--ds-text-tertiary)',
                       marginTop: 4, fontStyle: 'italic',
                     }}>
-                      Tutor generiert Definition aus deinen Karten...
+                      Tutor generiert Erklärung aus deinen Karten...
+                    </div>
+                  </div>
+                )}
+
+                {/* Connected terms — navigate through the graph */}
+                {termDefinition?.connectedTerms?.length > 0 && (
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{
+                      fontSize: 10, color: 'var(--ds-text-muted)',
+                      marginBottom: 6, fontWeight: 500,
+                      textTransform: 'uppercase', letterSpacing: '0.04em',
+                    }}>
+                      Verbundene Begriffe
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {termDefinition.connectedTerms.slice(0, 8).map(t => (
+                        <button
+                          key={t}
+                          onClick={() => {
+                            // Find the node in kgSubgraph and select it
+                            const node = kgSubgraph?.nodes?.find(n => n.label === t || n.id === t);
+                            if (node) onSelectTerm?.(node);
+                            else onSelectTerm?.({ id: t, label: t });
+                          }}
+                          style={{
+                            padding: '4px 10px',
+                            fontSize: 11, fontWeight: 500,
+                            fontFamily: 'inherit',
+                            background: 'var(--ds-hover-tint)',
+                            border: '1px solid var(--ds-border-subtle)',
+                            borderRadius: 6,
+                            color: 'var(--ds-text-secondary)',
+                            cursor: 'pointer',
+                            transition: 'background 0.15s, color 0.15s',
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.background = 'var(--ds-active-tint)';
+                            e.currentTarget.style.color = 'var(--ds-text-primary)';
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.background = 'var(--ds-hover-tint)';
+                            e.currentTarget.style.color = 'var(--ds-text-secondary)';
+                          }}
+                        >
+                          {t}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -703,21 +793,45 @@ export default function SearchSidebar({
               </div>
               <div style={{
                 fontSize: 12, color: 'var(--ds-text-secondary)', marginTop: 3,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
               }}>
                 {stackCardCount} Karten
+                {learnStats && (
+                  <>
+                    <span style={{ color: 'var(--ds-text-muted)' }}>·</span>
+                    <span>{learnStats.pct}% gelernt</span>
+                    {learnStats.due > 0 && (
+                      <>
+                        <span style={{ color: 'var(--ds-text-muted)' }}>·</span>
+                        <span style={{ color: 'var(--ds-yellow)' }}>{learnStats.due} fällig</span>
+                      </>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           }
           actionPrimary={{
             label: `${stackCardCount} Karten kreuzen`,
-            onClick: onStartStack,
+            shortcut: 'Enter',
+            onClick: () => {
+              if (sidebarTab === 'definition' && imageCardCount > 0) {
+                window.ankiBridge?.addMessage('startTermStack', {
+                  term: query,
+                  cardIds: JSON.stringify(imageSelectedCardIds),
+                });
+              } else {
+                onStartStack?.();
+              }
+            },
           }}
           actionSecondary={{
-            label: '',
+            label: 'Schließen',
             shortcut: 'Esc',
             onClick: () => {
               if (multiSelect) { setMultiSelect(false); setMultiIds(new Set()); }
               else if (selectedClusterId) handleDrillUp();
+              else if (selectedTerm) onSelectTerm?.(null);
             },
           }}
         />
