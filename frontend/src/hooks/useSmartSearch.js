@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { useReasoningDispatch } from '../reasoning/store';
 
 export default function useSmartSearch() {
   const [query, setQuery] = useState('');
@@ -14,11 +15,12 @@ export default function useSmartSearch() {
   const [kgSubgraph, setKgSubgraph] = useState(null);
   const [graphMode, setGraphMode] = useState('clusters');
   const [imageSelectedCardIds, setImageSelectedCardIds] = useState([]);
-  const [selectedTerm, setSelectedTerm] = useState(null); // { id, label, cardIds, color }
-  const [termDefinition, setTermDefinition] = useState(null); // { term, definition, sources }
+  const [selectedTerm, setSelectedTerm] = useState(null);
+  const [termDefinition, setTermDefinition] = useState(null);
   const [isAnswerStreaming, setIsAnswerStreaming] = useState(false);
-  const [pipelineSteps, setPipelineSteps] = useState([]);
+  const [searchStreamId, setSearchStreamId] = useState(null);
   const answerChunksRef = useRef('');
+  const reasoningDispatch = useReasoningDispatch();
 
   // Track if sidebar slide-in has played — survives tab switches (lives in hook, not component)
   const sidebarHasAnimated = useRef(false);
@@ -96,16 +98,20 @@ export default function useSmartSearch() {
         setIsAnswerStreaming(false);
       }
 
-      // Pipeline steps — accumulate for SearchSidebar ReasoningDisplay
+      // Pipeline steps — dispatch into ReasoningStore for live pacing + animation
       if (data.type === 'pipeline_step') {
-        setPipelineSteps(prev => {
-          const existing = prev.findIndex(s => s.step === data.step);
-          const newStep = { step: data.step, status: data.status, data: data.data || {}, timestamp: Date.now() };
-          if (existing >= 0) {
-            return prev.map((s, i) => i === existing ? newStep : s);
+        const reqId = data.requestId || '';
+        const agentPrefix = data.data?.agent || data.agent || '';
+        const streamId = agentPrefix ? `${agentPrefix}-${reqId}` : reqId;
+        if (streamId) {
+          reasoningDispatch({ type: 'STEP', streamId, step: data.step, status: data.status, data: data.data || {} });
+          // Track the stream ID for SearchSidebar
+          setSearchStreamId(prev => prev || streamId);
+          // Set agent metadata
+          if (agentPrefix) {
+            reasoningDispatch({ type: 'AGENT_META', streamId, agentName: agentPrefix });
           }
-          return [...prev, newStep];
-        });
+        }
       }
     };
 
@@ -123,7 +129,7 @@ export default function useSmartSearch() {
       window.removeEventListener('graph.termDefinition', onTermDefinition);
       window.removeEventListener('smart_search.msg_event', onSmartSearchMsgEvent);
     };
-  }, []);
+  }, [reasoningDispatch]);
 
   // Select a KG term — request definition with search context
   const selectTerm = useCallback((termNode) => {
@@ -170,7 +176,7 @@ export default function useSmartSearch() {
     setCardRefs(null);
     answerChunksRef.current = '';
     setIsAnswerStreaming(false);
-    setPipelineSteps([]);
+    setSearchStreamId(null);
     setSelectedClusterId(null);
     setSubClusters(null);
     window.ankiBridge?.addMessage('searchCards', { query: q.trim(), topK: 100 });
@@ -186,7 +192,7 @@ export default function useSmartSearch() {
     setCardRefs(null);
     answerChunksRef.current = '';
     setIsAnswerStreaming(false);
-    setPipelineSteps([]);
+    setSearchStreamId(null);
     setSelectedClusterId(null);
     setSubClusters(null);
     cacheRef.current = null;
@@ -211,7 +217,7 @@ export default function useSmartSearch() {
 
   return {
     query, searchResult, isSearching,
-    answerText, isAnswerStreaming, pipelineSteps, clusterLabels, clusterSummaries, cardRefs,
+    answerText, isAnswerStreaming, searchStreamId, clusterLabels, clusterSummaries, cardRefs,
     selectedClusterId, setSelectedClusterId: selectCluster,
     selectedCluster, selectedClusterLabel, selectedClusterSummary,
     subClusters, isSubClustering,

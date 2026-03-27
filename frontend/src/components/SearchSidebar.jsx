@@ -31,7 +31,7 @@ export default function SearchSidebar({
   onSelectTerm,
   termDefinition,
   imageSelectedCardIds = [],  // NEW — from ImageCanvas selection
-  pipelineSteps = [],  // From useSmartSearch — accumulated from smart_search.msg_event
+  searchStreamId,  // From useSmartSearch — ReasoningStore stream ID for live pipeline display
 }) {
 
   // All hooks must be called unconditionally (before any early return)
@@ -216,29 +216,18 @@ export default function SearchSidebar({
       {/* Resize handle — same as session sidebar */}
       <ResizeHandle />
 
-      {/* Scrollable content */}
+      {/* Fixed header: Agent + Reasoning + Tabs */}
       <div style={{
-        flex: 1,
-        overflowY: 'auto',
-        padding: '20px 20px 12px',
+        flexShrink: 0,
+        padding: '16px 20px 0',
         display: 'flex',
         flexDirection: 'column',
-        gap: 14,
-        scrollbarWidth: 'none',
+        gap: 8,
       }}>
-        {/* Query title */}
-        <div style={{
-          fontSize: 20, fontWeight: 700,
-          color: 'var(--ds-text-primary)',
-          letterSpacing: '-0.3px',
-        }}>
-          {query}
-        </div>
-
-        {/* Tutor AgenticCell + Reasoning Steps — always visible above tabs */}
+        {/* Tutor AgenticCell + Reasoning Steps — fixed, not scrollable */}
         <AgenticCell
           agentName="tutor"
-          isLoading={!answerText && pipelineSteps.length > 0}
+          isLoading={!answerText && isSearching}
           loadingHint="Analysiert deine Karten..."
           headerMeta={
             <span style={{
@@ -250,16 +239,28 @@ export default function SearchSidebar({
             </span>
           }
         >
-          {/* Pipeline steps — always inside AgenticCell */}
-          {pipelineSteps.length > 0 && (
+          {/* Pipeline steps — live from ReasoningStore with pacing + animation */}
+          {searchStreamId && (
             <ReasoningDisplay
-              steps={pipelineSteps}
+              streamId={searchStreamId}
               mode="full"
               hasOutput={Boolean(answerText)}
               bridge={bridge}
             />
           )}
         </AgenticCell>
+      </div>
+
+      {/* Scrollable content — only tab content scrolls */}
+      <div style={{
+        flex: 1,
+        overflowY: 'auto',
+        padding: '0 20px 12px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 14,
+        scrollbarWidth: 'none',
+      }}>
 
         {/* Cluster skeleton — shown while searching, before clusters arrive */}
         {!clusters && isSearching && (
