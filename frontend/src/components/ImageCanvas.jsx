@@ -5,12 +5,18 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 const CANVAS_STYLE = {
   flex: 1,
   overflowY: 'auto',
-  padding: '72px 16px 16px',
+  padding: '72px 48px 16px', // 48px side padding (largest spacing token)
   background: 'transparent',
   scrollbarWidth: 'none',
   display: 'flex',
   flexDirection: 'column',
-  position: 'relative', // anchor for lightbox overlay
+  alignItems: 'center', // center the grid content
+  position: 'relative',
+};
+
+const CANVAS_INNER = {
+  width: '100%',
+  maxWidth: 1080, // constrain grid width
 };
 
 const DECK_HEADER_STYLE = {
@@ -85,7 +91,7 @@ const SKELETON_ROW = {
 const LB_OVERLAY = {
   position: 'absolute',
   inset: 0,
-  background: 'var(--ds-bg-deep)',
+  background: 'transparent',
   zIndex: 10,
   display: 'flex',
   flexDirection: 'column',
@@ -578,31 +584,33 @@ export default function ImageCanvas({
   return (
     <div style={{
       ...CANVAS_STYLE,
-      overflowY: isLightboxOpen ? 'hidden' : 'auto', // lock scroll when lightbox open
+      overflowY: isLightboxOpen ? 'hidden' : 'auto',
     }}>
-      {deckGroups.map(group => {
-        const rows = chunkIntoRows(group.images, IMAGES_PER_ROW);
-        return (
-          <div key={group.deck} style={{ marginBottom: 16 }}>
-            <div style={DECK_HEADER_STYLE}>
-              {group.deck}
-              <span style={DECK_COUNT_STYLE}>{group.images.length}</span>
-            </div>
-            {rows.map((row, ri) => (
-              <div key={ri} style={GRID_ROW_STYLE}>
-                {row.map(img => (
-                  <ImageTile
-                    key={img.filename}
-                    image={img}
-                    isSelected={lbImage?.filename === img.filename}
-                    onClick={() => openLightbox(img)}
-                  />
-                ))}
+      <div style={CANVAS_INNER}>
+        {deckGroups.map(group => {
+          const rows = chunkIntoRows(group.images, IMAGES_PER_ROW);
+          return (
+            <div key={group.deck} style={{ marginBottom: 16 }}>
+              <div style={DECK_HEADER_STYLE}>
+                {group.deck}
+                <span style={DECK_COUNT_STYLE}>{group.images.length}</span>
               </div>
-            ))}
-          </div>
-        );
-      })}
+              {rows.map((row, ri) => (
+                <div key={ri} style={GRID_ROW_STYLE}>
+                  {row.map(img => (
+                    <ImageTile
+                      key={img.filename}
+                      image={img}
+                      isSelected={lbImage?.filename === img.filename}
+                      onClick={() => openLightbox(img)}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
 
       {/* Lightbox overlay */}
       {lightboxIdx != null && lbImage && (
