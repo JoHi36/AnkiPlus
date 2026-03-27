@@ -559,20 +559,8 @@ def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="c
 
         # Helper function to build Anki query with deck restriction
         def build_anki_query(query, search_scope, context):
-            """Konstruiere Anki-Suchquery mit korrekter Deck-Name-Quote-Behandlung"""
-            if search_scope == "current_deck" and context and context.get('deckName'):
-                deck_name_query = context.get('deckName')
-                if 'deck:' in query.lower():
-                    pattern = r'deck:(["\']?)([^"\'\s\)]+(?:\s+[^"\'\s\)]+)*)\1'
-                    def replace_deck(match):
-                        deck_val = match.group(2)
-                        deck_val = deck_val.strip('"\'')
-                        return f'deck:"{deck_val}"'
-                    return re.sub(pattern, replace_deck, query, flags=re.IGNORECASE)
-                else:
-                    return f'deck:"{deck_name_query}" ({query})'
-            else:
-                return query
+            """Return query as-is. Always searches entire collection."""
+            return query
 
         # Helper function to execute query and aggregate results
         def execute_query(query, query_type, note_results):
@@ -802,8 +790,9 @@ def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="c
                         seen_images.add(img)
                         unique_images.append(img)
 
-                # Formatiere Note für Context-String
-                note_parts = [f"Note {note_id} (found in {query_count} queries: {', '.join(queries_found)}):"]
+                # Formatiere Note für Context-String — [index] statt Note-ID
+                index = len(formatted_notes) + 1  # 1-based index
+                note_parts = [f"[{index}] (found in {query_count} queries: {', '.join(queries_found)}):"]
 
                 for field_name, field_clean in note_fields.items():
                     note_parts.append(f"Field {field_name}: {field_clean}")
@@ -826,7 +815,8 @@ def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="c
                     "cardId": first_card_id,  # Erste Card-ID
                     "fields": citation_fields,
                     "deckName": deck_name,
-                    "isCurrentCard": False  # Will be set to True for current card below
+                    "isCurrentCard": False,  # Will be set to True for current card below
+                    "index": index  # Stable index for [N] inline references
                 }
 
             except (AttributeError, KeyError, IndexError, ValueError) as e:
