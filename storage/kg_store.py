@@ -256,6 +256,47 @@ def get_connected_terms(term):
     return [r["connected"] for r in rows]
 
 
+def get_term_expansions(term, max_terms=5, db=None):
+    """Get co-occurrence expansions for a term, sorted by edge weight.
+
+    Returns list of (term, weight) tuples sorted by weight descending.
+    """
+    conn = db or _get_db()
+    rows = conn.execute(
+        "SELECT term_b, weight FROM kg_edges WHERE term_a = ? "
+        "UNION "
+        "SELECT term_a, weight FROM kg_edges WHERE term_b = ? "
+        "ORDER BY weight DESC LIMIT ?",
+        (term, term, max_terms)
+    ).fetchall()
+    return [(r[0], r[1]) for r in rows]
+
+
+def exact_term_lookup(query, db=None):
+    """Case-insensitive exact match in kg_terms.
+
+    Returns the canonical term string if found, None otherwise.
+    """
+    conn = db or _get_db()
+    row = conn.execute(
+        "SELECT term FROM kg_terms WHERE LOWER(term) = LOWER(?) LIMIT 1",
+        (query,)
+    ).fetchone()
+    return row[0] if row else None
+
+
+def load_term_embeddings(db=None):
+    """Load all term embeddings from kg_terms.
+
+    Returns dict of {term: embedding_bytes} for terms with non-NULL embeddings.
+    """
+    conn = db or _get_db()
+    rows = conn.execute(
+        "SELECT term, embedding FROM kg_terms WHERE embedding IS NOT NULL"
+    ).fetchall()
+    return {r[0]: r[1] for r in rows}
+
+
 # ---------------------------------------------------------------------------
 #  Definitions
 # ---------------------------------------------------------------------------

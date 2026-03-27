@@ -324,3 +324,66 @@ class TestDeckCrossLinks(_BaseKGTest):
         kg.save_card_terms(100, ["Aktionspotential"], deck_id=1)
         deck_ids = kg.search_decks_by_term("Aktion")
         assert 1 in deck_ids
+
+
+import unittest
+
+
+class TestKgStoreEnrichment(unittest.TestCase):
+    """Tests for KG enrichment query functions."""
+
+    def setUp(self):
+        import sqlite3
+        self.db = sqlite3.connect(':memory:')
+        self.db.row_factory = sqlite3.Row
+        self.db.executescript("""
+            CREATE TABLE kg_terms (term TEXT PRIMARY KEY, frequency INTEGER DEFAULT 0, embedding BLOB);
+            CREATE TABLE kg_edges (term_a TEXT, term_b TEXT, weight INTEGER, PRIMARY KEY (term_a, term_b));
+            CREATE TABLE kg_card_terms (card_id INTEGER, term TEXT, deck_id INTEGER, is_definition INTEGER DEFAULT 0);
+            CREATE INDEX idx_kg_card_terms_term ON kg_card_terms(term);
+        """)
+        terms = [('Duenndarm', 5, None), ('Jejunum', 8, None), ('Ileum', 7, None), ('Duodenum', 6, None)]
+        self.db.executemany("INSERT INTO kg_terms VALUES (?, ?, ?)", terms)
+        edges = [('Duenndarm', 'Jejunum', 8), ('Duenndarm', 'Ileum', 7), ('Duenndarm', 'Duodenum', 6),
+                 ('Jejunum', 'Ileum', 5)]
+        self.db.executemany("INSERT INTO kg_edges VALUES (?, ?, ?)", edges)
+        self.db.commit()
+
+    def test_get_term_expansions_sorted_by_weight(self):
+        from storage.kg_store import get_term_expansions
+        expansions = get_term_expansions('Duenndarm', db=self.db)
+        self.assertEqual(len(expansions), 3)
+        self.assertEqual(expansions[0], ('Jejunum', 8))
+        self.assertEqual(expansions[1], ('Ileum', 7))
+
+    def test_get_term_expansions_limit(self):
+        from storage.kg_store import get_term_expansions
+        expansions = get_term_expansions('Duenndarm', max_terms=2, db=self.db)
+        self.assertEqual(len(expansions), 2)
+
+    def test_get_term_expansions_unknown_term(self):
+        from storage.kg_store import get_term_expansions
+        self.assertEqual(get_term_expansions('Unbekannt', db=self.db), [])
+
+    def test_exact_term_lookup_case_insensitive(self):
+        from storage.kg_store import exact_term_lookup
+        result = exact_term_lookup('duenndarm', db=self.db)
+        self.assertEqual(result, 'Duenndarm')
+
+    def test_exact_term_lookup_miss(self):
+        from storage.kg_store import exact_term_lookup
+        self.assertIsNone(exact_term_lookup('Quantenmechanik', db=self.db))
+
+    def test_load_term_embeddings_empty(self):
+        from storage.kg_store import load_term_embeddings
+        self.assertEqual(load_term_embeddings(db=self.db), {})
+
+    def test_load_term_embeddings_with_data(self):
+        import struct
+        from storage.kg_store import load_term_embeddings
+        fake_emb = struct.pack('4f', 0.1, 0.2, 0.3, 0.4)
+        self.db.execute("UPDATE kg_terms SET embedding = ? WHERE term = ?", (fake_emb, 'Jejunum'))
+        self.db.commit()
+        result = load_term_embeddings(db=self.db)
+        self.assertIn('Jejunum', result)
+        self.assertEqual(result['Jejunum'], fake_emb)
