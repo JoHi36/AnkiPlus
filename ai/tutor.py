@@ -80,6 +80,7 @@ def run_tutor(situation, emit_step=None, memory=None,
     callback = kwargs.get('callback')  # v1 legacy streaming callback
     rag_retrieve_fn = kwargs.get('rag_retrieve_fn')
     embedding_manager = kwargs.get('embedding_manager')
+    smart_search_context = kwargs.get('smart_search_context')
 
     # ------------------------------------------------------------------
     # 2. Track memory
@@ -111,43 +112,66 @@ def run_tutor(situation, emit_step=None, memory=None,
         return {'text': msg}
 
     # ------------------------------------------------------------------
-    # 4. RAG retrieval
+    # 4. RAG retrieval (or pre-loaded smart search context)
     # ------------------------------------------------------------------
     rag_context = None
     citations = {}
 
-    try:
-        if routing_result is not None:
-            # If no rag_retrieve_fn was provided, try to build one from ai/rag.py
-            _rag_fn = rag_retrieve_fn
-            if _rag_fn is None:
-                _rag_fn = _make_default_rag_retrieve_fn()
+    if smart_search_context:
+        # Smart Search: cards already found by SearchCardsThread
+        # Build RAG context string from pre-loaded cards
+        cards = smart_search_context.get('cards_data', [])
+        rag_lines = []
+        for i, card in enumerate(cards[:50]):
+            q = (card.get('question') or '')[:80]
+            a = (card.get('answer') or card.get('deck') or '')[:80]
+            rag_lines.append("[%d] %s | %s" % (i + 1, q, a))
+        if rag_lines:
+            rag_context = {"context_string": "\n".join(rag_lines)}
+            # Build citations for card references
+            for i, card in enumerate(cards[:50]):
+                card_id = card.get('id') or card.get('card_id') or ''
+                if card_id:
+                    citations[str(card_id)] = {
+                        'noteId': str(card_id),
+                        'question': (card.get('question') or '')[:60],
+                        'source': 'smart_search',
+                    }
+        if emit_step:
+            emit_step("sources_ready", "done", {"citations": citations})
+        logger.info("Tutor: using smart_search_context with %d cards", len(cards))
+    else:
+        # Normal path: RAG retrieval from routing result
+        try:
+            if routing_result is not None:
+                _rag_fn = rag_retrieve_fn
+                if _rag_fn is None:
+                    _rag_fn = _make_default_rag_retrieve_fn()
 
-            rag_result = retrieve_rag_context(
-                user_message=situation,
-                context=context,
-                config=config,
-                routing_result=routing_result,
-                emit_step=emit_step,
-                embedding_manager=embedding_manager,
-                rag_retrieve_fn=_rag_fn,
-            )
+                rag_result = retrieve_rag_context(
+                    user_message=situation,
+                    context=context,
+                    config=config,
+                    routing_result=routing_result,
+                    emit_step=emit_step,
+                    embedding_manager=embedding_manager,
+                    rag_retrieve_fn=_rag_fn,
+                )
 
-            if rag_result.cards_found > 0:
-                rag_context = rag_result.rag_context
-                citations = rag_result.citations
-                logger.debug("Tutor RAG: %s citations", len(citations))
-                # Emit citations early so frontend can show source cards during generation
-                if emit_step and citations:
-                    emit_step("sources_ready", "done", {"citations": citations})
-    except Exception as e:
-        logger.warning("Tutor RAG retrieval failed: %s", e)
+                if rag_result.cards_found > 0:
+                    rag_context = rag_result.rag_context
+                    citations = rag_result.citations
+                    logger.debug("Tutor RAG: %s citations", len(citations))
+                    if emit_step and citations:
+                        emit_step("sources_ready", "done", {"citations": citations})
+        except Exception as e:
+            logger.warning("Tutor RAG retrieval failed: %s", e)
 
-    # Even without search results, include current card as context
-    if not rag_context and context and context.get('cardId'):
-        rag_context = _build_current_card_context(context)
-        if rag_context:
-            citations = rag_context.get('citations', {})
+        # Even without search results, include current card as context
+        if not rag_context and context and context.get('cardId'):
+            rag_context = _build_current_card_context(context)
+            if rag_context:
+                citations = rag_context.get('citations', {})
 
     # ------------------------------------------------------------------
     # 5. Build system prompt
