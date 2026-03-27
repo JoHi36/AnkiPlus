@@ -166,11 +166,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   }
   .step-row:last-child { margin-bottom: 0; }
   .step-name {
-    width: 130px;
+    width: 175px;
     flex-shrink: 0;
     font-size: 12px;
     color: var(--text-muted);
     font-family: var(--mono);
+    display: flex;
+    align-items: center;
   }
   .step-bar-bg {
     flex: 1;
@@ -310,16 +312,6 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   .td-steps {
     white-space: nowrap;
   }
-  .step-dot {
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    margin-right: 3px;
-    vertical-align: middle;
-    flex-shrink: 0;
-  }
-
   /* ── Trace row ── */
   tr.trace-row td {
     padding: 0;
@@ -362,6 +354,69 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     font-weight: 600;
     background: rgba(255, 69, 58, 0.15);
     color: var(--red);
+  }
+
+  /* ── Tooltip ── */
+  .tip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-muted);
+    cursor: default;
+    margin-left: 5px;
+    flex-shrink: 0;
+    vertical-align: middle;
+  }
+  .tip::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 7px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-overlay, #3A3A3C);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.45;
+    white-space: normal;
+    width: 220px;
+    padding: 8px 10px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+    z-index: 100;
+  }
+  .tip:hover::after {
+    opacity: 1;
+  }
+
+  /* ── Step dot (numbered) ── */
+  .step-dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    margin-right: 3px;
+    vertical-align: middle;
+    flex-shrink: 0;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--bg-deep);
+    line-height: 1;
   }
 
   /* ── Spinner ── */
@@ -451,12 +506,35 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
 const STEP_KEYS = ['term_extraction','kg_expansion','sql_search','semantic_search','rrf_ranking','confidence'];
 const STEP_LABELS = {
-  term_extraction:  'term_extraction',
-  kg_expansion:     'kg_expansion',
-  sql_search:       'sql_search',
-  semantic_search:  'semantic_search',
-  rrf_ranking:      'rrf_ranking',
-  confidence:       'confidence',
+  term_extraction:  '① term extraction',
+  kg_expansion:     '② kg expansion',
+  sql_search:       '③ sql search',
+  semantic_search:  '④ semantic search',
+  rrf_ranking:      '⑤ rrf ranking',
+  confidence:       '⑥ confidence',
+};
+const STEP_NUMBERS = {
+  term_extraction:  1,
+  kg_expansion:     2,
+  sql_search:       3,
+  semantic_search:  4,
+  rrf_ranking:      5,
+  confidence:       6,
+};
+const STEP_TOOLTIPS = {
+  term_extraction:  'Welche Wörter werden aus deiner Frage extrahiert? Score = Anteil der erwarteten Fachbegriffe gefunden.',
+  kg_expansion:     'Findet das KG verwandte Begriffe? z.B. Dünndarm → Jejunum, Ileum. Score = Anteil gefundener Synonyme.',
+  sql_search:       'Findet die Keyword-Suche die richtige Karte? Durchsucht alle Karten nach den generierten Suchbegriffen.',
+  semantic_search:  'Findet die Embedding-Suche die richtige Karte? Vergleicht Bedeutung der Frage mit allen Karten-Embeddings.',
+  rrf_ranking:      'Wie gut ist das finale Ranking? Kombiniert SQL + Semantic mathematisch. Score = 1/Rang der Zielkarte.',
+  confidence:       'Erkennt das System ob es eine Antwort hat? High = Antwort da, Low = Web-Suche nötig.',
+};
+const CAT_TOOLTIPS = {
+  direct:     'Frage nutzt gleiche Begriffe wie die Karte. Einfachster Fall.',
+  synonym:    'Frage nutzt andere Fachbegriffe als die Karte. Testet KG-Expansion.',
+  context:    'Vage Frage wie "Erkläre das genauer" + Kartenkontext. Testet Kontextverständnis.',
+  cross_deck: 'Frage zu einer Karte in einem anderen Deck. Testet Collection-weite Suche.',
+  typo:       'Frage mit Tippfehler im Fachbegriff. Testet Embedding-Fuzzy-Matching.',
 };
 const CATEGORY_FILTERS = ['all','pass','fail','direct','synonym','context','cross_deck','typo'];
 const CAT_BADGE_CLASS = {
@@ -514,6 +592,10 @@ function renderSummary(agg) {
   const recallCard = el('div', 'recall-card');
   const rl = el('div', 'recall-label');
   rl.appendChild(safeText('Recall@K'));
+  const rlTip = el('span', 'tip');
+  rlTip.appendChild(safeText('?'));
+  rlTip.setAttribute('data-tooltip', 'Prozentsatz der Fragen, bei denen die richtige Karte in den Top-K Ergebnissen landet. Höher = besser.');
+  rl.appendChild(rlTip);
   recallCard.appendChild(rl);
 
   const rv = el('div', 'recall-value ' + recallClass(overall.recall_at_k));
@@ -537,7 +619,11 @@ function renderSummary(agg) {
     const srow = el('div', 'step-row');
 
     const nameEl = el('div', 'step-name');
-    nameEl.appendChild(safeText(key));
+    nameEl.appendChild(safeText(STEP_LABELS[key] || key));
+    const stepTip = el('span', 'tip');
+    stepTip.appendChild(safeText('?'));
+    stepTip.setAttribute('data-tooltip', STEP_TOOLTIPS[key] || '');
+    nameEl.appendChild(stepTip);
     srow.appendChild(nameEl);
 
     const barBg = el('div', 'step-bar-bg');
@@ -566,9 +652,19 @@ function renderSummary(agg) {
   Object.entries(byCat).forEach(([cat, info]) => {
     const crow = el('div', 'cat-row');
 
+    const badgeWrap = el('span');
+    badgeWrap.style.display = 'inline-flex';
+    badgeWrap.style.alignItems = 'center';
     const badge = el('span', 'cat-badge ' + (CAT_BADGE_CLASS[cat] || ''));
     badge.appendChild(safeText(cat));
-    crow.appendChild(badge);
+    badgeWrap.appendChild(badge);
+    if (CAT_TOOLTIPS[cat]) {
+      const catTip = el('span', 'tip');
+      catTip.appendChild(safeText('?'));
+      catTip.setAttribute('data-tooltip', CAT_TOOLTIPS[cat]);
+      badgeWrap.appendChild(catTip);
+    }
+    crow.appendChild(badgeWrap);
 
     const stats = el('span', 'cat-stats');
     stats.appendChild(safeText(info.passed + '/' + info.cases));
@@ -662,13 +758,14 @@ function renderTable(cases) {
     tdRank.appendChild(safeText(rank));
     tr.appendChild(tdRank);
 
-    // Step dots
+    // Step dots (numbered)
     const tdSteps = el('td', 'td-steps');
     STEP_KEYS.forEach(key => {
       const step = (c.steps && c.steps[key]) ? c.steps[key] : null;
       const score = step ? (step.score != null ? step.score : 0) : 0;
       const dot = el('span', 'step-dot');
       dot.style.background = scoreColor(score);
+      dot.appendChild(safeText(String(STEP_NUMBERS[key] || '')));
       dot.setAttribute('title', key + ': ' + pct(score));
       tdSteps.appendChild(dot);
     });
