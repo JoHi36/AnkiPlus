@@ -10,6 +10,7 @@ const CANVAS_STYLE = {
   scrollbarWidth: 'none',
   display: 'flex',
   flexDirection: 'column',
+  position: 'relative', // anchor for lightbox overlay
 };
 
 const DECK_HEADER_STYLE = {
@@ -81,19 +82,20 @@ const SKELETON_ROW = {
 // --- Lightbox styles ---
 
 const LB_OVERLAY = {
-  position: 'fixed',
+  position: 'absolute',
   inset: 0,
   background: 'rgba(0,0,0,0.88)',
   backdropFilter: 'blur(16px)',
-  zIndex: 100,
+  zIndex: 10,
   display: 'flex',
   flexDirection: 'column',
   transition: 'opacity 0.25s ease',
+  borderRadius: 0,
 };
 
 const LB_HEADER = {
   flexShrink: 0,
-  padding: '72px 56px 10px', // top padding for transparent app header
+  padding: '16px 24px 10px',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
@@ -121,7 +123,7 @@ const LB_CENTER = {
   alignItems: 'center',
   justifyContent: 'center',
   position: 'relative',
-  padding: '0 60px',
+  padding: '0 48px',
   minHeight: 0,
 };
 
@@ -177,9 +179,33 @@ const LB_NAV = {
 
 const LB_FILMSTRIP_WRAP = {
   flexShrink: 0,
-  padding: '12px 40px 22px',
+  padding: '12px 0 22px',
   display: 'flex',
   justifyContent: 'center',
+  position: 'relative',
+};
+
+// Fade masks for filmstrip edges
+const LB_FILMSTRIP_FADE_LEFT = {
+  position: 'absolute',
+  left: 0,
+  top: 0,
+  bottom: 0,
+  width: 40,
+  background: 'linear-gradient(to right, rgba(0,0,0,0.88), transparent)',
+  zIndex: 1,
+  pointerEvents: 'none',
+};
+
+const LB_FILMSTRIP_FADE_RIGHT = {
+  position: 'absolute',
+  right: 0,
+  top: 0,
+  bottom: 0,
+  width: 40,
+  background: 'linear-gradient(to left, rgba(0,0,0,0.88), transparent)',
+  zIndex: 1,
+  pointerEvents: 'none',
 };
 
 const LB_FILMSTRIP = {
@@ -295,6 +321,7 @@ function Lightbox({ images, currentIdx, clusterLabel, deckName, onNav, onClose }
   if (!image) return null;
 
   const filmstripRef = React.useRef(null);
+  const overlayRef = React.useRef(null);
 
   // Scroll active thumb into view
   useEffect(() => {
@@ -304,10 +331,30 @@ function Lightbox({ images, currentIdx, clusterLabel, deckName, onNav, onClose }
     if (active) active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
   }, [currentIdx]);
 
+  // Close on click — check if click is on the overlay background (not on children)
+  const handleOverlayClick = useCallback((e) => {
+    // Close if clicking directly on overlay, center area background, or header background
+    const tag = e.target.tagName?.toLowerCase();
+    // Don't close if clicking on interactive elements
+    if (tag === 'button' || tag === 'img' || tag === 'span' || tag === 'a') return;
+    // Close if clicking on a div that's the overlay, center, or header
+    if (e.target === overlayRef.current || e.target.dataset?.closeZone) {
+      onClose();
+    }
+  }, [onClose]);
+
+  // Open image source in browser
+  const handleSourceClick = useCallback(() => {
+    if (image?.src) {
+      window.ankiBridge?.addMessage('openUrl', image.src);
+    }
+  }, [image]);
+
   return (
     <div
+      ref={overlayRef}
       style={{ ...LB_OVERLAY, opacity: 1, pointerEvents: 'auto' }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={handleOverlayClick}
     >
       {/* Header: Deck › Perspektive | Quelle */}
       <div style={LB_HEADER}>
@@ -322,6 +369,7 @@ function Lightbox({ images, currentIdx, clusterLabel, deckName, onNav, onClose }
         </div>
         <span
           style={LB_SOURCE}
+          onClick={handleSourceClick}
           onMouseEnter={e => { e.currentTarget.style.opacity = '1'; }}
           onMouseLeave={e => { e.currentTarget.style.opacity = '0.7'; }}
         >
@@ -329,8 +377,8 @@ function Lightbox({ images, currentIdx, clusterLabel, deckName, onNav, onClose }
         </span>
       </div>
 
-      {/* Big image */}
-      <div style={LB_CENTER}>
+      {/* Big image — data-close-zone on the padding area */}
+      <div style={LB_CENTER} data-close-zone="true">
         <button
           style={{ ...LB_NAV, left: 10 }}
           onClick={(e) => { e.stopPropagation(); onNav(-1); }}
@@ -355,8 +403,9 @@ function Lightbox({ images, currentIdx, clusterLabel, deckName, onNav, onClose }
         </button>
       </div>
 
-      {/* Filmstrip */}
+      {/* Filmstrip with fade edges */}
       <div style={LB_FILMSTRIP_WRAP}>
+        <div style={LB_FILMSTRIP_FADE_LEFT} />
         <div style={LB_FILMSTRIP} ref={filmstripRef}>
           {images.map((img, i) => (
             <div
@@ -385,6 +434,7 @@ function Lightbox({ images, currentIdx, clusterLabel, deckName, onNav, onClose }
             </div>
           ))}
         </div>
+        <div style={LB_FILMSTRIP_FADE_RIGHT} />
       </div>
     </div>
   );
