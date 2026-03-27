@@ -2891,12 +2891,29 @@ class ChatbotWidget(QWidget):
                 # Fallback: use embedded count as approximation
                 total_cards = max(embedded_count, kg_status.get('totalCards', 0))
 
+            # KG term embeddings count (for fuzzy matching indicator)
+            kg_total_terms = kg_status.get('totalTerms', 0)
+            kg_embedded_terms = 0
+            try:
+                try:
+                    from ..storage.kg_store import get_unembedded_terms
+                except ImportError:
+                    from storage.kg_store import get_unembedded_terms
+                unembedded = len(get_unembedded_terms())
+                kg_embedded_terms = max(0, kg_total_terms - unembedded)
+            except Exception:
+                pass
+
             self._send_to_frontend('indexingStatus', {
                 'embeddings': {'total': total_cards, 'done': embedded_count},
                 'kgTerms': {
                     'total': total_cards,
                     'done': kg_status.get('totalCards', 0),
-                    'totalTerms': kg_status.get('totalTerms', 0),
+                    'totalTerms': kg_total_terms,
+                },
+                'kgTermEmbeddings': {
+                    'total': kg_total_terms,
+                    'done': kg_embedded_terms,
                 },
             })
         except Exception:

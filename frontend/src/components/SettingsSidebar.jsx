@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Settings, Copy, LogOut, ChevronRight, Sun, Moon, Monitor } from 'lucide-react';
 import { bridgeAction } from '../actions';
 
@@ -33,10 +33,15 @@ export default function SettingsSidebar() {
     tokenLimit: 0,
   });
   const [copyLabel, setCopyLabel] = useState(null); // null = default, string = temporary
+  const [indexing, setIndexing] = useState(null); // { embeddings: {total, done}, kgTerms: {total, done, totalTerms} }
 
   // Request status from Python on mount
   useEffect(() => {
     bridgeAction('sidebarGetStatus');
+    bridgeAction('sidebarGetIndexingStatus');
+    // Poll indexing status every 10s (background thread updates DB)
+    const interval = setInterval(() => bridgeAction('sidebarGetIndexingStatus'), 10000);
+    return () => clearInterval(interval);
   }, []);
 
   // Listen for messages from Python via ankiReceive (safe — doesn't override the handler)
@@ -65,6 +70,9 @@ export default function SettingsSidebar() {
           setStatus(prev => ({ ...prev, theme }));
           document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
         }
+      }
+      if (payload.type === 'indexingStatus') {
+        setIndexing(payload.data);
       }
       if (payload.type === 'sidebarLogsCopied') {
         setCopyLabel('Kopiert ✓');
@@ -233,6 +241,12 @@ export default function SettingsSidebar() {
       {/* Divider */}
       <div style={{ height: 1, background: 'var(--ds-border-subtle)', margin: '12px 0' }} />
 
+      {/* Indexing Status Gauge */}
+      {indexing && <IndexingGauge data={indexing} />}
+
+      {/* Divider */}
+      <div style={{ height: 1, background: 'var(--ds-border-subtle)', margin: '12px 0' }} />
+
       {/* Action Rows */}
       <div>
         <ActionRow icon={<Settings size={16} />} label="Anki-Einstellungen" onClick={openNativeSettings} chevron />
@@ -316,6 +330,193 @@ export default function SettingsSidebar() {
     </div>
   );
 }
+
+/* ─── Dual Arc Gauge ─── */
+
+const ARC_SIZE = 120;
+const ARC_CENTER = ARC_SIZE / 2;
+const R_OUTER = 48;
+const R_INNER = 36;
+const STROKE_W = 5;
+const CIRC_OUTER = 2 * Math.PI * R_OUTER;
+const CIRC_INNER = 2 * Math.PI * R_INNER;
+
+const INFO_TEXT = 'Einmaliger Prozess beim ersten Start. Embeddings ermöglichen semantische Suche, der Knowledge Graph verknüpft Fachbegriffe deiner Karten. Wird bei neuen Karten automatisch aktualisiert. Kostet einmalig wenige Cent an Tokens.';
+
+function IndexingGauge({ data }) {
+  const emb = data?.embeddings || { total: 0, done: 0 };
+  const kg = data?.kgTerms || { total: 0, done: 0, totalTerms: 0 };
+  const kgEmb = data?.kgTermEmbeddings || { total: 0, done: 0 };
+  const [showInfo, setShowInfo] = useState(false);
+
+  const embPct = emb.total > 0 ? Math.min(1, emb.done / emb.total) : 0;
+  const kgPct = kg.total > 0 ? Math.min(1, kg.done / kg.total) : 0;
+  const isActive = (embPct < 1 || kgPct < 1) && emb.total > 0;
+
+  const embOffset = CIRC_OUTER * (1 - embPct);
+  const kgOffset = CIRC_INNER * (1 - kgPct);
+
+  const fmt = (n) => n.toLocaleString('de-DE');
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div
+          className="uppercase font-semibold tracking-wide"
+          style={{ fontSize: 10, letterSpacing: '0.06em', color: 'var(--ds-text-muted)' }}
+        >
+          Indexierung
+        </div>
+        <button
+          onClick={() => setShowInfo(!showInfo)}
+          style={{
+            width: 16, height: 16, borderRadius: '50%',
+            border: '1px solid var(--ds-border-medium)',
+            background: showInfo ? 'var(--ds-active-tint)' : 'transparent',
+            color: 'var(--ds-text-muted)', fontSize: 9, fontWeight: 600,
+            cursor: 'pointer', fontFamily: 'inherit',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            lineHeight: 1, padding: 0,
+          }}
+        >?</button>
+      </div>
+
+      {showInfo && (
+        <div style={{
+          fontSize: 10, lineHeight: 1.5,
+          color: 'var(--ds-text-tertiary)',
+          padding: '8px 10px', marginBottom: 10,
+          background: 'var(--ds-hover-tint)',
+          borderRadius: 8,
+          border: '1px solid var(--ds-border-subtle)',
+        }}>
+          {INFO_TEXT}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        {/* SVG Gauge */}
+        <svg
+          width={ARC_SIZE}
+          height={ARC_SIZE}
+          viewBox={`0 0 ${ARC_SIZE} ${ARC_SIZE}`}
+          style={{ flexShrink: 0 }}
+        >
+          {/* Background tracks */}
+          <circle cx={ARC_CENTER} cy={ARC_CENTER} r={R_OUTER}
+            fill="none" stroke="var(--ds-border-subtle)" strokeWidth={STROKE_W}
+            opacity={0.4}
+          />
+          <circle cx={ARC_CENTER} cy={ARC_CENTER} r={R_INNER}
+            fill="none" stroke="var(--ds-border-subtle)" strokeWidth={STROKE_W}
+            opacity={0.4}
+          />
+
+          {/* Progress arcs — no glow, clean */}
+          <circle cx={ARC_CENTER} cy={ARC_CENTER} r={R_OUTER}
+            fill="none" stroke="var(--ds-accent)" strokeWidth={STROKE_W}
+            strokeDasharray={CIRC_OUTER}
+            strokeDashoffset={embOffset}
+            strokeLinecap="round"
+            transform={`rotate(-90 ${ARC_CENTER} ${ARC_CENTER})`}
+            style={{ transition: 'stroke-dashoffset 1s ease-out' }}
+          />
+          <circle cx={ARC_CENTER} cy={ARC_CENTER} r={R_INNER}
+            fill="none" stroke="#30D158" strokeWidth={STROKE_W}
+            strokeDasharray={CIRC_INNER}
+            strokeDashoffset={kgOffset}
+            strokeLinecap="round"
+            transform={`rotate(-90 ${ARC_CENTER} ${ARC_CENTER})`}
+            style={{ transition: 'stroke-dashoffset 1s ease-out' }}
+          />
+
+          {/* Center text */}
+          <text x={ARC_CENTER} y={ARC_CENTER - 6} textAnchor="middle"
+            fill="var(--ds-text-primary)" fontSize="18" fontWeight="700"
+            fontFamily="var(--ds-font-mono, 'SF Mono', monospace)"
+          >
+            {Math.round(((embPct + kgPct) / 2) * 100)}%
+          </text>
+          <text x={ARC_CENTER} y={ARC_CENTER + 10} textAnchor="middle"
+            fill="var(--ds-text-muted)" fontSize="8" fontWeight="500"
+            letterSpacing="0.05em"
+          >
+            {isActive ? 'INDEXING' : 'SYNCED'}
+          </text>
+        </svg>
+
+        {/* Legend */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+              <span style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: 'var(--ds-accent)', flexShrink: 0,
+              }} />
+              <span style={{ fontSize: 10, color: 'var(--ds-text-secondary)', fontWeight: 500 }}>
+                Embeddings
+              </span>
+            </div>
+            <span style={{
+              fontSize: 11, color: 'var(--ds-text-muted)',
+              fontFamily: 'var(--ds-font-mono, monospace)',
+            }}>
+              {fmt(emb.done)} / {fmt(emb.total)}
+            </span>
+          </div>
+
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+              <span style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: '#30D158', flexShrink: 0,
+              }} />
+              <span style={{ fontSize: 10, color: 'var(--ds-text-secondary)', fontWeight: 500 }}>
+                Knowledge Graph
+              </span>
+            </div>
+            <span style={{
+              fontSize: 11, color: 'var(--ds-text-muted)',
+              fontFamily: 'var(--ds-font-mono, monospace)',
+            }}>
+              {fmt(kg.done)} / {fmt(kg.total)}
+            </span>
+            {kg.totalTerms > 0 && (
+              <span style={{
+                fontSize: 11, color: 'var(--ds-text-muted)',
+                fontFamily: 'var(--ds-font-mono, monospace)',
+                marginLeft: 6,
+              }}>
+                · {fmt(kg.totalTerms)} Begriffe
+              </span>
+            )}
+          </div>
+
+          {kgEmb.total > 0 && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                <span style={{
+                  width: 6, height: 6, borderRadius: '50%',
+                  background: 'var(--ds-yellow)', flexShrink: 0,
+                }} />
+                <span style={{ fontSize: 10, color: 'var(--ds-text-secondary)', fontWeight: 500 }}>
+                  Begriffe Embedded
+                </span>
+              </div>
+              <span style={{
+                fontSize: 11, color: 'var(--ds-text-muted)',
+                fontFamily: 'var(--ds-font-mono, monospace)',
+              }}>
+                {fmt(kgEmb.done)} / {fmt(kgEmb.total)}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 /** Reusable action row */
 function ActionRow({ icon, label, sub, onClick, chevron, last }) {

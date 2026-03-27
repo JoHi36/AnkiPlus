@@ -55,6 +55,7 @@ def _handle_sidebar_message(msg_type, data):
     """Route sidebar messages from the React frontend."""
     handlers = {
         'sidebarGetStatus': _msg_get_status,
+        'sidebarGetIndexingStatus': _msg_get_indexing_status,
         'sidebarSetTheme': _msg_set_theme,
         'sidebarOpenNativeSettings': _msg_open_native_settings,
         'sidebarCopyLogs': _msg_copy_logs,
@@ -272,6 +273,73 @@ def _msg_copy_logs(_data):
         _send_to_sidebar("sidebarLogsCopied", {})
     except Exception:
         logger.exception("_msg_copy_logs failed")
+
+
+def _msg_get_indexing_status(_data):
+    """Return embedding + KG term extraction status."""
+    try:
+        # KG terms status
+        try:
+            from ..storage.kg_store import get_graph_status
+        except ImportError:
+            from storage.kg_store import get_graph_status
+        kg_status = get_graph_status()
+
+        # Embedding status — count from card_sessions
+        try:
+            from ..storage.card_sessions import load_all_embeddings
+        except ImportError:
+            from storage.card_sessions import load_all_embeddings
+        embedded_count = 0
+        try:
+            for _ in load_all_embeddings():
+                embedded_count += 1
+        except Exception:
+            pass
+
+        # Total cards from Anki
+        total_cards = 0
+        try:
+            if mw and mw.col:
+                total_cards = mw.col.card_count()
+        except Exception:
+            pass
+
+        # KG term embeddings count (for fuzzy matching indicator)
+        kg_total_terms = kg_status.get('totalTerms', 0)
+        kg_embedded_terms = 0
+        try:
+            try:
+                from ..storage.kg_store import get_unembedded_terms
+            except ImportError:
+                from storage.kg_store import get_unembedded_terms
+            unembedded = len(get_unembedded_terms())
+            kg_embedded_terms = max(0, kg_total_terms - unembedded)
+        except Exception:
+            pass
+
+        _send_to_sidebar('indexingStatus', {
+            'embeddings': {
+                'total': total_cards,
+                'done': embedded_count,
+            },
+            'kgTerms': {
+                'total': total_cards,
+                'done': kg_status.get('totalCards', 0),
+                'totalTerms': kg_total_terms,
+            },
+            'kgTermEmbeddings': {
+                'total': kg_total_terms,
+                'done': kg_embedded_terms,
+            },
+        })
+    except Exception:
+        logger.exception("_msg_get_indexing_status failed")
+        _send_to_sidebar('indexingStatus', {
+            'embeddings': {'total': 0, 'done': 0},
+            'kgTerms': {'total': 0, 'done': 0, 'totalTerms': 0},
+            'kgTermEmbeddings': {'total': 0, 'done': 0},
+        })
 
 
 def _msg_js_error(data):

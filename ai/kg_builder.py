@@ -149,11 +149,31 @@ def build_term_embeddings(embed_fn, db=None, batch_size=50):
         logger.info("build_term_embeddings: all terms already embedded")
         return 0
 
+    # Load definitions for richer embeddings
+    # "Jejunum" alone → lexical embedding. "Jejunum: mittlerer Abschnitt des Dünndarms" → semantic.
+    definitions = {}
+    try:
+        def_rows = conn.execute("SELECT term, definition FROM kg_definitions").fetchall()
+        for r in def_rows:
+            definitions[r[0]] = r[1][:150]  # Truncate long definitions
+        if definitions:
+            logger.info("build_term_embeddings: %d definitions available for enriched embedding", len(definitions))
+    except Exception:
+        pass
+
     total_embedded = 0
     for i in range(0, len(terms), batch_size):
         batch = terms[i:i + batch_size]
+        # Enrich terms with definitions where available
+        texts_to_embed = []
+        for term in batch:
+            defn = definitions.get(term)
+            if defn:
+                texts_to_embed.append("%s: %s" % (term, defn))
+            else:
+                texts_to_embed.append(term)
         try:
-            embeddings = embed_fn(batch)
+            embeddings = embed_fn(texts_to_embed)
             if not embeddings:
                 continue
             for term, emb in zip(batch, embeddings):

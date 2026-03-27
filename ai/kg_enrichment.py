@@ -20,28 +20,22 @@ except ImportError:
     from utils.logging import get_logger
 logger = get_logger(__name__)
 
+# Minimal universal stopwords — only the absolute basics (function words).
+# Domain filtering is handled dynamically by KG presence check, not by this list.
+# A term NOT in the KG is demoted to embedding-only (not used for SQL queries).
 _STOPWORDS = frozenset({
-    # German determiners, pronouns, conjunctions, prepositions
+    # German function words (determiners, pronouns, prepositions, conjunctions)
     'und', 'oder', 'der', 'die', 'das', 'ein', 'eine', 'ist', 'sind',
-    'hat', 'haben', 'wird', 'werden', 'kann', 'koennen', 'bei', 'von',
-    'mit', 'auf', 'fuer', 'aus', 'nach', 'ueber', 'sich', 'dem', 'den',
-    'des', 'einer', 'einem', 'eines', 'nicht', 'auch', 'noch', 'aber',
-    'wenn', 'dass', 'wie', 'was', 'wer', 'wem', 'wen', 'welche',
-    # German common verbs (pollute queries — not domain terms)
-    'macht', 'liegt', 'kommt', 'geht', 'gibt', 'heisst', 'heißt',
-    'steht', 'nimmt', 'sieht', 'bleibt', 'findet', 'braucht',
-    'produziert', 'funktioniert', 'passiert', 'bedeutet', 'nennt',
-    'spielt', 'gehört', 'entsteht', 'wirkt', 'bewirkt', 'befindet',
-    # German modal/helper forms + generic adjectives/adverbs
-    'meinst', 'genau', 'erklaere', 'erklaer', 'kannst', 'bitte', 'lang',
-    'gross', 'groß', 'viel', 'viele', 'welcher', 'welches', 'welchem',
-    'besondere', 'besonderes', 'besonderen', 'besonders', 'wichtig',
-    'verschiedene', 'verschiedenen', 'unterschied', 'unterschiede',
-    'eigentlich', 'warum', 'wofuer', 'wozu', 'wobei', 'zwischen',
-    # English stopwords
+    'hat', 'haben', 'wird', 'werden', 'kann', 'bei', 'von', 'mit',
+    'auf', 'aus', 'nach', 'sich', 'dem', 'den', 'des', 'einer',
+    'einem', 'eines', 'nicht', 'auch', 'noch', 'aber', 'wenn', 'dass',
+    'wie', 'was', 'wer', 'wem', 'wen', 'welche', 'welcher', 'welches',
+    'mein', 'dein', 'sein', 'ihr', 'unser', 'euer',
+    # English function words
     'the', 'and', 'for', 'with', 'from', 'this', 'that', 'which',
     'are', 'was', 'were', 'been', 'have', 'has', 'had', 'does', 'did',
     'will', 'would', 'could', 'should', 'may', 'might', 'can',
+    'not', 'but', 'its', 'his', 'her', 'our', 'their', 'who', 'whom',
 })
 
 _KEEP_ABBREVIATIONS = frozenset({
@@ -444,18 +438,56 @@ def _build_embedding_query(original_text, all_expansion_terms):
     return original_text
 
 
+def _filter_by_kg_presence(candidates, db=None):
+    """Split candidates into KG-present terms and non-KG terms.
+
+    Terms in the KG are domain-relevant → used for SQL + Embedding queries.
+    Terms NOT in the KG are generic (verbs, adjectives) → only for Embedding.
+
+    This replaces language-specific stopword lists with a universal approach.
+    """
+    try:
+        try:
+            from ..storage.kg_store import exact_term_lookup
+        except ImportError:
+            from storage.kg_store import exact_term_lookup
+    except ImportError:
+        return candidates, []  # Can't check — keep all
+
+    kg_terms = []
+    non_kg_terms = []
+    for term in candidates:
+        canonical = exact_term_lookup(term, db=db)
+        if canonical:
+            kg_terms.append(canonical)
+        else:
+            non_kg_terms.append(term)
+
+    if non_kg_terms:
+        logger.debug("KG filter: domain=%s, generic=%s", kg_terms, non_kg_terms)
+
+    return kg_terms, non_kg_terms
+
+
 def _process_tier(candidates, kg_term_index, term_embeddings, sentence_embedding=None, db=None):
-    """Process one tier of terms: embedding expand → edge expand → combine.
+    """Process one tier of terms: KG filter → embedding expand → edge expand → combine.
 
     Returns:
         (query_terms, all_expansions)
-        query_terms: list of terms to use in queries (original + embedding-similar)
+        query_terms: list of terms for SQL queries (KG-present only + expansions)
         all_expansions: dict of {term: [(expanded, weight/score), ...]}
             Edge expansions use weight >= 1.0 (raw_weight * 0.1, so raw >= 10).
             Embedding expansions use score < 1.0 (cosine similarity 0.55-0.99).
     """
-    # Step 1: Edge-based expansion on ORIGINAL terms first (highest value)
-    edge_expansions_original = _get_edge_expansions(candidates, db=db)
+    # Step 0: KG-based filter — only domain terms get SQL queries
+    # Non-KG terms (verbs, adjectives) contribute only to embedding queries.
+    kg_candidates, non_kg_candidates = _filter_by_kg_presence(candidates, db=db)
+
+    # Use KG terms for SQL, but ALL candidates for embedding expansion
+    sql_candidates = kg_candidates if kg_candidates else candidates  # fallback if no KG matches
+
+    # Step 1: Edge-based expansion on SQL-candidate terms first (highest value)
+    edge_expansions_original = _get_edge_expansions(sql_candidates, db=db)
 
     # Step 2: Embedding-based expansion (sentence + term level)
     emb_expansions = _embedding_expand_terms(
@@ -502,8 +534,9 @@ def _process_tier(candidates, kg_term_index, term_embeddings, sentence_embedding
         else:
             all_expansions[term] = [(t, w * 0.1) for t, w in edges]
 
-    # Query terms = original candidates + embedding-similar KG terms
-    query_terms = list(candidates)
+    # Query terms for SQL = KG-present candidates + embedding-found KG terms
+    # Non-KG candidates are excluded from SQL queries (they're generic words).
+    query_terms = list(sql_candidates)
     for t in emb_found_terms:
         if t.lower() not in {q.lower() for q in query_terms}:
             query_terms.append(t)

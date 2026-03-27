@@ -26,8 +26,10 @@ const STEP_NAMES: Record<string, string> = {
   orchestrating: 'Routing',
   sql_search: 'Keyword-Suche',
   semantic_search: 'Semantische Suche',
+  kg_search: 'Knowledge Graph',
   merge: 'Zusammenführung',
   generating: 'Generierung',
+  web_search: 'Web-Recherche',
 };
 
 /* ── getDoneLabel — per-step done label logic ── */
@@ -51,11 +53,26 @@ function getDoneLabel(step: string, data: Record<string, any>, status: string): 
       return `${data.total_hits || 0} Keyword-Treffer`;
     case 'semantic_search':
       return `${data.total_hits || 0} semantische Treffer`;
+    case 'kg_search':
+      return `${data.total_hits || 0} Graph-Treffer`;
     case 'merge': {
       const t = data.total || 0;
       const k = data.keyword_count || 0;
       const s = data.semantic_count || 0;
-      return `${t} Quelle${t !== 1 ? 'n' : ''} kombiniert` + (k + s > 0 ? ` (${k}K + ${s}S)` : '');
+      const g = data.kg_count || 0;
+      const parts = [];
+      if (k > 0) parts.push(`${k}K`);
+      if (s > 0) parts.push(`${s}S`);
+      if (g > 0) parts.push(`${g}G`);
+      return `${t} Quelle${t !== 1 ? 'n' : ''} kombiniert` + (parts.length > 0 ? ` (${parts.join(' + ')})` : '');
+    }
+    case 'web_search': {
+      const sourceCount = data.source_count || data.sources?.length || 0;
+      const tool = data.tool_used || '';
+      const toolLabel = tool === 'pubmed' ? 'PubMed' : tool === 'wikipedia' ? 'Wikipedia' : 'Web';
+      return sourceCount > 0
+        ? `${sourceCount} ${toolLabel}-Quelle${sourceCount !== 1 ? 'n' : ''}`
+        : `${toolLabel}-Recherche`;
     }
     case 'generating':
       return 'Antwort generiert';
@@ -339,6 +356,52 @@ function SemanticChunks({ data, isDone, animate = true }: { data: Record<string,
   );
 }
 
+/* ── KG Terms ── */
+function KgTerms({ data, isDone, animate = true }: { data: Record<string, any>; isDone: boolean; animate?: boolean }) {
+  const terms = data.terms || [];
+  if (terms.length === 0 && !isDone) {
+    return (
+      <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+        <div style={{
+          width: 80, height: 22, borderRadius: 5,
+          background: 'linear-gradient(90deg, var(--ds-hover-tint), var(--ds-active-tint), var(--ds-hover-tint))',
+          backgroundSize: '200% 100%',
+          animation: 'ts-shimmerWave 2s ease-in-out infinite',
+        }} />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+      {terms.slice(0, 8).map((term: string, i: number) => (
+        <div
+          key={i}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 5,
+            fontSize: 11,
+            padding: '3px 8px',
+            borderRadius: 5,
+            background: 'var(--ds-hover-tint)',
+            color: 'var(--ds-text-secondary)',
+            animation: animate ? `ts-pulseIn 0.3s ease-out ${i * 0.1}s both` : undefined,
+          }}
+        >
+          <svg width={10} height={10} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" style={{ opacity: 0.3 }}>
+            <circle cx="5" cy="5" r="2" />
+            <circle cx="11" cy="5" r="2" />
+            <circle cx="8" cy="11" r="2" />
+            <path d="M6.5 6.5L7 9.5M9.5 6.5L9 9.5M7 5h2" />
+          </svg>
+          <span>{term}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ── Merge Bar ── */
 function MergeBar({ data }: { data: Record<string, any> }) {
   const kw = data.keyword_count || 0;
@@ -387,6 +450,94 @@ function MergeBar({ data }: { data: Record<string, any> }) {
   );
 }
 
+/* ── Web Search Sources ── */
+function WebSearchSources({ data, isDone, animate = true }: { data: Record<string, any>; isDone: boolean; animate?: boolean }) {
+  const sources = data.sources || [];
+  const tool = data.tool_used || 'web';
+  const toolLabel = tool === 'pubmed' ? 'PubMed' : tool === 'wikipedia' ? 'Wikipedia' : 'Perplexity';
+
+  if (!isDone) {
+    return (
+      <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          fontSize: 11, padding: '3px 8px', borderRadius: 5,
+          background: 'color-mix(in srgb, var(--ds-green) 10%, transparent)',
+          color: 'var(--ds-green)',
+        }}>
+          <svg width={10} height={10} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" style={{ opacity: 0.6 }}>
+            <circle cx="8" cy="8" r="6" />
+            <path d="M8 2a12 12 0 0 1 3 6 12 12 0 0 1-3 6" />
+            <path d="M8 2a12 12 0 0 0-3 6 12 12 0 0 0 3 6" />
+            <path d="M2 8h12" />
+          </svg>
+          <span>{toolLabel}</span>
+          <div style={{
+            width: 48, height: 10, borderRadius: 3,
+            background: 'linear-gradient(90deg, color-mix(in srgb, var(--ds-green) 10%, transparent), color-mix(in srgb, var(--ds-green) 20%, transparent), color-mix(in srgb, var(--ds-green) 10%, transparent))',
+            backgroundSize: '200% 100%',
+            animation: 'ts-shimmerWave 2s ease-in-out infinite',
+          }} />
+        </div>
+      </div>
+    );
+  }
+
+  if (sources.length === 0) return null;
+
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+      {sources.slice(0, 5).map((src: any, i: number) => {
+        const domain = src.domain || new URL(src.url || 'https://example.com').hostname;
+        const letter = src.favicon_letter || domain.charAt(0).toUpperCase();
+        return (
+          <div
+            key={i}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              fontSize: 11,
+              padding: '3px 8px',
+              borderRadius: 5,
+              background: 'color-mix(in srgb, var(--ds-green) 10%, transparent)',
+              color: 'var(--ds-text-secondary)',
+              cursor: 'pointer',
+              animation: animate ? `ts-pulseIn 0.3s ease-out ${i * 0.1}s both` : undefined,
+            }}
+            onClick={() => {
+              if (src.url) {
+                if (window.ankiBridge) {
+                  window.ankiBridge.addMessage('openUrl', { url: src.url });
+                } else {
+                  window.open(src.url, '_blank');
+                }
+              }
+            }}
+            title={src.url || src.title}
+          >
+            <span style={{
+              width: 14, height: 14, borderRadius: 3,
+              background: 'color-mix(in srgb, var(--ds-green) 20%, transparent)',
+              color: 'var(--ds-green)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 9, fontWeight: 600, flexShrink: 0,
+            }}>
+              {letter}
+            </span>
+            <span style={{
+              maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {src.title || domain}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+
 /* ═══════════════════════════════════════════════════
    REGISTRATION — wire all default step renderers
    ═══════════════════════════════════════════════════ */
@@ -428,6 +579,15 @@ const semanticSearchDef: StepRendererDef = {
     <SemanticChunks data={data} isDone={isDone} animate={animate} />,
 };
 
+const kgSearchDef: StepRendererDef = {
+  id: 'kg_search',
+  label: 'Knowledge Graph',
+  activeTitle: 'Durchsuche Knowledge Graph...',
+  doneLabel: (data, status) => getDoneLabel('kg_search', data, status),
+  renderContent: ({ data, isDone, animate }) =>
+    <KgTerms data={data} isDone={isDone} animate={animate} />,
+};
+
 const mergeDef: StepRendererDef = {
   id: 'merge',
   label: 'Zusammenführung',
@@ -444,23 +604,19 @@ const strategyDef: StepRendererDef = {
   doneLabel: (data, status) => {
     if (status === 'error') return 'Strategie fehlgeschlagen';
     if (!data.search_needed) return 'Direkte Antwort';
-    const mode = MODE_LABELS[data.retrieval_mode] || data.retrieval_mode || 'Suche';
-    const scope = data.scope === 'current_deck' ? 'im Deck' : data.scope === 'all_decks' ? 'alle Decks' : '';
-    return scope ? `${mode} ${scope}` : mode;
+    return 'KG-Suche';
   },
   renderContent: ({ data, isDone }) => {
     if (!isDone) return null;
     const tags: { label: string; value: string }[] = [];
     if (data.search_needed) {
-      const mode = MODE_LABELS[data.retrieval_mode] || data.retrieval_mode || '';
-      if (mode) tags.push({ label: 'Suche', value: mode });
-      const scope = data.scope === 'current_deck' ? 'Deck' : data.scope === 'all_decks' ? 'Alle' : data.scope || '';
-      if (scope) tags.push({ label: 'Bereich', value: scope });
+      tags.push({ label: 'Suche', value: 'KG + Embedding + SQL' });
+      if (data.resolved_intent) {
+        tags.push({ label: 'Intent', value: data.resolved_intent.slice(0, 60) });
+      }
     } else {
       tags.push({ label: 'Modus', value: 'Direkt' });
     }
-    const length = RESPONSE_LENGTH_LABELS[data.response_length] || '';
-    if (length) tags.push({ label: 'Länge', value: length });
     if (tags.length === 0) return null;
     return (
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
@@ -485,6 +641,15 @@ const generatingDef: StepRendererDef = {
   hidden: true,
 };
 
+const webSearchDef: StepRendererDef = {
+  id: 'web_search',
+  label: 'Web-Recherche',
+  activeTitle: 'Recherchiere im Web...',
+  doneLabel: (data, status) => getDoneLabel('web_search', data, status),
+  renderContent: ({ data, isDone, animate }) =>
+    <WebSearchSources data={data} isDone={isDone} animate={animate} />,
+};
+
 const sourcesReadyDef: StepRendererDef = {
   id: 'sources_ready',
   label: 'Quellen',
@@ -501,8 +666,10 @@ export function registerDefaultRenderers(): void {
   registerStepRenderer(routerDef);
   registerStepRenderer(sqlSearchDef);
   registerStepRenderer(semanticSearchDef);
+  registerStepRenderer(kgSearchDef);
   registerStepRenderer(mergeDef);
   registerStepRenderer(strategyDef);
   registerStepRenderer(generatingDef);
+  registerStepRenderer(webSearchDef);
   registerStepRenderer(sourcesReadyDef);
 }

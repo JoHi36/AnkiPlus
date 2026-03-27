@@ -444,63 +444,40 @@ class EnrichedRetrieval:
         Returns:
             {context_string, citations, keyword_count, confidence, rrf_scores}
         """
-        if not routing_result.get('search_needed', False):
+        # Handle both dict and dataclass routing_result
+        _get_rr = (lambda k, d=None: routing_result.get(k, d)) if isinstance(routing_result, dict) \
+            else (lambda k, d=None: getattr(routing_result, k, d))
+
+        if not _get_rr('search_needed', False):
             return {"context_string": "", "citations": {}, "keyword_count": 0,
                     "confidence": "low", "rrf_scores": []}
 
-        resolved_intent = routing_result.get('resolved_intent', '')
+        resolved_intent = _get_rr('resolved_intent', '') or ''
 
-        # ── 1. KG Enrichment ──────────────────────────────────────────────────
-        self.emit_step("kg_enrichment", "active", {"terms": []})
-        enrichment = {}
+        # ── 1. Load KG term index ────────────────────────────────────────────
         kg_term_index = {}
-        try:
-            if self.emb:
+        if self.emb:
+            try:
                 kg_term_index = self.emb.load_kg_term_index()
-            enrichment = enrich_query(
-                user_message,
-                resolved_intent=resolved_intent,
-                kg_term_index=kg_term_index,
-            )
-            self.emit_step("kg_enrichment", "done", {
-                "terms": enrichment.get('kg_terms_found', [])[:8],
-                "tier1_terms": enrichment.get('tier1_terms', []),
-                "tier2_terms": enrichment.get('tier2_terms', []),
-                "unmatched": enrichment.get('unmatched_terms', []),
-            })
-        except Exception as e:
-            logger.warning("EnrichedRetrieval: KG enrichment failed: %s", e)
-            self.emit_step("kg_enrichment", "error", {"message": str(e)})
-            # Fall back to bare queries so pipeline can continue
-            enrichment = {
-                'precise_primary': [], 'broad_primary': [],
-                'precise_secondary': [], 'broad_secondary': [],
-                'embedding_primary': user_message,
-                'embedding_secondary': resolved_intent or '',
-                'unmatched_terms': [],
-            }
+            except Exception as e:
+                logger.warning("EnrichedRetrieval: load KG term index failed: %s", e)
 
-        # ── 2. Embedding batch ────────────────────────────────────────────────
-        # Collect all texts that need embeddings in one batch call.
-        embedding_primary = enrichment.get('embedding_primary') or user_message
-        embedding_secondary = enrichment.get('embedding_secondary') or ''
-        unmatched_terms = enrichment.get('unmatched_terms', [])
+        # ── 2. Extract terms + embed them ────────────────────────────────────
+        # Extract query terms FIRST, then embed them so KG enrichment can use
+        # embedding similarity to find related KG terms (not just exact match).
+        try:
+            from .kg_enrichment import extract_query_terms
+        except ImportError:
+            from kg_enrichment import extract_query_terms
 
-        texts_to_embed = []
-        emb_idx_primary = None
-        emb_idx_secondary = None
-        unmatched_start_idx = None
+        tier1_candidates = extract_query_terms(user_message)
+        tier2_candidates = extract_query_terms(resolved_intent) if resolved_intent else []
 
-        texts_to_embed.append(embedding_primary)
-        emb_idx_primary = 0
-
-        if embedding_secondary and embedding_secondary != embedding_primary:
-            texts_to_embed.append(embedding_secondary)
-            emb_idx_secondary = len(texts_to_embed) - 1
-
-        unmatched_start_idx = len(texts_to_embed)
-        for term in unmatched_terms[:8]:
-            texts_to_embed.append(term)
+        # Batch embed: all candidate terms + semantic query
+        all_candidate_terms = list(dict.fromkeys(tier1_candidates + tier2_candidates))
+        texts_to_embed = list(all_candidate_terms) + [user_message]
+        if resolved_intent:
+            texts_to_embed.append(resolved_intent)
 
         all_embeddings = []
         if self.emb and texts_to_embed:
@@ -508,27 +485,50 @@ class EnrichedRetrieval:
                 all_embeddings = self.emb.embed_texts(texts_to_embed) or []
             except Exception as e:
                 logger.warning("EnrichedRetrieval: embed_texts failed: %s", e)
-                all_embeddings = []
 
-        def _get_emb(idx):
-            if idx is not None and idx < len(all_embeddings):
-                return all_embeddings[idx]
-            return None
+        # Split embeddings: term vectors + semantic vectors
+        term_embeddings = {}
+        for i, term in enumerate(all_candidate_terms):
+            if i < len(all_embeddings) and all_embeddings[i]:
+                term_embeddings[term] = all_embeddings[i]
 
-        primary_vec = _get_emb(emb_idx_primary)
-        secondary_vec = _get_emb(emb_idx_secondary)
+        sem_offset = len(all_candidate_terms)
+        primary_vec = all_embeddings[sem_offset] if sem_offset < len(all_embeddings) else None
+        secondary_vec = all_embeddings[sem_offset + 1] if (resolved_intent and sem_offset + 1 < len(all_embeddings)) else None
 
-        # Fuzzy KG matching for unmatched terms (after batch embed)
-        if kg_term_index and unmatched_terms and self.emb:
-            fuzzy_found = {}
-            for i, term in enumerate(unmatched_terms[:8]):
-                term_emb = _get_emb(unmatched_start_idx + i)
-                if term_emb:
-                    matches = self.emb.fuzzy_term_search(term_emb, kg_term_index, top_k=1)
-                    if matches:
-                        fuzzy_found[term] = matches[0][0]  # best match term
-            if fuzzy_found:
-                logger.debug("EnrichedRetrieval: fuzzy KG matches: %s", fuzzy_found)
+        # ── 3. KG Enrichment (embedding-first, then edges) ──────────────────
+        self.emit_step("kg_enrichment", "active", {"terms": []})
+        enrichment = {}
+        try:
+            # Build sentence embeddings dict for enrich_query
+            sentence_embs = {}
+            if primary_vec:
+                sentence_embs[user_message] = primary_vec
+            if secondary_vec and resolved_intent:
+                sentence_embs[resolved_intent] = secondary_vec
+
+            enrichment = enrich_query(
+                user_message,
+                resolved_intent=resolved_intent,
+                kg_term_index=kg_term_index,
+                term_embeddings=term_embeddings,
+                sentence_embeddings=sentence_embs,
+            )
+            self.emit_step("kg_enrichment", "done", {
+                "terms": enrichment.get('kg_terms_found', [])[:8],
+                "tier1_terms": enrichment.get('tier1_terms', []),
+                "tier2_terms": enrichment.get('tier2_terms', []),
+            })
+        except Exception as e:
+            logger.warning("EnrichedRetrieval: KG enrichment failed: %s", e)
+            self.emit_step("kg_enrichment", "error", {"message": str(e)})
+            enrichment = {
+                'precise_primary': [' '.join('"%s"' % t for t in tier1_candidates)] if tier1_candidates else [],
+                'broad_primary': [],
+                'precise_secondary': [], 'broad_secondary': [],
+                'embedding_primary': user_message,
+                'embedding_secondary': resolved_intent or '',
+            }
 
         # ── 3. SQL Search ─────────────────────────────────────────────────────
         self.emit_step("sql_search", "active", {
@@ -550,9 +550,11 @@ class EnrichedRetrieval:
             self.emit_step("sql_search", "error", {"message": str(e)})
 
         # ── 4. Semantic Search ────────────────────────────────────────────────
+        emb_primary_text = enrichment.get('embedding_primary', user_message)
+        emb_secondary_text = enrichment.get('embedding_secondary', '')
         self.emit_step("semantic_search", "active", {
             "chunks": [],
-            "embedding_queries": [q for q in [embedding_primary, embedding_secondary] if q]
+            "embedding_queries": [q for q in [emb_primary_text, emb_secondary_text] if q]
         })
         semantic_results = {}
         try:
@@ -595,7 +597,7 @@ class EnrichedRetrieval:
 
             self.emit_step("semantic_search", "done", {
                 "total_hits": len(semantic_results),
-                "embedding_queries": [q for q in [embedding_primary, embedding_secondary] if q]
+                "embedding_queries": [q for q in [emb_primary_text, emb_secondary_text] if q]
             })
         except Exception as e:
             logger.warning("EnrichedRetrieval: Semantic search failed: %s", e)
@@ -824,7 +826,6 @@ class EnrichedRetrieval:
         parts = []
         for note_id, data in merged.items():
             sources = ', '.join(data.get('sources', ['unknown']))
-            rrf_score = data.get('rrf_score', 0.0)
             fields = data.get('fields', {})
             if fields:
                 field_lines = []
@@ -833,7 +834,7 @@ class EnrichedRetrieval:
                         field_lines.append(f"  {name}: {value}")
                 if field_lines:
                     parts.append(
-                        f"Note {note_id} (via {sources}, score={rrf_score:.4f}):\n"
+                        f"Note {note_id} (via {sources}):\n"
                         + '\n'.join(field_lines)
                     )
 

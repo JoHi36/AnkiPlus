@@ -146,6 +146,7 @@ class AIHandler:
             suppress_error_callback=suppress_error_callback,
             system_prompt_override=system_prompt_override,
             config=self.config,
+            pipeline_step_callback=getattr(self, '_pipeline_signal_callback', None),
         )
 
     def _stream_response(self, urls, data, callback=None, use_backend=False,
@@ -307,6 +308,11 @@ class AIHandler:
         elif step == 'merge':
             t = data.get('total', 0)
             return f"{t} Quelle{'n' if t != 1 else ''} kombiniert"
+        elif step == 'web_search':
+            source_count = data.get('source_count', 0)
+            tool_used = data.get('tool_used', 'web')
+            tool_label = {'pubmed': 'PubMed', 'wikipedia': 'Wikipedia'}.get(tool_used, 'Web')
+            return f"{source_count} {tool_label}-Quelle{'n' if source_count != 1 else ''}" if source_count else f"{tool_label}-Recherche"
         elif step == 'generating':
             return "Antwort generiert"
         return step
@@ -443,19 +449,14 @@ class AIHandler:
             self._emit_pipeline_step(step, status, enriched)
 
         # Emit strategy step — always visible in the agent's reasoning area.
-        # Shows the router's decision so the user sees what approach the agent takes.
         search_needed = False
-        retrieval_mode = ''
-        search_scope = ''
+        resolved_intent = ''
         if routing_result:
             search_needed = getattr(routing_result, 'search_needed', False)
-            retrieval_mode = getattr(routing_result, 'retrieval_mode', '')
-            search_scope = getattr(routing_result, 'search_scope', '')
+            resolved_intent = getattr(routing_result, 'resolved_intent', '') or ''
         agent_emit_step("strategy", "done", {
             'search_needed': search_needed,
-            'retrieval_mode': retrieval_mode,
-            'scope': search_scope,
-            'response_length': response_length,
+            'resolved_intent': resolved_intent,
             'has_card': has_card,
         })
 
@@ -560,8 +561,12 @@ class AIHandler:
         except (AttributeError, ImportError, KeyError) as mem_err:
             logger.debug("Memory extraction skipped: %s", mem_err)
 
-        # v2: Done
-        self._emit_msg_event("msg_done", {"messageId": request_id or ''})
+        # v2: Done — include webSources if the tutor used web search tools
+        msg_done_data = {"messageId": request_id or ''}
+        web_sources = result.get('webSources') if isinstance(result, dict) else None
+        if web_sources:
+            msg_done_data['webSources'] = web_sources
+        self._emit_msg_event("msg_done", msg_done_data)
 
         # Lifecycle: on_finished (main thread)
         if on_finished and self.widget:
