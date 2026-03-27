@@ -29,6 +29,7 @@ class RagResult:
     citations: Dict[str, Any]
     cards_found: int
     retrieval_state: Any = None  # RetrievalState if hybrid was used
+    keyword_hits: int = 0  # SQL keyword search hit count (0 = topic not in cards)
 
 
 def retrieve_rag_context(
@@ -98,19 +99,17 @@ def retrieve_rag_context(
     retrieval_state = None
 
     if embedding_manager and retrieval_mode in ('semantic', 'both'):
-        # Try HybridRetrieval (SQL + semantic)
+        # Try EnrichedRetrieval first (new KG-enriched pipeline)
         try:
             try:
-                from .retrieval import HybridRetrieval, RetrievalState
+                from .retrieval import EnrichedRetrieval, RetrievalState
             except ImportError:
-                from retrieval import HybridRetrieval, RetrievalState
+                from retrieval import EnrichedRetrieval, RetrievalState
 
             retrieval_state = RetrievalState()
-            # Seed with caller's request steps so HybridRetrieval can parse query hits
             if request_steps_ref is not None:
                 retrieval_state.request_steps = list(request_steps_ref)
 
-            # Wrap rag_retrieve_fn to sync request_steps after each SQL call
             _inner_fn = rag_retrieve_fn
             def _syncing_rag(**kwargs):
                 result = _inner_fn(**kwargs)
@@ -118,28 +117,46 @@ def retrieve_rag_context(
                     retrieval_state.request_steps = list(request_steps_ref)
                 return result
 
-            hybrid = HybridRetrieval(
+            enriched = EnrichedRetrieval(
                 embedding_manager,
                 emit_step=_emit,
                 rag_retrieve_fn=_syncing_rag,
                 state=retrieval_state,
             )
 
-            # Build router_result dict for HybridRetrieval.retrieve()
-            router_dict = {
-                'search_needed': True,
-                'retrieval_mode': retrieval_mode,
-                'search_scope': search_scope,
-                'precise_queries': precise_queries,
-                'broad_queries': broad_queries,
-                'embedding_queries': _get('embedding_queries', []) or [],
-            }
+            retrieval_result = enriched.retrieve(
+                user_message, routing_result, context, max_notes=max_notes)
 
-            retrieval_result = hybrid.retrieve(
-                user_message, router_dict, context, max_notes=max_notes)
         except Exception as e:
-            logger.debug("Hybrid retrieval failed, falling back to SQL: %s", e)
+            logger.warning("EnrichedRetrieval failed, falling back to HybridRetrieval: %s", e)
             retrieval_result = None
+
+        # Fallback to legacy HybridRetrieval
+        if retrieval_result is None:
+            try:
+                try:
+                    from .retrieval import HybridRetrieval
+                except ImportError:
+                    from retrieval import HybridRetrieval
+
+                retrieval_state = RetrievalState()
+
+                hybrid = HybridRetrieval(
+                    embedding_manager, emit_step=_emit,
+                    rag_retrieve_fn=rag_retrieve_fn, state=retrieval_state,
+                )
+                router_dict = {
+                    'search_needed': True, 'retrieval_mode': retrieval_mode,
+                    'search_scope': 'collection',
+                    'precise_queries': precise_queries,
+                    'broad_queries': broad_queries,
+                    'embedding_queries': _get('embedding_queries', []) or [],
+                }
+                retrieval_result = hybrid.retrieve(
+                    user_message, router_dict, context, max_notes=max_notes)
+            except Exception as e2:
+                logger.warning("HybridRetrieval also failed: %s", e2)
+                retrieval_result = None
 
     # SQL-only fallback (or if hybrid wasn't attempted)
     if retrieval_result is None and rag_retrieve_fn:
@@ -204,6 +221,7 @@ def retrieve_rag_context(
         citations=citations,
         cards_found=len(citations),
         retrieval_state=retrieval_state,
+        keyword_hits=retrieval_result.get("keyword_count", 0),
     )
 
 
