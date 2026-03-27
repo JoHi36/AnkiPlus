@@ -389,6 +389,11 @@ body.sidebar-resizing * {
   to { transform: translateX(100%); opacity: 0; }
 }
 
+@keyframes searchBarSlideIn {
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* ── Skeleton loading pulse ── */
 @keyframes pulse {
   0%, 100% { opacity: 0.4; }
