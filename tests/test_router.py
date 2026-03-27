@@ -100,6 +100,25 @@ def test_unified_route_fallback_on_error(mock_requests, mock_url, mock_token):
     assert result.method == 'default'
 
 
+import unittest
+
+
+class TestSlimRoutingResult(unittest.TestCase):
+
+    def test_resolved_intent_field(self):
+        from ai.router import UnifiedRoutingResult
+        result = UnifiedRoutingResult(
+            agent='tutor', method='llm',
+            search_needed=True, resolved_intent='Laenge des Duenndarms'
+        )
+        self.assertEqual(result.resolved_intent, 'Laenge des Duenndarms')
+
+    def test_default_resolved_intent_is_none(self):
+        from ai.router import UnifiedRoutingResult
+        result = UnifiedRoutingResult(agent='tutor', method='default')
+        self.assertIsNone(result.resolved_intent)
+
+
 @patch('ai.router.unified_route')
 def test_route_message_passes_context_to_unified(mock_unified):
     mock_unified.return_value = UnifiedRoutingResult(

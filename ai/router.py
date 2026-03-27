@@ -43,6 +43,7 @@ class UnifiedRoutingResult:
     reasoning: str = ''                     # Why this agent was chosen
     # Search strategy (populated when agent='tutor' and method='llm')
     search_needed: Optional[bool] = None
+    resolved_intent: Optional[str] = None   # Router's interpretation of user's question
     retrieval_mode: Optional[str] = None    # 'sql', 'semantic', 'both'
     response_length: Optional[str] = None   # 'short', 'medium', 'long'
     max_sources: Optional[str] = None       # 'low', 'medium', 'high'
@@ -210,6 +211,7 @@ def unified_route(user_message: str, session_context: dict, config: dict,
             method='llm',
             reasoning=parsed.get('reasoning', ''),
             search_needed=search_needed,
+            resolved_intent=parsed.get('resolved_intent'),
             retrieval_mode=parsed.get('retrieval_mode') or 'both',
             response_length=parsed.get('response_length') or 'medium',
             max_sources=parsed.get('max_sources') or 'medium',
