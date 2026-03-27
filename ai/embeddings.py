@@ -58,11 +58,11 @@ class EmbeddingManager:
         self._api_key = api_key
         self._backend_url = backend_url
         self._auth_headers_fn = auth_headers_fn
-        # _backend_failed flag removed — backend is the only path now
         self._index = []       # list of normalized float lists
         self._card_ids = []    # card_id list aligned with index rows
         self._lock = threading.Lock()
         self._background_thread = None
+        self._index_loaded = False  # lazy-load flag
 
     def set_credentials(self, api_key=None, backend_url=None, auth_headers_fn=None):
         if api_key is not None:
@@ -190,6 +190,9 @@ class EmbeddingManager:
     # ── In-Memory Index ──
 
     def load_index(self):
+        """Load all embeddings from DB into memory. Safe to call multiple times."""
+        if self._index_loaded:
+            return
         try:
             from storage.card_sessions import load_all_embeddings
         except ImportError:
@@ -200,22 +203,27 @@ class EmbeddingManager:
             if not rows:
                 self._index = []
                 self._card_ids = []
-                return
-
-            card_ids = []
-            vectors = []
-            for card_id, emb_bytes, _ in rows:
-                vec = _unpack_floats(emb_bytes, self.EMBEDDING_DIM)
-                if len(vec) == self.EMBEDDING_DIM:
-                    vectors.append(_normalize(vec))
-                    card_ids.append(card_id)
-
-            self._card_ids = card_ids
-            self._index = vectors
+            else:
+                card_ids = []
+                vectors = []
+                for card_id, emb_bytes, _ in rows:
+                    vec = _unpack_floats(emb_bytes, self.EMBEDDING_DIM)
+                    if len(vec) == self.EMBEDDING_DIM:
+                        vectors.append(_normalize(vec))
+                        card_ids.append(card_id)
+                self._card_ids = card_ids
+                self._index = vectors
+            self._index_loaded = True
 
         logger.info("EmbeddingManager: Loaded %d embeddings into index", len(self._card_ids))
 
+    def _ensure_index(self):
+        """Lazy-load the index on first use."""
+        if not self._index_loaded:
+            self.load_index()
+
     def search(self, query_embedding, top_k=10, exclude_card_ids=None):
+        self._ensure_index()
         with self._lock:
             if not self._index:
                 return []
@@ -234,6 +242,73 @@ class EmbeddingManager:
 
             scored.sort(key=lambda x: x[1], reverse=True)
             return scored[:top_k]
+
+    def load_kg_term_index(self):
+        """Load pre-computed KG term embeddings into memory for fuzzy matching.
+
+        Returns:
+            Dict of {term: normalized_vector (list of float)} or empty dict.
+        """
+        import struct
+        import math
+
+        try:
+            try:
+                from ..storage.kg_store import load_term_embeddings
+            except ImportError:
+                from storage.kg_store import load_term_embeddings
+
+            raw = load_term_embeddings()
+            if not raw:
+                return {}
+
+            index = {}
+            for term, emb_bytes in raw.items():
+                dim = len(emb_bytes) // 4
+                if dim == 0:
+                    continue
+                vec = list(struct.unpack('%df' % dim, emb_bytes))
+                norm = math.sqrt(sum(v * v for v in vec))
+                if norm > 0:
+                    vec = [v / norm for v in vec]
+                index[term] = vec
+
+            logger.info("Loaded %d KG term embeddings for fuzzy matching", len(index))
+            return index
+        except Exception as e:
+            logger.warning("Failed to load KG term index: %s", e)
+            return {}
+
+    def fuzzy_term_search(self, term_embedding, kg_term_index, top_k=3, min_similarity=0.60):
+        """Find nearest KG terms by cosine similarity.
+
+        Args:
+            term_embedding: Embedding vector for the query term.
+            kg_term_index: Dict of {term: normalized_vector} from load_kg_term_index().
+            top_k: Max number of matches to return.
+            min_similarity: Minimum cosine similarity threshold.
+
+        Returns:
+            List of (term, score) tuples sorted by similarity descending.
+        """
+        if not kg_term_index or not term_embedding:
+            return []
+
+        import math
+        norm = math.sqrt(sum(v * v for v in term_embedding))
+        if norm > 0:
+            normed = [v / norm for v in term_embedding]
+        else:
+            return []
+
+        scored = []
+        for kg_term, kg_vec in kg_term_index.items():
+            score = sum(a * b for a, b in zip(normed, kg_vec))
+            if score >= min_similarity:
+                scored.append((kg_term, score))
+
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return scored[:top_k]
 
     def add_to_index(self, card_id, embedding):
         with self._lock:
@@ -348,28 +423,6 @@ class BackgroundEmbeddingThread(QThread):
             if cid and (cid not in existing or existing[cid] != h):
                 to_embed.append({'card_id': cid, 'text': text, 'hash': h})
 
-            # KG term extraction (runs for every card, independent of embedding status)
-            try:
-                try:
-                    from .term_extractor import TermExtractor
-                except ImportError:
-                    from ai.term_extractor import TermExtractor
-                try:
-                    from ..storage.kg_store import save_card_terms
-                except ImportError:
-                    from storage.kg_store import save_card_terms
-                if not hasattr(self, '_term_extractor'):
-                    self._term_extractor = TermExtractor()
-                # Use only question+answer for term extraction (NOT tags)
-                kg_text = ' '.join(filter(None, [card.get('question', ''), card.get('answer', '')]))
-                terms = self._term_extractor.extract(kg_text)
-                if terms:
-                    question = card.get('question', '')
-                    definition_terms = [t for t in terms if self._term_extractor.is_definition_card(t, question, card.get('answer', ''))]
-                    save_card_terms(cid, terms, deck_id=card.get('deck_id', 0), definition_terms=definition_terms)
-            except Exception as e:
-                logger.warning("KG term extraction failed for card %s: %s", card.get('card_id'), e)
-
         total = len(to_embed)
         embedded = 0
 
@@ -396,6 +449,113 @@ class BackgroundEmbeddingThread(QThread):
                 break  # Stop on error instead of continuing to spam API
 
             time.sleep(0.5)
+
+        # --- LLM-based batch term extraction (rate-limited: max 1 full run per 24h) ---
+        if all_cards and not self._cancelled:
+            try:
+                try:
+                    from ..ai.gemini import extract_terms_batch
+                except ImportError:
+                    from ai.gemini import extract_terms_batch
+                try:
+                    from ..storage.kg_store import save_card_terms, get_card_terms
+                except ImportError:
+                    from storage.kg_store import save_card_terms, get_card_terms
+
+                # Rate limit: prevent quota exploit by limiting full extractions
+                import os
+                _ts_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                        '..', 'storage', '.kg_extraction_ts')
+                _ts_path = os.path.normpath(_ts_path)
+                MIN_EXTRACTION_INTERVAL = 3600  # 1 hour minimum between full extractions
+                try:
+                    if os.path.exists(_ts_path):
+                        last_ts = float(open(_ts_path).read().strip())
+                        if time.time() - last_ts < MIN_EXTRACTION_INTERVAL:
+                            logger.info("KG extraction skipped: last run was %d min ago (min interval: %d min)",
+                                        int((time.time() - last_ts) / 60), MIN_EXTRACTION_INTERVAL // 60)
+                            raise StopIteration("rate limited")
+                except (ValueError, OSError):
+                    pass
+                except StopIteration:
+                    raise  # Re-raise to skip extraction
+
+
+                BATCH_SIZE_LLM = 15
+                extracted_count = 0
+                skipped_count = 0
+
+                # Only extract terms for cards that don't have terms yet
+                kg_cards_to_extract = []
+                for card in all_cards:
+                    cid = card.get('card_id') or card.get('cardId')
+                    if not cid:
+                        continue
+                    existing_terms = get_card_terms(cid)
+                    if existing_terms:
+                        continue  # Already extracted
+                    kg_text = ' '.join(filter(None, [card.get('question', ''), card.get('answer', '')]))
+                    if kg_text.strip():
+                        kg_cards_to_extract.append({
+                            'card_id': cid,
+                            'question': card.get('question', ''),
+                            'answer': card.get('answer', ''),
+                            'deck_id': card.get('deck_id', 0),
+                        })
+
+                logger.info("KG term extraction: %d cards need extraction (of %d total)",
+                            len(kg_cards_to_extract), len(all_cards))
+
+                for i in range(0, len(kg_cards_to_extract), BATCH_SIZE_LLM):
+                    if self._cancelled:
+                        break
+                    batch = kg_cards_to_extract[i:i + BATCH_SIZE_LLM]
+
+                    # LLM-only extraction — NO heuristic fallback
+                    try:
+                        llm_result = extract_terms_batch(batch)
+                    except Exception as e:
+                        err_str = str(e)
+                        if '403' in err_str or '429' in err_str or 'quota' in err_str.lower():
+                            logger.warning("KG extraction stopped: quota/auth error. %d cards extracted, %d remaining.",
+                                           extracted_count, len(kg_cards_to_extract) - i)
+                            break  # Stop entirely — retry on next startup
+                        logger.warning("KG batch extraction failed, skipping batch: %s", e)
+                        skipped_count += len(batch)
+                        continue
+
+                    if not llm_result:
+                        skipped_count += len(batch)
+                        continue
+
+                    for card in batch:
+                        cid = card['card_id']
+                        terms = llm_result.get(cid)
+
+                        # No fallback — if LLM didn't return terms, skip this card
+                        if not terms:
+                            skipped_count += 1
+                            continue
+
+                        save_card_terms(cid, terms, deck_id=card.get('deck_id', 0))
+                        extracted_count += 1
+
+                    time.sleep(0.3)
+
+                logger.info("KG term extraction: %d cards extracted, %d skipped (LLM-only, no fallback)",
+                            extracted_count, skipped_count)
+
+                # Save timestamp to prevent re-extraction within rate limit window
+                if extracted_count > 0:
+                    try:
+                        with open(_ts_path, 'w') as f:
+                            f.write(str(time.time()))
+                    except OSError:
+                        pass
+            except StopIteration:
+                pass  # Rate limited — skip silently
+            except Exception as e:
+                logger.warning("Batch KG term extraction failed: %s", e)
 
         # KG graph build (runs after all cards are processed)
         try:
