@@ -37,6 +37,7 @@ const TILE_STYLE = {
   height: 140,
   flex: 1,
   minWidth: 100,
+  maxWidth: 280, // prevent stretching when only 1-2 images in a row
   borderRadius: 8,
   overflow: 'hidden',
   cursor: 'pointer',
@@ -575,8 +576,13 @@ export default function ImageCanvas({
   const lbDeck = lbImage ? (lbImage.decks?.[String(lbImage.cardIds[0])] || '') : '';
   const lbCluster = lbImage ? getClusterForImage(lbImage, searchResult, clusterLabels) : '';
 
+  const isLightboxOpen = lightboxIdx != null;
+
   return (
-    <div style={CANVAS_STYLE}>
+    <div style={{
+      ...CANVAS_STYLE,
+      overflowY: isLightboxOpen ? 'hidden' : 'auto', // lock scroll when lightbox open
+    }}>
       {deckGroups.map(group => {
         const rows = chunkIntoRows(group.images, IMAGES_PER_ROW);
         return (
