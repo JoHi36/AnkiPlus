@@ -5,7 +5,6 @@ import ChatInput from './ChatInput';
 import ResizeHandle from './ResizeHandle';
 import AgenticCell from './AgenticCell';
 import ReasoningDisplay from '../reasoning/ReasoningDisplay';
-import { useReasoningStore } from '../reasoning/store';
 
 export default function SearchSidebar({
   query,
@@ -32,21 +31,8 @@ export default function SearchSidebar({
   onSelectTerm,
   termDefinition,
   imageSelectedCardIds = [],  // NEW — from ImageCanvas selection
+  pipelineSteps = [],  // From useSmartSearch — accumulated from smart_search.msg_event
 }) {
-  // Read pipeline steps from the reasoning store — find the latest search stream
-  const { state: reasoningState } = useReasoningStore();
-  const pipelineSteps = useMemo(() => {
-    const entries = Object.entries(reasoningState.streams);
-    // Collect all steps from streams that look like search streams (router + agent)
-    const allSteps = [];
-    for (const [id, stream] of entries) {
-      if (id.startsWith('router-') || id.startsWith('tutor-') || stream.phase !== 'complete') {
-        allSteps.push(...stream.steps);
-      }
-    }
-    // Only return steps if there are active/recent ones
-    return allSteps.length > 0 ? allSteps : [];
-  }, [reasoningState.streams]);
 
   // All hooks must be called unconditionally (before any early return)
   const [multiSelect, setMultiSelect] = useState(false);
@@ -249,53 +235,31 @@ export default function SearchSidebar({
           {query}
         </div>
 
-        {/* Definition tab content — Tutor answer + pipeline steps */}
-        {sidebarTab === 'definition' && (
-          <>
-            {/* Orchestration step — ABOVE agent (like session router) */}
-            {pipelineSteps.some(s => s.step === 'orchestrating') && (
-              <ReasoningDisplay
-                steps={pipelineSteps.filter(s => ['orchestrating', 'router'].includes(s.step))}
-                mode="full"
-              />
-            )}
-
-            {/* Tutor AgenticCell — standard agent signature */}
-            <AgenticCell
-              agentName="tutor"
-              isLoading={!answerText}
-              loadingHint="Analysiert deine Karten..."
-              headerMeta={
-                <span style={{
-                  fontSize: 11, fontWeight: 500,
-                  color: 'var(--ds-text-tertiary)',
-                  letterSpacing: '0.2px',
-                }}>
-                  aus {totalCards || '...'} Karten
-                </span>
-              }
-            >
-              {/* Agent-internal pipeline steps — INSIDE the agent (like session) */}
-              {pipelineSteps.filter(s => !['orchestrating', 'router'].includes(s.step)).length > 0 && (
-                <ReasoningDisplay
-                  steps={pipelineSteps.filter(s => !['orchestrating', 'router'].includes(s.step))}
-                  mode="full"
-                  hasOutput={Boolean(answerText)}
-                  bridge={bridge}
-                />
-              )}
-              {answerText && (
-                <div style={{
-                  fontSize: 14,
-                  color: 'var(--ds-text-secondary)',
-                  lineHeight: 1.65,
-                }}>
-                  {renderMarkdownWithRefs(answerText)}
-                </div>
-              )}
-            </AgenticCell>
-          </>
-        )}
+        {/* Tutor AgenticCell + Reasoning Steps — always visible above tabs */}
+        <AgenticCell
+          agentName="tutor"
+          isLoading={!answerText && pipelineSteps.length > 0}
+          loadingHint="Analysiert deine Karten..."
+          headerMeta={
+            <span style={{
+              fontSize: 11, fontWeight: 500,
+              color: 'var(--ds-text-tertiary)',
+              letterSpacing: '0.2px',
+            }}>
+              aus {totalCards || '...'} Karten
+            </span>
+          }
+        >
+          {/* Pipeline steps — always inside AgenticCell */}
+          {pipelineSteps.length > 0 && (
+            <ReasoningDisplay
+              steps={pipelineSteps}
+              mode="full"
+              hasOutput={Boolean(answerText)}
+              bridge={bridge}
+            />
+          )}
+        </AgenticCell>
 
         {/* Cluster skeleton — shown while searching, before clusters arrive */}
         {!clusters && isSearching && (
@@ -378,6 +342,16 @@ export default function SearchSidebar({
                 </button>
               ))}
             </div>
+            {/* ── Definition tab ── */}
+            {sidebarTab === 'definition' && answerText && (
+              <div style={{
+                fontSize: 14,
+                color: 'var(--ds-text-secondary)',
+                lineHeight: 1.65,
+              }}>
+                {renderMarkdownWithRefs(answerText)}
+              </div>
+            )}
             {/* ── Clusters tab ── */}
             {sidebarTab === 'clusters' && clusters?.length > 1 && (
             <div style={{

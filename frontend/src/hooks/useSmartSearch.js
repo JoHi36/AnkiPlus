@@ -17,6 +17,7 @@ export default function useSmartSearch() {
   const [selectedTerm, setSelectedTerm] = useState(null); // { id, label, cardIds, color }
   const [termDefinition, setTermDefinition] = useState(null); // { term, definition, sources }
   const [isAnswerStreaming, setIsAnswerStreaming] = useState(false);
+  const [pipelineSteps, setPipelineSteps] = useState([]);
   const answerChunksRef = useRef('');
 
   // Track if sidebar slide-in has played — survives tab switches (lives in hook, not component)
@@ -94,6 +95,18 @@ export default function useSmartSearch() {
       if (data.type === 'msg_done') {
         setIsAnswerStreaming(false);
       }
+
+      // Pipeline steps — accumulate for SearchSidebar ReasoningDisplay
+      if (data.type === 'pipeline_step') {
+        setPipelineSteps(prev => {
+          const existing = prev.findIndex(s => s.step === data.step);
+          const newStep = { step: data.step, status: data.status, data: data.data || {}, timestamp: Date.now() };
+          if (existing >= 0) {
+            return prev.map((s, i) => i === existing ? newStep : s);
+          }
+          return [...prev, newStep];
+        });
+      }
     };
 
     window.addEventListener('graph.searchCards', onSearchCards);
@@ -157,6 +170,7 @@ export default function useSmartSearch() {
     setCardRefs(null);
     answerChunksRef.current = '';
     setIsAnswerStreaming(false);
+    setPipelineSteps([]);
     setSelectedClusterId(null);
     setSubClusters(null);
     window.ankiBridge?.addMessage('searchCards', { query: q.trim(), topK: 100 });
@@ -172,6 +186,7 @@ export default function useSmartSearch() {
     setCardRefs(null);
     answerChunksRef.current = '';
     setIsAnswerStreaming(false);
+    setPipelineSteps([]);
     setSelectedClusterId(null);
     setSubClusters(null);
     cacheRef.current = null;
@@ -196,7 +211,7 @@ export default function useSmartSearch() {
 
   return {
     query, searchResult, isSearching,
-    answerText, isAnswerStreaming, clusterLabels, clusterSummaries, cardRefs,
+    answerText, isAnswerStreaming, pipelineSteps, clusterLabels, clusterSummaries, cardRefs,
     selectedClusterId, setSelectedClusterId: selectCluster,
     selectedCluster, selectedClusterLabel, selectedClusterSummary,
     subClusters, isSubClustering,
