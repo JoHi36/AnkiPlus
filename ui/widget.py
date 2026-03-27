@@ -835,37 +835,108 @@ class KGDefinitionThread(QThread):
             }))
 
 
-class QuickAnswerThread(QThread):
-    """Background thread for generating quick AI answers from card search results."""
-    result_signal = pyqtSignal(str)
-    pipeline_signal = pyqtSignal(str, str, str, object)  # requestId, step, status, data
+class SmartSearchAgentThread(QThread):
+    """Dispatch Tutor agent for Smart Search answer + parallel cluster labeling."""
+    result_signal = pyqtSignal(str)  # JSON for graph.quickAnswer (cluster labels only)
+    pipeline_signal = pyqtSignal(str, str, str, object)
+    msg_event_signal = pyqtSignal(str, str, object)
+    finished_signal = pyqtSignal(str)
+    error_signal = pyqtSignal(str, str)
 
-    def __init__(self, query, cards_data, cluster_info):
+    def __init__(self, query, cards_data, cluster_info, ai_handler, widget_ref):
         super().__init__()
         self.query = query
         self.cards_data = cards_data
         self.cluster_info = cluster_info
+        self._handler_ref = weakref.ref(ai_handler) if ai_handler is not None else None
+        self._widget_ref = weakref.ref(widget_ref) if widget_ref is not None else None
         self._request_id = "search_%s" % id(self)
+        self._cancelled = False
 
-    def run(self):
+    def cancel(self):
+        self._cancelled = True
+
+    def _generate_cluster_labels(self):
+        """Generate cluster labels via LLM (runs in parallel with Tutor)."""
         try:
-            self.pipeline_signal.emit(self._request_id, "generating", "active", {"query": self.query})
             try:
                 from ..ai.gemini import generate_quick_answer
             except ImportError:
                 from ai.gemini import generate_quick_answer
-            result = generate_quick_answer(self.query, self.cards_data, self.cluster_info)
-            self.pipeline_signal.emit(self._request_id, "generating", "done", {})
-            self.result_signal.emit(json.dumps({
-                "type": "graph.quickAnswer",
-                "data": result
-            }))
+            return generate_quick_answer(
+                self.query, self.cards_data, cluster_labels=self.cluster_info
+            )
         except Exception:
-            logger.exception("QuickAnswer failed for: %s", self.query)
-            self.result_signal.emit(json.dumps({
-                "type": "graph.quickAnswer",
-                "data": {"answer": "", "answerable": False, "clusterLabels": {}}
-            }))
+            logger.exception("Cluster labeling failed for: %s", self.query)
+            return {"clusterLabels": {}, "clusterSummaries": {}, "cardRefs": {}}
+
+    def run(self):
+        handler = self._handler_ref() if self._handler_ref else None
+        if handler is None:
+            logger.warning("SmartSearchAgentThread: handler destroyed, aborting")
+            return
+
+        try:
+            # Wire up pipeline/msg_event callbacks (same pattern as AIRequestThread)
+            def pipeline_callback(step, status, data):
+                if not self._cancelled:
+                    self.pipeline_signal.emit(self._request_id, step, status, data or {})
+
+            def msg_event_callback(event_type, data):
+                if not self._cancelled:
+                    self.msg_event_signal.emit(self._request_id, event_type, data or {})
+
+            handler._pipeline_signal_callback = pipeline_callback
+            handler._msg_event_callback = msg_event_callback
+
+            # Run Tutor + cluster labeling in parallel
+            from concurrent.futures import ThreadPoolExecutor
+
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                # 1. Tutor agent answer (blocking, streams via callbacks)
+                tutor_future = pool.submit(
+                    handler.dispatch_smart_search,
+                    query=self.query,
+                    cards_data=self.cards_data,
+                    cluster_info=self.cluster_info,
+                    request_id=self._request_id,
+                )
+
+                # 2. Cluster labels (parallel LLM call)
+                label_future = None
+                if self.cluster_info:
+                    label_future = pool.submit(self._generate_cluster_labels)
+
+                # Wait for both
+                tutor_future.result()  # raises on error
+
+                if label_future and not self._cancelled:
+                    label_result = label_future.result()
+                    self.result_signal.emit(json.dumps({
+                        "type": "graph.quickAnswer",
+                        "data": {
+                            "clusterLabels": label_result.get("clusterLabels", {}),
+                            "clusterSummaries": label_result.get("clusterSummaries", {}),
+                            "cardRefs": label_result.get("cardRefs", {}),
+                        }
+                    }))
+
+            if not self._cancelled:
+                self.finished_signal.emit(self._request_id)
+
+        except Exception as e:
+            if not self._cancelled:
+                logger.exception("SmartSearchAgentThread failed: %s", self.query)
+                self.error_signal.emit(self._request_id, str(e))
+                # Emit error to frontend so user sees feedback
+                self.result_signal.emit(json.dumps({
+                    "type": "graph.quickAnswer",
+                    "data": {"answer": "", "answerable": False, "clusterLabels": {}}
+                }))
+        finally:
+            if handler:
+                handler._pipeline_signal_callback = None
+                handler._msg_event_callback = None
 
 
 class ChatbotWidget(QWidget):
@@ -881,7 +952,6 @@ class ChatbotWidget(QWidget):
         self.card_tracker = None  # Card-Tracker wird später initialisiert
         self.current_card_context = None  # Aktueller Karten-Kontext
         self._active_subagent_thread = None
-        self._freechat_was_open = False  # preserve FreeChat state across state changes
         self.setup_ui()
         # Card-Tracking wird nach UI-Setup initialisiert
         if self.web_view:
@@ -1062,8 +1132,6 @@ class ChatbotWidget(QWidget):
             'saveCardInsights': self._msg_save_card_insights,
             'getCardRevlog': self._msg_get_card_revlog,
             'markInsightsSeen': self._msg_mark_insights_seen,
-            'loadDeckMessages': self._msg_load_deck_messages,
-            'saveDeckMessage': self._msg_save_deck_message,
             # Config & Settings
             'saveSettings': self._msg_save_settings,
             'getCurrentConfig': self._msg_get_current_config,
@@ -1110,11 +1178,6 @@ class ChatbotWidget(QWidget):
             'deck.options': self._msg_open_deck_options,
             # View actions
             'view.navigate': self._msg_navigate,
-            # Deck-level chat (FreeChat persistence)
-            'chat.load': self._msg_load_deck_messages,
-            'chat.save': self._msg_save_deck_message,
-            'chat.clear': self._msg_clear_deck_messages,
-            'chat.stateChanged': self._msg_freechat_state,
             # Stats
             'stats.open': self._msg_open_stats,
             # Card review (React ReviewerView)
@@ -1384,37 +1447,6 @@ class ChatbotWidget(QWidget):
         hashes = [insight_hash(ins.get('text', '')) for ins in current.get('insights', [])]
         current['seen_hashes'] = hashes
         save_insights(int(card_id), current)
-
-    def _msg_load_deck_messages(self, data):
-        deck_id = data if isinstance(data, (int, str)) else data.get('deckId')
-        try:
-            deck_id = int(deck_id)
-        except (ValueError, TypeError):
-            logger.warning("_msg_load_deck_messages: Ungültige deckId: %s", deck_id)
-            return
-        try:
-            from ..storage.card_sessions import load_deck_messages
-        except ImportError:
-            from storage.card_sessions import load_deck_messages
-        messages = load_deck_messages(deck_id, limit=50)
-        self._send_to_frontend("deckMessagesLoaded", None, {"type": "deckMessagesLoaded", "deckId": deck_id, "messages": messages})
-
-    def _msg_save_deck_message(self, data):
-        msg_data = json.loads(data) if isinstance(data, str) else data
-        deck_id = msg_data.get('deckId')
-        if deck_id is None:
-            logger.warning("_msg_save_deck_message: Missing deckId")
-            return
-        try:
-            deck_id = int(deck_id)
-        except (ValueError, TypeError):
-            logger.warning("_msg_save_deck_message: Ungültige deckId: %s", deck_id)
-            return
-        try:
-            from ..storage.card_sessions import save_deck_message
-        except ImportError:
-            from storage.card_sessions import save_deck_message
-        save_deck_message(deck_id, msg_data.get('message', {}))
 
     def _msg_save_settings(self, data):
         if isinstance(data, dict):
@@ -2584,7 +2616,7 @@ class ChatbotWidget(QWidget):
             logger.error("_get_overview_data error: %s", e)
             return {'deckId': 0, 'deckName': '', 'dueNew': 0, 'dueLearning': 0, 'dueReview': 0}
 
-    # ── Deck/Overview/FreeChat Action Handlers (SP2 unification) ──
+    # ── Deck/Overview Action Handlers (SP2 unification) ──
 
     def _msg_study_deck(self, data):
         from aqt import mw
@@ -2625,24 +2657,6 @@ class ChatbotWidget(QWidget):
                     mw.onOverview()
         except (AttributeError, RuntimeError) as e:
             logger.error("navigate error: %s", e)
-
-    def _msg_clear_deck_messages(self, data=None):
-        try:
-            try:
-                from ..storage.card_sessions import clear_deck_messages
-            except ImportError:
-                from storage.card_sessions import clear_deck_messages
-            count = clear_deck_messages()
-            self._send_to_frontend("chat.messagesCleared", {"count": count})
-        except (ImportError, AttributeError, RuntimeError) as e:
-            logger.error("clear_deck_messages error: %s", e)
-
-    def _msg_freechat_state(self, data):
-        try:
-            parsed = json.loads(data) if isinstance(data, str) else data
-            self._freechat_was_open = parsed.get('open', False)
-        except (json.JSONDecodeError, AttributeError, TypeError) as e:
-            logger.debug("Could not parse freechat state: %s", e)
 
     def _msg_create_deck(self, data=None):
         from aqt import mw
@@ -3246,14 +3260,38 @@ class ChatbotWidget(QWidget):
             logger.exception("Failed to send search cards result")
 
     def _start_quick_answer(self, query, cards_data, clusters):
-        """Launch QuickAnswerThread after search completes (must be called on main thread)."""
-        logger.info("Starting quick answer for: %s (%d cards, %d clusters)", query, len(cards_data), len(clusters))
+        """Launch SmartSearchAgentThread after search completes (must be called on main thread)."""
+        logger.info("Starting smart search agent for: %s (%d cards, %d clusters)", query, len(cards_data), len(clusters))
+
+        # Cancel any in-flight search agent thread
+        if hasattr(self, '_quick_answer_thread') and self._quick_answer_thread and self._quick_answer_thread.isRunning():
+            self._quick_answer_thread.cancel()
+
         cluster_info = {}
         for c in clusters:
             cluster_info[c["id"]] = [card.get("question", "")[:40] for card in c.get("cards", [])[:3]]
-        self._quick_answer_thread = QuickAnswerThread(query, cards_data, cluster_info)
+
+        # Get AI handler
+        try:
+            from ..ai.handler import get_ai_handler
+        except ImportError:
+            from ai.handler import get_ai_handler
+        ai_handler = get_ai_handler(self)
+
+        # Ensure cards have an 'answer' field for Tutor context
+        for card in cards_data:
+            if 'answer' not in card:
+                card['answer'] = card.get('deck', '')
+
+        self._quick_answer_thread = SmartSearchAgentThread(
+            query, cards_data, cluster_info, ai_handler, self
+        )
         self._quick_answer_thread.result_signal.connect(self._on_quick_answer_result)
         self._quick_answer_thread.pipeline_signal.connect(self.on_pipeline_step)
+        self._quick_answer_thread.msg_event_signal.connect(self.on_msg_event)
+        self._quick_answer_thread.error_signal.connect(
+            lambda req_id, err: logger.error("SmartSearch agent error: %s", err)
+        )
         self._quick_answer_thread.start()
 
     def _on_quick_answer_result(self, result_json):
