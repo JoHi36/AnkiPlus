@@ -573,6 +573,55 @@ class AIHandler:
 
         return text
 
+    def dispatch_smart_search(self, query, cards_data, cluster_info, request_id=None):
+        """Dispatch Tutor agent for Smart Search with pre-loaded card context.
+
+        Skips routing — always uses Tutor. Cards are passed as pre-loaded RAG
+        context so the Tutor skips its own retrieval pipeline.
+
+        Args:
+            query: The user's search query.
+            cards_data: List of card dicts from SearchCardsThread (up to 50).
+            cluster_info: Dict of cluster_id -> [card_question_snippets].
+            request_id: Optional request ID for v2 event correlation.
+
+        Returns:
+            str: The Tutor's response text.
+        """
+        try:
+            from .agents import get_agent, lazy_load_run_fn
+        except ImportError:
+            from agents import get_agent, lazy_load_run_fn
+
+        agent_def = get_agent('tutor')
+        run_fn = lazy_load_run_fn(agent_def)
+
+        self._current_request_id = request_id
+
+        # Build pre-loaded RAG context from search cards
+        smart_search_context = {
+            'query': query,
+            'cards_data': cards_data[:50],
+            'cluster_info': cluster_info,
+        }
+
+        return self._dispatch_agent(
+            agent_name='tutor',
+            run_fn=run_fn,
+            situation=query,
+            request_id=request_id,
+            on_finished=agent_def.on_finished,
+            extra_kwargs={
+                'context': None,
+                'history': [],
+                'mode': 'compact',
+                'smart_search_context': smart_search_context,
+                **agent_def.extra_kwargs,
+            },
+            callback=None,
+            agent_def=agent_def,
+        )
+
     # ---- Pure dispatcher (all agents go through _dispatch_agent) ----------------
 
     def get_response_with_rag(self, user_message, context=None, history=None,
