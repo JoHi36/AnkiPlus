@@ -190,7 +190,7 @@ export function AccountPage() {
         <PageNav rightContent={
           <div className="flex items-center gap-4">
             <Link to="/" className="text-[13px] text-white/[0.35] font-light hover:text-white/[0.55] transition-colors">Startseite</Link>
-            <Button variant="outline" size="sm" onClick={handleLogout}>Abmelden</Button>
+            <Button variant="primary" size="sm" onClick={handleLogout}>Abmelden</Button>
           </div>
         } />
 
@@ -227,7 +227,7 @@ export function AccountPage() {
                   </Button>
                 )}
                 {tier !== 'free' && (
-                  <Button variant="outline" size="sm" onClick={handlePortal} disabled={portalLoading}>
+                  <Button variant="primary" size="sm" onClick={handlePortal} disabled={portalLoading}>
                     {portalLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Verwalten'}
                   </Button>
                 )}

@@ -120,7 +120,7 @@ export function LandingPage() {
         <section id="demo" className="max-w-6xl mx-auto px-4 sm:px-6 pb-24 sm:pb-32 demo-glow relative" style={{ overflow: 'visible' }}>
 
           {/* Fixed-height container so both layers overlap during crossfade */}
-          <div className="relative rounded-2xl" style={{ zIndex: 1, aspectRatio: '16 / 10' }}>
+          <div className="relative h-[520px] sm:h-[600px] md:h-[700px] lg:h-[800px] rounded-2xl" style={{ zIndex: 1 }}>
 
             {/* Old Anki — visible on load, crossfades out */}
             <div
