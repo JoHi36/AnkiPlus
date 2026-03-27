@@ -137,7 +137,7 @@ export function LandingPage() {
 
             {/* Modern Demo — crossfades in as old Anki fades out */}
             <div
-              className="absolute inset-0 demo-blue-border demo-dot-grid rounded-2xl flex"
+              className="absolute inset-0 demo-blue-border demo-dot-grid rounded-2xl flex flex-col"
               style={{
                 opacity: introDone ? 1 : 0,
                 transition: 'opacity 1.2s cubic-bezier(0.25, 0.1, 0.25, 1) 0.1s',
