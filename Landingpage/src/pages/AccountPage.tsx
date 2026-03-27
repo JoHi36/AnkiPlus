@@ -131,7 +131,16 @@ export function AccountPage() {
   const handleDeleteAccount = async () => {
     if (!user || !auth) return;
     try {
-      await deleteUser(user);
+      // Call backend to delete all server-side data (Firestore, Stripe, Auth)
+      const token = await getAuthToken();
+      if (token) {
+        await fetch(`${API_URL}/user/account`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+      // Fallback: also try client-side deletion in case backend missed Auth
+      try { await deleteUser(user); } catch { /* backend already deleted */ }
       await logout();
       navigate('/');
     } catch (err: any) {
@@ -312,6 +321,33 @@ export function AccountPage() {
                   </div>
                 </form>
               )}
+
+              {/* Data export row */}
+              <div className="flex justify-between items-center py-3.5 border-b border-white/[0.04]">
+                <span className="text-[13px] text-white/[0.35] font-light">Meine Daten</span>
+                <button onClick={async () => {
+                  try {
+                    const token = await getAuthToken();
+                    if (!token) return;
+                    const res = await fetch(`${API_URL}/user/data-export`, {
+                      headers: { Authorization: `Bearer ${token}` },
+                    });
+                    if (!res.ok) throw new Error('Export failed');
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `ankiplus-daten-export.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    setMessage({ type: 'success', text: 'Datenexport heruntergeladen.' });
+                  } catch {
+                    setMessage({ type: 'error', text: 'Datenexport fehlgeschlagen.' });
+                  }
+                }} className="text-[12px] text-[#0a84ff]">
+                  Exportieren (JSON)
+                </button>
+              </div>
 
               {/* Delete row */}
               <div className="flex justify-between items-center py-3.5">

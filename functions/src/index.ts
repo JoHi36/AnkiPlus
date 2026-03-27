@@ -1,4 +1,6 @@
-import * as functions from 'firebase-functions';
+import * as v1 from 'firebase-functions/v1';
+import { onRequest } from 'firebase-functions/v2/https';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
 import express from 'express';
 import cors from 'cors';
@@ -17,6 +19,7 @@ import { routerHandler } from './handlers/router';
 import { embedHandler } from './handlers/embed';
 import { researchHandler } from './handlers/research';
 import { insightsExtractHandler } from './handlers/insights';
+import { deleteAccountHandler, dataExportHandler, cleanupOldData } from './handlers/gdpr';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -107,9 +110,13 @@ app.post('/research', validateToken, researchHandler);
 // Insights extraction route
 app.post('/insights/extract', validateToken, insightsExtractHandler);
 
+// GDPR routes (Art. 17 deletion, Art. 15/20 data export)
+app.delete('/user/account', validateToken, deleteAccountHandler);
+app.get('/user/data-export', validateToken, dataExportHandler);
+
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  functions.logger.error('Unhandled error', {
+  v1.logger.error('Unhandled error', {
     error: err.message,
     stack: err.stack,
     path: req.path,
@@ -129,7 +136,24 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
   });
 });
 
-// Export Cloud Function
-export const api = functions
+// v1 export — kept for backward compatibility until clients migrate
+export const api = v1
   .region('europe-west1')
   .https.onRequest(app);
+
+// v2 export — runs on Cloud Run, supports HTTP streaming natively
+// invoker: 'public' allows unauthenticated access (app handles auth itself)
+export const apiv2 = onRequest(
+  { region: 'europe-west1', timeoutSeconds: 120, invoker: 'public' },
+  app
+);
+
+// Scheduled cleanup: delete analytics/anonymous data older than 90 days (DSGVO retention policy)
+// Runs daily at 03:00 UTC
+export const gdprDataCleanup = onSchedule(
+  { schedule: '0 3 * * *', region: 'europe-west1', timeoutSeconds: 300 },
+  async () => {
+    const result = await cleanupOldData();
+    v1.logger.info('GDPR scheduled cleanup', result);
+  }
+);
