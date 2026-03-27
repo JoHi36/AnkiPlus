@@ -4,6 +4,7 @@ Verwaltet das Web-basierte Chat-UI über QWebEngineView
 """
 
 import os
+import re
 import json
 import uuid
 import weakref
@@ -3329,7 +3330,7 @@ class ChatbotWidget(QWidget):
                                 entry["questions"][str(cid_int)] = question
                                 entry["decks"][str(cid_int)] = deck_name
                 except Exception:
-                    pass
+                    logger.debug("getCardImages: skipping card %s", cid, exc_info=True)
 
             self._send_to_js({
                 "type": "graph.cardImages",
