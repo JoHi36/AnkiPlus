@@ -16,6 +16,8 @@ export default function useSmartSearch() {
   const [imageSelectedCardIds, setImageSelectedCardIds] = useState([]);
   const [selectedTerm, setSelectedTerm] = useState(null); // { id, label, cardIds, color }
   const [termDefinition, setTermDefinition] = useState(null); // { term, definition, sources }
+  const [isAnswerStreaming, setIsAnswerStreaming] = useState(false);
+  const answerChunksRef = useRef('');
 
   // Track if sidebar slide-in has played — survives tab switches (lives in hook, not component)
   const sidebarHasAnimated = useRef(false);
@@ -48,7 +50,7 @@ export default function useSmartSearch() {
 
     const onQuickAnswer = (e) => {
       const data = e.detail;
-      setAnswerText(data?.answer || null);
+      // Answer now comes via text_chunk streaming — only use cluster data from here
       if (data?.clusterLabels && Object.keys(data.clusterLabels).length > 0) {
         setClusterLabels(data.clusterLabels);
       }
@@ -79,17 +81,34 @@ export default function useSmartSearch() {
       if (data?.term) setTermDefinition(data);
     };
 
+    const onSmartSearchMsgEvent = (e) => {
+      const data = e.detail;
+      if (!data) return;
+
+      if (data.type === 'text_chunk' && data.chunk) {
+        answerChunksRef.current += data.chunk;
+        setAnswerText(answerChunksRef.current);
+        setIsAnswerStreaming(true);
+      }
+
+      if (data.type === 'msg_done') {
+        setIsAnswerStreaming(false);
+      }
+    };
+
     window.addEventListener('graph.searchCards', onSearchCards);
     window.addEventListener('graph.quickAnswer', onQuickAnswer);
     window.addEventListener('graph.subClusters', onSubClusters);
     window.addEventListener('graph.kgSubgraph', onKgSubgraph);
     window.addEventListener('graph.termDefinition', onTermDefinition);
+    window.addEventListener('smart_search.msg_event', onSmartSearchMsgEvent);
     return () => {
       window.removeEventListener('graph.searchCards', onSearchCards);
       window.removeEventListener('graph.quickAnswer', onQuickAnswer);
       window.removeEventListener('graph.subClusters', onSubClusters);
       window.removeEventListener('graph.kgSubgraph', onKgSubgraph);
       window.removeEventListener('graph.termDefinition', onTermDefinition);
+      window.removeEventListener('smart_search.msg_event', onSmartSearchMsgEvent);
     };
   }, []);
 
@@ -136,6 +155,8 @@ export default function useSmartSearch() {
     setClusterLabels(null);
     setClusterSummaries(null);
     setCardRefs(null);
+    answerChunksRef.current = '';
+    setIsAnswerStreaming(false);
     setSelectedClusterId(null);
     setSubClusters(null);
     window.ankiBridge?.addMessage('searchCards', { query: q.trim(), topK: 100 });
@@ -149,6 +170,8 @@ export default function useSmartSearch() {
     setClusterLabels(null);
     setClusterSummaries(null);
     setCardRefs(null);
+    answerChunksRef.current = '';
+    setIsAnswerStreaming(false);
     setSelectedClusterId(null);
     setSubClusters(null);
     cacheRef.current = null;
@@ -173,7 +196,7 @@ export default function useSmartSearch() {
 
   return {
     query, searchResult, isSearching,
-    answerText, clusterLabels, clusterSummaries, cardRefs,
+    answerText, isAnswerStreaming, clusterLabels, clusterSummaries, cardRefs,
     selectedClusterId, setSelectedClusterId: selectCluster,
     selectedCluster, selectedClusterLabel, selectedClusterSummary,
     subClusters, isSubClustering,
