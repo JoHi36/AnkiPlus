@@ -6,7 +6,7 @@ const CANVAS_STYLE = {
   flex: 1,
   overflowY: 'auto',
   padding: '72px 16px 16px',
-  background: 'var(--ds-bg-deep)',
+  background: 'transparent',
   scrollbarWidth: 'none',
   display: 'flex',
   flexDirection: 'column',
