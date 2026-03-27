@@ -118,3 +118,55 @@ class GraphIndexBuilder:
         self.update_frequencies()
         self.compute_edges(min_weight=min_weight, max_edges=max_edges)
         logger.info("GraphIndexBuilder.build: complete")
+
+
+def build_term_embeddings(embed_fn, db=None, batch_size=50):
+    """Compute and store embeddings for all KG terms without one.
+
+    Args:
+        embed_fn: Callable(texts: list[str]) -> list[list[float]].
+        db: Optional DB connection (for testing).
+        batch_size: Number of terms per API call.
+
+    Returns:
+        Number of terms newly embedded.
+    """
+    import struct
+
+    try:
+        from ..storage.kg_store import _get_db as kg_get_db
+    except ImportError:
+        from storage.kg_store import _get_db as kg_get_db
+
+    conn = db or kg_get_db()
+
+    rows = conn.execute(
+        "SELECT term FROM kg_terms WHERE embedding IS NULL ORDER BY frequency DESC"
+    ).fetchall()
+    terms = [r[0] for r in rows]
+
+    if not terms:
+        logger.info("build_term_embeddings: all terms already embedded")
+        return 0
+
+    total_embedded = 0
+    for i in range(0, len(terms), batch_size):
+        batch = terms[i:i + batch_size]
+        try:
+            embeddings = embed_fn(batch)
+            if not embeddings:
+                continue
+            for term, emb in zip(batch, embeddings):
+                if emb:
+                    packed = struct.pack('%df' % len(emb), *emb)
+                    conn.execute(
+                        "UPDATE kg_terms SET embedding = ? WHERE term = ?",
+                        (packed, term)
+                    )
+                    total_embedded += 1
+            conn.commit()
+        except Exception as e:
+            logger.warning("build_term_embeddings: batch %d failed: %s", i, e)
+
+    logger.info("build_term_embeddings: embedded %d/%d terms", total_embedded, len(terms))
+    return total_embedded

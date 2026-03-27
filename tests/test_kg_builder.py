@@ -134,3 +134,56 @@ class TestGraphIndexBuilder(_BaseKGBuilderTest):
         pairs = {(e["term_a"], e["term_b"]) for e in edges}
         key = tuple(sorted(["Fibrin", "Thrombin"]))
         assert key in pairs, f"Expected edge {key} after build(), got {list(pairs)}"
+
+
+import unittest
+
+
+class TestBuildTermEmbeddings(unittest.TestCase):
+
+    def setUp(self):
+        import sqlite3
+        self.db = sqlite3.connect(':memory:')
+        self.db.row_factory = sqlite3.Row
+        self.db.executescript("""
+            CREATE TABLE kg_terms (term TEXT PRIMARY KEY, frequency INTEGER DEFAULT 0, embedding BLOB);
+        """)
+        self.db.executemany("INSERT INTO kg_terms VALUES (?, ?, ?)",
+                           [('Herz', 5, None), ('Lunge', 3, None)])
+        self.db.commit()
+
+    def test_embeds_all_unembedded_terms(self):
+        from unittest.mock import MagicMock
+        mock_embed_fn = MagicMock(return_value=[[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
+        from ai.kg_builder import build_term_embeddings
+        count = build_term_embeddings(embed_fn=mock_embed_fn, db=self.db, batch_size=50)
+        self.assertEqual(count, 2)
+        mock_embed_fn.assert_called_once()
+        row = self.db.execute("SELECT embedding FROM kg_terms WHERE term = 'Herz'").fetchone()
+        self.assertIsNotNone(row[0])
+
+    def test_skips_already_embedded(self):
+        import struct
+        from unittest.mock import MagicMock
+        fake_emb = struct.pack('3f', 0.1, 0.2, 0.3)
+        self.db.execute("UPDATE kg_terms SET embedding = ? WHERE term = 'Herz'", (fake_emb,))
+        self.db.commit()
+        mock_embed_fn = MagicMock(return_value=[[0.4, 0.5, 0.6]])
+        from ai.kg_builder import build_term_embeddings
+        count = build_term_embeddings(embed_fn=mock_embed_fn, db=self.db, batch_size=50)
+        self.assertEqual(count, 1)
+        call_args = mock_embed_fn.call_args[0][0]
+        self.assertEqual(call_args, ['Lunge'])
+
+    def test_returns_zero_when_all_embedded(self):
+        import struct
+        fake_emb = struct.pack('3f', 0.1, 0.2, 0.3)
+        self.db.execute("UPDATE kg_terms SET embedding = ? WHERE term = 'Herz'", (fake_emb,))
+        self.db.execute("UPDATE kg_terms SET embedding = ? WHERE term = 'Lunge'", (fake_emb,))
+        self.db.commit()
+        from unittest.mock import MagicMock
+        mock_embed_fn = MagicMock()
+        from ai.kg_builder import build_term_embeddings
+        count = build_term_embeddings(embed_fn=mock_embed_fn, db=self.db, batch_size=50)
+        self.assertEqual(count, 0)
+        mock_embed_fn.assert_not_called()
