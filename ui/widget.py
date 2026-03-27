@@ -455,6 +455,8 @@ class SearchCardsThread(QThread):
                             deck_name = deck["name"] if deck else "Unknown"
                             question = fields[0] if fields else ""
                             question_clean = _re.sub(r'<[^>]+>', '', question)[:80]
+                            # Card review state: 0=new, 1=learning, 2=review(mature)
+                            is_due = card.queue > 0 and card.due <= mw.col.sched.today
                             cards_data.append({
                                 "id": str(cid),
                                 "question": question_clean,
@@ -462,6 +464,8 @@ class SearchCardsThread(QThread):
                                 "deckFull": deck_name,
                                 "score": round(scores.get(cid, 0), 3),
                                 "source": sources.get(cid, "semantic"),
+                                "cardType": card.type,  # 0=new, 1=learn, 2=review
+                                "isDue": is_due,
                             })
                         except Exception:
                             pass
@@ -708,9 +712,10 @@ class KGDefinitionThread(QThread):
     """Background thread for generating Knowledge Graph term definitions via LLM."""
     result_signal = pyqtSignal(str)  # JSON result string
 
-    def __init__(self, term, widget_ref):
+    def __init__(self, term, widget_ref, search_query=None):
         super().__init__()
         self.term = term
+        self.search_query = search_query
         self._widget_ref = weakref.ref(widget_ref) if widget_ref is not None else None
 
     def run(self):
@@ -797,10 +802,16 @@ class KGDefinitionThread(QThread):
                 from ..ai.gemini import generate_definition
             except ImportError:
                 from ai.gemini import generate_definition
-            definition = generate_definition(self.term, card_texts)
+            definition = generate_definition(self.term, card_texts, search_query=self.search_query)
+
+            # Build card refs for inline [1], [2] rendering
+            source_ids = [cid for cid, _ in top_cards]
+            card_refs = {}
+            for i, (cid, _) in enumerate(top_cards):
+                q = card_texts[i].get("question", "") if i < len(card_texts) else ""
+                card_refs[str(i + 1)] = {"id": str(cid), "question": q[:60]}
 
             # Cache
-            source_ids = [cid for cid, _ in top_cards]
             save_definition(self.term, definition, source_ids, "llm")
 
             connected = get_connected_terms(self.term)
@@ -812,6 +823,7 @@ class KGDefinitionThread(QThread):
                     "sourceCount": len(source_ids),
                     "generatedBy": "llm",
                     "connectedTerms": connected,
+                    "cardRefs": card_refs,
                 }
             }))
         except Exception as e:
@@ -1113,6 +1125,7 @@ class ChatbotWidget(QWidget):
             # Settings sidebar actions (forwarded from main bridge)
             'sidebarCopyLogs': self._msg_copy_logs,
             'sidebarGetStatus': self._msg_get_sidebar_status,
+            'sidebarGetIndexingStatus': self._msg_get_indexing_status,
             'sidebarSetTheme': self._msg_set_theme,
             'sidebarOpenNativeSettings': lambda d: __import__('aqt', fromlist=['mw']).mw.onPrefs(),
             'sidebarOpenUpgrade': self._msg_sidebar_upgrade,
@@ -1128,6 +1141,7 @@ class ChatbotWidget(QWidget):
             'getDeckCrossLinks': self._msg_get_deck_cross_links,
             'startTermStack': self._msg_start_term_stack,
             'searchCards': self._msg_search_cards,
+            'getCardImages': self._msg_get_card_images,
             'searchKgSubgraph': self._msg_search_kg_subgraph,
             'subClusterCards': self._msg_sub_cluster,
             'quickAnswer': lambda data: None,  # Reserved — triggered internally by searchCards
@@ -2221,18 +2235,70 @@ class ChatbotWidget(QWidget):
         js_code = f"window.ankiReceive({json.dumps(payload)});"
         self.web_view.page().runJavaScript(js_code)
 
+    # ── Streaming delivery queue ─────────────────────────────────────
+    # When the backend buffers SSE responses, all text_chunk events arrive
+    # in a single burst. Without spacing, React renders them as one block.
+    # This queue delivers events with ~30ms gaps so the UI streams visibly.
+    STREAM_DELIVERY_MS = 30  # ms between queued event deliveries
+
+    def _init_stream_queue(self):
+        """Lazy-init the streaming delivery queue."""
+        if not hasattr(self, '_stream_queue'):
+            self._stream_queue = []
+            self._stream_timer = QTimer()
+            self._stream_timer.setSingleShot(True)
+            self._stream_timer.timeout.connect(self._deliver_next_stream_event)
+
+    def _enqueue_stream_event(self, payload):
+        """Add event to the delivery queue and start draining if idle.
+
+        IMPORTANT: Never deliver synchronously here. All Qt signals from the AI
+        thread burst arrive in one event-loop tick. A 0ms timer ensures the queue
+        is fully populated before the first delivery fires.
+
+        NOTE: This queue spaces out delivery but does NOT create real streaming.
+        Google Cloud Functions (1st gen) buffer the entire SSE response — all
+        chunks arrive as one burst. Real streaming requires migrating to Cloud
+        Run (2nd gen) or another provider that supports HTTP streaming.
+        """
+        self._init_stream_queue()
+        self._stream_queue.append(payload)
+        if not self._stream_timer.isActive():
+            # 0ms timer fires after all pending signals are processed
+            self._stream_timer.start(0)
+
+    def _deliver_next_stream_event(self):
+        """Deliver the next queued event to JS and schedule the following one."""
+        if not self._stream_queue:
+            return
+        payload = self._stream_queue.pop(0)
+        self._send_to_js(payload)
+        if self._stream_queue:
+            self._stream_timer.start(self.STREAM_DELIVERY_MS)
+
     def on_msg_event(self, request_id, event_type, data):
-        """Handle v2 structured message events from the AI thread — delivered via Qt signal."""
-        if event_type in ('msg_start', 'agent_cell', 'msg_done', 'text_chunk'):
-            chunk_preview = ''
-            if event_type == 'text_chunk' and isinstance(data, dict):
-                chunk_preview = ' chunk=%d' % len(data.get('chunk', ''))
-            logger.info("[v2-signal] on_msg_event: type=%s, data_is_dict=%s%s",
-                        event_type, isinstance(data, dict), chunk_preview)
+        """Handle v2 structured message events from the AI thread — delivered via Qt signal.
+
+        text_chunk events (and events that follow them like agent_cell/done and msg_done)
+        are queued with spacing so the frontend renders streaming progressively.
+        """
         payload = {"type": event_type}
         if isinstance(data, dict):
             payload.update(data)
-        self._send_to_js(payload)
+
+        if event_type == 'text_chunk':
+            # Queue for progressive delivery
+            self._enqueue_stream_event(payload)
+        elif event_type in ('agent_cell', 'msg_done'):
+            # If streaming is in progress, queue behind text chunks
+            self._init_stream_queue()
+            if self._stream_queue:
+                self._enqueue_stream_event(payload)
+            else:
+                self._send_to_js(payload)
+        else:
+            # msg_start, orchestration — deliver immediately
+            self._send_to_js(payload)
 
     def on_pipeline_step(self, request_id, step, status, data):
         """Handle pipeline step events from the AI thread — delivered via Qt signal for real-time UI."""
@@ -2779,6 +2845,48 @@ class ChatbotWidget(QWidget):
             import webbrowser
             webbrowser.open('https://anki-plus.vercel.app/login')
 
+    def _msg_get_indexing_status(self, data=None):
+        """Return embedding + KG term extraction progress to sidebar."""
+        try:
+            try:
+                from ..storage.kg_store import get_graph_status
+            except ImportError:
+                from storage.kg_store import get_graph_status
+
+            try:
+                from ..storage.card_sessions import load_all_embeddings
+            except ImportError:
+                from storage.card_sessions import load_all_embeddings
+
+            kg_status = get_graph_status()
+
+            embedded_count = 0
+            try:
+                for _ in load_all_embeddings():
+                    embedded_count += 1
+            except Exception:
+                pass
+
+            total_cards = 0
+            try:
+                if mw and mw.col and mw.col.db:
+                    total_cards = mw.col.db.scalar("SELECT COUNT() FROM cards") or 0
+            except Exception as e:
+                logger.debug("card count failed: %s", e)
+                # Fallback: use embedded count as approximation
+                total_cards = max(embedded_count, kg_status.get('totalCards', 0))
+
+            self._send_to_frontend('indexingStatus', {
+                'embeddings': {'total': total_cards, 'done': embedded_count},
+                'kgTerms': {
+                    'total': total_cards,
+                    'done': kg_status.get('totalCards', 0),
+                    'totalTerms': kg_status.get('totalTerms', 0),
+                },
+            })
+        except Exception:
+            logger.exception("_msg_get_indexing_status failed")
+
     def _msg_sidebar_logout(self, data=None):
         """Clear auth tokens."""
         try:
@@ -2912,6 +3020,8 @@ class ChatbotWidget(QWidget):
         try:
             card_id = int(data.get("cardId", 0)) if isinstance(data, dict) else 0
             terms = get_card_terms(card_id)
+            logger.info("getCardKGTerms: card_id=%s → %d terms: %s",
+                        card_id, len(terms), terms[:5] if terms else "[]")
             self._send_to_js({"type": "kg.cardTerms", "data": {"cardId": card_id, "terms": terms}})
         except Exception:
             logger.exception("getCardKGTerms failed")
@@ -2921,6 +3031,7 @@ class ChatbotWidget(QWidget):
         """Check cache first; if miss, launch QThread to generate definition."""
         try:
             term = data.get("term", "") if isinstance(data, dict) else str(data)
+            search_query = data.get("searchQuery", "") if isinstance(data, dict) else ""
             try:
                 from ..storage.kg_store import get_definition, get_connected_terms
             except ImportError:
@@ -2930,7 +3041,7 @@ class ChatbotWidget(QWidget):
                 cached["connectedTerms"] = get_connected_terms(term)
                 self._send_to_js({"type": "graph.termDefinition", "data": cached})
                 return
-            self._start_kg_definition(term)
+            self._start_kg_definition(term, search_query=search_query)
         except Exception:
             logger.exception("getTermDefinition handler failed")
 
@@ -3005,11 +3116,17 @@ class ChatbotWidget(QWidget):
                 self._send_to_js({"type": "graph.kgSubgraph", "data": {"nodes": [], "edges": [], "query": query}})
                 return
 
-            # 2. Get edges between these terms
+            # 2. Compute co-occurrence edges LIVE from kg_card_terms (all cards, not just search)
             term_placeholders = ','.join('?' * len(terms))
             edge_rows = db.execute(
-                "SELECT term_a, term_b, weight FROM kg_edges "
-                "WHERE term_a IN (%s) AND term_b IN (%s)" % (term_placeholders, term_placeholders),
+                "SELECT a.term, b.term, COUNT(DISTINCT a.card_id) as weight "
+                "FROM kg_card_terms a "
+                "JOIN kg_card_terms b ON a.card_id = b.card_id AND a.term < b.term "
+                "WHERE a.term IN (%s) AND b.term IN (%s) "
+                "GROUP BY a.term, b.term "
+                "HAVING weight >= 2 "
+                "ORDER BY weight DESC "
+                "LIMIT 200" % (term_placeholders, term_placeholders),
                 terms + terms
             ).fetchall()
 
@@ -3144,6 +3261,83 @@ class ChatbotWidget(QWidget):
             self._send_to_js(json.loads(result_json))
         except Exception:
             logger.exception("Failed to send quick answer")
+
+    def _msg_get_card_images(self, data):
+        """Batch-extract deduplicated images from card HTML fields.
+
+        Runs synchronously on main thread (called from polling timer).
+        Request: { cardIds: JSON string of int array }
+        Response: graph.cardImages event with deduplicated image list.
+        """
+        try:
+            from ..utils.text import extract_images_from_html
+        except ImportError:
+            from utils.text import extract_images_from_html
+
+        card_ids_raw = data.get("cardIds", "[]") if isinstance(data, dict) else "[]"
+        try:
+            card_ids = json.loads(card_ids_raw)
+        except (ValueError, TypeError):
+            card_ids = []
+
+        if not card_ids:
+            self._send_to_js({"type": "graph.cardImages", "data": {"images": []}})
+            return
+
+        try:
+            from aqt import mw
+            if mw is None or mw.col is None:
+                self._send_to_js({"type": "graph.cardImages", "data": {"images": []}})
+                return
+
+            media_dir = mw.col.media.dir()
+            seen = {}  # filename -> entry dict
+
+            for cid in card_ids[:30]:  # Cap at 30
+                try:
+                    card = mw.col.get_card(int(cid))
+                    note = card.note()
+                    deck = mw.col.decks.get(card.did)
+                    deck_name = deck["name"].split("::")[-1] if deck else "Unknown"
+                    question = re.sub(r'<[^>]+>', '', note.fields[0])[:80] if note.fields else ""
+
+                    for field in note.fields:
+                        for raw_src in extract_images_from_html(field):
+                            # Skip remote URLs and absolute paths — only local media
+                            if raw_src.startswith(('http://', 'https://', 'file://', '/')):
+                                continue
+                            filename = os.path.basename(raw_src)
+                            if not filename:
+                                continue
+                            # Check file actually exists in media dir
+                            filepath = os.path.join(media_dir, filename)
+                            if not os.path.isfile(filepath):
+                                continue
+
+                            if filename not in seen:
+                                seen[filename] = {
+                                    "filename": filename,
+                                    "src": "file://" + filepath,
+                                    "cardIds": [],
+                                    "questions": {},
+                                    "decks": {},
+                                }
+                            entry = seen[filename]
+                            cid_int = int(cid)
+                            if cid_int not in entry["cardIds"]:
+                                entry["cardIds"].append(cid_int)
+                                entry["questions"][str(cid_int)] = question
+                                entry["decks"][str(cid_int)] = deck_name
+                except Exception:
+                    pass
+
+            self._send_to_js({
+                "type": "graph.cardImages",
+                "data": {"images": list(seen.values())}
+            })
+        except Exception as e:
+            logger.exception("_msg_get_card_images failed: %s", e)
+            self._send_to_js({"type": "graph.cardImages", "data": {"images": []}})
 
     def _msg_sub_cluster(self, data):
         """Re-cluster a subset of cards into finer sub-clusters."""
@@ -3338,9 +3532,9 @@ class ChatbotWidget(QWidget):
         except Exception:
             logger.exception("startTermStack handler failed")
 
-    def _start_kg_definition(self, term):
+    def _start_kg_definition(self, term, search_query=None):
         """Launch background thread for definition generation."""
-        self._kg_def_thread = KGDefinitionThread(term, self)
+        self._kg_def_thread = KGDefinitionThread(term, self, search_query=search_query)
         self._kg_def_thread.result_signal.connect(self._on_kg_result)
         self._kg_def_thread.start()
 
