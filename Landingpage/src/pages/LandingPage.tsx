@@ -206,36 +206,36 @@ export function LandingPage() {
       </main>
 
       {/* ═══ FOOTER ═══ */}
-      <footer className="border-t border-white/[0.06] py-8">
-        <div className="max-w-6xl mx-auto px-6 flex flex-col gap-6">
-          {/* Trust strip */}
-          <div className="flex justify-center">
-            <div className="flex flex-wrap justify-center gap-6 md:gap-10">
-              <TrustItem
-                icon={<ShieldCheck className="w-3.5 h-3.5" strokeWidth={1.5} />}
-                label="DSGVO-konform"
-                tooltip="Vollständige Datenschutzerklärung nach EU-DSGVO. Datenexport und Kontolöschung jederzeit möglich."
-              />
-              <TrustItem
-                icon={<Globe className="w-3.5 h-3.5" strokeWidth={1.5} />}
-                label="EU-Server"
-                tooltip="Alle KI-Anfragen werden über europäische Server verarbeitet. Deine Lerndaten verlassen die EU nicht."
-              />
-              <TrustItem
-                icon={<EyeOff className="w-3.5 h-3.5" strokeWidth={1.5} />}
-                label="Kein Tracking"
-                tooltip="Keine Cookies, kein Google Analytics, keine Weitergabe an Dritte. Wir sehen nur, was du uns zeigst."
-              />
-            </div>
+      <footer className="border-t border-white/[0.06] px-6 py-8">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+          {/* Left: Copyright */}
+          <div className="text-white/[0.18] text-xs">
+            &copy; 2026 Anki.Plus &middot; Johannes Hinkel
           </div>
 
-          {/* Bottom row */}
-          <div className="flex flex-col md:flex-row justify-between items-center gap-3 text-white/[0.18] text-xs">
-            <span>ANKI+ &middot; Johannes Hinkel</span>
-            <div className="flex gap-6">
-              <Link to="/datenschutz" className="hover:text-white/[0.35] transition-colors">Datenschutz</Link>
-              <Link to="/impressum" className="hover:text-white/[0.35] transition-colors">Impressum</Link>
-            </div>
+          {/* Center: Trust items */}
+          <div className="flex flex-wrap justify-center gap-6 md:gap-8">
+            <TrustItem
+              icon={<ShieldCheck className="w-3.5 h-3.5" strokeWidth={1.5} />}
+              label="DSGVO-konform"
+              tooltip="Vollständige Datenschutzerklärung nach EU-DSGVO. Datenexport und Kontolöschung jederzeit möglich."
+            />
+            <TrustItem
+              icon={<Globe className="w-3.5 h-3.5" strokeWidth={1.5} />}
+              label="EU-Server"
+              tooltip="Alle KI-Anfragen werden über europäische Server verarbeitet. Deine Lerndaten verlassen die EU nicht."
+            />
+            <TrustItem
+              icon={<EyeOff className="w-3.5 h-3.5" strokeWidth={1.5} />}
+              label="Kein Tracking"
+              tooltip="Keine Cookies, kein Google Analytics, keine Weitergabe an Dritte. Wir sehen nur, was du uns zeigst."
+            />
+          </div>
+
+          {/* Right: Legal links */}
+          <div className="flex gap-6 text-white/[0.18] text-xs">
+            <Link to="/datenschutz" className="hover:text-white/[0.35] transition-colors">Datenschutz</Link>
+            <Link to="/impressum" className="hover:text-white/[0.35] transition-colors">Impressum</Link>
           </div>
         </div>
       </footer>
@@ -255,7 +255,7 @@ function TrustItem({ icon, label, tooltip }: { icon: React.ReactNode; label: str
     >
       <button
         className={`flex items-center gap-2 text-xs font-light tracking-wide transition-colors duration-300 ${
-          open ? 'text-[#0a84ff]' : 'text-white/[0.25] hover:text-[#0a84ff]'
+          open ? 'text-[#0a84ff]' : 'text-white/[0.35] hover:text-[#0a84ff]'
         }`}
       >
         {icon}
