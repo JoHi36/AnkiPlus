@@ -15,8 +15,11 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESULTS_PATH = os.path.join(PROJECT_ROOT, "benchmark", "results.json")
+ROUTER_RESULTS_PATH = os.path.join(PROJECT_ROOT, "benchmark", "router_results.json")
 BENCHMARK_RUN_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "benchmark_run.py")
 BENCHMARK_GENERATE_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "benchmark_generate.py")
+BENCHMARK_ROUTER_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "benchmark_router.py")
+DOCS_PATH = os.path.join(PROJECT_ROOT, "docs", "reference", "RETRIEVAL_SYSTEM.md")
 
 # ── HTML Dashboard ────────────────────────────────────────────────────────────
 
@@ -462,6 +465,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     <div class="timestamp" id="timestamp">Loading…</div>
   </div>
   <div class="header-right">
+    <div style="display:flex;gap:6px;margin-right:16px">
+      <button class="btn btn-primary" style="font-size:13px" id="tab-benchmark" onclick="switchTab('benchmark')">Benchmark</button>
+      <button class="btn" style="font-size:13px" id="tab-router" onclick="switchTab('router')">Router Test</button>
+      <button class="btn" style="font-size:13px" id="tab-docs" onclick="switchTab('docs')">System Docs</button>
+    </div>
     <button class="btn" id="btn-generate" onclick="handleGenerate()">
       <span class="spinner" id="spin-generate"></span>
       Regenerate Cases
@@ -474,6 +482,39 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 </div>
 
 <div class="error-banner" id="error-banner"></div>
+
+<!-- Docs Tab (hidden by default) -->
+<div id="docs-panel" style="display:none;background:#1c1c1e;border-radius:12px;padding:24px 32px;border:1px solid #2c2c2e;max-width:900px;margin:0 auto;font-size:14px;line-height:1.8;color:#e5e5e7">
+  <div id="docs-content" style="white-space:pre-wrap;font-family:-apple-system,BlinkMacSystemFont,'SF Pro',sans-serif">Loading docs...</div>
+  <div style="margin-top:16px;padding-top:12px;border-top:1px solid #2c2c2e;font-size:11px;color:#636366" id="docs-path"></div>
+</div>
+
+<!-- Router Tab (hidden by default) -->
+<div id="router-panel" style="display:none">
+  <div class="summary-row" id="router-summary-row">
+    <!-- filled by JS -->
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Category</th>
+          <th>Query</th>
+          <th>Card Context</th>
+          <th style="text-align:center">Coverage</th>
+          <th style="text-align:center">Relevance</th>
+        </tr>
+      </thead>
+      <tbody id="router-table-body">
+        <tr><td colspan="6"><div class="empty-state">Loading router results...</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Benchmark Tab -->
+<div id="benchmark-panel">
 
 <div class="summary-row" id="summary-row">
   <!-- filled by JS -->
@@ -500,6 +541,55 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     </tbody>
   </table>
 </div>
+
+</div>
+
+<script>
+function switchTab(tab) {
+  var bp = document.getElementById('benchmark-panel');
+  var dp = document.getElementById('docs-panel');
+  var rp = document.getElementById('router-panel');
+  var tbtn = document.getElementById('tab-benchmark');
+  var dbtn = document.getElementById('tab-docs');
+  var rbtn = document.getElementById('tab-router');
+  // Hide all panels
+  bp.style.display = 'none';
+  dp.style.display = 'none';
+  rp.style.display = 'none';
+  // Deactivate all tab buttons
+  tbtn.classList.remove('btn-primary');
+  dbtn.classList.remove('btn-primary');
+  rbtn.classList.remove('btn-primary');
+  if (tab === 'docs') {
+    dp.style.display = 'block';
+    dbtn.classList.add('btn-primary');
+    loadDocs();
+  } else if (tab === 'router') {
+    rp.style.display = 'block';
+    rbtn.classList.add('btn-primary');
+    loadRouterResults();
+  } else {
+    bp.style.display = 'block';
+    tbtn.classList.add('btn-primary');
+  }
+}
+
+function loadDocs() {
+  fetch('/api/docs').then(function(r) { return r.json(); }).then(function(data) {
+    var el = document.getElementById('docs-content');
+    var pathEl = document.getElementById('docs-path');
+    // Render as preformatted text with monospace — safe, no HTML injection
+    el.textContent = data.content || 'No docs found';
+    el.style.whiteSpace = 'pre-wrap';
+    el.style.fontFamily = "'SF Mono', 'Fira Code', monospace";
+    el.style.fontSize = '12px';
+    el.style.lineHeight = '1.7';
+    if (pathEl) pathEl.textContent = 'Source: ' + (data.path || '');
+  }).catch(function(e) {
+    document.getElementById('docs-content').textContent = 'Failed to load: ' + e;
+  });
+}
+</script>
 
 <script>
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -591,10 +681,10 @@ function renderSummary(agg) {
   // ── Recall card ──
   const recallCard = el('div', 'recall-card');
   const rl = el('div', 'recall-label');
-  rl.appendChild(safeText('Recall@K'));
+  rl.appendChild(safeText('Recall@10'));
   const rlTip = el('span', 'tip');
   rlTip.appendChild(safeText('?'));
-  rlTip.setAttribute('data-tooltip', 'Prozentsatz der Fragen, bei denen die richtige Karte in den Top-K Ergebnissen landet. Höher = besser.');
+  rlTip.setAttribute('data-tooltip', 'Prozentsatz der Fragen, bei denen die richtige Karte in den Top-10 Ergebnissen landet. Höher = besser.');
   rl.appendChild(rlTip);
   recallCard.appendChild(rl);
 
@@ -605,6 +695,15 @@ function renderSummary(agg) {
   const rs = el('div', 'recall-sub');
   rs.appendChild(safeText(overall.passed + ' / ' + overall.total_cases + ' passed  ·  MRR ' + overall.mrr.toFixed(3)));
   recallCard.appendChild(rs);
+
+  // Top-3 quality reference line
+  const top3 = overall.recall_at_3 != null ? overall.recall_at_3 : 0;
+  const top3Count = overall.top3_passed != null ? overall.top3_passed : 0;
+  const top3Line = el('div', 'recall-sub');
+  top3Line.style.marginTop = '4px';
+  top3Line.style.color = scoreColor(top3);
+  top3Line.appendChild(safeText('Top-3: ' + pct(top3) + ' (' + top3Count + '/' + overall.total_cases + ')'));
+  recallCard.appendChild(top3Line);
 
   row.appendChild(recallCard);
 
@@ -748,10 +847,10 @@ function renderTable(cases) {
     tdQ.appendChild(safeText(c.query));
     tr.appendChild(tdQ);
 
-    // Rank
+    // Rank — color-coded: green (1-3), yellow (4-10), red (>10 or missing)
     const tdRank = el('td', 'td-rank');
     const rank = c.target_rank != null ? '#' + c.target_rank : '—';
-    const rankColor = (c.target_rank != null && c.target_rank <= 5)
+    const rankColor = (c.target_rank != null && c.target_rank <= 3)
       ? 'var(--green)' : (c.target_rank != null && c.target_rank <= 10)
       ? 'var(--yellow)' : 'var(--red)';
     tdRank.style.color = rankColor;
@@ -883,6 +982,203 @@ async function handleGenerate() {
   }
 }
 
+// ── Router Tab ───────────────────────────────────────────────────────────────
+
+let _routerData = null;
+
+function renderRouterSummary(agg) {
+  const row = document.getElementById('router-summary-row');
+  row.textContent = '';
+
+  const overall = agg.overall || {};
+
+  // ── Coverage card ──
+  const covCard = el('div', 'recall-card');
+  const covLabel = el('div', 'recall-label');
+  covLabel.appendChild(safeText('Term Coverage'));
+  const covTip = el('span', 'tip');
+  covTip.appendChild(safeText('?'));
+  covTip.setAttribute('data-tooltip', 'Anteil der erwarteten Fachbegriffe, die im Router-Output (resolved_intent / reasoning / queries) vorkommen.');
+  covLabel.appendChild(covTip);
+  covCard.appendChild(covLabel);
+
+  const covVal = el('div', 'recall-value ' + recallClass(overall.avg_term_coverage || 0));
+  covVal.appendChild(safeText(pct(overall.avg_term_coverage || 0)));
+  covCard.appendChild(covVal);
+
+  const covSub = el('div', 'recall-sub');
+  covSub.appendChild(safeText((overall.successful || 0) + ' / ' + (overall.total_cases || 0) + ' successful'));
+  covCard.appendChild(covSub);
+  row.appendChild(covCard);
+
+  // ── Relevance card ──
+  const relCard = el('div', 'recall-card');
+  const relLabel = el('div', 'recall-label');
+  relLabel.appendChild(safeText('Relevance'));
+  const relTip = el('span', 'tip');
+  relTip.appendChild(safeText('?'));
+  relTip.setAttribute('data-tooltip', 'Cosine Similarity zwischen Router-Output-Embedding und Expected-Terms-Embedding. Misst semantische Nähe.');
+  relLabel.appendChild(relTip);
+  relCard.appendChild(relLabel);
+
+  const relVal = el('div', 'recall-value ' + recallClass(overall.avg_relevance || 0));
+  relVal.appendChild(safeText(pct(overall.avg_relevance || 0)));
+  relCard.appendChild(relVal);
+
+  const relSub = el('div', 'recall-sub');
+  relSub.appendChild(safeText((overall.errors || 0) + ' errors'));
+  relCard.appendChild(relSub);
+  row.appendChild(relCard);
+
+  // ── By Category card ──
+  const catCard = el('div', 'metric-card');
+  const ch = el('h3');
+  ch.appendChild(safeText('By Category'));
+  catCard.appendChild(ch);
+
+  const byCat = agg.by_category || {};
+  Object.entries(byCat).forEach(function(entry) {
+    var cat = entry[0], info = entry[1];
+    const crow = el('div', 'cat-row');
+
+    const badge = el('span', 'cat-badge ' + (CAT_BADGE_CLASS[cat] || ''));
+    badge.appendChild(safeText(cat));
+    crow.appendChild(badge);
+
+    const stats = el('span', 'cat-stats');
+    stats.appendChild(safeText(info.cases + ' cases'));
+    crow.appendChild(stats);
+
+    const covSpan = el('span', 'cat-recall');
+    covSpan.style.color = scoreColor(info.avg_coverage || 0);
+    covSpan.appendChild(safeText('cov ' + pct(info.avg_coverage || 0)));
+    crow.appendChild(covSpan);
+
+    const relSpan = el('span', 'cat-recall');
+    relSpan.style.color = scoreColor(info.avg_relevance || 0);
+    relSpan.style.marginLeft = '8px';
+    relSpan.appendChild(safeText('rel ' + pct(info.avg_relevance || 0)));
+    crow.appendChild(relSpan);
+
+    catCard.appendChild(crow);
+  });
+  row.appendChild(catCard);
+}
+
+function renderRouterTable(cases) {
+  const tbody = document.getElementById('router-table-body');
+  tbody.textContent = '';
+
+  if (!cases || cases.length === 0) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.setAttribute('colspan', '6');
+    const empty = el('div', 'empty-state');
+    empty.appendChild(safeText('No router results yet. Run: python3 scripts/benchmark_router.py'));
+    cell.appendChild(empty);
+    row.appendChild(cell);
+    tbody.appendChild(row);
+    return;
+  }
+
+  cases.forEach(function(c) {
+    // ── Data row ──
+    const tr = el('tr', 'data-row');
+    tr.dataset.id = c.id;
+
+    // ID
+    const tdId = el('td', 'td-id');
+    tdId.appendChild(safeText(c.id));
+    tr.appendChild(tdId);
+
+    // Category badge
+    const tdCat = document.createElement('td');
+    const badge = el('span', 'cat-badge ' + (CAT_BADGE_CLASS[c.category] || ''));
+    badge.appendChild(safeText(c.category));
+    tdCat.appendChild(badge);
+    tr.appendChild(tdCat);
+
+    // Query
+    const tdQ = el('td', 'td-query');
+    tdQ.appendChild(safeText(c.query));
+    tr.appendChild(tdQ);
+
+    // Card Context (short)
+    const tdCtx = el('td', 'td-query');
+    tdCtx.style.maxWidth = '180px';
+    var ctxText = '';
+    if (c.card_context && c.card_context.question) {
+      ctxText = c.card_context.question;
+    }
+    tdCtx.appendChild(safeText(ctxText));
+    tr.appendChild(tdCtx);
+
+    // Coverage
+    const tdCov = el('td', 'td-rank');
+    var covColor = scoreColor(c.term_coverage || 0);
+    tdCov.style.color = covColor;
+    tdCov.appendChild(safeText(pct(c.term_coverage || 0)));
+    tr.appendChild(tdCov);
+
+    // Relevance
+    const tdRel = el('td', 'td-rank');
+    var relColor = scoreColor(c.relevance || 0);
+    tdRel.style.color = relColor;
+    tdRel.appendChild(safeText(pct(c.relevance || 0)));
+    tr.appendChild(tdRel);
+
+    tbody.appendChild(tr);
+
+    // ── Trace row (hidden by default) ──
+    const traceRow = el('tr', 'trace-row');
+    traceRow.dataset.traceFor = c.id;
+    const traceTd = document.createElement('td');
+    traceTd.setAttribute('colspan', '6');
+
+    const traceInner = el('div', 'trace-inner');
+    traceInner.id = 'router-trace-' + c.id;
+
+    const pre = el('pre', 'trace-pre');
+    var traceData = {
+      router_response: c.router_response || {},
+      term_coverage: c.term_coverage,
+      missed_terms: c.missed_terms || [],
+      relevance: c.relevance,
+    };
+    if (c.error) traceData.error = c.error;
+    pre.appendChild(safeText(JSON.stringify(traceData, null, 2)));
+    traceInner.appendChild(pre);
+    traceTd.appendChild(traceInner);
+    traceRow.appendChild(traceTd);
+    tbody.appendChild(traceRow);
+
+    // Toggle on click
+    tr.addEventListener('click', function() {
+      var inner = document.getElementById('router-trace-' + c.id);
+      if (inner) inner.classList.toggle('open');
+    });
+  });
+}
+
+async function loadRouterResults() {
+  try {
+    const resp = await fetch('/api/router_results');
+    if (!resp.ok) {
+      if (resp.status === 404) {
+        renderRouterTable([]);
+        return;
+      }
+      throw new Error('HTTP ' + resp.status);
+    }
+    _routerData = await resp.json();
+    renderRouterSummary(_routerData.aggregate || {});
+    renderRouterTable(_routerData.cases || []);
+    hideError();
+  } catch (err) {
+    showError('Failed to load router results: ' + err.message);
+  }
+}
+
 // ── Init ─────────────────────────────────────────────────────────────────────
 
 loadResults();
@@ -931,6 +1227,28 @@ class BenchmarkHandler(BaseHTTPRequestHandler):
             except OSError as exc:
                 self._send_error_json(500, str(exc))
 
+        elif self.path == "/api/router_results":
+            if not os.path.isfile(ROUTER_RESULTS_PATH):
+                self._send_error_json(404, "router_results.json not found")
+                return
+            try:
+                with open(ROUTER_RESULTS_PATH, "r", encoding="utf-8") as fh:
+                    raw = fh.read()
+                self._send(200, "application/json", raw)
+            except OSError as exc:
+                self._send_error_json(500, str(exc))
+
+        elif self.path == "/api/docs":
+            if not os.path.isfile(DOCS_PATH):
+                self._send_json(200, {"content": "# No docs found\n\nExpected at: docs/reference/RETRIEVAL_SYSTEM.md"})
+                return
+            try:
+                with open(DOCS_PATH, "r", encoding="utf-8") as fh:
+                    content = fh.read()
+                self._send_json(200, {"content": content, "path": DOCS_PATH})
+            except OSError as exc:
+                self._send_error_json(500, str(exc))
+
         else:
             self._send(404, "text/plain", "Not found")
 
@@ -940,6 +1258,9 @@ class BenchmarkHandler(BaseHTTPRequestHandler):
 
         elif self.path == "/api/generate":
             self._run_script(BENCHMARK_GENERATE_SCRIPT)
+
+        elif self.path == "/api/run_router":
+            self._run_script(BENCHMARK_ROUTER_SCRIPT)
 
         else:
             self._send(404, "text/plain", "Not found")

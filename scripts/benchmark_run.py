@@ -41,28 +41,72 @@ def _load_config():
     return {}
 
 
+EMBED_CACHE_PATH = os.path.join(PROJECT_ROOT, 'benchmark', '.embed_cache.json')
+_embed_cache = {}
+
+def _load_embed_cache():
+    global _embed_cache
+    if os.path.exists(EMBED_CACHE_PATH):
+        try:
+            with open(EMBED_CACHE_PATH) as f:
+                _embed_cache = json.load(f)
+            print("  Embed cache: %d cached queries (no API calls needed for these)" % len(_embed_cache))
+        except Exception:
+            _embed_cache = {}
+
+def _save_embed_cache():
+    try:
+        with open(EMBED_CACHE_PATH, 'w') as f:
+            json.dump(_embed_cache, f)
+    except Exception:
+        pass
+
 def embed_texts(texts, config=None):
-    """Call backend /embed endpoint. Returns list of vectors (or None per item on failure)."""
+    """Call backend /embed endpoint with caching. Cached queries skip the API call."""
+    global _embed_cache
     if not texts:
         return []
+
+    # Check cache first — return cached embeddings for known texts
+    results = [None] * len(texts)
+    uncached_indices = []
+    uncached_texts = []
+    for i, text in enumerate(texts):
+        if text in _embed_cache:
+            results[i] = _embed_cache[text]
+        else:
+            uncached_indices.append(i)
+            uncached_texts.append(text)
+
+    if not uncached_texts:
+        return results  # All cached — zero API calls
+
+    # Embed only uncached texts
     if config is None:
         config = _load_config()
     import urllib.request
     backend_url = config.get('backend_url', 'https://apiv2-wrcj6dja6q-ew.a.run.app')
     auth_token = config.get('auth_token', '')
     if not auth_token:
-        return [None] * len(texts)
+        return results
     url = '%s/embed' % backend_url.rstrip('/')
-    payload = json.dumps({'texts': texts}).encode('utf-8')
+    payload = json.dumps({'texts': uncached_texts}).encode('utf-8')
     req = urllib.request.Request(url, data=payload, method='POST')
     req.add_header('Content-Type', 'application/json')
     req.add_header('Authorization', 'Bearer %s' % auth_token)
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read().decode('utf-8'))
-        return data.get('embeddings', [None] * len(texts))
+        embeddings = data.get('embeddings', [None] * len(uncached_texts))
+        for j, emb in enumerate(embeddings):
+            idx = uncached_indices[j]
+            results[idx] = emb
+            if emb:
+                _embed_cache[uncached_texts[j]] = emb  # Cache for next run
+        _save_embed_cache()
+        return results
     except Exception as e:
-        return {'error': str(e)}
+        return results  # Return partial (cached) results on API failure
 
 # ── Index Loading ────────────────────────────────────────────────────────────
 
@@ -303,6 +347,28 @@ def score_rrf_ranking(expected_card_id, sql_result, semantic_result,
             scored.sort(key=lambda x: x[1], reverse=True)
             for rank, (card_id, _) in enumerate(scored, start=1):
                 semantic_results[card_id] = {'rank': rank, 'tier': 'primary'}
+
+    # Semantic-informed SQL Expansion (Feedback Loop)
+    # Re-enabled now that primary metric is Recall@10.
+    if semantic_results:
+        top_sem_cards = sorted(semantic_results.items(), key=lambda x: x[1]['rank'])[:5]
+        feedback_terms = set()
+        for card_id, _ in top_sem_cards:
+            rows = db.execute("SELECT term FROM kg_card_terms WHERE card_id = ?", (int(card_id),)).fetchall()
+            for r in rows:
+                feedback_terms.add(r[0])
+        # Remove terms already in SQL queries
+        existing_lower = {t.lower() for t in all_search_terms}
+        new_fb_terms = [t for t in feedback_terms if t.lower() not in existing_lower]
+        if new_fb_terms:
+            fb_rank = len(sql_results) + 1
+            for term in new_fb_terms[:10]:
+                rows = db.execute("SELECT card_id FROM kg_card_terms WHERE LOWER(term) = LOWER(?)", (term,)).fetchall()
+                for r in rows:
+                    cid = r[0]  # Keep as int — consistent with sql_results keys
+                    if cid not in sql_results:
+                        sql_results[cid] = {'rank': fb_rank, 'query_type': 'broad', 'tier': 'secondary'}
+                        fb_rank += 1
 
     rrf_ranked = compute_rrf(sql_results, semantic_results)
 
@@ -551,10 +617,18 @@ def run_case(case, db, kg_term_index, card_embeddings, config):
     target_rank = step5.get('target_rank') if embedding_available else step3.get('target_rank')
     result['target_rank'] = target_rank
 
-    # Pass = expected card is found within expected_in_top_k
-    if target_rank is not None and target_rank <= expected_in_top_k:
+    # Rank tier for color-coded display: green (1-3), yellow (4-10), red (>10)
+    if target_rank is not None and target_rank <= 3:
+        result['rank_tier'] = 'green'
+    elif target_rank is not None and target_rank <= 10:
+        result['rank_tier'] = 'yellow'
+    else:
+        result['rank_tier'] = 'red'
+
+    # Aggregate pass/fail uses Recall@10 (TOP_K=10)
+    if target_rank is not None and target_rank <= TOP_K:
         result['overall_pass'] = True
-    elif not embedding_available and step3.get('target_rank') is not None and step3['target_rank'] <= expected_in_top_k:
+    elif not embedding_available and step3.get('target_rank') is not None and step3['target_rank'] <= TOP_K:
         result['overall_pass'] = True
 
     return result
@@ -568,6 +642,12 @@ def compute_aggregate(results):
 
     total = len(results)
     passed = sum(1 for r in results if r.get('overall_pass', False))
+
+    # Top-3 recall (quality reference)
+    top3_passed = sum(
+        1 for r in results
+        if r.get('target_rank') is not None and r['target_rank'] <= 3
+    )
 
     # MRR
     reciprocal_ranks = []
@@ -607,6 +687,8 @@ def compute_aggregate(results):
     return {
         'overall': {
             'recall_at_k': round(passed / total, 4) if total > 0 else 0.0,
+            'recall_at_3': round(top3_passed / total, 4) if total > 0 else 0.0,
+            'top3_passed': top3_passed,
             'mrr': round(mrr, 4),
             'total_cases': total,
             'passed': passed,
@@ -629,10 +711,14 @@ def print_summary(aggregate):
     recall = overall.get('recall_at_k', 0.0)
     mrr = overall.get('mrr', 0.0)
 
+    top3_passed = overall.get('top3_passed', 0)
+    recall3 = overall.get('recall_at_3', 0.0)
+
     print()
     print('=' * 50)
     print('RESULTS')
-    print('  Recall@K: %d%% (%d/%d passed)' % (int(recall * 100), passed, total))
+    print('  Recall@10: %d%% (%d/%d passed)' % (int(recall * 100), passed, total))
+    print('  Top-3:     %d%% (%d/%d)' % (int(recall3 * 100), top3_passed, total))
     print('  MRR: %.3f' % mrr)
 
     if by_cat:
@@ -699,6 +785,9 @@ def main():
 
     # Load config
     config = _load_config()
+
+    # Load embedding cache (skips API calls for previously embedded queries)
+    _load_embed_cache()
 
     # Load KG term index
     print('Loading KG term index...')
