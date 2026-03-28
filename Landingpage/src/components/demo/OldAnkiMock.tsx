@@ -31,19 +31,18 @@ export function OldAnkiMock() {
         <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#28c840' }} />
       </div>
 
-      {/* ── Anki Toolbar — centered, rounded, NOT full width ── */}
+      {/* ── Anki Toolbar — notch style, hangs from header ── */}
       <div style={{
         display: 'flex', justifyContent: 'center',
-        padding: '8px 24px 6px',
         flexShrink: 0,
       }}>
         <div style={{
           display: 'inline-flex', alignItems: 'center', gap: 16,
-          padding: '5px 20px',
+          padding: '6px 24px',
           background: '#383838',
-          borderRadius: 8,
+          borderRadius: '0 0 10px 10px',
           fontSize: 12, fontWeight: 500, color: '#999',
-          border: '1px solid #4a4a4a',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
         }}>
           {['Stapelübersicht', 'Hinzufügen', 'Kartenverwaltung', 'Statistiken', 'Synchronisieren'].map(item => (
             <span key={item}>{item}</span>
