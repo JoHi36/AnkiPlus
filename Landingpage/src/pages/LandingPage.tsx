@@ -3,6 +3,9 @@ import { useState, useCallback } from 'react';
 import {
   ChevronRight,
   CheckCircle2,
+  ShieldCheck,
+  Globe,
+  EyeOff,
 } from 'lucide-react';
 import { Button } from '@shared/components/Button';
 import { PricingComparisonTable } from '../components/PricingComparisonTable';
@@ -199,6 +202,33 @@ export function LandingPage() {
           </div>
         </section>
       </main>
+
+      {/* ═══ TRUST ═══ */}
+      <div className="py-16">
+        <div className="max-w-2xl mx-auto px-6">
+          <Link
+            to="/datenschutz"
+            className="group block rounded-2xl border border-white/[0.04] bg-gradient-to-b from-white/[0.02] to-transparent px-8 py-6 transition-all duration-500 hover:border-white/[0.08] hover:from-white/[0.03]"
+          >
+            <div className="flex items-center justify-center gap-10 md:gap-14">
+              <div className="flex items-center gap-2.5 text-white/[0.3] group-hover:text-white/[0.5] transition-colors duration-500">
+                <ShieldCheck className="w-4 h-4" strokeWidth={1.5} />
+                <span className="text-[13px] font-light tracking-wide">DSGVO-konform</span>
+              </div>
+              <div className="w-px h-4 bg-white/[0.06]" />
+              <div className="flex items-center gap-2.5 text-white/[0.3] group-hover:text-white/[0.5] transition-colors duration-500">
+                <Globe className="w-4 h-4" strokeWidth={1.5} />
+                <span className="text-[13px] font-light tracking-wide">EU-Server</span>
+              </div>
+              <div className="w-px h-4 bg-white/[0.06]" />
+              <div className="flex items-center gap-2.5 text-white/[0.3] group-hover:text-white/[0.5] transition-colors duration-500">
+                <EyeOff className="w-4 h-4" strokeWidth={1.5} />
+                <span className="text-[13px] font-light tracking-wide">Kein Tracking</span>
+              </div>
+            </div>
+          </Link>
+        </div>
+      </div>
 
       {/* ═══ FOOTER ═══ */}
       <footer className="border-t border-white/[0.06] py-8">
