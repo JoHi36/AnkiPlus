@@ -229,7 +229,8 @@ export function LandingPage() {
               ANKI+ &middot; Johannes Hinkel
             </div>
             <div className="flex gap-6 text-white/[0.18] text-xs">
-              <Link to="/datenschutz" className="hover:text-white/[0.35] transition-colors">Datenschutz & Impressum</Link>
+              <Link to="/datenschutz" className="hover:text-white/[0.35] transition-colors">Datenschutz</Link>
+              <Link to="/impressum" className="hover:text-white/[0.35] transition-colors">Impressum</Link>
             </div>
           </div>
         </div>
