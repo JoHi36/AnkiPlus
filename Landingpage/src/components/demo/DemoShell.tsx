@@ -12,6 +12,7 @@ import { QuizCard } from '@shared/components/QuizCard';
 const SHELL: React.CSSProperties = {
   position: 'absolute',
   top: 0, left: 0, right: 0, bottom: 0,
+  zIndex: 1,
   display: 'flex', flexDirection: 'column',
   background: 'var(--ds-bg-canvas, #1C1C1E)',
   overflow: 'hidden',
