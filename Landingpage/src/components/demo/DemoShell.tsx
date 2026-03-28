@@ -10,9 +10,7 @@ import { QuizCard } from '@shared/components/QuizCard';
 // ───────────────────────────────────────────────
 
 const SHELL: React.CSSProperties = {
-  position: 'absolute',
-  top: 0, left: 0, right: 0, bottom: 0,
-  zIndex: 1,
+  width: '100%', height: '100%',
   display: 'flex', flexDirection: 'column',
   background: 'var(--ds-bg-canvas, #1C1C1E)',
   overflow: 'hidden',
@@ -132,11 +130,8 @@ export function DemoShell() {
   return (
     <div style={SHELL}>
 
-      {/* ── Title bar ── */}
-      <div style={HEADER}>
-        <div style={DOT} />
-        <div style={DOT} />
-        <div style={DOT} />
+      {/* ── Tabs (Medizin / Jura / BWL) ── */}
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 16px', flexShrink: 0 }}>
         <div style={TABS}>
           {SCENARIOS.map(s => (
             <button

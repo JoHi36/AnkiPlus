@@ -1,115 +1,139 @@
 import React from 'react';
 
 /**
- * 1:1 mock of vanilla Anki's deck browser (Stapelübersicht).
- * Shown before the ParticlePlus intro transforms it into the modern DemoShell.
+ * Accurate mock of vanilla Anki's card reviewer (light theme).
+ * Only the content area — title bar with dots is shared with DemoShell.
  */
-
-const MENU_BAR: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  gap: 20, height: 36, flexShrink: 0,
-  background: '#383838', borderBottom: '1px solid #222',
-  fontSize: 13, fontWeight: 500, color: '#b0b0b0',
-};
-
-const TABLE_WRAP: React.CSSProperties = {
-  margin: '24px auto 0', width: '80%', maxWidth: 560,
-  border: '1px solid #444', borderRadius: 4, overflow: 'hidden',
-};
-
-const TH: React.CSSProperties = {
-  padding: '8px 12px', fontSize: 12, fontWeight: 600,
-  color: '#999', textAlign: 'left',
-  borderBottom: '1px solid #444', background: '#333',
-};
-
-const TH_NUM: React.CSSProperties = { ...TH, textAlign: 'right', width: 60 };
-
-const TD: React.CSSProperties = {
-  padding: '7px 12px', fontSize: 13, color: '#ccc',
-  borderBottom: '1px solid #3a3a3a',
-};
-
-const TD_NUM: React.CSSProperties = {
-  ...TD, textAlign: 'right', fontFamily: 'ui-monospace, monospace', width: 60,
-};
-
-const DECKS = [
-  { name: 'Anatomie',        indent: false, neu: 204, lernen: 12,  fällig: 1850 },
-  { name: 'Biochemie',       indent: false, neu: 600, lernen: 3,   fällig: 3200 },
-  { name: 'Physiologie',     indent: false, neu: 150, lernen: 8,   fällig: 920  },
-  { name: 'Pharmakologie',   indent: false, neu: 90,  lernen: 26,  fällig: 540  },
-  { name: 'Pathologie',      indent: false, neu: 320, lernen: 0,   fällig: 2100 },
-  { name: 'Klinische Chemie', indent: true, neu: 45,  lernen: 2,   fällig: 180  },
-];
-
-const BOTTOM_BTN: React.CSSProperties = {
-  padding: '4px 14px', fontSize: 11, fontWeight: 500,
-  color: '#999', background: '#3a3a3a',
-  border: '1px solid #555', borderRadius: 4,
-};
 
 export function OldAnkiMock() {
   return (
     <div style={{
       width: '100%', height: '100%',
       display: 'flex', flexDirection: 'column',
-      background: '#2d2d2d', overflow: 'hidden',
+      background: '#e8e8e8',
+      overflow: 'hidden',
       fontFamily: '-apple-system, BlinkMacSystemFont, system-ui, sans-serif',
-      color: '#d4d4d4', userSelect: 'none',
+      color: '#333',
+      userSelect: 'none',
     }}>
 
-      {/* ── Menu Bar ── */}
-      <div style={MENU_BAR}>
-        {['Stapel', 'Hinzufügen', 'Kartenverwaltung', 'Statistiken'].map(item => (
-          <span key={item}>{item}</span>
-        ))}
-        <span style={{ color: '#4a9eff' }}>Synchronisieren</span>
-      </div>
-
-      {/* ── Deck Table ── */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
-        <table style={TABLE_WRAP as any} cellSpacing={0} cellPadding={0}>
-          <thead>
-            <tr>
-              <th style={TH}>Stapel</th>
-              <th style={TH_NUM}>Neu</th>
-              <th style={TH_NUM}>Lernen</th>
-              <th style={TH_NUM}>Fällig</th>
-            </tr>
-          </thead>
-          <tbody>
-            {DECKS.map((d, i) => (
-              <tr key={i}>
-                <td style={TD}>
-                  {d.indent ? '    ' : '+ '}{d.name}
-                </td>
-                <td style={{ ...TD_NUM, color: '#5b9aff' }}>{d.neu}</td>
-                <td style={{ ...TD_NUM, color: d.lernen > 0 ? '#e05555' : '#666' }}>{d.lernen}</td>
-                <td style={{ ...TD_NUM, color: '#45b065' }}>{d.fällig}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {/* Stats */}
+      {/* ── Anki Toolbar — centered, rounded, not full width ── */}
+      <div style={{
+        display: 'flex', justifyContent: 'center',
+        padding: '6px 16px 0',
+        flexShrink: 0,
+      }}>
         <div style={{
-          textAlign: 'center', marginTop: 20,
-          fontSize: 12, color: '#777',
+          display: 'flex', alignItems: 'center', gap: 20,
+          padding: '6px 24px',
+          background: '#d5d5d5',
+          borderRadius: 8,
+          fontSize: 13, fontWeight: 500, color: '#444',
+          border: '1px solid #bbb',
         }}>
-          Heute 0 Karten in 0 Sekunden gelernt (0s/Karte)
+          {['Stapelübersicht', 'Hinzufügen', 'Kartenverwaltung', 'Statistiken', 'Synchronisieren'].map(item => (
+            <span key={item}>{item}</span>
+          ))}
         </div>
       </div>
 
-      {/* ── Bottom Buttons ── */}
+      {/* ── Info row (timer, tags, etc.) ── */}
       <div style={{
-        display: 'flex', justifyContent: 'center', gap: 8,
-        padding: '12px 16px', flexShrink: 0,
-        borderTop: '1px solid #3a3a3a',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '4px 16px',
+        fontSize: 11, color: '#888', flexShrink: 0,
       }}>
-        <button style={BOTTOM_BTN}>Stapel teilen</button>
-        <button style={BOTTOM_BTN}>Stapel erstellen</button>
-        <button style={BOTTOM_BTN}>Datei importieren</button>
+        <span style={{ color: '#5a9', fontFamily: 'ui-monospace, monospace' }}>0:11</span>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={{ padding: '1px 6px', border: '1px solid #bbb', borderRadius: 3, fontSize: 10 }}>Tags</span>
+          <span style={{ color: '#999' }}>AMBOSS</span>
+          <span style={{ padding: '1px 6px', border: '1px solid #bbb', borderRadius: 3, fontSize: 10 }}>Note ID</span>
+        </div>
+        <span style={{ padding: '1px 6px', border: '1px solid #bbb', borderRadius: 3, fontSize: 10 }}>Errata</span>
+      </div>
+
+      {/* ── Progress gradient bar ── */}
+      <div style={{
+        height: 2, flexShrink: 0,
+        background: 'linear-gradient(to right, #c44, #c84, #4a8)',
+      }} />
+
+      {/* ── Card content — white, centered ── */}
+      <div style={{
+        flex: 1, overflow: 'auto',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        padding: '32px 40px',
+        background: '#fafafa',
+      }}>
+        <p style={{
+          fontSize: 20, lineHeight: 1.6, textAlign: 'center',
+          maxWidth: 560, color: '#222',
+        }}>
+          Welche typischen <span style={{ color: '#4a9' }}>Befunde</span> zeigen sich
+          in der <span style={{ color: '#c44' }}>Urinuntersuchung</span> bei der{' '}
+          <span style={{ color: '#c44' }}>Lupusnephritis</span>?
+        </p>
+
+        <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 6, textAlign: 'left' }}>
+          <p style={{ fontSize: 16, color: '#333' }}>
+            ① Laborchemisch: <span style={{ color: '#c44', fontWeight: 600 }}>Proteinurie</span>
+          </p>
+          <p style={{ fontSize: 16, color: '#333' }}>
+            ② Urinsediment: <span style={{ color: '#c44', fontWeight: 600 }}>Erythrozytenzylinder</span>
+          </p>
+          <p style={{ fontSize: 16, color: '#333' }}>
+            ③ Urinsediment: <span style={{ color: '#c44', fontWeight: 600 }}>Akanthozyten</span>
+          </p>
+        </div>
+      </div>
+
+      {/* ── Bottom: rating buttons ── */}
+      <div style={{
+        flexShrink: 0, padding: '8px 16px 12px',
+        background: '#e8e8e8',
+        borderTop: '1px solid #ccc',
+      }}>
+        {/* Time labels */}
+        <div style={{
+          display: 'flex', justifyContent: 'center', gap: 48,
+          marginBottom: 4, fontSize: 11, color: '#888',
+        }}>
+          <span>&lt;1 min</span>
+          <span>&lt;6 min</span>
+          <span>&lt;10 min</span>
+          <span>4 d</span>
+        </div>
+
+        {/* Buttons row */}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}>
+          <button style={{
+            padding: '4px 14px', fontSize: 12, color: '#666',
+            background: '#ddd', border: '1px solid #bbb', borderRadius: 4,
+          }}>Bearbeiten</button>
+
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[
+              { label: 'Nochmal', color: '#c44' },
+              { label: 'Schwer', color: '#888' },
+              { label: 'Gut',     color: '#4a8' },
+              { label: 'Einfach', color: '#48c' },
+            ].map(b => (
+              <button key={b.label} style={{
+                padding: '5px 18px', fontSize: 12, fontWeight: 500,
+                color: '#555', background: '#ddd',
+                border: '1px solid #bbb', borderRadius: 4,
+              }}>{b.label}</button>
+            ))}
+          </div>
+
+          <button style={{
+            padding: '4px 14px', fontSize: 12, color: '#666',
+            background: '#ddd', border: '1px solid #bbb', borderRadius: 4,
+          }}>Mehr ▾</button>
+        </div>
       </div>
     </div>
   );
