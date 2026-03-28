@@ -131,14 +131,14 @@ export function LandingPage() {
             <div style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '10px 16px',
-              background: introDone ? 'var(--ds-bg-canvas, #1C1C1E)' : '#e0e0e0',
-              borderBottom: introDone ? '1px solid rgba(255,255,255,0.06)' : '1px solid #ccc',
+              background: introDone ? 'var(--ds-bg-canvas, #1C1C1E)' : '#383838',
+              borderBottom: introDone ? '1px solid rgba(255,255,255,0.06)' : '1px solid #222',
               flexShrink: 0, zIndex: 5,
               transition: 'background 1.2s ease, border-color 1.2s ease',
             }}>
-              <div style={{ width: 10, height: 10, borderRadius: '50%', background: introDone ? 'rgba(255,255,255,0.08)' : '#ff5f57' }} />
-              <div style={{ width: 10, height: 10, borderRadius: '50%', background: introDone ? 'rgba(255,255,255,0.08)' : '#febc2e' }} />
-              <div style={{ width: 10, height: 10, borderRadius: '50%', background: introDone ? 'rgba(255,255,255,0.08)' : '#28c840' }} />
+              <div style={{ width: 10, height: 10, borderRadius: '50%', background: introDone ? 'rgba(255,255,255,0.08)' : '#ff5f57', transition: 'background 1.2s ease' }} />
+              <div style={{ width: 10, height: 10, borderRadius: '50%', background: introDone ? 'rgba(255,255,255,0.08)' : '#febc2e', transition: 'background 1.2s ease' }} />
+              <div style={{ width: 10, height: 10, borderRadius: '50%', background: introDone ? 'rgba(255,255,255,0.08)' : '#28c840', transition: 'background 1.2s ease' }} />
             </div>
 
             {/* ── Content area: crossfade between Old Anki and Modern Demo ── */}
