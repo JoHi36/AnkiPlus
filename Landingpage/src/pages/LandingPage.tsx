@@ -206,35 +206,79 @@ export function LandingPage() {
       </main>
 
       {/* ═══ FOOTER ═══ */}
-      <footer className="border-t border-white/[0.06] pt-10 pb-8">
-        <div className="max-w-6xl mx-auto px-6">
+      <footer className="border-t border-white/[0.06] py-8">
+        <div className="max-w-6xl mx-auto px-6 flex flex-col gap-6">
           {/* Trust strip */}
-          <div className="flex justify-center mb-8">
-            <div className="flex flex-wrap justify-center gap-8 md:gap-12">
-              <Link to="/datenschutz" className="flex items-center gap-2 text-white/[0.25] hover:text-white/[0.45] transition-colors duration-300 text-xs font-light tracking-wide">
-                <ShieldCheck className="w-3.5 h-3.5" strokeWidth={1.5} /> DSGVO-konform
-              </Link>
-              <span className="flex items-center gap-2 text-white/[0.25] text-xs font-light tracking-wide">
-                <Globe className="w-3.5 h-3.5" strokeWidth={1.5} /> EU-Server
-              </span>
-              <span className="flex items-center gap-2 text-white/[0.25] text-xs font-light tracking-wide">
-                <EyeOff className="w-3.5 h-3.5" strokeWidth={1.5} /> Kein Tracking
-              </span>
+          <div className="flex justify-center">
+            <div className="flex flex-wrap justify-center gap-6 md:gap-10">
+              <TrustItem
+                icon={<ShieldCheck className="w-3.5 h-3.5" strokeWidth={1.5} />}
+                label="DSGVO-konform"
+                tooltip="Vollständige Datenschutzerklärung nach EU-DSGVO. Datenexport und Kontolöschung jederzeit möglich."
+              />
+              <TrustItem
+                icon={<Globe className="w-3.5 h-3.5" strokeWidth={1.5} />}
+                label="EU-Server"
+                tooltip="Alle KI-Anfragen werden über europäische Server verarbeitet. Deine Lerndaten verlassen die EU nicht."
+              />
+              <TrustItem
+                icon={<EyeOff className="w-3.5 h-3.5" strokeWidth={1.5} />}
+                label="Kein Tracking"
+                tooltip="Keine Cookies, kein Google Analytics, keine Weitergabe an Dritte. Wir sehen nur, was du uns zeigst."
+              />
             </div>
           </div>
 
           {/* Bottom row */}
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4 pt-6 border-t border-white/[0.04]">
-            <div className="text-white/[0.18] text-xs">
-              ANKI+ &middot; Johannes Hinkel
-            </div>
-            <div className="flex gap-6 text-white/[0.18] text-xs">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-3 text-white/[0.18] text-xs">
+            <span>ANKI+ &middot; Johannes Hinkel</span>
+            <div className="flex gap-6">
               <Link to="/datenschutz" className="hover:text-white/[0.35] transition-colors">Datenschutz</Link>
               <Link to="/impressum" className="hover:text-white/[0.35] transition-colors">Impressum</Link>
             </div>
           </div>
         </div>
       </footer>
+    </div>
+  );
+}
+
+/* ─── Trust Item with hover popup ─── */
+function TrustItem({ icon, label, tooltip }: { icon: React.ReactNode; label: string; tooltip: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        className={`flex items-center gap-2 text-xs font-light tracking-wide transition-colors duration-300 ${
+          open ? 'text-[#0a84ff]' : 'text-white/[0.25] hover:text-[#0a84ff]'
+        }`}
+      >
+        {icon}
+        {label}
+      </button>
+
+      {/* Tooltip */}
+      <div
+        className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 pointer-events-none"
+        style={{
+          opacity: open ? 1 : 0,
+          transform: `translateX(-50%) translateY(${open ? '0' : '4px'})`,
+          transition: 'opacity 200ms ease, transform 200ms ease',
+        }}
+      >
+        <div className="bg-[#1a1a1c] border border-[#0a84ff]/20 rounded-xl px-4 py-3 text-[12px] text-white/[0.6] font-light leading-relaxed w-[220px] text-center shadow-lg shadow-[#0a84ff]/5">
+          {tooltip}
+        </div>
+        {/* Arrow */}
+        <div className="flex justify-center">
+          <div className="w-2 h-2 bg-[#1a1a1c] border-b border-r border-[#0a84ff]/20 rotate-45 -mt-1" />
+        </div>
+      </div>
     </div>
   );
 }
