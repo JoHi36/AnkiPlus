@@ -129,6 +129,8 @@ export function LandingPage() {
             <div
               className="absolute inset-0 rounded-2xl overflow-hidden border border-white/[0.08]"
               style={{
+                position: 'absolute',
+                inset: 0,
                 opacity: introDone ? 0 : 1,
                 transition: 'opacity 1.2s cubic-bezier(0.25, 0.1, 0.25, 1)',
                 pointerEvents: introDone ? 'none' : 'auto',
