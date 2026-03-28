@@ -6,18 +6,26 @@ The retrieval system finds relevant flashcards for a user's question. It combine
 
 **Core principle:** Embedding-first KG expansion, then Graph edges, then parallel SQL + Semantic + Tag search, then mathematical ranking.
 
-## Current Benchmark Results (2026-03-28)
+## Current Benchmark Results (2026-03-28, v63%)
 
 | Metric | Value | Notes |
 |--------|-------|-------|
-| Recall@10 | ~50% | Target card in top-10 results (estimated, full run pending) |
-| Context | 41% | Was 0% before resolved_intent fix |
+| **Recall@10** | **63%** | Target card in top-10 results |
+| **Context** | **100%** | Was 0% → solved by card_context terms + embedding fallback |
 | Direct | 75% | Exact term matches |
-| Cross-Deck | 58% | Collection-wide search |
+| Cross-Deck | 66% | Collection-wide search |
 | Typo | 75% | Fuzzy embedding matching |
-| Synonym | 0% | KG expansion not sufficient yet |
+| Synonym | 6% | First movement via Router associated_terms |
+| Top-3 | 36% | Target card in top-3 results |
+| MRR | 0.311 | Mean Reciprocal Rank |
 
-**Honest assessment:** SQL keyword search is the strongest signal for direct/context cases. Semantic search underperforms for vague queries. The new Focus Boost (Phase 6) is designed to address the precision gap — the system finds related cards but doesn't rank the *most relevant* card high enough.
+**Session progress (2026-03-28):** 46% → 63% Recall@10 through:
+1. `resolved_intent` from card_context.terms for context cases (+9%)
+2. Embedding fallback: combine query with intent when no domain terms found (+5%)
+3. Focus lane: query rerank within candidate pool (k=80) (+1%)
+4. Router `associated_terms`: LLM-generated domain terms as SQL + semantic lane (+2%)
+
+**Honest assessment:** SQL keyword search is the strongest signal for direct/context cases. Synonym remains the biggest challenge — the Router generates correct associated terms but they need stronger weighting in the ranking. LLM validation confirmed: 0 false positives in 310 card evaluations.
 
 **Dashboard:** Run `python3 scripts/benchmark_serve.py` and open `http://localhost:8080` for the interactive benchmark dashboard.
 
@@ -30,6 +38,7 @@ flowchart TD
 
     subgraph ROUTER["1 - ROUTER  (LLM)"]
         RI["Thema (resolved_intent)\n'Dünndarm, Jejunum, Ileum'"]
+        AT["Assoziierte Terme\n'Duodenum, Dickdarm, Peristaltik'"]
         QF["Fragerichtung (query_focus)\n'Längenangabe, Maß'"]
     end
 
@@ -54,6 +63,8 @@ flowchart TD
         SQL["SQL Search\nprecise + broad Queries\n→ Keyword-Treffer"]
         SEM["Semantic Search\nprimary + secondary Embedding\n→ Cosine vs 8k Karten"]
         TAG["Tag Search\ntag:*term* Wildcards"]
+        LLMSQL["Router-Terme SQL\nassociated_terms → Keyword-Suche"]
+        LLMSEM["Router-Terme Embedding\nassociated_terms → Cosine-Boost"]
     end
 
     subgraph RANK["4 - FUSION"]
@@ -74,9 +85,13 @@ flowchart TD
     T2EMB --> T2KG
     T2KG --> T2GR --> QG
     ENRICH --> SEARCH
+    AT -.->|assoziierte Terme| LLMSQL
+    AT -.->|assoziierte Terme| LLMSEM
     SQL --> POOL
     SEM --> POOL
     TAG --> POOL
+    LLMSQL --> POOL
+    LLMSEM -.->|Boost| FOCUS
     POOL --> FOCUS
     QF -.->|Fragerichtung| FOCUS
     FOCUS --> RRF
@@ -115,25 +130,33 @@ Am Ende der Anreicherung entstehen 6 Queries + 2 Sucharten. Hier die komplette �
 | 6 | Semantic Primary | Tier 1 (Frage) | Frage + Expansionsterme | `"wie lang ist der dünndarm Duodenum Jejunum Dickdarm"` | k=60 |
 | 7 | Semantic Secondary | Tier 2 (Intent) | Intent + Expansionsterme | `"Dünndarm Jejunum Ileum Ileumschlingen"` | k=120 (schwächste) |
 
-**Focus-Signal (NEU — kein eigener Suchkanal)**
+**Router-generierte Terme (associated_terms)**
 
 | # | Signal | Quelle | Berechnung | Beispiel | RRF k-Wert |
 |---|--------|--------|------------|----------|------------|
-| 8 | Focus Rang | Router query_focus | cosine(focus_embedding, karte) für jede Karte im Kandidaten-Pool | `"Längenangabe, Maß"` vs jede gefundene Karte | k=55 (geplant) |
+| 8 | Router SQL | Router associated_terms | SQL-Suche nach LLM-generierten Termen | `"Broca-Aphasie"`, `"Sprachverständnis"` | k=70 (broad primary) |
+| 9 | Router Embedding | Router associated_terms | cosine(terms_embedding, karte) im Kandidaten-Pool | Alle Router-Terme als ein Embedding | k=75 |
+
+**Focus-Signal (Query Rerank)**
+
+| # | Signal | Quelle | Berechnung | Beispiel | RRF k-Wert |
+|---|--------|--------|------------|----------|------------|
+| 10 | Focus Rang | Original-Frage | cosine(query_embedding, karte) nur im Kandidaten-Pool | Frage-Embedding vs jede gefundene Karte | k=80 |
 
 **Gewichtungs-Hierarchie** (niedrigerer k = stärkerer Einfluss):
 
 ```
 k=50  Precise Primary     ████████████████████  stärkste — exakte Terme aus deiner Frage
-k=55  Focus               ███████████████████   NEU — Fragerichtung
 k=60  Semantic Primary    ██████████████████    Embedding deiner Frage
-k=70  Broad/Tag Primary   ████████████████      breitere Suche aus deiner Frage
+k=70  Broad/Tag/Router    ████████████████      breitere Suche + Router-Terme
+k=75  Router Embedding    ███████████████       Router-Terme als Embedding-Boost
+k=80  Focus Rerank        ██████████████        Frage-Richtung im Kandidaten-Pool
 k=90  Precise Secondary   ████████████          exakte Terme aus Intent
 k=110 Broad Secondary     ██████████            breitere Suche aus Intent
 k=120 Semantic Secondary  █████████             schwächste — Embedding des Intents
 ```
 
-**Warum diese Reihenfolge?** Deine eigenen Worte sind am wertvollsten (Tier 1). Was der Router ergänzt (Tier 2) hilft bei vagen Fragen ("Erkläre das"), ist aber weniger zuverlässig. Focus steht bewusst weit oben — wenn eine Karte die Fragerichtung trifft UND die richtigen Terme hat, ist das der beste Match.
+**Warum diese Reihenfolge?** Deine eigenen Worte sind am wertvollsten (Tier 1). Router-Terme ergänzen fehlende Synonyme und verwandte Begriffe. Focus re-rankt den Kandidaten-Pool nach Frage-Relevanz. Was der Intent ergänzt (Tier 2) hilft bei vagen Fragen.
 
 ### Pipeline Detail (6 Phases)
 
