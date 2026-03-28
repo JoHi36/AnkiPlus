@@ -80,6 +80,14 @@ def _init_kg_schema(db):
             top_terms    TEXT,
             PRIMARY KEY (deck_a, deck_b)
         );
+
+        CREATE TABLE IF NOT EXISTS card_content (
+            card_id     INTEGER PRIMARY KEY,
+            question    TEXT,
+            answer      TEXT,
+            deck_name   TEXT,
+            updated_at  TEXT DEFAULT (datetime('now'))
+        );
     """)
     db.commit()
 
@@ -572,6 +580,83 @@ def get_deck_cross_links():
         }
         for r in rows
     ]
+
+
+# ---------------------------------------------------------------------------
+#  Card Content Cache
+# ---------------------------------------------------------------------------
+
+def save_card_content(card_id, question, answer, deck_name):
+    """Cache card question/answer text for offline search and benchmark use.
+
+    Args:
+        card_id: Anki card ID (int).
+        question: Cleaned question text.
+        answer: Cleaned answer text.
+        deck_name: Deck name string.
+    """
+    db = _get_db()
+    now = datetime.now().isoformat()
+    try:
+        db.execute(
+            """
+            INSERT INTO card_content (card_id, question, answer, deck_name, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(card_id) DO UPDATE SET
+                question   = excluded.question,
+                answer     = excluded.answer,
+                deck_name  = excluded.deck_name,
+                updated_at = excluded.updated_at
+            """,
+            (int(card_id), question, answer, deck_name, now),
+        )
+        db.commit()
+    except sqlite3.Error as e:
+        logger.error("kg_store: Error saving card content for card %s: %s", card_id, e)
+        db.rollback()
+
+
+def search_card_content(query_text, limit=20):
+    """Simple LIKE search on cached card question+answer fields.
+
+    Args:
+        query_text: Search string (partial match).
+        limit: Max results to return.
+
+    Returns:
+        List of dicts with keys: card_id, question, answer, deck_name.
+    """
+    db = _get_db()
+    pattern = "%%%s%%" % query_text.replace("%", "\\%")
+    rows = db.execute(
+        """
+        SELECT card_id, question, answer, deck_name
+        FROM card_content
+        WHERE question LIKE ? OR answer LIKE ?
+        LIMIT ?
+        """,
+        (pattern, pattern, limit),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_card_content(card_id):
+    """Return cached content for a single card, or None."""
+    db = _get_db()
+    row = db.execute(
+        "SELECT card_id, question, answer, deck_name FROM card_content WHERE card_id = ?",
+        (int(card_id),)
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def get_all_card_content():
+    """Return all cached card content as a list of dicts."""
+    db = _get_db()
+    rows = db.execute(
+        "SELECT card_id, question, answer, deck_name FROM card_content"
+    ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def search_decks_by_term(query):

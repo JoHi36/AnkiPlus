@@ -394,6 +394,14 @@ class BackgroundEmbeddingThread(QThread):
             from ..storage.card_sessions import load_all_embeddings, save_embedding
 
         try:
+            from storage.kg_store import save_card_content
+        except ImportError:
+            try:
+                from ..storage.kg_store import save_card_content
+            except ImportError:
+                save_card_content = None
+
+        try:
             all_cards = self.get_all_cards_fn()
         except Exception as e:
             logger.error("BackgroundEmbedding: Failed to get cards: %s", e)
@@ -403,6 +411,25 @@ class BackgroundEmbeddingThread(QThread):
         if not all_cards:
             self.finished_signal.emit(0)
             return
+
+        # Cache card content (question/answer/deck) for benchmark and offline search
+        if save_card_content:
+            cached_count = 0
+            for card in all_cards:
+                cid = card.get('card_id') or card.get('cardId')
+                if not cid:
+                    continue
+                question = card.get('question', '') or ''
+                answer = card.get('answer', '') or ''
+                deck_name = card.get('deckName', '') or card.get('deck_name', '') or ''
+                if question or answer:
+                    try:
+                        save_card_content(cid, question, answer, deck_name)
+                        cached_count += 1
+                    except Exception as e:
+                        logger.debug("BackgroundEmbedding: save_card_content failed for %s: %s", cid, e)
+            if cached_count > 0:
+                logger.info("BackgroundEmbedding: Cached content for %d cards", cached_count)
 
         existing = {}
         try:

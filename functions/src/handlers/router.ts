@@ -37,16 +37,26 @@ export async function routerHandler(req: Request, res: Response): Promise<void> 
     const currentMode = mode || 'free_chat';
     const userMsg = (message as string).substring(0, 300);
 
-    const prompt = `Route diese Nachricht zum richtigen Agent. Antworte NUR mit einem JSON-Objekt.
+    const prompt = `You are a message router for a learning app. Your job:
+1. Decide which agent handles this message (tutor/research/help/plusi)
+2. Decide if a card search is needed
+3. If search is needed: write a clear, specific description of what the user wants to know, using domain-specific terminology.
 
-Agenten: tutor (Default, Lernfragen), ${agents}
-Regeln: tutor im Zweifel. Andere NUR wenn eindeutig kein Lernthema.
+Agents: tutor (default, learning questions), ${agents}
+Rules: tutor in doubt. Others ONLY when clearly not a learning topic.
 
-${cardHint}Modus: ${currentMode}
-Nachricht: "${userMsg}"
+CRITICAL for resolved_intent:
+- For context-dependent questions ("what do you mean?", "explain that"):
+  Use the card context and recent exchange to determine the SPECIFIC topic.
+  Write the intent using actual domain terms, not the user's vague words.
+- For standalone questions: Restate with domain-specific precision.
+- resolved_intent must be a factual description, NOT a search query.
 
-Antwort-Schema:
-{"agent":"tutor","search_needed":true,"precise_queries":["keyword1 keyword2"],"broad_queries":["keyword1 OR keyword2"],"search_scope":"current_deck","response_length":"medium"}`;
+${cardHint}Mode: ${currentMode}
+Message: "${userMsg}"
+
+Output JSON only:
+{"agent":"tutor","search_needed":true,"resolved_intent":"clear description of what the user wants to know"}`;
 
     const response = await chatCompletionWithRetry({
       model: ROUTER_MODEL,

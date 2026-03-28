@@ -7,6 +7,7 @@ Run from project root:
 """
 import json
 import os
+import re as _re
 import subprocess
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -578,11 +579,11 @@ function loadDocs() {
   fetch('/api/docs').then(function(r) { return r.json(); }).then(function(data) {
     var el = document.getElementById('docs-content');
     var pathEl = document.getElementById('docs-path');
-    // Render as preformatted text with monospace — safe, no HTML injection
-    el.textContent = data.content || 'No docs found';
-    el.style.whiteSpace = 'pre-wrap';
-    el.style.fontFamily = "'SF Mono', 'Fira Code', monospace";
-    el.style.fontSize = '12px';
+    // Server-rendered HTML from our own docs files (trusted input)
+    el.innerHTML = data.html || '<p>No docs found</p>';
+    el.style.whiteSpace = 'normal';
+    el.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'SF Pro', sans-serif";
+    el.style.fontSize = '14px';
     el.style.lineHeight = '1.7';
     if (pathEl) pathEl.textContent = 'Source: ' + (data.path || '');
   }).catch(function(e) {
@@ -1187,6 +1188,158 @@ loadResults();
 </html>
 """
 
+# ── Markdown → HTML Renderer (stdlib only) ────────────────────────────────────
+
+
+def _render_markdown(text):
+    """Convert markdown to styled HTML.
+
+    Only used for rendering our own documentation files (trusted input),
+    so HTML safety is not a concern.  Handles: headings, bold, inline code,
+    fenced code blocks, tables, bullet lists, and blank-line breaks.
+    """
+    lines = text.split("\n")
+    html_parts = []
+    in_code_block = False
+    code_lang = ""
+    code_lines = []
+    in_table = False
+    table_rows = []
+
+    _h_style = (
+        "font-family:-apple-system,BlinkMacSystemFont,'SF Pro',sans-serif;"
+        "color:#e5e5ea;margin:20px 0 10px 0;font-weight:600;letter-spacing:-0.3px;"
+    )
+    _code_bg = "background:#141416;border:1px solid #2c2c2e;border-radius:8px;padding:16px 20px;"
+    _inline_code = (
+        "background:#242426;padding:2px 6px;border-radius:4px;font-family:'SF Mono',Menlo,monospace;"
+        "font-size:12px;color:#e5e5ea;"
+    )
+    _td_style = "padding:8px 14px;border-bottom:1px solid #2c2c2e;font-size:13px;"
+    _th_style = (
+        "padding:8px 14px;border-bottom:1px solid #2c2c2e;font-size:11px;"
+        "font-weight:600;letter-spacing:0.5px;text-transform:uppercase;color:#636366;text-align:left;"
+    )
+
+    def _flush_table():
+        if not table_rows:
+            return ""
+        out = '<table style="width:100%;border-collapse:collapse;margin:12px 0;">'
+        for i, row_cells in enumerate(table_rows):
+            # Skip separator rows (|---|---|)
+            if all(_re.match(r"^[-:]+$", c.strip()) for c in row_cells):
+                continue
+            tag = "th" if i == 0 else "td"
+            style = _th_style if i == 0 else _td_style
+            out += "<tr>"
+            for cell in row_cells:
+                out += '<%s style="%s">%s</%s>' % (tag, style, cell.strip(), tag)
+            out += "</tr>"
+        out += "</table>"
+        return out
+
+    def _inline(line):
+        """Process inline formatting: bold, inline code."""
+        # Inline code first (so bold inside code is not processed)
+        line = _re.sub(
+            r"`([^`]+)`",
+            r'<code style="%s">\1</code>' % _inline_code,
+            line,
+        )
+        # Bold
+        line = _re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", line)
+        return line
+
+    for line in lines:
+        stripped = line.strip()
+
+        # Fenced code blocks
+        if stripped.startswith("```"):
+            if in_code_block:
+                # End code block
+                escaped = "\n".join(code_lines)
+                html_parts.append(
+                    '<pre style="%sfont-family:\'SF Mono\',Menlo,monospace;font-size:12px;'
+                    'color:#acb0b6;line-height:1.6;overflow-x:auto;margin:12px 0;white-space:pre-wrap;">'
+                    "<code>%s</code></pre>" % (_code_bg, escaped)
+                )
+                code_lines = []
+                in_code_block = False
+            else:
+                # Flush any open table
+                if in_table:
+                    html_parts.append(_flush_table())
+                    table_rows = []
+                    in_table = False
+                in_code_block = True
+                code_lang = stripped[3:].strip()
+            continue
+
+        if in_code_block:
+            code_lines.append(line)
+            continue
+
+        # Table rows
+        if "|" in stripped and stripped.startswith("|"):
+            cells = [c for c in stripped.split("|")[1:-1]]  # strip outer empty cells
+            if cells:
+                if not in_table:
+                    in_table = True
+                table_rows.append(cells)
+                continue
+
+        # Flush table if we left table context
+        if in_table:
+            html_parts.append(_flush_table())
+            table_rows = []
+            in_table = False
+
+        # Headings
+        if stripped.startswith("### "):
+            html_parts.append(
+                '<h3 style="%sfont-size:15px;">%s</h3>' % (_h_style, _inline(stripped[4:]))
+            )
+        elif stripped.startswith("## "):
+            html_parts.append(
+                '<h2 style="%sfont-size:17px;margin-top:28px;">%s</h2>' % (_h_style, _inline(stripped[3:]))
+            )
+        elif stripped.startswith("# "):
+            html_parts.append(
+                '<h1 style="%sfont-size:22px;margin-top:32px;">%s</h1>' % (_h_style, _inline(stripped[2:]))
+            )
+        # Bullet list items
+        elif stripped.startswith("- ") or stripped.startswith("* "):
+            html_parts.append(
+                '<div style="padding:2px 0 2px 16px;font-size:14px;line-height:1.7;">'
+                '<span style="color:#636366;margin-right:8px;">&#x2022;</span>%s</div>'
+                % _inline(stripped[2:])
+            )
+        # Numbered list items
+        elif _re.match(r"^\d+\.\s", stripped):
+            match = _re.match(r"^(\d+)\.\s(.*)", stripped)
+            if match:
+                html_parts.append(
+                    '<div style="padding:2px 0 2px 16px;font-size:14px;line-height:1.7;">'
+                    '<span style="color:#636366;margin-right:8px;">%s.</span>%s</div>'
+                    % (match.group(1), _inline(match.group(2)))
+                )
+        # Empty line = break
+        elif stripped == "":
+            html_parts.append("<br>")
+        # Normal paragraph
+        else:
+            html_parts.append(
+                '<p style="font-size:14px;line-height:1.7;margin:4px 0;">%s</p>'
+                % _inline(stripped)
+            )
+
+    # Flush remaining table
+    if in_table:
+        html_parts.append(_flush_table())
+
+    return "\n".join(html_parts)
+
+
 # ── HTTP Handler ──────────────────────────────────────────────────────────────
 
 
@@ -1240,12 +1393,13 @@ class BenchmarkHandler(BaseHTTPRequestHandler):
 
         elif self.path == "/api/docs":
             if not os.path.isfile(DOCS_PATH):
-                self._send_json(200, {"content": "# No docs found\n\nExpected at: docs/reference/RETRIEVAL_SYSTEM.md"})
+                self._send_json(200, {"html": "<p>No docs found. Expected at: docs/reference/RETRIEVAL_SYSTEM.md</p>", "path": ""})
                 return
             try:
                 with open(DOCS_PATH, "r", encoding="utf-8") as fh:
                     content = fh.read()
-                self._send_json(200, {"content": content, "path": DOCS_PATH})
+                rendered_html = _render_markdown(content)
+                self._send_json(200, {"html": rendered_html, "path": DOCS_PATH})
             except OSError as exc:
                 self._send_error_json(500, str(exc))
 

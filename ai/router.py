@@ -212,10 +212,12 @@ def unified_route(user_message: str, session_context: dict, config: dict,
             reasoning=parsed.get('reasoning', ''),
             search_needed=search_needed,
             resolved_intent=parsed.get('resolved_intent'),
+            # Backend v2 returns only agent/search_needed/resolved_intent.
+            # Legacy fields kept for backwards compat with old backend versions.
             retrieval_mode=parsed.get('retrieval_mode') or 'both',
             response_length=parsed.get('response_length') or 'medium',
             max_sources=parsed.get('max_sources') or 'medium',
-            search_scope=parsed.get('search_scope') or 'current_deck',
+            search_scope=parsed.get('search_scope') or 'collection',
             precise_queries=parsed.get('precise_queries'),
             broad_queries=parsed.get('broad_queries'),
             embedding_queries=parsed.get('embedding_queries'),

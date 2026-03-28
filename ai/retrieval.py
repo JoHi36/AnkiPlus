@@ -603,6 +603,82 @@ class EnrichedRetrieval:
             logger.warning("EnrichedRetrieval: Semantic search failed: %s", e)
             self.emit_step("semantic_search", "error", {"message": str(e)})
 
+        # ── 4c. Semantic-informed SQL Expansion (Feedback Loop) ────────────
+        # Extract KG terms from top semantic hits, use them for additional SQL queries.
+        # This finds cards that semantic search "knows about" but SQL missed.
+        if semantic_results and self.rag_retrieve_fn:
+            try:
+                try:
+                    from ..storage.kg_store import _get_db as _kg_db
+                except ImportError:
+                    from storage.kg_store import _get_db as _kg_db
+
+                # Get card_ids from top-5 semantic results
+                top_sem_cards = []
+                for nid, data in sorted(semantic_results.items(), key=lambda x: x[1]['rank'])[:5]:
+                    cid = data.get('card_id')
+                    if cid:
+                        top_sem_cards.append(cid)
+
+                if top_sem_cards:
+                    kg_db = _kg_db()
+                    feedback_terms = set()
+                    for cid in top_sem_cards:
+                        rows = kg_db.execute(
+                            "SELECT term FROM kg_card_terms WHERE card_id = ?", (cid,)
+                        ).fetchall()
+                        for r in rows:
+                            feedback_terms.add(r[0])
+
+                    # Remove terms we already searched for
+                    existing_lower = {t.lower() for t in enrichment.get('tier1_terms', [])}
+                    for exps in enrichment.get('expansions', {}).values():
+                        for t, _ in exps:
+                            existing_lower.add(t.lower())
+                    new_terms = [t for t in feedback_terms if t.lower() not in existing_lower]
+
+                    if new_terms:
+                        # Run feedback SQL with new terms (max 5 most common)
+                        from collections import Counter
+                        term_freq = Counter()
+                        for cid in top_sem_cards:
+                            rows = kg_db.execute(
+                                "SELECT term FROM kg_card_terms WHERE card_id = ?", (cid,)
+                            ).fetchall()
+                            for r in rows:
+                                if r[0].lower() not in existing_lower:
+                                    term_freq[r[0]] += 1
+
+                        top_feedback = [t for t, _ in term_freq.most_common(5)]
+                        if top_feedback:
+                            feedback_queries = [' OR '.join('"%s"' % t for t in top_feedback)]
+                            try:
+                                fb_data = self.rag_retrieve_fn(
+                                    precise_queries=[],
+                                    broad_queries=feedback_queries,
+                                    context=None,
+                                    max_notes=max_notes,
+                                    suppress_event=True,
+                                )
+                                fb_citations = fb_data.get('citations', {})
+                                fb_rank = len(sql_results) + 1
+                                for nid in fb_citations:
+                                    if nid not in sql_results:
+                                        sql_results[nid] = {
+                                            'rank': fb_rank,
+                                            'query_type': 'broad',
+                                            'tier': 'secondary',
+                                            'card_data': fb_citations[nid],
+                                        }
+                                        fb_rank += 1
+                                if fb_citations:
+                                    logger.info("Feedback SQL: +%d cards from %d semantic-derived terms",
+                                                len(fb_citations), len(top_feedback))
+                            except Exception as e:
+                                logger.debug("Feedback SQL failed: %s", e)
+            except Exception as e:
+                logger.debug("Semantic-informed expansion failed: %s", e)
+
         # ── 5. RRF + Confidence ───────────────────────────────────────────────
         self.emit_step("merge", "active")
         try:
@@ -709,6 +785,25 @@ class EnrichedRetrieval:
         if broad_secondary and len(results) < 5:
             cits = _call_rag([], broad_secondary)
             _merge_sql_batch(cits, 'broad', 'secondary')
+
+        # Tag-based search: if enrichment found KG terms, search by Anki tags too.
+        # Anki tags are hierarchical (e.g. "Anatomie::GI-Trakt::Duenndarm") and
+        # searched via "tag:*segment*" wildcards in find_cards().
+        kg_terms = enrichment.get('kg_terms_found', [])
+        tier1_terms = enrichment.get('tier1_terms', [])
+        tag_candidates = list(dict.fromkeys(tier1_terms + kg_terms))[:8]
+        if tag_candidates and len(results) < max_notes:
+            tag_queries = []
+            for term in tag_candidates:
+                # Wildcard match within hierarchical tags: tag:*Duenndarm*
+                tag_queries.append('tag:*%s*' % term)
+            # Run as broad queries (OR semantics via separate calls)
+            for tq in tag_queries[:5]:
+                try:
+                    cits = _call_rag([], [tq])
+                    _merge_sql_batch(cits, 'precise', 'primary')
+                except Exception as e:
+                    logger.debug("Tag search '%s' failed: %s", tq, e)
 
         return results
 

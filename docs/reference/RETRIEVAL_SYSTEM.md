@@ -2,9 +2,22 @@
 
 ## Overview
 
-The retrieval system finds relevant flashcards for a user's question. It combines three search strategies into a single ranked result via Reciprocal Rank Fusion (RRF).
+The retrieval system finds relevant flashcards for a user's question. It combines four search strategies into a single ranked result via Reciprocal Rank Fusion (RRF).
 
-**Core principle:** Embedding-first KG expansion, then Graph edges, then parallel SQL + Semantic search, then mathematical ranking.
+**Core principle:** Embedding-first KG expansion, then Graph edges, then parallel SQL + Semantic + Tag search, then mathematical ranking.
+
+## Current Benchmark Results (2026-03-27)
+
+| Metric | Value | Notes |
+|--------|-------|-------|
+| Recall@10 | 47% | Target card in top-10 results |
+| Top-3 Recall | 26% | Target card in top-3 results |
+| Term Extraction | ~85% | Domain terms correctly identified |
+| KG Expansion | ~40% | Related terms found via Knowledge Graph |
+
+**Honest assessment:** Semantic Search (embedding cosine similarity) is the primary driver of recall. KG expansion adds roughly 5% incremental recall by finding cards that semantic search misses (e.g., synonym-based queries). SQL keyword search contributes mainly for exact-match queries. Tag-based search is newly added and not yet benchmarked.
+
+**Dashboard:** Run `python3 scripts/benchmark_serve.py` and open `http://localhost:8080` for the interactive benchmark dashboard.
 
 ## Pipeline (5 Phases)
 
@@ -15,6 +28,8 @@ USER QUESTION: "wie lang ist der dünndarm"
 PHASE 1: ROUTER (~250ms, backend LLM)
     Agent routing + context resolution
     Output: {agent: "tutor", search_needed: true, resolved_intent: "..."}
+    Note: Router now returns ONLY 3 fields (agent, search_needed, resolved_intent).
+    Query generation is handled locally by KG enrichment, not the LLM.
     |
     v
 PHASE 2: TERM EXTRACTION + EMBEDDING (~200ms, 1 API call)
@@ -40,6 +55,8 @@ PHASE 3: KG ENRICHMENT (~30ms, local)
 PHASE 4: PARALLEL SEARCH
     SQL Search: Anki find_cards() with generated queries (always collection-wide)
     Semantic Search: cosine similarity against 8k+ card embedding index
+    Tag Search: Anki find_cards() with "tag:*term*" for hierarchical tag matching
+    Feedback Loop: top semantic hits -> extract KG terms -> additional SQL queries
     |
     v
 PHASE 5: RRF + CONFIDENCE
@@ -67,8 +84,27 @@ PHASE 5: RRF + CONFIDENCE
 | `ai/embeddings.py` | Embedding API, in-memory card index, KG term index, fuzzy search |
 | `ai/router.py` | Agent routing (tutor/research/help/plusi), resolved_intent |
 | `ai/tutor.py` | Tutor agent — calls pipeline, handles generation + fallback |
-| `storage/kg_store.py` | KG persistence: terms, edges, definitions, embeddings |
+| `storage/kg_store.py` | KG persistence: terms, edges, definitions, embeddings, card content cache |
 | `ai/kg_builder.py` | Builds KG graph (edges, frequencies, term embeddings) |
+| `functions/src/handlers/router.ts` | Backend router — agent + search_needed + resolved_intent |
+
+## Search Strategies
+
+### 1. SQL Keyword Search (via Anki find_cards)
+
+Searches card text using Anki's built-in full-text search. Queries are generated deterministically from KG enrichment (no LLM involved). Tiered cascade: precise AND queries first, then broad OR queries if results are sparse.
+
+### 2. Semantic Search (Embedding Cosine Similarity)
+
+Embeds the user question and compares against 8k+ pre-computed card embeddings. Primary driver of recall. Uses dual vectors: primary (user's question) and secondary (resolved_intent from router).
+
+### 3. Tag-Based Search
+
+New in v2.1. Searches Anki's hierarchical tag system using `tag:*term*` wildcards. Tags like `Anatomie::GI-Trakt::Duenndarm` are matched when KG enrichment finds terms that appear in the tag hierarchy. Adds cards that keyword search might miss because the term appears in tags but not in card text.
+
+### 4. Semantic-Informed SQL Expansion (Feedback Loop)
+
+Extracts KG terms from the top-5 semantic search results, then runs additional SQL queries with those terms. Finds cards that semantic search "knows about" but SQL missed.
 
 ## KG Enrichment Strategy
 
@@ -110,6 +146,22 @@ Precise SQL queries are ordered by relevance:
 
 Max 5 precise queries to reduce noise.
 
+## Backend Router (resolved_intent)
+
+The backend router (`functions/src/handlers/router.ts`) now returns only 3 fields:
+
+```json
+{
+  "agent": "tutor",
+  "search_needed": true,
+  "resolved_intent": "clear description of what the user wants to know"
+}
+```
+
+**Status:** Deployed. The old query generation fields (precise_queries, broad_queries, embedding_queries, retrieval_mode, search_scope, max_sources, response_length) are removed from the router prompt. Query generation is now handled entirely by local KG enrichment, which is deterministic and does not require an LLM call.
+
+**resolved_intent** is critical for context-dependent questions. When a user asks "explain that" while looking at a card about the small intestine, the router resolves this to a specific intent like "detailed explanation of the structure and segments of the small intestine (duodenum, jejunum, ileum)". This resolved intent feeds into KG enrichment as secondary tier terms.
+
 ## RRF Scoring
 
 Reciprocal Rank Fusion (Cormack et al., 2009) combines ranked lists without requiring score normalization:
@@ -132,7 +184,29 @@ Confidence thresholds (tunable):
 - `CONFIDENCE_HIGH = 0.025` (answer from cards)
 - `CONFIDENCE_LOW = 0.012` (trigger Perplexity web search)
 
+## Card Content Cache
+
+Cards' question/answer text is cached in `card_content` table (in `card_sessions.db`) during background embedding. This enables:
+- Offline text search via `search_card_content(query)` in `storage/kg_store.py`
+- Benchmark card export via `python3 scripts/benchmark_cache_cards.py`
+
+The cache is populated automatically when Anki runs the `BackgroundEmbeddingThread`.
+
 ## Evaluation
+
+### Benchmark Dashboard
+
+```bash
+python3 scripts/benchmark_serve.py
+# Open http://localhost:8080
+```
+
+The dashboard shows:
+- Overall Recall@10 and Top-3 metrics
+- Per-step scores (term extraction, KG expansion, SQL, semantic, RRF, confidence)
+- Per-category breakdown (direct, synonym, context, cross-deck, typo)
+- Expandable trace for each test case
+- System documentation (this file) with rendered markdown
 
 ### CLI Eval Script
 
@@ -187,6 +261,8 @@ python3 run_tests.py -k test_kg_builder -v     # KG builder tests
 
 4. **Confidence-Schwellenwerte sind Schätzungen** — müssen mit echten Daten kalibriert werden.
 
+5. **Tag-based search ist neu und nicht benchmarked** — erste Implementation nutzt Wildcard-Matching, Effektivität noch unklar.
+
 ### High-Impact Next Steps
 
 1. **Mehr KG-Definitionen generieren** — Jeder Term mit Definition bekommt ein semantisch reicheres Embedding. Target: 1000+ Definitionen.
@@ -195,9 +271,22 @@ python3 run_tests.py -k test_kg_builder -v     # KG builder tests
 
 3. **Confidence-Thresholds kalibrieren** — RRF-Scores loggen + User-Feedback korrelieren.
 
-4. **Backend-Router-Prompt vereinfachen** — Nur noch 3 Felder (agent, search_needed, resolved_intent) statt 8+.
+4. **Tag-Search benchmarken** — Recall-Impact der Tag-basierten Suche messen.
 
-## Architecture History
+5. **Card Content Cache für Benchmark nutzen** — Realistischere SQL-Simulation im Offline-Benchmark.
 
-- **v1 (pre-2026-03-27):** LLM Router generates queries, KG as dead-arm parallel search, source-count merge.
-- **v2 (2026-03-27):** KG-enriched query expansion, RRF scoring, embedding-first expansion, universal KG stopword filter. Spec: `docs/superpowers/specs/2026-03-27-retrieval-algorithm-redesign.md`
+## Changelog
+
+### v2.1 (2026-03-27)
+- **Backend Router simplified:** Now returns only 3 fields (agent, search_needed, resolved_intent). Query generation moved entirely to local KG enrichment.
+- **Tag-based search added:** Searches Anki hierarchical tags via `tag:*term*` wildcards using KG-enriched terms.
+- **Card content cache:** `card_content` table in card_sessions.db, populated during background embedding. Enables offline text search and benchmark export.
+- **Benchmark dashboard:** Docs tab now renders proper markdown instead of raw preformatted text.
+- **Semantic-informed SQL expansion:** Feedback loop extracts KG terms from top semantic hits for additional SQL queries.
+
+### v2.0 (2026-03-27)
+- KG-enriched query expansion, RRF scoring, embedding-first expansion, universal KG stopword filter.
+- Spec: `docs/superpowers/specs/2026-03-27-retrieval-algorithm-redesign.md`
+
+### v1.0 (pre-2026-03-27)
+- LLM Router generates queries, KG as dead-arm parallel search, source-count merge.
