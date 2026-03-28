@@ -192,8 +192,35 @@ def score_kg_expansion(query, expected_terms, enrichment_result):
     }
 
 
+ANKI_DB_PATH = os.path.join(
+    os.path.dirname(PROJECT_ROOT),  # addons21/
+    '..', 'Benutzer 1', 'collection.anki2'
+)
+ANKI_DB_PATH = os.path.normpath(ANKI_DB_PATH)
+
+_anki_db = None
+
+def _get_anki_db():
+    """Open Anki's native collection database (read-only)."""
+    global _anki_db
+    if _anki_db is None:
+        if not os.path.exists(ANKI_DB_PATH):
+            return None
+        _anki_db = sqlite3.connect('file:%s?mode=ro' % ANKI_DB_PATH, uri=True)
+    return _anki_db
+
+
+def _anki_note_to_card_id(anki_db, note_id):
+    """Get first card_id for a note_id from Anki's cards table."""
+    row = anki_db.execute("SELECT id FROM cards WHERE nid = ? LIMIT 1", (note_id,)).fetchone()
+    return row[0] if row else None
+
+
 def score_sql_search(expected_card_id, enrichment_result, db):
-    """Step 3: Search kg_card_terms with extracted terms, find rank of expected card."""
+    """Step 3: Search Anki's NATIVE database with full-text LIKE queries.
+
+    Falls back to KG-term proxy if Anki DB is not available.
+    """
     # Collect all SQL search terms from enrichment result
     tier1_terms = enrichment_result.get('tier1_terms', [])
     tier2_terms = enrichment_result.get('tier2_terms', [])
@@ -220,32 +247,70 @@ def score_sql_search(expected_card_id, enrichment_result, db):
             'note': 'no search terms',
         }
 
-    # Count how many search terms match each card
-    card_hit_counts = {}
-    for term in all_search_terms:
-        rows = db.execute(
-            "SELECT card_id FROM kg_card_terms WHERE LOWER(term) = LOWER(?)",
-            (term,)
-        ).fetchall()
-        for (card_id,) in rows:
-            card_hit_counts[card_id] = card_hit_counts.get(card_id, 0) + 1
+    anki_db = _get_anki_db()
 
-    # Rank by hit count descending
-    ranked = sorted(card_hit_counts.items(), key=lambda x: x[1], reverse=True)
+    if anki_db:
+        # NATIVE ANKI SEARCH: full-text LIKE on notes.flds
+        note_hit_counts = {}
+        for term in all_search_terms:
+            rows = anki_db.execute(
+                "SELECT id FROM notes WHERE flds LIKE ? COLLATE NOCASE",
+                ('%' + term + '%',)
+            ).fetchall()
+            for (note_id,) in rows:
+                note_hit_counts[note_id] = note_hit_counts.get(note_id, 0) + 1
 
-    target_rank = None
-    for rank, (card_id, _) in enumerate(ranked, start=1):
-        if card_id == expected_card_id:
-            target_rank = rank
-            break
+        # Rank by hit count descending
+        ranked = sorted(note_hit_counts.items(), key=lambda x: x[1], reverse=True)
 
-    total_hits = len(ranked)
-    score = 1.0 if (target_rank is not None and target_rank <= SQL_TOP_K) else 0.0
-    return {
-        'score': score,
-        'target_rank': target_rank,
-        'total_hits': total_hits,
-    }
+        # Find expected card: expected_card_id is a card_id, we need to check its note_id
+        expected_note_id = None
+        row = anki_db.execute("SELECT nid FROM cards WHERE id = ?", (expected_card_id,)).fetchone()
+        if row:
+            expected_note_id = row[0]
+
+        target_rank = None
+        for rank, (note_id, _) in enumerate(ranked, start=1):
+            if note_id == expected_note_id:
+                target_rank = rank
+                break
+
+        total_hits = len(ranked)
+        score = 1.0 if (target_rank is not None and target_rank <= SQL_TOP_K) else 0.0
+        return {
+            'score': score,
+            'target_rank': target_rank,
+            'total_hits': total_hits,
+            'search_type': 'anki_native',
+        }
+
+    else:
+        # FALLBACK: KG-term proxy (when Anki DB not available)
+        card_hit_counts = {}
+        for term in all_search_terms:
+            rows = db.execute(
+                "SELECT card_id FROM kg_card_terms WHERE LOWER(term) = LOWER(?)",
+                (term,)
+            ).fetchall()
+            for (card_id,) in rows:
+                card_hit_counts[card_id] = card_hit_counts.get(card_id, 0) + 1
+
+        ranked = sorted(card_hit_counts.items(), key=lambda x: x[1], reverse=True)
+
+        target_rank = None
+        for rank, (card_id, _) in enumerate(ranked, start=1):
+            if card_id == expected_card_id:
+                target_rank = rank
+                break
+
+        total_hits = len(ranked)
+        score = 1.0 if (target_rank is not None and target_rank <= SQL_TOP_K) else 0.0
+        return {
+            'score': score,
+            'target_rank': target_rank,
+            'total_hits': total_hits,
+            'search_type': 'kg_proxy',
+        }
 
 
 def score_semantic_search(expected_card_id, query_embedding, card_embeddings):

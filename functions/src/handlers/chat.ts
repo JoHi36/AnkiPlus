@@ -1,5 +1,4 @@
 import { Request, Response } from 'express';
-import * as functions from 'firebase-functions';
 import { ChatRequest } from '../types';
 import { createErrorResponse, ErrorCode } from '../utils/errors';
 import { createLogger } from '../utils/logging';
@@ -62,8 +61,13 @@ export async function chatHandler(
     const responseStyle = body.responseStyle || body.mode || 'compact';
     const model = body.model || 'gemini-3-flash-preview';
     const mode = body.mode || 'compact';
+    const purpose = body.purpose || '';  // 'extraction' = background KG indexing
 
     // ── Token quota check ────────────────────────────────────────────
+    // Background extraction (purpose='extraction') only checks weekly quota,
+    // so it doesn't consume the daily chat budget.
+    const skipDailyCheck = purpose === 'extraction';
+
     let tokenQuota: {
       allowed: boolean;
       daily: { used: number; limit: number; remaining: number };
@@ -73,7 +77,7 @@ export async function chatHandler(
 
     if (isAuthenticated && userId) {
       await getOrCreateUser(userId, (req as any).userEmail);
-      tokenQuota = await checkTokenQuota(userId);
+      tokenQuota = await checkTokenQuota(userId, skipDailyCheck);
     } else if (anonymousId && ipAddress) {
       const anonResult = await checkAnonymousTokenQuota(anonymousId, ipAddress);
       tokenQuota = {
@@ -97,7 +101,7 @@ export async function chatHandler(
         await logQuotaExceeded(userId, user.tier, 'tokens');
       }
 
-      const upgradeUrl = process.env.UPGRADE_URL || functions.config().app?.upgrade_url || 'https://anki-plus.vercel.app/register';
+      const upgradeUrl = process.env.UPGRADE_URL || 'https://anki-plus.vercel.app/register';
 
       res.status(403).json(
         createErrorResponse(
@@ -230,13 +234,13 @@ export async function chatHandler(
             cost = calculateCostMicrodollars(resolvedModel, inputTokens, outputTokens);
           }
 
-          debitTokens(effectiveUserId, date, week, normalized, inputTokens, outputTokens, cost).catch((error) => {
+          debitTokens(effectiveUserId, date, week, normalized, inputTokens, outputTokens, cost, skipDailyCheck).catch((error) => {
             logger.error('Failed to debit tokens', error, { effectiveUserId, normalized });
           });
 
           tokenInfo = {
             used: normalized,
-            dailyRemaining: Math.max(0, tokenQuota.daily.remaining - normalized),
+            dailyRemaining: skipDailyCheck ? tokenQuota.daily.remaining : Math.max(0, tokenQuota.daily.remaining - normalized),
             weeklyRemaining: tokenQuota.weekly.limit > 0 ? Math.max(0, tokenQuota.weekly.remaining - normalized) : 0,
           };
         }
@@ -400,13 +404,13 @@ export async function chatHandler(
           cost = calculateCostMicrodollars(resolvedModel, totalInputTokens, totalOutputTokens);
         }
 
-        debitTokens(effectiveUserId, date, week, normalized, totalInputTokens, totalOutputTokens, cost).catch((error) => {
+        debitTokens(effectiveUserId, date, week, normalized, totalInputTokens, totalOutputTokens, cost, skipDailyCheck).catch((error) => {
           logger.error('Failed to debit tokens', error, { effectiveUserId, normalized });
         });
 
         const tokenInfo = {
           used: normalized,
-          dailyRemaining: Math.max(0, tokenQuota.daily.remaining - normalized),
+          dailyRemaining: skipDailyCheck ? tokenQuota.daily.remaining : Math.max(0, tokenQuota.daily.remaining - normalized),
           weeklyRemaining: tokenQuota.weekly.limit > 0 ? Math.max(0, tokenQuota.weekly.remaining - normalized) : 0,
         };
 

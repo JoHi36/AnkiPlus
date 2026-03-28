@@ -18,7 +18,6 @@ import { useReasoningStore, useReasoningDispatch } from '../reasoning/store';
  */
 export function useChat(bridge, currentSessionId, setSessions, currentSectionId, cardContextHook = null, cardSessionHook = null) {
   const [messages, setMessages] = useState([]);
-  const freeChatPushRef = useRef(null); // set by App.jsx to push messages to Free Chat
   const [isLoading, setIsLoading] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState('');
   const [error, setError] = useState(null);  // NEW: Error state
@@ -144,10 +143,6 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       }
     }
 
-    // Push card messages to Free Chat hook (for deck-level chronological view)
-    if (freeChatPushRef.current) {
-      freeChatPushRef.current(newMessage);
-    }
   }, [currentSectionId, setSessions]);
   
   // Aktualisiere Ref bei jeder Änderung
@@ -468,6 +463,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
           orchestration_steps: routerStream?.steps || finalMsg.orchestration?.steps || [],
           agentCells: finalMsg.agentCells,
           orchestration: finalMsg.orchestration,
+          ...(payload.webSources ? { webSources: payload.webSources } : {}),
         };
         // Add saved message FIRST, then clear live message in same batch
         setMessages(prev => [...prev, savedMsg]);
@@ -768,7 +764,6 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
     isLoading,
     setIsLoading,
     streamingMessage,
-    freeChatPushRef,
     error,
     connectionStatus,
     appendMessage,

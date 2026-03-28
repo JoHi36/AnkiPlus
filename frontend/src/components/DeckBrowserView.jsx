@@ -27,10 +27,6 @@ export default function DeckBrowserView({ data, isPremium, onToggleView }) {
     executeAction('chat.open', { text });
   };
 
-  const handleSearchOpenEmpty = () => {
-    executeAction('chat.open', { text: '' });
-  };
-
   return (
     <div style={{
       flex: 1, overflow: 'hidden',
@@ -108,7 +104,7 @@ export default function DeckBrowserView({ data, isPremium, onToggleView }) {
         flexShrink: 0, width: '100%', maxWidth: MAX_W,
         marginBottom: 16,
       }}>
-        <DeckSearchBar onSubmit={handleSearchSubmit} onOpenEmpty={handleSearchOpenEmpty} />
+        <DeckSearchBar onSubmit={handleSearchSubmit} />
       </div>
 
       {/* Deck List — only this scrolls, clipped right at the search bar bottom edge */}

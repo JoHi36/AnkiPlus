@@ -116,6 +116,7 @@ def run_tutor(situation, emit_step=None, memory=None,
     # ------------------------------------------------------------------
     rag_context = None
     citations = {}
+    rag_result = None  # Will be set by normal RAG path
 
     if smart_search_context:
         # Smart Search: cards already found by SearchCardsThread
@@ -173,6 +174,9 @@ def run_tutor(situation, emit_step=None, memory=None,
             if rag_context:
                 citations = rag_context.get('citations', {})
 
+    # Web search is handled dynamically by the model via tool calls (agent_loop).
+    # The model reads the cards first, then decides if it needs web search.
+
     # ------------------------------------------------------------------
     # 5. Build system prompt
     # ------------------------------------------------------------------
@@ -181,21 +185,31 @@ def run_tutor(situation, emit_step=None, memory=None,
     })
     system_prompt = None  # Backend builds the system prompt
 
+    generation_situation = situation
+
     # ------------------------------------------------------------------
     # 6. Generate with 3-level fallback chain
     # ------------------------------------------------------------------
+    _web_tool_markers = []  # Collect search_web/pubmed/wikipedia tool results
+
     def _on_chunk(chunk, done, is_function_call=False):
         """Forward streaming chunks to both stream_callback and legacy callback."""
         if done:
-            return  # We handle the done signal after the call
-        if chunk and not is_function_call:
-            if stream_callback:
-                stream_callback(chunk, False)
-            if callback:
-                callback(chunk, False, False)
+            return
+        if not chunk:
+            return
+        if is_function_call:
+            # Collect web search tool markers for webSources resolution
+            if isinstance(chunk, str) and '[[TOOL:' in chunk and 'search_web' in chunk:
+                _web_tool_markers.append(chunk)
+            return
+        if stream_callback:
+            stream_callback(chunk, False)
+        if callback:
+            callback(chunk, False, False)
 
     result_text = _generate_with_fallback(
-        situation=situation,
+        situation=generation_situation,
         primary_model=model,
         fallback_model=fallback_model,
         api_key=api_key,
@@ -294,19 +308,39 @@ def run_tutor(situation, emit_step=None, memory=None,
     # 8. Return result
     # ------------------------------------------------------------------
     final_text = result_text or ''
+
+    # Extract webSources from accumulated tool markers for [[WEB:N]] resolution
+    _extracted_web_sources = []
+    for marker in _web_tool_markers:
+        try:
+            import json as _json
+            # Parse [[TOOL:{...}]] content
+            match = __import__('re').search(r'\[\[TOOL:(\{.*\})\]\]', marker)
+            if match:
+                data = _json.loads(match.group(1))
+                sources = data.get('result', {}).get('sources', [])
+                if sources:
+                    _extracted_web_sources = sources
+        except (ValueError, KeyError):
+            pass
+
     if handoff_marker:
         final_text = final_text + '\n' + handoff_marker if final_text else handoff_marker
 
-    return {
+    result = {
         'text': final_text,
         'citations': citations,
         '_used_streaming': stream_callback is not None,
         '_handoff_marker': handoff_marker,
     }
+    if _extracted_web_sources:
+        result['webSources'] = _extracted_web_sources
+    return result
 
 
 def _call_generation(situation, model, api_key, config, system_prompt,
-                     context, history, mode, rag_context, on_chunk):
+                     context, history, mode, rag_context, on_chunk,
+                     pipeline_step_callback=None):
     """Call get_google_response_streaming with the given parameters.
 
     Returns the result text string. Raises on error.
@@ -318,6 +352,7 @@ def _call_generation(situation, model, api_key, config, system_prompt,
         rag_context=rag_context,
         system_prompt_override=system_prompt,
         config=config,
+        pipeline_step_callback=pipeline_step_callback,
     )
 
 
@@ -367,7 +402,8 @@ def _generate_with_fallback(situation, primary_model, fallback_model,
             emit_step("generating", "active")
         result_text = _call_generation(
             situation, primary_model, api_key, config, system_prompt,
-            context, history, mode, rag_context, on_chunk)
+            context, history, mode, rag_context, on_chunk,
+            pipeline_step_callback=emit_step)
         if emit_step:
             emit_step("generating", "done")
         return result_text
@@ -391,7 +427,8 @@ def _generate_with_fallback(situation, primary_model, fallback_model,
             emit_step("generating", "active")
         result_text = _call_generation(
             situation, fallback_model, api_key, config, system_prompt,
-            context, fallback_history, mode, fallback_rag, on_chunk)
+            context, fallback_history, mode, fallback_rag, on_chunk,
+            pipeline_step_callback=emit_step)
         if emit_step:
             emit_step("generating", "done")
         return result_text
@@ -407,7 +444,8 @@ def _generate_with_fallback(situation, primary_model, fallback_model,
             emit_step("generating", "active")
         result_text = _call_generation(
             situation, fallback_model, api_key, config, system_prompt,
-            context, [], mode, None, on_chunk)
+            context, [], mode, None, on_chunk,
+            pipeline_step_callback=emit_step)
         if emit_step:
             emit_step("generating", "done")
         return result_text

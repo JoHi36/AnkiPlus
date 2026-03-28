@@ -49,6 +49,7 @@ export interface ChatRequest {
   temperature?: number; // Optional: override temperature (0.0-2.0)
   maxOutputTokens?: number; // Optional: override max output tokens
   disableThinking?: boolean; // Optional: disable thinking for faster responses
+  purpose?: 'extraction' | ''; // Optional: 'extraction' = background KG indexing (weekly quota only)
 }
 
 /**

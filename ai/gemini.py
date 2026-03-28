@@ -154,8 +154,23 @@ def _build_chat_payload(user_message, model, context=None, history=None,
         "molecules": False
     })
 
-    # Determine enabled tools list
+    # Determine enabled tools list (legacy — for system prompt tool hints)
     enabled_tools = [name for name, enabled in ai_tools.items() if enabled]
+
+    # Build Gemini-format tool definitions for the backend
+    tools_definitions = None
+    try:
+        try:
+            from .tools import registry as tool_registry
+        except ImportError:
+            from tools import registry as tool_registry
+        declarations = tool_registry.get_function_declarations(
+            agent=agent, ai_tools_config=ai_tools, mode=mode,
+        )
+        if declarations:
+            tools_definitions = [{"functionDeclarations": declarations}]
+    except (ImportError, AttributeError) as e:
+        logger.debug("Failed to build tool definitions: %s", e)
 
     # Build card context from the context dict
     card_context = None
@@ -191,6 +206,10 @@ def _build_chat_payload(user_message, model, context=None, history=None,
         "temperature": 0.7,
         "maxOutputTokens": 8192,
     }
+
+    # Include Gemini-format tool definitions so the backend can pass them to the model
+    if tools_definitions:
+        payload["tools_definitions"] = tools_definitions
 
     # Pass system prompt override if provided (backend can use or ignore)
     if system_prompt_override is not None:
@@ -419,7 +438,7 @@ def get_google_response(user_message, model, api_key, context=None, history=None
 def get_google_response_streaming(user_message, model, api_key, context=None, history=None,
                                   mode='compact', callback=None, rag_context=None,
                                   suppress_error_callback=False, system_prompt_override=None,
-                                  config=None):
+                                  config=None, pipeline_step_callback=None):
     """Send a streaming chat request to the backend /chat endpoint.
 
     All parameters are preserved for backward compatibility.
@@ -462,9 +481,29 @@ def get_google_response_streaming(user_message, model, api_key, context=None, hi
             backend_data=payload,
         )
         # stream_response returns (full_text, function_call_data) tuple
-        # Callers expect a plain string
         if isinstance(result, tuple):
-            return result[0] or ""
+            text, function_call = result
+            # If the model wants to call a tool, run the agent loop
+            if function_call:
+                try:
+                    from .agent_loop import run_agent_loop
+                except ImportError:
+                    from agent_loop import run_agent_loop
+                agent_text = run_agent_loop(
+                    stream_fn=lambda urls, data, cb, **kw: stream_response(
+                        urls, None, callback=cb,
+                        use_backend=True, backend_data=payload,
+                    ),
+                    stream_urls=[url],
+                    data={"contents": [], "generationConfig": {"temperature": 0.7, "maxOutputTokens": 8192}},
+                    callback=callback,
+                    use_backend=True,
+                    backend_data=payload,
+                    pending_function_call=function_call,
+                    pipeline_step_callback=pipeline_step_callback,
+                )
+                return (text or "") + (agent_text or "")
+            return text or ""
         return result or ""
     except Exception as e:
         error_msg = f"Streaming request error: {str(e)}"
@@ -526,6 +565,8 @@ def stream_response(urls, data, callback=None, use_backend=False, backend_data=N
 
             # Parse SSE stream from backend
             # Format: data: {"text": "chunk"} or data: {"functionCall": {...}} or data: {"error": "..."}
+            import time as _time
+            _stream_start = _time.monotonic()
             logger.debug("Starting backend stream processing...")
             chunk_count = 0
             accumulated_text = ""
@@ -564,19 +605,30 @@ def stream_response(urls, data, callback=None, use_backend=False, backend_data=N
                                 accumulated_text += chunk_text
                                 full_text = accumulated_text
                                 chunk_count += 1
+                                _elapsed = int((_time.monotonic() - _stream_start) * 1000)
+                                logger.info("[stream-timing] chunk #%d at +%dms, len=%d",
+                                            chunk_count, _elapsed, len(chunk_text))
                                 if callback:
                                     callback(chunk_text, False, False)
 
                         # Done marker: {"done": true, "tokens": {...}}
                         if chunk_data.get("done"):
-                            logger.info("Stream finished (done=true), chunks: %s", chunk_count)
+                            _elapsed = int((_time.monotonic() - _stream_start) * 1000)
+                            logger.info("Stream finished (done=true), chunks: %s, elapsed: %dms", chunk_count, _elapsed)
                             if callback:
                                 callback("", True, False)
                             return (accumulated_text, None)
 
                         # Function call: {"functionCall": {"name": "...", "args": {...}}}
+                        # or from backend: {"toolCalls": {"parts": [{"functionCall": {"name": "...", "args": {...}}}]}}
+                        function_call = None
                         if "functionCall" in chunk_data:
                             function_call = chunk_data["functionCall"]
+                        elif "toolCalls" in chunk_data:
+                            parts = chunk_data["toolCalls"].get("parts", [])
+                            if parts and "functionCall" in parts[0]:
+                                function_call = parts[0]["functionCall"]
+                        if function_call:
                             logger.debug("Function call in stream: %s", function_call.get('name'))
                             if callback:
                                 callback(None, False, True)
@@ -643,18 +695,19 @@ def stream_response(urls, data, callback=None, use_backend=False, backend_data=N
 DEFINITION_MODEL = "gemini-2.5-flash"
 
 
-def generate_definition(term, card_texts, model=None):
-    """Generate a concise definition of a term from flashcard texts.
+def generate_definition(term, card_texts, model=None, search_query=None):
+    """Generate a contextual explanation of a term from flashcard texts.
 
     Routes through the backend /chat endpoint with agent='tutor'.
 
     Args:
         term: The term to define.
-        card_texts: List of dicts with 'question' and 'answer' keys.
+        card_texts: List of dicts with 'question', 'answer', and optionally 'id' keys.
         model: Model to use (defaults to DEFINITION_MODEL).
+        search_query: Original search query for contextual explanation.
 
     Returns:
-        Definition string, or empty string on failure.
+        Definition string with [1], [2] card references, or empty string on failure.
     """
     if not card_texts:
         return ""
@@ -667,9 +720,14 @@ def generate_definition(term, card_texts, model=None):
         for i, c in enumerate(card_texts[:8])
     )
 
+    context_part = ""
+    if search_query:
+        context_part = " im Kontext der Suche '%s'" % search_query
+
     prompt = (
-        "Basierend auf den folgenden Lernkarten, erstelle eine präzise Definition von '%s'. "
-        "Maximal 3 Sätze. Antworte auf Deutsch.\n\n%s" % (term, cards_str)
+        "Erkläre '%s'%s basierend auf diesen Lernkarten.\n"
+        "Referenziere relevante Karten inline mit [1], [2] etc.\n"
+        "Maximal 3-4 Sätze. Antworte auf Deutsch.\n\n%s" % (term, context_part, cards_str)
     )
 
     config = get_config() or {}
@@ -914,3 +972,196 @@ def generate_quick_answer(query, card_texts, cluster_labels=None, model=None):
                 query, parsed["answerable"], len(parsed["clusterLabels"]), len(card_refs))
 
     return parsed
+
+
+# ---------------------------------------------------------------------------
+# extract_terms_batch — LLM-based term extraction for KG (Ansatz B)
+# ---------------------------------------------------------------------------
+EXTRACTION_MODEL = "gemini-2.5-flash"
+
+
+def extract_terms_batch(cards, model=None):
+    """Extract medical/scientific terms from a batch of cards via LLM.
+
+    Args:
+        cards: List of dicts with 'card_id', 'question', 'answer' keys.
+              Batch size should be 10-15 cards.
+        model: Model ID (defaults to EXTRACTION_MODEL).
+
+    Returns:
+        Dict mapping card_id → list of term strings.
+        Example: {123: ["Schlagvolumen", "HZV", "Frank-Starling-Mechanismus"], ...}
+    """
+    if not cards:
+        return {}
+
+    if model is None:
+        model = EXTRACTION_MODEL
+
+    config = get_config() or {}
+
+    # Clean card text: strip HTML, resolve cloze, remove images/sounds/LaTeX noise
+    def _clean_card(text):
+        if not text:
+            return ''
+        import re as _re
+        # Remove sound/image references
+        text = _re.sub(r'\[sound:[^\]]+\]', '', text)
+        # Remove img tags
+        text = _re.sub(r'<img[^>]*>', '', text)
+        # Resolve cloze: {{c1::answer::hint}} → answer
+        text = _re.sub(r'\{\{c\d+::(.*?)(?:::[^}]*)?\}\}', r'\1', text)
+        # Strip HTML tags
+        text = _re.sub(r'<[^>]+>', ' ', text)
+        # Strip HTML entities
+        text = _re.sub(r'&[a-zA-Z#\d]+;', ' ', text)
+        # Strip LaTeX commands
+        text = _re.sub(r'\\[a-zA-Z]+', ' ', text)
+        text = _re.sub(r'[{}]', '', text)
+        # Collapse whitespace
+        text = _re.sub(r'\s+', ' ', text).strip()
+        return text
+
+    # Build prompt with cleaned cards (skip empty/image-only cards)
+    card_blocks = []
+    for i, card in enumerate(cards):
+        q = _clean_card(card.get('question', ''))
+        a = _clean_card(card.get('answer', ''))
+        combined = ('%s %s' % (q, a)).strip()
+        if len(combined) < 10:
+            continue  # Skip image-only or near-empty cards
+        cid = card.get('card_id', i)
+        card_blocks.append("KARTE_%s:\n%s\n%s" % (cid, q, a))
+
+    if not card_blocks:
+        return {}
+
+    cards_text = "\n\n".join(card_blocks)
+
+    prompt = (
+        "Du extrahierst Fachbegriffe aus Lernkarten.\n\n"
+        "EIN FACHBEGRIFF ist ein domänenspezifisches Konzept das man in einer Prüfung "
+        "wissen müsste — ein Begriff den ein Student aktiv lernen muss.\n\n"
+        "BEISPIELE für Fachbegriffe:\n"
+        "- Medizin: Schlagvolumen, Frank-Starling-Mechanismus, Hämoglobin, Plexus brachialis, Glomeruläre Filtrationsrate\n"
+        "- Chemie: Redoxreaktion, Elektronegativität, Peptidbindung, Michaelis-Menten-Kinetik\n"
+        "- Physik: Drehmoment, Lorentzkraft, Impulserhaltung, Snellius-Gesetz\n"
+        "- Biologie: Mitose, Genexpression, Krebs-Zyklus, Aktionspotential\n"
+        "- Psychologie: Kognitive Dissonanz, Konditionierung, Selbstwirksamkeit\n"
+        "- Jura: Anfechtbarkeit, Schuldverhältnis, Deliktsrecht, Grundrechtsbindung\n"
+        "- BWL/VWL: Grenznutzen, Elastizität, Opportunitätskosten, SWOT-Analyse\n"
+        "- Informatik: Rekursion, Polymorphismus, Hashfunktion, Dijkstra-Algorithmus\n"
+        "- Mathematik: Determinante, Eigenwert, Stetigkeit, Lagrange-Multiplikator\n\n"
+        "KEINE Fachbegriffe — diese NIEMALS extrahieren:\n"
+        "- Alltagswörter: Aufbau, Verlauf, Funktion, Wirkung, Bedeutung, Eigenschaft, "
+        "System, Rolle, Gruppe, Art, Form, Bereich, Beispiel, Unterschied\n"
+        "- Verben: bildet, führt, bewirkt, entsteht, bindet, hemmt, aktiviert, oxidiert, "
+        "nennen, dienen, berechnet, verläuft, enthält, zeigt, beginnt, wirkt\n"
+        "- Adjektive: konkret, normal, wichtig, häufig, selten, spezifisch, direkt\n"
+        "- Stoppwörter: im, ins, dies, dass, vom, beim, zum, hinter\n"
+        "- Zahlen/Einheiten: ~500, mg/dl, mmHg, 3-5 cm\n"
+        "- Zu generisch für einen Fachbegriff: Zelle, Patient, Behandlung, Therapie, "
+        "Diagnose, Formel, Studie, Reaktion, Prozess, Substanz, Organ, Struktur\n\n"
+        "REGELN:\n"
+        "- Multi-Word-Begriffe zusammen: 'Linker Ventrikel', 'Kognitive Dissonanz'\n"
+        "- Abkürzungen behalten: HZV, ATP, EKG, BGB, SWOT\n"
+        "- Pro Karte maximal 8 Begriffe — lieber weniger aber hochwertig\n"
+        "- Im Zweifel WEGLASSEN — Qualität vor Quantität\n\n"
+        "FORMAT: Eine Zeile pro Karte:\n"
+        "KARTE_<id>: Begriff1, Begriff2, Begriff3\n"
+        "Falls keine Fachbegriffe: KARTE_<id>: KEINE\n\n"
+        "%s" % cards_text
+    )
+
+    payload = {
+        "message": prompt,
+        "model": model,
+        "temperature": 0.1,
+        "maxOutputTokens": 2000,
+    }
+
+    # Try OpenRouter first (dev mode), then backend
+    try:
+        or_result = _maybe_call_openrouter(payload, config)
+    except Exception:
+        or_result = None
+    if or_result is not None:
+        return _parse_extraction_result(or_result, cards)
+
+    url = _get_backend_chat_url()
+    headers = _get_auth_headers_safe()
+
+    backend_payload = {
+        "message": prompt,
+        "history": [],
+        "agent": "tutor",
+        "mode": "free_chat",
+        "responseStyle": "compact",
+        "model": model,
+        "stream": False,
+        "temperature": 0.1,
+        "maxOutputTokens": 2000,
+        "purpose": "extraction",  # Uses weekly quota only, not daily
+    }
+
+    try:
+        response = requests.post(url, json=backend_payload, headers=headers, timeout=30)
+        response.raise_for_status()
+        result = response.json()
+        text = result.get("text") or result.get("response") or ""
+        if not text:
+            candidates = result.get("candidates", [])
+            if candidates:
+                parts = candidates[0].get("content", {}).get("parts", [])
+                if parts:
+                    text = parts[0].get("text", "").strip()
+        if text:
+            return _parse_extraction_result(text, cards)
+        return {}
+    except Exception as e:
+        logger.error("extract_terms_batch failed: %s", e)
+        return {}
+
+
+def _parse_extraction_result(text, cards):
+    """Parse LLM output into {card_id: [terms]} dict."""
+    import re
+    result = {}
+    card_ids = {str(c.get('card_id', '')): c.get('card_id') for c in cards}
+    valid_cids = {c.get('card_id') for c in cards}
+
+    for line in text.strip().split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+        match = re.match(r'KARTE_(\S+):\s*(.*)', line)
+        if not match:
+            continue
+        raw_id = match.group(1)
+        terms_str = match.group(2).strip()
+
+        cid = card_ids.get(raw_id)
+        if cid is None:
+            try:
+                cid = int(raw_id)
+            except (ValueError, TypeError):
+                continue
+        # Skip hallucinated card IDs not in batch
+        if cid not in valid_cids:
+            continue
+
+        if terms_str.upper() == 'KEINE' or not terms_str:
+            result[cid] = []
+            continue
+
+        terms = [t.strip() for t in terms_str.split(',') if t.strip()]
+        seen = set()
+        unique = []
+        for t in terms:
+            key = t.lower()
+            if key not in seen:
+                seen.add(key)
+                unique.append(t)
+        result[cid] = unique
+
+    return result

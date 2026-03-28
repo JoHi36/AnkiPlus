@@ -357,6 +357,9 @@ register_agent(AgentDefinition(
         'create_mermaid_diagram',
         'get_learning_stats',
         'compact',
+        'search_web',
+        'search_pubmed',
+        'search_wikipedia',
     ],
     # Context
     context_sources=[
@@ -371,6 +374,7 @@ register_agent(AgentDefinition(
         {'id': 'sql_search', 'label': 'Keyword-Suche'},
         {'id': 'semantic_search', 'label': 'Semantische Suche'},
         {'id': 'merge', 'label': 'Zusammenführung'},
+        {'id': 'web_search', 'label': 'Web-Recherche'},
     ],
     loading_hint_template='Suche in deinen Karten...',
     # Agent Studio UI
@@ -406,22 +410,9 @@ register_agent(AgentDefinition(
                 Slot(ref='create_mermaid_diagram', mode='on'),
                 Slot(ref='get_learning_stats', mode='on'),
                 Slot(ref='compact', mode='on'),
-            ],
-            outputs=[Slot(ref='chat_response', mode='locked'), Slot(ref='widget', mode='on')],
-        ),
-        Workflow(
-            name='free_chat',
-            label='Freies Gespräch',
-            description='Alle Tools verfügbar für offene Fragen ohne Kartenbezug',
-            mode='on',
-            triggers=[Slot(ref='chat', mode='locked')],
-            tools=[
-                Slot(ref='search_deck', mode='locked'),
-                Slot(ref='search_image', mode='on'),
-                Slot(ref='create_mermaid_diagram', mode='on'),
-                Slot(ref='get_learning_stats', mode='on'),
-                Slot(ref='show_card', mode='on'),
-                Slot(ref='compact', mode='on'),
+                Slot(ref='search_web', mode='on'),
+                Slot(ref='search_pubmed', mode='on'),
+                Slot(ref='search_wikipedia', mode='on'),
             ],
             outputs=[Slot(ref='chat_response', mode='locked'), Slot(ref='widget', mode='on')],
         ),

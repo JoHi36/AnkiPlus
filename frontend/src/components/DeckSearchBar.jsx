@@ -27,9 +27,8 @@ const BORDER = 1.5;
  *
  * Props:
  *   onSubmit(text)  — called with trimmed text when user sends
- *   onOpenEmpty()   — called on Enter without text, or double-click
  */
-export default function DeckSearchBar({ onSubmit, onOpenEmpty }) {
+export default function DeckSearchBar({ onSubmit }) {
   const [value, setValue] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
@@ -80,14 +79,8 @@ export default function DeckSearchBar({ onSubmit, onOpenEmpty }) {
       e.preventDefault();
       if (hasText) {
         submitSearch();
-      } else {
-        onOpenEmpty?.();
       }
     }
-  };
-
-  const handleDoubleClick = () => {
-    onOpenEmpty?.();
   };
 
   /* Show Cmd+K badge: input is empty AND not focused */
@@ -135,7 +128,6 @@ export default function DeckSearchBar({ onSubmit, onOpenEmpty }) {
               onKeyDown={handleKeyDown}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
-              onDoubleClick={handleDoubleClick}
               placeholder=""
               style={{
                 width: '100%',

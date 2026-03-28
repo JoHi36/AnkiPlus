@@ -12,9 +12,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **AnkiPlus ist eine agentische Lernplattform.** Es gibt EIN agentisches System mit Agenten (Tutor, Research, Plusi, Help) die plattformweit operieren — nicht an Views gebunden. Jedes neue Feature MUSS als Teil des agentischen Systems gedacht werden: "Welcher Agent macht das?" → über den Agent-Loop (`ai/handler.py`) implementieren, nicht als standalone Funktion.
 
-**Canvas + State-Modell:** Der Stapel-Tab ist ein Canvas auf dem Agenten visuelle Ergebnisse darstellen. Daneben ein State-basierter Bereich (kein Chat-Verlauf). Ein Zustand = die gesamte Ansicht. Neuer Zustand nur durch bewusste Vertiefung/neue Anfrage.
+**Drei kognitive Modi:** Stapel = Finden (state-basiert), Session = Lernen (verlaufsbasiert), Statistik = Planen. Vollständiges Konzeptdokument: `docs/vision/product-concept.md`.
 
-**Agent-Handoff:** Tutor kann an Research übergeben wenn Karten nicht reichen (`ai/handoff.py`). Visuell: jeder Agent als eigene `AgenticCell` mit Icon + Name. Pipeline-Steps sichtbar via `ReasoningStream`.
+**Canvas + State-Modell:** Der Stapel-Tab ist ein Canvas auf dem Agenten visuelle Ergebnisse darstellen. Daneben ein State-basierter Bereich (kein Chat-Verlauf). Ein Zustand = die gesamte Ansicht. Neuer Zustand nur durch bewusste Vertiefung/neue Anfrage. Der Router hält unsichtbar den vollen Verlauf für kontextsensitives Routing.
+
+**Ein-Glas-Regel:** Zu jedem Zeitpunkt gibt es maximal ein primäres Glas-Eingabeelement auf dem Screen. Ausnahme in der Stapelansicht: Suchleiste (oben, Eingabe) + Action-Dock (unten, Aktion) koexistieren als zwei Phasen eines Flows (Fragen → Handeln).
+
+**Agent-Handoff:** Tutor kann an Research übergeben wenn Karten nicht reichen (`ai/handoff.py`). Visuell: jeder Agent als eigene `AgenticCell` mit Icon + Name. Pipeline-Steps sichtbar via `ReasoningStream`. Agent-Wechsel kommunizieren sich durch Farbübergänge des gesamten Screens.
 
 ## Overview
 

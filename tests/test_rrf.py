@@ -12,8 +12,9 @@ class TestComputeRrf(unittest.TestCase):
         semantic_results = {}
         ranked = compute_rrf(sql_results, semantic_results)
         self.assertEqual(ranked[0][0], 'note_1')
-        # 1/(50+0) = 0.02
-        self.assertAlmostEqual(ranked[0][1], 0.02, places=4)
+        # 1/(K_PRECISE_PRIMARY + 0) — check it's positive and matches the constant
+        from ai.rrf import K_PRECISE_PRIMARY
+        self.assertAlmostEqual(ranked[0][1], 1.0 / K_PRECISE_PRIMARY, places=4)
 
     def test_dual_source_ranks_higher(self):
         """Card found by both SQL and semantic ranks above single-source."""

@@ -17,6 +17,7 @@ import ReviewFeedback from './components/ReviewFeedback';
 import { DockEvalResult, DockTimer, DockStars, DockLoading } from './components/ReviewerDock';
 import SourceCard from './components/SourceCard';
 import CitationBadge from './components/CitationBadge';
+import CitationRef from '../../shared/components/CitationRef';
 import AgenticCell from './components/AgenticCell';
 import { setRegistry } from '../../shared/config/subagentRegistry';
 
@@ -131,7 +132,8 @@ const NAV = [
     { id: 'reviewfeedback', label: 'ReviewFeedback' },
     { id: 'dockwidgets', label: 'Dock Widgets' },
     { id: 'sourcecard', label: 'SourceCard' },
-    { id: 'citationbadge', label: 'CitationBadge' },
+    { id: 'citationref', label: 'CitationRef' },
+    { id: 'citationbadge', label: 'CitationBadge (legacy)' },
     { id: 'agenticcell', label: 'AgenticCell' },
     { id: 'multiplechoice', label: 'MultipleChoiceCard' },
   ]},
@@ -1749,8 +1751,43 @@ export default function ComponentViewer() {
             </div>
           </Showcase>
 
-          {/* CitationBadge */}
-          <SubHeader id="citationbadge" label="Citation Badge" refs={sectionRefs} />
+          {/* CitationRef — Design System */}
+          <SubHeader id="citationref" label="CitationRef" refs={sectionRefs} />
+          <Showcase label="Card citations (blue) — references Anki cards">
+            <div style={{ fontSize: 'var(--ds-text-lg)', color: 'var(--ds-text-secondary)', lineHeight: 1.8 }}>
+              Die <strong style={{ color: 'var(--ds-text-primary)' }}>Atmungskette</strong> findet in der inneren
+              Mitochondrienmembran statt{' '}
+              <CitationRef index={1} variant="card" onClick={() => {}} title="Karte: Atmungskette Lokalisation" />{' '}
+              <CitationRef index={2} variant="card" onClick={() => {}} title="Karte: Komplex I-IV Übersicht" />.
+              Dabei werden Elektronen über Enzymkomplexe{' '}
+              <CitationRef index={3} variant="card" onClick={() => {}} title="Karte: Elektronentransportkette" />{' '}
+              auf Sauerstoff übertragen.
+            </div>
+          </Showcase>
+          <VariantLabel>Web citations (green) — references external sources</VariantLabel>
+          <Showcase>
+            <div style={{ fontSize: 'var(--ds-text-lg)', color: 'var(--ds-text-secondary)', lineHeight: 1.8 }}>
+              Laut aktueller Forschung spielt die ATP-Synthase eine zentrale Rolle{' '}
+              <CitationRef index={1} variant="web" onClick={() => {}} title="https://pubmed.ncbi.nlm.nih.gov/..." />{' '}
+              <CitationRef index={2} variant="web" onClick={() => {}} title="https://nature.com/articles/..." />.
+              Die rotatorische Katalyse wurde erstmals 1997 nachgewiesen{' '}
+              <CitationRef index={3} variant="web" onClick={() => {}} title="Nobel Prize 1997" />.
+            </div>
+          </Showcase>
+          <VariantLabel>Size variants</VariantLabel>
+          <Showcase>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 11, color: 'var(--ds-text-muted)' }}>sm (inline):</span>
+              <CitationRef index={1} variant="card" size="sm" />
+              <CitationRef index={2} variant="web" size="sm" />
+              <span style={{ fontSize: 11, color: 'var(--ds-text-muted)', marginLeft: 12 }}>md (standalone):</span>
+              <CitationRef index={1} variant="card" size="md" />
+              <CitationRef index={2} variant="web" size="md" />
+            </div>
+          </Showcase>
+
+          {/* CitationBadge (legacy) */}
+          <SubHeader id="citationbadge" label="Citation Badge (legacy)" refs={sectionRefs} />
           <Showcase label="Inline citation pills">
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--ds-space-xs)', flexWrap: 'wrap' }}>
               <span style={{ fontSize: 'var(--ds-text-lg)', color: 'var(--ds-text-primary)' }}>

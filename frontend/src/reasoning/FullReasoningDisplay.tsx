@@ -304,10 +304,9 @@ export default function FullReasoningDisplay({
     }
   }, []);
 
-  // Filter hidden steps (e.g. 'generating') and merge
+  // Filter hidden steps (e.g. 'generating')
   const visibleSteps = useMemo(
     () => displaySteps.filter(ds => {
-      if (ds.step === 'merge') return false;
       const r = getStepRenderer(ds.step);
       return !r?.hidden;
     }),

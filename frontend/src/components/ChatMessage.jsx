@@ -1218,7 +1218,7 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
  * ChatMessage Komponente - INTENT BASED RENDERING
  * Analysiert JSON-Daten oder Intents und rendert die entsprechende High-End Card.
  */
-function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, isStreaming = false, isLastMessage = false, steps = [], citations = {}, pipelineSteps = [], bridge = null, onPreviewCard, onPerformanceCapture, webSources: webSourcesProp = null, agentCells, orchestration, status: msgStatus, pipelineGeneration: msgPipelineGeneration }) {
+function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, isStreaming = false, isLastMessage = false, steps = [], citations = {}, pipelineSteps = [], bridge = null, onPreviewCard, onPerformanceCapture, webSources: webSourcesProp = null, agentCells, orchestration, status: msgStatus, pipelineGeneration: msgPipelineGeneration, requestId }) {
   // v2: Structured message detection
   const message_prop = {
     agentCells: agentCells || null,
@@ -1530,44 +1530,48 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
     if (!citations || Object.keys(citations).length === 0) {
       return indices;
     }
-    
-    let counter = 1;
-    
-    // 1. Priority: Order of appearance in text
-    // Matches [[CardID: 123]], [[ CardID: 123 ]], [[123]], [[ 123 ]]
-    const pattern = /\[\[\s*(?:CardID:\s*)?(\d+)\s*\]\]/gi;
-    const matches = [...processedMessage.matchAll(pattern)];
-    
-    matches.forEach(match => {
-        const citationId = match[1]; // ID from text (String)
-        const citation = citations[citationId];
-        
-        if (citation) {
-            // Use same logic as in text renderer: noteId || cardId || citationId
-            // This ensures consistency between index calculation and rendering
-            const id = citation.noteId || citation.cardId || citationId;
-            const idKey = String(id); // Always use string key for consistency
-            
-            // Only assign if not already assigned
-            if (!indices[idKey]) {
-                indices[idKey] = counter++;
-            }
-        }
+
+    let maxIndex = 0;
+
+    // 1. Use stable index from backend (set by RAG pipeline)
+    Object.entries(citations).forEach(([citationId, citation]) => {
+      if (citation && citation.index) {
+        const id = citation.noteId || citation.cardId || citationId;
+        const idKey = String(id);
+        indices[idKey] = citation.index;
+        if (citation.index > maxIndex) maxIndex = citation.index;
+      }
     });
-    
-    // 2. Remaining citations (found but not referenced in text)
-    // Sort keys to be deterministic
-    Object.keys(citations).sort().forEach(citationId => {
-        const citation = citations[citationId];
-        if (citation) {
-            // Use same logic as in text renderer: noteId || cardId || citationId
-            const id = citation.noteId || citation.cardId || citationId;
-            const idKey = String(id); // Always use string key for consistency
-            
-            if (!indices[idKey]) {
-                indices[idKey] = counter++;
-            }
+
+    // 2. Fallback: assign indices to citations without backend index
+    //    (e.g. current card, legacy saved messages)
+    let nextCounter = maxIndex + 1;
+
+    // Legacy text-based detection for old [[CardID: N]] messages
+    const legacyPattern = /\[\[\s*(?:CardID:\s*)?(\d+)\s*\]\]/gi;
+    const legacyMatches = [...processedMessage.matchAll(legacyPattern)];
+    legacyMatches.forEach(match => {
+      const citationId = match[1];
+      const citation = citations[citationId];
+      if (citation) {
+        const id = citation.noteId || citation.cardId || citationId;
+        const idKey = String(id);
+        if (!indices[idKey]) {
+          indices[idKey] = nextCounter++;
         }
+      }
+    });
+
+    // Remaining citations not yet indexed
+    Object.keys(citations).sort().forEach(citationId => {
+      const citation = citations[citationId];
+      if (citation) {
+        const id = citation.noteId || citation.cardId || citationId;
+        const idKey = String(id);
+        if (!indices[idKey]) {
+          indices[idKey] = nextCounter++;
+        }
+      }
     });
     return indices;
   }, [processedMessage, citations]);
@@ -1581,8 +1585,8 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
     let message = processedMessage.replace(/\n?HANDOFF:?\s*\w+\s+REASON:?\s*.+?\s+QUERY:?\s*.+$/s, '').trim();
     if (!message) message = processedMessage; // Fallback if regex removes everything
     if (citations && Object.keys(citations).length > 0) {
+      // 1. Legacy: Replace [[CardID: N]] / [[N]] patterns (old format)
       const citationPattern = /\[\[\s*(?:CardID:\s*)?(\d+)\s*\]\]/gi;
-      let replacementCount = 0;
       message = message.replace(citationPattern, (match, citationId) => {
         const citation = citations[citationId];
         if (citation) {
@@ -1590,13 +1594,25 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
           const idKey = String(id);
           const index = citationIndices[idKey];
           if (index !== undefined) {
-            replacementCount++;
-            const replacement = `[${index}](citation:${idKey})`;
-            // Replace with a special markdown link that we can catch in the link renderer
-            return replacement;
+            return `[${index}](citation:${idKey})`;
           }
         }
-        return match; // Keep original if citation not found or no index
+        return match;
+      });
+
+      // 2. New: Replace [N] inline references (from Tutor prompt)
+      //    Match [N] NOT followed by ( — to avoid breaking existing markdown links
+      const indexToCitationId = {};
+      Object.entries(citationIndices).forEach(([id, idx]) => {
+        indexToCitationId[idx] = id;
+      });
+      message = message.replace(/\[(\d+)\](?!\()/g, (match, numStr) => {
+        const num = parseInt(numStr, 10);
+        const citId = indexToCitationId[num];
+        if (citId) {
+          return `[${num}](citation:${citId})`;
+        }
+        return match;
       });
     }
     // Replace [[WEB:N]] markers with clickable citation badges
@@ -1833,10 +1849,11 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
             {/* ── v2: Structured Agent Cells ── */}
             {hasV2Data && !isUser && (
               <>
-                {/* Router Orchestration */}
-                {orchestrationSteps.length > 0 && (
+                {/* Router Orchestration — streamId for live pacing, steps for saved */}
+                {(orchestrationSteps.length > 0 || (isStreaming && requestId)) && (
                   <ReasoningDisplay
-                    steps={orchestrationSteps}
+                    streamId={isStreaming && requestId ? `router-${requestId}` : undefined}
+                    steps={isStreaming && requestId ? undefined : orchestrationSteps}
                     mode="full"
                     agentColor={'var(--ds-text-muted)'}
                   />
@@ -1849,10 +1866,11 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                     isLoading={cell.status === 'loading'}
                     loadingHint={cell.loadingHint || ''}
                   >
-                    {/* Agent reasoning steps — from cell (saved) or from pipelineSteps prop (live, via store) */}
-                    {(cell.pipelineSteps?.length > 0 || agentSteps.length > 0) && (
+                    {/* Agent reasoning steps — streamId for live pacing, steps for saved */}
+                    {((isStreaming && requestId) || cell.pipelineSteps?.length > 0 || agentSteps.length > 0) && (
                       <ReasoningDisplay
-                        steps={cell.pipelineSteps?.length > 0 ? cell.pipelineSteps : agentSteps}
+                        streamId={isStreaming && requestId ? `${cell.agent}-${requestId}` : undefined}
+                        steps={isStreaming && requestId ? undefined : (cell.pipelineSteps?.length > 0 ? cell.pipelineSteps : agentSteps)}
                         mode="full"
                         hasOutput={Boolean(cell.text)}
                         citations={cell.citations || citations}
@@ -1971,7 +1989,8 @@ const MemoizedChatMessage = React.memo(ChatMessage, (prevProps, nextProps) => {
          prevProps.agentCells === nextProps.agentCells &&
          prevProps.orchestration === nextProps.orchestration &&
          prevProps.status === nextProps.status &&
-         prevProps.pipelineGeneration === nextProps.pipelineGeneration;
+         prevProps.pipelineGeneration === nextProps.pipelineGeneration &&
+         prevProps.requestId === nextProps.requestId;
 });
 
 MemoizedChatMessage.displayName = 'ChatMessage';

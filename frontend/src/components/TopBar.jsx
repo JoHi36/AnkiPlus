@@ -13,7 +13,6 @@ let _lastIndicator = null; // { left, width } from last mount
 export default function TopBar({
   activeView = 'deckBrowser',
   ankiState = 'deckBrowser',
-  messageCount = 0,
   totalDue = 0,
   deckName = '',
   dueNew = 0,
@@ -22,7 +21,6 @@ export default function TopBar({
   onTabClick,
   onSidebarToggle,
   settingsOpen = false,
-  holdToResetProps = {},
 }) {
   const activeTab = activeView === 'statistik' ? 'statistik'
     : (ankiState === 'overview' || ankiState === 'review') ? 'session'
@@ -50,16 +48,7 @@ export default function TopBar({
 
   // Left content — depends on view
   let leftContent;
-  if (activeView === 'freeChat') {
-    leftContent = (
-      <div style={{ display: 'flex', alignItems: 'center' }}>
-        {plusButton}
-        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--ds-text-tertiary)' }}>
-          {messageCount} {messageCount === 1 ? 'Nachricht' : 'Nachrichten'}
-        </span>
-      </div>
-    );
-  } else if (ankiState === 'overview') {
+  if (ankiState === 'overview') {
     const shortDeck = deckName ? deckName.split('::').pop() : '';
     leftContent = (
       <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -87,9 +76,7 @@ export default function TopBar({
 
   // Right content
   let rightContent;
-  if (activeView === 'freeChat') {
-    rightContent = <HoldToResetIndicator {...holdToResetProps} />;
-  } else if (ankiState === 'overview') {
+  if (ankiState === 'overview') {
     rightContent = (
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11, fontWeight: 600, color: 'var(--ds-stat-new)', fontVariantNumeric: 'tabular-nums' }}>{dueNew}</span>
@@ -225,29 +212,3 @@ export default function TopBar({
   );
 }
 
-function HoldToResetIndicator({ progress = 0, isHolding = false }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <span style={{
-        fontSize: 10, fontWeight: 500, color: 'var(--ds-text-muted)',
-        opacity: isHolding ? 1 : 0.6, transition: 'opacity 0.15s',
-      }}>
-        Zur\u00fccksetzen
-      </span>
-      <span style={{
-        background: 'var(--ds-border-subtle)', padding: '2px 6px', borderRadius: 4,
-        fontSize: 10, fontWeight: 600, color: 'var(--ds-text-secondary)',
-        position: 'relative', overflow: 'hidden', minWidth: 18, textAlign: 'center',
-      }}>
-        R
-        <span style={{
-          position: 'absolute', left: 0, bottom: 0, height: 2,
-          width: `${progress * 100}%`,
-          background: progress > 0.8 ? 'var(--ds-red)' : 'var(--ds-text-muted)',
-          transition: isHolding ? 'none' : 'width 0.15s ease',
-          borderRadius: 1,
-        }} />
-      </span>
-    </div>
-  );
-}

@@ -98,6 +98,25 @@ def _handle_tool_response(function_name, tool_response, callback):
                                      result=tool_response.result)
         if callback:
             callback(marker, False, True)
+
+        # Research tools: return full content + citation instructions to the model
+        if function_name in RESEARCH_TOOL_NAMES and isinstance(tool_response.result, dict):
+            sources = tool_response.result.get('sources', [])
+            answer = tool_response.result.get('answer', '')
+            source_lines = []
+            for i, src in enumerate(sources, 1):
+                title = src.get('title', '')
+                url = src.get('url', '')
+                source_lines.append(f"[[WEB:{i}]] {title} ({url})")
+            sources_text = '\n'.join(source_lines)
+            return (
+                f"WEB-RECHERCHE-ERGEBNIS:\n{answer}\n\n"
+                f"QUELLEN:\n{sources_text}\n\n"
+                f"WICHTIG: Verwende [[WEB:N]] als Inline-Referenzen in deiner Antwort. "
+                f"Beispiel: 'Die Banane ist krumm wegen negativem Geotropismus [[WEB:1]].' "
+                f"Schreibe NICHT [1] oder (Quelle 1), sondern exakt [[WEB:1]], [[WEB:2]] etc."
+            )
+
         # Tell Gemini the widget was displayed, don't echo full result
         return json.dumps({"status": "displayed_to_user", "tool": function_name})
 
@@ -110,6 +129,9 @@ def _handle_tool_response(function_name, tool_response, callback):
     return str(tool_response.result)
 
 
+RESEARCH_TOOL_NAMES = frozenset({'search_web', 'search_pubmed', 'search_wikipedia'})
+
+
 def run_agent_loop(
     stream_fn,
     stream_urls,
@@ -120,6 +142,8 @@ def run_agent_loop(
     tools_array=None,
     system_instruction=None,
     model=None,
+    pending_function_call=None,
+    pipeline_step_callback=None,
 ):
     """Run the multi-turn agent loop.
 
@@ -137,6 +161,9 @@ def run_agent_loop(
         tools_array: Gemini tools array for re-injection.
         system_instruction: System instruction dict {"parts": [{"text": "..."}]}.
         model: Model string for maxOutputTokens calculation.
+        pending_function_call: If set, skip the first stream_fn call and use
+            this function call directly (for when the caller already received it).
+        pipeline_step_callback: Optional fn(step, status, data) to emit reasoning steps.
 
     Returns:
         str: The final accumulated text response.
@@ -148,11 +175,16 @@ def run_agent_loop(
         iteration += 1
         logger.debug("agent_loop: Iteration %d/%d", iteration, MAX_ITERATIONS)
 
-        # Stream from Gemini
-        text_result, function_call = stream_fn(
-            stream_urls, data, callback,
-            use_backend=use_backend, backend_data=backend_data
-        )
+        # If we have a pending function call from the caller, use it directly
+        if pending_function_call is not None:
+            function_call = pending_function_call
+            pending_function_call = None  # Only use once
+        else:
+            # Stream from Gemini
+            text_result, function_call = stream_fn(
+                stream_urls, data, callback,
+                use_backend=use_backend, backend_data=backend_data
+            )
 
         # No tool call → done
         if not function_call:
@@ -170,8 +202,25 @@ def run_agent_loop(
             loading_marker = _build_tool_marker(function_name, "loading")
             callback(loading_marker, False, True)
 
+        # Emit web_search reasoning step for research tools
+        is_research_tool = function_name in RESEARCH_TOOL_NAMES
+        if is_research_tool and pipeline_step_callback:
+            pipeline_step_callback(
+                'web_search', 'active',
+                {'query': function_args.get('query', ''), 'tool': function_name},
+            )
+
         # Execute tool (with timeout from ToolDefinition)
         tool_response = execute_tool(function_name, function_args)
+
+        # Emit web_search done step with sources info
+        if is_research_tool and pipeline_step_callback:
+            step_data = {'tool_used': function_name.replace('search_', ''), 'query': function_args.get('query', '')}
+            if tool_response.status == 'success' and isinstance(tool_response.result, dict):
+                sources = tool_response.result.get('sources', [])
+                step_data['source_count'] = len(sources)
+                step_data['sources'] = sources[:5]
+            pipeline_step_callback('web_search', 'done', step_data)
 
         # Handle response: emit markers, build Gemini response
         gemini_response = _handle_tool_response(function_name, tool_response, callback)

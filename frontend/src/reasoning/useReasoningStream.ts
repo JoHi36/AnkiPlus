@@ -34,6 +34,9 @@ export function useReasoningStream(options: UseReasoningStreamOptions): UseReaso
 
   const displaySteps = useAdaptivePacing(rawSteps, isLive);
 
+  // All paced steps have been revealed (queue is empty)
+  const allRevealed = displaySteps.length >= rawSteps.length;
+
   const [isCollapsed, setIsCollapsed] = useState(false);
   const userExpandedRef = useRef(false);
 
@@ -47,10 +50,12 @@ export function useReasoningStream(options: UseReasoningStreamOptions): UseReaso
     if (isOrchestration) {
       if (phase === 'complete' && !isCollapsed) setIsCollapsed(true);
     } else {
+      // Wait until all paced steps are visible before collapsing
+      if (!allRevealed) return;
       if (hasOutput && !isCollapsed) setIsCollapsed(true);
       if (phase === 'generating' && !isCollapsed) setIsCollapsed(true);
     }
-  }, [phase, hasOutput, isCollapsed, isOrchestration]);
+  }, [phase, hasOutput, isCollapsed, isOrchestration, allRevealed]);
 
   const prevPhaseRef = useRef(phase);
   useEffect(() => {

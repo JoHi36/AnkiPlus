@@ -139,15 +139,11 @@ export default function useAgenticMessage() {
     updateMsg(prev => {
       if (!prev) return prev;
       const targetAgent = payload.agent;
-      const cellCount = prev.agentCells.length;
-      const matched = prev.agentCells.filter(c => c.agent === targetAgent).length;
-      void matched; // used only for debugging
       const cells = prev.agentCells.map(c => {
         if (targetAgent && c.agent !== targetAgent) return c;
         if (!targetAgent && c !== prev.agentCells[prev.agentCells.length - 1]) return c;
         return { ...c, text: (c.text || '') + payload.chunk, status: 'streaming' };
       });
-      const newTextLen = cells[0]?.text?.length || 0;
       return { ...prev, agentCells: cells, status: 'streaming' };
     });
   }, [updateMsg]);
@@ -178,9 +174,6 @@ export default function useAgenticMessage() {
     // even if React hasn't rendered pending updates yet.
     const prev = msgRef.current;
     if (!prev) return null;
-    const primaryText = prev.agentCells?.[0]?.text || '';
-    const cellCount = prev.agentCells?.length || 0;
-    void cellCount; // used only for debugging
     const finalMsg = {
       ...prev,
       status: 'done',

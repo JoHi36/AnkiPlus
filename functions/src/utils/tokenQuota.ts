@@ -20,8 +20,11 @@ export interface TokenQuotaResult {
 /**
  * Check whether an authenticated user has remaining token quota.
  * Returns quota status for both daily and weekly windows.
+ *
+ * @param skipDailyCheck - If true, only check weekly quota (used for background
+ *   tasks like KG extraction that shouldn't consume the daily chat budget).
  */
-export async function checkTokenQuota(userId: string): Promise<TokenQuotaResult> {
+export async function checkTokenQuota(userId: string, skipDailyCheck = false): Promise<TokenQuotaResult> {
   try {
     const user = await getUser(userId);
     const tier = user?.tier || 'free';
@@ -36,7 +39,9 @@ export async function checkTokenQuota(userId: string): Promise<TokenQuotaResult>
 
     const dailyRemaining = Math.max(0, limits.daily - daily.tokensUsed);
     const weeklyRemaining = Math.max(0, limits.weekly - weekly.tokensUsed);
-    const allowed = dailyRemaining > 0 && weeklyRemaining > 0;
+    const allowed = skipDailyCheck
+      ? weeklyRemaining > 0
+      : dailyRemaining > 0 && weeklyRemaining > 0;
 
     return {
       allowed,

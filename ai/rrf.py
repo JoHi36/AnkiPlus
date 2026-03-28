@@ -18,6 +18,7 @@ except ImportError:
 logger = get_logger(__name__)
 
 # k-values: lower = more weight (steeper contribution curve)
+# k-values: lower = more weight (steeper contribution curve)
 K_PRECISE_PRIMARY = 50    # AND queries from user's direct terms
 K_BROAD_PRIMARY = 70      # OR queries from user's direct terms
 K_SEMANTIC_PRIMARY = 60   # Embedding search from user's query

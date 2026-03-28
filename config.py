@@ -59,8 +59,8 @@ DEFAULT_CONFIG = {
     "system_quality": "standard",    # Response quality tier: 'standard', 'high'
 }
 
-# Standard Backend URL
-DEFAULT_BACKEND_URL = "https://europe-west1-ankiplus-b0ffb.cloudfunctions.net/api"
+# Standard Backend URL (v2 — Cloud Run, supports HTTP streaming)
+DEFAULT_BACKEND_URL = "https://apiv2-wrcj6dja6q-ew.a.run.app"
 
 # Verfügbare Modelle (nur Google) - Fallback falls API nicht erreichbar
 # NUR Gemini 3 Flash für Chat (Gemini 2.0 wird nur intern für Titel verwendet)

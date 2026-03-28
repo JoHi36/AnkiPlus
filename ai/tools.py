@@ -1042,6 +1042,174 @@ registry.register(ToolDefinition(
 
 
 # ---------------------------------------------------------------------------
+# Search PubMed Tool
+# ---------------------------------------------------------------------------
+
+SEARCH_PUBMED_SCHEMA = {
+    'name': 'search_pubmed',
+    'description': (
+        'Search PubMed for biomedical and life science research articles. Returns article titles, '
+        'abstracts, and URLs. USE WHEN: the question is about medicine, pharmacology, biology, '
+        'biochemistry, or any biomedical topic AND the user\'s cards (LERNMATERIAL) do not cover it '
+        'sufficiently. Prefer this over search_web for medical/scientific questions. '
+        'DO NOT USE: when LERNMATERIAL already contains sufficient information, '
+        'or for non-biomedical topics.'
+    ),
+    'parameters': {
+        'type': 'object',
+        'properties': {
+            'query': {
+                'type': 'string',
+                'description': 'Search query — use English biomedical terms for best results (e.g. "ACE inhibitor mechanism of action")',
+            },
+        },
+        'required': ['query'],
+    },
+}
+
+
+def execute_search_pubmed(args: dict) -> dict:
+    """Execute the search_pubmed tool — calls Research/pubmed.py directly."""
+    query = args.get('query', '')
+    if not query:
+        return {'error': 'No query provided'}
+    try:
+        try:
+            from ..research.pubmed import search_pubmed
+        except ImportError:
+            from research.pubmed import search_pubmed
+        result = search_pubmed(query)
+        articles = result.get('articles', [])
+        sources = [
+            {
+                'title': a.get('title', ''),
+                'url': a.get('url', ''),
+                'domain': a.get('domain', 'pubmed.ncbi.nlm.nih.gov'),
+                'favicon_letter': 'P',
+                'snippet': a.get('snippet', ''),
+            }
+            for a in articles
+        ]
+        # Build text summary from snippets
+        text_parts = []
+        for i, a in enumerate(articles, 1):
+            title = a.get('title', 'Untitled')
+            snippet = a.get('snippet', '')
+            text_parts.append(f"[{i}] {title}: {snippet}")
+        answer = '\n\n'.join(text_parts) if text_parts else 'Keine Ergebnisse gefunden.'
+        return {
+            'sources': sources,
+            'answer': answer,
+            'query': query,
+            'tool_used': 'pubmed',
+        }
+    except Exception as e:
+        logger.exception("search_pubmed tool error")
+        return {'error': str(e)}
+
+
+registry.register(ToolDefinition(
+    name='search_pubmed',
+    schema=SEARCH_PUBMED_SCHEMA,
+    execute_fn=execute_search_pubmed,
+    category='research',
+    config_key='research',
+    agent='tutor',
+    display_type='widget',
+    timeout_seconds=15,
+    label='PubMed-Suche',
+    ui_description='Biomedizinische Artikel auf PubMed suchen',
+))
+
+
+# ---------------------------------------------------------------------------
+# Search Wikipedia Tool
+# ---------------------------------------------------------------------------
+
+SEARCH_WIKIPEDIA_SCHEMA = {
+    'name': 'search_wikipedia',
+    'description': (
+        'Search Wikipedia for encyclopedic knowledge. Returns article extracts and URLs. '
+        'USE WHEN: the user asks for a definition, background, or overview of a concept '
+        'AND the user\'s cards (LERNMATERIAL) do not cover it sufficiently. '
+        'Good for: terminology definitions, historical context, general science overviews. '
+        'DO NOT USE: when LERNMATERIAL already contains sufficient information, '
+        'or for highly specialized medical questions (use search_pubmed instead).'
+    ),
+    'parameters': {
+        'type': 'object',
+        'properties': {
+            'query': {
+                'type': 'string',
+                'description': 'Search query — in the user\'s language for best results (e.g. "Krebs-Zyklus" or "Krebs cycle")',
+            },
+            'lang': {
+                'type': 'string',
+                'description': 'Language code (default: "de"). Use "en" for English Wikipedia.',
+                'enum': ['de', 'en'],
+            },
+        },
+        'required': ['query'],
+    },
+}
+
+
+def execute_search_wikipedia(args: dict) -> dict:
+    """Execute the search_wikipedia tool — calls Research/wikipedia.py directly."""
+    query = args.get('query', '')
+    lang = args.get('lang', 'de')
+    if not query:
+        return {'error': 'No query provided'}
+    try:
+        try:
+            from ..research.wikipedia import search_wikipedia
+        except ImportError:
+            from research.wikipedia import search_wikipedia
+        result = search_wikipedia(query, lang=lang)
+        articles = result.get('articles', [])
+        sources = [
+            {
+                'title': a.get('title', ''),
+                'url': a.get('url', ''),
+                'domain': a.get('domain', f'{lang}.wikipedia.org'),
+                'favicon_letter': 'W',
+                'snippet': a.get('snippet', ''),
+            }
+            for a in articles
+        ]
+        # Build text from extracts
+        text_parts = []
+        for i, a in enumerate(articles, 1):
+            title = a.get('title', 'Untitled')
+            extract = a.get('extract', a.get('snippet', ''))
+            text_parts.append(f"[{i}] {title}: {extract}")
+        answer = '\n\n'.join(text_parts) if text_parts else 'Keine Ergebnisse gefunden.'
+        return {
+            'sources': sources,
+            'answer': answer,
+            'query': query,
+            'tool_used': 'wikipedia',
+        }
+    except Exception as e:
+        logger.exception("search_wikipedia tool error")
+        return {'error': str(e)}
+
+
+registry.register(ToolDefinition(
+    name='search_wikipedia',
+    schema=SEARCH_WIKIPEDIA_SCHEMA,
+    execute_fn=execute_search_wikipedia,
+    category='research',
+    config_key='research',
+    agent='tutor',
+    display_type='widget',
+    timeout_seconds=15,
+    label='Wikipedia-Suche',
+    ui_description='Enzyklopädisches Wissen auf Wikipedia suchen',
+))
+
+
+# ---------------------------------------------------------------------------
 # Compact Tool — AI-initiated insight extraction
 # ---------------------------------------------------------------------------
 

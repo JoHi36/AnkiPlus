@@ -755,60 +755,6 @@ class WebBridge(QObject):
             logger.error("Fehler in saveCardSection: %s", e)
             return json.dumps({'success': False, 'error': str(e)})
 
-    @pyqtSlot(str, result=str)
-    def loadDeckMessages(self, deck_id_str):
-        """Load chronological messages for a deck (all cards + deck-level)."""
-        try:
-            from ..storage.card_sessions import load_deck_messages
-        except ImportError:
-            from storage.card_sessions import load_deck_messages
-        try:
-            deck_id = int(deck_id_str)
-            messages = load_deck_messages(deck_id, limit=50)
-            return json.dumps({"success": True, "messages": messages})
-        except Exception as e:
-            logger.error("loadDeckMessages error: %s", e)
-            return json.dumps({"success": False, "messages": [], "error": str(e)})
-
-    @pyqtSlot(str, result=str)
-    def saveDeckMessage(self, data_json):
-        """Save a deck-level message (no card association)."""
-        try:
-            from ..storage.card_sessions import save_deck_message
-        except ImportError:
-            from storage.card_sessions import save_deck_message
-        try:
-            data = json.loads(data_json)
-            deck_id = data.get('deckId')
-            if deck_id is None:
-                return json.dumps({"success": False, "error": "Missing deckId"})
-            try:
-                deck_id = int(deck_id)
-            except (ValueError, TypeError):
-                return json.dumps({"success": False, "error": "Invalid deckId"})
-            message = data.get('message')
-            if not isinstance(message, dict):
-                return json.dumps({"success": False, "error": "Missing or invalid message"})
-            success = save_deck_message(deck_id, message)
-            return json.dumps({"success": success})
-        except Exception as e:
-            logger.error("saveDeckMessage error: %s", e)
-            return json.dumps({"success": False, "error": str(e)})
-
-    @pyqtSlot(result=str)
-    def clearDeckMessages(self):
-        """Clear all free-chat messages (card_id IS NULL)."""
-        try:
-            from ..storage.card_sessions import clear_deck_messages
-        except ImportError:
-            from storage.card_sessions import clear_deck_messages
-        try:
-            count = clear_deck_messages()
-            return json.dumps({"success": True, "count": count})
-        except Exception as e:
-            logger.exception("clearDeckMessages error")
-            return json.dumps({"success": False, "error": str(e)})
-
     @pyqtSlot(str, str, result=str)
     def searchImage(self, query, image_type="general"):
         """Delegiert an image_search Modul."""

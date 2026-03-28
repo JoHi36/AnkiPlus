@@ -4,42 +4,42 @@
       "total_cases": 32,
       "successful": 32,
       "errors": 0,
-      "avg_term_coverage": 0.0618,
-      "avg_relevance": 0.6197
+      "avg_term_coverage": 0.0428,
+      "avg_relevance": 0.6439
     },
     "by_category": {
       "context": {
         "cases": 12,
         "errors": 0,
         "avg_coverage": 0.0,
-        "avg_relevance": 0.446
+        "avg_relevance": 0.5164
       },
       "direct": {
         "cases": 5,
         "errors": 0,
-        "avg_coverage": 0.1754,
-        "avg_relevance": 0.7341
+        "avg_coverage": 0.1054,
+        "avg_relevance": 0.72
       },
       "synonym": {
         "cases": 5,
         "errors": 0,
         "avg_coverage": 0.0,
-        "avg_relevance": 0.6888
+        "avg_relevance": 0.6864
       },
       "cross_deck": {
         "cases": 5,
         "errors": 0,
-        "avg_coverage": 0.1196,
-        "avg_relevance": 0.7208
+        "avg_coverage": 0.0821,
+        "avg_relevance": 0.7329
       },
       "typo": {
         "cases": 5,
         "errors": 0,
-        "avg_coverage": 0.1006,
-        "avg_relevance": 0.7521
+        "avg_coverage": 0.0864,
+        "avg_relevance": 0.7426
       }
     },
-    "timestamp": "2026-03-28 02:23:54"
+    "timestamp": "2026-03-28 03:08:07"
   },
   "cases": [
     {
@@ -55,14 +55,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "relevante Aspekte"
-        ],
-        "broad_queries": [
-          "Aspekte"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "additional relevant aspects of the current learning topic"
       },
       "term_coverage": 0.0,
       "missed_terms": [
@@ -74,7 +67,7 @@
         "Sexualhormone",
         "Steroidhormonsynthese"
       ],
-      "relevance": 0.5201
+      "relevance": 0.5143
     },
     {
       "id": "context_002",
@@ -89,14 +82,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "Konzepte zentral"
-        ],
-        "broad_queries": [
-          "Konzepte OR zentral"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "zentrale Konzepte des aktuellen Lerninhalts"
       },
       "term_coverage": 0.0,
       "missed_terms": [
@@ -109,7 +95,7 @@
         "Wertschätzung",
         "klientenzentrierte nondirektive Gesprächstherapie"
       ],
-      "relevance": 0.5652
+      "relevance": 0.5478
     },
     {
       "id": "context_003",
@@ -124,14 +110,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "Zusammenhang"
-        ],
-        "broad_queries": [
-          "Zusammenhang"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "relationship between previously discussed concepts"
       },
       "term_coverage": 0.0,
       "missed_terms": [
@@ -147,7 +126,7 @@
         "primäre Hämostase",
         "δ-Granula"
       ],
-      "relevance": 0.5154
+      "relevance": 0.4913
     },
     {
       "id": "context_004",
@@ -161,11 +140,8 @@
       },
       "router_response": {
         "agent": "tutor",
-        "search_needed": false,
-        "precise_queries": [],
-        "broad_queries": [],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "search_needed": true,
+        "resolved_intent": "Elaborate on the previous explanation"
       },
       "term_coverage": 0.0,
       "missed_terms": [
@@ -188,7 +164,7 @@
         "glatte Muskulatur",
         "β2-Innervation"
       ],
-      "relevance": 0.0
+      "relevance": 0.4891
     },
     {
       "id": "context_005",
@@ -203,14 +179,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "Zusammenhänge"
-        ],
-        "broad_queries": [
-          "Zusammenhänge"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "Zusammenhänge zwischen den Konzepten/Informationen, die in der aktuellen Lernkarte präsentiert werden"
       },
       "term_coverage": 0.0,
       "missed_terms": [
@@ -221,7 +190,7 @@
         "Seitengruppe",
         "pKS-Normwerte"
       ],
-      "relevance": 0.5478
+      "relevance": 0.5459
     },
     {
       "id": "context_006",
@@ -236,14 +205,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "Zusammenhang"
-        ],
-        "broad_queries": [
-          "Zusammenhang"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "relationship between previously discussed concepts"
       },
       "term_coverage": 0.0,
       "missed_terms": [
@@ -257,7 +219,7 @@
         "Körperstrukturen",
         "Partizipation"
       ],
-      "relevance": 0.5742
+      "relevance": 0.5129
     },
     {
       "id": "context_007",
@@ -272,14 +234,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "relevante Aspekte"
-        ],
-        "broad_queries": [
-          "Aspekte"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "additional relevant aspects of the current learning topic"
       },
       "term_coverage": 0.0,
       "missed_terms": [
@@ -291,7 +246,7 @@
         "Plicae circulares",
         "Zotten"
       ],
-      "relevance": 0.5376
+      "relevance": 0.5181
     },
     {
       "id": "context_008",
@@ -305,11 +260,8 @@
       },
       "router_response": {
         "agent": "tutor",
-        "search_needed": false,
-        "precise_queries": [],
-        "broad_queries": [],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "search_needed": true,
+        "resolved_intent": "meaning of the last discussed concept/term"
       },
       "term_coverage": 0.0,
       "missed_terms": [
@@ -319,7 +271,7 @@
         "Plexus brachialis",
         "Plexus cervicalis"
       ],
-      "relevance": 0.0
+      "relevance": 0.502
     },
     {
       "id": "context_009",
@@ -334,14 +286,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "vertiefen"
-        ],
-        "broad_queries": [
-          "vertiefen"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "Vertiefung des zuletzt besprochenen Themas"
       },
       "term_coverage": 0.0,
       "missed_terms": [
@@ -352,7 +297,7 @@
         "mitochondriale Proteine",
         "mtDNA"
       ],
-      "relevance": 0.555
+      "relevance": 0.5678
     },
     {
       "id": "context_010",
@@ -367,14 +312,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "Was sollte ich darüber wissen?"
-        ],
-        "broad_queries": [
-          "Was sollte ich darüber wissen?"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "key information about the current topic of discussion"
       },
       "term_coverage": 0.0,
       "missed_terms": [
@@ -387,7 +325,7 @@
         "N. petrosus profundus",
         "Os temporale"
       ],
-      "relevance": 0.5035
+      "relevance": 0.4699
     },
     {
       "id": "context_011",
@@ -402,14 +340,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "Konzepte zentral"
-        ],
-        "broad_queries": [
-          "Konzepte OR zentral"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "zentrale Konzepte des aktuellen Lerninhalts"
       },
       "term_coverage": 0.0,
       "missed_terms": [
@@ -418,7 +349,7 @@
         "Tight Junctions",
         "Typ-2-Pneumozyten"
       ],
-      "relevance": 0.512
+      "relevance": 0.533
     },
     {
       "id": "context_012",
@@ -433,14 +364,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "was steckt dahinter"
-        ],
-        "broad_queries": [
-          "was steckt dahinter"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "explanation of the previous topic or concept discussed"
       },
       "term_coverage": 0.0,
       "missed_terms": [
@@ -453,7 +377,7 @@
         "Foramen stylomastoideum",
         "N. facialis"
       ],
-      "relevance": 0.5216
+      "relevance": 0.5044
     },
     {
       "id": "direct_001",
@@ -468,14 +392,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "Sekret"
-        ],
-        "broad_queries": [
-          "Sekret"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "physiologische Prozesse und Funktionen der Sekretion"
       },
       "term_coverage": 0.0769,
       "missed_terms": [
@@ -492,7 +409,7 @@
         "exokrinen Drüsengeweben",
         "zystische Fibrose"
       ],
-      "relevance": 0.5086
+      "relevance": 0.6521
     },
     {
       "id": "direct_002",
@@ -507,26 +424,20 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "rechter Vorhof A. pulmonalis dextra"
-        ],
-        "broad_queries": [
-          "rechter Vorhof",
-          "A. pulmonalis dextra"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "Verbindung zwischen rechtem Vorhof und Arteria pulmonalis dextra"
       },
-      "term_coverage": 0.25,
+      "term_coverage": 0.0,
       "missed_terms": [
+        "A. pulmonalis dextra",
         "Aorta ascendens",
         "Sternum",
         "V. brachiocephalica",
         "V. cava inferior",
         "V. cava superior",
-        "Venenklappen"
+        "Venenklappen",
+        "rechter Vorhof"
       ],
-      "relevance": 0.8553
+      "relevance": 0.7818
     },
     {
       "id": "direct_003",
@@ -541,14 +452,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "Sauerstoffbindungskurve"
-        ],
-        "broad_queries": [
-          "Sauerstoffbindungskurve"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "Beschreibung der Sauerstoffbindungskurve"
       },
       "term_coverage": 0.25,
       "missed_terms": [
@@ -556,7 +460,7 @@
         "O2-Halbsättigungsdruck",
         "Rechtsverschiebung"
       ],
-      "relevance": 0.8355
+      "relevance": 0.82
     },
     {
       "id": "direct_004",
@@ -571,14 +475,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "Tunica mucosa auslösen"
-        ],
-        "broad_queries": [
-          "Tunica mucosa"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "causes of Tunica mucosa"
       },
       "term_coverage": 0.2,
       "missed_terms": [
@@ -587,7 +484,7 @@
         "Flimmerzellen",
         "Tuba uterina"
       ],
-      "relevance": 0.7425
+      "relevance": 0.6785
     },
     {
       "id": "direct_005",
@@ -602,20 +499,14 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "V. cava superior Lage"
-        ],
-        "broad_queries": [
-          "V. cava superior"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "anatomical location of the superior vena cava"
       },
-      "term_coverage": 0.1,
+      "term_coverage": 0.0,
       "missed_terms": [
         "Plexus venosi vertebrales",
         "V. azygos",
         "V. cava inferior",
+        "V. cava superior",
         "V. hemiazygos",
         "V. lumbalis ascendens",
         "Vv. intercostales posteriores",
@@ -623,7 +514,7 @@
         "cavocavale Anastomosen",
         "dorsale Rumpfwand"
       ],
-      "relevance": 0.7288
+      "relevance": 0.6674
     },
     {
       "id": "synonym_001",
@@ -638,14 +529,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "3-Phosphoglycerat"
-        ],
-        "broad_queries": [
-          "3-Phosphoglycerat"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "Definition und Eigenschaften von 3-Phosphoglycerat"
       },
       "term_coverage": 0.0,
       "missed_terms": [
@@ -658,7 +542,7 @@
         "Sauerstoffbindungskurve",
         "pH-Wert"
       ],
-      "relevance": 0.66
+      "relevance": 0.6374
     },
     {
       "id": "synonym_002",
@@ -673,14 +557,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "Uracil Translation Zusammenhang"
-        ],
-        "broad_queries": [
-          "Uracil Translation"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "Zusammenhang zwischen Uracil und Translation"
       },
       "term_coverage": 0.0,
       "missed_terms": [
@@ -695,7 +572,7 @@
         "Transkription",
         "epigenetischer Regulationsmechanismus"
       ],
-      "relevance": 0.6068
+      "relevance": 0.6159
     },
     {
       "id": "synonym_003",
@@ -710,15 +587,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "Hiatus oesophageus N. glossopharyngeus Zusammenhang"
-        ],
-        "broad_queries": [
-          "Hiatus oesophageus",
-          "N. glossopharyngeus"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "Zusammenhang zwischen Hiatus oesophageus und Nervus glossopharyngeus"
       },
       "term_coverage": 0.0,
       "missed_terms": [
@@ -735,7 +604,7 @@
         "Truncus vagalis anterior",
         "Truncus vagalis posterior"
       ],
-      "relevance": 0.7221
+      "relevance": 0.7096
     },
     {
       "id": "synonym_004",
@@ -750,15 +619,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "Atemfrequenz respiratorische Alkalose Zusammenhang"
-        ],
-        "broad_queries": [
-          "Atemfrequenz Alkalose",
-          "Respiratorische Alkalose"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "Zusammenhang zwischen Atemfrequenz und respiratorischer Alkalose"
       },
       "term_coverage": 0.0,
       "missed_terms": [
@@ -767,7 +628,7 @@
         "Metabolische Azidose",
         "Respiratorische Kompensation"
       ],
-      "relevance": 0.846
+      "relevance": 0.8292
     },
     {
       "id": "synonym_005",
@@ -782,15 +643,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "Repolarisation cGMP"
-        ],
-        "broad_queries": [
-          "Repolarisation",
-          "cGMP"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "Zusammenhang zwischen Repolarisation und cGMP"
       },
       "term_coverage": 0.0,
       "missed_terms": [
@@ -805,7 +658,7 @@
         "Ruhemembranpotential",
         "inhibitorische Wirkung"
       ],
-      "relevance": 0.6093
+      "relevance": 0.6397
     },
     {
       "id": "cross_deck_001",
@@ -820,17 +673,11 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "A. suprascapularis Bedeutung"
-        ],
-        "broad_queries": [
-          "A. suprascapularis"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "Bedeutung der Arteria suprascapularis"
       },
-      "term_coverage": 0.125,
+      "term_coverage": 0.0,
       "missed_terms": [
+        "A. suprascapularis",
         "Clavicula",
         "Fossa infraspinata",
         "Fossa supraspinata",
@@ -839,7 +686,7 @@
         "M. trapezius",
         "N. suprascapularis"
       ],
-      "relevance": 0.8313
+      "relevance": 0.7903
     },
     {
       "id": "cross_deck_002",
@@ -854,14 +701,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "Magensäuresekretion"
-        ],
-        "broad_queries": [
-          "Magensäure OR Sekretion"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "Magensäuresekretion"
       },
       "term_coverage": 0.1667,
       "missed_terms": [
@@ -871,7 +711,7 @@
         "Medikamentöse Therapie",
         "Protonenpumpeninhibitoren"
       ],
-      "relevance": 0.7578
+      "relevance": 0.7592
     },
     {
       "id": "cross_deck_003",
@@ -886,14 +726,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "pH-Wert Funktion"
-        ],
-        "broad_queries": [
-          "pH-Wert"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "pH-Wert Funktion"
       },
       "term_coverage": 0.1667,
       "missed_terms": [
@@ -903,7 +736,7 @@
         "Hypokapnie",
         "pH-Atemantrieb"
       ],
-      "relevance": 0.6934
+      "relevance": 0.6848
     },
     {
       "id": "cross_deck_004",
@@ -918,14 +751,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "Komplementsystem"
-        ],
-        "broad_queries": [
-          "Komplementsystem"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "Komplementsystem"
       },
       "term_coverage": 0.0769,
       "missed_terms": [
@@ -942,7 +768,7 @@
         "Pathogenoberfläche",
         "Proteasen"
       ],
-      "relevance": 0.6924
+      "relevance": 0.6921
     },
     {
       "id": "cross_deck_005",
@@ -957,17 +783,11 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "A. basilaris"
-        ],
-        "broad_queries": [
-          "A. basilaris"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "Arteria basilaris"
       },
-      "term_coverage": 0.0625,
+      "term_coverage": 0.0,
       "missed_terms": [
+        "A. basilaris",
         "Aa. cerebelli",
         "Colliculi inferiores",
         "Colliculi superiores",
@@ -984,7 +804,7 @@
         "V. magna cerebri",
         "Vierhügelplatte"
       ],
-      "relevance": 0.629
+      "relevance": 0.7382
     },
     {
       "id": "typo_001",
@@ -999,14 +819,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "Neurouskuläre Endplatte Definition"
-        ],
-        "broad_queries": [
-          "Neurouskuläre Endplatte"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "Definition und Funktion der neuromuskulären Endplatte"
       },
       "term_coverage": 0.0,
       "missed_terms": [
@@ -1017,7 +830,7 @@
         "Räumliche Summation",
         "Zeitliche Summation"
       ],
-      "relevance": 0.7486
+      "relevance": 0.8001
     },
     {
       "id": "typo_002",
@@ -1032,14 +845,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "Handwurzelknochen"
-        ],
-        "broad_queries": [
-          "Handwurzelknochen"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "Definition und Funktion der Handwurzelknochen"
       },
       "term_coverage": 0.25,
       "missed_terms": [
@@ -1047,7 +853,7 @@
         "Art. carpometacarpales",
         "Mittelhandknochen II–V"
       ],
-      "relevance": 0.7798
+      "relevance": 0.7443
     },
     {
       "id": "typo_003",
@@ -1062,15 +868,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "Vena portae hepatis Erklärung"
-        ],
-        "broad_queries": [
-          "Vena portae hepatis",
-          "Pfortader Leber"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "explanation of Vena portae hepatis"
       },
       "term_coverage": 0.0,
       "missed_terms": [
@@ -1087,7 +885,7 @@
         "Vv. lumbales ascendentes",
         "portokavale Anastomose"
       ],
-      "relevance": 0.7398
+      "relevance": 0.6939
     },
     {
       "id": "typo_004",
@@ -1102,17 +900,9 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "N. mandibularis Funktion"
-        ],
-        "broad_queries": [
-          "N. mandibularis",
-          "mandibularis Funktion"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "Funktion des Nervus mandibularis"
       },
-      "term_coverage": 0.0714,
+      "term_coverage": 0.0,
       "missed_terms": [
         "A. maxillaris",
         "A. meningea media",
@@ -1122,13 +912,14 @@
         "Ganglion oticum",
         "M. pterygoideus lateralis",
         "M. pterygoideus medialis",
+        "N. mandibularis",
         "Os sphenoidale",
         "Os temporale",
         "Plexus venosus pterygoideus",
         "R. mandibulae",
         "Unterschläfengrube"
       ],
-      "relevance": 0.7169
+      "relevance": 0.691
     },
     {
       "id": "typo_005",
@@ -1143,14 +934,7 @@
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "precise_queries": [
-          "Cholesterinbiosynthese"
-        ],
-        "broad_queries": [
-          "Cholesterin Synthese"
-        ],
-        "search_scope": "current_deck",
-        "response_length": "medium"
+        "resolved_intent": "Cholesterinbiosynthese"
       },
       "term_coverage": 0.1818,
       "missed_terms": [
@@ -1164,7 +948,7 @@
         "Mevalonatweg",
         "Mitochondrium"
       ],
-      "relevance": 0.7755
+      "relevance": 0.7835
     }
   ]
 }

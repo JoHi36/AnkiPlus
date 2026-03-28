@@ -218,7 +218,7 @@ def _init_embedding_manager():
             backend_url=backend_url,
             auth_headers_fn=auth_headers_fn
         )
-        _embedding_manager.load_index()
+        # Index is lazy-loaded on first search() call — no blocking at startup
 
         # Start background embedding after a delay to not slow down startup
         def get_all_cards():
@@ -390,8 +390,8 @@ def init_addon():
 
         # Keine automatischen Server/Monitoring mehr - User fügt Token manuell ein
 
-        # Initialize EmbeddingManager for semantic search (after other init is done)
-        _init_embedding_manager()
+        # Initialize EmbeddingManager deferred — index is lazy-loaded on first search
+        QTimer.singleShot(2000, _init_embedding_manager)
     except Exception as e:
         from aqt.utils import showInfo
         showInfo(f"Fehler beim Laden des Chatbot-Addons: {str(e)}")

@@ -3,7 +3,6 @@ import Stripe from 'stripe';
 import { stripe, getTierFromPriceId } from '../utils/stripe';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { createLogger } from '../utils/logging';
-import * as functions from 'firebase-functions';
 
 // Lazy initialization - get Firestore when needed
 function getDb() {
@@ -23,9 +22,8 @@ export async function stripeWebhookHandler(
 ): Promise<void> {
   const sig = req.headers['stripe-signature'] as string;
   
-  // Get webhook secret from config
-  const config = functions.config();
-  const webhookSecret = config.stripe?.webhook_secret || process.env.STRIPE_WEBHOOK_SECRET;
+  // Get webhook secret from environment
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
   if (!webhookSecret) {
     logger.error('STRIPE_WEBHOOK_SECRET is not set');

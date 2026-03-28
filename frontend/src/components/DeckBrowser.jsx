@@ -2,12 +2,6 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, Layers } from 'lucide-react';
 import TreeList from '../../../shared/components/TreeList';
-// FreeChatSearchBar removed — component was deleted
-import ChatMessage from './ChatMessage';
-import CardRefChip from './CardRefChip';
-import DeckSectionDivider from './DeckSectionDivider';
-
-const EMPTY_CITATIONS = {};
 
 /* ── tokens ── */
 const T = {
@@ -105,8 +99,6 @@ const DECK_SCROLL_CONTAINER_BASE = {
 const DECK_SECTION_MARGIN = { marginBottom: 4 };
 const DECK_EMPTY_LABEL = { padding: '12px 16px', fontSize: 12, color: 'var(--ds-text-muted)' };
 const DECK_DIVIDER = { height: 1, background: 'var(--ds-border-subtle)', margin: '8px 16px' };
-const CHAT_HISTORY_PADDING = { padding: '0 8px' };
-const CARD_REF_CHIP_PADDING = { padding: '0 8px' };
 
 /* ── helpers ── */
 function formatDate(str) {
@@ -276,8 +268,6 @@ export default function DeckBrowser({
   onSelectSession,
   onOpenDeck,
   headerHeight,
-  onFreeChatOpen,
-  freeChatHook = null,
 }) {
   const [decks, setDecks] = useState([]);
   const [deckStatsMap, setDeckStatsMap] = useState({});
@@ -305,15 +295,6 @@ export default function DeckBrowser({
       } catch (_) {}
     });
   }, [bridge, decks]);
-
-  /* Load chat history from DB on mount */
-  const historyLoadedRef = useRef(false);
-  useEffect(() => {
-    if (freeChatHook?.loadForDeck && !historyLoadedRef.current) {
-      historyLoadedRef.current = true;
-      freeChatHook.loadForDeck(0); // 0 = global, loads all messages
-    }
-  }, [freeChatHook]);
 
   /* Also handle async deckStats events (Python may push updates) */
   useEffect(() => {
@@ -425,42 +406,6 @@ export default function DeckBrowser({
           </div>
         )}
 
-        {/* ── Chat History (all messages across decks) ── */}
-        {freeChatHook && freeChatHook.messages && freeChatHook.messages.length > 0 && (
-          <div>
-            <div style={DECK_DIVIDER} />
-            <SectionLabel count={freeChatHook.messages.length}>Chat-Verlauf</SectionLabel>
-            <div style={CHAT_HISTORY_PADDING}>
-              {freeChatHook.messages.map((msg, idx) => {
-                const prevMsg = idx > 0 ? freeChatHook.messages[idx - 1] : null;
-                const deckChanged = msg.deckName && (!prevMsg || prevMsg.deckName !== msg.deckName);
-                const showDivider = deckChanged || (idx === 0 && msg.deckName);
-
-                return (
-                  <React.Fragment key={msg.id}>
-                    {showDivider && <DeckSectionDivider deckName={msg.deckName} />}
-                    <ChatMessage
-                      message={msg.text}
-                      from={msg.from}
-                      cardContext={null}
-                      citations={msg.citations || EMPTY_CITATIONS}
-                      bridge={bridge}
-                    />
-                    {msg.cardId && (
-                      <div style={CARD_REF_CHIP_PADDING}>
-                        <CardRefChip
-                          cardId={msg.cardId}
-                          cardFront={msg.cardFront}
-                          bridge={bridge}
-                        />
-                      </div>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
