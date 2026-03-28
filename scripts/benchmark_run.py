@@ -48,6 +48,7 @@ BENCHMARK_CONFIG = {
     'focus_enabled': True,      # NEW — toggle focus lane
     'embedding_fallback': True, # NEW — combine with intent when no domain terms
     'max_context_terms': 10,    # Max terms from card_context for resolved_intent
+    'lenient_validation': True, # LLM validates alternative cards on fail
 }
 
 # ── Config & Embedding API ───────────────────────────────────────────────────
@@ -126,6 +127,148 @@ def embed_texts(texts, config=None):
         return results
     except Exception as e:
         return results  # Return partial (cached) results on API failure
+
+# ── LLM Validation Cache ─────────────────────────────────────────────────────
+
+VALIDATION_CACHE_PATH = os.path.join(PROJECT_ROOT, 'benchmark', 'validation_cache.json')
+_validation_cache = {}  # key: "case_id:card_id" → True (whitelist) or False (blacklist)
+
+def _load_validation_cache():
+    global _validation_cache
+    if os.path.exists(VALIDATION_CACHE_PATH):
+        try:
+            with open(VALIDATION_CACHE_PATH) as f:
+                _validation_cache = json.load(f)
+            print("  Validation cache: %d entries (%d whitelist, %d blacklist)" % (
+                len(_validation_cache),
+                sum(1 for v in _validation_cache.values() if v),
+                sum(1 for v in _validation_cache.values() if not v)))
+        except Exception:
+            _validation_cache = {}
+
+def _save_validation_cache():
+    try:
+        with open(VALIDATION_CACHE_PATH, 'w') as f:
+            json.dump(_validation_cache, f, indent=2)
+    except Exception:
+        pass
+
+def _get_card_content(card_id, db):
+    """Load card text from Anki DB (fields contain question+answer)."""
+    import re as _re
+    anki_db_path = os.path.join(os.path.dirname(PROJECT_ROOT), '..', 'Benutzer 1', 'collection.anki2')
+    anki_db_path = os.path.normpath(anki_db_path)
+    if not os.path.exists(anki_db_path):
+        # Try common alternatives
+        for name in ['Benutzer 1', 'User 1']:
+            p = os.path.normpath(os.path.join(os.path.dirname(PROJECT_ROOT), '..', name, 'collection.anki2'))
+            if os.path.exists(p):
+                anki_db_path = p
+                break
+    if not os.path.exists(anki_db_path):
+        return None, None
+    try:
+        import sqlite3 as _sql
+        adb = _sql.connect('file:%s?mode=ro' % anki_db_path, uri=True)
+        row = adb.execute(
+            "SELECT n.flds FROM cards c JOIN notes n ON c.nid = n.id WHERE c.id = ?",
+            (int(card_id),)
+        ).fetchone()
+        adb.close()
+        if row and row[0]:
+            # Fields are separated by \x1f; strip HTML tags
+            fields = row[0].split('\x1f')
+            clean = lambda s: _re.sub(r'<[^>]+>', '', s).strip()[:500]
+            question = clean(fields[0]) if len(fields) > 0 else ''
+            answer = clean(fields[1]) if len(fields) > 1 else ''
+            return question, answer
+    except Exception:
+        pass
+    return None, None
+
+def validate_card_llm(case_id, query, card_id, card_question, card_answer, target_question, target_answer, config):
+    """Ask LLM: does this card answer the query as well as the target card?
+
+    Returns True (whitelist) or False (blacklist).
+    """
+    cache_key = '%s:%s' % (case_id, card_id)
+    if cache_key in _validation_cache:
+        return _validation_cache[cache_key]
+
+    api_key = config.get('api_key', '') or config.get('google_api_key', '')
+    if not api_key:
+        return False
+
+    prompt = """Du bist ein strenger Benchmark-Evaluator. Beantworte NUR mit "JA" oder "NEIN".
+
+Frage: "%s"
+
+ZIELKARTE (korrekte Antwort):
+Vorderseite: %s
+Rückseite: %s
+
+GEFUNDENE KARTE (zu bewerten):
+Vorderseite: %s
+Rückseite: %s
+
+Enthält die GEFUNDENE KARTE die nötigen Informationen, um die Frage VOLLSTÄNDIG und KORREKT zu beantworten — genauso gut wie die Zielkarte? Nur "JA" wenn der Informationsgehalt wirklich gleichwertig ist. Bei Zweifel: "NEIN".""" % (
+        query, target_question, target_answer, card_question, card_answer)
+
+    import urllib.request
+    url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=%s' % api_key
+    payload = json.dumps({
+        'contents': [{'parts': [{'text': prompt}]}],
+        'generationConfig': {'maxOutputTokens': 5, 'temperature': 0}
+    }).encode('utf-8')
+    req = urllib.request.Request(url, data=payload, method='POST')
+    req.add_header('Content-Type', 'application/json')
+
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+        answer = data.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', '').strip().upper()
+        result = answer.startswith('JA')
+    except Exception:
+        result = False
+
+    _validation_cache[cache_key] = result
+    _save_validation_cache()
+    return result
+
+def validate_top_cards(case_id, query, expected_card_id, rrf_ranked, db, config):
+    """Check top-K cards for lenient matches. Returns (lenient_rank, matched_card_id) or (None, None)."""
+    if not BENCHMARK_CONFIG.get('lenient_validation'):
+        return None, None
+
+    # Load target card content
+    target_q, target_a = _get_card_content(expected_card_id, db)
+    if not target_q and not target_a:
+        return None, None
+
+    for rank, (card_id, _) in enumerate(rrf_ranked[:TOP_K], start=1):
+        if card_id == expected_card_id:
+            break  # Strict pass — no need for lenient
+
+        cache_key = '%s:%s' % (case_id, card_id)
+        # Check cache first
+        if cache_key in _validation_cache:
+            if _validation_cache[cache_key]:
+                return rank, card_id  # Whitelist hit
+            continue  # Blacklist hit
+
+        # LLM validation needed
+        card_q, card_a = _get_card_content(card_id, db)
+        if not card_q and not card_a:
+            _validation_cache[cache_key] = False
+            continue
+
+        is_valid = validate_card_llm(
+            case_id, query, card_id, card_q, card_a, target_q, target_a, config)
+        if is_valid:
+            return rank, card_id
+
+    return None, None
+
 
 # ── Index Loading ────────────────────────────────────────────────────────────
 
@@ -280,7 +423,7 @@ def _anki_note_to_card_id(anki_db, note_id):
     return row[0] if row else None
 
 
-def score_sql_search(expected_card_id, enrichment_result, db):
+def score_sql_search(acceptable_ids, enrichment_result, db):
     """Step 3: Search Anki's NATIVE database with full-text LIKE queries.
 
     Falls back to KG-term proxy if Anki DB is not available.
@@ -327,15 +470,16 @@ def score_sql_search(expected_card_id, enrichment_result, db):
         # Rank by hit count descending
         ranked = sorted(note_hit_counts.items(), key=lambda x: x[1], reverse=True)
 
-        # Find expected card: expected_card_id is a card_id, we need to check its note_id
-        expected_note_id = None
-        row = anki_db.execute("SELECT nid FROM cards WHERE id = ?", (expected_card_id,)).fetchone()
-        if row:
-            expected_note_id = row[0]
+        # Find any acceptable card: map card_ids to note_ids
+        acceptable_note_ids = set()
+        for cid in acceptable_ids:
+            row = anki_db.execute("SELECT nid FROM cards WHERE id = ?", (cid,)).fetchone()
+            if row:
+                acceptable_note_ids.add(row[0])
 
         target_rank = None
         for rank, (note_id, _) in enumerate(ranked, start=1):
-            if note_id == expected_note_id:
+            if note_id in acceptable_note_ids:
                 target_rank = rank
                 break
 
@@ -363,7 +507,7 @@ def score_sql_search(expected_card_id, enrichment_result, db):
 
         target_rank = None
         for rank, (card_id, _) in enumerate(ranked, start=1):
-            if card_id == expected_card_id:
+            if card_id in acceptable_ids:
                 target_rank = rank
                 break
 
@@ -377,7 +521,7 @@ def score_sql_search(expected_card_id, enrichment_result, db):
         }
 
 
-def score_semantic_search(expected_card_id, query_embedding, card_embeddings):
+def score_semantic_search(acceptable_ids, query_embedding, card_embeddings):
     """Step 4: Cosine similarity of query embedding vs card embeddings."""
     if query_embedding is None:
         return {
@@ -406,7 +550,7 @@ def score_semantic_search(expected_card_id, query_embedding, card_embeddings):
 
     target_rank = None
     for rank, (card_id, _) in enumerate(scored, start=1):
-        if card_id == expected_card_id:
+        if card_id in acceptable_ids:
             target_rank = rank
             break
 
@@ -419,7 +563,7 @@ def score_semantic_search(expected_card_id, query_embedding, card_embeddings):
     }
 
 
-def score_rrf_ranking(expected_card_id, sql_result, semantic_result,
+def score_rrf_ranking(acceptable_ids, sql_result, semantic_result,
                       card_embeddings, enrichment_result, query_embedding, db,
                       focus_embedding=None):
     """Step 5: Compute RRF scores and rank expected card."""
@@ -529,7 +673,7 @@ def score_rrf_ranking(expected_card_id, sql_result, semantic_result,
 
     target_rank = None
     for rank, (card_id, _) in enumerate(rrf_ranked, start=1):
-        if card_id == expected_card_id:
+        if card_id in acceptable_ids:
             target_rank = rank
             break
 
@@ -576,6 +720,7 @@ def run_case(case, db, kg_term_index, card_embeddings, config):
     case_id = case['id']
     query = case['query']
     expected_card_id = case['expected_card_id']
+    acceptable_ids = {expected_card_id}
     expected_terms = case.get('expected_terms', [])
     expected_in_top_k = case.get('expected_in_top_k', TOP_K)
 
@@ -704,7 +849,7 @@ def run_case(case, db, kg_term_index, card_embeddings, config):
 
     # ── Step 3: SQL Search ───────────────────────────────────────────────────
     try:
-        step3 = score_sql_search(expected_card_id, enrichment_result, db)
+        step3 = score_sql_search(acceptable_ids, enrichment_result, db)
     except Exception as e:
         step3 = {'score': 0.0, 'error': str(e)}
     result['steps']['sql_search'] = step3
@@ -714,7 +859,7 @@ def run_case(case, db, kg_term_index, card_embeddings, config):
         step4 = {'score': 0, 'error': 'embedding unavailable', 'target_rank': None, 'total_hits': 0}
     else:
         try:
-            step4 = score_semantic_search(expected_card_id, query_embedding, card_embeddings)
+            step4 = score_semantic_search(acceptable_ids, query_embedding, card_embeddings)
         except Exception as e:
             step4 = {'score': 0.0, 'error': str(e), 'target_rank': None, 'total_hits': 0}
     result['steps']['semantic_search'] = step4
@@ -725,16 +870,13 @@ def run_case(case, db, kg_term_index, card_embeddings, config):
     else:
         try:
             step5 = score_rrf_ranking(
-                expected_card_id, step3, step4,
+                acceptable_ids, step3, step4,
                 card_embeddings, enrichment_result, query_embedding, db,
                 focus_embedding=query_embedding)
         except Exception as e:
             step5 = {'score': 0.0, 'error': str(e), 'target_rank': None, 'total_merged': 0}
     result['steps']['rrf_ranking'] = step5
-
-    # Remove internal rrf_ranked list from output (too large)
-    if 'rrf_ranked' in result['steps'].get('rrf_ranking', {}):
-        del result['steps']['rrf_ranking']['rrf_ranked']
+    _rrf_ranked_for_lenient = step5.get('rrf_ranked', [])
 
     # ── Step 6: Confidence ───────────────────────────────────────────────────
     if not embedding_available:
@@ -811,6 +953,7 @@ def run_case(case, db, kg_term_index, card_embeddings, config):
     # ── Overall Pass & Rank ──────────────────────────────────────────────────
     target_rank = step5.get('target_rank') if embedding_available else step3.get('target_rank')
     result['target_rank'] = target_rank
+    result['pass_type'] = 'fail'
 
     # Rank tier for color-coded display: green (1-3), yellow (4-10), red (>10)
     if target_rank is not None and target_rank <= 3:
@@ -820,11 +963,32 @@ def run_case(case, db, kg_term_index, card_embeddings, config):
     else:
         result['rank_tier'] = 'red'
 
-    # Aggregate pass/fail uses Recall@10 (TOP_K=10)
+    # Strict pass: exact target card in Top-K
     if target_rank is not None and target_rank <= TOP_K:
         result['overall_pass'] = True
+        result['pass_type'] = 'strict'
     elif not embedding_available and step3.get('target_rank') is not None and step3['target_rank'] <= TOP_K:
         result['overall_pass'] = True
+        result['pass_type'] = 'strict'
+
+    # ── Lenient validation: LLM checks top-K cards on strict fail ─────────
+    result['lenient_pass'] = result['overall_pass']
+    result['lenient_rank'] = target_rank
+    result['lenient_card_id'] = None
+
+    if not result['overall_pass'] and BENCHMARK_CONFIG.get('lenient_validation'):
+        if _rrf_ranked_for_lenient:
+            lenient_rank, matched_id = validate_top_cards(
+                case_id, query, expected_card_id, _rrf_ranked_for_lenient, db, config)
+            if lenient_rank is not None:
+                result['lenient_pass'] = True
+                result['lenient_rank'] = lenient_rank
+                result['lenient_card_id'] = matched_id
+                result['pass_type'] = 'lenient'
+
+    # Clean up large internal data before returning
+    if 'rrf_ranked' in result['steps'].get('rrf_ranking', {}):
+        del result['steps']['rrf_ranking']['rrf_ranked']
 
     return result
 
@@ -837,6 +1001,7 @@ def compute_aggregate(results):
 
     total = len(results)
     passed = sum(1 for r in results if r.get('overall_pass', False))
+    lenient_passed = sum(1 for r in results if r.get('lenient_pass', False))
 
     # Top-3 recall (quality reference)
     top3_passed = sum(
@@ -859,13 +1024,16 @@ def compute_aggregate(results):
     for r in results:
         cat = r.get('category', 'unknown')
         if cat not in by_category:
-            by_category[cat] = {'cases': 0, 'passed': 0}
+            by_category[cat] = {'cases': 0, 'passed': 0, 'lenient_passed': 0}
         by_category[cat]['cases'] += 1
         if r.get('overall_pass', False):
             by_category[cat]['passed'] += 1
+        if r.get('lenient_pass', False):
+            by_category[cat]['lenient_passed'] += 1
     for cat in by_category:
         c = by_category[cat]
         c['recall'] = round(c['passed'] / c['cases'], 4) if c['cases'] > 0 else 0.0
+        c['lenient_recall'] = round(c['lenient_passed'] / c['cases'], 4) if c['cases'] > 0 else 0.0
 
     # By step
     step_names = ['term_extraction', 'kg_expansion', 'sql_search',
@@ -882,11 +1050,13 @@ def compute_aggregate(results):
     return {
         'overall': {
             'recall_at_k': round(passed / total, 4) if total > 0 else 0.0,
+            'lenient_recall_at_k': round(lenient_passed / total, 4) if total > 0 else 0.0,
             'recall_at_3': round(top3_passed / total, 4) if total > 0 else 0.0,
             'top3_passed': top3_passed,
             'mrr': round(mrr, 4),
             'total_cases': total,
             'passed': passed,
+            'lenient_passed': lenient_passed,
         },
         'by_category': by_category,
         'by_step': by_step,
@@ -909,20 +1079,24 @@ def print_summary(aggregate):
     top3_passed = overall.get('top3_passed', 0)
     recall3 = overall.get('recall_at_3', 0.0)
 
+    lenient_passed = overall.get('lenient_passed', passed)
+    lenient_recall = overall.get('lenient_recall_at_k', recall)
+
     print()
     print('=' * 50)
     print('RESULTS')
-    print('  Recall@10: %d%% (%d/%d passed)' % (int(recall * 100), passed, total))
-    print('  Top-3:     %d%% (%d/%d)' % (int(recall3 * 100), top3_passed, total))
+    print('  Strict  Recall@10: %d%% (%d/%d passed)' % (int(recall * 100), passed, total))
+    print('  Lenient Recall@10: %d%% (%d/%d passed)' % (int(lenient_recall * 100), lenient_passed, total))
+    print('  Top-3:             %d%% (%d/%d)' % (int(recall3 * 100), top3_passed, total))
     print('  MRR: %.3f' % mrr)
 
     if by_cat:
         print()
-        print('  By Category:')
+        print('  By Category:          strict  lenient')
         for cat, stats in sorted(by_cat.items()):
-            bar = '#' * int(stats['recall'] * 10)
-            print('    %-12s: %3d%% (%d/%d)' % (
-                cat, int(stats['recall'] * 100),
+            lr = stats.get('lenient_recall', stats['recall'])
+            print('    %-12s: %3d%%     %3d%%   (%d/%d)' % (
+                cat, int(stats['recall'] * 100), int(lr * 100),
                 stats['passed'], stats['cases']))
 
     if by_step:
@@ -983,6 +1157,7 @@ def main():
 
     # Load embedding cache (skips API calls for previously embedded queries)
     _load_embed_cache()
+    _load_validation_cache()
 
     # Load KG term index
     print('Loading KG term index...')
