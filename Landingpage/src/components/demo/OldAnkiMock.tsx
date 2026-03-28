@@ -18,6 +18,19 @@ export function OldAnkiMock() {
       userSelect: 'none',
     }}>
 
+      {/* ── Title bar with dots ── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '10px 16px',
+        background: '#383838',
+        borderBottom: '1px solid #222',
+        flexShrink: 0,
+      }}>
+        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#ff5f57' }} />
+        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#febc2e' }} />
+        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#28c840' }} />
+      </div>
+
       {/* ── Anki Toolbar — centered, rounded, NOT full width ── */}
       <div style={{
         display: 'flex', justifyContent: 'center',

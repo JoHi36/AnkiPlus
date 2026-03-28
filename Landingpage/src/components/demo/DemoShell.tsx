@@ -130,8 +130,11 @@ export function DemoShell() {
   return (
     <div style={SHELL}>
 
-      {/* ── Tabs (Medizin / Jura / BWL) ── */}
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 16px', flexShrink: 0 }}>
+      {/* ── Title bar with dots + tabs ── */}
+      <div style={HEADER}>
+        <div style={DOT} />
+        <div style={DOT} />
+        <div style={DOT} />
         <div style={TABS}>
           {SCENARIOS.map(s => (
             <button

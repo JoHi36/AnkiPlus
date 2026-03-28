@@ -125,44 +125,28 @@ export function LandingPage() {
           {/* Fixed-height container so both layers overlap during crossfade */}
           <div
             className="relative w-full rounded-2xl overflow-hidden border border-white/[0.08]"
-            style={{ zIndex: 1, aspectRatio: '16 / 10', minHeight: 400, display: 'flex', flexDirection: 'column' }}
+            style={{ zIndex: 1, aspectRatio: '16 / 10', minHeight: 400 }}
           >
-            {/* ── Shared title bar (stays during crossfade) ── */}
+            {/* Old Anki — visible on load, crossfades out */}
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '10px 16px',
-              background: introDone ? 'var(--ds-bg-canvas, #1C1C1E)' : '#383838',
-              borderBottom: introDone ? '1px solid rgba(255,255,255,0.06)' : '1px solid #222',
-              flexShrink: 0, zIndex: 5,
-              transition: 'background 1.2s ease, border-color 1.2s ease',
+              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+              opacity: introDone ? 0 : 1,
+              transition: 'opacity 1.2s cubic-bezier(0.25, 0.1, 0.25, 1)',
+              pointerEvents: introDone ? 'none' : 'auto',
+              zIndex: 1,
             }}>
-              <div style={{ width: 10, height: 10, borderRadius: '50%', background: introDone ? 'rgba(255,255,255,0.08)' : '#ff5f57', transition: 'background 1.2s ease' }} />
-              <div style={{ width: 10, height: 10, borderRadius: '50%', background: introDone ? 'rgba(255,255,255,0.08)' : '#febc2e', transition: 'background 1.2s ease' }} />
-              <div style={{ width: 10, height: 10, borderRadius: '50%', background: introDone ? 'rgba(255,255,255,0.08)' : '#28c840', transition: 'background 1.2s ease' }} />
+              <OldAnkiMock />
             </div>
 
-            {/* ── Content area: crossfade between Old Anki and Modern Demo ── */}
-            <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-
-              {/* Old Anki — visible on load, crossfades out */}
-              <div style={{
-                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                opacity: introDone ? 0 : 1,
-                transition: 'opacity 1.2s cubic-bezier(0.25, 0.1, 0.25, 1)',
-                pointerEvents: introDone ? 'none' : 'auto',
-              }}>
-                <OldAnkiMock />
-              </div>
-
-              {/* Modern Demo — crossfades in */}
-              <div style={{
-                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                opacity: introDone ? 1 : 0,
-                transition: 'opacity 1.2s cubic-bezier(0.25, 0.1, 0.25, 1) 0.1s',
-                pointerEvents: introDone ? 'auto' : 'none',
-              }}>
-                <DemoShell />
-              </div>
+            {/* Modern Demo — crossfades in */}
+            <div style={{
+              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+              opacity: introDone ? 1 : 0,
+              transition: 'opacity 1.2s cubic-bezier(0.25, 0.1, 0.25, 1) 0.1s',
+              pointerEvents: introDone ? 'auto' : 'none',
+              zIndex: 2,
+            }}>
+              <DemoShell />
             </div>
 
           </div>
