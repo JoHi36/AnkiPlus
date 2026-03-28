@@ -142,6 +142,8 @@ export function LandingPage() {
             <div
               className="absolute inset-0 demo-blue-border demo-dot-grid rounded-2xl"
               style={{
+                position: 'absolute',
+                inset: 0,
                 opacity: introDone ? 1 : 0,
                 transition: 'opacity 1.2s cubic-bezier(0.25, 0.1, 0.25, 1) 0.1s',
                 pointerEvents: introDone ? 'auto' : 'none',
@@ -203,42 +205,32 @@ export function LandingPage() {
         </section>
       </main>
 
-      {/* ═══ TRUST ═══ */}
-      <div className="py-16">
-        <div className="max-w-2xl mx-auto px-6">
-          <Link
-            to="/datenschutz"
-            className="group block rounded-2xl border border-white/[0.04] bg-gradient-to-b from-white/[0.02] to-transparent px-8 py-6 transition-all duration-500 hover:border-white/[0.08] hover:from-white/[0.03]"
-          >
-            <div className="flex items-center justify-center gap-10 md:gap-14">
-              <div className="flex items-center gap-2.5 text-white/[0.3] group-hover:text-white/[0.5] transition-colors duration-500">
-                <ShieldCheck className="w-4 h-4" strokeWidth={1.5} />
-                <span className="text-[13px] font-light tracking-wide">DSGVO-konform</span>
-              </div>
-              <div className="w-px h-4 bg-white/[0.06]" />
-              <div className="flex items-center gap-2.5 text-white/[0.3] group-hover:text-white/[0.5] transition-colors duration-500">
-                <Globe className="w-4 h-4" strokeWidth={1.5} />
-                <span className="text-[13px] font-light tracking-wide">EU-Server</span>
-              </div>
-              <div className="w-px h-4 bg-white/[0.06]" />
-              <div className="flex items-center gap-2.5 text-white/[0.3] group-hover:text-white/[0.5] transition-colors duration-500">
-                <EyeOff className="w-4 h-4" strokeWidth={1.5} />
-                <span className="text-[13px] font-light tracking-wide">Kein Tracking</span>
-              </div>
-            </div>
-          </Link>
-        </div>
-      </div>
-
       {/* ═══ FOOTER ═══ */}
-      <footer className="border-t border-white/[0.06] py-8">
-        <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="text-white/[0.18] text-xs">
-            &copy; 2026 ANKI+
+      <footer className="border-t border-white/[0.06] pt-10 pb-8">
+        <div className="max-w-6xl mx-auto px-6">
+          {/* Trust strip */}
+          <div className="flex justify-center mb-8">
+            <div className="flex flex-wrap justify-center gap-8 md:gap-12">
+              <Link to="/datenschutz" className="flex items-center gap-2 text-white/[0.25] hover:text-white/[0.45] transition-colors duration-300 text-xs font-light tracking-wide">
+                <ShieldCheck className="w-3.5 h-3.5" strokeWidth={1.5} /> DSGVO-konform
+              </Link>
+              <span className="flex items-center gap-2 text-white/[0.25] text-xs font-light tracking-wide">
+                <Globe className="w-3.5 h-3.5" strokeWidth={1.5} /> EU-Server
+              </span>
+              <span className="flex items-center gap-2 text-white/[0.25] text-xs font-light tracking-wide">
+                <EyeOff className="w-3.5 h-3.5" strokeWidth={1.5} /> Kein Tracking
+              </span>
+            </div>
           </div>
-          <div className="flex gap-6 text-white/[0.18] text-xs">
-            <Link to="/datenschutz" className="hover:text-white/[0.35] transition-colors">Datenschutz</Link>
-            <Link to="/impressum" className="hover:text-white/[0.35] transition-colors">Impressum</Link>
+
+          {/* Bottom row */}
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4 pt-6 border-t border-white/[0.04]">
+            <div className="text-white/[0.18] text-xs">
+              ANKI+ &middot; Johannes Hinkel
+            </div>
+            <div className="flex gap-6 text-white/[0.18] text-xs">
+              <Link to="/datenschutz" className="hover:text-white/[0.35] transition-colors">Datenschutz & Impressum</Link>
+            </div>
           </div>
         </div>
       </footer>
