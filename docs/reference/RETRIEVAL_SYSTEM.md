@@ -6,37 +6,159 @@ The retrieval system finds relevant flashcards for a user's question. It combine
 
 **Core principle:** Embedding-first KG expansion, then Graph edges, then parallel SQL + Semantic + Tag search, then mathematical ranking.
 
-## Current Benchmark Results (2026-03-27)
+## Current Benchmark Results (2026-03-28)
 
 | Metric | Value | Notes |
 |--------|-------|-------|
-| Recall@10 | 47% | Target card in top-10 results |
-| Top-3 Recall | 26% | Target card in top-3 results |
-| Term Extraction | ~85% | Domain terms correctly identified |
-| KG Expansion | ~40% | Related terms found via Knowledge Graph |
+| Recall@10 | ~50% | Target card in top-10 results (estimated, full run pending) |
+| Context | 41% | Was 0% before resolved_intent fix |
+| Direct | 75% | Exact term matches |
+| Cross-Deck | 58% | Collection-wide search |
+| Typo | 75% | Fuzzy embedding matching |
+| Synonym | 0% | KG expansion not sufficient yet |
 
-**Honest assessment:** Semantic Search (embedding cosine similarity) is the primary driver of recall. KG expansion adds roughly 5% incremental recall by finding cards that semantic search misses (e.g., synonym-based queries). SQL keyword search contributes mainly for exact-match queries. Tag-based search is newly added and not yet benchmarked.
+**Honest assessment:** SQL keyword search is the strongest signal for direct/context cases. Semantic search underperforms for vague queries. The new Focus Boost (Phase 6) is designed to address the precision gap — the system finds related cards but doesn't rank the *most relevant* card high enough.
 
 **Dashboard:** Run `python3 scripts/benchmark_serve.py` and open `http://localhost:8080` for the interactive benchmark dashboard.
 
-## Pipeline (5 Phases)
+## Pipeline Overview
+
+```mermaid
+flowchart TD
+    Q["User Question\n'Wie lang ist der Dünndarm?'"]
+    CTX["Karten-Kontext\nVorder-/Rückseite der aktuellen Karte"]
+
+    subgraph ROUTER["1 - ROUTER  (LLM)"]
+        RI["Thema (resolved_intent)\n'Dünndarm, Jejunum, Ileum'"]
+        QF["Fragerichtung (query_focus)\n'Längenangabe, Maß'"]
+    end
+
+    subgraph ENRICH["2 - ANREICHERUNG  (zwei parallele Tiers)"]
+        direction TB
+        subgraph T1["Tier 1 — aus User-Frage (höher gewichtet)"]
+            T1E["Terme: 'Dünndarm'"]
+            T1EMB["Satz embedden → Vektor"]
+            T1KG["Embedding vs 17k KG\n→ Duodenum, Jejunum"]
+            T1GR["Graph-Kanten\n→ Dickdarm, Pankreas"]
+        end
+        subgraph T2["Tier 2 — aus Intent (nur NEUE Terme)"]
+            T2E["Terme: 'Ileum' (neu)"]
+            T2EMB["Intent embedden → Vektor"]
+            T2KG["Embedding vs 17k KG\n→ Ileumschlingen"]
+            T2GR["Graph-Kanten\n→ weitere Terme"]
+        end
+        QG["Queries generieren\n6 Varianten: precise/broad/embedding × primary/secondary"]
+    end
+
+    subgraph SEARCH["3 - SUCHE  (parallel)"]
+        SQL["SQL Search\nprecise + broad Queries\n→ Keyword-Treffer"]
+        SEM["Semantic Search\nprimary + secondary Embedding\n→ Cosine vs 8k Karten"]
+        TAG["Tag Search\ntag:*term* Wildcards"]
+    end
+
+    subgraph RANK["4 - FUSION"]
+        POOL["Kandidaten-Pool\nAlle gefundenen Karten vereinigt"]
+        FOCUS["Focus-Rang berechnen\ncosine(Fragerichtung, jede Karte)\nnur für Kandidaten, keine neuen"]
+        RRF["RRF Kombination\nscore = 1/(k+sql) + 1/(k+sem)\n+ 1/(k+tag) + 1/(k+focus)"]
+    end
+
+    OUT["Top-10 Karten"]
+
+    Q --> ROUTER
+    CTX -.->|Kontext für Intent| ROUTER
+    ROUTER --> ENRICH
+    T1E --> T1KG
+    T1EMB --> T1KG
+    T1KG --> T1GR --> QG
+    T2E --> T2KG
+    T2EMB --> T2KG
+    T2KG --> T2GR --> QG
+    ENRICH --> SEARCH
+    SQL --> POOL
+    SEM --> POOL
+    TAG --> POOL
+    POOL --> FOCUS
+    QF -.->|Fragerichtung| FOCUS
+    FOCUS --> RRF
+    RRF --> OUT
+```
+
+**Leserichtung (oben → unten):**
+
+1. **Router** bekommt Frage + Kartenkontext → gibt drei Dinge zurück: Thema, Fragerichtung, und ob überhaupt gesucht werden muss
+2. **Anreicherung** läuft in zwei parallelen Tiers:
+   - **Tier 1 (Primary):** Aus deiner Frage — höher gewichtet (k=50-70 in RRF)
+   - **Tier 2 (Secondary):** Aus dem Router-Intent — nur NEUE Terme die Tier 1 nicht schon hat, niedriger gewichtet (k=90-120)
+   - Jeder Tier durchläuft denselben Prozess: Terme extrahieren → Satz embedden → Embedding vs KG → Graph-Kanten → Queries generieren
+   - Am Ende: 6 Query-Varianten (precise/broad/embedding × primary/secondary)
+3. **Suche** läuft parallel mit allen 6 Queries: SQL (Keywords), Semantic (Embeddings), Tags
+4. **Fusion:** Alle Suchergebnisse → Kandidaten-Pool → Focus-Rang (Fragerichtung) für jede Karte → RRF kombiniert alle Signale
+
+### Alle Queries im Überblick
+
+Am Ende der Anreicherung entstehen 6 Queries + 2 Sucharten. Hier die komplette Übersicht, sortiert nach Suchtyp:
+
+**SQL-Suche (Keyword-basiert, via Anki `find_cards()`)**
+
+| # | Query | Quelle | Logik | Beispiel | RRF k-Wert |
+|---|-------|--------|-------|----------|------------|
+| 1 | Precise Primary | Tier 1 (Frage) | AND | `"Dünndarm" AND "Duodenum"` | k=50 (stärkste) |
+| 2 | Broad Primary | Tier 1 (Frage) | OR | `"Dünndarm" OR "Duodenum" OR "Jejunum"` | k=70 |
+| 3 | Precise Secondary | Tier 2 (Intent) | AND | `"Ileum" AND "Ileumschlingen"` | k=90 |
+| 4 | Broad Secondary | Tier 2 (Intent) | OR | `"Ileum" OR "Ileumschlingen"` | k=110 |
+| 5 | Tag Search | Tier 1 + 2 | Wildcard | `tag:*Dünndarm*`, `tag:*Duodenum*` | k=70 |
+
+**Embedding-Suche (Cosine Similarity vs 8k Karten-Embeddings)**
+
+| # | Query | Quelle | Inhalt | Beispiel | RRF k-Wert |
+|---|-------|--------|--------|----------|------------|
+| 6 | Semantic Primary | Tier 1 (Frage) | Frage + Expansionsterme | `"wie lang ist der dünndarm Duodenum Jejunum Dickdarm"` | k=60 |
+| 7 | Semantic Secondary | Tier 2 (Intent) | Intent + Expansionsterme | `"Dünndarm Jejunum Ileum Ileumschlingen"` | k=120 (schwächste) |
+
+**Focus-Signal (NEU — kein eigener Suchkanal)**
+
+| # | Signal | Quelle | Berechnung | Beispiel | RRF k-Wert |
+|---|--------|--------|------------|----------|------------|
+| 8 | Focus Rang | Router query_focus | cosine(focus_embedding, karte) für jede Karte im Kandidaten-Pool | `"Längenangabe, Maß"` vs jede gefundene Karte | k=55 (geplant) |
+
+**Gewichtungs-Hierarchie** (niedrigerer k = stärkerer Einfluss):
+
+```
+k=50  Precise Primary     ████████████████████  stärkste — exakte Terme aus deiner Frage
+k=55  Focus               ███████████████████   NEU — Fragerichtung
+k=60  Semantic Primary    ██████████████████    Embedding deiner Frage
+k=70  Broad/Tag Primary   ████████████████      breitere Suche aus deiner Frage
+k=90  Precise Secondary   ████████████          exakte Terme aus Intent
+k=110 Broad Secondary     ██████████            breitere Suche aus Intent
+k=120 Semantic Secondary  █████████             schwächste — Embedding des Intents
+```
+
+**Warum diese Reihenfolge?** Deine eigenen Worte sind am wertvollsten (Tier 1). Was der Router ergänzt (Tier 2) hilft bei vagen Fragen ("Erkläre das"), ist aber weniger zuverlässig. Focus steht bewusst weit oben — wenn eine Karte die Fragerichtung trifft UND die richtigen Terme hat, ist das der beste Match.
+
+### Pipeline Detail (6 Phases)
 
 ```
 USER QUESTION: "wie lang ist der dünndarm"
     |
     v
 PHASE 1: ROUTER (~250ms, backend LLM)
-    Agent routing + context resolution
-    Output: {agent: "tutor", search_needed: true, resolved_intent: "..."}
-    Note: Router now returns ONLY 3 fields (agent, search_needed, resolved_intent).
-    Query generation is handled locally by KG enrichment, not the LLM.
+    Agent routing + context resolution + question focus
+    Output: {
+      agent: "tutor",
+      search_needed: true,
+      resolved_intent: "Dünndarm, Jejunum, Ileum, Duodenum",
+      query_focus: "Längenangabe, Maß, Gesamtlänge"
+    }
+    - resolved_intent = THEMA (welche Fachbegriffe sind relevant?)
+    - query_focus     = FRAGERICHTUNG (was genau will der User wissen?)
     |
     v
 PHASE 2: TERM EXTRACTION + EMBEDDING (~200ms, 1 API call)
-    Extract terms: ["dünndarm"]
-    Batch embed: ["dünndarm", "wie lang ist der dünndarm"]
+    Extract terms: ["Dünndarm"]
+    Batch embed: [terms, query, resolved_intent, query_focus]
     -> term vectors (for KG fuzzy matching)
     -> sentence vector (for KG expansion + semantic search)
+    -> focus vector (for boost in Phase 6)
     |
     v
 PHASE 3: KG ENRICHMENT (~30ms, local)
@@ -45,31 +167,45 @@ PHASE 3: KG ENRICHMENT (~30ms, local)
        -> filters morphological variants (Dünndarms, Dünndarmkonvolut)
     B. KG-based stopword filter: "macht", "liegt" NOT in KG -> excluded from SQL
     C. Edge expansion: Dünndarm -> Dickdarm(7), Pankreas(6)
-       Duodenum -> Jejunum edges, etc.
     D. Query generation (deterministic, no LLM):
-       Precise: "dünndarm", "Duodenum", "Jejunum", "Dickdarm", "Pankreas"
-       Broad: "dünndarm" OR "Duodenum" OR "Jejunum" OR ...
+       Precise: "Dünndarm", "Duodenum", "Jejunum"
+       Broad: "Dünndarm" OR "Duodenum" OR "Jejunum" OR ...
        Embedding: "wie lang ist der dünndarm Duodenum Jejunum Ileumschlingen"
     |
     v
 PHASE 4: PARALLEL SEARCH
-    SQL Search: Anki find_cards() with generated queries (always collection-wide)
-    Semantic Search: cosine similarity against 8k+ card embedding index
-    Tag Search: Anki find_cards() with "tag:*term*" for hierarchical tag matching
-    Feedback Loop: top semantic hits -> extract KG terms -> additional SQL queries
+    SQL Search: Anki find_cards() with generated queries
+    Semantic Search: cosine similarity against 8k+ card embeddings
+    Tag Search: Anki find_cards() with "tag:*term*"
+    Feedback Loop: top-5 semantic hits -> extract KG terms -> additional SQL
     |
     v
-PHASE 5: RRF + CONFIDENCE
-    Weighted Reciprocal Rank Fusion:
-      score(card) = 1/(k + rank_sql) + 1/(k + rank_semantic)
-    k-values by tier:
-      Precise Primary:    k=50  (highest weight)
+PHASE 5: RRF FUSION + FOCUS
+    1. Collect all cards found by SQL, Semantic, and Tag searches → candidate pool
+    2. For each candidate: compute focus_rank from cosine(focus_vector, card_embedding)
+    3. Combine ALL signals via Reciprocal Rank Fusion:
+
+       score(card) = 1/(k + sql_rank) + 1/(k + sem_rank) + 1/(k + focus_rank)
+
+    k-values by tier (lower k = more weight):
+      Precise Primary:    k=50
       Semantic Primary:   k=60
+      Focus:              k=55   (NEW — between Precise and Semantic)
       Broad Primary:      k=70
       Precise Secondary:  k=90
       Broad Secondary:    k=110
-      Semantic Secondary: k=120 (lowest weight)
-    Confidence: high (>0.025), medium (>0.012), low (<0.012 -> web search)
+      Semantic Secondary: k=120
+
+    KEY PRINCIPLE: Focus is a signal IN the fusion, not a post-processing step.
+    - Card matching SQL + Semantic + Focus → 3 contributions → highest score
+    - Card matching SQL + Semantic, low Focus → 2 strong + 1 weak → good score
+    - Card matching SQL only, low Focus → 1 contribution → low score
+    - Card not found by any search → not in candidate pool → Focus irrelevant
+    |
+    v
+CONFIDENCE CHECK
+    high (>threshold) → answer from cards
+    low (<threshold)  → trigger web search
 ```
 
 ## Key Files

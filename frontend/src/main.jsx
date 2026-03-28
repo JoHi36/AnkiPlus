@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import ComponentViewer from './ComponentViewer';
 import GlassLab from './GlassLab';
+import { ReasoningProvider } from './reasoning/store/ReasoningProvider';
 import './index.css';
 import './styles/card-enhancement.css';
 import 'katex/dist/katex.min.css'; // KaTeX CSS
@@ -41,7 +42,9 @@ try {
     // Design System Viewer — localhost:3000?view=components
     root.render(
       <React.StrictMode>
-        <ComponentViewer />
+        <ReasoningProvider>
+          <ComponentViewer />
+        </ReasoningProvider>
       </React.StrictMode>
     );
   } else if (view === 'glass') {

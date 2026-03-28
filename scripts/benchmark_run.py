@@ -31,6 +31,25 @@ RESULTS_PATH = os.path.join(PROJECT_ROOT, 'benchmark', 'results.json')
 TOP_K = 10          # Semantic search top-k for scoring
 SQL_TOP_K = 50      # SQL search candidates before ranking
 
+# ── Tunable Parameters (saved with each benchmark run) ────────────────────
+
+BENCHMARK_CONFIG = {
+    'top_k': TOP_K,
+    'sql_top_k': SQL_TOP_K,
+    'k_precise_primary': 50,
+    'k_semantic_primary': 60,
+    'k_focus': 80,              # Focus lane: query rerank within candidate pool
+    'k_broad_primary': 70,
+    'k_precise_secondary': 90,
+    'k_broad_secondary': 110,
+    'k_semantic_secondary': 120,
+    'confidence_high': 0.025,
+    'confidence_low': 0.012,
+    'focus_enabled': True,      # NEW — toggle focus lane
+    'embedding_fallback': True, # NEW — combine with intent when no domain terms
+    'max_context_terms': 10,    # Max terms from card_context for resolved_intent
+}
+
 # ── Config & Embedding API ───────────────────────────────────────────────────
 
 def _load_config():
@@ -148,6 +167,51 @@ def load_card_embeddings(db):
     return index
 
 # ── Step Scorers ─────────────────────────────────────────────────────────────
+
+def build_query_focus(query, domain_terms):
+    """Build query_focus from the non-domain parts of the query.
+
+    Extracts the 'question direction' — everything that isn't a domain term.
+    E.g. "Wie lang ist der Dünndarm?" with domain=["Dünndarm"] → "wie lang"
+    """
+    import re
+    # Normalize: remove punctuation, lowercase
+    clean = re.sub(r'[^\w\s\-]', ' ', query.lower())
+    words = clean.split()
+    domain_lower = {t.lower() for t in domain_terms}
+    # Simple stopwords that carry no question direction
+    stop = {'der', 'die', 'das', 'ein', 'eine', 'und', 'oder', 'ist', 'sind',
+            'von', 'dem', 'den', 'des', 'im', 'in', 'am', 'an', 'auf', 'zu',
+            'für', 'mit', 'bei', 'nach', 'es', 'ich', 'du', 'er', 'sie', 'wir',
+            'man', 'noch', 'auch', 'so', 'hier', 'da', 'denn', 'mal', 'nur'}
+    focus_words = [w for w in words if w not in domain_lower and w not in stop and len(w) > 1]
+    return ' '.join(focus_words) if focus_words else ''
+
+
+def compute_focus_ranks(focus_embedding, candidate_card_ids, card_embeddings):
+    """Compute focus similarity for candidate cards, return as ranked dict.
+
+    Only scores cards already in the candidate pool — never introduces new cards.
+    Returns dict of {card_id: {'rank': int, 'sim': float}} sorted by similarity.
+    """
+    if focus_embedding is None:
+        return {}
+    norm = math.sqrt(sum(v * v for v in focus_embedding))
+    if norm == 0:
+        return {}
+    normed = [v / norm for v in focus_embedding]
+
+    scored = []
+    for cid in candidate_card_ids:
+        card_vec = card_embeddings.get(cid)
+        if card_vec:
+            sim = sum(a * b for a, b in zip(normed, card_vec))
+            scored.append((cid, sim))
+
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return {cid: {'rank': rank, 'sim': sim}
+            for rank, (cid, sim) in enumerate(scored, start=1)}
+
 
 def score_term_extraction(query, expected_terms):
     """Step 1: Extract terms from query, score against expected_terms."""
@@ -356,9 +420,10 @@ def score_semantic_search(expected_card_id, query_embedding, card_embeddings):
 
 
 def score_rrf_ranking(expected_card_id, sql_result, semantic_result,
-                      card_embeddings, enrichment_result, query_embedding, db):
+                      card_embeddings, enrichment_result, query_embedding, db,
+                      focus_embedding=None):
     """Step 5: Compute RRF scores and rank expected card."""
-    from ai.rrf import compute_rrf
+    from ai.rrf import compute_rrf, _get_k
 
     # Build sql_results dict for compute_rrf
     tier1_terms = enrichment_result.get('tier1_terms', [])
@@ -435,7 +500,32 @@ def score_rrf_ranking(expected_card_id, sql_result, semantic_result,
                         sql_results[cid] = {'rank': fb_rank, 'query_type': 'broad', 'tier': 'secondary'}
                         fb_rank += 1
 
-    rrf_ranked = compute_rrf(sql_results, semantic_results)
+    # ── Focus Lane: compute focus ranks for candidate pool ──────────────
+    candidate_ids = set(sql_results.keys()) | set(semantic_results.keys())
+    focus_results = {}
+    if focus_embedding is not None and BENCHMARK_CONFIG.get('focus_enabled'):
+        focus_results = compute_focus_ranks(focus_embedding, candidate_ids, card_embeddings)
+
+    # ── RRF with Focus ────────────────────────────────────────────────
+    # Extended RRF: sql + semantic + focus (focus only for existing candidates)
+    k_focus = BENCHMARK_CONFIG.get('k_focus', 55)
+    scores = {}
+    all_ids = candidate_ids
+    for cid in all_ids:
+        s = 0.0
+        if cid in sql_results:
+            sql = sql_results[cid]
+            k = _get_k(sql['query_type'], sql['tier'])
+            s += 1.0 / (k + sql['rank'])
+        if cid in semantic_results:
+            sem = semantic_results[cid]
+            k = _get_k('semantic', sem['tier'])
+            s += 1.0 / (k + sem['rank'])
+        if cid in focus_results:
+            s += 1.0 / (k_focus + focus_results[cid]['rank'])
+        scores[cid] = s
+
+    rrf_ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
 
     target_rank = None
     for rank, (card_id, _) in enumerate(rrf_ranked, start=1):
@@ -449,6 +539,7 @@ def score_rrf_ranking(expected_card_id, sql_result, semantic_result,
         'score': score,
         'target_rank': target_rank,
         'total_merged': total_merged,
+        'focus_candidates': len(focus_results),
         'rrf_ranked': rrf_ranked,  # pass through for confidence step
     }
 
@@ -505,10 +596,34 @@ def run_case(case, db, kg_term_index, card_embeddings, config):
         step1 = {'score': 0.0, 'error': str(e)}
     result['steps']['term_extraction'] = step1
 
-    # ── Embedding Call ───────────────────────────────────────────────────────
-    # Embed: individual terms + full sentence query
+    # ── Synthesize resolved_intent from card_context ────────────────────────
+    # For context-dependent cases (vague queries like "Erkläre das genauer"),
+    # the router would normally resolve the intent using card context.
+    # We simulate this by building resolved_intent from card_context.terms.
+    resolved_intent = None
+    card_context = case.get('card_context')
+    if card_context and card_context.get('terms'):
+        context_terms = card_context['terms'][:10]  # Cap at 10 to stay focused
+        # Use " und " to separate terms — prevents extract_query_terms() from
+        # grouping consecutive capitalized words into one multi-word compound.
+        resolved_intent = ' und '.join(context_terms)
+
     extracted_terms = step1.get('extracted', [])
-    texts_to_embed = list(extracted_terms) + [query]
+
+    # ── Embedding fallback: enrich query with intent when no domain terms ─
+    # extract_query_terms finds ALL capitalized words — KG membership is checked here.
+    kg_lower = {k.lower() for k in kg_term_index}
+    domain_terms = [t for t in extracted_terms if t.lower() in kg_lower]
+    embed_query = query
+    if BENCHMARK_CONFIG.get('embedding_fallback') and len(domain_terms) == 0 and resolved_intent:
+        embed_query = query + ' ' + resolved_intent
+
+    # ── Embedding Call ───────────────────────────────────────────────────────
+    # Embed: individual terms + sentence query + resolved_intent
+    # Focus uses the query_embedding directly (no extra embed needed)
+    texts_to_embed = list(extracted_terms) + [embed_query]
+    if resolved_intent:
+        texts_to_embed.append(resolved_intent)
 
     embedding_available = True
     query_embedding = None
@@ -526,11 +641,18 @@ def run_case(case, db, kg_term_index, card_embeddings, config):
         for i, term in enumerate(extracted_terms):
             if i < len(all_embs) and all_embs[i] is not None:
                 term_embeddings[term] = all_embs[i]
-        # Sentence embedding is the last one
+        # Sentence embedding for the query (or enriched query if fallback)
         sent_offset = len(extracted_terms)
         if sent_offset < len(all_embs) and all_embs[sent_offset] is not None:
             query_embedding = all_embs[sent_offset]
             sentence_embeddings[query] = query_embedding
+            if embed_query != query:
+                sentence_embeddings[embed_query] = query_embedding
+        # Sentence embedding for resolved_intent (if present)
+        if resolved_intent:
+            ri_offset = sent_offset + 1
+            if ri_offset < len(all_embs) and all_embs[ri_offset] is not None:
+                sentence_embeddings[resolved_intent] = all_embs[ri_offset]
     else:
         embedding_available = False
         emb_error = 'unexpected embedding response'
@@ -539,6 +661,7 @@ def run_case(case, db, kg_term_index, card_embeddings, config):
     try:
         enrichment_result = enrich_query(
             query,
+            resolved_intent=resolved_intent,
             kg_term_index=kg_term_index,
             term_embeddings=term_embeddings,
             sentence_embeddings=sentence_embeddings,
@@ -560,9 +683,15 @@ def run_case(case, db, kg_term_index, card_embeddings, config):
 
     # Store enrichment detail
     result['enrichment_detail'] = {
+        'resolved_intent': resolved_intent or '',
+        'focus_mode': 'query_rerank',
+        'embedding_fallback_used': embed_query != query,
         'precise_primary': enrichment_result.get('precise_primary', []),
         'broad_primary': enrichment_result.get('broad_primary', []),
+        'precise_secondary': enrichment_result.get('precise_secondary', []),
+        'broad_secondary': enrichment_result.get('broad_secondary', []),
         'tier1_terms': enrichment_result.get('tier1_terms', []),
+        'tier2_terms': enrichment_result.get('tier2_terms', []),
         'kg_terms_found': enrichment_result.get('kg_terms_found', []),
     }
 
@@ -597,7 +726,8 @@ def run_case(case, db, kg_term_index, card_embeddings, config):
         try:
             step5 = score_rrf_ranking(
                 expected_card_id, step3, step4,
-                card_embeddings, enrichment_result, query_embedding, db)
+                card_embeddings, enrichment_result, query_embedding, db,
+                focus_embedding=query_embedding)
         except Exception as e:
             step5 = {'score': 0.0, 'error': str(e), 'target_rank': None, 'total_merged': 0}
     result['steps']['rrf_ranking'] = step5
@@ -902,6 +1032,7 @@ def main():
 
     # Build output
     output = {
+        'config': BENCHMARK_CONFIG,
         'aggregate': aggregate,
         'cases': results,
     }
@@ -911,7 +1042,34 @@ def main():
     with open(RESULTS_PATH, 'w', encoding='utf-8') as f:
         json.dump(output, f, indent=2, ensure_ascii=False)
 
+    # Save to history only if new highscore (Recall@10)
+    history_dir = os.path.join(os.path.dirname(RESULTS_PATH), 'history')
+    os.makedirs(history_dir, exist_ok=True)
+    current_recall = aggregate.get('overall', {}).get('recall_at_k', 0)
+    prev_best = 0
+    for fname in os.listdir(history_dir):
+        if not fname.endswith('.json'):
+            continue
+        try:
+            with open(os.path.join(history_dir, fname), 'r') as fh:
+                prev = json.load(fh)
+            r = prev.get('aggregate', {}).get('overall', {}).get('recall_at_k', 0)
+            if r > prev_best:
+                prev_best = r
+        except Exception:
+            continue
+
     print('Results saved to %s' % RESULTS_PATH)
+    if current_recall > prev_best:
+        ts = aggregate.get('timestamp', time.strftime('%Y-%m-%d_%H-%M-%S'))
+        safe_ts = ts.replace(' ', '_').replace(':', '-')
+        recall_pct = int(round(current_recall * 100))
+        history_path = os.path.join(history_dir, '%s_%dpct.json' % (safe_ts, recall_pct))
+        with open(history_path, 'w', encoding='utf-8') as f:
+            json.dump(output, f, indent=2, ensure_ascii=False)
+        print('NEW HIGHSCORE! %d%% > %d%% — saved to %s' % (recall_pct, int(round(prev_best * 100)), history_path))
+    else:
+        print('No new highscore (%d%% <= %d%% best)' % (int(round(current_recall * 100)), int(round(prev_best * 100))))
 
     # Print summary
     print_summary(aggregate)

@@ -21,6 +21,8 @@ BENCHMARK_RUN_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "benchmark_run.py")
 BENCHMARK_GENERATE_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "benchmark_generate.py")
 BENCHMARK_ROUTER_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "benchmark_router.py")
 DOCS_PATH = os.path.join(PROJECT_ROOT, "docs", "reference", "RETRIEVAL_SYSTEM.md")
+DESIGN_CSS_PATH = os.path.join(PROJECT_ROOT, "shared", "styles", "design-system.css")
+HISTORY_DIR = os.path.join(PROJECT_ROOT, "benchmark", "history")
 
 # ── HTML Dashboard ────────────────────────────────────────────────────────────
 
@@ -29,24 +31,28 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Retrieval Benchmark Dashboard</title>
+<title>AnkiPlus Dev Hub</title>
+<link rel="stylesheet" href="/design-system.css">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:false, theme:'dark', themeVariables:{primaryColor:'#0a84ff',primaryTextColor:'#e5e5ea',lineColor:'#636366',secondaryColor:'#1c1c1e',tertiaryColor:'#242426'}});</script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --bg-deep:    #141416;
-    --bg-card:    #1c1c1e;
-    --bg-hover:   #242426;
-    --border:     #2c2c2e;
-    --text:       #e5e5ea;
-    --text-muted: #636366;
-    --green:      #30d158;
-    --yellow:     #ffd60a;
-    --red:        #ff453a;
-    --blue:       #0a84ff;
-    --purple:     #bf5af2;
-    --mono:       'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
-    --sans:       -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    /* Aliases → Design System tokens */
+    --bg-deep:    var(--ds-bg-deep);
+    --bg-card:    var(--ds-bg-canvas);
+    --bg-hover:   var(--ds-bg-overlay);
+    --border:     var(--ds-border-medium);
+    --text:       var(--ds-text-primary);
+    --text-muted: var(--ds-text-secondary);
+    --green:      var(--ds-green);
+    --yellow:     var(--ds-yellow);
+    --red:        var(--ds-red);
+    --blue:       var(--ds-accent);
+    --purple:     var(--ds-purple);
+    --mono:       var(--ds-font-mono);
+    --sans:       var(--ds-font-sans);
   }
 
   body {
@@ -64,7 +70,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 24px;
+    margin-bottom: 0;
     flex-wrap: wrap;
     gap: 12px;
   }
@@ -82,6 +88,90 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     display: flex;
     gap: 8px;
   }
+
+  /* ── Sub-navigation ── */
+  .subnav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0 16px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .subnav-tabs {
+    display: flex;
+    gap: 4px;
+  }
+  .subnav-btn {
+    padding: 6px 14px;
+    border-radius: var(--ds-radius-sm);
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+  }
+  .subnav-btn:hover { background: var(--ds-hover-tint); color: var(--text); }
+  .subnav-btn.active { background: var(--ds-active-tint); color: var(--text); }
+  .subnav-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  /* ── Version picker ── */
+  .version-picker {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+  .version-btn {
+    padding: 5px 10px;
+    border-radius: var(--ds-radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .version-btn:hover { background: var(--bg-hover); color: var(--text); }
+  .version-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--ds-radius-md);
+    box-shadow: var(--ds-shadow-md);
+    min-width: 340px;
+    max-height: 320px;
+    overflow-y: auto;
+    z-index: 50;
+    padding: 6px;
+  }
+  .version-dropdown.open { display: block; }
+  .version-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.1s;
+    gap: 10px;
+  }
+  .version-item:hover { background: var(--ds-hover-tint); }
+  .version-item.active { background: var(--ds-accent-10); }
+  .version-ts { font-family: var(--mono); color: var(--text-muted); font-size: 11px; }
+  .version-recall { font-family: var(--mono); font-weight: 600; min-width: 40px; text-align: right; }
+  .version-config { font-size: 10px; color: var(--text-muted); }
   .btn {
     display: inline-flex;
     align-items: center;
@@ -100,7 +190,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   }
   .btn:hover { background: var(--bg-hover); }
   .btn.btn-primary { background: var(--blue); border-color: var(--blue); color: #fff; }
-  .btn.btn-primary:hover { background: #0070e0; border-color: #0070e0; }
+  .btn.btn-primary:hover { opacity: 0.85; }
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
   /* ── Summary row ── */
@@ -229,11 +319,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   }
 
   /* Category colors */
-  .badge-direct    { background: rgba(10, 132, 255, 0.2); color: #4da6ff; }
-  .badge-synonym   { background: rgba(191, 90, 242, 0.2); color: #d08ef5; }
-  .badge-context   { background: rgba(255, 214, 10, 0.2);  color: #ffd60a; }
-  .badge-cross_deck{ background: rgba(48, 209, 88, 0.2);  color: #30d158; }
-  .badge-typo      { background: rgba(255, 69, 58, 0.2);   color: #ff6b63; }
+  .badge-direct    { background: var(--ds-accent-20); color: var(--ds-accent); }
+  .badge-synonym   { background: color-mix(in srgb, var(--ds-purple) 20%, transparent); color: var(--ds-purple); }
+  .badge-context   { background: var(--ds-yellow-20); color: var(--ds-yellow); }
+  .badge-cross_deck{ background: var(--ds-green-20); color: var(--ds-green); }
+  .badge-typo      { background: var(--ds-red-20); color: var(--ds-red); }
 
   /* ── Filter bar ── */
   .filter-bar {
@@ -258,7 +348,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   .filter-btn.active {
     background: var(--bg-card);
     color: var(--text);
-    border-color: #555;
+    border-color: var(--ds-text-tertiary);
   }
 
   /* ── Table ── */
@@ -347,7 +437,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     border-radius: 4px;
     font-size: 11px;
     font-weight: 600;
-    background: rgba(48, 209, 88, 0.15);
+    background: var(--ds-green-10);
     color: var(--green);
   }
   .status-fail {
@@ -356,7 +446,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     border-radius: 4px;
     font-size: 11px;
     font-weight: 600;
-    background: rgba(255, 69, 58, 0.15);
+    background: var(--ds-red-10);
     color: var(--red);
   }
 
@@ -396,7 +486,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     padding: 8px 10px;
     border-radius: 7px;
     border: 1px solid var(--border);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    box-shadow: var(--ds-shadow-md);
     pointer-events: none;
     opacity: 0;
     transition: opacity 0.12s ease;
@@ -428,8 +518,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     display: none;
     width: 14px;
     height: 14px;
-    border: 2px solid rgba(255,255,255,0.3);
-    border-top-color: #fff;
+    border: 2px solid var(--ds-text-tertiary);
+    border-top-color: var(--ds-text-primary);
     border-radius: 50%;
     animation: spin 0.6s linear infinite;
     flex-shrink: 0;
@@ -447,9 +537,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   /* ── Error banner ── */
   .error-banner {
     display: none;
-    background: rgba(255, 69, 58, 0.15);
-    border: 1px solid rgba(255, 69, 58, 0.4);
-    border-radius: 8px;
+    background: var(--ds-red-10);
+    border: 1px solid var(--ds-red-20);
+    border-radius: var(--ds-radius-sm);
     padding: 10px 14px;
     margin-bottom: 16px;
     color: var(--red);
@@ -462,32 +552,46 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
 <div class="header">
   <div class="header-left">
-    <h1>Retrieval Benchmark</h1>
+    <h1>AnkiPlus Dev Hub</h1>
     <div class="timestamp" id="timestamp">Loading…</div>
   </div>
   <div class="header-right">
-    <div style="display:flex;gap:6px;margin-right:16px">
-      <button class="btn btn-primary" style="font-size:13px" id="tab-benchmark" onclick="switchTab('benchmark')">Benchmark</button>
-      <button class="btn" style="font-size:13px" id="tab-router" onclick="switchTab('router')">Router Test</button>
-      <button class="btn" style="font-size:13px" id="tab-docs" onclick="switchTab('docs')">System Docs</button>
+    <div class="version-picker">
+      <button class="version-btn" id="version-btn" onclick="toggleVersionPicker()">current</button>
+      <div class="version-dropdown" id="version-dropdown"></div>
     </div>
-    <button class="btn" id="btn-generate" onclick="handleGenerate()">
-      <span class="spinner" id="spin-generate"></span>
-      Regenerate Cases
-    </button>
-    <button class="btn btn-primary" id="btn-run" onclick="handleRun()">
-      <span class="spinner" id="spin-run"></span>
-      Re-Run Benchmark
-    </button>
+    <button class="btn btn-primary" id="tab-top-benchmarks" onclick="switchTopTab('benchmarks')">Benchmarks</button>
+    <button class="btn" id="tab-top-design" onclick="switchTopTab('design')">Design System</button>
+  </div>
+</div>
+
+<!-- Sub-nav for Benchmarks -->
+<div class="subnav" id="subnav-benchmarks">
+  <div class="subnav-tabs">
+    <button class="subnav-btn active" id="sub-retrieval" onclick="switchSubTab('retrieval')">Retrieval</button>
+    <button class="subnav-btn" id="sub-router" onclick="switchSubTab('router')">Router</button>
+    <button class="subnav-btn" id="sub-docs" onclick="switchSubTab('docs')">Docs</button>
   </div>
 </div>
 
 <div class="error-banner" id="error-banner"></div>
 
 <!-- Docs Tab (hidden by default) -->
-<div id="docs-panel" style="display:none;background:#1c1c1e;border-radius:12px;padding:24px 32px;border:1px solid #2c2c2e;max-width:900px;margin:0 auto;font-size:14px;line-height:1.8;color:#e5e5e7">
-  <div id="docs-content" style="white-space:pre-wrap;font-family:-apple-system,BlinkMacSystemFont,'SF Pro',sans-serif">Loading docs...</div>
-  <div style="margin-top:16px;padding-top:12px;border-top:1px solid #2c2c2e;font-size:11px;color:#636366" id="docs-path"></div>
+<div id="docs-panel" style="display:none;background:var(--ds-bg-canvas);border-radius:var(--ds-radius-lg);padding:24px 32px;border:1px solid var(--ds-border-medium);max-width:900px;margin:0 auto;font-size:var(--ds-text-md);line-height:1.8;color:var(--ds-text-primary)">
+  <div id="docs-content" style="white-space:pre-wrap;font-family:var(--ds-font-sans)">Loading docs...</div>
+  <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--ds-border-medium);font-size:var(--ds-text-xs);color:var(--ds-text-secondary)" id="docs-path"></div>
+</div>
+
+<!-- Components Tab (hidden by default) -->
+<div id="components-panel" style="display:none">
+  <div id="components-frame-wrap" style="background:var(--ds-bg-canvas);border-radius:var(--ds-radius-lg);border:1px solid var(--ds-border-medium);overflow:hidden;height:calc(100vh - 120px)">
+    <iframe id="components-iframe" src="about:blank" style="width:100%;height:100%;border:none;background:var(--ds-bg-deep)"></iframe>
+  </div>
+  <div id="components-offline" style="display:none;text-align:center;padding:80px 20px;color:var(--ds-text-secondary)">
+    <div style="font-size:var(--ds-text-xl);margin-bottom:12px;color:var(--ds-text-primary)">Component Viewer not running</div>
+    <div style="font-size:var(--ds-text-md)">Start the Vite dev server:</div>
+    <code style="display:inline-block;margin-top:12px;padding:8px 16px;background:var(--ds-bg-deep);border-radius:var(--ds-radius-sm);font-family:var(--ds-font-mono);font-size:var(--ds-text-sm);color:var(--ds-accent)">cd frontend && npm run dev</code>
+  </div>
 </div>
 
 <!-- Router Tab (hidden by default) -->
@@ -546,46 +650,85 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 </div>
 
 <script>
-function switchTab(tab) {
-  var bp = document.getElementById('benchmark-panel');
-  var dp = document.getElementById('docs-panel');
-  var rp = document.getElementById('router-panel');
-  var tbtn = document.getElementById('tab-benchmark');
-  var dbtn = document.getElementById('tab-docs');
-  var rbtn = document.getElementById('tab-router');
+// ── Two-level navigation ──
+
+let _topTab = 'benchmarks';
+let _subTab = 'retrieval';
+
+function switchTopTab(tab) {
+  _topTab = tab;
+  // Top buttons
+  document.getElementById('tab-top-benchmarks').classList.toggle('btn-primary', tab === 'benchmarks');
+  document.getElementById('tab-top-design').classList.toggle('btn-primary', tab === 'design');
+  document.getElementById('tab-top-benchmarks').classList.toggle('btn', true);
+  document.getElementById('tab-top-design').classList.toggle('btn', true);
+  // Sub-nav visibility
+  document.getElementById('subnav-benchmarks').style.display = tab === 'benchmarks' ? 'flex' : 'none';
   // Hide all panels
-  bp.style.display = 'none';
-  dp.style.display = 'none';
-  rp.style.display = 'none';
-  // Deactivate all tab buttons
-  tbtn.classList.remove('btn-primary');
-  dbtn.classList.remove('btn-primary');
-  rbtn.classList.remove('btn-primary');
-  if (tab === 'docs') {
-    dp.style.display = 'block';
-    dbtn.classList.add('btn-primary');
-    loadDocs();
-  } else if (tab === 'router') {
-    rp.style.display = 'block';
-    rbtn.classList.add('btn-primary');
-    loadRouterResults();
+  ['benchmark', 'router', 'docs', 'components'].forEach(function(p) {
+    var el = document.getElementById(p + '-panel');
+    if (el) el.style.display = 'none';
+  });
+  if (tab === 'design') {
+    document.getElementById('components-panel').style.display = 'block';
+    loadComponents();
   } else {
-    bp.style.display = 'block';
-    tbtn.classList.add('btn-primary');
+    switchSubTab(_subTab);
   }
+}
+
+function switchSubTab(tab) {
+  _subTab = tab;
+  // Sub buttons
+  ['retrieval', 'router', 'docs'].forEach(function(s) {
+    var btn = document.getElementById('sub-' + s);
+    if (btn) btn.classList.toggle('active', s === tab);
+  });
+  // Hide benchmark panels
+  ['benchmark', 'router', 'docs'].forEach(function(p) {
+    var el = document.getElementById(p + '-panel');
+    if (el) el.style.display = 'none';
+  });
+  // Show selected
+  var panelMap = { retrieval: 'benchmark', router: 'router', docs: 'docs' };
+  var panel = document.getElementById(panelMap[tab] + '-panel');
+  if (panel) panel.style.display = 'block';
+  // Load data
+  if (tab === 'router') loadRouterResults();
+  if (tab === 'docs') loadDocs();
+}
+
+function loadComponents() {
+  var iframe = document.getElementById('components-iframe');
+  var wrap = document.getElementById('components-frame-wrap');
+  var offline = document.getElementById('components-offline');
+  var url = 'http://localhost:3000/?view=components';
+  fetch(url, {mode: 'no-cors', cache: 'no-cache'}).then(function() {
+    iframe.src = url;
+    wrap.style.display = 'block';
+    offline.style.display = 'none';
+  }).catch(function() {
+    wrap.style.display = 'none';
+    offline.style.display = 'block';
+  });
 }
 
 function loadDocs() {
   fetch('/api/docs').then(function(r) { return r.json(); }).then(function(data) {
     var el = document.getElementById('docs-content');
     var pathEl = document.getElementById('docs-path');
-    // Server-rendered HTML from our own docs files (trusted input)
-    el.innerHTML = data.html || '<p>No docs found</p>';
+    // Server-rendered HTML from our own documentation files (trusted internal input,
+    // generated by _render_markdown on the local server — not user-supplied content)
+    el.innerHTML = data.html || '<p>No docs found</p>';  // nosec: trusted server-rendered docs
     el.style.whiteSpace = 'normal';
-    el.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'SF Pro', sans-serif";
-    el.style.fontSize = '14px';
+    el.style.fontFamily = "var(--ds-font-sans)";
+    el.style.fontSize = 'var(--ds-text-md)';
     el.style.lineHeight = '1.7';
     if (pathEl) pathEl.textContent = 'Source: ' + (data.path || '');
+    // Render Mermaid diagrams after inserting HTML
+    if (typeof mermaid !== 'undefined') {
+      mermaid.run({ nodes: el.querySelectorAll('.mermaid') });
+    }
   }).catch(function(e) {
     document.getElementById('docs-content').textContent = 'Failed to load: ' + e;
   });
@@ -962,6 +1105,27 @@ async function handleRun() {
   }
 }
 
+async function handleRunRouter() {
+  const btn = document.getElementById('btn-run');
+  const spin = document.getElementById('spin-run');
+  btn.disabled = true;
+  spin.classList.add('active');
+  hideError();
+  try {
+    const resp = await fetch('/api/run_router', { method: 'POST' });
+    if (!resp.ok) {
+      const body = await resp.text();
+      throw new Error('Router run failed: ' + body);
+    }
+    await loadRouterResults();
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    btn.disabled = false;
+    spin.classList.remove('active');
+  }
+}
+
 async function handleGenerate() {
   const btn = document.getElementById('btn-generate');
   const spin = document.getElementById('spin-generate');
@@ -1180,6 +1344,100 @@ async function loadRouterResults() {
   }
 }
 
+// ── Version Picker ──────────────────────────────────────────────────────────
+
+let _versions = [];
+let _activeVersion = null; // null = current/latest
+
+function toggleVersionPicker() {
+  var dd = document.getElementById('version-dropdown');
+  dd.classList.toggle('open');
+  if (dd.classList.contains('open')) loadVersions();
+}
+
+// Close picker when clicking outside
+document.addEventListener('click', function(e) {
+  var picker = document.querySelector('.version-picker');
+  if (picker && !picker.contains(e.target)) {
+    document.getElementById('version-dropdown').classList.remove('open');
+  }
+});
+
+async function loadVersions() {
+  try {
+    var resp = await fetch('/api/history');
+    var data = await resp.json();
+    _versions = data.versions || [];
+    renderVersionDropdown();
+  } catch(e) {}
+}
+
+function renderVersionDropdown() {
+  var dd = document.getElementById('version-dropdown');
+  dd.textContent = '';
+
+  // "Current" item
+  var cur = el('div', 'version-item' + (_activeVersion === null ? ' active' : ''));
+  var curLabel = el('span', 'version-ts');
+  curLabel.appendChild(safeText('current (latest)'));
+  cur.appendChild(curLabel);
+  cur.addEventListener('click', function() { loadVersionResults(null); });
+  dd.appendChild(cur);
+
+  _versions.forEach(function(v) {
+    var item = el('div', 'version-item' + (_activeVersion === v.file ? ' active' : ''));
+
+    var ts = el('span', 'version-ts');
+    ts.appendChild(safeText(v.timestamp));
+    item.appendChild(ts);
+
+    var recall = el('span', 'version-recall');
+    recall.style.color = scoreColor(v.recall_at_10);
+    recall.appendChild(safeText(pct(v.recall_at_10)));
+    item.appendChild(recall);
+
+    var conf = el('span', 'version-config');
+    var parts = [];
+    if (v.config_summary) {
+      if (v.config_summary.k_focus !== '—') parts.push('k_f=' + v.config_summary.k_focus);
+      if (v.config_summary.focus_enabled === true) parts.push('focus');
+      if (v.config_summary.embedding_fallback === true) parts.push('fb');
+    }
+    conf.appendChild(safeText(parts.join(' · ') || v.passed + '/' + v.total_cases));
+    item.appendChild(conf);
+
+    item.addEventListener('click', function() { loadVersionResults(v.file); });
+    dd.appendChild(item);
+  });
+}
+
+async function loadVersionResults(file) {
+  _activeVersion = file;
+  document.getElementById('version-dropdown').classList.remove('open');
+
+  var url = file ? '/api/history/' + file : '/api/results';
+  var btnLabel = file ? file.replace('.json','').substring(0,16) : 'current';
+  document.getElementById('version-btn').textContent = btnLabel;
+
+  try {
+    var resp = await fetch(url);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    _data = await resp.json();
+    var ts = document.getElementById('timestamp');
+    ts.textContent = '';
+    var tsText = (_data.aggregate && _data.aggregate.timestamp)
+      ? 'Run: ' + _data.aggregate.timestamp : 'Run: unknown';
+    if (_data.config) tsText += '  ·  k_focus=' + (_data.config.k_focus || '—');
+    ts.appendChild(document.createTextNode(tsText));
+    renderSummary(_data.aggregate);
+    renderFilters();
+    renderTable(_data.cases || []);
+    hideError();
+  } catch(err) {
+    showError('Failed to load version: ' + err.message);
+  }
+}
+
 // ── Init ─────────────────────────────────────────────────────────────────────
 
 loadResults();
@@ -1207,18 +1465,18 @@ def _render_markdown(text):
     table_rows = []
 
     _h_style = (
-        "font-family:-apple-system,BlinkMacSystemFont,'SF Pro',sans-serif;"
-        "color:#e5e5ea;margin:20px 0 10px 0;font-weight:600;letter-spacing:-0.3px;"
+        "font-family:var(--ds-font-sans);"
+        "color:var(--ds-text-primary);margin:20px 0 10px 0;font-weight:600;letter-spacing:-0.3px;"
     )
-    _code_bg = "background:#141416;border:1px solid #2c2c2e;border-radius:8px;padding:16px 20px;"
+    _code_bg = "background:var(--ds-bg-deep);border:1px solid var(--ds-border-medium);border-radius:var(--ds-radius-sm);padding:16px 20px;"
     _inline_code = (
-        "background:#242426;padding:2px 6px;border-radius:4px;font-family:'SF Mono',Menlo,monospace;"
-        "font-size:12px;color:#e5e5ea;"
+        "background:var(--ds-bg-overlay);padding:2px 6px;border-radius:4px;font-family:var(--ds-font-mono);"
+        "font-size:var(--ds-text-sm);color:var(--ds-text-primary);"
     )
-    _td_style = "padding:8px 14px;border-bottom:1px solid #2c2c2e;font-size:13px;"
+    _td_style = "padding:8px 14px;border-bottom:1px solid var(--ds-border-medium);font-size:var(--ds-text-base);"
     _th_style = (
-        "padding:8px 14px;border-bottom:1px solid #2c2c2e;font-size:11px;"
-        "font-weight:600;letter-spacing:0.5px;text-transform:uppercase;color:#636366;text-align:left;"
+        "padding:8px 14px;border-bottom:1px solid var(--ds-border-medium);font-size:var(--ds-text-xs);"
+        "font-weight:600;letter-spacing:0.5px;text-transform:uppercase;color:var(--ds-text-secondary);text-align:left;"
     )
 
     def _flush_table():
@@ -1258,11 +1516,19 @@ def _render_markdown(text):
             if in_code_block:
                 # End code block
                 escaped = "\n".join(code_lines)
-                html_parts.append(
-                    '<pre style="%sfont-family:\'SF Mono\',Menlo,monospace;font-size:12px;'
-                    'color:#acb0b6;line-height:1.6;overflow-x:auto;margin:12px 0;white-space:pre-wrap;">'
-                    "<code>%s</code></pre>" % (_code_bg, escaped)
-                )
+                if code_lang == "mermaid":
+                    # Mermaid diagram — render as <div class="mermaid"> for client-side rendering
+                    html_parts.append(
+                        '<div class="mermaid" style="margin:20px 0;background:var(--ds-bg-deep);'
+                        'border:1px solid var(--ds-border-medium);border-radius:var(--ds-radius-md);padding:20px;">'
+                        "%s</div>" % escaped
+                    )
+                else:
+                    html_parts.append(
+                        '<pre style="%sfont-family:var(--ds-font-mono);font-size:var(--ds-text-sm);'
+                        'color:var(--ds-text-secondary);line-height:1.6;overflow-x:auto;margin:12px 0;white-space:pre-wrap;">'
+                        "<code>%s</code></pre>" % (_code_bg, escaped)
+                    )
                 code_lines = []
                 in_code_block = False
             else:
@@ -1310,8 +1576,8 @@ def _render_markdown(text):
         # Bullet list items
         elif stripped.startswith("- ") or stripped.startswith("* "):
             html_parts.append(
-                '<div style="padding:2px 0 2px 16px;font-size:14px;line-height:1.7;">'
-                '<span style="color:#636366;margin-right:8px;">&#x2022;</span>%s</div>'
+                '<div style="padding:2px 0 2px 16px;font-size:var(--ds-text-md);line-height:1.7;">'
+                '<span style="color:var(--ds-text-secondary);margin-right:8px;">&#x2022;</span>%s</div>'
                 % _inline(stripped[2:])
             )
         # Numbered list items
@@ -1319,8 +1585,8 @@ def _render_markdown(text):
             match = _re.match(r"^(\d+)\.\s(.*)", stripped)
             if match:
                 html_parts.append(
-                    '<div style="padding:2px 0 2px 16px;font-size:14px;line-height:1.7;">'
-                    '<span style="color:#636366;margin-right:8px;">%s.</span>%s</div>'
+                    '<div style="padding:2px 0 2px 16px;font-size:var(--ds-text-md);line-height:1.7;">'
+                    '<span style="color:var(--ds-text-secondary);margin-right:8px;">%s.</span>%s</div>'
                     % (match.group(1), _inline(match.group(2)))
                 )
         # Empty line = break
@@ -1329,7 +1595,7 @@ def _render_markdown(text):
         # Normal paragraph
         else:
             html_parts.append(
-                '<p style="font-size:14px;line-height:1.7;margin:4px 0;">%s</p>'
+                '<p style="font-size:var(--ds-text-md);line-height:1.7;margin:4px 0;">%s</p>'
                 % _inline(stripped)
             )
 
@@ -1368,6 +1634,62 @@ class BenchmarkHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/" or self.path == "/index.html":
             self._send(200, "text/html; charset=utf-8", DASHBOARD_HTML)
+
+        elif self.path == "/design-system.css":
+            if os.path.isfile(DESIGN_CSS_PATH):
+                with open(DESIGN_CSS_PATH, "r", encoding="utf-8") as fh:
+                    self._send(200, "text/css; charset=utf-8", fh.read())
+            else:
+                self._send(404, "text/plain", "design-system.css not found")
+
+        elif self.path == "/api/history":
+            # List all history files with summary info
+            if not os.path.isdir(HISTORY_DIR):
+                self._send_json(200, {"versions": []})
+                return
+            versions = []
+            for fname in sorted(os.listdir(HISTORY_DIR), reverse=True):
+                if not fname.endswith(".json"):
+                    continue
+                fpath = os.path.join(HISTORY_DIR, fname)
+                try:
+                    with open(fpath, "r", encoding="utf-8") as fh:
+                        data = json.load(fh)
+                    agg = data.get("aggregate", {})
+                    overall = agg.get("overall", {})
+                    conf = data.get("config", {})
+                    versions.append({
+                        "file": fname,
+                        "timestamp": agg.get("timestamp", fname.replace(".json", "")),
+                        "recall_at_10": overall.get("recall_at_k", 0),
+                        "recall_at_3": overall.get("recall_at_3", 0),
+                        "total_cases": overall.get("total_cases", 0),
+                        "passed": overall.get("passed", 0),
+                        "config_summary": {
+                            "k_focus": conf.get("k_focus", "—"),
+                            "focus_enabled": conf.get("focus_enabled", "—"),
+                            "embedding_fallback": conf.get("embedding_fallback", "—"),
+                        },
+                    })
+                except Exception:
+                    continue
+            self._send_json(200, {"versions": versions})
+
+        elif self.path.startswith("/api/history/"):
+            # Load a specific history file
+            fname = self.path.split("/api/history/", 1)[1]
+            if ".." in fname or "/" in fname:
+                self._send_error_json(400, "Invalid filename")
+                return
+            fpath = os.path.join(HISTORY_DIR, fname)
+            if not os.path.isfile(fpath):
+                self._send_error_json(404, "History file not found")
+                return
+            try:
+                with open(fpath, "r", encoding="utf-8") as fh:
+                    self._send(200, "application/json", fh.read())
+            except OSError as exc:
+                self._send_error_json(500, str(exc))
 
         elif self.path == "/api/results":
             if not os.path.isfile(RESULTS_PATH):
@@ -1453,7 +1775,7 @@ def main():
     port = 8080
     server = HTTPServer((host, port), BenchmarkHandler)
     url = f"http://{host}:{port}"
-    print(f"Benchmark Dashboard running at {url}")
+    print(f"AnkiPlus Dev Hub running at {url}")
     print("Press Ctrl+C to stop.\n")
     try:
         server.serve_forever()
