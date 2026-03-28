@@ -40,7 +40,8 @@ export async function routerHandler(req: Request, res: Response): Promise<void> 
     const prompt = `You are a message router for a learning app. Your job:
 1. Decide which agent handles this message (tutor/research/help/plusi)
 2. Decide if a card search is needed
-3. If search is needed: write a clear, specific description of what the user wants to know, using domain-specific terminology.
+3. If search is needed: write a clear, specific description of what the user wants to know
+4. List 5-10 associated domain terms (synonyms, related concepts, parent/child terms)
 
 Agents: tutor (default, learning questions), ${agents}
 Rules: tutor in doubt. Others ONLY when clearly not a learning topic.
@@ -53,11 +54,17 @@ CRITICAL for resolved_intent:
 - resolved_intent must be a factual description, NOT a search query.
 - ALWAYS respond in the SAME LANGUAGE as the user's message.
 
+CRITICAL for associated_terms:
+- List 5-10 domain-specific terms associated with the topic.
+- Include: synonyms, related anatomy/physiology, parent concepts, clinical terms.
+- Example: "Wernicke-Zentrum" → ["Broca-Aphasie", "Sprachverständnis", "Temporallappen", "sensorische Aphasie", "Gyrus temporalis superior"]
+- These terms are used for card search — be specific, use the user's language.
+
 ${cardHint}Mode: ${currentMode}
 Message: "${userMsg}"
 
 Output JSON only:
-{"agent":"tutor","search_needed":true,"resolved_intent":"clear description of what the user wants to know"}`;
+{"agent":"tutor","search_needed":true,"resolved_intent":"clear description","associated_terms":["term1","term2","term3"]}`;
 
     const response = await chatCompletionWithRetry({
       model: ROUTER_MODEL,

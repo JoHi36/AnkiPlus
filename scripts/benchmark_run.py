@@ -49,7 +49,7 @@ BENCHMARK_CONFIG = {
     'embedding_fallback': True, # NEW — combine with intent when no domain terms
     'max_context_terms': 10,    # Max terms from card_context for resolved_intent
     'lenient_validation': True, # LLM validates alternative cards on fail
-    'llm_expansion': False,     # LLM generates associated terms per query (WIP — terms good, weighting needs tuning)
+    'llm_expansion': True,      # Router-generated associated_terms as SQL + semantic lane
     'k_llm_semantic': 75,       # k-value for LLM-expanded terms semantic lane
 }
 
@@ -674,7 +674,7 @@ def score_rrf_ranking(acceptable_ids, sql_result, semantic_result,
             'tier': 'primary',
         }
 
-    # LLM-expanded SQL: search for LLM-generated terms (secondary tier)
+    # Router associated_terms → SQL search (primary broad tier)
     llm_sql_terms = enrichment_result.get('llm_sql_terms', [])
     if llm_sql_terms:
         llm_rank = len(sql_results) + 1
@@ -688,7 +688,7 @@ def score_rrf_ranking(acceptable_ids, sql_result, semantic_result,
                     sql_results[card_id] = {
                         'rank': llm_rank,
                         'query_type': 'broad',
-                        'tier': 'secondary',
+                        'tier': 'primary',
                     }
                     llm_rank += 1
 
@@ -937,17 +937,15 @@ def run_case(case, db, kg_term_index, card_embeddings, config):
         'kg_terms_found': enrichment_result.get('kg_terms_found', []),
     }
 
-    # ── LLM Term Expansion (Tier 3: associated terms from LLM) ──────────
-    llm_terms = []
+    # ── Router-generated associated terms (from deployed Router) ────────
+    llm_terms = case.get('_associated_terms', [])
     llm_embedding = None
-    if BENCHMARK_CONFIG.get('llm_expansion') and embedding_available:
-        llm_terms = expand_terms_llm(query, config)
-        if llm_terms:
-            llm_text = ' '.join(llm_terms)
-            llm_emb_result = embed_texts([llm_text], config=config)
-            if isinstance(llm_emb_result, list) and llm_emb_result and llm_emb_result[0]:
-                llm_embedding = llm_emb_result[0]
-            result['enrichment_detail']['llm_terms'] = llm_terms
+    if llm_terms and embedding_available:
+        llm_text = ' '.join(llm_terms[:10])
+        llm_emb_result = embed_texts([llm_text], config=config)
+        if isinstance(llm_emb_result, list) and llm_emb_result and llm_emb_result[0]:
+            llm_embedding = llm_emb_result[0]
+        result['enrichment_detail']['associated_terms'] = llm_terms
 
     # ── LLM Terms → SQL Search (find cards via LLM-generated terms) ─────
     if llm_terms and BENCHMARK_CONFIG.get('llm_expansion'):
@@ -1307,6 +1305,29 @@ def main():
         sys.exit(1)
     with open(TEST_CASES_PATH) as f:
         all_cases = json.load(f)
+
+    # Load Router associated_terms for all cases
+    router_path = os.path.join(PROJECT_ROOT, 'benchmark', 'router_results.json')
+    if os.path.exists(router_path):
+        try:
+            with open(router_path) as f:
+                router_data = json.load(f)
+            loaded = 0
+            for rc in router_data.get('cases', []):
+                cid = rc.get('id')
+                if not cid:
+                    continue
+                terms = rc.get('router_response', {}).get('associated_terms', [])
+                if terms:
+                    for case in all_cases:
+                        if case['id'] == cid:
+                            case['_associated_terms'] = terms
+                            loaded += 1
+                            break
+            if loaded:
+                print('  Router associated_terms: %d cases loaded' % loaded)
+        except Exception:
+            pass
 
     # Filter cases
     cases = all_cases

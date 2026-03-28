@@ -724,6 +724,15 @@ function switchSubTab(tab) {
   // Load data
   if (tab === 'router') loadRouterResults();
   if (tab === 'docs') loadDocs();
+  if (tab === 'retrieval') {
+    if (_data) {
+      renderSummary(_data.aggregate);
+      renderFilters();
+      renderTable(_data.cases || []);
+    } else {
+      loadResults();
+    }
+  }
 }
 
 function loadComponents() {
