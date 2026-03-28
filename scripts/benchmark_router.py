@@ -131,7 +131,7 @@ def call_router(message, card_context, config):
 
     url = '%s/router' % backend_url.rstrip('/')
     body = {
-        'message': message,
+        'message': message + ' (Antworte auf Deutsch)',
         'cardContext': card_context,
         'lastAssistantMessage': '',
     }
@@ -240,13 +240,44 @@ def score_relevance(router_response, expected_terms, config):
 # ── Build Card Context ───────────────────────────────────────────────────────
 
 def build_card_context(case):
-    """Build a synthetic cardContext from test case metadata."""
+    """Build cardContext from test case — uses real card text for context cases."""
+    import re as _re
+    import sqlite3 as _sql
     metadata = case.get('metadata', {})
     source_terms = metadata.get('source_terms', [])
     deck_id = metadata.get('deck_id', '')
 
-    # For context cases that have card_context, use those terms
+    # For context cases that have card_context with a card_id, load real card text
     card_ctx = case.get('card_context')
+    if card_ctx and card_ctx.get('card_id'):
+        card_id = card_ctx['card_id']
+        deck_id = card_ctx.get('deck_id', deck_id)
+        # Try loading real card text from Anki DB
+        for profile in ['Benutzer 1', 'User 1']:
+            anki_path = os.path.join(os.path.dirname(PROJECT_ROOT), '..', profile, 'collection.anki2')
+            anki_path = os.path.normpath(anki_path)
+            if os.path.exists(anki_path):
+                try:
+                    adb = _sql.connect('file:%s?mode=ro' % anki_path, uri=True)
+                    row = adb.execute(
+                        "SELECT n.flds FROM cards c JOIN notes n ON c.nid = n.id WHERE c.id = ?",
+                        (int(card_id),)
+                    ).fetchone()
+                    adb.close()
+                    if row and row[0]:
+                        fields = row[0].split('\x1f')
+                        clean = lambda s: _re.sub(r'<[^>]+>', '', s).strip()[:500]
+                        return {
+                            'cardId': str(card_id),
+                            'question': clean(fields[0]) if fields else '',
+                            'answer': clean(fields[1]) if len(fields) > 1 else '',
+                            'deckName': str(deck_id),
+                            'tags': [],
+                        }
+                except Exception:
+                    pass
+
+    # Fallback: use source terms
     if card_ctx and card_ctx.get('terms'):
         source_terms = card_ctx['terms']
         deck_id = card_ctx.get('deck_id', deck_id)

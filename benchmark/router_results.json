@@ -1,45 +1,21 @@
 {
   "aggregate": {
     "overall": {
-      "total_cases": 32,
-      "successful": 32,
+      "total_cases": 12,
+      "successful": 12,
       "errors": 0,
-      "avg_term_coverage": 0.0428,
-      "avg_relevance": 0.6439
+      "avg_term_coverage": 0.2125,
+      "avg_relevance": 0.7962
     },
     "by_category": {
       "context": {
         "cases": 12,
         "errors": 0,
-        "avg_coverage": 0.0,
-        "avg_relevance": 0.5164
-      },
-      "direct": {
-        "cases": 5,
-        "errors": 0,
-        "avg_coverage": 0.1054,
-        "avg_relevance": 0.72
-      },
-      "synonym": {
-        "cases": 5,
-        "errors": 0,
-        "avg_coverage": 0.0,
-        "avg_relevance": 0.6864
-      },
-      "cross_deck": {
-        "cases": 5,
-        "errors": 0,
-        "avg_coverage": 0.0821,
-        "avg_relevance": 0.7329
-      },
-      "typo": {
-        "cases": 5,
-        "errors": 0,
-        "avg_coverage": 0.0864,
-        "avg_relevance": 0.7426
+        "avg_coverage": 0.2125,
+        "avg_relevance": 0.7962
       }
     },
-    "timestamp": "2026-03-28 03:08:07"
+    "timestamp": "2026-03-28 19:58:20"
   },
   "cases": [
     {
@@ -47,105 +23,100 @@
       "category": "context",
       "query": "Gibt es weitere relevante Aspekte?",
       "card_context": {
-        "question": "Cholesterin Cholesterindesmolase Glucocorticoide",
-        "answer": "Mineralocorticoide Pregnenolon Sexualhormone",
+        "cardId": "1585744063988",
+        "question": "Welches Enzym katalysiert die Umwandlung von Cholesterin → Pregnenolon?{{c1::Cholesterindesmolase}}",
+        "answer": "Gemeinsame Grundreaktion der SteroidhormonsyntheseEntfernung der Seitenkette mit 6 C-Atomen zwischen den C-Atomen 20 &amp; 22 des Cholesterins → Hierbei wird die Seitenkette C22 bis C27 oxidativ abgespaltenPregnenolon ist damit die Ausgangssubstanz aller Mineralo- &amp; Glucocorticoide sowie der Sexualhormone",
         "deckName": "1736519912593",
         "tags": []
       },
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "resolved_intent": "additional relevant aspects of the current learning topic"
+        "resolved_intent": "Weitere relevante Aspekte zur Cholesterindesmolase und ihrer Rolle bei der Umwandlung von Cholesterin zu Pregnenolon"
       },
-      "term_coverage": 0.0,
+      "term_coverage": 0.4286,
       "missed_terms": [
-        "Cholesterin",
-        "Cholesterindesmolase",
         "Glucocorticoide",
         "Mineralocorticoide",
-        "Pregnenolon",
         "Sexualhormone",
         "Steroidhormonsynthese"
       ],
-      "relevance": 0.5143
+      "relevance": 0.8364
     },
     {
       "id": "context_002",
       "category": "context",
       "query": "Welche Konzepte sind hier zentral?",
       "card_context": {
-        "question": "Arzt-Patient-Beziehung Echtheit Empathie",
-        "answer": "Kongruenz Rogers Transparenz",
+        "cardId": "1586278625656",
+        "question": "Was sind die Basismerkmale der klientenzentrierten, nondirektiven Gesprächstherapie nach Rogers?• {{c1::Empathie}}• {{c2::Wertschätzung}}• {{c3::Echtheit/Kongruenz}}• Transparenz",
+        "answer": "① Arzt versetzt sich in den Patienten hinein und versucht, dessen Gefühle wiederzugeben② Arzt gibt dem Patienten zu erkennen, dass er ihn wertschätzt &amp; akzeptiert③ Arzt steht hinter seinen Äußerungen④ Arzt sollte Patienten erklären, vor welchem Hintergrund er Fragen stellt &amp; warum er vorgeschlagene Diagnostik &amp; Therapie bevorzugtGrundlage einer vertrauensvollen Arzt-Patient-Beziehung → ↑Kooperationsbereitschaft → Voraussetzung für eine erfolgreiche Therapie",
         "deckName": "1736519912638",
         "tags": []
       },
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "resolved_intent": "zentrale Konzepte des aktuellen Lerninhalts"
+        "resolved_intent": "zentrale Konzepte der klientenzentrierten, nondirektiven Gesprächstherapie nach Rogers"
       },
-      "term_coverage": 0.0,
+      "term_coverage": 0.125,
       "missed_terms": [
         "Arzt-Patient-Beziehung",
         "Echtheit",
         "Empathie",
         "Kongruenz",
-        "Rogers",
         "Transparenz",
         "Wertschätzung",
         "klientenzentrierte nondirektive Gesprächstherapie"
       ],
-      "relevance": 0.5478
+      "relevance": 0.7975
     },
     {
       "id": "context_003",
       "category": "context",
       "query": "Wie hängt das zusammen?",
       "card_context": {
-        "question": "ADP ADP-Rezeptoren Aktivierung",
-        "answer": "COX Cyclooxygenase Degranulation",
+        "cardId": "1589213139815",
+        "question": "Wie ist der Ablauf der Aktivierung der Thrombozyten bei der primären Hämostase?{{c1::Wandadhärente Thrombozyten}} sezernieren {{c1::ADP}} aus {{c1::δ-Granula}} → {{c1::ADP}} bindet an {{c1::ADP-Rezeptoren}} weiterer Thrombozyten → Ausbildung von {{c2::Pseudopodien}} und Stimulation der {{c2::Cyclooxygenase (COX)}} → {{c2::↑Thromboxan-A2-Synthese}} → Sekretion weiterer {{c2::Granula-Inhaltsstoffe (= Degranulation)}}",
+        "answer": "Positive Rückkopplung bzw. Kettenreaktion",
         "deckName": "1736519912683",
         "tags": []
       },
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "resolved_intent": "relationship between previously discussed concepts"
+        "resolved_intent": "Zusammenhang zwischen ADP-Sekretion aus δ-Granula und ADP-Rezeptorbindung bei der Thrombozytenaktivierung in der primären Hämostase"
       },
-      "term_coverage": 0.0,
+      "term_coverage": 0.3636,
       "missed_terms": [
-        "ADP",
         "ADP-Rezeptoren",
-        "Aktivierung",
         "COX",
         "Cyclooxygenase",
         "Degranulation",
         "Pseudopodien",
         "Thromboxan-A2-Synthese",
-        "Thrombozyten",
-        "primäre Hämostase",
-        "δ-Granula"
+        "primäre Hämostase"
       ],
-      "relevance": 0.4913
+      "relevance": 0.885
     },
     {
       "id": "context_004",
       "category": "context",
       "query": "Kannst du das ausführlicher erklären?",
       "card_context": {
-        "question": "AC Ca2+-ATPasen Ca2+-Kanäle",
-        "answer": "GC Gs-Protein Hyperpolarisation",
+        "cardId": "1548500744854",
+        "question": "Durch welche Mechanismen wird die Kontraktion der glatten Muskulatur wieder beendet?• {{c1::↓Ca2+-Konzentration}} → {{c1::↑Aktivität Myosin-leichte-Ketten-Phosphatase (MLKP)}}• {{c2::Aktivierung der MLKP durch}}: {{c2::NO → GC → ↑cGMP → PKG}} | {{c2::Gs-Protein → AC → ↑cAMP → PKA}}• {{c3::Hemmung der MLKK durch ↑cGMP &amp; ↑cAMP}}",
+        "answer": "MLKP Funktion: Dephosphorylierung von phosphoryliertem Myosin → Keine Interaktion mit Aktin → Kontraktion beendet① Hyperpolarisation (bspw. durch Öffnung von K+-Kanälen) verhindert Öffnung von spannungsaktivierten Ca2+-Kanälen↳ Ca2+-ATPasen / Na+-Ca2+-Austauscher② PKA → Phosphoryliert / inaktiviert MLKK③ Bspw. durch β2-Innervation oder Bindung von NO",
         "deckName": "1736519912665",
         "tags": []
       },
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "resolved_intent": "Elaborate on the previous explanation"
+        "resolved_intent": "Mechanisms that terminate smooth muscle contraction, specifically the role of decreased Ca2+ concentration and increased Myosin Light Chain Phosphatase (MLCP) activity."
       },
-      "term_coverage": 0.0,
+      "term_coverage": 0.0556,
       "missed_terms": [
-        "AC",
         "Ca2+-ATPasen",
         "Ca2+-Kanäle",
         "GC",
@@ -164,104 +135,101 @@
         "glatte Muskulatur",
         "β2-Innervation"
       ],
-      "relevance": 0.4891
+      "relevance": 0.7449
     },
     {
       "id": "context_005",
       "category": "context",
       "query": "Welche Zusammenhänge gibt es hier?",
       "card_context": {
-        "question": "Aminogruppe Aminosäuren Ampholyten",
-        "answer": "Carboxylgruppe Seitengruppe pKS-Normwerte",
+        "cardId": "1591532253913",
+        "question": "Was sind die pKS-Normwerte von Aminosäuren?• pKS-Wert - Carboxylgruppe: {{c1::2}}• pKS-Wert - Aminogruppe: {{c1::9-10}}",
+        "answer": "Ggf. pKS-Wert der Seitengruppe | Bei pH-Wert von 2 liegt also bei der Hälfte der Aminosäuren die α-Carboxylgruppe deprotoniert vorAminosäuren sind Ampholyten → Können (in Abhängigkeit vom pH) sowohl sauer als auch basisch reagieren↳ Protonenaufnahme mittels Carboxylgruppe &amp; Protonenabgabe mittels Aminogruppe",
         "deckName": "1736519912577",
         "tags": []
       },
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "resolved_intent": "Zusammenhänge zwischen den Konzepten/Informationen, die in der aktuellen Lernkarte präsentiert werden"
+        "resolved_intent": "Zusammenhänge zwischen pKS-Werten von Carboxyl- und Aminogruppen in Aminosäuren"
       },
-      "term_coverage": 0.0,
+      "term_coverage": 0.3333,
       "missed_terms": [
-        "Aminogruppe",
-        "Aminosäuren",
         "Ampholyten",
         "Carboxylgruppe",
         "Seitengruppe",
         "pKS-Normwerte"
       ],
-      "relevance": 0.5459
+      "relevance": 0.8738
     },
     {
       "id": "context_006",
       "category": "context",
       "query": "Wie hängt das zusammen?",
       "card_context": {
-        "question": "Aktivität Disability Handicap",
-        "answer": "ICF-Klassifikation Impairment Kontextfaktoren",
+        "cardId": "1586347073412",
+        "question": "Welche Komponenten werden in der ICF-Klassifikation berücksichtigt?• {{c1::Körperfunktionen &amp; Körperstrukturen}} → {{c1::Ausmaß der Beeinträchtigungen auf physischer &amp; psychischer Ebene}}• {{c2::Aktivität}} → {{c2::Ausmaß der Fähigkeit, am Alltagsleben teilzunehmen}}• {{c3::Partizipation}} → {{c3::Ausmaß der Fähigkeit, seinen Beruf auszuüben &amp; an Gesellschaft teilzuhaben}}• {{c4::Kontextfaktoren}} → {{c4::Person &amp; deren Umwelt}}",
+        "answer": "Standardisierte &amp; von der WHO herausgegeben① Früher: Impairment → Bspw. Angaben über die Sehstärke, mentale Funktionen, Stimm- &amp; Sprechfunktionen② Früher: Disability → z.B. Gehen können③ Früher: Handicap④ Person → z.B. Geschlecht, Lebensstil | Umwelt → z.B. behindertengerechter Arbeitsplatz",
         "deckName": "1736519912565",
         "tags": []
       },
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "resolved_intent": "relationship between previously discussed concepts"
+        "resolved_intent": "Zusammenhang zwischen Körperfunktionen & Körperstrukturen und dem Ausmaß der Beeinträchtigungen auf physischer & psychischer Ebene in der ICF-Klassifikation"
       },
-      "term_coverage": 0.0,
+      "term_coverage": 0.3333,
       "missed_terms": [
         "Aktivität",
         "Disability",
         "Handicap",
-        "ICF-Klassifikation",
         "Impairment",
         "Kontextfaktoren",
-        "Körperfunktionen",
-        "Körperstrukturen",
         "Partizipation"
       ],
-      "relevance": 0.5129
+      "relevance": 0.7833
     },
     {
       "id": "context_007",
       "category": "context",
       "query": "Gibt es weitere relevante Aspekte?",
       "card_context": {
-        "question": "Ileum Jejunum Krypten",
-        "answer": "Paneth-Zellen Peyer-Plaques Plicae circulares",
+        "cardId": "1635358399459",
+        "question": "Wie verändern sich regionale Besonderheiten im Verlauf des Jejunums bis zum Ileum?• {{c1::Plicae circulares: Werden flacher und weiter auseinander}}• {{c1::Peyer-Plaques↑}}• {{c2::Zotten kürzer}}• {{c2::Krypten tiefer}}• {{c2::Paneth-Zellen↑}}",
+        "answer": "",
         "deckName": "1736519912695",
         "tags": []
       },
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "resolved_intent": "additional relevant aspects of the current learning topic"
+        "resolved_intent": "regionale Besonderheiten des Jejunums und Ileums, die nicht in der Karte genannt wurden"
       },
-      "term_coverage": 0.0,
+      "term_coverage": 0.2857,
       "missed_terms": [
-        "Ileum",
-        "Jejunum",
         "Krypten",
         "Paneth-Zellen",
         "Peyer-Plaques",
         "Plicae circulares",
         "Zotten"
       ],
-      "relevance": 0.5181
+      "relevance": 0.8094
     },
     {
       "id": "context_008",
       "category": "context",
       "query": "Was bedeutet das?",
       "card_context": {
-        "question": "M. longus capitis M. longus colli Mm. scaleni",
-        "answer": "Plexus brachialis Plexus cervicalis",
+        "cardId": "1571834729899",
+        "question": "Welche Muskeln gehören zur tiefen Halsmuskulatur und wie werden sie innerviert?{{c1::Mm. scaleni, M. longus colli, M. longus capitis}} |  {{c1::Ventrale Spinalnervenäste des Plexus cervicalis &amp; brachialis}}",
+        "answer": "",
         "deckName": "1736519912756",
         "tags": []
       },
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "resolved_intent": "meaning of the last discussed concept/term"
+        "resolved_intent": "Innervation der tiefen Halsmuskulatur"
       },
       "term_coverage": 0.0,
       "missed_terms": [
@@ -271,22 +239,23 @@
         "Plexus brachialis",
         "Plexus cervicalis"
       ],
-      "relevance": 0.502
+      "relevance": 0.7079
     },
     {
       "id": "context_009",
       "category": "context",
       "query": "Kannst du das vertiefen?",
       "card_context": {
-        "question": "Atmungskette Mitochondrienmatrix Ribosomen",
-        "answer": "mitochondriale DNA mitochondriale Proteine mtDNA",
+        "cardId": "1581159682248",
+        "question": "Was enthält die Mitochondrienmatrix?{{c1::Mitochondriale DNA (mtDNA)}} | {{c1::Ribosomen}}",
+        "answer": "Sind für die Synthese von ~1% der mitochondrialen Proteine zuständig (bspw. einige Proteine der Atmungskette)",
         "deckName": "1736519912610",
         "tags": []
       },
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "resolved_intent": "Vertiefung des zuletzt besprochenen Themas"
+        "resolved_intent": "detailed explanation of the components and functions of the mitochondrial matrix"
       },
       "term_coverage": 0.0,
       "missed_terms": [
@@ -297,50 +266,48 @@
         "mitochondriale Proteine",
         "mtDNA"
       ],
-      "relevance": 0.5678
+      "relevance": 0.7399
     },
     {
       "id": "context_010",
       "category": "context",
       "query": "Was sollte ich darüber wissen?",
       "card_context": {
-        "question": "A. carotis interna Basis cranii interna Canalis caroticus",
-        "answer": "Foramen lacerum Fossa cranii media N. petrosus major",
+        "cardId": "1634152625543",
+        "question": "Welche Durchtrittsstellen für welche Strukturen liegen im Os temporale (Basis cranii interna)?Fossa cranii media• {{c1::Foramen lacerum}} → {{c2::N. petrosus profundus}} | {{c2::N. petrosus major}}• {{c1::Canalis caroticus}} → {{c3::A. carotis interna}}• {{c1::Hiatus canalis n. petrosi majoris &amp; minoris}} → {{c3::N. petrosus major &amp; minor}}Fossa cranii posterior• {{c1::Porus acusticus internus}} → {{c4::N. facialis (VII)}} | {{c4::N. vestibulocochlearis (VIII)}} | {{c4::A./V. labyrinthi}",
+        "answer": "Benachbarte Struktur: Felsenbein",
         "deckName": "1736519912616",
         "tags": []
       },
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "resolved_intent": "key information about the current topic of discussion"
+        "resolved_intent": "Strukturen, die durch das Foramen lacerum im Os temporale (Basis cranii interna, Fossa cranii media) ziehen"
       },
-      "term_coverage": 0.0,
+      "term_coverage": 0.5,
       "missed_terms": [
         "A. carotis interna",
-        "Basis cranii interna",
         "Canalis caroticus",
-        "Foramen lacerum",
-        "Fossa cranii media",
         "N. petrosus major",
-        "N. petrosus profundus",
-        "Os temporale"
+        "N. petrosus profundus"
       ],
-      "relevance": 0.4699
+      "relevance": 0.812
     },
     {
       "id": "context_011",
       "category": "context",
       "query": "Welche Konzepte sind hier zentral?",
       "card_context": {
-        "question": "Blut-Luft-Schranke Pneumozyten Typ 1 Tight Junctions",
-        "answer": "Typ-2-Pneumozyten",
+        "cardId": "1560853338212",
+        "question": "Welcher Zelltyp in den Alveolen ist ein Hauptbestandteil der Blut-Luft-Schranke?{{c1::Pneumozyten Typ 1}}",
+        "answer": "Flache Epithelzellen → Tight Junctions | Bedecken ~95% der AlveolaroberflächeErsatz von Typ-1-Pneumozyten bei Gewebsverletzung → Typ-2-Pneumozyten können sich mitotisch teilen↳ Tochterzellen können sich dann nachfolgend zu Typ-1-Pneumozyten differenzieren",
         "deckName": "1736519912696",
         "tags": []
       },
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "resolved_intent": "zentrale Konzepte des aktuellen Lerninhalts"
+        "resolved_intent": "central concepts related to the cell type in alveoli that forms the blood-air barrier"
       },
       "term_coverage": 0.0,
       "missed_terms": [
@@ -349,606 +316,35 @@
         "Tight Junctions",
         "Typ-2-Pneumozyten"
       ],
-      "relevance": 0.533
+      "relevance": 0.7644
     },
     {
       "id": "context_012",
       "category": "context",
       "query": "Was steckt dahinter?",
       "card_context": {
-        "question": "A. stylomastoidea A. tympanica anterior Canaliculus mastoideus",
-        "answer": "Chorda tympanica Fissura petrotympanica Foramen lacerum",
+        "cardId": "1578138179488",
+        "question": "Welche Durchtrittsstellen für welche Strukturen liegen im Os temporale (Basis cranii externa)?• {{c1::Fissura petrotympanica}} → {{c2::Chorda tympani (aus VII)}} | {{c2::A. tympanica anterior}}• {{c1::Foramen stylomastoideum}} → {{c2::N. facialis (VII)}} | {{c2::A. stylomastoidea}}• {{c1::Foramen lacerum}}• {{c1::Canaliculus mastoideus}} → {{c2::R. auricularis (aus X)}}• {{c1::Canaliculus tympanicus}} → {{c2::N. tympanicus (aus IX)}}• {{c1::Foramen mastoideum}} → {{c2::V. emissaria mastoidea}}",
+        "answer": "",
         "deckName": "1736519912616",
         "tags": []
       },
       "router_response": {
         "agent": "tutor",
         "search_needed": true,
-        "resolved_intent": "explanation of the previous topic or concept discussed"
+        "resolved_intent": "Fissura petrotympanica: Strukturen, die durch sie hindurchtreten"
       },
-      "term_coverage": 0.0,
+      "term_coverage": 0.125,
       "missed_terms": [
         "A. stylomastoidea",
         "A. tympanica anterior",
         "Canaliculus mastoideus",
         "Chorda tympanica",
-        "Fissura petrotympanica",
         "Foramen lacerum",
         "Foramen stylomastoideum",
         "N. facialis"
       ],
-      "relevance": 0.5044
-    },
-    {
-      "id": "direct_001",
-      "category": "direct",
-      "query": "Was passiert bei Sekret?",
-      "card_context": {
-        "question": "Autosomal-rezessiv CFTR-Gen Chloridionen",
-        "answer": "Chloridkanal Chronischen Entzündungen Lunge",
-        "deckName": "1736519912535",
-        "tags": []
-      },
-      "router_response": {
-        "agent": "tutor",
-        "search_needed": true,
-        "resolved_intent": "physiologische Prozesse und Funktionen der Sekretion"
-      },
-      "term_coverage": 0.0769,
-      "missed_terms": [
-        "Autosomal-rezessiv",
-        "CFTR-Gen",
-        "Chloridionen",
-        "Chloridkanal",
-        "Chronischen Entzündungen",
-        "Lunge",
-        "Mukoviszidose",
-        "Organschädigung",
-        "Pankreas",
-        "Wasser-Salzhaushalts",
-        "exokrinen Drüsengeweben",
-        "zystische Fibrose"
-      ],
-      "relevance": 0.6521
-    },
-    {
-      "id": "direct_002",
-      "category": "direct",
-      "query": "Was verbindet rechter Vorhof mit A. pulmonalis dextra?",
-      "card_context": {
-        "question": "A. pulmonalis dextra Aorta ascendens Sternum",
-        "answer": "V. brachiocephalica V. cava inferior V. cava superior",
-        "deckName": "1736519912708",
-        "tags": []
-      },
-      "router_response": {
-        "agent": "tutor",
-        "search_needed": true,
-        "resolved_intent": "Verbindung zwischen rechtem Vorhof und Arteria pulmonalis dextra"
-      },
-      "term_coverage": 0.0,
-      "missed_terms": [
-        "A. pulmonalis dextra",
-        "Aorta ascendens",
-        "Sternum",
-        "V. brachiocephalica",
-        "V. cava inferior",
-        "V. cava superior",
-        "Venenklappen",
-        "rechter Vorhof"
-      ],
-      "relevance": 0.7818
-    },
-    {
-      "id": "direct_003",
-      "category": "direct",
-      "query": "Beschreibe Sauerstoffbindungskurve.",
-      "card_context": {
-        "question": "O2-Affinität O2-Halbsättigungsdruck Rechtsverschiebung",
-        "answer": "Sauerstoffbindungskurve",
-        "deckName": "1736519912576",
-        "tags": []
-      },
-      "router_response": {
-        "agent": "tutor",
-        "search_needed": true,
-        "resolved_intent": "Beschreibung der Sauerstoffbindungskurve"
-      },
-      "term_coverage": 0.25,
-      "missed_terms": [
-        "O2-Affinität",
-        "O2-Halbsättigungsdruck",
-        "Rechtsverschiebung"
-      ],
-      "relevance": 0.82
-    },
-    {
-      "id": "direct_004",
-      "category": "direct",
-      "query": "Was löst Tunica mucosa aus?",
-      "card_context": {
-        "question": "Drüsenzellen Epithel Flimmerzellen",
-        "answer": "Tuba uterina Tunica mucosa",
-        "deckName": "1736519912846",
-        "tags": []
-      },
-      "router_response": {
-        "agent": "tutor",
-        "search_needed": true,
-        "resolved_intent": "causes of Tunica mucosa"
-      },
-      "term_coverage": 0.2,
-      "missed_terms": [
-        "Drüsenzellen",
-        "Epithel",
-        "Flimmerzellen",
-        "Tuba uterina"
-      ],
-      "relevance": 0.6785
-    },
-    {
-      "id": "direct_005",
-      "category": "direct",
-      "query": "Wo liegt V. cava superior?",
-      "card_context": {
-        "question": "Plexus venosi vertebrales V. azygos V. cava inferior",
-        "answer": "V. cava superior V. hemiazygos V. lumbalis ascendens",
-        "deckName": "1736519912740",
-        "tags": []
-      },
-      "router_response": {
-        "agent": "tutor",
-        "search_needed": true,
-        "resolved_intent": "anatomical location of the superior vena cava"
-      },
-      "term_coverage": 0.0,
-      "missed_terms": [
-        "Plexus venosi vertebrales",
-        "V. azygos",
-        "V. cava inferior",
-        "V. cava superior",
-        "V. hemiazygos",
-        "V. lumbalis ascendens",
-        "Vv. intercostales posteriores",
-        "Vv. lumbales",
-        "cavocavale Anastomosen",
-        "dorsale Rumpfwand"
-      ],
-      "relevance": 0.6674
-    },
-    {
-      "id": "synonym_001",
-      "category": "synonym",
-      "query": "Was ist 3-Phosphoglycerat?",
-      "card_context": {
-        "question": "2 3-BPG Blut",
-        "answer": "Hyperventilation O2-Partialdruck Respiratorische Alkalose",
-        "deckName": "1736519912678",
-        "tags": []
-      },
-      "router_response": {
-        "agent": "tutor",
-        "search_needed": true,
-        "resolved_intent": "Definition und Eigenschaften von 3-Phosphoglycerat"
-      },
-      "term_coverage": 0.0,
-      "missed_terms": [
-        "2",
-        "3-BPG",
-        "Blut",
-        "Hyperventilation",
-        "O2-Partialdruck",
-        "Respiratorische Alkalose",
-        "Sauerstoffbindungskurve",
-        "pH-Wert"
-      ],
-      "relevance": 0.6374
-    },
-    {
-      "id": "synonym_002",
-      "category": "synonym",
-      "query": "Wie hängen Uracil und Translation zusammen?",
-      "card_context": {
-        "question": "CpG-Inseln Cytosin DNA-Methylierung",
-        "answer": "DNA-Methyltransferasen DNMTs Guanin-Rest",
-        "deckName": "1736519912535",
-        "tags": []
-      },
-      "router_response": {
-        "agent": "tutor",
-        "search_needed": true,
-        "resolved_intent": "Zusammenhang zwischen Uracil und Translation"
-      },
-      "term_coverage": 0.0,
-      "missed_terms": [
-        "CpG-Inseln",
-        "Cytosin",
-        "DNA-Methylierung",
-        "DNA-Methyltransferasen",
-        "DNMTs",
-        "Guanin-Rest",
-        "Nukleotidsequenz 5'-CpG-3'",
-        "Promotorbereichen",
-        "Transkription",
-        "epigenetischer Regulationsmechanismus"
-      ],
-      "relevance": 0.6159
-    },
-    {
-      "id": "synonym_003",
-      "category": "synonym",
-      "query": "Was ist der Zusammenhang zwischen Hiatus oesophageus und N. glossopharyngeus?",
-      "card_context": {
-        "question": "N. laryngeus recurrens dexter N. laryngeus recurrens sinister N. vagus",
-        "answer": "Nn. cardiaci thoracici Plexus cardiacus Plexus oesophageus",
-        "deckName": "1736519912708",
-        "tags": []
-      },
-      "router_response": {
-        "agent": "tutor",
-        "search_needed": true,
-        "resolved_intent": "Zusammenhang zwischen Hiatus oesophageus und Nervus glossopharyngeus"
-      },
-      "term_coverage": 0.0,
-      "missed_terms": [
-        "N. laryngeus recurrens dexter",
-        "N. laryngeus recurrens sinister",
-        "N. vagus",
-        "Nn. cardiaci thoracici",
-        "Plexus cardiacus",
-        "Plexus oesophageus",
-        "Plexus pulmonalis",
-        "Rr. bronchiales",
-        "Rr. cardiaci thoracici",
-        "Rr. pulmonales thoracici",
-        "Truncus vagalis anterior",
-        "Truncus vagalis posterior"
-      ],
-      "relevance": 0.7096
-    },
-    {
-      "id": "synonym_004",
-      "category": "synonym",
-      "query": "Wie hängen Atemfrequenz und Respiratorische Alkalose zusammen?",
-      "card_context": {
-        "question": "Atemzugvolumen Hyperventilation Metabolische Azidose",
-        "answer": "Respiratorische Kompensation",
-        "deckName": "1736519912614",
-        "tags": []
-      },
-      "router_response": {
-        "agent": "tutor",
-        "search_needed": true,
-        "resolved_intent": "Zusammenhang zwischen Atemfrequenz und respiratorischer Alkalose"
-      },
-      "term_coverage": 0.0,
-      "missed_terms": [
-        "Atemzugvolumen",
-        "Hyperventilation",
-        "Metabolische Azidose",
-        "Respiratorische Kompensation"
-      ],
-      "relevance": 0.8292
-    },
-    {
-      "id": "synonym_005",
-      "category": "synonym",
-      "query": "Was verbindet Repolarisation mit cGMP?",
-      "card_context": {
-        "question": "Anionenkanal Cl–-Ionen GABA A",
-        "answer": "GABA B Glycin Hyperpolarisation",
-        "deckName": "1736519912600",
-        "tags": []
-      },
-      "router_response": {
-        "agent": "tutor",
-        "search_needed": true,
-        "resolved_intent": "Zusammenhang zwischen Repolarisation und cGMP"
-      },
-      "term_coverage": 0.0,
-      "missed_terms": [
-        "Anionenkanal",
-        "Cl–-Ionen",
-        "GABA A",
-        "GABA B",
-        "Glycin",
-        "Hyperpolarisation",
-        "IPSP",
-        "K+-Ausstrom",
-        "Ruhemembranpotential",
-        "inhibitorische Wirkung"
-      ],
-      "relevance": 0.6397
-    },
-    {
-      "id": "cross_deck_001",
-      "category": "cross_deck",
-      "query": "Welche Bedeutung hat A. suprascapularis?",
-      "card_context": {
-        "question": "A. suprascapularis Clavicula Fossa infraspinata",
-        "answer": "Fossa supraspinata Lig. transversum scapulae inferius Lig. transversum scapulae superius",
-        "deckName": "1736519912834",
-        "tags": []
-      },
-      "router_response": {
-        "agent": "tutor",
-        "search_needed": true,
-        "resolved_intent": "Bedeutung der Arteria suprascapularis"
-      },
-      "term_coverage": 0.0,
-      "missed_terms": [
-        "A. suprascapularis",
-        "Clavicula",
-        "Fossa infraspinata",
-        "Fossa supraspinata",
-        "Lig. transversum scapulae inferius",
-        "Lig. transversum scapulae superius",
-        "M. trapezius",
-        "N. suprascapularis"
-      ],
-      "relevance": 0.7903
-    },
-    {
-      "id": "cross_deck_002",
-      "category": "cross_deck",
-      "query": "Was versteht man unter Magensäuresekretion?",
-      "card_context": {
-        "question": "Gastroduodenale Ulkuskrankheit H⁺/K⁺-ATPase H₂-Rezeptor-Blocker",
-        "answer": "Magensäuresekretion Medikamentöse Therapie Protonenpumpeninhibitoren",
-        "deckName": "1736519912598",
-        "tags": []
-      },
-      "router_response": {
-        "agent": "tutor",
-        "search_needed": true,
-        "resolved_intent": "Magensäuresekretion"
-      },
-      "term_coverage": 0.1667,
-      "missed_terms": [
-        "Gastroduodenale Ulkuskrankheit",
-        "H⁺/K⁺-ATPase",
-        "H₂-Rezeptor-Blocker",
-        "Medikamentöse Therapie",
-        "Protonenpumpeninhibitoren"
-      ],
-      "relevance": 0.7592
-    },
-    {
-      "id": "cross_deck_003",
-      "category": "cross_deck",
-      "query": "Wie funktioniert pH-Wert?",
-      "card_context": {
-        "question": "Alkalose CO2-Atemantrieb Hyperventilation",
-        "answer": "Hypokapnie pH-Atemantrieb pH-Wert",
-        "deckName": "1736519912614",
-        "tags": []
-      },
-      "router_response": {
-        "agent": "tutor",
-        "search_needed": true,
-        "resolved_intent": "pH-Wert Funktion"
-      },
-      "term_coverage": 0.1667,
-      "missed_terms": [
-        "Alkalose",
-        "CO2-Atemantrieb",
-        "Hyperventilation",
-        "Hypokapnie",
-        "pH-Atemantrieb"
-      ],
-      "relevance": 0.6848
-    },
-    {
-      "id": "cross_deck_004",
-      "category": "cross_deck",
-      "query": "Erkläre Komplementsystem.",
-      "card_context": {
-        "question": "C3-Konvertase Ficoline Kohlenhydratreste",
-        "answer": "Komplementsystem Lektinweg MASP-1+2",
-        "deckName": "1736519912644",
-        "tags": []
-      },
-      "router_response": {
-        "agent": "tutor",
-        "search_needed": true,
-        "resolved_intent": "Komplementsystem"
-      },
-      "term_coverage": 0.0769,
-      "missed_terms": [
-        "C3-Konvertase",
-        "Ficoline",
-        "Kohlenhydratreste",
-        "Lektinweg",
-        "MASP-1+2",
-        "MBL",
-        "Mannose",
-        "Mannose-bindendes Lektin",
-        "PAMPs",
-        "Pathogen Associated Molecular Patterns",
-        "Pathogenoberfläche",
-        "Proteasen"
-      ],
-      "relevance": 0.6921
-    },
-    {
-      "id": "cross_deck_005",
-      "category": "cross_deck",
-      "query": "Erkläre A. basilaris.",
-      "card_context": {
-        "question": "A. basilaris Aa. cerebelli Colliculi inferiores",
-        "answer": "Colliculi superiores Crura cerebri Lamina quadrigemina",
-        "deckName": "1736519912721",
-        "tags": []
-      },
-      "router_response": {
-        "agent": "tutor",
-        "search_needed": true,
-        "resolved_intent": "Arteria basilaris"
-      },
-      "term_coverage": 0.0,
-      "missed_terms": [
-        "A. basilaris",
-        "Aa. cerebelli",
-        "Colliculi inferiores",
-        "Colliculi superiores",
-        "Crura cerebri",
-        "Lamina quadrigemina",
-        "Lamina tecti",
-        "Mesencephalon",
-        "Mittelhirndach",
-        "Nucleus ruber",
-        "Substantia nigra",
-        "Tectum mesencephali",
-        "Tegmentum mesencephali",
-        "V. basalis",
-        "V. magna cerebri",
-        "Vierhügelplatte"
-      ],
-      "relevance": 0.7382
-    },
-    {
-      "id": "typo_001",
-      "category": "typo",
-      "query": "Was versteht man unter Neurouskuläre Endplatte?",
-      "card_context": {
-        "question": "Aktionspotential EPSP Motorische Endplatte",
-        "answer": "Neuromuskuläre Endplatte Räumliche Summation Zeitliche Summation",
-        "deckName": "1736519912600",
-        "tags": []
-      },
-      "router_response": {
-        "agent": "tutor",
-        "search_needed": true,
-        "resolved_intent": "Definition und Funktion der neuromuskulären Endplatte"
-      },
-      "term_coverage": 0.0,
-      "missed_terms": [
-        "Aktionspotential",
-        "EPSP",
-        "Motorische Endplatte",
-        "Neuromuskuläre Endplatte",
-        "Räumliche Summation",
-        "Zeitliche Summation"
-      ],
-      "relevance": 0.8001
-    },
-    {
-      "id": "typo_002",
-      "category": "typo",
-      "query": "Was ist Handwurzelnknochen?",
-      "card_context": {
-        "question": "Amphiarthrose Art. carpometacarpales Handwurzelknochen",
-        "answer": "Mittelhandknochen II–V",
-        "deckName": "1736519912838",
-        "tags": []
-      },
-      "router_response": {
-        "agent": "tutor",
-        "search_needed": true,
-        "resolved_intent": "Definition und Funktion der Handwurzelknochen"
-      },
-      "term_coverage": 0.25,
-      "missed_terms": [
-        "Amphiarthrose",
-        "Art. carpometacarpales",
-        "Mittelhandknochen II–V"
-      ],
-      "relevance": 0.7443
-    },
-    {
-      "id": "typo_003",
-      "category": "typo",
-      "query": "Erkläre V portae hepatis.",
-      "card_context": {
-        "question": "Hohlvenen Kolonvenen Leberzirrhose",
-        "answer": "V. azygos V. cava superior V. hemiazygos",
-        "deckName": "1736519912740",
-        "tags": []
-      },
-      "router_response": {
-        "agent": "tutor",
-        "search_needed": true,
-        "resolved_intent": "explanation of Vena portae hepatis"
-      },
-      "term_coverage": 0.0,
-      "missed_terms": [
-        "Hohlvenen",
-        "Kolonvenen",
-        "Leberzirrhose",
-        "V. azygos",
-        "V. cava superior",
-        "V. hemiazygos",
-        "V. mesenterica inferior",
-        "V. mesenterica superior",
-        "V. portae hepatis",
-        "Vv. colicae",
-        "Vv. lumbales ascendentes",
-        "portokavale Anastomose"
-      ],
-      "relevance": 0.6939
-    },
-    {
-      "id": "typo_004",
-      "category": "typo",
-      "query": "Welche Funktion hat N. mandbiularis?",
-      "card_context": {
-        "question": "A. maxillaris A. meningea media Ala major",
-        "answer": "Arcus zygomaticus Fossa infratemporalis Ganglion oticum",
-        "deckName": "1736519912616",
-        "tags": []
-      },
-      "router_response": {
-        "agent": "tutor",
-        "search_needed": true,
-        "resolved_intent": "Funktion des Nervus mandibularis"
-      },
-      "term_coverage": 0.0,
-      "missed_terms": [
-        "A. maxillaris",
-        "A. meningea media",
-        "Ala major",
-        "Arcus zygomaticus",
-        "Fossa infratemporalis",
-        "Ganglion oticum",
-        "M. pterygoideus lateralis",
-        "M. pterygoideus medialis",
-        "N. mandibularis",
-        "Os sphenoidale",
-        "Os temporale",
-        "Plexus venosus pterygoideus",
-        "R. mandibulae",
-        "Unterschläfengrube"
-      ],
-      "relevance": 0.691
-    },
-    {
-      "id": "typo_005",
-      "category": "typo",
-      "query": "Was ist Cholestrinbiosynthese?",
-      "card_context": {
-        "question": "Acetyl-CoA Aktives Isopren Cholesterin",
-        "answer": "Cholesterinbiosynthese DMAPP Dimethylallylpyrophosphat",
-        "deckName": "1736519912581",
-        "tags": []
-      },
-      "router_response": {
-        "agent": "tutor",
-        "search_needed": true,
-        "resolved_intent": "Cholesterinbiosynthese"
-      },
-      "term_coverage": 0.1818,
-      "missed_terms": [
-        "Acetyl-CoA",
-        "Aktives Isopren",
-        "DMAPP",
-        "Dimethylallylpyrophosphat",
-        "IPP",
-        "Isopentenylpyrophosphat",
-        "Ketonkörpersynthese",
-        "Mevalonatweg",
-        "Mitochondrium"
-      ],
-      "relevance": 0.7835
+      "relevance": 0.7994
     }
   ]
 }

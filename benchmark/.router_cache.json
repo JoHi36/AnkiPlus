@@ -4,105 +4,100 @@
     "category": "context",
     "query": "Gibt es weitere relevante Aspekte?",
     "card_context": {
-      "question": "Cholesterin Cholesterindesmolase Glucocorticoide",
-      "answer": "Mineralocorticoide Pregnenolon Sexualhormone",
+      "cardId": "1585744063988",
+      "question": "Welches Enzym katalysiert die Umwandlung von Cholesterin → Pregnenolon?{{c1::Cholesterindesmolase}}",
+      "answer": "Gemeinsame Grundreaktion der SteroidhormonsyntheseEntfernung der Seitenkette mit 6 C-Atomen zwischen den C-Atomen 20 &amp; 22 des Cholesterins → Hierbei wird die Seitenkette C22 bis C27 oxidativ abgespaltenPregnenolon ist damit die Ausgangssubstanz aller Mineralo- &amp; Glucocorticoide sowie der Sexualhormone",
       "deckName": "1736519912593",
       "tags": []
     },
     "router_response": {
       "agent": "tutor",
       "search_needed": true,
-      "resolved_intent": "additional relevant aspects of the current learning topic"
+      "resolved_intent": "Weitere relevante Aspekte zur Cholesterindesmolase und ihrer Rolle bei der Umwandlung von Cholesterin zu Pregnenolon"
     },
-    "term_coverage": 0.0,
+    "term_coverage": 0.4286,
     "missed_terms": [
-      "Cholesterin",
-      "Cholesterindesmolase",
       "Glucocorticoide",
       "Mineralocorticoide",
-      "Pregnenolon",
       "Sexualhormone",
       "Steroidhormonsynthese"
     ],
-    "relevance": 0.5143
+    "relevance": 0.8364
   },
   "context_002": {
     "id": "context_002",
     "category": "context",
     "query": "Welche Konzepte sind hier zentral?",
     "card_context": {
-      "question": "Arzt-Patient-Beziehung Echtheit Empathie",
-      "answer": "Kongruenz Rogers Transparenz",
+      "cardId": "1586278625656",
+      "question": "Was sind die Basismerkmale der klientenzentrierten, nondirektiven Gesprächstherapie nach Rogers?• {{c1::Empathie}}• {{c2::Wertschätzung}}• {{c3::Echtheit/Kongruenz}}• Transparenz",
+      "answer": "① Arzt versetzt sich in den Patienten hinein und versucht, dessen Gefühle wiederzugeben② Arzt gibt dem Patienten zu erkennen, dass er ihn wertschätzt &amp; akzeptiert③ Arzt steht hinter seinen Äußerungen④ Arzt sollte Patienten erklären, vor welchem Hintergrund er Fragen stellt &amp; warum er vorgeschlagene Diagnostik &amp; Therapie bevorzugtGrundlage einer vertrauensvollen Arzt-Patient-Beziehung → ↑Kooperationsbereitschaft → Voraussetzung für eine erfolgreiche Therapie",
       "deckName": "1736519912638",
       "tags": []
     },
     "router_response": {
       "agent": "tutor",
       "search_needed": true,
-      "resolved_intent": "zentrale Konzepte des aktuellen Lerninhalts"
+      "resolved_intent": "zentrale Konzepte der klientenzentrierten, nondirektiven Gesprächstherapie nach Rogers"
     },
-    "term_coverage": 0.0,
+    "term_coverage": 0.125,
     "missed_terms": [
       "Arzt-Patient-Beziehung",
       "Echtheit",
       "Empathie",
       "Kongruenz",
-      "Rogers",
       "Transparenz",
       "Wertschätzung",
       "klientenzentrierte nondirektive Gesprächstherapie"
     ],
-    "relevance": 0.5478
+    "relevance": 0.7975
   },
   "context_003": {
     "id": "context_003",
     "category": "context",
     "query": "Wie hängt das zusammen?",
     "card_context": {
-      "question": "ADP ADP-Rezeptoren Aktivierung",
-      "answer": "COX Cyclooxygenase Degranulation",
+      "cardId": "1589213139815",
+      "question": "Wie ist der Ablauf der Aktivierung der Thrombozyten bei der primären Hämostase?{{c1::Wandadhärente Thrombozyten}} sezernieren {{c1::ADP}} aus {{c1::δ-Granula}} → {{c1::ADP}} bindet an {{c1::ADP-Rezeptoren}} weiterer Thrombozyten → Ausbildung von {{c2::Pseudopodien}} und Stimulation der {{c2::Cyclooxygenase (COX)}} → {{c2::↑Thromboxan-A2-Synthese}} → Sekretion weiterer {{c2::Granula-Inhaltsstoffe (= Degranulation)}}",
+      "answer": "Positive Rückkopplung bzw. Kettenreaktion",
       "deckName": "1736519912683",
       "tags": []
     },
     "router_response": {
       "agent": "tutor",
       "search_needed": true,
-      "resolved_intent": "relationship between previously discussed concepts"
+      "resolved_intent": "Zusammenhang zwischen ADP-Sekretion aus δ-Granula und ADP-Rezeptorbindung bei der Thrombozytenaktivierung in der primären Hämostase"
     },
-    "term_coverage": 0.0,
+    "term_coverage": 0.3636,
     "missed_terms": [
-      "ADP",
       "ADP-Rezeptoren",
-      "Aktivierung",
       "COX",
       "Cyclooxygenase",
       "Degranulation",
       "Pseudopodien",
       "Thromboxan-A2-Synthese",
-      "Thrombozyten",
-      "primäre Hämostase",
-      "δ-Granula"
+      "primäre Hämostase"
     ],
-    "relevance": 0.4913
+    "relevance": 0.885
   },
   "context_004": {
     "id": "context_004",
     "category": "context",
     "query": "Kannst du das ausführlicher erklären?",
     "card_context": {
-      "question": "AC Ca2+-ATPasen Ca2+-Kanäle",
-      "answer": "GC Gs-Protein Hyperpolarisation",
+      "cardId": "1548500744854",
+      "question": "Durch welche Mechanismen wird die Kontraktion der glatten Muskulatur wieder beendet?• {{c1::↓Ca2+-Konzentration}} → {{c1::↑Aktivität Myosin-leichte-Ketten-Phosphatase (MLKP)}}• {{c2::Aktivierung der MLKP durch}}: {{c2::NO → GC → ↑cGMP → PKG}} | {{c2::Gs-Protein → AC → ↑cAMP → PKA}}• {{c3::Hemmung der MLKK durch ↑cGMP &amp; ↑cAMP}}",
+      "answer": "MLKP Funktion: Dephosphorylierung von phosphoryliertem Myosin → Keine Interaktion mit Aktin → Kontraktion beendet① Hyperpolarisation (bspw. durch Öffnung von K+-Kanälen) verhindert Öffnung von spannungsaktivierten Ca2+-Kanälen↳ Ca2+-ATPasen / Na+-Ca2+-Austauscher② PKA → Phosphoryliert / inaktiviert MLKK③ Bspw. durch β2-Innervation oder Bindung von NO",
       "deckName": "1736519912665",
       "tags": []
     },
     "router_response": {
       "agent": "tutor",
       "search_needed": true,
-      "resolved_intent": "Elaborate on the previous explanation"
+      "resolved_intent": "Mechanisms that terminate smooth muscle contraction, specifically the role of decreased Ca2+ concentration and increased Myosin Light Chain Phosphatase (MLCP) activity."
     },
-    "term_coverage": 0.0,
+    "term_coverage": 0.0556,
     "missed_terms": [
-      "AC",
       "Ca2+-ATPasen",
       "Ca2+-Kanäle",
       "GC",
@@ -121,104 +116,101 @@
       "glatte Muskulatur",
       "β2-Innervation"
     ],
-    "relevance": 0.4891
+    "relevance": 0.7449
   },
   "context_005": {
     "id": "context_005",
     "category": "context",
     "query": "Welche Zusammenhänge gibt es hier?",
     "card_context": {
-      "question": "Aminogruppe Aminosäuren Ampholyten",
-      "answer": "Carboxylgruppe Seitengruppe pKS-Normwerte",
+      "cardId": "1591532253913",
+      "question": "Was sind die pKS-Normwerte von Aminosäuren?• pKS-Wert - Carboxylgruppe: {{c1::2}}• pKS-Wert - Aminogruppe: {{c1::9-10}}",
+      "answer": "Ggf. pKS-Wert der Seitengruppe | Bei pH-Wert von 2 liegt also bei der Hälfte der Aminosäuren die α-Carboxylgruppe deprotoniert vorAminosäuren sind Ampholyten → Können (in Abhängigkeit vom pH) sowohl sauer als auch basisch reagieren↳ Protonenaufnahme mittels Carboxylgruppe &amp; Protonenabgabe mittels Aminogruppe",
       "deckName": "1736519912577",
       "tags": []
     },
     "router_response": {
       "agent": "tutor",
       "search_needed": true,
-      "resolved_intent": "Zusammenhänge zwischen den Konzepten/Informationen, die in der aktuellen Lernkarte präsentiert werden"
+      "resolved_intent": "Zusammenhänge zwischen pKS-Werten von Carboxyl- und Aminogruppen in Aminosäuren"
     },
-    "term_coverage": 0.0,
+    "term_coverage": 0.3333,
     "missed_terms": [
-      "Aminogruppe",
-      "Aminosäuren",
       "Ampholyten",
       "Carboxylgruppe",
       "Seitengruppe",
       "pKS-Normwerte"
     ],
-    "relevance": 0.5459
+    "relevance": 0.8738
   },
   "context_006": {
     "id": "context_006",
     "category": "context",
     "query": "Wie hängt das zusammen?",
     "card_context": {
-      "question": "Aktivität Disability Handicap",
-      "answer": "ICF-Klassifikation Impairment Kontextfaktoren",
+      "cardId": "1586347073412",
+      "question": "Welche Komponenten werden in der ICF-Klassifikation berücksichtigt?• {{c1::Körperfunktionen &amp; Körperstrukturen}} → {{c1::Ausmaß der Beeinträchtigungen auf physischer &amp; psychischer Ebene}}• {{c2::Aktivität}} → {{c2::Ausmaß der Fähigkeit, am Alltagsleben teilzunehmen}}• {{c3::Partizipation}} → {{c3::Ausmaß der Fähigkeit, seinen Beruf auszuüben &amp; an Gesellschaft teilzuhaben}}• {{c4::Kontextfaktoren}} → {{c4::Person &amp; deren Umwelt}}",
+      "answer": "Standardisierte &amp; von der WHO herausgegeben① Früher: Impairment → Bspw. Angaben über die Sehstärke, mentale Funktionen, Stimm- &amp; Sprechfunktionen② Früher: Disability → z.B. Gehen können③ Früher: Handicap④ Person → z.B. Geschlecht, Lebensstil | Umwelt → z.B. behindertengerechter Arbeitsplatz",
       "deckName": "1736519912565",
       "tags": []
     },
     "router_response": {
       "agent": "tutor",
       "search_needed": true,
-      "resolved_intent": "relationship between previously discussed concepts"
+      "resolved_intent": "Zusammenhang zwischen Körperfunktionen & Körperstrukturen und dem Ausmaß der Beeinträchtigungen auf physischer & psychischer Ebene in der ICF-Klassifikation"
     },
-    "term_coverage": 0.0,
+    "term_coverage": 0.3333,
     "missed_terms": [
       "Aktivität",
       "Disability",
       "Handicap",
-      "ICF-Klassifikation",
       "Impairment",
       "Kontextfaktoren",
-      "Körperfunktionen",
-      "Körperstrukturen",
       "Partizipation"
     ],
-    "relevance": 0.5129
+    "relevance": 0.7833
   },
   "context_007": {
     "id": "context_007",
     "category": "context",
     "query": "Gibt es weitere relevante Aspekte?",
     "card_context": {
-      "question": "Ileum Jejunum Krypten",
-      "answer": "Paneth-Zellen Peyer-Plaques Plicae circulares",
+      "cardId": "1635358399459",
+      "question": "Wie verändern sich regionale Besonderheiten im Verlauf des Jejunums bis zum Ileum?• {{c1::Plicae circulares: Werden flacher und weiter auseinander}}• {{c1::Peyer-Plaques↑}}• {{c2::Zotten kürzer}}• {{c2::Krypten tiefer}}• {{c2::Paneth-Zellen↑}}",
+      "answer": "",
       "deckName": "1736519912695",
       "tags": []
     },
     "router_response": {
       "agent": "tutor",
       "search_needed": true,
-      "resolved_intent": "additional relevant aspects of the current learning topic"
+      "resolved_intent": "regionale Besonderheiten des Jejunums und Ileums, die nicht in der Karte genannt wurden"
     },
-    "term_coverage": 0.0,
+    "term_coverage": 0.2857,
     "missed_terms": [
-      "Ileum",
-      "Jejunum",
       "Krypten",
       "Paneth-Zellen",
       "Peyer-Plaques",
       "Plicae circulares",
       "Zotten"
     ],
-    "relevance": 0.5181
+    "relevance": 0.8094
   },
   "context_008": {
     "id": "context_008",
     "category": "context",
     "query": "Was bedeutet das?",
     "card_context": {
-      "question": "M. longus capitis M. longus colli Mm. scaleni",
-      "answer": "Plexus brachialis Plexus cervicalis",
+      "cardId": "1571834729899",
+      "question": "Welche Muskeln gehören zur tiefen Halsmuskulatur und wie werden sie innerviert?{{c1::Mm. scaleni, M. longus colli, M. longus capitis}} |  {{c1::Ventrale Spinalnervenäste des Plexus cervicalis &amp; brachialis}}",
+      "answer": "",
       "deckName": "1736519912756",
       "tags": []
     },
     "router_response": {
       "agent": "tutor",
       "search_needed": true,
-      "resolved_intent": "meaning of the last discussed concept/term"
+      "resolved_intent": "Innervation der tiefen Halsmuskulatur"
     },
     "term_coverage": 0.0,
     "missed_terms": [
@@ -228,22 +220,23 @@
       "Plexus brachialis",
       "Plexus cervicalis"
     ],
-    "relevance": 0.502
+    "relevance": 0.7079
   },
   "context_009": {
     "id": "context_009",
     "category": "context",
     "query": "Kannst du das vertiefen?",
     "card_context": {
-      "question": "Atmungskette Mitochondrienmatrix Ribosomen",
-      "answer": "mitochondriale DNA mitochondriale Proteine mtDNA",
+      "cardId": "1581159682248",
+      "question": "Was enthält die Mitochondrienmatrix?{{c1::Mitochondriale DNA (mtDNA)}} | {{c1::Ribosomen}}",
+      "answer": "Sind für die Synthese von ~1% der mitochondrialen Proteine zuständig (bspw. einige Proteine der Atmungskette)",
       "deckName": "1736519912610",
       "tags": []
     },
     "router_response": {
       "agent": "tutor",
       "search_needed": true,
-      "resolved_intent": "Vertiefung des zuletzt besprochenen Themas"
+      "resolved_intent": "detailed explanation of the components and functions of the mitochondrial matrix"
     },
     "term_coverage": 0.0,
     "missed_terms": [
@@ -254,50 +247,48 @@
       "mitochondriale Proteine",
       "mtDNA"
     ],
-    "relevance": 0.5678
+    "relevance": 0.7399
   },
   "context_010": {
     "id": "context_010",
     "category": "context",
     "query": "Was sollte ich darüber wissen?",
     "card_context": {
-      "question": "A. carotis interna Basis cranii interna Canalis caroticus",
-      "answer": "Foramen lacerum Fossa cranii media N. petrosus major",
+      "cardId": "1634152625543",
+      "question": "Welche Durchtrittsstellen für welche Strukturen liegen im Os temporale (Basis cranii interna)?Fossa cranii media• {{c1::Foramen lacerum}} → {{c2::N. petrosus profundus}} | {{c2::N. petrosus major}}• {{c1::Canalis caroticus}} → {{c3::A. carotis interna}}• {{c1::Hiatus canalis n. petrosi majoris &amp; minoris}} → {{c3::N. petrosus major &amp; minor}}Fossa cranii posterior• {{c1::Porus acusticus internus}} → {{c4::N. facialis (VII)}} | {{c4::N. vestibulocochlearis (VIII)}} | {{c4::A./V. labyrinthi}",
+      "answer": "Benachbarte Struktur: Felsenbein",
       "deckName": "1736519912616",
       "tags": []
     },
     "router_response": {
       "agent": "tutor",
       "search_needed": true,
-      "resolved_intent": "key information about the current topic of discussion"
+      "resolved_intent": "Strukturen, die durch das Foramen lacerum im Os temporale (Basis cranii interna, Fossa cranii media) ziehen"
     },
-    "term_coverage": 0.0,
+    "term_coverage": 0.5,
     "missed_terms": [
       "A. carotis interna",
-      "Basis cranii interna",
       "Canalis caroticus",
-      "Foramen lacerum",
-      "Fossa cranii media",
       "N. petrosus major",
-      "N. petrosus profundus",
-      "Os temporale"
+      "N. petrosus profundus"
     ],
-    "relevance": 0.4699
+    "relevance": 0.812
   },
   "context_011": {
     "id": "context_011",
     "category": "context",
     "query": "Welche Konzepte sind hier zentral?",
     "card_context": {
-      "question": "Blut-Luft-Schranke Pneumozyten Typ 1 Tight Junctions",
-      "answer": "Typ-2-Pneumozyten",
+      "cardId": "1560853338212",
+      "question": "Welcher Zelltyp in den Alveolen ist ein Hauptbestandteil der Blut-Luft-Schranke?{{c1::Pneumozyten Typ 1}}",
+      "answer": "Flache Epithelzellen → Tight Junctions | Bedecken ~95% der AlveolaroberflächeErsatz von Typ-1-Pneumozyten bei Gewebsverletzung → Typ-2-Pneumozyten können sich mitotisch teilen↳ Tochterzellen können sich dann nachfolgend zu Typ-1-Pneumozyten differenzieren",
       "deckName": "1736519912696",
       "tags": []
     },
     "router_response": {
       "agent": "tutor",
       "search_needed": true,
-      "resolved_intent": "zentrale Konzepte des aktuellen Lerninhalts"
+      "resolved_intent": "central concepts related to the cell type in alveoli that forms the blood-air barrier"
     },
     "term_coverage": 0.0,
     "missed_terms": [
@@ -306,35 +297,35 @@
       "Tight Junctions",
       "Typ-2-Pneumozyten"
     ],
-    "relevance": 0.533
+    "relevance": 0.7644
   },
   "context_012": {
     "id": "context_012",
     "category": "context",
     "query": "Was steckt dahinter?",
     "card_context": {
-      "question": "A. stylomastoidea A. tympanica anterior Canaliculus mastoideus",
-      "answer": "Chorda tympanica Fissura petrotympanica Foramen lacerum",
+      "cardId": "1578138179488",
+      "question": "Welche Durchtrittsstellen für welche Strukturen liegen im Os temporale (Basis cranii externa)?• {{c1::Fissura petrotympanica}} → {{c2::Chorda tympani (aus VII)}} | {{c2::A. tympanica anterior}}• {{c1::Foramen stylomastoideum}} → {{c2::N. facialis (VII)}} | {{c2::A. stylomastoidea}}• {{c1::Foramen lacerum}}• {{c1::Canaliculus mastoideus}} → {{c2::R. auricularis (aus X)}}• {{c1::Canaliculus tympanicus}} → {{c2::N. tympanicus (aus IX)}}• {{c1::Foramen mastoideum}} → {{c2::V. emissaria mastoidea}}",
+      "answer": "",
       "deckName": "1736519912616",
       "tags": []
     },
     "router_response": {
       "agent": "tutor",
       "search_needed": true,
-      "resolved_intent": "explanation of the previous topic or concept discussed"
+      "resolved_intent": "Fissura petrotympanica: Strukturen, die durch sie hindurchtreten"
     },
-    "term_coverage": 0.0,
+    "term_coverage": 0.125,
     "missed_terms": [
       "A. stylomastoidea",
       "A. tympanica anterior",
       "Canaliculus mastoideus",
       "Chorda tympanica",
-      "Fissura petrotympanica",
       "Foramen lacerum",
       "Foramen stylomastoideum",
       "N. facialis"
     ],
-    "relevance": 0.5044
+    "relevance": 0.7994
   },
   "direct_001": {
     "id": "direct_001",

@@ -49,6 +49,8 @@ BENCHMARK_CONFIG = {
     'embedding_fallback': True, # NEW — combine with intent when no domain terms
     'max_context_terms': 10,    # Max terms from card_context for resolved_intent
     'lenient_validation': True, # LLM validates alternative cards on fail
+    'llm_expansion': False,     # LLM generates associated terms per query (WIP — terms good, weighting needs tuning)
+    'k_llm_semantic': 75,       # k-value for LLM-expanded terms semantic lane
 }
 
 # ── Config & Embedding API ───────────────────────────────────────────────────
@@ -215,7 +217,7 @@ Enthält die GEFUNDENE KARTE die nötigen Informationen, um die Frage VOLLSTÄND
         query, target_question, target_answer, card_question, card_answer)
 
     import urllib.request
-    url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=%s' % api_key
+    url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=%s' % api_key
     payload = json.dumps({
         'contents': [{'parts': [{'text': prompt}]}],
         'generationConfig': {'maxOutputTokens': 5, 'temperature': 0}
@@ -268,6 +270,70 @@ def validate_top_cards(case_id, query, expected_card_id, rrf_ranked, db, config)
             return rank, card_id
 
     return None, None
+
+
+# ── LLM Term Expansion ───────────────────────────────────────────────────────
+
+LLM_EXPANSION_CACHE_PATH = os.path.join(PROJECT_ROOT, 'benchmark', '.llm_expansion_cache.json')
+_llm_expansion_cache = {}
+
+def _load_llm_expansion_cache():
+    global _llm_expansion_cache
+    if os.path.exists(LLM_EXPANSION_CACHE_PATH):
+        try:
+            with open(LLM_EXPANSION_CACHE_PATH) as f:
+                _llm_expansion_cache = json.load(f)
+            print("  LLM expansion cache: %d queries cached" % len(_llm_expansion_cache))
+        except Exception:
+            _llm_expansion_cache = {}
+
+def _save_llm_expansion_cache():
+    try:
+        with open(LLM_EXPANSION_CACHE_PATH, 'w') as f:
+            json.dump(_llm_expansion_cache, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+def expand_terms_llm(query, config):
+    """Ask Gemini Flash for associated medical/scientific terms.
+
+    Returns list of term strings. Cached per query.
+    """
+    if query in _llm_expansion_cache:
+        return _llm_expansion_cache[query]
+
+    api_key = config.get('api_key', '')
+    if not api_key:
+        return []
+
+    prompt = """Nenne 5-10 medizinische/wissenschaftliche Fachbegriffe die mit dieser Frage assoziiert sind.
+Nur die Begriffe, einer pro Zeile, keine Erklärungen, keine Nummerierung.
+
+Frage: "%s"
+
+Begriffe:""" % query
+
+    import urllib.request
+    url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=%s' % api_key
+    payload = json.dumps({
+        'contents': [{'parts': [{'text': prompt}]}],
+        'generationConfig': {'maxOutputTokens': 1024, 'temperature': 0}
+    }).encode('utf-8')
+    req = urllib.request.Request(url, data=payload, method='POST')
+    req.add_header('Content-Type', 'application/json')
+
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+        text = data.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', '')
+        terms = [t.strip().strip('-').strip('•').strip() for t in text.strip().split('\n') if t.strip()]
+        terms = [t for t in terms if len(t) > 2 and len(t) < 60][:10]
+    except Exception:
+        terms = []
+
+    _llm_expansion_cache[query] = terms
+    _save_llm_expansion_cache()
+    return terms
 
 
 # ── Index Loading ────────────────────────────────────────────────────────────
@@ -565,7 +631,7 @@ def score_semantic_search(acceptable_ids, query_embedding, card_embeddings):
 
 def score_rrf_ranking(acceptable_ids, sql_result, semantic_result,
                       card_embeddings, enrichment_result, query_embedding, db,
-                      focus_embedding=None):
+                      focus_embedding=None, llm_embedding=None):
     """Step 5: Compute RRF scores and rank expected card."""
     from ai.rrf import compute_rrf, _get_k
 
@@ -608,6 +674,24 @@ def score_rrf_ranking(acceptable_ids, sql_result, semantic_result,
             'tier': 'primary',
         }
 
+    # LLM-expanded SQL: search for LLM-generated terms (secondary tier)
+    llm_sql_terms = enrichment_result.get('llm_sql_terms', [])
+    if llm_sql_terms:
+        llm_rank = len(sql_results) + 1
+        for term in llm_sql_terms:
+            rows = db.execute(
+                "SELECT card_id FROM kg_card_terms WHERE LOWER(term) = LOWER(?)",
+                (term,)
+            ).fetchall()
+            for (card_id,) in rows:
+                if card_id not in sql_results:
+                    sql_results[card_id] = {
+                        'rank': llm_rank,
+                        'query_type': 'broad',
+                        'tier': 'secondary',
+                    }
+                    llm_rank += 1
+
     # Build semantic_results dict for compute_rrf
     semantic_results = {}
     if query_embedding is not None:
@@ -645,17 +729,31 @@ def score_rrf_ranking(acceptable_ids, sql_result, semantic_result,
                         fb_rank += 1
 
     # ── Focus Lane: compute focus ranks for candidate pool ──────────────
+    # LLM lane only boosts existing candidates — never introduces new cards
     candidate_ids = set(sql_results.keys()) | set(semantic_results.keys())
     focus_results = {}
     if focus_embedding is not None and BENCHMARK_CONFIG.get('focus_enabled'):
         focus_results = compute_focus_ranks(focus_embedding, candidate_ids, card_embeddings)
 
-    # ── RRF with Focus ────────────────────────────────────────────────
-    # Extended RRF: sql + semantic + focus (focus only for existing candidates)
-    k_focus = BENCHMARK_CONFIG.get('k_focus', 55)
+    # ── LLM Semantic Lane: LLM-generated terms embedding vs all cards ──
+    llm_semantic_results = {}
+    if llm_embedding is not None:
+        ln = math.sqrt(sum(v * v for v in llm_embedding))
+        if ln > 0:
+            normed_llm = [v / ln for v in llm_embedding]
+            l_scored = []
+            for card_id, card_vec in card_embeddings.items():
+                sim = sum(a * b for a, b in zip(normed_llm, card_vec))
+                l_scored.append((card_id, sim))
+            l_scored.sort(key=lambda x: x[1], reverse=True)
+            for rank, (card_id, _) in enumerate(l_scored, start=1):
+                llm_semantic_results[card_id] = {'rank': rank}
+
+    # ── RRF with Focus + LLM ─────────────────────────────────────────
+    k_focus = BENCHMARK_CONFIG.get('k_focus', 80)
+    k_llm = BENCHMARK_CONFIG.get('k_llm_semantic', 75)
     scores = {}
-    all_ids = candidate_ids
-    for cid in all_ids:
+    for cid in candidate_ids:
         s = 0.0
         if cid in sql_results:
             sql = sql_results[cid]
@@ -665,6 +763,8 @@ def score_rrf_ranking(acceptable_ids, sql_result, semantic_result,
             sem = semantic_results[cid]
             k = _get_k('semantic', sem['tier'])
             s += 1.0 / (k + sem['rank'])
+        if cid in llm_semantic_results:
+            s += 1.0 / (k_llm + llm_semantic_results[cid]['rank'])
         if cid in focus_results:
             s += 1.0 / (k_focus + focus_results[cid]['rank'])
         scores[cid] = s
@@ -741,16 +841,13 @@ def run_case(case, db, kg_term_index, card_embeddings, config):
         step1 = {'score': 0.0, 'error': str(e)}
     result['steps']['term_extraction'] = step1
 
-    # ── Synthesize resolved_intent from card_context ────────────────────────
-    # For context-dependent cases (vague queries like "Erkläre das genauer"),
-    # the router would normally resolve the intent using card context.
-    # We simulate this by building resolved_intent from card_context.terms.
+    # ── Resolve intent: synthetic from card_context.terms ───────────────
+    # Synthetic (pure German terms) outperforms Router intents (91% vs 66%)
+    # because term extraction works better with clean terms than LLM sentences.
     resolved_intent = None
     card_context = case.get('card_context')
     if card_context and card_context.get('terms'):
-        context_terms = card_context['terms'][:10]  # Cap at 10 to stay focused
-        # Use " und " to separate terms — prevents extract_query_terms() from
-        # grouping consecutive capitalized words into one multi-word compound.
+        context_terms = card_context['terms'][:10]
         resolved_intent = ' und '.join(context_terms)
 
     extracted_terms = step1.get('extracted', [])
@@ -840,6 +937,22 @@ def run_case(case, db, kg_term_index, card_embeddings, config):
         'kg_terms_found': enrichment_result.get('kg_terms_found', []),
     }
 
+    # ── LLM Term Expansion (Tier 3: associated terms from LLM) ──────────
+    llm_terms = []
+    llm_embedding = None
+    if BENCHMARK_CONFIG.get('llm_expansion') and embedding_available:
+        llm_terms = expand_terms_llm(query, config)
+        if llm_terms:
+            llm_text = ' '.join(llm_terms)
+            llm_emb_result = embed_texts([llm_text], config=config)
+            if isinstance(llm_emb_result, list) and llm_emb_result and llm_emb_result[0]:
+                llm_embedding = llm_emb_result[0]
+            result['enrichment_detail']['llm_terms'] = llm_terms
+
+    # ── LLM Terms → SQL Search (find cards via LLM-generated terms) ─────
+    if llm_terms and BENCHMARK_CONFIG.get('llm_expansion'):
+        enrichment_result['llm_sql_terms'] = llm_terms
+
     # ── Step 2: KG Expansion ─────────────────────────────────────────────────
     try:
         step2 = score_kg_expansion(query, expected_terms, enrichment_result)
@@ -872,7 +985,8 @@ def run_case(case, db, kg_term_index, card_embeddings, config):
             step5 = score_rrf_ranking(
                 acceptable_ids, step3, step4,
                 card_embeddings, enrichment_result, query_embedding, db,
-                focus_embedding=query_embedding)
+                focus_embedding=query_embedding,
+                llm_embedding=llm_embedding)
         except Exception as e:
             step5 = {'score': 0.0, 'error': str(e), 'target_rank': None, 'total_merged': 0}
     result['steps']['rrf_ranking'] = step5
@@ -1035,7 +1149,7 @@ def compute_aggregate(results):
         c['recall'] = round(c['passed'] / c['cases'], 4) if c['cases'] > 0 else 0.0
         c['lenient_recall'] = round(c['lenient_passed'] / c['cases'], 4) if c['cases'] > 0 else 0.0
 
-    # By step
+    # By step (legacy 6 steps)
     step_names = ['term_extraction', 'kg_expansion', 'sql_search',
                   'semantic_search', 'rrf_ranking', 'confidence']
     by_step = {}
@@ -1046,6 +1160,65 @@ def compute_aggregate(results):
             if 'error' not in step_data or step_data.get('score') is not None:
                 scores.append(step_data.get('score', 0.0))
         by_step[step] = round(sum(scores) / len(scores), 4) if scores else 0.0
+
+    # ── Simplified 4 indicators ──────────────────────────────────────
+    def _compute_indicators(case_list):
+        """Compute 4 simplified indicators for a list of cases."""
+        if not case_list:
+            return {}
+        n = len(case_list)
+
+        # 1. Begriffe: combined term extraction + kg expansion (max of both)
+        begriffe_scores = []
+        for r in case_list:
+            te = r.get('steps', {}).get('term_extraction', {}).get('score', 0)
+            kg = r.get('steps', {}).get('kg_expansion', {}).get('score', 0)
+            begriffe_scores.append(max(te, kg))
+
+        # 2. SQL: target card found by SQL? Score based on rank
+        sql_scores = []
+        for r in case_list:
+            rank = r.get('steps', {}).get('sql_search', {}).get('target_rank')
+            if rank is not None and rank <= 10:
+                sql_scores.append(1.0)
+            elif rank is not None and rank <= 50:
+                sql_scores.append(0.5)
+            elif rank is not None:
+                sql_scores.append(0.2)
+            else:
+                sql_scores.append(0.0)
+
+        # 3. Semantic: target card found by semantic? Score based on rank
+        sem_scores = []
+        for r in case_list:
+            rank = r.get('steps', {}).get('semantic_search', {}).get('target_rank')
+            if rank is not None and rank <= 10:
+                sem_scores.append(1.0)
+            elif rank is not None and rank <= 50:
+                sem_scores.append(0.5)
+            elif rank is not None and rank <= 200:
+                sem_scores.append(0.2)
+            else:
+                sem_scores.append(0.0)
+
+        # 4. Ergebnis: final RRF rank in top 10
+        result_scores = [1.0 if r.get('overall_pass') else 0.0 for r in case_list]
+
+        return {
+            'begriffe': round(sum(begriffe_scores) / n, 4),
+            'sql': round(sum(sql_scores) / n, 4),
+            'semantic': round(sum(sem_scores) / n, 4),
+            'ergebnis': round(sum(result_scores) / n, 4),
+        }
+
+    # Overall indicators
+    indicators = _compute_indicators(results)
+
+    # Per-category indicators (for drill-down)
+    by_category_indicators = {}
+    for cat in by_category:
+        cat_cases = [r for r in results if r.get('category') == cat]
+        by_category_indicators[cat] = _compute_indicators(cat_cases)
 
     return {
         'overall': {
@@ -1059,6 +1232,8 @@ def compute_aggregate(results):
             'lenient_passed': lenient_passed,
         },
         'by_category': by_category,
+        'indicators': indicators,
+        'by_category_indicators': by_category_indicators,
         'by_step': by_step,
         'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
     }
@@ -1158,6 +1333,7 @@ def main():
     # Load embedding cache (skips API calls for previously embedded queries)
     _load_embed_cache()
     _load_validation_cache()
+    _load_llm_expansion_cache()
 
     # Load KG term index
     print('Loading KG term index...')
@@ -1205,11 +1381,19 @@ def main():
     # Compute aggregate
     aggregate = compute_aggregate(results)
 
+    # Load docs snapshot for versioning
+    docs_path = os.path.join(PROJECT_ROOT, 'docs', 'reference', 'RETRIEVAL_SYSTEM.md')
+    docs_content = ''
+    if os.path.exists(docs_path):
+        with open(docs_path, 'r', encoding='utf-8') as f:
+            docs_content = f.read()
+
     # Build output
     output = {
         'config': BENCHMARK_CONFIG,
         'aggregate': aggregate,
         'cases': results,
+        'docs_snapshot': docs_content,
     }
 
     # Save results

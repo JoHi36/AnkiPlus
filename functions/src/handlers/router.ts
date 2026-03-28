@@ -51,6 +51,7 @@ CRITICAL for resolved_intent:
   Write the intent using actual domain terms, not the user's vague words.
 - For standalone questions: Restate with domain-specific precision.
 - resolved_intent must be a factual description, NOT a search query.
+- ALWAYS respond in the SAME LANGUAGE as the user's message.
 
 ${cardHint}Mode: ${currentMode}
 Message: "${userMsg}"

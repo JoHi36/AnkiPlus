@@ -553,13 +553,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <div class="header">
   <div class="header-left">
     <h1>AnkiPlus Dev Hub</h1>
-    <div class="timestamp" id="timestamp">Loading…</div>
   </div>
   <div class="header-right">
-    <div class="version-picker">
-      <button class="version-btn" id="version-btn" onclick="toggleVersionPicker()">current</button>
-      <div class="version-dropdown" id="version-dropdown"></div>
-    </div>
     <button class="btn btn-primary" id="tab-top-benchmarks" onclick="switchTopTab('benchmarks')">Benchmarks</button>
     <button class="btn" id="tab-top-design" onclick="switchTopTab('design')">Design System</button>
   </div>
@@ -568,9 +563,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <!-- Sub-nav for Benchmarks -->
 <div class="subnav" id="subnav-benchmarks">
   <div class="subnav-tabs">
-    <button class="subnav-btn active" id="sub-retrieval" onclick="switchSubTab('retrieval')">Retrieval</button>
+    <div class="version-picker" style="margin-right:12px">
+      <button class="version-btn" id="version-btn" onclick="toggleVersionPicker()">current</button>
+      <div class="version-dropdown" id="version-dropdown"></div>
+    </div>
+    <button class="subnav-btn active" id="sub-docs" onclick="switchSubTab('docs')">Docs</button>
     <button class="subnav-btn" id="sub-router" onclick="switchSubTab('router')">Router</button>
-    <button class="subnav-btn" id="sub-docs" onclick="switchSubTab('docs')">Docs</button>
+    <button class="subnav-btn" id="sub-retrieval" onclick="switchSubTab('retrieval')">Retrieval</button>
+    <button class="subnav-btn" id="sub-generation" onclick="switchSubTab('generation')">Generation</button>
+    <button class="subnav-btn" id="sub-livetest" onclick="switchSubTab('livetest')" style="margin-left:auto;color:var(--ds-accent)">Live Test</button>
   </div>
 </div>
 
@@ -618,6 +619,32 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   </div>
 </div>
 
+<!-- Generation Tab (placeholder) -->
+<div id="generation-panel" style="display:none">
+  <div style="background:var(--ds-bg-canvas);border-radius:var(--ds-radius-lg);padding:48px 32px;border:1px solid var(--ds-border-medium);max-width:700px;margin:0 auto;text-align:center">
+    <div style="font-size:var(--ds-text-xl);color:var(--ds-text-primary);margin-bottom:12px">Generation Evaluation</div>
+    <div style="font-size:var(--ds-text-md);color:var(--ds-text-secondary);line-height:1.7">
+      Bewertet die Antwortqualität des Tutor-Modells.<br>
+      Input: Frage + gefundene Karten → Output: generierte Antwort.<br>
+      Metriken: Vollständigkeit, Korrektheit, Quellennutzung.<br><br>
+      <span style="color:var(--ds-text-tertiary)">Wird als nächster Schritt implementiert.</span>
+    </div>
+  </div>
+</div>
+
+<!-- Live Test Tab -->
+<div id="livetest-panel" style="display:none">
+  <div style="background:var(--ds-bg-canvas);border-radius:var(--ds-radius-lg);padding:32px;border:1px solid var(--ds-border-medium);max-width:700px;margin:0 auto">
+    <div style="font-size:var(--ds-text-xl);color:var(--ds-text-primary);margin-bottom:16px">Live Test</div>
+    <div style="font-size:var(--ds-text-sm);color:var(--ds-text-secondary);margin-bottom:16px">Teste die Retrieval-Pipeline mit einer einzelnen Frage.</div>
+    <div style="display:flex;gap:8px;margin-bottom:20px">
+      <input id="livetest-input" type="text" placeholder="z.B. Wie lang ist der Dünndarm?" style="flex:1;padding:10px 14px;border-radius:var(--ds-radius-sm);border:1px solid var(--ds-border-medium);background:var(--ds-bg-deep);color:var(--ds-text-primary);font-family:var(--ds-font-sans);font-size:var(--ds-text-md);outline:none">
+      <button class="btn btn-primary" onclick="runLiveTest()" id="livetest-btn">Suchen</button>
+    </div>
+    <pre id="livetest-output" style="font-family:var(--ds-font-mono);font-size:var(--ds-text-sm);color:var(--ds-text-secondary);white-space:pre-wrap;line-height:1.6;max-height:500px;overflow-y:auto;background:var(--ds-bg-deep);border-radius:var(--ds-radius-sm);padding:16px;display:none"></pre>
+  </div>
+</div>
+
 <!-- Benchmark Tab -->
 <div id="benchmark-panel">
 
@@ -653,7 +680,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 // ── Two-level navigation ──
 
 let _topTab = 'benchmarks';
-let _subTab = 'retrieval';
+let _subTab = 'docs';
+let _versionDocs = null; // docs snapshot from selected version
 
 function switchTopTab(tab) {
   _topTab = tab;
@@ -680,17 +708,17 @@ function switchTopTab(tab) {
 function switchSubTab(tab) {
   _subTab = tab;
   // Sub buttons
-  ['retrieval', 'router', 'docs'].forEach(function(s) {
+  ['docs', 'router', 'retrieval', 'generation', 'livetest'].forEach(function(s) {
     var btn = document.getElementById('sub-' + s);
     if (btn) btn.classList.toggle('active', s === tab);
   });
-  // Hide benchmark panels
-  ['benchmark', 'router', 'docs'].forEach(function(p) {
-    var el = document.getElementById(p + '-panel');
-    if (el) el.style.display = 'none';
+  // Hide all panels
+  ['docs', 'router', 'benchmark', 'generation', 'livetest'].forEach(function(p) {
+    var panel = document.getElementById(p + '-panel');
+    if (panel) panel.style.display = 'none';
   });
   // Show selected
-  var panelMap = { retrieval: 'benchmark', router: 'router', docs: 'docs' };
+  var panelMap = { docs: 'docs', router: 'router', retrieval: 'benchmark', generation: 'generation', livetest: 'livetest' };
   var panel = document.getElementById(panelMap[tab] + '-panel');
   if (panel) panel.style.display = 'block';
   // Load data
@@ -714,7 +742,26 @@ function loadComponents() {
 }
 
 function loadDocs() {
-  fetch('/api/docs').then(function(r) { return r.json(); }).then(function(data) {
+  // Use version-specific docs if available, otherwise load current
+  var url = '/api/docs';
+  var sourceLabel = 'current';
+  if (_versionDocs && _activeVersion) {
+    url = '/api/render_markdown';
+    sourceLabel = 'version: ' + _activeVersion;
+  }
+
+  var fetchPromise;
+  if (_versionDocs && _activeVersion) {
+    fetchPromise = fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({markdown: _versionDocs})
+    });
+  } else {
+    fetchPromise = fetch(url);
+  }
+
+  fetchPromise.then(function(r) { return r.json(); }).then(function(data) {
     var el = document.getElementById('docs-content');
     var pathEl = document.getElementById('docs-path');
     // Server-rendered HTML from our own documentation files (trusted internal input,
@@ -724,7 +771,7 @@ function loadDocs() {
     el.style.fontFamily = "var(--ds-font-sans)";
     el.style.fontSize = 'var(--ds-text-md)';
     el.style.lineHeight = '1.7';
-    if (pathEl) pathEl.textContent = 'Source: ' + (data.path || '');
+    if (pathEl) pathEl.textContent = 'Source: ' + sourceLabel;
     // Render Mermaid diagrams after inserting HTML
     if (typeof mermaid !== 'undefined') {
       mermaid.run({ nodes: el.querySelectorAll('.mermaid') });
@@ -851,21 +898,63 @@ function renderSummary(agg) {
 
   row.appendChild(recallCard);
 
-  // ── By Step card ──
+  // ── Pipeline Indicators card (simplified 4 indicators) ──
   const stepCard = el('div', 'metric-card');
   const sh = el('h3');
-  sh.appendChild(safeText('Pipeline Steps'));
+  sh.id = 'indicators-title';
+  sh.style.cursor = 'pointer';
+  sh.appendChild(safeText('Pipeline'));
+  sh.addEventListener('click', function() {
+    // Reset to overall indicators
+    sh.textContent = '';
+    sh.appendChild(safeText('Pipeline'));
+    INDICATOR_KEYS.forEach(function(key, i) {
+      var score = indData[key] != null ? indData[key] : 0;
+      var rows = stepCard.querySelectorAll('.step-row');
+      if (rows[i]) {
+        var fill = rows[i].querySelector('.step-bar-fill');
+        var scoreEl = rows[i].querySelector('.step-score');
+        if (fill) { fill.style.width = pct(score); fill.style.background = scoreColor(score); }
+        if (scoreEl) { scoreEl.textContent = pct(score); scoreEl.style.color = scoreColor(score); }
+      }
+    });
+    catCard.querySelectorAll('.cat-row').forEach(function(r) { r.style.background = 'transparent'; });
+  });
   stepCard.appendChild(sh);
 
-  STEP_KEYS.forEach(key => {
-    const score = (agg.by_step && agg.by_step[key] != null) ? agg.by_step[key] : 0;
+  const INDICATOR_KEYS = ['begriffe', 'sql', 'semantic', 'ergebnis'];
+  const INDICATOR_LABELS = {
+    begriffe: 'Begriffe',
+    sql: 'SQL Search',
+    semantic: 'Semantic Search',
+    ergebnis: 'Ergebnis',
+  };
+  const INDICATOR_TOOLTIPS = {
+    begriffe: 'Finden wir die richtigen Suchbegriffe? (Term-Extraktion + KG-Expansion kombiniert)',
+    sql: 'Findet die Keyword-Suche die Zielkarte? Top-10 = 100%, Top-50 = 50%, gefunden = 20%, nicht gefunden = 0%',
+    semantic: 'Findet die Embedding-Suche die Zielkarte? Top-10 = 100%, Top-50 = 50%, Top-200 = 20%',
+    ergebnis: 'Landet die Karte nach RRF-Fusion in den Top-10? Das Endergebnis.',
+  };
+
+  // Use indicators from aggregate (or fall back to by_step for old data)
+  var indData = agg.indicators || {};
+
+  INDICATOR_KEYS.forEach(key => {
+    var score = indData[key] != null ? indData[key] : 0;
+    // Fallback for old data without indicators
+    if (!agg.indicators) {
+      if (key === 'begriffe') score = Math.max(agg.by_step.term_extraction || 0, agg.by_step.kg_expansion || 0);
+      else if (key === 'sql') score = agg.by_step.sql_search || 0;
+      else if (key === 'semantic') score = agg.by_step.semantic_search || 0;
+      else if (key === 'ergebnis') score = agg.by_step.rrf_ranking || 0;
+    }
     const srow = el('div', 'step-row');
 
     const nameEl = el('div', 'step-name');
-    nameEl.appendChild(safeText(STEP_LABELS[key] || key));
+    nameEl.appendChild(safeText(INDICATOR_LABELS[key] || key));
     const stepTip = el('span', 'tip');
     stepTip.appendChild(safeText('?'));
-    stepTip.setAttribute('data-tooltip', STEP_TOOLTIPS[key] || '');
+    stepTip.setAttribute('data-tooltip', INDICATOR_TOOLTIPS[key] || '');
     nameEl.appendChild(stepTip);
     srow.appendChild(nameEl);
 
@@ -885,15 +974,41 @@ function renderSummary(agg) {
   });
   row.appendChild(stepCard);
 
-  // ── By Category card ──
+  // ── By Category card (clickable for drill-down) ──
   const catCard = el('div', 'metric-card');
   const ch = el('h3');
   ch.appendChild(safeText('By Category'));
   catCard.appendChild(ch);
 
   const byCat = agg.by_category || {};
+  const byCatInd = agg.by_category_indicators || {};
   Object.entries(byCat).forEach(([cat, info]) => {
     const crow = el('div', 'cat-row');
+    crow.style.cursor = 'pointer';
+    crow.style.borderRadius = '6px';
+    crow.style.padding = '4px 6px';
+    crow.style.margin = '0 -6px';
+    crow.addEventListener('click', function() {
+      // Show per-category indicators in the Pipeline card
+      var title = document.getElementById('indicators-title');
+      title.textContent = '';
+      title.appendChild(safeText('Pipeline · ' + cat));
+      // Render category-specific indicators
+      var catInd = byCatInd[cat] || {};
+      stepCard.querySelectorAll('.step-row').forEach(function(r, i) {
+        var key = INDICATOR_KEYS[i];
+        var score = catInd[key] != null ? catInd[key] : 0;
+        var fill = r.querySelector('.step-bar-fill');
+        var scoreEl = r.querySelector('.step-score');
+        if (fill) { fill.style.width = pct(score); fill.style.background = scoreColor(score); }
+        if (scoreEl) { scoreEl.textContent = pct(score); scoreEl.style.color = scoreColor(score); }
+      });
+      // Highlight active category
+      catCard.querySelectorAll('.cat-row').forEach(function(r) {
+        r.style.background = 'transparent';
+      });
+      crow.style.background = 'var(--ds-active-tint)';
+    });
 
     const badgeWrap = el('span');
     badgeWrap.style.display = 'inline-flex';
@@ -1054,13 +1169,6 @@ async function loadResults() {
     const resp = await fetch('/api/results');
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     _data = await resp.json();
-
-    const ts = document.getElementById('timestamp');
-    ts.textContent = '';
-    const tsText = (_data.aggregate && _data.aggregate.timestamp)
-      ? 'Last run: ' + _data.aggregate.timestamp
-      : 'Last run: unknown';
-    ts.appendChild(document.createTextNode(tsText));
 
     renderSummary(_data.aggregate);
     renderFilters();
@@ -1423,24 +1531,55 @@ async function loadVersionResults(file) {
     var resp = await fetch(url);
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     _data = await resp.json();
-    var ts = document.getElementById('timestamp');
-    ts.textContent = '';
-    var tsText = (_data.aggregate && _data.aggregate.timestamp)
-      ? 'Run: ' + _data.aggregate.timestamp : 'Run: unknown';
-    if (_data.config) tsText += '  ·  k_focus=' + (_data.config.k_focus || '—');
-    ts.appendChild(document.createTextNode(tsText));
     renderSummary(_data.aggregate);
     renderFilters();
     renderTable(_data.cases || []);
+    // Store version docs for the Docs tab
+    _versionDocs = _data.docs_snapshot || null;
     hideError();
   } catch(err) {
     showError('Failed to load version: ' + err.message);
   }
 }
 
+// ── Live Test ───────────────────────────────────────────────────────────────
+
+async function runLiveTest() {
+  var input = document.getElementById('livetest-input');
+  var output = document.getElementById('livetest-output');
+  var btn = document.getElementById('livetest-btn');
+  var query = input.value.trim();
+  if (!query) return;
+
+  btn.disabled = true;
+  btn.textContent = '...';
+  output.style.display = 'block';
+  output.textContent = 'Running pipeline for: "' + query + '"...\n';
+
+  try {
+    var resp = await fetch('/api/live_test', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({query: query})
+    });
+    var data = await resp.json();
+    if (data.error) {
+      output.textContent = 'Error: ' + data.error;
+    } else {
+      output.textContent = JSON.stringify(data, null, 2);
+    }
+  } catch(e) {
+    output.textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Suchen';
+  }
+}
+
 // ── Init ─────────────────────────────────────────────────────────────────────
 
 loadResults();
+switchSubTab('docs');
 </script>
 </body>
 </html>
@@ -1737,6 +1876,39 @@ class BenchmarkHandler(BaseHTTPRequestHandler):
 
         elif self.path == "/api/run_router":
             self._run_script(BENCHMARK_ROUTER_SCRIPT)
+
+        elif self.path == "/api/live_test":
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                body = json.loads(self.rfile.read(length)) if length else {}
+                query = body.get("query", "")
+                if not query:
+                    self._send_error_json(400, "query required")
+                    return
+                # Run single case through the benchmark pipeline
+                result = subprocess.run(
+                    [sys.executable, os.path.join(PROJECT_ROOT, "scripts", "benchmark_run.py"),
+                     "--id", "__live__", "--live-query", query],
+                    cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=60,
+                )
+                # For now, return a placeholder with the query
+                self._send_json(200, {
+                    "query": query,
+                    "status": "Live test not yet connected to pipeline. Run eval_retrieval.py manually:",
+                    "command": "python3 scripts/eval_retrieval.py \"%s\"" % query.replace('"', '\\"'),
+                })
+            except Exception as exc:
+                self._send_error_json(500, str(exc))
+
+        elif self.path == "/api/render_markdown":
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                body = json.loads(self.rfile.read(length)) if length else {}
+                md = body.get("markdown", "")
+                rendered = _render_markdown(md)
+                self._send_json(200, {"html": rendered})
+            except Exception as exc:
+                self._send_error_json(500, str(exc))
 
         else:
             self._send(404, "text/plain", "Not found")
