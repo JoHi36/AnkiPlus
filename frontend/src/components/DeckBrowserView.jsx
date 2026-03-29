@@ -1,4 +1,5 @@
 import React from 'react';
+import DeckSearchBar from './DeckSearchBar';
 import { DeckNode } from './DeckNode';
 import AccountBadge from './AccountBadge';
 import PlusiDock from './PlusiDock';
@@ -20,6 +21,10 @@ export default function DeckBrowserView({ data, isPremium, onToggleView }) {
 
   const handleSelect = (deckId) => {
     executeAction('deck.select', { deckId });
+  };
+
+  const handleSearchSubmit = (text) => {
+    executeAction('chat.open', { text });
   };
 
   return (
@@ -94,6 +99,13 @@ export default function DeckBrowserView({ data, isPremium, onToggleView }) {
         )}
       </div>
 
+      {/* Search Bar — fixed, never scrolls, same max-width */}
+      <div style={{
+        flexShrink: 0, width: '100%', maxWidth: MAX_W,
+        marginBottom: 16,
+      }}>
+        <DeckSearchBar onSubmit={handleSearchSubmit} />
+      </div>
 
       {/* Deck List — only this scrolls, clipped right at the search bar bottom edge */}
       <div style={{
