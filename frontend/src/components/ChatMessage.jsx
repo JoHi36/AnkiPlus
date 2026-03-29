@@ -1864,10 +1864,59 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                   const hasReasoningData = (isStreaming && requestId) || cell.pipelineSteps?.length > 0 || agentSteps.length > 0;
                   const cellIsStreaming = isStreaming && cell.status !== 'done' && cell.status !== 'error';
                   const cellCitations = cell.citations || citations;
-                  const citedCount = cellCitations ? Object.keys(cellCitations).length : 0;
-                  const cardSourceCount = cellCitations
-                    ? Object.values(cellCitations).filter((c) => c && !c.url && !c.web_url).length
-                    : 0;
+
+                  // Build citationIndices for this cell's citations
+                  const cellCitationIndices = {};
+                  if (cellCitations && Object.keys(cellCitations).length > 0) {
+                    let nextIdx = 1;
+                    Object.entries(cellCitations).forEach(([citId, cit]) => {
+                      if (cit) {
+                        const id = cit.noteId || cit.cardId || citId;
+                        const idKey = String(id);
+                        if (cit.index) {
+                          cellCitationIndices[idKey] = cit.index;
+                          if (cit.index >= nextIdx) nextIdx = cit.index + 1;
+                        }
+                      }
+                    });
+                    // Assign indices to any citations without backend index
+                    Object.entries(cellCitations).forEach(([citId, cit]) => {
+                      if (cit) {
+                        const id = cit.noteId || cit.cardId || citId;
+                        const idKey = String(id);
+                        if (!cellCitationIndices[idKey]) {
+                          cellCitationIndices[idKey] = nextIdx++;
+                        }
+                      }
+                    });
+                  }
+
+                  // Count only citations actually referenced in the text
+                  let citedCount = 0;
+                  let cardSourceCount = 0;
+                  if (cell.text && cellCitations && Object.keys(cellCitations).length > 0) {
+                    // Find all [N] references in the text
+                    const refMatches = [...(cell.text.matchAll(/\[(\d+)\]/g))];
+                    const referencedIndices = new Set(refMatches.map(m => parseInt(m[1], 10)));
+                    // Map indices back to citations to count types
+                    const indexToCitId = {};
+                    Object.entries(cellCitationIndices).forEach(([id, idx]) => {
+                      indexToCitId[idx] = id;
+                    });
+                    referencedIndices.forEach(idx => {
+                      const citId = indexToCitId[idx];
+                      if (citId) {
+                        citedCount++;
+                        const cit = cellCitations[citId] || Object.values(cellCitations).find(c => String(c?.noteId || c?.cardId) === citId);
+                        if (cit && !cit.url && !cit.web_url) cardSourceCount++;
+                      }
+                    });
+                  }
+                  // Fallback: if no text yet but citations exist, show total count
+                  if (citedCount === 0 && !cell.text && cellCitations) {
+                    citedCount = Object.keys(cellCitations).length;
+                    cardSourceCount = Object.values(cellCitations).filter((c) => c && !c.url && !c.web_url).length;
+                  }
 
                   let headerMeta = null;
                   if (cellIsStreaming && hasReasoningData) {
@@ -1906,15 +1955,28 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                     {/* Text content */}
                     {cell.text && cell.status !== 'loading' && !cell.sources?.length && (() => {
                       // Strip HANDOFF signal from display text
-                      const cleanText = cell.text.replace(/\n?HANDOFF:?\s*\w+\s+REASON:?\s*.+?\s+QUERY:?\s*.+$/s, '').trim();
+                      let cleanText = cell.text.replace(/\n?HANDOFF:?\s*\w+\s+REASON:?\s*.+?\s+QUERY:?\s*.+$/s, '').trim();
                       if (!cleanText) return null;
+                      // Replace [N] inline refs with citation links for markdown rendering
+                      if (cellCitations && Object.keys(cellCitationIndices).length > 0) {
+                        const idxToCitId = {};
+                        Object.entries(cellCitationIndices).forEach(([id, idx]) => {
+                          idxToCitId[idx] = id;
+                        });
+                        cleanText = cleanText.replace(/\[(\d+)\](?!\()/g, (match, numStr) => {
+                          const num = parseInt(numStr, 10);
+                          const citId = idxToCitId[num];
+                          if (citId) return `[${num}](citation:${citId})`;
+                          return match;
+                        });
+                      }
                       return (
                         <SafeMarkdownRenderer
                           content={cleanText}
                           MermaidDiagram={MermaidDiagram}
                           isStreaming={cell.status === 'streaming'}
-                          citations={cell.citations || {}}
-                          citationIndices={{}}
+                          citations={cellCitations || {}}
+                          citationIndices={cellCitationIndices}
                           bridge={bridge}
                           onPreviewCard={onPreviewCard}
                         />
