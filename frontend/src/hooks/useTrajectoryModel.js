@@ -158,31 +158,15 @@ export default function useTrajectoryModel({ days = [], currentPct = 0, totalCar
     // Dynamik drives prediction position (replaces old consistency bias)
     const bias = 0.3 + dynamik * 0.4; // maps 0–1 → 0.3–0.7 (never extreme)
 
-    // Natural decay rate: average daily loss on days where mature_pct dropped.
-    // This represents cards lapsing when not reviewed on time.
-    let dailyDecay = 0;
-    if (pctSeries.length > 1) {
-      let totalDrop = 0;
-      let dropCount = 0;
-      for (let i = 1; i < pctSeries.length; i++) {
-        const diff = pctSeries[i] - pctSeries[i - 1];
-        if (diff < 0) {
-          totalDrop += Math.abs(diff);
-          dropCount++;
-        }
-      }
-      // Spread drops over all days to get average daily decay
-      dailyDecay = totalDrop / pctSeries.length;
-    }
+    // Prediction = pure Damped Holt. No decay modifier on the prediction line.
+    // Holt already learned the trend from historical data (which includes real lapses).
+    // Adding explicit decay would double-count.
+    const forecastClean = holt.forecast;
 
-    // Apply decay to forecast: weighted by (1 - dynamik)
-    // High dynamik → user is active → reviews offset decay → minimal effect
-    // Low dynamik → user is inactive → decay dominates → curve bends down
-    const forecastWithDecay = holt.forecast.map((val, i) => {
-      const h = i + 1;
-      const decayEffect = dailyDecay * h * (1 - dynamik);
-      return Math.max(0, Math.min(100, val - decayEffect));
-    });
+    // Decay lives ONLY in the lower band edge (see band calculation below).
+    // "What if you slow down?" → lower band bends down with Anki decay physics.
+    // Half-life ~60 days: if you stop completely, ~50% of mature cards lapse in 60 days.
+    const DECAY_HALF_LIFE = 60;
 
     const last7 = pctSeries.slice(-7);
     const pacePerDay = last7.length >= 2
@@ -200,9 +184,13 @@ export default function useTrajectoryModel({ days = [], currentPct = 0, totalCar
     const bandWidthFn = (h) => h === 0 ? 0 : holt.residualStd * Math.sqrt(h / futureDays) * bandScale;
     const allVisiblePcts = [
       ...smoothed,
-      ...forecastWithDecay,
-      ...forecastWithDecay.map((p, i) => p + bandWidthFn(i + 1)),
-      ...forecastWithDecay.map((p, i) => p - bandWidthFn(i + 1)),
+      ...forecastClean,
+      ...forecastClean.map((p, i) => p + bandWidthFn(i + 1)),
+      ...forecastClean.map((p, i) => {
+        const h = i + 1;
+        const decay = Math.exp(-Math.log(2) / DECAY_HALF_LIFE * h * (1 - dynamik));
+        return p * decay - bandWidthFn(h);
+      }),
     ];
     const dataMin = Math.min(...allVisiblePcts);
     const dataMax = Math.max(...allVisiblePcts);
@@ -241,7 +229,7 @@ export default function useTrajectoryModel({ days = [], currentPct = 0, totalCar
     const lastPastPct = smoothed[smoothed.length - 1] || currentPct;
     const predAll = [
       { pct: lastPastPct, h: 0 },
-      ...forecastWithDecay.map((pct, i) => ({ pct, h: i + 1 })),
+      ...forecastClean.map((pct, i) => ({ pct, h: i + 1 })),
     ];
     const maxPredPoints = range === 'W' ? 7 : range === 'M' ? 10 : 12;
     const predStep = Math.max(1, Math.floor(predAll.length / maxPredPoints));
@@ -265,7 +253,7 @@ export default function useTrajectoryModel({ days = [], currentPct = 0, totalCar
     });
 
     // Prediction lookup (all points for hover)
-    const predLookup = forecastWithDecay.map((pct, i) => {
+    const predLookup = forecastClean.map((pct, i) => {
       const h = i + 1;
       const bh = bandWidth(h);
       const biasShift = (bias - 0.5) * 2 * bh;
@@ -278,18 +266,24 @@ export default function useTrajectoryModel({ days = [], currentPct = 0, totalCar
       };
     });
 
-    // Band: also starts at last past point
+    // Band: upper = statistical uncertainty, lower = statistical + decay physics
     const upperBand = predAll.map(({ pct, h }) => {
       return { x: dayToX(pastDays + h), y: pctToY(Math.min(100, pct + bandWidth(h))) };
     });
 
     const lowerBand = predAll.map(({ pct, h }) => {
-      return { x: dayToX(pastDays + h), y: pctToY(Math.max(0, pct - bandWidth(h))) };
+      // Lower band includes exponential decay: "what if you slow down?"
+      // Decay multiplier: fraction of knowledge retained after h days of reduced activity
+      // At full dynamik (1.0): no decay, band is symmetric
+      // At zero dynamik (0.0): full decay with half-life ~60 days
+      const decayFactor = h === 0 ? 1 : Math.exp(-Math.log(2) / DECAY_HALF_LIFE * h * (1 - dynamik));
+      const decayedPct = pct * decayFactor;
+      return { x: dayToX(pastDays + h), y: pctToY(Math.max(0, decayedPct - bandWidth(h))) };
     });
 
     return {
       pastCurve, pastLookup, predictionLine, predLookup, upperBand, lowerBand,
-      dynamik, momentum, konsistenz, predictionOpacity, dailyDecay: Math.round(dailyDecay * 100) / 100,
+      dynamik, momentum, konsistenz, predictionOpacity,
       pacePerDay: Math.round(pacePerDay * 100) / 100,
       phase,
       yMin, yMax,
