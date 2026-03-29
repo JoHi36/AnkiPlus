@@ -1,10 +1,14 @@
-# Retrieval System — Architecture & Evaluation Guide
+# Tutor Pipeline — Router → Retrieval → Generation
 
 ## Overview
 
-The retrieval system finds relevant flashcards for a user's question. It combines four search strategies into a single ranked result via Reciprocal Rank Fusion (RRF).
+Die Tutor-Pipeline hat drei Phasen:
 
-**Core principle:** Embedding-first KG expansion, then Graph edges, then parallel SQL + Semantic + Tag search, then mathematical ranking.
+1. **Router** — LLM entscheidet: welcher Agent, ob Suche nötig, resolved_intent, associated_terms
+2. **Retrieval** — Findet relevante Karten via SQL + Semantic + KG + RRF (liefert Top-30)
+3. **Generation** — Tutor baut strukturierte Antwort mit Quellen-Transparenz und Safety-Checks
+
+**Core principle:** Embedding-first KG expansion, then Graph edges, then parallel SQL + Semantic + Tag search, then mathematical ranking, then structured generation with source hierarchy.
 
 ## Current Benchmark Results (2026-03-29, v81%)
 
@@ -354,6 +358,113 @@ Constants in `ai/rrf.py`:
 Confidence thresholds (tunable):
 - `CONFIDENCE_HIGH = 0.025` (answer from cards)
 - `CONFIDENCE_LOW = 0.012` (trigger Perplexity web search)
+
+## Generation — Tutor Response Architecture
+
+Phase 3 der Pipeline: Der Tutor erhält Top-30 Karten aus dem Retrieval und baut eine strukturierte Antwort.
+
+### Response-Struktur
+
+Jede Tutor-Antwort folgt dieser Architektur (von oben nach unten):
+
+```
+┌─────────────────────────────────────────────────┐
+│ 1. SAFETY CHECK (nur wenn nötig)                │
+│    ⚠ Widerspruch / Fehler / Unsicherheit        │
+│    Wird VOR der Antwort angezeigt                │
+├─────────────────────────────────────────────────┤
+│ 2. PARAPHRASE                                   │
+│    "Du fragst also, ob..."                      │
+│    Zeigt dem User: ich hab dich verstanden       │
+├─────────────────────────────────────────────────┤
+│ 3. KOMPAKTE ANTWORT                             │
+│    Ja/Nein/Der Begriff ist X [1]                │
+│    1-2 Sätze, sofort die Kernaussage + Quelle   │
+├─────────────────────────────────────────────────┤
+│ 4. ERKLÄRUNG                                    │
+│    Ausführlich, mit Quellen [1][2][3]            │
+│    Tiefe, Kontext, Zusammenhänge                │
+├─────────────────────────────────────────────────┤
+│ 5. ZUSAMMENFASSUNG / MERKE                      │
+│    Takeaway, das hängenbleibt                   │
+│    Quellen nur wenn nötig                       │
+└─────────────────────────────────────────────────┘
+```
+
+Nicht jede Antwort braucht alle 5 Blöcke. Einfache Faktenfragen können direkt mit Block 3 (Kompakte Antwort) beantwortet werden. Safety Check erscheint nur wenn tatsächlich ein Problem vorliegt.
+
+### Wissenshierarchie
+
+Der Tutor hat drei Wissensquellen, strikt priorisiert:
+
+| Priorität | Quelle | Verhalten |
+|-----------|--------|-----------|
+| 1. Höchste | **Anki-Karten** (Lernmaterial) | Primärquelle. Nutze Terminologie und Fakten aus den Karten. |
+| 2. Ergänzend | **Tutor-Weltwissen** | Verbindet, erklärt, kontextualisiert frei. Widerspricht NIE den Karten. |
+| 3. Ausnahme | **Web-Suche** | Nur wenn Karten + Weltwissen nicht reichen. Aktiv kommuniziert. |
+
+**Kernregel:** Der Tutor denkt frei (verbindet, analogisiert, erklärt mit Weltwissen), aber zitiert ehrlich (macht klar was aus Karten kommt und was nicht). Er ist kein Papagei der Karten vorliest, aber auch kein Freelancer der Sachen erfindet.
+
+### Quellen-System
+
+**Einheitliche Nummerierung** — Quellen werden in Reihenfolge der Nutzung nummeriert [1], [2], [3], unabhängig vom Typ. Die Unterscheidung erfolgt über **Farbe**, nicht über Format:
+
+| Farbe | Typ | Bedeutung |
+|-------|-----|-----------|
+| **Blau** (Anki-Markenfarbe) | Anki-Karte | Standard. "Kommt aus deinem Lernmaterial." |
+| **Grün** (sticht hervor) | Web-Quelle | Ausnahme. "Achtung, das kommt von außen." |
+
+```
+"Das Broca-Areal liegt im Gyrus frontalis inferior [1] und ist
+über den Fasciculus arcuatus mit dem Wernicke-Areal verbunden [2].
+Aktuelle Leitlinien empfehlen logopädische Frühintervention [3]."
+
+[1] Anki-Karte #4821 — blau
+[2] Anki-Karte #4835 — blau
+[3] PubMed-Ergebnis  — grün (sticht hervor)
+```
+
+**Platzierung:**
+- **Paraphrase** — keine Quellen (ist User-Input)
+- **Kompakte Antwort** — JA, Quelle direkt an der Kernaussage
+- **Erklärung** — jede Fakten-Aussage mit Quelle
+- **Zusammenfassung/Merke** — nur wenn nötig, leichter
+
+**Weltwissen-Aussagen** (Tutor erklärt aus eigenem Wissen, keine Karte vorhanden) bekommen KEINE Quellennummer. Das Fehlen einer Nummer signalisiert: "Das ist Kontext/Erklärung, nicht aus deinen Karten."
+
+### Safety Checks
+
+Der Safety-Block erscheint am Anfang der Antwort, VOR allem anderen. Er wird nur gezeigt wenn ein konkretes Problem vorliegt:
+
+| Check | Trigger | Beispiel |
+|-------|---------|----------|
+| **Impliziter Fehler** | User-Frage enthält eine falsche Annahme | "Du schreibst Broca sei für Verständnis — Broca ist für Produktion, Wernicke für Verständnis." |
+| **Quellen-Widerspruch** | Zwei Karten widersprechen sich | "Karte [1] sagt X, Karte [2] sagt Y — Unterschied ist..." |
+| **Verwechslungsgefahr** | Frage deutet Verwechslung ähnlicher Begriffe an | "Achtung: Afferent (zum ZNS hin) ≠ Efferent (vom ZNS weg)" |
+| **Keine Quelle** | Karten decken die Frage nicht ab | "Deine Karten enthalten dazu nichts. Basierend auf Weltwissen: ..." |
+| **Veraltete Info** | Karte enthält überholten Wissensstand | "Deine Karte sagt X — aktuelle Leitlinie sagt jedoch Y [3]." |
+
+**Kein Safety-Block bei:** Standardfragen die sauber aus Karten beantwortbar sind (der Normalfall).
+
+### Generation Fallback
+
+3-Level Fallback-Kette (`ai/tutor.py`):
+
+1. **Level 1:** Primärmodell mit vollem RAG-Kontext (30 Karten) + Chat-History
+2. **Level 2:** Fallback-Modell mit Top-3 Karten, ohne History (bei 400/Size-Errors)
+3. **Level 3:** Fallback-Modell ohne RAG (bei jedem Error aus Level 2)
+
+Fehlermeldung an User nur wenn alle 3 Level scheitern.
+
+### Key Files (Generation)
+
+| File | Responsibility |
+|------|---------------|
+| `functions/src/prompts/tutor.ts` | System-Prompt: Response-Struktur, Quellen-Regeln, Tool-Nutzung |
+| `ai/tutor.py` | Generation-Orchestrierung, 3-Level Fallback |
+| `ai/agent_loop.py` | Multi-Turn Agent Loop (Tool-Calls, Streaming) |
+| `ai/system_prompt.py` | System-Prompt-Konstruktion (Card-Kontext injection) |
+| `frontend/src/components/CitationBadge.jsx` | Quellen-Badge UI (blau/grün Farbcodierung) |
 
 ## Card Content Cache
 
