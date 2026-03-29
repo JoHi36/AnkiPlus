@@ -15,6 +15,7 @@ export interface ReasoningDisplayProps {
   citations?: Record<string, any>;
   bridge?: any;
   onPreviewCard?: (citation: any) => void;
+  hideCounter?: boolean;
 }
 
 export default function ReasoningDisplay({
@@ -27,6 +28,7 @@ export default function ReasoningDisplay({
   citations: citationsProp,
   bridge,
   onPreviewCard,
+  hideCounter,
 }: ReasoningDisplayProps) {
   const {
     displaySteps,
@@ -61,6 +63,7 @@ export default function ReasoningDisplay({
         displaySteps={displaySteps}
         phase={phase}
         agentColor={agentColor}
+        showCounter={!hideCounter}
       />
     );
   }

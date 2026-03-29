@@ -6,6 +6,7 @@ interface CompactProps {
   displaySteps: DisplayStep[];
   phase: StreamPhase;
   agentColor?: string;
+  showCounter?: boolean;
 }
 
 /* ═══════════════════════════════════════════════════
@@ -45,7 +46,7 @@ const CHECKMARK_DONE_STYLE: React.CSSProperties = {
    only, no renderContent.
    ═══════════════════════════════════════════════════ */
 
-export default function CompactReasoningDisplay({ displaySteps, phase, agentColor }: CompactProps) {
+export default function CompactReasoningDisplay({ displaySteps, phase, agentColor, showCounter = true }: CompactProps) {
   const currentStep = displaySteps[displaySteps.length - 1];
   const completedCount = displaySteps.filter(s => s.status === 'done').length;
   const totalCount = displaySteps.length;
@@ -82,7 +83,7 @@ export default function CompactReasoningDisplay({ displaySteps, phase, agentColo
 
   return (
     <div style={CONTAINER_STYLE}>
-      <span style={COUNTER_STYLE}>{completedCount}/{totalCount}</span>
+      {showCounter && <span style={COUNTER_STYLE}>{completedCount}/{totalCount}</span>}
       <div key={currentStep.step} style={STEP_ROW_STYLE}>
         <div style={dotStyle} />
         <span style={titleStyle}>{title}</span>

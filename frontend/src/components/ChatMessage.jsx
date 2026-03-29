@@ -1893,6 +1893,16 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                     loadingHint={cell.loadingHint || ''}
                     headerMeta={headerMeta}
                   >
+                    {/* Step label during streaming */}
+                    {cellIsStreaming && hasReasoningData && (
+                      <ReasoningDisplay
+                        streamId={requestId ? `${cell.agent}-${requestId}` : undefined}
+                        mode="compact"
+                        hideCounter
+                        hasOutput={Boolean(cell.text)}
+                        agentColor={'var(--ds-text-muted)'}
+                      />
+                    )}
                     {/* Text content */}
                     {cell.text && cell.status !== 'loading' && !cell.sources?.length && (() => {
                       // Strip HANDOFF signal from display text
