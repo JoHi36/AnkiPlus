@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import { describe, it, expect, beforeAll } from 'vitest';
 import ReasoningDots from '../ReasoningDots';
 import { registerDefaultRenderers } from '../defaultRenderers';
@@ -32,13 +32,18 @@ describe('ReasoningDots', () => {
     expect(dots).toHaveLength(4);
   });
 
-  it('shows active step label from registry', () => {
+  it('renders dots only, no label text', () => {
     const steps: DisplayStep[] = [
       makeStep('router', 'done'),
       makeStep('sql_search', 'active'),
     ];
-    render(<ReasoningDots displaySteps={steps} phase="accumulating" />);
-    expect(screen.getByText('Durchsuche Karten...')).toBeTruthy();
+    const { container } = render(
+      <ReasoningDots displaySteps={steps} phase="accumulating" />
+    );
+    const dots = container.querySelectorAll('[data-testid="reasoning-dot"]');
+    expect(dots).toHaveLength(2);
+    // No label text rendered — label is handled by CompactReasoningDisplay separately
+    expect(container.textContent).toBe('');
   });
 
   it('returns null when no steps', () => {
