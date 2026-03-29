@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo } from 'react';
-import SourcesCarousel from '../components/SourcesCarousel';
 import type { DisplayStep, StreamPhase } from './types';
 import { getStepRenderer, getFallbackRenderer } from './stepRegistry';
 
@@ -316,9 +315,6 @@ export default function FullReasoningDisplay({
   const hasCitations = Object.keys(citations).length > 0;
   const citationCount = Object.keys(citations).length;
 
-  // Sources appear simultaneously with the sources_ready step
-  const sourcesReady = hasCitations && displaySteps.some(d => d.step === 'sources_ready');
-
   const isAccumulating = phase === 'accumulating';
   const isComplete = phase === 'complete';
   const isProcessingLive = isStreaming && !isComplete;
@@ -426,14 +422,6 @@ export default function FullReasoningDisplay({
             ))}
           </div>
 
-          {/* Sources carousel — inside collapsible area, collapses with steps */}
-          {sourcesReady && (
-            <SourcesCarousel
-              citations={citations}
-              bridge={bridge}
-              onPreviewCard={onPreviewCard}
-            />
-          )}
         </div>
       )}
     </div>
