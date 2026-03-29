@@ -1925,7 +1925,6 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                         streamId={requestId ? `${cell.agent}-${requestId}` : undefined}
                         steps={undefined}
                         mode="dots"
-                        agentColor={'var(--ds-text-muted)'}
                       />
                     );
                   } else if (!cellIsStreaming && citedCount > 0) {
@@ -1949,7 +1948,6 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                         mode="compact"
                         hideCounter
                         hasOutput={Boolean(cell.text)}
-                        agentColor={'var(--ds-text-muted)'}
                       />
                     )}
                     {/* Text content */}

@@ -567,9 +567,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       <button class="version-btn" id="version-btn" onclick="toggleVersionPicker()">current</button>
       <div class="version-dropdown" id="version-dropdown"></div>
     </div>
-    <button class="subnav-btn active" id="sub-docs" onclick="switchSubTab('docs')">Docs</button>
+    <button class="subnav-btn" id="sub-docs" onclick="switchSubTab('docs')">Docs</button>
     <button class="subnav-btn" id="sub-router" onclick="switchSubTab('router')">Router</button>
-    <button class="subnav-btn" id="sub-retrieval" onclick="switchSubTab('retrieval')">Retrieval</button>
+    <button class="subnav-btn active" id="sub-retrieval" onclick="switchSubTab('retrieval')">Retrieval</button>
     <button class="subnav-btn" id="sub-generation" onclick="switchSubTab('generation')">Generation</button>
     <button class="subnav-btn" id="sub-livetest" onclick="switchSubTab('livetest')" style="margin-left:auto;color:var(--ds-accent)">Live Test</button>
   </div>
@@ -680,7 +680,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 // ── Two-level navigation ──
 
 let _topTab = 'benchmarks';
-let _subTab = 'docs';
+let _subTab = 'retrieval';
 let _versionDocs = null; // docs snapshot from selected version
 
 function switchTopTab(tab) {
@@ -1175,6 +1175,8 @@ function renderTable(cases) {
 
 async function loadResults() {
   try {
+    var bp = document.getElementById('benchmark-panel');
+    if (bp) bp.style.display = 'block';
     const resp = await fetch('/api/results');
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     _data = await resp.json();
@@ -1563,7 +1565,7 @@ async function runLiveTest() {
   btn.disabled = true;
   btn.textContent = '...';
   output.style.display = 'block';
-  output.textContent = 'Running pipeline for: "' + query + '"...\n';
+  output.textContent = 'Running pipeline for: ' + query + '...';
 
   try {
     var resp = await fetch('/api/live_test', {
@@ -1587,8 +1589,8 @@ async function runLiveTest() {
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 
+// Load and show retrieval as default
 loadResults();
-switchSubTab('docs');
 </script>
 </body>
 </html>
