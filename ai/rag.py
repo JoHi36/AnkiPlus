@@ -501,7 +501,7 @@ QUERY RULES:
         }
 
 
-def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="current_deck", context=None, max_notes=10, emit_state=None, emit_event=None):
+def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="current_deck", context=None, max_notes=30, emit_state=None, emit_event=None):
     """
     Stage 2: Multi-Query Cascade Retrieval Engine - Führt präzise und breite Queries in Cascade aus
 

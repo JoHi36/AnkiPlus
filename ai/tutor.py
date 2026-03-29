@@ -467,7 +467,7 @@ def _make_default_rag_retrieve_fn():
 
         def _rag_fn(precise_queries=None, broad_queries=None,
                      search_scope="current_deck", context=None,
-                     max_notes=10, **_kwargs):
+                     max_notes=30, **_kwargs):
             return rag_retrieve_cards(
                 precise_queries=precise_queries,
                 broad_queries=broad_queries,

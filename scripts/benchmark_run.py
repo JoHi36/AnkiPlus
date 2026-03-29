@@ -28,7 +28,7 @@ RESULTS_PATH = os.path.join(PROJECT_ROOT, 'benchmark', 'results.json')
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-TOP_K = 10          # Semantic search top-k for scoring
+TOP_K = 30          # Match production: Tutor receives top-30 cards
 SQL_TOP_K = 50      # SQL search candidates before ranking
 
 # ── Tunable Parameters (saved with each benchmark run) ────────────────────
@@ -50,7 +50,8 @@ BENCHMARK_CONFIG = {
     'max_context_terms': 10,    # Max terms from card_context for resolved_intent
     'lenient_validation': True, # LLM validates alternative cards on fail
     'llm_expansion': True,      # Router-generated associated_terms as SQL + semantic lane
-    'k_llm_semantic': 75,       # k-value for LLM-expanded terms semantic lane
+    'k_llm_sql': 65,            # k-value for LLM SQL lane (own lane, not appended)
+    'k_llm_semantic': 65,       # k-value for LLM-expanded terms semantic lane
 }
 
 # ── Config & Embedding API ───────────────────────────────────────────────────
@@ -674,22 +675,19 @@ def score_rrf_ranking(acceptable_ids, sql_result, semantic_result,
             'tier': 'primary',
         }
 
-    # Router associated_terms → SQL search (primary broad tier)
+    # Router associated_terms → own RRF lane (separate from SQL)
+    llm_sql_results = {}
     llm_sql_terms = enrichment_result.get('llm_sql_terms', [])
     if llm_sql_terms:
-        llm_rank = len(sql_results) + 1
+        llm_rank = 1
         for term in llm_sql_terms:
             rows = db.execute(
                 "SELECT card_id FROM kg_card_terms WHERE LOWER(term) = LOWER(?)",
                 (term,)
             ).fetchall()
             for (card_id,) in rows:
-                if card_id not in sql_results:
-                    sql_results[card_id] = {
-                        'rank': llm_rank,
-                        'query_type': 'broad',
-                        'tier': 'primary',
-                    }
+                if card_id not in llm_sql_results:
+                    llm_sql_results[card_id] = {'rank': llm_rank}
                     llm_rank += 1
 
     # Build semantic_results dict for compute_rrf
@@ -729,8 +727,7 @@ def score_rrf_ranking(acceptable_ids, sql_result, semantic_result,
                         fb_rank += 1
 
     # ── Focus Lane: compute focus ranks for candidate pool ──────────────
-    # LLM lane only boosts existing candidates — never introduces new cards
-    candidate_ids = set(sql_results.keys()) | set(semantic_results.keys())
+    candidate_ids = set(sql_results.keys()) | set(semantic_results.keys()) | set(llm_sql_results.keys())
     focus_results = {}
     if focus_embedding is not None and BENCHMARK_CONFIG.get('focus_enabled'):
         focus_results = compute_focus_ranks(focus_embedding, candidate_ids, card_embeddings)
@@ -749,9 +746,10 @@ def score_rrf_ranking(acceptable_ids, sql_result, semantic_result,
             for rank, (card_id, _) in enumerate(l_scored, start=1):
                 llm_semantic_results[card_id] = {'rank': rank}
 
-    # ── RRF with Focus + LLM ─────────────────────────────────────────
+    # ── RRF with Focus + LLM SQL + LLM Semantic ─────────────────────
     k_focus = BENCHMARK_CONFIG.get('k_focus', 80)
-    k_llm = BENCHMARK_CONFIG.get('k_llm_semantic', 75)
+    k_llm_sql = BENCHMARK_CONFIG.get('k_llm_sql', 55)
+    k_llm_sem = BENCHMARK_CONFIG.get('k_llm_semantic', 65)
     scores = {}
     for cid in candidate_ids:
         s = 0.0
@@ -763,8 +761,10 @@ def score_rrf_ranking(acceptable_ids, sql_result, semantic_result,
             sem = semantic_results[cid]
             k = _get_k('semantic', sem['tier'])
             s += 1.0 / (k + sem['rank'])
+        if cid in llm_sql_results:
+            s += 1.0 / (k_llm_sql + llm_sql_results[cid]['rank'])
         if cid in llm_semantic_results:
-            s += 1.0 / (k_llm + llm_semantic_results[cid]['rank'])
+            s += 1.0 / (k_llm_sem + llm_semantic_results[cid]['rank'])
         if cid in focus_results:
             s += 1.0 / (k_focus + focus_results[cid]['rank'])
         scores[cid] = s

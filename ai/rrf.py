@@ -25,6 +25,8 @@ K_SEMANTIC_PRIMARY = 60   # Embedding search from user's query
 K_PRECISE_SECONDARY = 90  # AND queries from Router intent
 K_BROAD_SECONDARY = 110   # OR queries from Router intent
 K_SEMANTIC_SECONDARY = 120  # Embedding search from Router intent
+K_LLM_SQL = 65              # Router associated_terms SQL hits (own lane)
+K_LLM_SEMANTIC = 65         # Router associated_terms embedding boost
 
 # Confidence thresholds -- tune with real data after deployment
 CONFIDENCE_HIGH = 0.025
@@ -47,18 +49,23 @@ def _get_k(query_type, tier):
         return K_SEMANTIC_SECONDARY
 
 
-def compute_rrf(sql_results, semantic_results):
+def compute_rrf(sql_results, semantic_results, extra_lanes=None):
     """Compute weighted RRF score for each note.
 
     Args:
         sql_results: dict of note_id -> {rank: int, query_type: str, tier: str}
         semantic_results: dict of note_id -> {rank: int, tier: str}
+        extra_lanes: optional list of (dict, k_value) tuples.
+            Each dict maps note_id -> {rank: int}. Cards in extra lanes
+            are added to the candidate pool and receive 1/(k + rank) boost.
 
     Returns:
         Sorted list of (note_id, rrf_score) tuples, descending by score.
     """
     scores = {}
     all_note_ids = set(sql_results.keys()) | set(semantic_results.keys())
+    for lane, _k in (extra_lanes or []):
+        all_note_ids |= set(lane.keys())
 
     for note_id in all_note_ids:
         score = 0.0
@@ -72,6 +79,10 @@ def compute_rrf(sql_results, semantic_results):
             sem = semantic_results[note_id]
             k = _get_k('semantic', sem['tier'])
             score += 1.0 / (k + sem['rank'])
+
+        for lane, k_val in (extra_lanes or []):
+            if note_id in lane:
+                score += 1.0 / (k_val + lane[note_id]['rank'])
 
         scores[note_id] = score
 

@@ -78,7 +78,7 @@ def retrieve_rag_context(
     retrieval_mode = _get('retrieval_mode', 'both')
     search_scope = _get('search_scope', 'current_deck')
     max_sources_level = _get('max_sources', 'medium')
-    max_notes = {"low": 5, "medium": 10, "high": 15}.get(max_sources_level, 10)
+    max_notes = {"low": 10, "medium": 30, "high": 50}.get(max_sources_level, 30)
 
     precise_queries = [q for q in (_get('precise_queries', []) or []) if q and q.strip()]
     broad_queries = [q for q in (_get('broad_queries', []) or []) if q and q.strip()]

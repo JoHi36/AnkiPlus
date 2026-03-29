@@ -6,26 +6,36 @@ The retrieval system finds relevant flashcards for a user's question. It combine
 
 **Core principle:** Embedding-first KG expansion, then Graph edges, then parallel SQL + Semantic + Tag search, then mathematical ranking.
 
-## Current Benchmark Results (2026-03-28, v63%)
+## Current Benchmark Results (2026-03-29, v81%)
 
 | Metric | Value | Notes |
 |--------|-------|-------|
-| **Recall@10** | **63%** | Target card in top-10 results |
-| **Context** | **100%** | Was 0% → solved by card_context terms + embedding fallback |
-| Direct | 75% | Exact term matches |
-| Cross-Deck | 66% | Collection-wide search |
-| Typo | 75% | Fuzzy embedding matching |
-| Synonym | 6% | First movement via Router associated_terms |
+| **Recall@30** | **81%** | Target card in top-30 results (Tutor receives 30 cards) |
+| **Context** | **100%** | card_context terms + embedding fallback |
+| **Cross-Deck** | **100%** | Was 66% → solved by wider retrieval window |
+| Direct | 88% | Was 75% |
+| Typo | 88% | Was 75% |
+| Synonym | 38% | Was 6% → Router associated_terms own lane + wider window |
 | Top-3 | 36% | Target card in top-3 results |
-| MRR | 0.311 | Mean Reciprocal Rank |
+| MRR | 0.304 | Mean Reciprocal Rank |
 
-**Session progress (2026-03-28):** 46% → 63% Recall@10 through:
+**Session progress (2026-03-29):** 63% → 81% Recall@30 through:
+1. **Retrieval window widened from 10 → 30** — main driver of improvement. Cards were found by the pipeline but ranked 11-30, now included. Production max_notes also raised to 30 (model filters relevance).
+2. **Router associated_terms as own RRF lane** — previously appended to SQL results at high rank (rank 51+, effectively ignored). Now separate lane with k=65, own ranking from 1. Adds LLM-found cards to candidate pool.
+3. **LLM semantic lane strengthened** — k=75 → k=65.
+
+**What each change contributed (isolated):**
+- TOP_K 10→30: dominant effect (+18% overall). Cross-Deck 66%→100%, Synonym 6%→38%.
+- LLM own lane (k=65): at Recall@10, slightly negative (-2%). At Recall@30, contribution not isolated.
+- Caveat: only 32/80 benchmark cases have Router associated_terms. Running Router on all 80 cases would likely boost Synonym further.
+
+**Previous session (2026-03-28):** 46% → 63% Recall@10 through:
 1. `resolved_intent` from card_context.terms for context cases (+9%)
 2. Embedding fallback: combine query with intent when no domain terms found (+5%)
 3. Focus lane: query rerank within candidate pool (k=80) (+1%)
 4. Router `associated_terms`: LLM-generated domain terms as SQL + semantic lane (+2%)
 
-**Honest assessment:** SQL keyword search is the strongest signal for direct/context cases. Synonym remains the biggest challenge — the Router generates correct associated terms but they need stronger weighting in the ranking. LLM validation confirmed: 0 false positives in 310 card evaluations.
+**Honest assessment:** The wider retrieval window is the biggest single improvement. The model (Gemini Flash) is good at filtering 30 cards for relevance. Synonym remains the hardest category — Router generates correct terms but only 32/80 cases have them. Next step: run Router on all 80 cases. LLM validation: 0 false positives in 310 card evaluations.
 
 **Dashboard:** Run `python3 scripts/benchmark_serve.py` and open `http://localhost:8080` for the interactive benchmark dashboard.
 
@@ -130,12 +140,12 @@ Am Ende der Anreicherung entstehen 6 Queries + 2 Sucharten. Hier die komplette �
 | 6 | Semantic Primary | Tier 1 (Frage) | Frage + Expansionsterme | `"wie lang ist der dünndarm Duodenum Jejunum Dickdarm"` | k=60 |
 | 7 | Semantic Secondary | Tier 2 (Intent) | Intent + Expansionsterme | `"Dünndarm Jejunum Ileum Ileumschlingen"` | k=120 (schwächste) |
 
-**Router-generierte Terme (associated_terms)**
+**Router-generierte Terme (associated_terms) — eigene RRF-Lane**
 
 | # | Signal | Quelle | Berechnung | Beispiel | RRF k-Wert |
 |---|--------|--------|------------|----------|------------|
-| 8 | Router SQL | Router associated_terms | SQL-Suche nach LLM-generierten Termen | `"Broca-Aphasie"`, `"Sprachverständnis"` | k=70 (broad primary) |
-| 9 | Router Embedding | Router associated_terms | cosine(terms_embedding, karte) im Kandidaten-Pool | Alle Router-Terme als ein Embedding | k=75 |
+| 8 | Router SQL | Router associated_terms | Eigene SQL-Suche, eigenes Ranking ab 1 | `"Broca-Aphasie"`, `"Sprachverständnis"` | k=65 (eigene Lane) |
+| 9 | Router Embedding | Router associated_terms | cosine(terms_embedding, karte) im Kandidaten-Pool | Alle Router-Terme als ein Embedding | k=65 |
 
 **Focus-Signal (Query Rerank)**
 
@@ -148,8 +158,8 @@ Am Ende der Anreicherung entstehen 6 Queries + 2 Sucharten. Hier die komplette �
 ```
 k=50  Precise Primary     ████████████████████  stärkste — exakte Terme aus deiner Frage
 k=60  Semantic Primary    ██████████████████    Embedding deiner Frage
-k=70  Broad/Tag/Router    ████████████████      breitere Suche + Router-Terme
-k=75  Router Embedding    ███████████████       Router-Terme als Embedding-Boost
+k=65  Router SQL/Embed    █████████████████     Router-Terme (eigene Lane, eigenes Ranking)
+k=70  Broad/Tag Primary   ████████████████      breitere Suche
 k=80  Focus Rerank        ██████████████        Frage-Richtung im Kandidaten-Pool
 k=90  Precise Secondary   ████████████          exakte Terme aus Intent
 k=110 Broad Secondary     ██████████            breitere Suche aus Intent
@@ -334,6 +344,8 @@ Lower k = more weight. Cards found by multiple searches get a natural multi-sour
 Constants in `ai/rrf.py`:
 - `K_PRECISE_PRIMARY = 50` (AND queries from user's terms)
 - `K_SEMANTIC_PRIMARY = 60` (embedding search from user's query)
+- `K_LLM_SQL = 65` (Router associated_terms SQL — own lane)
+- `K_LLM_SEMANTIC = 65` (Router associated_terms embedding boost)
 - `K_BROAD_PRIMARY = 70` (OR queries from user's terms)
 - `K_PRECISE_SECONDARY = 90` (queries from Router intent)
 - `K_BROAD_SECONDARY = 110`
@@ -435,6 +447,14 @@ python3 run_tests.py -k test_kg_builder -v     # KG builder tests
 5. **Card Content Cache für Benchmark nutzen** — Realistischere SQL-Simulation im Offline-Benchmark.
 
 ## Changelog
+
+### v3.0 (2026-03-29) — 81% Recall@30
+
+- **Retrieval window widened:** `max_notes` default 10 → 30 across all retrieval paths (`retrieval.py`, `rag_pipeline.py`, `tutor.py`, `rag.py`). Model filters relevance from 30 candidates. Benchmark TOP_K also raised to 30.
+- **Router associated_terms as own RRF lane:** Previously appended to SQL results at high rank (effectively ignored). Now separate lane in `compute_rrf()` via `extra_lanes` parameter. Own ranking from 1, k=65. Cards found via Router terms are added to candidate pool (can benefit from semantic + focus boost).
+- **LLM semantic lane strengthened:** k=75 → k=65.
+- **Production integration:** `EnrichedRetrieval.retrieve()` now reads `associated_terms` from Router result and runs separate SQL search. Previously completely ignored despite being generated by backend Router.
+- **`compute_rrf()` extended:** Accepts optional `extra_lanes` parameter — list of `(dict, k_value)` tuples for additional RRF signals without modifying the core function signature.
 
 ### v2.1 (2026-03-27)
 - **Backend Router simplified:** Now returns only 3 fields (agent, search_needed, resolved_intent). Query generation moved entirely to local KG enrichment.

@@ -32,7 +32,7 @@ class HybridRetrieval:
         self.rag_retrieve_fn = rag_retrieve_fn
         self.state = state or RetrievalState()
 
-    def retrieve(self, user_message, router_result, context=None, max_notes=10):
+    def retrieve(self, user_message, router_result, context=None, max_notes=30):
         """
         Execute retrieval based on router decision.
 
@@ -40,7 +40,7 @@ class HybridRetrieval:
             user_message: User's question
             router_result: Dict from _rag_router() with intent, search_needed, queries, retrieval_mode
             context: Current card context dict
-            max_notes: Max cards to return
+            max_notes: Max cards to return (default 30, model filters relevance)
 
         Returns:
             {context_string: str, citations: dict} — same format as _rag_retrieve_cards()
@@ -410,9 +410,9 @@ except ImportError:
     from kg_enrichment import enrich_query
 
 try:
-    from .rrf import compute_rrf, check_confidence
+    from .rrf import compute_rrf, check_confidence, K_LLM_SQL
 except ImportError:
-    from rrf import compute_rrf, check_confidence
+    from rrf import compute_rrf, check_confidence, K_LLM_SQL
 
 
 class EnrichedRetrieval:
@@ -432,14 +432,14 @@ class EnrichedRetrieval:
         self.rag_retrieve_fn = rag_retrieve_fn
         self.state = state or RetrievalState()
 
-    def retrieve(self, user_message, routing_result, context=None, max_notes=10):
+    def retrieve(self, user_message, routing_result, context=None, max_notes=30):
         """Execute enriched retrieval pipeline.
 
         Args:
             user_message: User's question.
             routing_result: Dict from Router with resolved_intent, search_needed, etc.
             context: Current card context dict (unused for scope — always collection-wide).
-            max_notes: Max cards to return.
+            max_notes: Max cards to return (default 30, model filters relevance).
 
         Returns:
             {context_string, citations, keyword_count, confidence, rrf_scores}
@@ -453,6 +453,7 @@ class EnrichedRetrieval:
                     "confidence": "low", "rrf_scores": []}
 
         resolved_intent = _get_rr('resolved_intent', '') or ''
+        associated_terms = _get_rr('associated_terms', []) or []
 
         # ── 1. Load KG term index ────────────────────────────────────────────
         kg_term_index = {}
@@ -679,10 +680,40 @@ class EnrichedRetrieval:
             except Exception as e:
                 logger.debug("Semantic-informed expansion failed: %s", e)
 
+        # ── 4d. Router associated_terms → own RRF lane ─────────────────────
+        llm_sql_results = {}
+        if associated_terms and self.rag_retrieve_fn:
+            try:
+                at_query = ' OR '.join('"%s"' % t for t in associated_terms[:10])
+                if at_query:
+                    at_data = self.rag_retrieve_fn(
+                        precise_queries=[],
+                        broad_queries=[at_query],
+                        context=None,
+                        max_notes=max_notes,
+                        suppress_event=True,
+                    )
+                    at_citations = at_data.get('citations', {})
+                    at_rank = 1
+                    for nid in at_citations:
+                        if nid not in llm_sql_results:
+                            llm_sql_results[nid] = {'rank': at_rank}
+                            at_rank += 1
+                    if llm_sql_results:
+                        logger.info("Router associated_terms: +%d cards from %d terms",
+                                    len(llm_sql_results), len(associated_terms))
+            except Exception as e:
+                logger.debug("Router associated_terms SQL failed: %s", e)
+
+        # Build extra lanes for RRF
+        extra_lanes = []
+        if llm_sql_results:
+            extra_lanes.append((llm_sql_results, K_LLM_SQL))
+
         # ── 5. RRF + Confidence ───────────────────────────────────────────────
         self.emit_step("merge", "active")
         try:
-            rrf_ranked = compute_rrf(sql_results, semantic_results)
+            rrf_ranked = compute_rrf(sql_results, semantic_results, extra_lanes=extra_lanes or None)
             confidence = check_confidence(rrf_ranked)
             top_notes = rrf_ranked[:max_notes]
             rrf_scores = dict(top_notes)
