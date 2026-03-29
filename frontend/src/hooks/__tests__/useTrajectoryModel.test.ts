@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   dampedHoltForecast,
   computeConsistencyBias,
+  computeDynamik,
   movingAverage,
 } from '../useTrajectoryModel';
 
@@ -97,5 +98,39 @@ describe('movingAverage', () => {
   it('window=1 returns original values', () => {
     const data = [10, 20, 30];
     expect(movingAverage(data, 1)).toEqual([10, 20, 30]);
+  });
+});
+
+// ─── Dynamik ─────────────────────────────────────────────────────────────────
+
+describe('computeDynamik', () => {
+  it('returns high dynamik for consistent upward trend', () => {
+    const daily = Array.from({ length: 30 }, (_, i) => 50 + i * 2);
+    const { dynamik, momentum, konsistenz } = computeDynamik(daily);
+    expect(dynamik).toBeGreaterThan(0.6);
+    expect(momentum).toBeGreaterThan(0.5);
+    expect(konsistenz).toBeGreaterThan(0.5);
+  });
+
+  it('returns low dynamik for erratic declining data', () => {
+    const daily = Array.from({ length: 30 }, (_, i) => Math.max(0, 100 - i * 3 + (i % 2 === 0 ? 30 : -20)));
+    const { dynamik } = computeDynamik(daily);
+    expect(dynamik).toBeLessThan(0.5);
+  });
+
+  it('returns 0.5 for insufficient data', () => {
+    const { dynamik } = computeDynamik([10, 20]);
+    expect(dynamik).toBe(0.5);
+  });
+
+  it('all values between 0 and 1', () => {
+    const daily = Array.from({ length: 30 }, () => Math.random() * 100);
+    const { dynamik, momentum, konsistenz } = computeDynamik(daily);
+    expect(dynamik).toBeGreaterThanOrEqual(0);
+    expect(dynamik).toBeLessThanOrEqual(1);
+    expect(momentum).toBeGreaterThanOrEqual(0);
+    expect(momentum).toBeLessThanOrEqual(1);
+    expect(konsistenz).toBeGreaterThanOrEqual(0);
+    expect(konsistenz).toBeLessThanOrEqual(1);
   });
 });

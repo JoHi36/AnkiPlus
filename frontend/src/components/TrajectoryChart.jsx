@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useRef } from 'react';
-import useTrajectoryModel from '../hooks/useTrajectoryModel';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import useTrajectoryModel, { RANGE_PRESETS } from '../hooks/useTrajectoryModel';
 
 const CONTAINER_STYLE = {};
 
@@ -41,9 +41,134 @@ const FOOTER_STYLE = {
 const SVG_WRAPPER_STYLE = {
   width: '100%',
   overflow: 'hidden',
+  position: 'relative',
+};
+
+const RANGE_ROW_STYLE = {
+  display: 'flex',
+  gap: 2,
+};
+
+const RANGE_PILL_STYLE = {
+  padding: '2px 8px',
+  fontSize: 10,
+  fontWeight: 500,
+  fontFamily: 'inherit',
+  border: 'none',
+  borderRadius: 4,
+  background: 'transparent',
+  color: 'var(--ds-text-muted)',
+  cursor: 'pointer',
+  transition: 'all 0.15s',
+  letterSpacing: 0.5,
+};
+
+const RANGE_PILL_ACTIVE_STYLE = {
+  ...RANGE_PILL_STYLE,
+  background: 'var(--ds-hover-tint)',
+  color: 'var(--ds-text-secondary)',
+};
+
+const DYNAMIK_ROW_STYLE = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 5,
+  marginTop: 3,
+  justifyContent: 'flex-end',
+};
+
+const DYNAMIK_LABEL_STYLE = {
+  fontSize: 9,
+  fontWeight: 500,
+  letterSpacing: 0.5,
+  color: 'var(--ds-text-muted)',
+};
+
+const DYNAMIK_DOTS_STYLE = {
+  display: 'flex',
+  gap: 2,
+};
+
+const DYNAMIK_DOT = {
+  width: 5,
+  height: 5,
+  borderRadius: '50%',
+  background: 'var(--ds-accent)',
+  transition: 'opacity 0.3s',
 };
 
 const MONTHS = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+
+// ─── Today Burst (CSS-only, no SVG animate) ─────────────────────────────────
+
+const RING_STYLE = {
+  position: 'absolute',
+  borderRadius: '50%',
+  border: '1.5px solid var(--ds-accent)',
+  pointerEvents: 'none',
+  animation: 'burst-ring 0.9s ease-out forwards',
+};
+
+const PARTICLE_BASE = {
+  position: 'absolute',
+  width: 4,
+  height: 4,
+  borderRadius: '50%',
+  background: 'var(--ds-accent)',
+  pointerEvents: 'none',
+};
+
+const PARTICLE_ANGLES = [0, 45, 90, 135, 180, 225, 270, 315];
+
+// Inject keyframes once
+if (typeof document !== 'undefined' && !document.getElementById('burst-keyframes')) {
+  const style = document.createElement('style');
+  style.id = 'burst-keyframes';
+  style.textContent = `
+    @keyframes burst-ring {
+      0% { width: 0; height: 0; opacity: 0.5; }
+      100% { width: 32px; height: 32px; opacity: 0; }
+    }
+    @keyframes burst-particle {
+      0% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; }
+      100% { transform: translate(-50%, -50%) translate(var(--dx), var(--dy)) scale(0); opacity: 0; }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function TodayBurst({ todayX, todayY, viewBox }) {
+  // Convert SVG coords to percentage position within the wrapper
+  const leftPct = (todayX / viewBox.w) * 100;
+  const topPct = (todayY / viewBox.h) * 100;
+
+  return (
+    <>
+      {/* Expanding ring */}
+      <div style={{
+        ...RING_STYLE,
+        left: `${leftPct}%`,
+        top: `${topPct}%`,
+        transform: 'translate(-50%, -50%)',
+      }} />
+      {/* Particles */}
+      {PARTICLE_ANGLES.map((angle, i) => {
+        const rad = angle * Math.PI / 180;
+        const dist = 14;
+        return (
+          <div key={i} style={{
+            ...PARTICLE_BASE,
+            left: `${leftPct}%`,
+            top: `${topPct}%`,
+            '--dx': `${Math.cos(rad) * dist}px`,
+            '--dy': `${Math.sin(rad) * dist}px`,
+            animation: `burst-particle 0.7s ease-out ${i * 0.02}s forwards`,
+          }} />
+        );
+      })}
+    </>
+  );
+}
 
 function buildCurve(points) {
   if (points.length < 2) return '';
@@ -98,11 +223,20 @@ export default function TrajectoryChart({
   youngCards = 0,
   avgNew7d = 0,
 }) {
-  const model = useTrajectoryModel({ days, currentPct, totalCards });
+  const [range, setRange] = useState('M');
+  const model = useTrajectoryModel({ days, currentPct, totalCards, range });
   const svgRef = useRef(null);
   const [hover, setHover] = useState(null);
+  const [burstPhase, setBurstPhase] = useState('idle'); // 'idle' | 'burst' | 'done'
 
-  const { viewBox, chartArea, todayX, todayY, pastCurve, predictionLine, upperBand, lowerBand, pacePerDay } = model;
+  // Trigger burst on mount with delay
+  useEffect(() => {
+    const t1 = setTimeout(() => setBurstPhase('burst'), 500);
+    const t2 = setTimeout(() => setBurstPhase('done'), 1600);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
+  const { viewBox, chartArea, todayX, todayY, pastCurve, pastLookup, predictionLine, predLookup, upperBand, lowerBand, pacePerDay, yMin, yMax, dynamik, predictionOpacity } = model;
 
   const handleMouseMove = useCallback((e) => {
     const svg = svgRef.current;
@@ -118,9 +252,9 @@ export default function TrajectoryChart({
     const isFuture = svgX > todayX;
 
     if (!isFuture) {
-      let closest = pastCurve[0];
+      let closest = pastLookup[0];
       let minDist = Infinity;
-      for (const pt of pastCurve) {
+      for (const pt of pastLookup) {
         const dist = Math.abs(pt.x - svgX);
         if (dist < minDist) { minDist = dist; closest = pt; }
       }
@@ -128,18 +262,17 @@ export default function TrajectoryChart({
         setHover({ x: closest.x, y: closest.y, pct: closest.pct, date: formatDate(closest.date), isFuture: false });
       }
     } else {
-      let closest = predictionLine[0];
+      let closest = predLookup[0];
       let minDist = Infinity;
-      for (let i = 0; i < predictionLine.length; i++) {
-        const pt = predictionLine[i];
+      for (const pt of predLookup) {
         const dist = Math.abs(pt.x - svgX);
-        if (dist < minDist) { minDist = dist; closest = { ...pt, dayOffset: i + 1 }; }
+        if (dist < minDist) { minDist = dist; closest = pt; }
       }
       if (closest) {
         setHover({ x: closest.x, y: closest.y, pct: closest.pct, date: formatFutureDate(closest.dayOffset), isFuture: true });
       }
     }
-  }, [pastCurve, predictionLine, viewBox.w, chartArea, todayX]);
+  }, [pastLookup, predLookup, viewBox.w, chartArea, todayX]);
 
   const handleMouseLeave = useCallback(() => setHover(null), []);
 
@@ -158,11 +291,47 @@ export default function TrajectoryChart({
   const predictionPath = buildCurve(predictionLine);
 
   const now = new Date();
-  const monthLabels = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(now);
-    d.setMonth(d.getMonth() - 2 + i);
-    return { label: MONTHS[d.getMonth()], x: chartArea.left + ((i / 5) * (chartArea.right - chartArea.left)) };
-  });
+  const preset = RANGE_PRESETS[range] || RANGE_PRESETS.M;
+  const totalRangeDays = preset.pastDays + preset.futureDays;
+
+  // Generate smart axis labels based on range
+  const axisLabels = (() => {
+    const chartW = chartArea.right - chartArea.left;
+    if (range === 'W') {
+      const dayNames = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+      return Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(now);
+        d.setDate(d.getDate() - (preset.pastDays - 1) + i);
+        return { label: dayNames[d.getDay()], x: chartArea.left + (i / (totalRangeDays - 1)) * chartW };
+      });
+    } else if (range === 'M') {
+      const count = 5;
+      return Array.from({ length: count }, (_, i) => {
+        const d = new Date(now);
+        d.setDate(d.getDate() - preset.pastDays + Math.round(i * totalRangeDays / (count - 1)));
+        return { label: `${d.getDate()}. ${MONTHS[d.getMonth()]}`, x: chartArea.left + (i / (count - 1)) * chartW };
+      });
+    } else {
+      // Year: evenly space actual months across the range
+      const startDate = new Date(now);
+      startDate.setDate(startDate.getDate() - preset.pastDays);
+      const endDate = new Date(now);
+      endDate.setDate(endDate.getDate() + preset.futureDays);
+      const labels = [];
+      const d = new Date(startDate);
+      d.setDate(1);
+      d.setMonth(d.getMonth() + 1); // start from first full month
+      while (d <= endDate) {
+        const dayOffset = (d - startDate) / (1000 * 60 * 60 * 24);
+        const frac = dayOffset / totalRangeDays;
+        if (frac >= 0 && frac <= 1) {
+          labels.push({ label: MONTHS[d.getMonth()], x: chartArea.left + frac * chartW });
+        }
+        d.setMonth(d.getMonth() + 1);
+      }
+      return labels;
+    }
+  })();
 
   const displayPct = hover ? hover.pct.toFixed(1) : currentPct;
   const displayPctColor = hover
@@ -175,15 +344,53 @@ export default function TrajectoryChart({
     ? (hover.isFuture ? 'var(--ds-accent)' : 'var(--ds-text-tertiary)')
     : 'var(--ds-accent)';
 
-  const gridPcts = [25, 50, 75];
+  // Dynamik dots: 5 dots, filled based on dynamik score
+  const filledDots = Math.round(dynamik * 5);
+  const dynamikLabel = dynamik >= 0.7 ? 'stark' : dynamik >= 0.4 ? 'stabil' : 'niedrig';
+
+  // Dynamic grid lines based on visible Y range
+  const gridPcts = (() => {
+    const range = yMax - yMin;
+    const step = range > 30 ? 10 : range > 10 ? 5 : range > 4 ? 2 : 1;
+    const lines = [];
+    const start = Math.ceil(yMin / step) * step;
+    for (let v = start; v < yMax; v += step) {
+      if (v > yMin && v < yMax) lines.push(v);
+    }
+    return lines;
+  })();
 
   return (
     <div style={CONTAINER_STYLE}>
       <div style={HEADER_STYLE}>
-        <div style={LABEL_STYLE}>Fortschritt</div>
+        <div>
+          <div style={LABEL_STYLE}>Fortschritt</div>
+          <div style={RANGE_ROW_STYLE}>
+            {Object.keys(RANGE_PRESETS).map(key => (
+              <button
+                key={key}
+                style={range === key ? RANGE_PILL_ACTIVE_STYLE : RANGE_PILL_STYLE}
+                onClick={() => { setRange(key); setHover(null); }}
+              >
+                {RANGE_PRESETS[key].label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div style={{ textAlign: 'right' }}>
           <div style={{ ...BIG_PCT_STYLE, color: displayPctColor }}>{displayPct}%</div>
           <div style={{ ...PACE_STYLE, color: displaySubColor }}>{displaySub}</div>
+          <div style={{ ...DYNAMIK_ROW_STYLE, visibility: hover ? 'hidden' : 'visible' }}>
+            <span style={DYNAMIK_LABEL_STYLE}>Dynamik</span>
+            <span style={DYNAMIK_DOTS_STYLE}>
+              {Array.from({ length: 5 }, (_, i) => (
+                <span key={i} style={{
+                  ...DYNAMIK_DOT,
+                  opacity: i < filledDots ? (0.4 + dynamik * 0.6) : 0.15,
+                }} />
+              ))}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -191,8 +398,8 @@ export default function TrajectoryChart({
         <svg
           ref={svgRef}
           viewBox={`0 0 ${viewBox.w} ${viewBox.h}`}
-          preserveAspectRatio="none"
-          style={{ display: 'block', width: '100%', height: 80 }}
+          preserveAspectRatio="xMidYMid meet"
+          style={{ display: 'block', width: '100%' }}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
         >
@@ -202,14 +409,19 @@ export default function TrajectoryChart({
               <stop offset="100%" stopColor="var(--ds-accent)" stopOpacity="0" />
             </linearGradient>
             <linearGradient id="predictionStroke" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="var(--ds-accent)" stopOpacity="0.7" />
-              <stop offset="100%" stopColor="var(--ds-accent)" stopOpacity="0.1" />
+              <stop offset="0%" stopColor="var(--ds-accent)" stopOpacity={predictionOpacity} />
+              <stop offset="100%" stopColor="var(--ds-accent)" stopOpacity={predictionOpacity * 0.15} />
             </linearGradient>
           </defs>
 
           {gridPcts.map(pct => {
-            const y = chartArea.top + chartArea.h - (pct / 100) * chartArea.h;
-            return <line key={pct} x1={chartArea.left} y1={y} x2={chartArea.right} y2={y} stroke="var(--ds-border-subtle)" strokeWidth="0.8" />;
+            const y = chartArea.top + chartArea.h - ((pct - yMin) / (yMax - yMin)) * chartArea.h;
+            return (
+              <g key={pct}>
+                <line x1={chartArea.left} y1={y} x2={chartArea.right} y2={y} stroke="var(--ds-border-subtle)" strokeWidth="0.8" />
+                <text x={chartArea.right + 6} y={y + 3} fontSize="9" fill="var(--ds-text-muted)">{pct}%</text>
+              </g>
+            );
           })}
 
           {pastArea && <path d={pastArea} fill="url(#trajectoryFill)" />}
@@ -219,25 +431,33 @@ export default function TrajectoryChart({
 
           {predictionPath && (
             <path d={predictionPath} fill="none" stroke="url(#predictionStroke)" strokeWidth="1.3" strokeDasharray="5 3" strokeLinecap="round">
-              <animate attributeName="opacity" values="0.35;0.65;0.35" dur="3s" repeatCount="indefinite" />
+              <animate attributeName="opacity" values={`${predictionOpacity * 0.5};${predictionOpacity};${predictionOpacity * 0.5}`} dur="3s" repeatCount="indefinite" />
             </path>
           )}
 
           <line x1={todayX} y1={chartArea.top} x2={todayX} y2={chartArea.bottom} stroke="var(--ds-border-medium)" strokeWidth="0.5" strokeDasharray="2 2" />
-          <circle cx={todayX} cy={todayY} r="8" fill="var(--ds-accent)" opacity="0.12" />
-          <circle cx={todayX} cy={todayY} r="3" fill="var(--ds-accent)" />
-
-          {hover && (
+          {/* Today dot OR hover dot — never both */}
+          {hover ? (
             <>
               <line x1={hover.x} y1={chartArea.top} x2={hover.x} y2={chartArea.bottom} stroke="var(--ds-text-tertiary)" strokeWidth="0.5" opacity="0.3" />
-              <circle cx={hover.x} cy={hover.y} r="4" fill="var(--ds-accent)" />
+              <circle cx={hover.x} cy={hover.y} r="8" fill="var(--ds-accent)" opacity="0.12" />
+              <circle cx={hover.x} cy={hover.y} r="3.5" fill="var(--ds-accent)" />
+            </>
+          ) : (
+            <>
+              <circle cx={todayX} cy={todayY} r="8" fill="var(--ds-accent)" opacity="0.12" />
+              <circle cx={todayX} cy={todayY} r="3" fill="var(--ds-accent)" />
             </>
           )}
 
-          {monthLabels.map((m, i) => (
+          {axisLabels.map((m, i) => (
             <text key={i} x={m.x} y={viewBox.h - 4} textAnchor="middle" fontSize="10" fill="var(--ds-text-muted)">{m.label}</text>
           ))}
         </svg>
+        {/* CSS burst overlay — positioned over today dot */}
+        {burstPhase === 'burst' && !hover && (
+          <TodayBurst todayX={todayX} todayY={todayY} viewBox={viewBox} />
+        )}
       </div>
 
       <div style={FOOTER_STYLE}>
