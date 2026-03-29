@@ -2016,6 +2016,11 @@ class ChatbotWidget(QWidget):
             logger.warning("voice: invalid audio data")
             return
 
+        # Prevent concurrent voice requests
+        if hasattr(self, '_voice_thread') and self._voice_thread and self._voice_thread.isRunning():
+            logger.warning("voice: already processing, ignoring new request")
+            return
+
         # Show thinking state on Plusi dock
         try:
             try:

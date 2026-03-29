@@ -4,7 +4,12 @@ STT: Sends audio to backend /voice/transcribe → Gemini 2.0 Flash (multimodal, 
 TTS: Sends text + style to backend /voice/speak → Gemini 2.5 Flash TTS (Puck voice, direct API).
 Backend handlers call Gemini API directly (not OpenRouter — no TTS support there).
 """
+import time
 import requests
+
+# Retry settings for 429 rate limits
+MAX_RETRIES = 3
+RETRY_DELAY_S = 2.0
 
 try:
     from ..config import get_backend_url
@@ -99,22 +104,33 @@ def transcribe_audio(audio_base64):
         logger.warning("voice transcribe: no backend URL")
         return None
 
-    try:
-        url = f"{backend_url}/voice/transcribe"
-        payload = {
-            "audio": audio_base64,
-            "model": STT_MODEL,
-        }
-        headers = get_auth_headers()
-        response = requests.post(url, json=payload, headers=headers, timeout=STT_TIMEOUT)
-        response.raise_for_status()
-        result = response.json()
-        text = result.get("text", "").strip()
-        logger.info("voice transcribe: %d chars", len(text))
-        return text if text else None
-    except Exception as e:
-        logger.exception("voice transcribe error: %s", e)
-        return None
+    url = f"{backend_url}/voice/transcribe"
+    payload = {
+        "audio": audio_base64,
+        "model": STT_MODEL,
+    }
+    headers = get_auth_headers()
+
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=STT_TIMEOUT)
+            if response.status_code == 429 and attempt < MAX_RETRIES:
+                delay = RETRY_DELAY_S * (attempt + 1)
+                logger.warning("voice transcribe: 429 rate limit, retry %d/%d in %.1fs", attempt + 1, MAX_RETRIES, delay)
+                time.sleep(delay)
+                continue
+            response.raise_for_status()
+            result = response.json()
+            text = result.get("text", "").strip()
+            logger.info("voice transcribe: %d chars", len(text))
+            return text if text else None
+        except Exception as e:
+            if attempt < MAX_RETRIES and '429' in str(e):
+                time.sleep(RETRY_DELAY_S * (attempt + 1))
+                continue
+            logger.exception("voice transcribe error: %s", e)
+            return None
+    return None
 
 
 def generate_speech(text, mood="neutral"):
