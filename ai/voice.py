@@ -136,24 +136,30 @@ Antworte auf Deutsch."""
 
 
 def voice_chat(audio_base64):
-    """Combined STT + Plusi response in a single Gemini call.
+    """Native audio-to-audio: Gemini listens, Plusi responds with voice.
 
-    Sends audio to Gemini Flash with Plusi personality as system context.
-    Gemini transcribes AND responds in one round-trip — much faster than
-    separate STT → agent → TTS pipeline.
+    ONE API call: audio in → audio out. No text intermediary.
+    Gemini natively understands the audio and generates a spoken response
+    as Plusi with the Puck voice.
 
     Args:
         audio_base64: Base64-encoded audio data (webm/opus).
 
     Returns:
-        dict: {"text": str, "mood": str} or None on error.
+        dict: {"audio": str (base64 WAV), "text": str, "mood": str} or None on error.
     """
     api_key = _get_api_key()
     if not api_key:
         return None
 
+    # Use the native audio model (not TTS-specific)
     url = f"{GEMINI_BASE}/{STT_MODEL}:generateContent?key={api_key}"
     payload = {
+        "systemInstruction": {
+            "parts": [{
+                "text": PLUSI_VOICE_PERSONA,
+            }],
+        },
         "contents": [{
             "parts": [
                 {
@@ -164,7 +170,6 @@ def voice_chat(audio_base64):
                 },
                 {
                     "text": (
-                        f"{PLUSI_VOICE_PERSONA}\n\n"
                         "Der User hat dir gerade eine Sprachnachricht geschickt. "
                         "Höre sie dir an und antworte als Plusi. Kurz und natürlich."
                     ),
@@ -172,14 +177,20 @@ def voice_chat(audio_base64):
             ],
         }],
         "generationConfig": {
-            "temperature": 0.8,
-            "maxOutputTokens": 256,
+            "responseModalities": ["AUDIO"],
+            "speechConfig": {
+                "voiceConfig": {
+                    "prebuiltVoiceConfig": {
+                        "voiceName": PLUSI_VOICE,
+                    },
+                },
+            },
         },
     }
 
     for attempt in range(MAX_RETRIES + 1):
         try:
-            response = requests.post(url, json=payload, timeout=STT_TIMEOUT)
+            response = requests.post(url, json=payload, timeout=TTS_TIMEOUT)
             if response.status_code == 429 and attempt < MAX_RETRIES:
                 delay = RETRY_DELAY_S * (attempt + 1)
                 logger.warning("voice_chat: 429 rate limit, retry %d/%d in %.1fs", attempt + 1, MAX_RETRIES, delay)
@@ -187,14 +198,32 @@ def voice_chat(audio_base64):
                 continue
             response.raise_for_status()
             result = response.json()
-            text = (result.get("candidates", [{}])[0]
-                    .get("content", {})
-                    .get("parts", [{}])[0]
-                    .get("text", "").strip())
-            if not text:
+
+            # Extract audio and transcript from response
+            parts = (result.get("candidates", [{}])[0]
+                     .get("content", {})
+                     .get("parts", []))
+
+            audio_b64 = None
+            transcript = ""
+            for part in parts:
+                if "inlineData" in part:
+                    audio_b64 = part["inlineData"].get("data")
+                if "text" in part:
+                    transcript = part["text"].strip()
+
+            if not audio_b64:
+                logger.error("voice_chat: no audio in response, parts=%d", len(parts))
+                # Fallback: maybe model returned text only
+                if transcript:
+                    logger.info("voice_chat: got text fallback, will use TTS")
+                    return {"audio": None, "text": transcript, "mood": "neutral"}
                 return None
-            logger.info("voice_chat: response %d chars", len(text))
-            return {"text": text, "mood": "neutral"}
+
+            # Convert PCM → WAV
+            wav_b64 = _pcm_to_wav_base64(audio_b64)
+            logger.info("voice_chat: native audio response, transcript=%d chars", len(transcript))
+            return {"audio": wav_b64, "text": transcript, "mood": "neutral"}
         except Exception as e:
             if attempt < MAX_RETRIES and '429' in str(e):
                 time.sleep(RETRY_DELAY_S * (attempt + 1))

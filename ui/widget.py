@@ -220,25 +220,40 @@ class VoiceThread(QThread):
             except ImportError:
                 from ai.voice import voice_chat, generate_speech
 
-            # Step 1: STT + Plusi response in one Gemini call
+            # Single call: audio in → Plusi audio out (native)
             self.mood_signal.emit('thinking')
             result = voice_chat(self.audio_base64)
-            if not result or not result.get('text'):
+            if not result:
                 self.error_signal.emit("Konnte Sprache nicht erkennen.")
                 return
 
-            plusi_text = result['text']
+            plusi_text = result.get('text', '')
             mood = result.get('mood', 'neutral')
-            self.mood_signal.emit(mood)
-            logger.info("voice pipeline: plusi responded len=%d", len(plusi_text))
+            audio_b64 = result.get('audio')
 
-            # Step 2: TTS
-            audio_b64 = generate_speech(plusi_text, mood=mood)
-            self.result_signal.emit({
-                "audio": audio_b64,
-                "mood": mood,
-                "text": plusi_text,
-            })
+            # If native audio worked, send directly
+            if audio_b64:
+                self.mood_signal.emit(mood)
+                logger.info("voice pipeline: native audio response, text=%d chars", len(plusi_text))
+                self.result_signal.emit({
+                    "audio": audio_b64,
+                    "mood": mood,
+                    "text": plusi_text,
+                })
+                return
+
+            # Fallback: model returned text only → use TTS
+            if plusi_text:
+                self.mood_signal.emit(mood)
+                logger.info("voice pipeline: text fallback, generating TTS for %d chars", len(plusi_text))
+                audio_b64 = generate_speech(plusi_text, mood=mood)
+                self.result_signal.emit({
+                    "audio": audio_b64,
+                    "mood": mood,
+                    "text": plusi_text,
+                })
+            else:
+                self.error_signal.emit("Keine Antwort von Plusi.")
         except Exception as e:
             logger.exception("voice pipeline error: %s", e)
             self.error_signal.emit(str(e))
