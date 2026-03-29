@@ -19,6 +19,7 @@ import { routerHandler } from './handlers/router';
 import { embedHandler } from './handlers/embed';
 import { researchHandler } from './handlers/research';
 import { insightsExtractHandler } from './handlers/insights';
+import { voiceTranscribeHandler, voiceSpeakHandler } from './handlers/voice';
 import { deleteAccountHandler, dataExportHandler, cleanupOldData } from './handlers/gdpr';
 
 // Initialize Firebase Admin
@@ -109,6 +110,10 @@ app.post('/research', validateToken, researchHandler);
 
 // Insights extraction route
 app.post('/insights/extract', validateToken, insightsExtractHandler);
+
+// Voice routes (Plusi voice conversation — direct Gemini API, not OpenRouter)
+app.post('/voice/transcribe', validateTokenOptional, voiceTranscribeHandler);
+app.post('/voice/speak', validateTokenOptional, voiceSpeakHandler);
 
 // GDPR routes (Art. 17 deletion, Art. 15/20 data export)
 app.delete('/user/account', validateToken, deleteAccountHandler);

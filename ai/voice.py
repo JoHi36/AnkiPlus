@@ -1,15 +1,15 @@
 """Gemini STT (transcription) and TTS (speech generation) for Plusi voice conversations.
 
-STT: Sends audio to backend /voice/transcribe → Gemini Flash transcription.
-TTS: Sends text + style to backend /voice/speak → Gemini 2.5 Flash TTS (Puck voice).
+STT: Sends audio to backend /voice/transcribe → Gemini 2.0 Flash (multimodal, direct API).
+TTS: Sends text + style to backend /voice/speak → Gemini 2.5 Flash TTS (Puck voice, direct API).
+Backend handlers call Gemini API directly (not OpenRouter — no TTS support there).
 """
 import requests
-import base64
 
 try:
-    from ..config import get_backend_url, get_auth_token
+    from ..config import get_backend_url
 except ImportError:
-    from config import get_backend_url, get_auth_token
+    from config import get_backend_url
 
 try:
     from ..ai.auth import get_auth_headers

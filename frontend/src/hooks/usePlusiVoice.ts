@@ -108,7 +108,7 @@ export default function usePlusiVoice(): UsePlusiVoiceReturn {
       }
       // Play audio
       setVoiceState('speaking');
-      const audioSrc = `data:audio/mp3;base64,${audio}`;
+      const audioSrc = `data:audio/wav;base64,${audio}`;
       const player = new Audio(audioSrc);
       audioRef.current = player;
       player.onended = () => {
