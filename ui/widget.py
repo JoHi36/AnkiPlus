@@ -1044,11 +1044,31 @@ class ChatbotWidget(QWidget):
         url.setQuery(f"v={int(time.time())}")
         self.web_view.loadFinished.connect(self._init_js_bridge)
         self.web_view.loadFinished.connect(self.push_initial_state)
+        self.web_view.page().featurePermissionRequested.connect(self._handle_permission_request)
         self.web_view.load(url)
 
         layout.addWidget(self.web_view)
         self.setLayout(layout)
     
+    def _handle_permission_request(self, origin, feature):
+        """Auto-grant microphone permission for Plusi voice."""
+        try:
+            from PyQt6.QtWebEngineCore import QWebEnginePage
+        except ImportError:
+            try:
+                from PyQt5.QtWebEngineWidgets import QWebEnginePage
+            except ImportError:
+                return
+        if feature == QWebEnginePage.Feature.MediaAudioCapture:
+            self.web_view.page().setFeaturePermission(
+                origin, feature, QWebEnginePage.PermissionPolicy.PermissionGrantedByUser
+            )
+            logger.info("Granted microphone permission for Plusi voice")
+        else:
+            self.web_view.page().setFeaturePermission(
+                origin, feature, QWebEnginePage.PermissionPolicy.PermissionDeniedByUser
+            )
+
     def _init_js_bridge(self):
         """Initialisiert die JavaScript-Bridge mit Message-Queue System"""
         # Erstelle globales JavaScript-Objekt für Message-Queue
