@@ -15,6 +15,38 @@ logger = get_logger(__name__)
 _DAY_ROLLOVER_HOUR = 4
 
 
+def _compute_daily_mature_pct(revlog_rows, dates, total_cards):
+    """Reconstruct daily mature_pct from review history.
+
+    Args:
+        revlog_rows: list of (card_id, date_str, interval) tuples from revlog.
+        dates: ordered list of date strings to compute pct for.
+        total_cards: total card count in collection.
+
+    Returns:
+        list of floats — one mature_pct per date.
+    """
+    if total_cards == 0 or not dates:
+        return [0.0] * len(dates)
+
+    card_intervals = {}
+    from collections import defaultdict
+    reviews_by_date = defaultdict(list)
+    for card_id, date_str, interval in revlog_rows:
+        reviews_by_date[date_str].append((card_id, interval))
+
+    result = []
+    for d in dates:
+        for card_id, interval in reviews_by_date.get(d, []):
+            card_intervals[card_id] = interval
+        mature = sum(1 for ivl in card_intervals.values() if ivl >= 21)
+        young = sum(1 for ivl in card_intervals.values() if 0 < ivl < 21)
+        pct = round((mature + young * 0.5) / total_cards * 100, 1)
+        result.append(pct)
+
+    return result
+
+
 def get_trajectory_data():
     """Daily progress for the last 180 days.
 
@@ -64,6 +96,7 @@ def get_trajectory_data():
 
         # Build ordered list
         days_data = []
+        date_strings = []
         new_counts_last_7 = []
         for i in range(days_back - 1, -1, -1):
             d = today - timedelta(days=i)
@@ -75,13 +108,14 @@ def get_trajectory_data():
                 "review_count": rev_count,
                 "new_count": n_count,
             })
+            date_strings.append(d_str)
             if i < 7:
                 new_counts_last_7.append(n_count)
 
         avg_new_7d = round(sum(new_counts_last_7) / max(len(new_counts_last_7), 1), 1)
 
         # Current maturity percentage across all cards
-        # mature = interval >= 21 days; young = interval 1-20 days; new = interval == 0
+        # (queried first so `total` is available for mature_pct reconstruction)
         try:
             total = mw.col.db.scalar("SELECT COUNT(*) FROM cards") or 0
             mature = mw.col.db.scalar("SELECT COUNT(*) FROM cards WHERE ivl >= 21") or 0
@@ -96,6 +130,24 @@ def get_trajectory_data():
             total = 0
             mature = 0
             young = 0
+
+        # Reconstruct daily mature_pct from revlog intervals
+        try:
+            ivl_rows = mw.col.db.all(
+                "SELECT cid, date(id/1000 - ?, 'unixepoch', 'localtime'), ivl "
+                "FROM revlog WHERE id >= ? ORDER BY id",
+                _DAY_ROLLOVER_HOUR * 3600,
+                int((datetime.combine(today - timedelta(days=days_back),
+                     datetime.min.time()).timestamp()) * 1000
+                    - _DAY_ROLLOVER_HOUR * 3600 * 1000),
+            )
+            daily_pcts = _compute_daily_mature_pct(ivl_rows, date_strings, total)
+            for entry, pct in zip(days_data, daily_pcts):
+                entry["mature_pct"] = pct
+        except Exception as e:
+            logger.warning("get_trajectory_data: mature_pct reconstruction failed: %s", e)
+            for entry in days_data:
+                entry["mature_pct"] = 0.0
 
         return {
             "days": days_data,
