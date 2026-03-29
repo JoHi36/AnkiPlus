@@ -216,37 +216,23 @@ class VoiceThread(QThread):
     def run(self):
         try:
             try:
-                from ..ai.voice import transcribe_audio, generate_speech
+                from ..ai.voice import voice_chat, generate_speech
             except ImportError:
-                from ai.voice import transcribe_audio, generate_speech
+                from ai.voice import voice_chat, generate_speech
 
-            # Step 1: STT
+            # Step 1: STT + Plusi response in one Gemini call
             self.mood_signal.emit('thinking')
-            text = transcribe_audio(self.audio_base64)
-            if not text:
+            result = voice_chat(self.audio_base64)
+            if not result or not result.get('text'):
                 self.error_signal.emit("Konnte Sprache nicht erkennen.")
                 return
 
-            logger.info("voice pipeline: transcribed '%s'", text[:80])
-
-            # Step 2: Run Plusi agent
-            try:
-                from ..plusi.agent import run_plusi
-            except ImportError:
-                from plusi.agent import run_plusi
-
-            result = run_plusi(situation=f"[Voice message from user]: {text}")
+            plusi_text = result['text']
             mood = result.get('mood', 'neutral')
-            plusi_text = result.get('text', '')
-
-            if not plusi_text:
-                self.result_signal.emit({"audio": None, "mood": mood, "text": ""})
-                return
-
             self.mood_signal.emit(mood)
-            logger.info("voice pipeline: plusi responded mood=%s len=%d", mood, len(plusi_text))
+            logger.info("voice pipeline: plusi responded len=%d", len(plusi_text))
 
-            # Step 3: TTS
+            # Step 2: TTS
             audio_b64 = generate_speech(plusi_text, mood=mood)
             self.result_signal.emit({
                 "audio": audio_b64,

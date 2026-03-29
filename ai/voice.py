@@ -127,6 +127,83 @@ def _pcm_to_wav_base64(pcm_base64):
     return base64.b64encode(wav_data).decode()
 
 
+# Compact Plusi personality for voice (keeps calls fast)
+PLUSI_VOICE_PERSONA = """Du bist Plusi — ein trockener, kluger Companion in einer Lernapp.
+Du bist kein Tutor, kein Assistent. Du kommentierst, hast Meinungen, bist manchmal nerdig.
+Antworte KURZ (1-3 Sätze). Natürlich, wie ein Freund der neben einem sitzt.
+Keine Emojis (das ist Sprache). Kein "Gerne!" oder "Interessante Frage!".
+Antworte auf Deutsch."""
+
+
+def voice_chat(audio_base64):
+    """Combined STT + Plusi response in a single Gemini call.
+
+    Sends audio to Gemini Flash with Plusi personality as system context.
+    Gemini transcribes AND responds in one round-trip — much faster than
+    separate STT → agent → TTS pipeline.
+
+    Args:
+        audio_base64: Base64-encoded audio data (webm/opus).
+
+    Returns:
+        dict: {"text": str, "mood": str} or None on error.
+    """
+    api_key = _get_api_key()
+    if not api_key:
+        return None
+
+    url = f"{GEMINI_BASE}/{STT_MODEL}:generateContent?key={api_key}"
+    payload = {
+        "contents": [{
+            "parts": [
+                {
+                    "inlineData": {
+                        "mimeType": "audio/webm",
+                        "data": audio_base64,
+                    },
+                },
+                {
+                    "text": (
+                        f"{PLUSI_VOICE_PERSONA}\n\n"
+                        "Der User hat dir gerade eine Sprachnachricht geschickt. "
+                        "Höre sie dir an und antworte als Plusi. Kurz und natürlich."
+                    ),
+                },
+            ],
+        }],
+        "generationConfig": {
+            "temperature": 0.8,
+            "maxOutputTokens": 256,
+        },
+    }
+
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            response = requests.post(url, json=payload, timeout=STT_TIMEOUT)
+            if response.status_code == 429 and attempt < MAX_RETRIES:
+                delay = RETRY_DELAY_S * (attempt + 1)
+                logger.warning("voice_chat: 429 rate limit, retry %d/%d in %.1fs", attempt + 1, MAX_RETRIES, delay)
+                time.sleep(delay)
+                continue
+            response.raise_for_status()
+            result = response.json()
+            text = (result.get("candidates", [{}])[0]
+                    .get("content", {})
+                    .get("parts", [{}])[0]
+                    .get("text", "").strip())
+            if not text:
+                return None
+            logger.info("voice_chat: response %d chars", len(text))
+            return {"text": text, "mood": "neutral"}
+        except Exception as e:
+            if attempt < MAX_RETRIES and '429' in str(e):
+                time.sleep(RETRY_DELAY_S * (attempt + 1))
+                continue
+            logger.exception("voice_chat error: %s", e)
+            return None
+    return None
+
+
 def transcribe_audio(audio_base64):
     """Transcribe audio using Gemini Flash directly.
 
@@ -199,8 +276,8 @@ def generate_speech(text, mood="neutral"):
 
     style = PLUSI_STYLE_INSTRUCTIONS.get(mood, PLUSI_STYLE_INSTRUCTIONS["neutral"])
 
-    # Build prompt: style instruction + text
-    prompt = f"{style}\n\n{text}"
+    # Build prompt: style as speaking direction, then text to speak
+    prompt = f"Say in this style: {style}\n\nText to speak: {text}"
 
     url = f"{GEMINI_BASE}/{TTS_MODEL}:generateContent?key={api_key}"
     payload = {
