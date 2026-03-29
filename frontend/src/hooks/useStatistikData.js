@@ -3,12 +3,22 @@ import { useState, useEffect, useCallback } from 'react';
 const MOCK_DATA = {
   trajectory: {
     current_pct: 42,
-    avg_new_per_day: 23,
-    mature: 1240,
-    young: 680,
-    new: 520,
-    total: 2440,
-    days: {},
+    avg_new_7d: 23,
+    mature_cards: 1240,
+    young_cards: 680,
+    total_cards: 2440,
+    days: Array.from({ length: 180 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (179 - i));
+      const basePct = 15 + (27 * i / 179);
+      const noise = (Math.sin(i * 0.7) * 1.5) + (Math.cos(i * 0.3) * 0.8);
+      return {
+        date: d.toISOString().split('T')[0],
+        review_count: Math.floor(40 + Math.random() * 60),
+        new_count: Math.floor(10 + Math.random() * 20),
+        mature_pct: Math.round((basePct + noise) * 10) / 10,
+      };
+    }),
   },
   daily: {
     new: 23,

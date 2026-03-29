@@ -68,14 +68,12 @@ export default function StatistikView({ deckData }) {
 
       {/* Trajectory Hero */}
       <TrajectoryChart
+        days={trajectory?.days || []}
         currentPct={trajectory?.current_pct || 0}
-        avgPerDay={trajectory?.avg_new_per_day || 0}
-        dailyPflege={(dailyData?.young || 0) + (dailyData?.mature || 0)}
-        dailyTotal={totalDaily}
-        pacePerDay={trajectory?.total > 0
-          ? +((trajectory?.avg_new_per_day || 0) / trajectory.total * 100).toFixed(1)
-          : 0}
-        goals={[{ pct: 60, label: '~ Mai' }, { pct: 80, label: '~ Jun' }]}
+        totalCards={trajectory?.total_cards || 0}
+        matureCards={trajectory?.mature_cards || 0}
+        youngCards={trajectory?.young_cards || 0}
+        avgNew7d={trajectory?.avg_new_7d || 0}
       />
 
       <div style={DIVIDER_STYLE} />
