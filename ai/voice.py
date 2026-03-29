@@ -25,7 +25,7 @@ GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 # Plusi's voice identity
 PLUSI_VOICE = "Puck"
 TTS_MODEL = "gemini-2.5-flash-preview-tts"
-STT_MODEL = "gemini-2.0-flash"
+STT_MODEL = "gemini-2.5-flash"
 
 # Mood → TTS style instruction mapping
 PLUSI_STYLE_INSTRUCTIONS = {
