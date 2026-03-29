@@ -2,12 +2,13 @@ import React from 'react';
 import { useReasoningStream } from './useReasoningStream';
 import FullReasoningDisplay from './FullReasoningDisplay';
 import CompactReasoningDisplay from './CompactReasoningDisplay';
+import ReasoningDots from './ReasoningDots';
 import type { ReasoningStep } from './types';
 
 export interface ReasoningDisplayProps {
   streamId?: string;
   steps?: ReasoningStep[];
-  mode?: 'full' | 'compact';
+  mode?: 'full' | 'compact' | 'dots';
   hasOutput?: boolean;
   agentColor?: string;
   label?: string;
@@ -43,6 +44,16 @@ export default function ReasoningDisplay({
   const citations = (citationsProp && Object.keys(citationsProp).length > 0) ? citationsProp : storeCitations;
 
   if (!hasContent) return null;
+
+  if (mode === 'dots') {
+    return (
+      <ReasoningDots
+        displaySteps={displaySteps}
+        phase={phase}
+        agentColor={agentColor}
+      />
+    );
+  }
 
   if (mode === 'compact') {
     return (

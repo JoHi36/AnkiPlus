@@ -14,6 +14,7 @@ import CitationBadge from './CitationBadge';
 import WebCitationBadge from './WebCitationBadge';
 import ThoughtStream from './ThoughtStream';
 import ReasoningDisplay from '../reasoning/ReasoningDisplay';
+import SourceCountBadge from '../reasoning/SourceCountBadge';
 import ToolWidgetRenderer from './ToolWidgetRenderer';
 import { ComponentErrorBoundary } from './ErrorBoundary';
 import AgenticCell from './AgenticCell';
@@ -1859,25 +1860,39 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                   />
                 )}
                 {/* Agent Cells — ordered blocks */}
-                {(message_prop.agentCells || []).map((cell, i) => (
+                {(message_prop.agentCells || []).map((cell, i) => {
+                  const hasReasoningData = (isStreaming && requestId) || cell.pipelineSteps?.length > 0 || agentSteps.length > 0;
+                  const cellIsStreaming = isStreaming && cell.status !== 'done' && cell.status !== 'error';
+                  const cellCitations = cell.citations || citations;
+                  const citedCount = cellCitations ? Object.keys(cellCitations).length : 0;
+                  const cardSourceCount = cellCitations
+                    ? Object.values(cellCitations).filter((c) => c && !c.url && !c.web_url).length
+                    : 0;
+
+                  let headerMeta = null;
+                  if (cellIsStreaming && hasReasoningData) {
+                    headerMeta = (
+                      <ReasoningDisplay
+                        streamId={requestId ? `${cell.agent}-${requestId}` : undefined}
+                        steps={undefined}
+                        mode="dots"
+                        agentColor={'var(--ds-text-muted)'}
+                      />
+                    );
+                  } else if (!cellIsStreaming && citedCount > 0) {
+                    headerMeta = (
+                      <SourceCountBadge count={citedCount} cardCount={cardSourceCount} />
+                    );
+                  }
+
+                  return (
                   <AgenticCell
                     key={`${cell.agent}-${i}`}
                     agentName={cell.agent}
                     isLoading={cell.status === 'loading'}
                     loadingHint={cell.loadingHint || ''}
+                    headerMeta={headerMeta}
                   >
-                    {/* Agent reasoning steps — streamId for live pacing, steps for saved */}
-                    {((isStreaming && requestId) || cell.pipelineSteps?.length > 0 || agentSteps.length > 0) && (
-                      <ReasoningDisplay
-                        streamId={isStreaming && requestId ? `${cell.agent}-${requestId}` : undefined}
-                        steps={isStreaming && requestId ? undefined : (cell.pipelineSteps?.length > 0 ? cell.pipelineSteps : agentSteps)}
-                        mode="full"
-                        hasOutput={Boolean(cell.text)}
-                        citations={cell.citations || citations}
-                        bridge={bridge}
-                        onPreviewCard={onPreviewCard}
-                      />
-                    )}
                     {/* Text content */}
                     {cell.text && cell.status !== 'loading' && !cell.sources?.length && (() => {
                       // Strip HANDOFF signal from display text
@@ -1915,7 +1930,8 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                     )}
                     {/* Text skeleton — managed by ThoughtStream's onAllDone callback */}
                   </AgenticCell>
-                ))}
+                  );
+                })}
               </>
             )}
             {!hasV2Data && processedMessageWithCitations && !isUser && (
