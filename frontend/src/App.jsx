@@ -1872,6 +1872,24 @@ function AppInner() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [headerHeight, handleTrailNavigateLeft, handleTrailNavigateRight]);
 
+  // SPACE triggers lid-lift, ESC closes it (deckBrowser view only)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (activeView !== 'deckBrowser') return;
+      if (e.code === 'Space' && lidLift.state === 'idle' && document.activeElement?.tagName !== 'TEXTAREA' && document.activeElement?.tagName !== 'INPUT') {
+        e.preventDefault();
+        lidLift.trigger();
+      }
+      if (e.key === 'Escape' && lidLift.isOpen) {
+        e.preventDefault();
+        const hasMessages = chatHook.messages.length > 0;
+        lidLift.close(hasMessages);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeView, lidLift.state, lidLift.isOpen, chatHook.messages.length]);
+
   // Report text field focus state to Python for global shortcut routing
   useEffect(() => {
     const onFocusIn = (e) => {
