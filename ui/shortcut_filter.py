@@ -58,6 +58,7 @@ class GlobalShortcutFilter(QObject):
         self._text_field_has_focus = False
         self._focused_webview = None
         self._main_view_active = False
+        self._voice_recording = False
 
     def set_main_view_active(self, active):
         """Called by MainViewWidget on show/hide."""
@@ -241,10 +242,39 @@ class GlobalShortcutFilter(QObject):
         reviewer_web.page().runJavaScript(js)
         return True
 
+    def _dispatch_voice_event(self, event_name):
+        """Dispatch a voice event to the React webview."""
+        try:
+            from .main_view import get_main_view
+            mv = get_main_view()
+            if mv._chatbot and mv._chatbot.web_view:
+                js = f"window.dispatchEvent(new CustomEvent('{event_name}'));"
+                mv._chatbot.web_view.page().runJavaScript(js)
+        except (ImportError, AttributeError, RuntimeError) as e:
+            logger.warning("Could not dispatch voice event %s: %s", event_name, e)
+
     def eventFilter(self, obj, event):
         """Main event filter -- intercepts all KeyPress events."""
+        # --- Option key (Alt): hold-to-record for Plusi voice ---
+        if event.type() == QEvent.Type.KeyRelease and event.key() == Qt.Key.Key_Alt:
+            if self._voice_recording:
+                self._voice_recording = False
+                self._dispatch_voice_event('plusiVoiceStop')
+                return True
+            return super().eventFilter(obj, event)
+
         if event.type() != QEvent.Type.KeyPress:
             return super().eventFilter(obj, event)
+
+        # --- Option (Alt) key alone: start Plusi voice recording ---
+        if (event.key() == Qt.Key.Key_Alt and
+                not event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier) and
+                not self._text_field_has_focus and
+                not self._voice_recording and
+                not event.isAutoRepeat()):
+            self._voice_recording = True
+            self._dispatch_voice_event('plusiVoiceStart')
+            return True
 
         # --- Cmd+K: Always handle (toggle text field focus) ---
         if (event.key() == Qt.Key.Key_K and
