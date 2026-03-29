@@ -4,7 +4,6 @@ import SpriteText from 'three-spritetext';
 import { executeAction } from '../actions';
 import ChatInput from './ChatInput';
 // SearchSidebar rendered in App.jsx for header-pushing layout
-import DeckSearchBar from './DeckSearchBar';
 import { DeckNode } from './DeckNode';
 import { useDeckTree } from '../hooks/useDeckTree';
 import PlusLoader from './PlusLoader';
@@ -641,15 +640,6 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
               </span>
             </div>
 
-            {/* Search Bar */}
-            <div style={{
-              flexShrink: 0, width: '100%', maxWidth: MAX_W,
-              marginBottom: 16,
-            }}>
-              <DeckSearchBar
-                onSubmit={(text) => { if (text.trim()) search(text); }}
-              />
-            </div>
 
             {/* Content area — deck list */}
             <div style={{
