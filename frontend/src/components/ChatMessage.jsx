@@ -1865,49 +1865,42 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                   const cellIsStreaming = isStreaming && cell.status !== 'done' && cell.status !== 'error';
                   const cellCitations = cell.citations || citations;
 
-                  // Build citationIndices for this cell's citations
+                  // Build citationIndices: remap backend indices to sequential 1,2,3...
+                  // based on order of appearance in the text
                   const cellCitationIndices = {};
+                  // Map from backend index → citation id
+                  const backendIndexToCitId = {};
                   if (cellCitations && Object.keys(cellCitations).length > 0) {
-                    let nextIdx = 1;
                     Object.entries(cellCitations).forEach(([citId, cit]) => {
                       if (cit) {
                         const id = cit.noteId || cit.cardId || citId;
                         const idKey = String(id);
-                        if (cit.index) {
-                          cellCitationIndices[idKey] = cit.index;
-                          if (cit.index >= nextIdx) nextIdx = cit.index + 1;
-                        }
-                      }
-                    });
-                    // Assign indices to any citations without backend index
-                    Object.entries(cellCitations).forEach(([citId, cit]) => {
-                      if (cit) {
-                        const id = cit.noteId || cit.cardId || citId;
-                        const idKey = String(id);
-                        if (!cellCitationIndices[idKey]) {
-                          cellCitationIndices[idKey] = nextIdx++;
-                        }
+                        const backendIdx = cit.index || parseInt(citId, 10) || 0;
+                        if (backendIdx > 0) backendIndexToCitId[backendIdx] = idKey;
                       }
                     });
                   }
 
-                  // Count only citations actually referenced in the text
+                  // Remap: find [N] in text order, assign sequential 1,2,3...
+                  const remapOldToNew = {}; // backend index → new sequential index
                   let citedCount = 0;
                   let cardSourceCount = 0;
-                  if (cell.text && cellCitations && Object.keys(cellCitations).length > 0) {
-                    // Find all [N] references in the text
+                  if (cell.text && Object.keys(backendIndexToCitId).length > 0) {
                     const refMatches = [...(cell.text.matchAll(/\[(\d+)\]/g))];
-                    const referencedIndices = new Set(refMatches.map(m => parseInt(m[1], 10)));
-                    // Map indices back to citations to count types
-                    const indexToCitId = {};
-                    Object.entries(cellCitationIndices).forEach(([id, idx]) => {
-                      indexToCitId[idx] = id;
-                    });
-                    referencedIndices.forEach(idx => {
-                      const citId = indexToCitId[idx];
-                      if (citId) {
+                    let nextNew = 1;
+                    for (const m of refMatches) {
+                      const oldIdx = parseInt(m[1], 10);
+                      if (backendIndexToCitId[oldIdx] && !(oldIdx in remapOldToNew)) {
+                        remapOldToNew[oldIdx] = nextNew++;
+                      }
+                    }
+                    // Build cellCitationIndices with new sequential numbers
+                    Object.entries(remapOldToNew).forEach(([oldIdx, newIdx]) => {
+                      const citIdKey = backendIndexToCitId[parseInt(oldIdx, 10)];
+                      if (citIdKey) {
+                        cellCitationIndices[citIdKey] = newIdx;
                         citedCount++;
-                        const cit = cellCitations[citId] || Object.values(cellCitations).find(c => String(c?.noteId || c?.cardId) === citId);
+                        const cit = cellCitations[citIdKey] || Object.values(cellCitations).find(c => String(c?.noteId || c?.cardId) === citIdKey);
                         if (cit && !cit.url && !cit.web_url) cardSourceCount++;
                       }
                     });
@@ -1955,16 +1948,13 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                       // Strip HANDOFF signal from display text
                       let cleanText = cell.text.replace(/\n?HANDOFF:?\s*\w+\s+REASON:?\s*.+?\s+QUERY:?\s*.+$/s, '').trim();
                       if (!cleanText) return null;
-                      // Replace [N] inline refs with citation links for markdown rendering
-                      if (cellCitations && Object.keys(cellCitationIndices).length > 0) {
-                        const idxToCitId = {};
-                        Object.entries(cellCitationIndices).forEach(([id, idx]) => {
-                          idxToCitId[idx] = id;
-                        });
+                      // Replace [N] inline refs with remapped sequential numbers
+                      if (Object.keys(remapOldToNew).length > 0) {
                         cleanText = cleanText.replace(/\[(\d+)\](?!\()/g, (match, numStr) => {
-                          const num = parseInt(numStr, 10);
-                          const citId = idxToCitId[num];
-                          if (citId) return `[${num}](citation:${citId})`;
+                          const oldIdx = parseInt(numStr, 10);
+                          const newIdx = remapOldToNew[oldIdx];
+                          const citIdKey = backendIndexToCitId[oldIdx];
+                          if (newIdx && citIdKey) return `[${newIdx}](citation:${citIdKey})`;
                           return match;
                         });
                       }
