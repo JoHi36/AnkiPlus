@@ -2,12 +2,7 @@ import React from 'react';
 
 // ─── Static style constants ───────────────────────────────────────────────────
 
-const CONTAINER_STYLE = {
-  background: 'var(--ds-bg-overlay)',
-  border: '1px solid var(--ds-border-subtle)',
-  borderRadius: 16,
-  padding: '18px 20px',
-};
+const CONTAINER_STYLE = {};
 
 const HEADER_STYLE = {
   display: 'flex',
@@ -17,11 +12,10 @@ const HEADER_STYLE = {
 };
 
 const LABEL_STYLE = {
-  fontSize: 11,
+  fontSize: 13,
   fontWeight: 500,
   letterSpacing: 0.3,
   color: 'var(--ds-text-tertiary)',
-  textTransform: 'uppercase',
 };
 
 const HEADER_RIGHT_STYLE = {
