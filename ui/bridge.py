@@ -1430,3 +1430,36 @@ class WebBridge(QObject):
             logger.exception("saveSystemQuality error: %s", e)
             return json.dumps({"error": str(e)})
 
+    @pyqtSlot(result=str)
+    def getStatistikData(self):
+        """Return all statistics data for StatistikView in a single call.
+
+        Calls all four bridge_stats functions and bundles the results.
+        Returns JSON with keys: trajectory, daily_breakdown, year_heatmap, time_of_day.
+        """
+        try:
+            try:
+                from .bridge_stats import (
+                    get_trajectory_data,
+                    get_daily_breakdown,
+                    get_year_heatmap,
+                    get_time_of_day,
+                )
+            except ImportError:
+                from ui.bridge_stats import (
+                    get_trajectory_data,
+                    get_daily_breakdown,
+                    get_year_heatmap,
+                    get_time_of_day,
+                )
+            result = {
+                "trajectory": get_trajectory_data(),
+                "daily_breakdown": get_daily_breakdown(),
+                "year_heatmap": get_year_heatmap(),
+                "time_of_day": get_time_of_day(),
+            }
+            return json.dumps(result)
+        except Exception as e:
+            logger.exception("getStatistikData error: %s", e)
+            return json.dumps({"error": str(e)})
+

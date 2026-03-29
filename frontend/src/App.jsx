@@ -2292,7 +2292,7 @@ function AppInner() {
           )}
           {activeView === 'statistik' && (
             <ComponentErrorBoundary fallback={<div style={FALLBACK_VIEW_STYLE}>View failed to render. Try refreshing.</div>}>
-              <StatistikView />
+              <StatistikView deckData={deckBrowserData} />
             </ComponentErrorBoundary>
           )}
         </div>
