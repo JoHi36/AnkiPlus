@@ -5,7 +5,7 @@ import { createLogger } from '../utils/logging';
  * Gemini API key — used for direct Gemini calls (TTS/STT).
  * OpenRouter doesn't support audio models, so we call Gemini directly.
  */
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_API_KEY = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || '';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 const STT_MODEL = 'gemini-2.0-flash';
