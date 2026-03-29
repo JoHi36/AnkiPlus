@@ -1,35 +1,26 @@
 """Gemini STT (transcription) and TTS (speech generation) for Plusi voice conversations.
 
-STT: Sends audio to backend /voice/transcribe → Gemini 2.0 Flash (multimodal, direct API).
-TTS: Sends text + style to backend /voice/speak → Gemini 2.5 Flash TTS (Puck voice, direct API).
-Backend handlers call Gemini API directly (not OpenRouter — no TTS support there).
+Direct Gemini API calls from Python (no backend proxy needed).
+STT: Gemini 2.0 Flash with inline audio data (multimodal).
+TTS: Gemini 2.5 Flash TTS with Puck voice and mood-based style instructions.
 """
 import time
+import struct
 import requests
 
-# Retry settings for 429 rate limits
-MAX_RETRIES = 3
-RETRY_DELAY_S = 2.0
-
 try:
-    from ..config import get_backend_url
+    from ..config import get_config
 except ImportError:
-    from config import get_backend_url
-
-try:
-    from ..ai.auth import get_auth_headers
-except ImportError:
-    try:
-        from ai.auth import get_auth_headers
-    except ImportError:
-        def get_auth_headers():
-            return {"Content-Type": "application/json"}
+    from config import get_config
 
 try:
     from ..utils.logging import get_logger
 except ImportError:
     from utils.logging import get_logger
 logger = get_logger(__name__)
+
+# Gemini API base
+GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 
 # Plusi's voice identity
 PLUSI_VOICE = "Puck"
@@ -86,12 +77,58 @@ PLUSI_STYLE_INSTRUCTIONS = {
 }
 
 # Timeout for API calls (seconds)
-STT_TIMEOUT = 15
-TTS_TIMEOUT = 20
+STT_TIMEOUT = 30
+TTS_TIMEOUT = 30
+
+# Retry settings for 429 rate limits
+MAX_RETRIES = 3
+RETRY_DELAY_S = 2.0
+
+
+def _get_api_key():
+    """Get Google API key from config."""
+    config = get_config()
+    key = config.get("api_key", "")
+    if not key:
+        logger.warning("voice: no api_key in config")
+    return key
+
+
+def _pcm_to_wav_base64(pcm_base64):
+    """Convert raw PCM base64 (16-bit, 24kHz, mono) to WAV base64."""
+    import base64
+    pcm_data = base64.b64decode(pcm_base64)
+
+    sample_rate = 24000
+    channels = 1
+    bits_per_sample = 16
+    byte_rate = sample_rate * channels * (bits_per_sample // 8)
+    block_align = channels * (bits_per_sample // 8)
+    data_size = len(pcm_data)
+
+    # 44-byte WAV header
+    header = struct.pack('<4sI4s4sIHHIIHH4sI',
+        b'RIFF',
+        data_size + 36,
+        b'WAVE',
+        b'fmt ',
+        16,             # Subchunk1Size (PCM)
+        1,              # AudioFormat (PCM = 1)
+        channels,
+        sample_rate,
+        byte_rate,
+        block_align,
+        bits_per_sample,
+        b'data',
+        data_size,
+    )
+
+    wav_data = header + pcm_data
+    return base64.b64encode(wav_data).decode()
 
 
 def transcribe_audio(audio_base64):
-    """Transcribe audio using Gemini Flash via backend.
+    """Transcribe audio using Gemini Flash directly.
 
     Args:
         audio_base64: Base64-encoded audio data (webm/opus from MediaRecorder).
@@ -99,21 +136,34 @@ def transcribe_audio(audio_base64):
     Returns:
         Transcribed text string, or None on error.
     """
-    backend_url = get_backend_url()
-    if not backend_url:
-        logger.warning("voice transcribe: no backend URL")
+    api_key = _get_api_key()
+    if not api_key:
         return None
 
-    url = f"{backend_url}/voice/transcribe"
+    url = f"{GEMINI_BASE}/{STT_MODEL}:generateContent?key={api_key}"
     payload = {
-        "audio": audio_base64,
-        "model": STT_MODEL,
+        "contents": [{
+            "parts": [
+                {
+                    "inlineData": {
+                        "mimeType": "audio/webm",
+                        "data": audio_base64,
+                    },
+                },
+                {
+                    "text": "Transcribe this audio exactly. Return only the transcribed text, nothing else.",
+                },
+            ],
+        }],
+        "generationConfig": {
+            "temperature": 0,
+            "maxOutputTokens": 1024,
+        },
     }
-    headers = get_auth_headers()
 
     for attempt in range(MAX_RETRIES + 1):
         try:
-            response = requests.post(url, json=payload, headers=headers, timeout=STT_TIMEOUT)
+            response = requests.post(url, json=payload, timeout=STT_TIMEOUT)
             if response.status_code == 429 and attempt < MAX_RETRIES:
                 delay = RETRY_DELAY_S * (attempt + 1)
                 logger.warning("voice transcribe: 429 rate limit, retry %d/%d in %.1fs", attempt + 1, MAX_RETRIES, delay)
@@ -121,7 +171,7 @@ def transcribe_audio(audio_base64):
                 continue
             response.raise_for_status()
             result = response.json()
-            text = result.get("text", "").strip()
+            text = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
             logger.info("voice transcribe: %d chars", len(text))
             return text if text else None
         except Exception as e:
@@ -134,38 +184,70 @@ def transcribe_audio(audio_base64):
 
 
 def generate_speech(text, mood="neutral"):
-    """Generate speech audio using Gemini TTS via backend.
+    """Generate speech audio using Gemini TTS directly.
 
     Args:
         text: Text for Plusi to speak.
         mood: Plusi's current mood (determines speaking style).
 
     Returns:
-        Base64-encoded audio data (mp3/wav), or None on error.
+        Base64-encoded WAV audio data, or None on error.
     """
-    backend_url = get_backend_url()
-    if not backend_url:
-        logger.warning("voice speak: no backend URL")
+    api_key = _get_api_key()
+    if not api_key:
         return None
 
     style = PLUSI_STYLE_INSTRUCTIONS.get(mood, PLUSI_STYLE_INSTRUCTIONS["neutral"])
 
-    try:
-        url = f"{backend_url}/voice/speak"
-        payload = {
-            "text": text,
-            "voice": PLUSI_VOICE,
-            "model": TTS_MODEL,
-            "style": style,
-        }
-        headers = get_auth_headers()
-        response = requests.post(url, json=payload, headers=headers, timeout=TTS_TIMEOUT)
-        response.raise_for_status()
-        result = response.json()
-        audio = result.get("audio")
-        if audio:
+    # Build prompt: style instruction + text
+    prompt = f"{style}\n\n{text}"
+
+    url = f"{GEMINI_BASE}/{TTS_MODEL}:generateContent?key={api_key}"
+    payload = {
+        "contents": [{
+            "parts": [{
+                "text": prompt,
+            }],
+        }],
+        "generationConfig": {
+            "responseModalities": ["AUDIO"],
+            "speechConfig": {
+                "voiceConfig": {
+                    "prebuiltVoiceConfig": {
+                        "voiceName": PLUSI_VOICE,
+                    },
+                },
+            },
+        },
+    }
+
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            response = requests.post(url, json=payload, timeout=TTS_TIMEOUT)
+            if response.status_code == 429 and attempt < MAX_RETRIES:
+                delay = RETRY_DELAY_S * (attempt + 1)
+                logger.warning("voice speak: 429 rate limit, retry %d/%d in %.1fs", attempt + 1, MAX_RETRIES, delay)
+                time.sleep(delay)
+                continue
+            response.raise_for_status()
+            result = response.json()
+            pcm_base64 = (result.get("candidates", [{}])[0]
+                          .get("content", {})
+                          .get("parts", [{}])[0]
+                          .get("inlineData", {})
+                          .get("data"))
+            if not pcm_base64:
+                logger.error("voice speak: no audio in response")
+                return None
+
+            # Convert PCM to WAV for browser playback
+            wav_base64 = _pcm_to_wav_base64(pcm_base64)
             logger.info("voice speak: generated audio for %d chars text, mood=%s", len(text), mood)
-        return audio
-    except Exception as e:
-        logger.exception("voice speak error: %s", e)
-        return None
+            return wav_base64
+        except Exception as e:
+            if attempt < MAX_RETRIES and '429' in str(e):
+                time.sleep(RETRY_DELAY_S * (attempt + 1))
+                continue
+            logger.exception("voice speak error: %s", e)
+            return None
+    return None
