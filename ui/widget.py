@@ -203,6 +203,61 @@ class SubagentThread(QThread):
             self.error_signal.emit(self.agent_name, str(e))
 
 
+class VoiceThread(QThread):
+    """Thread for Plusi voice pipeline: STT → Plusi agent → TTS."""
+    result_signal = pyqtSignal(object)  # {"audio": base64, "mood": str, "text": str}
+    mood_signal = pyqtSignal(str)       # Intermediate mood updates for dock
+    error_signal = pyqtSignal(str)      # Error message
+
+    def __init__(self, audio_base64):
+        super().__init__()
+        self.audio_base64 = audio_base64
+
+    def run(self):
+        try:
+            try:
+                from ..ai.voice import transcribe_audio, generate_speech
+            except ImportError:
+                from ai.voice import transcribe_audio, generate_speech
+
+            # Step 1: STT
+            self.mood_signal.emit('thinking')
+            text = transcribe_audio(self.audio_base64)
+            if not text:
+                self.error_signal.emit("Konnte Sprache nicht erkennen.")
+                return
+
+            logger.info("voice pipeline: transcribed '%s'", text[:80])
+
+            # Step 2: Run Plusi agent
+            try:
+                from ..plusi.agent import run_plusi
+            except ImportError:
+                from plusi.agent import run_plusi
+
+            result = run_plusi(situation=f"[Voice message from user]: {text}")
+            mood = result.get('mood', 'neutral')
+            plusi_text = result.get('text', '')
+
+            if not plusi_text:
+                self.result_signal.emit({"audio": None, "mood": mood, "text": ""})
+                return
+
+            self.mood_signal.emit(mood)
+            logger.info("voice pipeline: plusi responded mood=%s len=%d", mood, len(plusi_text))
+
+            # Step 3: TTS
+            audio_b64 = generate_speech(plusi_text, mood=mood)
+            self.result_signal.emit({
+                "audio": audio_b64,
+                "mood": mood,
+                "text": plusi_text,
+            })
+        except Exception as e:
+            logger.exception("voice pipeline error: %s", e)
+            self.error_signal.emit(str(e))
+
+
 class InsightExtractionThread(QThread):
     """Background thread for insight extraction via OpenRouter."""
     finished_signal = pyqtSignal(int, str)  # card_id, insights_json
@@ -1159,6 +1214,8 @@ class ChatbotWidget(QWidget):
             'handleAuthDeepLink': self._msg_handle_auth_deep_link,
             # Media
             'fetchImage': self._msg_fetch_image,
+            # Voice
+            'voiceAudio': self._msg_voice_audio,
             # Utilities
             'openUrl': lambda d: self.bridge.openUrl(d.get('url', '') if isinstance(d, dict) else d),
             'pycmd': self._msg_pycmd,
@@ -1932,6 +1989,68 @@ class ChatbotWidget(QWidget):
             logger.info("plusi RESET: all memories, diary, and history cleared")
         except Exception as e:
             logger.exception("plusi reset error: %s", e)
+
+    def _msg_voice_audio(self, data):
+        """Handle voice audio from React: run STT → Plusi → TTS pipeline."""
+        if not data or not isinstance(data, str):
+            logger.warning("voice: invalid audio data")
+            return
+
+        # Show thinking state on Plusi dock
+        try:
+            try:
+                from ..plusi.dock import sync_mood
+            except ImportError:
+                from plusi.dock import sync_mood
+            sync_mood('thinking')
+        except (ImportError, AttributeError):
+            pass
+
+        thread = VoiceThread(data)
+        thread.mood_signal.connect(self._on_voice_mood)
+        thread.result_signal.connect(self._on_voice_result)
+        thread.error_signal.connect(self._on_voice_error)
+        thread.finished.connect(lambda: self._cleanup_voice_thread())
+        self._voice_thread = thread
+        thread.start()
+
+    def _on_voice_mood(self, mood):
+        """Update Plusi dock mood during voice pipeline."""
+        try:
+            try:
+                from ..plusi.dock import sync_mood
+            except ImportError:
+                from plusi.dock import sync_mood
+            sync_mood(mood)
+        except (ImportError, AttributeError):
+            pass
+
+    def _on_voice_result(self, result):
+        """Send voice response audio to React frontend."""
+        self._send_to_frontend_with_event(
+            "plusiVoiceResponse",
+            {"type": "plusiVoiceResponse", "data": result},
+            "plusiVoiceResponse"
+        )
+        # Sync final mood
+        mood = result.get('mood', 'neutral') if result else 'neutral'
+        self._on_voice_mood(mood)
+
+    def _on_voice_error(self, error_msg):
+        """Handle voice pipeline error."""
+        logger.error("voice pipeline error: %s", error_msg)
+        self._send_to_frontend_with_event(
+            "plusiVoiceResponse",
+            {"type": "plusiVoiceResponse", "data": {"audio": None, "mood": "neutral", "text": ""}},
+            "plusiVoiceResponse"
+        )
+        # Reset Plusi mood
+        self._on_voice_mood('neutral')
+
+    def _cleanup_voice_thread(self):
+        """Cleanup after voice thread completes."""
+        if hasattr(self, '_voice_thread'):
+            self._voice_thread = None
 
     def _msg_subagent_direct(self, data):
         """Handle @Name subagent direct call from frontend."""
