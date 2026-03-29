@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import SourceCard from './SourceCard';
+import { useHoldToPeek } from '../hooks/useHoldToPeek';
 
 const BADGE_BASE = {
   display: 'inline-flex',
@@ -37,11 +38,25 @@ const WEB_HOVER = { background: 'color-mix(in srgb, var(--ds-green) 30%, transpa
 
 const TOOLTIP_CONTAINER = { width: 192 };
 
-export default function CitationBadge({ cardId, citation, onClick, index }) {
+export default function CitationBadge({ cardId, citation, onClick, index, bridge }) {
   const [showTooltip, setShowTooltip] = useState(false);
   const [hovered, setHovered] = useState(false);
 
   const isWeb = citation && (citation.url || citation.web_url);
+
+  const { handlers: holdHandlers } = useHoldToPeek({
+    onPeekStart: () => {
+      if (!isWeb && cardId && bridge) {
+        bridge.previewCard(cardId);
+      }
+    },
+    onPeekEnd: () => {
+      if (!isWeb && bridge) {
+        bridge.dismissPreview();
+      }
+    },
+    threshold: 300,
+  });
   const baseStyle = isWeb ? WEB_STYLE : CARD_STYLE;
   const hoverStyle = isWeb ? WEB_HOVER : CARD_HOVER;
 
@@ -57,6 +72,9 @@ export default function CitationBadge({ cardId, citation, onClick, index }) {
         onClick={handleClick}
         onMouseEnter={() => { setShowTooltip(true); setHovered(true); }}
         onMouseLeave={() => { setShowTooltip(false); setHovered(false); }}
+        onPointerDown={holdHandlers.onPointerDown}
+        onPointerUp={holdHandlers.onPointerUp}
+        onPointerCancel={holdHandlers.onPointerCancel}
         style={hovered ? { ...baseStyle, ...hoverStyle } : baseStyle}
       >
         {index !== undefined ? index : cardId}
