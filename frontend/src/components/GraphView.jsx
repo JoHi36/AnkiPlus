@@ -2,7 +2,6 @@ import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react'
 import ForceGraph3D from '3d-force-graph';
 import SpriteText from 'three-spritetext';
 import { executeAction } from '../actions';
-import KnowledgeHeatmap from './KnowledgeHeatmap';
 import ChatInput from './ChatInput';
 // SearchSidebar rendered in App.jsx for header-pushing layout
 import DeckSearchBar from './DeckSearchBar';
@@ -46,10 +45,7 @@ function deckColor(deckName) {
 export default function GraphView({ onToggleView, isPremium, deckData, smartSearch, bridge }) {
   const containerRef = useRef(null);
   const graphRef = useRef(null);
-  const heatmapRef = useRef(null);
   const animatedQueryRef = useRef(null); // tracks which query has been animated
-  const [heatmapDeck, setHeatmapDeck] = useState(null);
-  const [contentMode, setContentMode] = useState('decks'); // 'decks' | 'heatmap'
   const { isExpanded, toggleExpanded } = useDeckTree();
 
   // Destructure smartSearch
@@ -544,53 +540,16 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
         }
         return;
       }
-      // Heatmap keyboard
-      if (e.key === 'Escape' && heatmapDeck) {
-        e.preventDefault();
-        setHeatmapDeck(null);
-      }
-      if (e.key === ' ' && heatmapDeck?.hasChildren) {
-        e.preventDefault();
-        heatmapRef.current?.drillInto(heatmapDeck);
-      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [hasResults, selectedClusterId, heatmapDeck, searchResult, reset, setSelectedClusterId, startStack]);
+  }, [hasResults, selectedClusterId, searchResult, reset, setSelectedClusterId, startStack]);
 
-  // Heatmap deck selection info
-  const isWeak = heatmapDeck && heatmapDeck.strength < 0.5;
-  const deckDue = heatmapDeck ? (heatmapDeck.dueNew + heatmapDeck.dueLearn + heatmapDeck.dueReview) : 0;
   const clusterCards = selectedCluster?.cards;
   const totalCards = searchResult?.totalFound || 0;
 
   // topSlot content
   const topSlotContent = (() => {
-    if (heatmapDeck && !hasResults) {
-      return (
-        <div style={{
-          padding: '12px 16px', textAlign: 'center',
-          borderBottom: '1px solid var(--ds-border-subtle)',
-        }}>
-          <div style={{
-            fontSize: 15, fontWeight: 600,
-            color: 'var(--ds-text-primary)',
-          }}>
-            {heatmapDeck.name}
-          </div>
-          <div style={{
-            fontSize: 12, color: 'var(--ds-text-secondary)', marginTop: 4,
-          }}>
-            {heatmapDeck.cards} Karten &middot; {Math.round(heatmapDeck.strength * 100)}% gelernt
-            {deckDue > 0 && (
-              <span style={{ color: 'var(--ds-yellow)', marginLeft: 8 }}>
-                {deckDue} fällig
-              </span>
-            )}
-          </div>
-        </div>
-      );
-    }
     if (hasResults) {
       return (
         <div style={{
@@ -692,127 +651,35 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
               />
             </div>
 
-            {/* Content area — deck list or heatmap (only this part toggles) */}
+            {/* Content area — deck list */}
             <div style={{
               flex: 1, overflowY: 'auto',
               width: '100%', maxWidth: MAX_W,
               paddingBottom: 60,
               scrollbarWidth: 'none',
             }}>
-              {contentMode === 'decks' ? (
-                /* Deck list — same as DeckBrowserView */
-                <>
-                  {(deckData?.roots || []).map((node, idx) => (
-                    <DeckNode
-                      key={node.id}
-                      node={node}
-                      depth={0}
-                      isExpanded={isExpanded}
-                      onToggle={toggleExpanded}
-                      onStudy={(deckId) => executeAction('deck.study', { deckId })}
-                      onSelect={(deckId) => executeAction('deck.select', { deckId })}
-                      index={idx}
-                    />
-                  ))}
-                  {(!deckData?.roots || deckData.roots.length === 0) && (
-                    <div style={{
-                      textAlign: 'center', padding: '40px 0',
-                      color: 'var(--ds-text-muted)', fontSize: 13,
-                    }}>
-                      Keine Stapel vorhanden
-                    </div>
-                  )}
-                </>
-              ) : (
-                /* Heatmap view */
-                <KnowledgeHeatmap
-                  ref={heatmapRef}
-                  deckData={deckData}
-                  selectedDeckId={heatmapDeck?.id ?? null}
-                  onSelectDeck={setHeatmapDeck}
+              {(deckData?.roots || []).map((node, idx) => (
+                <DeckNode
+                  key={node.id}
+                  node={node}
+                  depth={0}
+                  isExpanded={isExpanded}
+                  onToggle={toggleExpanded}
+                  onStudy={(deckId) => executeAction('deck.study', { deckId })}
+                  onSelect={(deckId) => executeAction('deck.select', { deckId })}
+                  index={idx}
                 />
+              ))}
+              {(!deckData?.roots || deckData.roots.length === 0) && (
+                <div style={{
+                  textAlign: 'center', padding: '40px 0',
+                  color: 'var(--ds-text-muted)', fontSize: 13,
+                }}>
+                  Keine Stapel vorhanden
+                </div>
               )}
             </div>
 
-            {/* Bottom dock — frosted: toggle + deck action */}
-            <div style={{
-              flexShrink: 0, width: '100%', maxWidth: MAX_W,
-              padding: '8px 0 20px',
-            }}>
-              <div
-                className="ds-frosted"
-                style={{
-                  borderRadius: 14,
-                  border: '1px solid var(--ds-border-subtle)',
-                  boxShadow: 'var(--ds-shadow-md)',
-                  display: 'flex', alignItems: 'center',
-                  padding: '10px 14px',
-                  gap: 12,
-                }}
-              >
-                {/* Toggle: Stapel / Heatmap */}
-                <div style={{
-                  display: 'flex', gap: 0,
-                  background: 'var(--ds-hover-tint)',
-                  borderRadius: 6,
-                  overflow: 'hidden',
-                  flexShrink: 0,
-                }}>
-                  {['decks', 'heatmap'].map(mode => (
-                    <button
-                      key={mode}
-                      onClick={() => setContentMode(mode)}
-                      style={{
-                        padding: '5px 12px',
-                        fontSize: 11, fontWeight: 500,
-                        fontFamily: 'inherit',
-                        border: 'none', cursor: 'pointer',
-                        color: contentMode === mode ? 'var(--ds-text-primary)' : 'var(--ds-text-tertiary)',
-                        background: contentMode === mode ? 'var(--ds-active-tint)' : 'transparent',
-                        transition: 'color 0.15s, background 0.15s',
-                      }}
-                    >
-                      {mode === 'decks' ? 'Stapel' : 'Heatmap'}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Selected deck info (if heatmap deck selected) */}
-                {heatmapDeck ? (
-                  <>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{
-                        fontSize: 13, fontWeight: 600,
-                        color: 'var(--ds-text-primary)',
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      }}>
-                        {heatmapDeck.name}
-                      </div>
-                      <div style={{ fontSize: 11, color: 'var(--ds-text-tertiary)' }}>
-                        {heatmapDeck.cards} Karten · {Math.round(heatmapDeck.strength * 100)}%
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => executeAction('deck.study', { deckId: heatmapDeck.id })}
-                      style={{
-                        background: isWeak ? 'var(--ds-red)' : 'var(--ds-accent)',
-                        color: 'var(--ds-text-primary)',
-                        border: 'none', borderRadius: 8,
-                        padding: '7px 16px', fontSize: 12, fontWeight: 600,
-                        cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-                        flexShrink: 0,
-                      }}
-                    >
-                      Loslegen
-                    </button>
-                  </>
-                ) : (
-                  <div style={{ flex: 1, fontSize: 12, color: 'var(--ds-text-tertiary)' }}>
-                    Wähle einen Stapel
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
         )}
 
