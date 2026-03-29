@@ -168,7 +168,7 @@ export default function DailyBreakdown({
         <span style={{ fontWeight: 600, color: 'var(--ds-text-primary)' }}>
           {newCount} neue Karten
         </span>
-        {' '}(+{growthPct.toFixed(1)}%)
+        {' '}(+{Number(growthPct).toFixed(1)}%)
       </div>
     </div>
   );
