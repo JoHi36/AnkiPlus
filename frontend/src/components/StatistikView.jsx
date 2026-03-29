@@ -96,11 +96,17 @@ export default function StatistikView({ deckData }) {
             <span style={SECTION_HINT_STYLE}>Tippe für Ziel</span>
           </div>
           <div style={TREEMAP_WRAP_STYLE}>
-            <KnowledgeHeatmap
-              deckData={scopedDeckData}
-              onSelectDeck={() => {}}
-              selectedDeckId={null}
-            />
+            {scopedDeckData?.roots?.length > 0 ? (
+              <KnowledgeHeatmap
+                deckData={scopedDeckData}
+                onSelectDeck={() => {}}
+                selectedDeckId={null}
+              />
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--ds-text-muted)', fontSize: 12 }}>
+                Deck-Daten werden geladen…
+              </div>
+            )}
           </div>
         </div>
       </div>
