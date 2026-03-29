@@ -36,8 +36,7 @@ import useInsights from './hooks/useInsights';
 import SettingsSidebar from './components/SettingsSidebar';
 import SidebarShell from './components/SidebarShell';
 import SearchSidebar from './components/SearchSidebar';
-import { useLidLift } from './hooks/useLidLift';
-import LidLiftTransition from './components/LidLiftTransition';
+import DeckSearchBar from './components/DeckSearchBar';
 import AgenticCell from './components/AgenticCell';
 import TopBar from './components/TopBar';
 import DeckBrowserView from './components/DeckBrowserView';
@@ -49,6 +48,7 @@ import ReasoningDisplay from './reasoning/ReasoningDisplay';
 import { registerDefaultRenderers } from './reasoning/defaultRenderers';
 import { ReasoningProvider, useReasoningDispatch, useReasoningStore } from './reasoning/store';
 import useSmartSearch from './hooks/useSmartSearch';
+import usePlusiVoice from './hooks/usePlusiVoice';
 
 // Register step renderers once at module load time
 registerDefaultRenderers();
@@ -404,6 +404,7 @@ function AppInner() {
 
   // Mascot state
   const { mood, setEventMood, setAiMood, resetMood } = useMascot();
+  const { voiceState, recordingDuration } = usePlusiVoice();
   const [mascotEnabled, setMascotEnabled] = useState(false);
   const mascotEnabledRef = useRef(false);
   useEffect(() => {
@@ -2254,6 +2255,7 @@ function AppInner() {
       }}
       onEvent={eventTriggerRef}
       enabled={mascotEnabled}
+      voiceState={voiceState}
     />,
     document.body,
   );

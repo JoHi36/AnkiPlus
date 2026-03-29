@@ -35,7 +35,16 @@ const BODY_TILT = 3.5;
 /** Jump initial velocity in px/s */
 const JUMP_VELOCITY = 380;
 
-export default function MascotShell({ mood = 'neutral', onEvent, enabled = true }) {
+const RECORDING_RING_STYLE = {
+  position: 'absolute',
+  inset: -4,
+  borderRadius: '50%',
+  border: '2px solid var(--ds-red)',
+  animation: 'plusi-voice-pulse 1s ease-in-out infinite',
+  pointerEvents: 'none',
+};
+
+export default function MascotShell({ mood = 'neutral', onEvent, enabled = true, voiceState }) {
   const [eventBubble, setEventBubble] = useState(null);
   const [tapKey, setTapKey] = useState(0);
   const [overrideMood, setOverrideMood] = useState(null);
@@ -611,7 +620,7 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true 
           className="plusi-dock-char"
           onPointerDown={handlePointerDown}
           title="Plusi"
-          style={{ touchAction: 'none' }}
+          style={{ touchAction: 'none', position: 'relative' }}
         >
           <MascotCharacter
             ref={charRef}
@@ -619,6 +628,9 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true 
             size={48}
             tapKey={tapKey}
           />
+          {voiceState === 'recording' && (
+            <div style={RECORDING_RING_STYLE} />
+          )}
         </div>
 
         {eventBubble && (
@@ -653,6 +665,11 @@ const DOCK_CSS = `
   @keyframes pd-float  { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
   @keyframes pd-bounce { 0%{transform:translateY(0)} 100%{transform:translateY(-6px)} }
   @keyframes pd-droop  { 0%,100%{transform:translateY(0)} 50%{transform:translateY(2px)} }
+
+  @keyframes plusi-voice-pulse {
+    0%, 100% { opacity: 0.4; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.1); }
+  }
 
   .plusi-dock-char {
     cursor: grab;
