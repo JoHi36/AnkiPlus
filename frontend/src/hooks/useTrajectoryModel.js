@@ -188,7 +188,7 @@ export default function useTrajectoryModel({ days = [], currentPct = 0, totalCar
       ...forecastClean.map((p, i) => p + bandWidthFn(i + 1)),
       ...forecastClean.map((p, i) => {
         const h = i + 1;
-        const decay = Math.exp(-Math.log(2) / DECAY_HALF_LIFE * h * (1 - dynamik));
+        const decay = Math.exp(-Math.log(2) / DECAY_HALF_LIFE * h * Math.pow(1 - dynamik, 3));
         return p * decay - bandWidthFn(h);
       }),
     ];
@@ -276,7 +276,9 @@ export default function useTrajectoryModel({ days = [], currentPct = 0, totalCar
       // Decay multiplier: fraction of knowledge retained after h days of reduced activity
       // At full dynamik (1.0): no decay, band is symmetric
       // At zero dynamik (0.0): full decay with half-life ~60 days
-      const decayFactor = h === 0 ? 1 : Math.exp(-Math.log(2) / DECAY_HALF_LIFE * h * (1 - dynamik));
+      // Cubic: (1-dynamik)³ → near-zero for active users, strong for truly inactive
+      const inactivity = Math.pow(1 - dynamik, 3);
+      const decayFactor = h === 0 ? 1 : Math.exp(-Math.log(2) / DECAY_HALF_LIFE * h * inactivity);
       const decayedPct = pct * decayFactor;
       return { x: dayToX(pastDays + h), y: pctToY(Math.max(0, decayedPct - bandWidth(h))) };
     });
