@@ -36,7 +36,8 @@ import useInsights from './hooks/useInsights';
 import SettingsSidebar from './components/SettingsSidebar';
 import SidebarShell from './components/SidebarShell';
 import SearchSidebar from './components/SearchSidebar';
-import DeckSearchBar from './components/DeckSearchBar';
+import { useLidLift } from './hooks/useLidLift';
+import LidLiftTransition from './components/LidLiftTransition';
 import AgenticCell from './components/AgenticCell';
 import TopBar from './components/TopBar';
 import DeckBrowserView from './components/DeckBrowserView';
@@ -221,13 +222,18 @@ function AppInner() {
     }
   }, [searchSidebarShouldShow]);
 
-  const [activeView, setActiveView] = useState('chat'); // 'chat' | 'deckBrowser' | 'overview' | 'review' | 'statistik'
+  const initialView = (() => {
+    try { const p = new URLSearchParams(window.location.search).get('view'); if (p === 'statistik') return 'statistik'; if (p === 'deckBrowser') return 'deckBrowser'; } catch {}
+    return 'chat';
+  })();
+  const [activeView, setActiveView] = useState(initialView); // 'chat' | 'deckBrowser' | 'overview' | 'review' | 'statistik'
   const activeViewRef = useRef('chat');
   useEffect(() => { activeViewRef.current = activeView; }, [activeView]);
 
   // Fullscreen view state (merged from MainApp)
   const [ankiState, setAnkiState] = useState('deckBrowser');
   const [viewMode, setViewMode] = useState('graph'); // 'graph' | 'decks'
+  const lidLift = useLidLift();
   const [deckBrowserData, setDeckBrowserData] = useState(null);
   const [overviewData, setOverviewData] = useState(null);
   const messagesEndRef = useRef(null);
@@ -2250,18 +2256,15 @@ function AppInner() {
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden', position: 'relative' }}>
             {persistentTopBar}
 
-            {/* Search bar — moves from center to under TopBar when search is active */}
-            {activeView === 'deckBrowser' && viewMode === 'graph' && (smartSearch.hasResults || smartSearch.isSearching) && (
-              <div style={{
-                flexShrink: 0,
-                display: 'flex', justifyContent: 'center',
-                padding: '56px 20px 8px',
-                animation: 'searchBarSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) both',
-              }}>
-                <div style={{ width: '100%', maxWidth: 560 }}>
-                  <DeckSearchBar onSubmit={(text) => { if (text.trim()) smartSearch.search(text); }} />
-                </div>
-              </div>
+            {activeView === 'deckBrowser' && (
+              <LidLiftTransition
+                state={lidLift.state}
+                onAnimationComplete={lidLift.onAnimationComplete}
+                deckName={overviewData?.deckName || null}
+                cardCount={overviewData?.totalCards}
+                onStartLearning={() => executeAction('deck.study', { deckId: overviewData?.deckId })}
+                onClose={() => lidLift.close(false)}
+              />
             )}
 
             <div style={FLEX_COL_FILL}>
@@ -2859,6 +2862,22 @@ function AppInner() {
         onSend = handleSend;
         actionPrimary = { label: 'Schließen', shortcut: 'ESC', onClick: () => setReviewChatOpen(false) };
         actionSecondary = { label: '', shortcut: '', onClick: () => {} };
+      } else if (activeView === 'deckBrowser') {
+        topSlot = undefined;
+        hideInput = false;
+        placeholder = 'Stelle eine Frage...';
+        onSend = (text) => {
+          lidLift.trigger();
+          handleSend(text);
+        };
+        actionPrimary = {
+          label: 'Öffnen', shortcut: 'SPACE',
+          onClick: () => lidLift.trigger(),
+        };
+        actionSecondary = {
+          label: 'Senden', shortcut: '↵',
+          onClick: () => {},
+        };
       } else {
         // Normal chat mode (non-review)
         topSlot = undefined;
@@ -2884,12 +2903,16 @@ function AppInner() {
       // Settings offset shifts everything right when settings panel is open
       const sOff = settingsOpen ? 'var(--ds-settings-width)' : '0px';
       // All modes: use left+right for bounds, maxWidth+margin:auto for centering
+      const isDeckIdle = activeView === 'deckBrowser' && lidLift.state === 'idle';
+
       const posStyle = isReviewSidebar
         ? { left: 'calc(100% - var(--ds-sidebar-width) + var(--ds-space-2xl))', right: 'var(--ds-space-2xl)', bottom: 'var(--ds-space-xl)' }
-        : { left: `calc(${sOff} + var(--ds-space-lg))`, right: 'var(--ds-space-lg)', bottom: isReview ? 'var(--ds-space-xl)' : 'var(--ds-space-lg)' };
+        : isDeckIdle
+          ? { left: `calc(${sOff} + 50% - 210px)`, right: `calc(50% - 210px)`, top: '50px', bottom: 'auto' }
+          : { left: `calc(${sOff} + var(--ds-space-lg))`, right: 'var(--ds-space-lg)', bottom: isReview ? 'var(--ds-space-xl)' : 'var(--ds-space-lg)' };
 
       return (
-        <div ref={dockPulseRef} style={{
+        <div ref={dockPulseRef} className={lidLift.state === 'animating' ? 'lid-drop' : lidLift.isReversing ? 'lid-reverse' : ''} style={{
           position: 'fixed', zIndex: 60,
           ...posStyle,
           maxWidth: 'var(--ds-content-width)',
