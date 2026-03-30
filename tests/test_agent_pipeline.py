@@ -702,19 +702,16 @@ class TestResearchPipeline:
         sig = inspect.signature(run_research)
         assert 'situation' in sig.parameters
 
-    @patch('research.search.search')
-    @patch('research.get_config', return_value={'openrouter_api_key': 'fake', 'research_sources': {}})
-    def test_research_dispatches_via_pipeline(self, mock_config, mock_search):
-        """Research agent runs through _dispatch_agent."""
-        mock_result = MagicMock()
-        mock_result.error = None
-        mock_result.sources = [{'title': 'ATP Source'}]
-        mock_result.tool_used = 'pubmed'
-        mock_result.to_dict.return_value = {
-            'text': 'ATP is adenosine triphosphate.',
-            'sources': [],
-        }
-        mock_search.return_value = mock_result
+    @patch('ai.gemini.get_google_response_streaming')
+    @patch('research.get_config', return_value={'api_key': 'fake'})
+    def test_research_dispatches_via_pipeline(self, mock_config, mock_streaming):
+        """Research agent runs through _dispatch_agent with RAG pipeline."""
+        # Mock streaming to return text via callback
+        def fake_stream(user_message, model, api_key, callback=None, **kw):
+            if callback:
+                callback('ATP is adenosine triphosphate.', False)
+                callback('', True)
+        mock_streaming.side_effect = fake_stream
 
         from ai.handler import AIHandler
         handler = AIHandler()
