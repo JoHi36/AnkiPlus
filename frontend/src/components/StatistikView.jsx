@@ -63,6 +63,20 @@ export default function StatistikView({ deckData }) {
     setShowTreemap(false);
   }, [selectedCells, deadlineInput, createFocus]);
 
+  // Track which focus row is selected (for chart switching, not page navigation)
+  const [selectedFocusIdx, setSelectedFocusIdx] = useState(0);
+
+  const handleSelectFocusRow = useCallback((focusId) => {
+    const idx = focuses.findIndex(f => f.id === focusId);
+    if (idx >= 0) {
+      setSelectedFocusIdx(idx);
+      const focus = focuses[idx];
+      if (focus.deckIds?.length > 0) {
+        focusDeck({ id: focus.deckIds[0], name: focus.deckNames?.[0] });
+      }
+    }
+  }, [focuses, focusDeck]);
+
   const handleSelectFocus = useCallback((focusId) => {
     setActiveFocusId(focusId);
     const focus = focuses.find(f => f.id === focusId);
@@ -115,15 +129,11 @@ export default function StatistikView({ deckData }) {
   if (hasFocuses && !showTreemap) {
     return (
       <div style={PAGE_STYLE}>
-        <FocusTabs
-          focuses={focuses}
-          activeFocusId={null}
-          onSelect={handleSelectFocus}
-          onAdd={() => setShowTreemap(true)}
-        />
         <AggregatedPlanView
           focuses={focuses}
-          onSelectFocus={handleSelectFocus}
+          selectedFocusId={focuses[selectedFocusIdx]?.id || focuses[0]?.id}
+          onSelectFocus={handleSelectFocusRow}
+          onAddFocus={() => setShowTreemap(true)}
           trajectoryData={deckTrajectory}
         />
       </div>
