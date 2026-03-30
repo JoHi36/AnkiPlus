@@ -473,7 +473,7 @@ function AppInner() {
 
   const [activeAgentColor, setActiveAgentColor] = useState(null);
   const [activeAgentName, setActiveAgentName] = useState(null);
-  const [stickyAgent, setStickyAgent] = useState(null);
+
   const [lastPlusiText, setLastPlusiText] = useState(null);
   const plusiTextAccRef = useRef('');
 
@@ -1080,7 +1080,7 @@ function AppInner() {
           const _chatHook = chatHookRef.current;
           if (_chatHook && _chatHook.handleSend) {
             setTimeout(() => {
-              _chatHook.handleSend(payload.data.text);
+              _chatHook.handleSend(payload.data.text, undefined, { agent: 'tutor' });
             }, 300);
           }
         }
@@ -1784,15 +1784,6 @@ function AppInner() {
       setActiveView('chat');
     }
 
-    // Prepend @AgentLabel prefix when a sticky agent is active,
-    // so the backend router dispatches to the correct subagent.
-    if (stickyAgent && !text.startsWith('@')) {
-      text = `@${stickyAgent.label} ${text}`;
-    }
-
-    // @Subagent intercept is now handled inside useChat.handleSend() via registry-based detection.
-    // No App.jsx-level interception needed — useChat routes via bridge.subagentDirect().
-
     // Auto-transition from peek to card_chat when user sends a message
     if (previewModeRef.current?.stage === 'peek') {
       const peekCardId = previewModeRef.current.cardId;
@@ -1827,7 +1818,7 @@ function AppInner() {
     chatHook.handleSend(text, {
       pendingDeckSession: pendingDeckSession,
       setCurrentSessionId: (id) => {
-        const session = sessionContext.sessions.find(s => s.id === id) || 
+        const session = sessionContext.sessions.find(s => s.id === id) ||
                        (sessionContext.isTemporary && sessionContext.currentSession?.id === id ? sessionContext.currentSession : null);
         if (session) {
           sessionContext.setCurrentSession(session);
@@ -1843,7 +1834,7 @@ function AppInner() {
       tempSeenCardIds: sessionContext.isTemporary && sessionContext.currentSession
         ? sessionContext.currentSession.seenCardIds || []
         : deckTrackingHook.tempSeenCardIds
-    });
+    }, { agent: activeView === 'deckBrowser' ? 'research' : 'tutor' });
     
     // If this is the first message in a temporary session, persist it after a short delay
     // (allowing useChat to complete its session creation first)
@@ -2335,12 +2326,11 @@ function AppInner() {
         {settingsPanel}
         {mascotElement}
 
-        {/* TopBar — OUTSIDE flex row so sidebar doesn't push it */}
-        {persistentTopBar}
-
-        {/* Flex row: left (content) + right (SearchSidebar) */}
+        {/* Flex row: left (canvas) + right (SearchSidebar) */}
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden', position: 'relative' }}>
+          <div data-canvas style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden', position: 'relative' }}>
+            {/* TopBar — INSIDE canvas column so tabs/ESC center on canvas */}
+            {persistentTopBar}
 
             <div style={FLEX_COL_FILL}>
               {/* DeckBrowser — always mounted to preserve lid-lift state across tab switches */}
@@ -2364,6 +2354,7 @@ function AppInner() {
                       isPremium={isPremium}
                       lidState={lidLift.state}
                       canvasOpen={searchSidebarMounted || lidIsActive}
+                      sidebarOpen={searchSidebarMounted}
                       onLidClick={handleLidClick}
                       onLidAnimEnd={lidLift.onAnimationComplete}
                       searchBarRef={searchBarRef}
@@ -2814,6 +2805,17 @@ function AppInner() {
                             then a cleanup effect clears it. No gap between live and saved. */}
                         {(() => {
                           const msg = chatHook.currentMessage || (nextMsg?.from === 'bot' ? nextMsg : null);
+                          // DEBUG: trace bot message rendering
+                          if (typeof window !== 'undefined') {
+                            window._debugLastInteraction = {
+                              hasCurrent: !!chatHook.currentMessage,
+                              currentStatus: chatHook.currentMessage?.status,
+                              nextMsg: nextMsg ? { from: nextMsg.from, hasText: !!nextMsg.text, hasAgentCells: !!(nextMsg.agentCells?.length), text: (nextMsg.text || '').slice(0, 50) } : null,
+                              resolvedMsg: msg ? { from: msg.from, hasText: !!msg.text, hasAgentCells: !!(msg.agentCells?.length) } : null,
+                              messagesCount: chatHook.messages.length,
+                              lastUserIdx: lastUserMessageIdx,
+                            };
+                          }
                           if (!msg) return null;
                           // 'done' status means finalize() kept the message alive for smooth
                           // transition — treat it as saved (not live) for rendering purposes.
@@ -2853,6 +2855,17 @@ function AppInner() {
                             </div>
                           );
                         })()}
+                        {/* DEBUG: show save state */}
+                        {typeof window !== 'undefined' && window._debugBotSave && (
+                          <div style={{ fontSize: 9, color: '#ff6b6b', padding: '4px 8px', fontFamily: 'monospace', background: 'rgba(255,0,0,0.1)', borderRadius: 4, margin: '4px 0' }}>
+                            SAVE: hook={String(window._debugBotSave.hasHook)} card={window._debugBotSave.cardId} text={window._debugBotSave.textLen}ch cells={JSON.stringify(window._debugBotSave.cellTexts)}
+                          </div>
+                        )}
+                        {typeof window !== 'undefined' && window._debugMsgDone && (
+                          <div style={{ fontSize: 9, color: '#4ecdc4', padding: '4px 8px', fontFamily: 'monospace', background: 'rgba(0,255,200,0.1)', borderRadius: 4, margin: '4px 0' }}>
+                            MSG_DONE: received={String(window._debugMsgDone.received)} t={window._debugMsgDone.timestamp}
+                          </div>
+                        )}
                         {/* Streaming Message - handles both Loading (Thinking) and Generating phases */}
                         {/* CRITICAL: Only render StreamingChatMessage if no saved bot message exists yet */}
                         {/* This prevents double-rendering when message is saved but timeout hasn't cleared streamingMessage */}
@@ -3050,8 +3063,6 @@ function AppInner() {
             currentAuthToken={currentAuthToken}
             onClose={handleClose}
             plusiEnabled={isReview ? false : mascotEnabled}
-            stickyAgent={stickyAgent}
-            onStickyAgentChange={setStickyAgent}
             topSlot={topSlot}
             hideInput={hideInput}
             placeholder={placeholder}
