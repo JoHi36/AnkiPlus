@@ -216,7 +216,7 @@ const DIVIDER_STYLE = {
 };
 
 const SECONDARY_ROW_STYLE = {
-  display: 'flex', gap: 20, alignItems: 'flex-end',
+  display: 'flex', gap: 20, alignItems: 'center',
 };
 
 const STREAK_WIDGET_STYLE = {
