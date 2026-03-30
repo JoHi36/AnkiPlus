@@ -107,7 +107,7 @@ function flattenLevel(roots) {
 
 const CELL_GAP = 4;
 const CELL_RADIUS = 14;
-const MIN_AREA_FRAC = 0.03; // every cell gets at least 3% of total area
+const MIN_AREA_FRAC = 0.08; // every cell gets at least 8% of total area
 
 const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({
   deckData, onSelectDeck, onDrillDown, selectedDeckIds = [],
