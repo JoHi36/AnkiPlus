@@ -701,4 +701,15 @@ const DOCK_CSS = `
     0% { opacity: 0; transform: translateX(-4px) scale(0.96); }
     100% { opacity: 1; transform: translateX(0) scale(1); }
   }
+
+  @keyframes plusi-bubble-in {
+    from { opacity: 0; transform: translateX(-8px) scale(0.95); }
+    to { opacity: 1; transform: translateX(0) scale(1); }
+  }
+
+  .plusi-bubble-scroll {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .plusi-bubble-scroll::-webkit-scrollbar { display: none; }
 `;
