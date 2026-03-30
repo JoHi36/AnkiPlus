@@ -87,7 +87,11 @@ function flattenLevel(roots) {
     var total = Math.max(1, deck.total || 1);
     var mature = deck.mature || 0;
     var young = deck.young || 0;
-    var strength = (mature + young * 0.5) / total;
+    // Continuous weighting: same formula as backend retrieval metric
+    // mature (ivl >= 21) = 1.0, young = ivl/21 (approximated as 0.5 average)
+    // For treemap we use the deck-level counts, so approximate:
+    // mature contributes 1.0, young contributes ~0.33 (avg young ivl ~7 / 21)
+    var strength = (mature + young * 0.33) / total;
     var hasChildren = deck.children && deck.children.length > 0;
     return {
       id: deck.id,
