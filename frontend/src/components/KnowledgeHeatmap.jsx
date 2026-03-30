@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo, useImperativeHandle, forwardRef } from 'react';
 
 // ─── Treemap layout ──────────────────────────────────────────────────────────
 
@@ -76,6 +76,7 @@ function masteryGradientStyle(strength) {
     textColor: `rgba(${r},${g},${b},0.85)`,
     labelColor: `rgba(${r},${g},${b},0.4)`,
     metaColor: `rgba(${r},${g},${b},0.25)`,
+    selectedBorder: `rgba(${r},${g},${b},0.5)`,
   };
 }
 
@@ -86,8 +87,6 @@ function flattenLevel(roots) {
     var total = Math.max(1, deck.total || 1);
     var mature = deck.mature || 0;
     var young = deck.young || 0;
-    // Strength = fraction of cards that are NOT new (mature + young / total)
-    // Mature cards count full, young cards count half (still being learned)
     var strength = (mature + young * 0.5) / total;
     var hasChildren = deck.children && deck.children.length > 0;
     return {
@@ -109,35 +108,36 @@ function flattenLevel(roots) {
 const CELL_GAP = 3;
 const CELL_RADIUS = 14;
 
-const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSelectDeck, selectedDeckId }, ref) {
+const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({
+  deckData, onSelectDeck, onDrillDown, selectedDeckIds = [],
+}, ref) {
   const containerRef = useRef(null);
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
 
-  // currentPath: array of { name, roots } for breadcrumb nav
   const [currentPath, setCurrentPath] = useState([]);
   const [currentRoots, setCurrentRoots] = useState([]);
 
-  // Animation state: 'idle' | 'morphOut' | 'morphIn'
   const [animState, setAnimState] = useState('idle');
   const [morphTarget, setMorphTarget] = useState(null);
   const [cells, setCells] = useState([]);
   const [pendingRoots, setPendingRoots] = useState(null);
 
-  // long-press detection
-  const longPressRef = useRef(null);
-  const longPressTriggered = useRef(false);
+  // Double-tap detection
+  const lastTapRef = useRef({ id: null, time: 0 });
 
-  // ── Drill-down method (exposed to parent via ref) ───────────────────────
+  const selectedSet = useMemo(() => new Set(selectedDeckIds), [selectedDeckIds]);
+
+  // ── Drill-down ──────────────────────────────────────────────────────────
 
   const drillInto = useCallback((deck) => {
     if (!deck?.hasChildren) return;
-    onSelectDeck?.(null);
     const cellRect = cells.find(c => c.id === deck.id);
     setMorphTarget(cellRect || null);
     setAnimState('morphOut');
     setPendingRoots(deck.children);
     setCurrentPath(prev => [...prev, { name: deck.name, roots: currentRoots }]);
-  }, [cells, currentRoots, onSelectDeck]);
+    onDrillDown?.();
+  }, [cells, currentRoots, onDrillDown]);
 
   useImperativeHandle(ref, () => ({ drillInto }), [drillInto]);
 
@@ -161,7 +161,6 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
 
   useEffect(() => {
     if (deckData?.roots) {
-      // Auto-drill into single root deck so treemap shows meaningful children
       const roots = deckData.roots;
       const nonEmpty = roots.filter(d => (d.total || 0) > 0);
       if (nonEmpty.length === 1 && nonEmpty[0].children?.length > 0) {
@@ -171,60 +170,48 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
         setCurrentRoots(roots);
         setCurrentPath([]);
       }
-      onSelectDeck?.(null);
     }
   }, [deckData]);
 
-  // ── Compute cells when roots or size changes ─────────────────────────────
+  // ── Compute cells ────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!containerSize.w || !containerSize.h) return;
     const items = flattenLevel(currentRoots);
-    // Sort descending by strength (strongest top-left)
     items.sort((a, b) => b.strength - a.strength);
     const mapped = items.map(d => ({ ...d, value: d.cards }));
     const layout = squarify(mapped, 0, 0, containerSize.w, containerSize.h);
     setCells(layout);
   }, [currentRoots, containerSize]);
 
-  // ── Pointer handlers (single-tap → level 2, long-press → drill-down) ──
+  // ── Click: single-tap = toggle select, double-tap = drill-down ──────────
 
-  const handlePointerDown = useCallback((cell) => {
-    longPressTriggered.current = false;
-    longPressRef.current = setTimeout(() => {
-      longPressTriggered.current = true;
+  const handleCellClick = useCallback((cell) => {
+    const now = Date.now();
+    const last = lastTapRef.current;
+
+    if (last.id === cell.id && now - last.time < 400) {
+      // Double-tap → drill-down
+      lastTapRef.current = { id: null, time: 0 };
       if (cell.hasChildren) {
         drillInto(cell);
       }
-    }, 500);
-  }, [drillInto]);
-
-  const handlePointerUp = useCallback(() => {
-    if (longPressRef.current) {
-      clearTimeout(longPressRef.current);
-      longPressRef.current = null;
+    } else {
+      // Single-tap → toggle selection
+      lastTapRef.current = { id: cell.id, time: now };
+      onSelectDeck?.(cell);
     }
-  }, []);
+  }, [drillInto, onSelectDeck]);
 
-  const handleCellClick = useCallback((cell) => {
-    if (longPressTriggered.current) return;
-    // Single tap → open Level 2 (deck focus)
-    onSelectDeck?.(cell);
-  }, [onSelectDeck]);
-
-  // ── Morph animation timing ───────────────────────────────────────────────
+  // ── Morph animation ──────────────────────────────────────────────────────
 
   useEffect(() => {
     if (animState !== 'morphOut') return;
-
     const t = setTimeout(() => {
-      if (pendingRoots) {
-        setCurrentRoots(pendingRoots);
-      }
+      if (pendingRoots) setCurrentRoots(pendingRoots);
       setMorphTarget(null);
       setAnimState('morphIn');
     }, 500);
-
     return () => clearTimeout(t);
   }, [animState, pendingRoots]);
 
@@ -238,7 +225,6 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
 
   const navigateTo = useCallback((idx) => {
     if (idx < 0) {
-      // Go to root
       if (deckData?.roots) setCurrentRoots(deckData.roots);
       setCurrentPath([]);
     } else {
@@ -246,30 +232,34 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
       setCurrentRoots(entry.roots);
       setCurrentPath(prev => prev.slice(0, idx));
     }
-    onSelectDeck?.(null);
     setAnimState('idle');
-  }, [currentPath, deckData, onSelectDeck]);
+  }, [currentPath, deckData]);
+
+  // ── Overall mastery for the bar ─────────────────────────────────────────
+
+  const overallMastery = useMemo(() => {
+    if (!cells.length) return 0;
+    let totalCards = 0, weightedStrength = 0;
+    for (const c of cells) {
+      totalCards += c.cards;
+      weightedStrength += c.strength * c.cards;
+    }
+    return totalCards > 0 ? weightedStrength / totalCards : 0;
+  }, [cells]);
 
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div style={WRAPPER_STYLE}>
       {/* Treemap container */}
       <div
         ref={containerRef}
-        style={{
-          width: '100%',
-          aspectRatio: '16/9',
-          position: 'relative',
-          borderRadius: 16,
-          overflow: 'hidden',
-        }}
+        style={CONTAINER_STYLE}
       >
-        {cells.map((cell, i) => {
+        {cells.map((cell) => {
           const isMorphTarget = animState !== 'idle' && morphTarget?.id === cell.id;
           const isOther = animState === 'morphOut' && morphTarget && morphTarget.id !== cell.id;
-          const isNew = animState === 'morphIn';
-
+          const isSelected = selectedSet.has(cell.id);
           const colors = masteryGradientStyle(cell.strength);
 
           let cellStyle = {
@@ -286,7 +276,9 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
             alignItems: 'center',
             padding: '12px 14px',
             background: colors.background,
-            border: '1px solid ' + colors.borderColor,
+            border: isSelected
+              ? `2px solid ${colors.selectedBorder}`
+              : `1px solid ${colors.borderColor}`,
             borderRadius: CELL_RADIUS,
             transition: [
               'left 0.55s cubic-bezier(0.4,0,0.15,1)',
@@ -294,7 +286,7 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
               'width 0.55s cubic-bezier(0.4,0,0.15,1)',
               'height 0.55s cubic-bezier(0.4,0,0.15,1)',
               'opacity 0.3s ease',
-              'background 0.55s ease',
+              'border 0.15s ease',
             ].join(', '),
           };
 
@@ -302,13 +294,10 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
             cellStyle = {
               ...cellStyle,
               left: 0, top: 0, width: containerSize.w, height: containerSize.h,
-              background: 'transparent',
-              zIndex: 20,
+              background: 'transparent', zIndex: 20,
             };
           } else if (isOther) {
             cellStyle = { ...cellStyle, opacity: 0, pointerEvents: 'none' };
-          } else if (isNew) {
-            // morphIn: let transition handle it
           }
 
           const textVisible = !(isMorphTarget && animState === 'morphOut');
@@ -320,9 +309,6 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
             <div
               key={cell.id}
               style={cellStyle}
-              onPointerDown={() => handlePointerDown(cell)}
-              onPointerUp={handlePointerUp}
-              onPointerLeave={handlePointerUp}
               onClick={() => handleCellClick(cell)}
             >
               {textVisible && (
@@ -333,14 +319,9 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
                       color: colors.labelColor,
                       letterSpacing: 1,
                       textTransform: 'uppercase',
-                      lineHeight: 1,
-                      marginBottom: 2,
-                      transition: 'opacity 0.2s',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      maxWidth: '100%',
-                      textAlign: 'center',
+                      lineHeight: 1, marginBottom: 2,
+                      overflow: 'hidden', textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap', maxWidth: '100%', textAlign: 'center',
                     }}>
                       {cell.name}
                       {cell.hasChildren && (
@@ -352,19 +333,14 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
                     fontSize: Math.max(18, Math.min(34, cell.w / 8)),
                     fontWeight: 200,
                     color: colors.textColor,
-                    lineHeight: 1,
-                    textAlign: 'center',
-                    transition: 'opacity 0.2s',
+                    lineHeight: 1, textAlign: 'center',
                   }}>
                     {pct}%
                   </div>
                   {showMeta && (
                     <div style={{
-                      fontSize: 11,
-                      color: colors.metaColor,
-                      marginTop: 3,
-                      transition: 'opacity 0.2s',
-                      textAlign: 'center',
+                      fontSize: 11, color: colors.metaColor,
+                      marginTop: 3, textAlign: 'center',
                     }}>
                       {cell.cards} Karten
                     </div>
@@ -375,52 +351,125 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
           );
         })}
 
-        {/* Morphin overlay: empty cells spawn from center */}
         {animState === 'morphIn' && cells.length === 0 && (
-          <div style={{
-            position: 'absolute', inset: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'var(--ds-text-tertiary)', fontSize: 13,
-          }}>
-            Keine Unterstapel
-          </div>
+          <div style={EMPTY_OVERLAY_STYLE}>Keine Unterstapel</div>
         )}
       </div>
 
-      {/* Breadcrumb — below treemap */}
-      {currentPath.length > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          fontSize: 12, color: 'var(--ds-text-secondary)',
-        }}>
-          <button
-            onClick={() => navigateTo(-1)}
-            style={{
-              background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-              color: 'var(--ds-accent)', fontSize: 12, fontFamily: 'inherit',
-            }}
-          >
-            Alle Stapel
-          </button>
-          {currentPath.map((entry, idx) => (
-            <React.Fragment key={idx}>
-              <span style={{ color: 'var(--ds-text-tertiary)', opacity: 0.5 }}>/</span>
-              <button
-                onClick={() => navigateTo(idx)}
-                style={{
-                  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                  color: idx === currentPath.length - 1 ? 'var(--ds-text-primary)' : 'var(--ds-accent)',
-                  fontSize: 12, fontFamily: 'inherit', fontWeight: idx === currentPath.length - 1 ? 600 : 400,
-                }}
-              >
-                {entry.name}
+      {/* Footer: Breadcrumbs + Mastery bar */}
+      <div style={FOOTER_STYLE}>
+        <div style={BREADCRUMB_STYLE}>
+          {currentPath.length > 0 ? (
+            <>
+              <button onClick={() => navigateTo(-1)} style={CRUMB_LINK_STYLE}>
+                Alle Stapel
               </button>
-            </React.Fragment>
-          ))}
+              {currentPath.map((entry, idx) => (
+                <React.Fragment key={idx}>
+                  <span style={CRUMB_SEP_STYLE}>/</span>
+                  <button
+                    onClick={() => navigateTo(idx)}
+                    style={idx === currentPath.length - 1 ? CRUMB_ACTIVE_STYLE : CRUMB_LINK_STYLE}
+                  >
+                    {entry.name}
+                  </button>
+                </React.Fragment>
+              ))}
+            </>
+          ) : (
+            <span style={{ fontSize: 11, color: 'var(--ds-text-muted)' }}>
+              Tippe zum Auswählen · Doppeltippe zum Vertiefen
+            </span>
+          )}
         </div>
-      )}
+
+        {/* Mastery gradient bar */}
+        <div style={MASTERY_BAR_WRAP_STYLE}>
+          <div style={MASTERY_BAR_BG_STYLE}>
+            <div style={{
+              ...MASTERY_BAR_FILL_STYLE,
+              width: `${Math.round(overallMastery * 100)}%`,
+            }} />
+            <div style={{
+              ...MASTERY_BAR_INDICATOR_STYLE,
+              left: `${Math.round(overallMastery * 100)}%`,
+            }} />
+          </div>
+          <span style={MASTERY_BAR_LABEL_STYLE}>
+            {Math.round(overallMastery * 100)}%
+          </span>
+        </div>
+      </div>
     </div>
   );
 });
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
+const WRAPPER_STYLE = {
+  width: '100%', display: 'flex', flexDirection: 'column', gap: 8,
+};
+
+const CONTAINER_STYLE = {
+  width: '100%', aspectRatio: '16/9',
+  position: 'relative', borderRadius: 16, overflow: 'hidden',
+};
+
+const EMPTY_OVERLAY_STYLE = {
+  position: 'absolute', inset: 0,
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  color: 'var(--ds-text-tertiary)', fontSize: 13,
+};
+
+const FOOTER_STYLE = {
+  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+  padding: '0 4px',
+};
+
+const BREADCRUMB_STYLE = {
+  display: 'flex', alignItems: 'center', gap: 6,
+  fontSize: 12, color: 'var(--ds-text-secondary)',
+};
+
+const CRUMB_LINK_STYLE = {
+  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+  color: 'var(--ds-accent)', fontSize: 12, fontFamily: 'inherit',
+};
+
+const CRUMB_ACTIVE_STYLE = {
+  ...CRUMB_LINK_STYLE,
+  color: 'var(--ds-text-primary)', fontWeight: 600,
+};
+
+const CRUMB_SEP_STYLE = {
+  color: 'var(--ds-text-tertiary)', opacity: 0.5,
+};
+
+const MASTERY_BAR_WRAP_STYLE = {
+  display: 'flex', alignItems: 'center', gap: 8,
+};
+
+const MASTERY_BAR_BG_STYLE = {
+  width: 80, height: 4, borderRadius: 2,
+  background: 'var(--ds-border-subtle)',
+  position: 'relative', overflow: 'visible',
+};
+
+const MASTERY_BAR_FILL_STYLE = {
+  height: '100%', borderRadius: 2,
+  background: 'linear-gradient(90deg, var(--ds-red), var(--ds-yellow), var(--ds-green))',
+  transition: 'width 0.5s ease',
+};
+
+const MASTERY_BAR_INDICATOR_STYLE = {
+  position: 'absolute', top: -2, width: 8, height: 8,
+  borderRadius: '50%', background: 'var(--ds-text-primary)',
+  transform: 'translateX(-50%)', transition: 'left 0.5s ease',
+};
+
+const MASTERY_BAR_LABEL_STYLE = {
+  fontSize: 11, fontWeight: 500, color: 'var(--ds-text-secondary)',
+  fontVariantNumeric: 'tabular-nums',
+};
 
 export default KnowledgeHeatmap;

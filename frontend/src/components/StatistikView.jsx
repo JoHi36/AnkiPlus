@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import useStatistikData from '../hooks/useStatistikData';
 import useDeckFocus from '../hooks/useDeckFocus';
 import KnowledgeHeatmap from './KnowledgeHeatmap';
@@ -17,6 +17,49 @@ export default function StatistikView({ deckData }) {
     focusDeck,
     goBack,
   } = useDeckFocus();
+
+  // Multi-select state: array of cell objects
+  const [selectedCells, setSelectedCells] = useState([]);
+
+  const selectedDeckIds = useMemo(
+    () => selectedCells.map(c => c.id),
+    [selectedCells]
+  );
+
+  const handleSelectDeck = useCallback((cell) => {
+    if (!cell) return;
+    setSelectedCells(prev => {
+      const exists = prev.find(c => c.id === cell.id);
+      if (exists) return prev.filter(c => c.id !== cell.id);
+      return [...prev, cell];
+    });
+  }, []);
+
+  const handleDrillDown = useCallback(() => {
+    setSelectedCells([]);
+  }, []);
+
+  // Aggregated stats for selected decks
+  const selectionSummary = useMemo(() => {
+    if (!selectedCells.length) return null;
+    let totalCards = 0, dueReview = 0, dueNew = 0;
+    for (const c of selectedCells) {
+      totalCards += c.cards || 0;
+      dueReview += c.dueReview || 0;
+      dueNew += c.dueNew || 0;
+    }
+    return { totalCards, dueReview, dueNew, total: dueReview + dueNew };
+  }, [selectedCells]);
+
+  const handleSetFocus = useCallback(() => {
+    if (selectedCells.length === 1) {
+      focusDeck(selectedCells[0]);
+    } else if (selectedCells.length > 1) {
+      // Treat as combined — use first deck's ID for trajectory
+      // but pass all selected info
+      focusDeck(selectedCells[0]);
+    }
+  }, [selectedCells, focusDeck]);
 
   if (loading || !data) {
     return (
@@ -37,7 +80,7 @@ export default function StatistikView({ deckData }) {
     return (
       <div style={PAGE_STYLE}>
         <button onClick={goBack} style={BACK_BUTTON_STYLE}>
-          ← Übersicht
+          ← Fokus ändern
         </button>
 
         {deckLoading && !traj ? (
@@ -65,23 +108,26 @@ export default function StatistikView({ deckData }) {
   // ── Level 1: Wissenslandschaft ───────────────────────────────────────────
   return (
     <div style={PAGE_STYLE}>
-      <div style={HERO_SECTION_STYLE}>
-        <div style={HERO_HEADER_STYLE}>
-          <span style={HERO_TITLE_STYLE}>Wissensstand</span>
-        </div>
-        {deckData?.roots?.length > 0 ? (
-          <KnowledgeHeatmap
-            deckData={deckData}
-            onSelectDeck={focusDeck}
-            selectedDeckId={null}
-          />
-        ) : (
-          <div style={EMPTY_STYLE}>Deck-Daten werden geladen…</div>
-        )}
+      {/* CTA Header */}
+      <div style={CTA_STYLE}>
+        <span style={CTA_TEXT_STYLE}>Wähle deinen Fokus</span>
       </div>
+
+      {/* Hero: Treemap */}
+      {deckData?.roots?.length > 0 ? (
+        <KnowledgeHeatmap
+          deckData={deckData}
+          onSelectDeck={handleSelectDeck}
+          onDrillDown={handleDrillDown}
+          selectedDeckIds={selectedDeckIds}
+        />
+      ) : (
+        <div style={EMPTY_STYLE}>Deck-Daten werden geladen…</div>
+      )}
 
       <div style={DIVIDER_STYLE} />
 
+      {/* Secondary charts */}
       <div style={SECONDARY_ROW_STYLE}>
         <div style={HEATMAP_COL_STYLE}>
           <YearHeatmap
@@ -99,6 +145,35 @@ export default function StatistikView({ deckData }) {
           />
         </div>
       </div>
+
+      {/* Bottom dock — appears when decks are selected */}
+      {selectionSummary && (
+        <div style={DOCK_WRAP_STYLE}>
+          <div className="ds-frosted" style={DOCK_STYLE}>
+            <div style={DOCK_STATS_STYLE}>
+              <div style={DOCK_STAT_STYLE}>
+                <span style={DOCK_STAT_VALUE_STYLE}>{selectionSummary.dueReview}</span>
+                <span style={DOCK_STAT_LABEL_STYLE}>Pflege</span>
+              </div>
+              <span style={DOCK_PLUS_STYLE}>+</span>
+              <div style={DOCK_STAT_STYLE}>
+                <span style={{ ...DOCK_STAT_VALUE_STYLE, color: 'var(--ds-green)' }}>
+                  {selectionSummary.dueNew}
+                </span>
+                <span style={DOCK_STAT_LABEL_STYLE}>Neue</span>
+              </div>
+              <span style={DOCK_EQUALS_STYLE}>=</span>
+              <div style={DOCK_STAT_STYLE}>
+                <span style={DOCK_TOTAL_VALUE_STYLE}>{selectionSummary.total}</span>
+                <span style={DOCK_STAT_LABEL_STYLE}>Gesamt</span>
+              </div>
+            </div>
+            <button onClick={handleSetFocus} style={DOCK_BUTTON_STYLE}>
+              Fokus festlegen
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -110,37 +185,34 @@ const LOADING_STYLE = {
 };
 
 const PAGE_STYLE = {
-  flex: 1, display: 'flex', flexDirection: 'column', gap: 28,
+  flex: 1, display: 'flex', flexDirection: 'column', gap: 24,
   maxWidth: 900, margin: '0 auto', width: '100%',
-  padding: '16px 36px 80px',
+  padding: '16px 36px 100px',
   overflowY: 'auto', scrollbarWidth: 'none',
+  alignItems: 'center',
 };
 
-const HERO_SECTION_STYLE = {
-  display: 'flex', flexDirection: 'column', gap: 12,
+const CTA_STYLE = {
+  textAlign: 'center', padding: '8px 0',
 };
 
-const HERO_HEADER_STYLE = {
-  display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-  padding: '0 4px',
-};
-
-const HERO_TITLE_STYLE = {
-  fontSize: 13, fontWeight: 500, color: 'var(--ds-text-tertiary)',
-  letterSpacing: 0.3,
+const CTA_TEXT_STYLE = {
+  fontSize: 15, fontWeight: 500, color: 'var(--ds-text-secondary)',
+  letterSpacing: 0.2,
 };
 
 const EMPTY_STYLE = {
   display: 'flex', alignItems: 'center', justifyContent: 'center',
   height: 200, color: 'var(--ds-text-muted)', fontSize: 12,
+  width: '100%',
 };
 
 const DIVIDER_STYLE = {
-  height: 1, background: 'var(--ds-border-subtle)', margin: '0 4px',
+  height: 1, background: 'var(--ds-border-subtle)', width: '100%',
 };
 
 const SECONDARY_ROW_STYLE = {
-  display: 'flex', gap: 28, padding: '0 4px',
+  display: 'flex', gap: 28, width: '100%',
 };
 
 const HEATMAP_COL_STYLE = { flex: 1 };
@@ -155,5 +227,58 @@ const BACK_BUTTON_STYLE = {
 
 const LOADING_BLOCK_STYLE = {
   display: 'flex', alignItems: 'center', justifyContent: 'center',
-  height: 200,
+  height: 200, width: '100%',
+};
+
+// ── Bottom Dock ──────────────────────────────────────────────────────────────
+
+const DOCK_WRAP_STYLE = {
+  position: 'fixed', bottom: 22, left: '50%',
+  transform: 'translateX(-50%)', zIndex: 100,
+};
+
+const DOCK_STYLE = {
+  display: 'flex', alignItems: 'center', gap: 20,
+  padding: '12px 20px', borderRadius: 16,
+  border: '1px solid var(--ds-border-subtle)',
+  boxShadow: 'var(--ds-shadow-lg)',
+};
+
+const DOCK_STATS_STYLE = {
+  display: 'flex', alignItems: 'center', gap: 12,
+};
+
+const DOCK_STAT_STYLE = {
+  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+};
+
+const DOCK_STAT_VALUE_STYLE = {
+  fontSize: 18, fontWeight: 600, color: 'var(--ds-accent)',
+  fontVariantNumeric: 'tabular-nums',
+};
+
+const DOCK_STAT_LABEL_STYLE = {
+  fontSize: 10, color: 'var(--ds-text-muted)', textTransform: 'uppercase',
+  letterSpacing: 0.5,
+};
+
+const DOCK_TOTAL_VALUE_STYLE = {
+  fontSize: 20, fontWeight: 600, color: 'var(--ds-text-primary)',
+  fontVariantNumeric: 'tabular-nums',
+};
+
+const DOCK_PLUS_STYLE = {
+  fontSize: 14, color: 'var(--ds-text-muted)', fontWeight: 300,
+};
+
+const DOCK_EQUALS_STYLE = {
+  fontSize: 14, color: 'var(--ds-text-tertiary)', fontWeight: 300,
+};
+
+const DOCK_BUTTON_STYLE = {
+  padding: '8px 20px', borderRadius: 10,
+  background: 'var(--ds-accent)', color: '#fff',
+  border: 'none', fontSize: 13, fontWeight: 600,
+  fontFamily: 'inherit', cursor: 'pointer',
+  transition: 'opacity 0.15s',
 };
