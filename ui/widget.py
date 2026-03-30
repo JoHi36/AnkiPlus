@@ -1262,6 +1262,10 @@ class ChatbotWidget(QWidget):
             'getDeckTrajectory': self._msg_get_deck_trajectory,
             'getDeckSessionSuggestion': self._msg_get_deck_session_suggestion,
             'getDeckMastery': self._msg_get_deck_mastery,
+            # Focus CRUD
+            'saveFocus': self._msg_save_focus,
+            'getFocuses': self._msg_get_focuses,
+            'deleteFocus': self._msg_delete_focus,
             # Card review (React ReviewerView)
             'card.flip': self._msg_flip_card,
             'card.rate': self._msg_rate_card,
@@ -2890,6 +2894,28 @@ class ChatbotWidget(QWidget):
             logger.warning("Failed to parse getDeckMastery response: %s", e)
             parsed = {"error": "Parse error"}
         self._send_to_frontend("deckMastery", parsed)
+
+    def _msg_save_focus(self, data=None):
+        result = self.bridge.saveFocus(json.dumps(data or {}))
+        try:
+            parsed = json.loads(result)
+        except (json.JSONDecodeError, TypeError):
+            parsed = {"error": "Parse error"}
+        self._send_to_frontend("focusSaved", parsed)
+
+    def _msg_get_focuses(self, data=None):
+        result = self.bridge.getFocuses()
+        try:
+            parsed = json.loads(result)
+        except (json.JSONDecodeError, TypeError):
+            parsed = []
+        self._send_to_frontend("focusList", parsed)
+
+    def _msg_delete_focus(self, data=None):
+        focus_id = data.get("focusId") if data else None
+        if focus_id:
+            self.bridge.deleteFocus(focus_id)
+        self._msg_get_focuses()
 
     def _msg_toggle_settings(self, data=None):
         try:

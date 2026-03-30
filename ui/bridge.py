@@ -1505,3 +1505,45 @@ class WebBridge(QObject):
             logger.exception("getDeckMastery error: %s", e)
             return json.dumps({"error": str(e)})
 
+    @pyqtSlot(str, result=str)
+    def saveFocus(self, focus_json):
+        """Save a new focus."""
+        try:
+            try:
+                from .focus_store import save_focus
+            except ImportError:
+                from ui.focus_store import save_focus
+            data = json.loads(focus_json)
+            result = save_focus(data)
+            return json.dumps(result)
+        except Exception as e:
+            logger.exception("saveFocus error: %s", e)
+            return json.dumps({"error": str(e)})
+
+    @pyqtSlot(result=str)
+    def getFocuses(self):
+        """Return all active focuses."""
+        try:
+            try:
+                from .focus_store import get_focuses
+            except ImportError:
+                from ui.focus_store import get_focuses
+            return json.dumps(get_focuses())
+        except Exception as e:
+            logger.exception("getFocuses error: %s", e)
+            return json.dumps([])
+
+    @pyqtSlot(str, result=str)
+    def deleteFocus(self, focus_id):
+        """Archive a focus."""
+        try:
+            try:
+                from .focus_store import delete_focus
+            except ImportError:
+                from ui.focus_store import delete_focus
+            result = delete_focus(focus_id)
+            return json.dumps(result)
+        except Exception as e:
+            logger.exception("deleteFocus error: %s", e)
+            return json.dumps({"error": str(e)})
+
