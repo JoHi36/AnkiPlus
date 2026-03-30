@@ -1982,13 +1982,21 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                           );
                         })()}
 
+                        {/* Research sources */}
+                        {cell.sources && cell.sources.length > 0 && (
+                          <ResearchContent
+                            sources={cell.sources}
+                            answer={cell.text || ''}
+                          />
+                        )}
                         {/* Tool widgets */}
-                        {cell.toolResults && cell.toolResults.length > 0 && (
-                          <ComponentErrorBoundary>
+                        {cell.toolWidgets && cell.toolWidgets.length > 0 && (
+                          <ComponentErrorBoundary fallback={<div style={{ color: 'var(--ds-text-tertiary)', fontSize: 'var(--ds-text-sm)', padding: '8px 12px' }}>Widget render failed</div>}>
                             <ToolWidgetRenderer
-                              toolResults={cell.toolResults}
+                              toolWidgets={cell.toolWidgets}
                               bridge={bridge}
-                              onPreviewCard={onPreviewCard}
+                              isStreaming={cell.status === 'streaming'}
+                              isLastMessage={isLastMessage}
                             />
                           </ComponentErrorBoundary>
                         )}
