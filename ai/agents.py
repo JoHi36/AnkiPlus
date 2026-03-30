@@ -42,6 +42,10 @@ class AgentDefinition:
     enabled_key: str = ''              # Config key: 'tutor_enabled'
     is_default: bool = False           # True only for Tutor
 
+    # Channel binding (agent-kanal-paradigma)
+    channel: str = ''                  # 'stapel', 'session', 'plusi', 'reviewer-inline'
+    uses_rag: bool = False             # Whether this agent calls analyze_query()
+
     # Execution
     run_module: str = ''               # 'ai.tutor', 'research', 'plusi.agent'
     run_function: str = ''             # 'run_tutor', 'run_research'
@@ -56,7 +60,6 @@ class AgentDefinition:
 
     # Routing
     router_hint: str = ''
-    can_handoff_to: List[str] = field(default_factory=list)
 
     # Agent Studio UI
     widget_type: str = ''           # 'embeddings', 'budget', '' (empty = no widget)
@@ -161,7 +164,7 @@ def get_registry_for_frontend(config: dict) -> List[dict]:
             'badgeLogo': a.badge_logo,
             'loadingHintTemplate': a.loading_hint_template,
             'tools': a.tools,
-            'canHandoffTo': a.can_handoff_to,
+            'channel': a.channel,
             # New fields
             'widgetType': a.widget_type,
             'submenuLabel': submenu_label,
@@ -345,6 +348,9 @@ register_agent(AgentDefinition(
     # Configuration
     enabled_key='tutor_enabled',
     is_default=True,
+    # Channel
+    channel='session',
+    uses_rag=True,
     # Execution
     run_module='ai.tutor',
     run_function='run_tutor',
@@ -366,8 +372,6 @@ register_agent(AgentDefinition(
         'card', 'card_review', 'insights', 'rag',
         'session', 'deck_info', 'memory',
     ],
-    # Routing
-    can_handoff_to=['research'],
     # Labels
     pipeline_label='Tutor',
     reasoning_steps=[
@@ -442,6 +446,9 @@ register_agent(AgentDefinition(
     badge_logo='',
     # Configuration
     enabled_key='research_enabled',
+    # Channel
+    channel='stapel',
+    uses_rag=True,
     # Execution
     run_module='research',
     run_function='run_research',
@@ -450,13 +457,6 @@ register_agent(AgentDefinition(
     # Context
     context_sources=['session', 'deck_info', 'memory'],
     # Routing
-    router_hint=(
-        'Delegate ONLY when: (1) user explicitly asks for internet sources/research, OR '
-        '(2) question clearly requires current/external information that cannot exist in flashcards '
-        '(e.g. latest guidelines, recent news, specific URLs). '
-        'Do NOT delegate when: question can be answered from flashcards, is about the user\'s '
-        'learning material, is casual conversation, or is a general knowledge question the AI knows.'
-    ),
     main_model_hint=(
         'Use search_web tool ONLY when: (1) user explicitly asks for sources/citations from the internet, '
         '(2) your own knowledge is clearly insufficient AND the user\'s cards don\'t cover the topic, '
@@ -464,7 +464,6 @@ register_agent(AgentDefinition(
         'Do NOT use when: LERNMATERIAL contains relevant cards, your knowledge is sufficient, '
         'or the question is about the user\'s own cards/deck.'
     ),
-    can_handoff_to=['tutor'],
     # Labels
     pipeline_label='Research',
     reasoning_steps=[
@@ -518,6 +517,9 @@ register_agent(AgentDefinition(
     badge_logo='',
     # Configuration
     enabled_key='help_enabled',
+    # Channel
+    channel='plusi',
+    uses_rag=False,
     # Execution
     run_module='ai.help_agent',
     run_function='run_help',
@@ -525,12 +527,6 @@ register_agent(AgentDefinition(
     tools=['change_theme', 'change_setting', 'navigate_to', 'explain_feature'],
     # Context
     context_sources=['memory'],
-    # Routing
-    router_hint=(
-        'Wenn der User nach App-Funktionen fragt, Einstellungen ändern möchte, '
-        'oder Hilfe zur Bedienung braucht. Nicht für Lernfragen.'
-    ),
-    can_handoff_to=['tutor'],
     # Labels
     pipeline_label='Help',
     loading_hint_template='Schaue nach...',
@@ -577,6 +573,9 @@ register_agent(AgentDefinition(
     badge_logo='',
     # Configuration
     enabled_key='mascot_enabled',
+    # Channel
+    channel='plusi',
+    uses_rag=False,
     # Execution
     run_module='plusi.agent',
     run_function='run_plusi',
@@ -585,14 +584,6 @@ register_agent(AgentDefinition(
     # Context
     context_sources=['memory', 'agent_state'],
     # Routing
-    router_hint=(
-        'Delegate ONLY when: (1) user explicitly says "Plusi" or "@Plusi", OR '
-        '(2) message is PURELY casual/emotional with NO factual question component '
-        '(e.g. "ich bin müde", "das nervt", "hey"). '
-        'Do NOT delegate when: user asks ANY factual question (even if frustrated), '
-        'wants card explanations, wants a quiz, or combines emotion with a learning question. '
-        'If unsure, do NOT delegate — the main model can spawn Plusi via tool if needed.'
-    ),
     main_model_hint=(
         'Use spawn_plusi tool ONLY when: (1) user explicitly mentions Plusi by name, '
         '(2) the interaction is purely emotional/personal with no factual question, '
@@ -601,7 +592,6 @@ register_agent(AgentDefinition(
         'or any question that needs RAG/card context. A frustrated user asking "I don\'t understand enzymes" '
         'needs an explanation, not Plusi.'
     ),
-    can_handoff_to=['tutor'],
     on_finished=_plusi_on_finished,
     # Labels
     pipeline_label='Plusi',
