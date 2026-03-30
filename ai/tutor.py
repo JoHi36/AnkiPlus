@@ -54,7 +54,7 @@ def run_tutor(situation, emit_step=None, memory=None,
             config (dict): Application config (api_key, ai_tools, ...).
             context (dict): Current card context (cardId, noteId, question, answer, ...).
             history (list): Conversation history.
-            routing_result: Routing result with search parameters.
+            routing_result: RagAnalysis from rag_analyzer with search parameters.
             model (str): Primary model name.
             fallback_model (str): Fallback model name.
             mode (str): Response mode ('compact', etc.).
@@ -72,7 +72,7 @@ def run_tutor(situation, emit_step=None, memory=None,
     config = kwargs.get('config') or {}
     context = kwargs.get('context')
     history = kwargs.get('history', [])
-    routing_result = kwargs.get('routing_result')
+    rag_analysis = kwargs.get('routing_result')  # RagAnalysis from rag_analyzer
     model = kwargs.get('model', 'gemini-3-flash-preview')
     fallback_model = kwargs.get('fallback_model', 'gemini-2.5-flash')
     mode = kwargs.get('mode', 'compact')
@@ -144,7 +144,7 @@ def run_tutor(situation, emit_step=None, memory=None,
     else:
         # Normal path: RAG retrieval from routing result
         try:
-            if routing_result is not None:
+            if rag_analysis is not None:
                 _rag_fn = rag_retrieve_fn
                 if _rag_fn is None:
                     _rag_fn = _make_default_rag_retrieve_fn()
@@ -153,7 +153,7 @@ def run_tutor(situation, emit_step=None, memory=None,
                     user_message=situation,
                     context=context,
                     config=config,
-                    routing_result=routing_result,
+                    routing_result=rag_analysis,
                     emit_step=emit_step,
                     embedding_manager=embedding_manager,
                     rag_retrieve_fn=_rag_fn,
