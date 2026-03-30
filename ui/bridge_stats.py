@@ -165,6 +165,181 @@ def get_trajectory_data():
         return {"error": str(e)}
 
 
+def _sql_in(ids):
+    """Build a SQL IN clause string from a collection of IDs."""
+    if not ids:
+        return "(0)"
+    return "(%s)" % ",".join(str(int(i)) for i in ids)
+
+
+def get_deck_trajectory(deck_id_str):
+    """Daily progress for the last 180 days, scoped to a single deck.
+
+    Same structure as get_trajectory_data() but filtered to cards in the
+    given deck (including child decks via name prefix matching).
+
+    Args:
+        deck_id_str: deck ID as string.
+
+    Returns:
+        dict with keys:
+          - days: list of 180 dicts [{date, mature_pct, review_count, new_count}]
+          - current_pct: float
+          - avg_new_7d: float
+          - total_cards, mature_cards, young_cards: int
+    """
+    try:
+        from ..utils.anki import run_on_main_thread
+    except ImportError:
+        from utils.anki import run_on_main_thread
+
+    def _collect():
+        from aqt import mw
+        from datetime import date, timedelta, datetime
+
+        if mw is None or mw.col is None:
+            return {"error": "No collection"}
+
+        try:
+            deck_id = int(deck_id_str)
+        except (ValueError, TypeError):
+            return {"error": "Invalid deck_id"}
+
+        # Resolve deck name for child-deck matching
+        deck = mw.col.decks.get(deck_id)
+        if deck is None:
+            return {"error": "Deck not found"}
+        deck_name = deck["name"]
+
+        # Collect this deck + all child deck IDs by name prefix
+        all_decks = mw.col.decks.all()
+        prefix = deck_name + "::"
+        all_dids = [deck_id]
+        for d in all_decks:
+            if d["name"].startswith(prefix):
+                all_dids.append(d["id"])
+
+        # Get all card IDs in these decks
+        all_card_ids = set(mw.col.db.list(
+            "SELECT id FROM cards WHERE did IN " + _sql_in(all_dids)
+        ))
+
+        total = len(all_card_ids)
+        if total == 0:
+            empty_days = []
+            today = date.today()
+            for i in range(179, -1, -1):
+                d = today - timedelta(days=i)
+                empty_days.append({
+                    "date": d.isoformat(),
+                    "mature_pct": 0.0,
+                    "review_count": 0,
+                    "new_count": 0,
+                })
+            return {
+                "days": empty_days,
+                "current_pct": 0.0,
+                "avg_new_7d": 0.0,
+                "total_cards": 0,
+                "mature_cards": 0,
+                "young_cards": 0,
+            }
+
+        card_in_clause = _sql_in(all_card_ids)
+
+        today = date.today()
+        days_back = 180
+        rollover_offset_ms = _DAY_ROLLOVER_HOUR * 3600 * 1000
+
+        rows = mw.col.db.all(
+            "SELECT r.id, r.type FROM revlog r WHERE r.cid IN %s AND r.id >= ?"
+            % card_in_clause,
+            int((datetime.combine(today - timedelta(days=days_back),
+                 datetime.min.time()).timestamp()) * 1000
+                - rollover_offset_ms),
+        )
+
+        from collections import defaultdict
+        day_reviews = defaultdict(int)
+        day_new = defaultdict(int)
+
+        for rev_id, rev_type in rows:
+            shifted_ms = rev_id - rollover_offset_ms
+            shifted_s = shifted_ms / 1000
+            day_str = date.fromtimestamp(shifted_s).isoformat()
+            day_reviews[day_str] += 1
+            if rev_type == 0:
+                day_new[day_str] += 1
+
+        days_data = []
+        date_strings = []
+        new_counts_last_7 = []
+        for i in range(days_back - 1, -1, -1):
+            d = today - timedelta(days=i)
+            d_str = d.isoformat()
+            rev_count = day_reviews.get(d_str, 0)
+            n_count = day_new.get(d_str, 0)
+            days_data.append({
+                "date": d_str,
+                "review_count": rev_count,
+                "new_count": n_count,
+            })
+            date_strings.append(d_str)
+            if i < 7:
+                new_counts_last_7.append(n_count)
+
+        avg_new_7d = round(sum(new_counts_last_7) / max(len(new_counts_last_7), 1), 1)
+
+        # Current maturity for this deck's cards
+        try:
+            mature = mw.col.db.scalar(
+                "SELECT COUNT(*) FROM cards WHERE id IN %s AND ivl >= 21" % card_in_clause
+            ) or 0
+            young = mw.col.db.scalar(
+                "SELECT COUNT(*) FROM cards WHERE id IN %s AND ivl > 0 AND ivl < 21" % card_in_clause
+            ) or 0
+            current_pct = round((mature + young * 0.5) / total * 100, 1)
+        except Exception as e:
+            logger.warning("get_deck_trajectory: card maturity query failed: %s", e)
+            current_pct = 0.0
+            mature = 0
+            young = 0
+
+        # Reconstruct daily mature_pct from revlog intervals
+        try:
+            ivl_rows = mw.col.db.all(
+                "SELECT r.cid, date(r.id/1000 - ?, 'unixepoch', 'localtime'), r.ivl "
+                "FROM revlog r WHERE r.cid IN %s AND r.id >= ? ORDER BY r.id"
+                % card_in_clause,
+                _DAY_ROLLOVER_HOUR * 3600,
+                int((datetime.combine(today - timedelta(days=days_back),
+                     datetime.min.time()).timestamp()) * 1000
+                    - _DAY_ROLLOVER_HOUR * 3600 * 1000),
+            )
+            daily_pcts = _compute_daily_mature_pct(ivl_rows, date_strings, total)
+            for entry, pct in zip(days_data, daily_pcts):
+                entry["mature_pct"] = pct
+        except Exception as e:
+            logger.warning("get_deck_trajectory: mature_pct reconstruction failed: %s", e)
+            for entry in days_data:
+                entry["mature_pct"] = 0.0
+
+        return {
+            "days": days_data,
+            "current_pct": current_pct,
+            "avg_new_7d": avg_new_7d,
+            "total_cards": total,
+            "mature_cards": mature,
+            "young_cards": young,
+        }
+
+    try:
+        return run_on_main_thread(_collect, timeout=9)
+    except Exception as e:
+        logger.exception("get_deck_trajectory failed: %s", e)
+        return {"error": str(e)}
+
+
 def get_daily_breakdown():
     """Today's reviews split by card type, plus remaining due count.
 
@@ -448,4 +623,122 @@ def get_time_of_day():
         return run_on_main_thread(_collect, timeout=9)
     except Exception as e:
         logger.exception("get_time_of_day failed: %s", e)
+        return {"error": str(e)}
+
+
+def get_deck_session_suggestion(deck_id_str):
+    """Session suggestion for a specific deck: due reviews + recommended new cards.
+
+    Args:
+        deck_id_str: deck ID as string.
+
+    Returns:
+        dict with keys:
+          - dueReview: int — cards due for review today
+          - recommendedNew: int — new cards to study (deck daily limit minus already done)
+          - total: int — dueReview + recommendedNew
+          - deckName: str
+          - totalCards: int — all cards in deck (including children)
+          - matureCards: int — cards with ivl >= 21
+          - youngCards: int — cards with 0 < ivl < 21
+          - newAvailable: int — unseen cards (queue == 0)
+    """
+    try:
+        from ..utils.anki import run_on_main_thread
+    except ImportError:
+        from utils.anki import run_on_main_thread
+
+    def _collect():
+        from aqt import mw
+        from datetime import date, datetime
+
+        if mw is None or mw.col is None:
+            return {"error": "No collection"}
+
+        try:
+            did = int(deck_id_str)
+        except (ValueError, TypeError):
+            return {"error": "Invalid deck_id"}
+
+        deck = mw.col.decks.get(did)
+        if deck is None:
+            return {"error": "Deck not found"}
+
+        deck_name = deck.get("name", "")
+
+        # Collect this deck + all child deck IDs by name prefix
+        all_decks = mw.col.decks.all()
+        prefix = deck_name + "::"
+        child_dids = [did]
+        for d in all_decks:
+            if d["name"].startswith(prefix):
+                child_dids.append(d["id"])
+
+        # Build placeholder string for SQL IN clause
+        placeholders = ",".join("?" * len(child_dids))
+
+        # Card counts
+        total_cards = mw.col.db.scalar(
+            "SELECT COUNT(*) FROM cards WHERE did IN (%s)" % placeholders,
+            *child_dids
+        ) or 0
+
+        mature_cards = mw.col.db.scalar(
+            "SELECT COUNT(*) FROM cards WHERE did IN (%s) AND ivl >= 21" % placeholders,
+            *child_dids
+        ) or 0
+
+        young_cards = mw.col.db.scalar(
+            "SELECT COUNT(*) FROM cards WHERE did IN (%s) AND ivl > 0 AND ivl < 21" % placeholders,
+            *child_dids
+        ) or 0
+
+        new_available = mw.col.db.scalar(
+            "SELECT COUNT(*) FROM cards WHERE did IN (%s) AND queue = 0" % placeholders,
+            *child_dids
+        ) or 0
+
+        # Due reviews: queue IN (1, 2, 3)
+        due_review = mw.col.db.scalar(
+            "SELECT COUNT(*) FROM cards WHERE did IN (%s) AND queue IN (1, 2, 3)" % placeholders,
+            *child_dids
+        ) or 0
+
+        # Deck daily new card limit from config
+        try:
+            conf = mw.col.decks.config_dict_for_deck_id(did)
+            daily_new_limit = conf.get("new", {}).get("perDay", 20)
+        except Exception:
+            daily_new_limit = 20
+
+        # New cards already studied today (type == 0 in revlog)
+        rollover_offset_ms = _DAY_ROLLOVER_HOUR * 3600 * 1000
+        today = date.today()
+        day_start_ms = int(datetime.combine(today, datetime.min.time()).timestamp() * 1000) - rollover_offset_ms
+
+        new_studied_today = mw.col.db.scalar(
+            "SELECT COUNT(*) FROM revlog r JOIN cards c ON r.cid = c.id "
+            "WHERE c.did IN (%s) AND r.type = 0 AND r.id >= ?" % placeholders,
+            *(child_dids + [day_start_ms])
+        ) or 0
+
+        recommended_new = max(0, daily_new_limit - new_studied_today)
+        # Cap at available new cards
+        recommended_new = min(recommended_new, new_available)
+
+        return {
+            "dueReview": due_review,
+            "recommendedNew": recommended_new,
+            "total": due_review + recommended_new,
+            "deckName": deck_name,
+            "totalCards": total_cards,
+            "matureCards": mature_cards,
+            "youngCards": young_cards,
+            "newAvailable": new_available,
+        }
+
+    try:
+        return run_on_main_thread(_collect, timeout=9)
+    except Exception as e:
+        logger.exception("get_deck_session_suggestion failed: %s", e)
         return {"error": str(e)}

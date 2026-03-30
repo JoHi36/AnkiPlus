@@ -1463,3 +1463,31 @@ class WebBridge(QObject):
             logger.exception("getStatistikData error: %s", e)
             return json.dumps({"error": str(e)})
 
+    @pyqtSlot(str, result=str)
+    def getDeckTrajectory(self, deck_id_str):
+        """Return trajectory data for a specific deck."""
+        try:
+            try:
+                from .bridge_stats import get_deck_trajectory
+            except ImportError:
+                from ui.bridge_stats import get_deck_trajectory
+            result = get_deck_trajectory(deck_id_str)
+            return json.dumps(result)
+        except Exception as e:
+            logger.exception("getDeckTrajectory error: %s", e)
+            return json.dumps({"error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    def getDeckSessionSuggestion(self, deck_id_str):
+        """Return session suggestion for a specific deck."""
+        try:
+            try:
+                from .bridge_stats import get_deck_session_suggestion
+            except ImportError:
+                from ui.bridge_stats import get_deck_session_suggestion
+            result = get_deck_session_suggestion(deck_id_str)
+            return json.dumps(result)
+        except Exception as e:
+            logger.exception("getDeckSessionSuggestion error: %s", e)
+            return json.dumps({"error": str(e)})
+

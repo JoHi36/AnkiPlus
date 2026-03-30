@@ -1259,6 +1259,8 @@ class ChatbotWidget(QWidget):
             # Stats
             'stats.open': self._msg_open_stats,
             'getStatistikData': self._msg_get_statistik_data,
+            'getDeckTrajectory': self._msg_get_deck_trajectory,
+            'getDeckSessionSuggestion': self._msg_get_deck_session_suggestion,
             # Card review (React ReviewerView)
             'card.flip': self._msg_flip_card,
             'card.rate': self._msg_rate_card,
@@ -2845,6 +2847,34 @@ class ChatbotWidget(QWidget):
             logger.warning("Failed to parse bridge response for getStatistikData: %s", e)
             parsed = {"error": "Parse error"}
         self._send_to_frontend("statistikData", parsed)
+
+    def _msg_get_deck_trajectory(self, data=None):
+        """Fetch per-deck trajectory data and send to frontend."""
+        deck_id = data.get("deckId") if data else None
+        if not deck_id:
+            self._send_to_frontend("deckTrajectory", {"error": "No deckId"})
+            return
+        result = self.bridge.getDeckTrajectory(str(deck_id))
+        try:
+            parsed = json.loads(result)
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning("Failed to parse getDeckTrajectory response: %s", e)
+            parsed = {"error": "Parse error"}
+        self._send_to_frontend("deckTrajectory", parsed)
+
+    def _msg_get_deck_session_suggestion(self, data=None):
+        """Fetch per-deck session suggestion and send to frontend."""
+        deck_id = data.get("deckId") if data else None
+        if not deck_id:
+            self._send_to_frontend("deckSessionSuggestion", {"error": "No deckId"})
+            return
+        result = self.bridge.getDeckSessionSuggestion(str(deck_id))
+        try:
+            parsed = json.loads(result)
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning("Failed to parse getDeckSessionSuggestion response: %s", e)
+            parsed = {"error": "Parse error"}
+        self._send_to_frontend("deckSessionSuggestion", parsed)
 
     def _msg_toggle_settings(self, data=None):
         try:
