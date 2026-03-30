@@ -63,6 +63,7 @@ class EmbeddingManager:
         self._lock = threading.Lock()
         self._background_thread = None
         self._index_loaded = False  # lazy-load flag
+        self._kg_term_index = None  # cached KG term index
 
     def set_credentials(self, api_key=None, backend_url=None, auth_headers_fn=None):
         if api_key is not None:
@@ -246,9 +247,15 @@ class EmbeddingManager:
     def load_kg_term_index(self):
         """Load pre-computed KG term embeddings into memory for fuzzy matching.
 
+        Cached after first load — subsequent calls return the cached index.
+        Call invalidate_kg_term_index() after re-embedding terms.
+
         Returns:
             Dict of {term: normalized_vector (list of float)} or empty dict.
         """
+        if self._kg_term_index is not None:
+            return self._kg_term_index
+
         import struct
         import math
 
@@ -260,7 +267,8 @@ class EmbeddingManager:
 
             raw = load_term_embeddings()
             if not raw:
-                return {}
+                self._kg_term_index = {}
+                return self._kg_term_index
 
             index = {}
             for term, emb_bytes in raw.items():
@@ -273,11 +281,16 @@ class EmbeddingManager:
                     vec = [v / norm for v in vec]
                 index[term] = vec
 
+            self._kg_term_index = index
             logger.info("Loaded %d KG term embeddings for fuzzy matching", len(index))
             return index
         except Exception as e:
             logger.warning("Failed to load KG term index: %s", e)
             return {}
+
+    def invalidate_kg_term_index(self):
+        """Clear cached KG term index so next load_kg_term_index() reloads from DB."""
+        self._kg_term_index = None
 
     def fuzzy_term_search(self, term_embedding, kg_term_index, top_k=3, min_similarity=0.60):
         """Find nearest KG terms by cosine similarity.
@@ -362,9 +375,13 @@ class EmbeddingManager:
         self._background_thread.progress_signal.connect(
             lambda cur, tot: logger.debug("Embedding progress: %d/%d", cur, tot)
         )
-        self._background_thread.finished_signal.connect(
-            lambda n: logger.info("Background embedding complete: %d cards embedded", n)
-        )
+        def _on_bg_done(n):
+            logger.info("Background embedding complete: %d cards embedded", n)
+            # Pre-warm both indices so first request is fast
+            self.invalidate_kg_term_index()
+            self.load_kg_term_index()
+            self.load_index()
+        self._background_thread.finished_signal.connect(_on_bg_done)
         self._background_thread.start()
 
     def stop_background_embedding(self):
