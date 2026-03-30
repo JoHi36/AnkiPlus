@@ -123,8 +123,9 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
   const [cells, setCells] = useState([]);
   const [pendingRoots, setPendingRoots] = useState(null);
 
-  // double-tap detection
-  const lastTapRef = useRef({ name: null, time: 0 });
+  // long-press detection
+  const longPressRef = useRef(null);
+  const longPressTriggered = useRef(false);
 
   // ── Drill-down method (exposed to parent via ref) ───────────────────────
 
@@ -186,23 +187,30 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
     setCells(layout);
   }, [currentRoots, containerSize]);
 
-  // ── Click handler ────────────────────────────────────────────────────────
+  // ── Pointer handlers (single-tap → level 2, long-press → drill-down) ──
+
+  const handlePointerDown = useCallback((cell) => {
+    longPressTriggered.current = false;
+    longPressRef.current = setTimeout(() => {
+      longPressTriggered.current = true;
+      if (cell.hasChildren) {
+        drillInto(cell);
+      }
+    }, 500);
+  }, [drillInto]);
+
+  const handlePointerUp = useCallback(() => {
+    if (longPressRef.current) {
+      clearTimeout(longPressRef.current);
+      longPressRef.current = null;
+    }
+  }, []);
 
   const handleCellClick = useCallback((cell) => {
-    const now = Date.now();
-    const last = lastTapRef.current;
-
-    if (last.name === cell.name && now - last.time < 400 && cell.hasChildren) {
-      // Double-click → drill down with morph animation
-      lastTapRef.current = { name: null, time: 0 };
-      drillInto(cell);
-    } else {
-      lastTapRef.current = { name: cell.name, time: now };
-      // Toggle selection — notify parent
-      const next = selectedDeckId === cell.id ? null : cell;
-      onSelectDeck?.(next);
-    }
-  }, [cells, currentRoots, selectedDeckId, onSelectDeck, drillInto]);
+    if (longPressTriggered.current) return;
+    // Single tap → open Level 2 (deck focus)
+    onSelectDeck?.(cell);
+  }, [onSelectDeck]);
 
   // ── Morph animation timing ───────────────────────────────────────────────
 
@@ -312,6 +320,9 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
             <div
               key={cell.id}
               style={cellStyle}
+              onPointerDown={() => handlePointerDown(cell)}
+              onPointerUp={handlePointerUp}
+              onPointerLeave={handlePointerUp}
               onClick={() => handleCellClick(cell)}
             >
               {textVisible && (
