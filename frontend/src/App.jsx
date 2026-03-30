@@ -51,7 +51,6 @@ import useSmartSearch from './hooks/useSmartSearch';
 import usePlusiVoice from './hooks/usePlusiVoice';
 import { useLidLift } from './hooks/useLidLift';
 import LidLiftTransition from './components/LidLiftTransition';
-import AgentCanvas from './components/AgentCanvas';
 
 // Register step renderers once at module load time
 registerDefaultRenderers();
@@ -209,7 +208,9 @@ function AppInner() {
   const searchBarRef = useRef(null);
 
   // SearchSidebar delayed unmount — slide out before removing
-  const searchSidebarShouldShow = smartSearch.hasResults || smartSearch.isSearching;
+  // Also show sidebar when lid-lift is active (agent canvas mode)
+  const lidIsActive = lidLift.state === 'animating' || lidLift.state === 'open';
+  const searchSidebarShouldShow = smartSearch.hasResults || smartSearch.isSearching || lidIsActive;
   const [searchSidebarMounted, setSearchSidebarMounted] = useState(false);
   const [searchSidebarExiting, setSearchSidebarExiting] = useState(false);
   useEffect(() => {
@@ -233,76 +234,33 @@ function AppInner() {
     // FLIP step 1: measure current position before switching to fixed
     const rect = searchBarRef.current?.measureRect();
     if (!rect) return;
+    // Reset sidebar animation flag so it slides in fresh
+    if (smartSearch.sidebarHasAnimated) {
+      smartSearch.sidebarHasAnimated.current = false;
+    }
     lidLift.trigger();
-  }, [lidLift]);
+  }, [lidLift, smartSearch.sidebarHasAnimated]);
 
-  // Canvas messages — track messages sent during this lid-lift session
-  const [canvasMessages, setCanvasMessages] = useState([]);
-  const [canvasStreaming, setCanvasStreaming] = useState(null);
-  const [canvasIsLoading, setCanvasIsLoading] = useState(false);
-
-  // Send message directly via bridge (not App.handleSend which switches views)
-  const handleCanvasSend = useCallback((text) => {
+  // Lid-lift search: triggers existing SmartSearch (SearchSidebar slides in)
+  const handleLidSearch = useCallback((text) => {
     if (!text.trim()) return;
-    const userMsg = { role: 'user', content: text, id: `canvas-${Date.now()}` };
-    setCanvasMessages(prev => [...prev, userMsg]);
-    setCanvasIsLoading(true);
-    setCanvasStreaming('');
+    smartSearch.search(text.trim());
+  }, [smartSearch]);
 
-    // Send via bridge directly — the Python handler will stream back
-    if (window.ankiBridge) {
-      window.ankiBridge.addMessage('sendMessage', {
-        text: text.trim(),
-        context: JSON.stringify({ source: 'agentCanvas' }),
-      });
-    }
-  }, []);
-
-  // Listen for AI response events targeted at agent canvas
-  useEffect(() => {
-    const onTextChunk = (e) => {
-      if (lidLift.state !== 'open' && lidLift.state !== 'animating') return;
-      setCanvasStreaming(prev => (prev || '') + (e.detail?.text || ''));
-    };
-    const onStreamEnd = (e) => {
-      setCanvasStreaming(prev => {
-        if (prev != null) {
-          setCanvasMessages(msgs => [...msgs, { role: 'assistant', content: prev, id: `canvas-ai-${Date.now()}` }]);
-        }
-        return null;
-      });
-      setCanvasIsLoading(false);
-    };
-    window.addEventListener('ankiTextChunk', onTextChunk);
-    window.addEventListener('ankiStreamEnd', onStreamEnd);
-    return () => {
-      window.removeEventListener('ankiTextChunk', onTextChunk);
-      window.removeEventListener('ankiStreamEnd', onStreamEnd);
-    };
-  }, [lidLift.state]);
-
-  // Reset canvas messages when lid closes
-  useEffect(() => {
-    if (lidLift.state === 'idle') {
-      setCanvasMessages([]);
-      setCanvasStreaming(null);
-      setCanvasIsLoading(false);
-    }
-  }, [lidLift.state]);
-
-  // ESC key closes lid-lift (reverse if no messages, instant reset if messages)
+  // ESC key closes lid-lift (reverse if no search results, instant reset otherwise)
   useEffect(() => {
     if (lidLift.state !== 'open') return;
     const handler = (e) => {
       if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
-        lidLift.close(canvasMessages.length > 0);
+        const hasResults = smartSearch.hasResults || smartSearch.isSearching;
+        lidLift.close(hasResults);
       }
     };
-    window.addEventListener('keydown', handler, true); // capture phase
+    window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
-  }, [lidLift.state, lidLift.close, canvasMessages.length]);
+  }, [lidLift.state, lidLift.close, smartSearch.hasResults, smartSearch.isSearching]);
 
   const initialView = (() => {
     try { const p = new URLSearchParams(window.location.search).get('view'); if (p === 'statistik') return 'statistik'; if (p === 'deckBrowser') return 'deckBrowser'; } catch {}
@@ -314,7 +272,7 @@ function AppInner() {
 
   // Fullscreen view state (merged from MainApp)
   const [ankiState, setAnkiState] = useState('deckBrowser');
-  const [viewMode, setViewMode] = useState('graph'); // 'graph' | 'decks'
+  const [viewMode, setViewMode] = useState('decks'); // 'graph' | 'decks'
   const [deckBrowserData, setDeckBrowserData] = useState(null);
   const [overviewData, setOverviewData] = useState(null);
   const messagesEndRef = useRef(null);
@@ -485,7 +443,7 @@ function AppInner() {
 
   // Mascot state
   const { mood, setEventMood, setAiMood, resetMood } = useMascot();
-  const { voiceState, recordingDuration } = usePlusiVoice({ onMoodChange: setAiMood });
+  const { voiceState, recordingDuration, lastVoiceText, lastVoiceAudio } = usePlusiVoice({ onMoodChange: setAiMood });
   const [mascotEnabled, setMascotEnabled] = useState(false);
   const mascotEnabledRef = useRef(false);
   useEffect(() => {
@@ -496,6 +454,7 @@ function AppInner() {
   const [activeAgentColor, setActiveAgentColor] = useState(null);
   const [activeAgentName, setActiveAgentName] = useState(null);
   const [stickyAgent, setStickyAgent] = useState(null);
+  const [lastPlusiText, setLastPlusiText] = useState(null);
 
   // Detect subagent routing from reasoning store (covers both direct @Name and router delegation)
   useEffect(() => {
@@ -1288,6 +1247,9 @@ function AppInner() {
 
             // Update mood if provided (Plusi compatibility)
             if (payload.mood) setAiMood(payload.mood);
+            if (payload.agent === 'plusi' && payload.text) {
+              setLastPlusiText(payload.text);
+            }
           }
         }
 
@@ -2319,6 +2281,9 @@ function AppInner() {
       onEvent={eventTriggerRef}
       enabled={mascotEnabled}
       voiceState={voiceState}
+      plusiText={lastPlusiText}
+      voiceAudio={lastVoiceAudio}
+      voiceTranscript={lastVoiceText}
     />,
     document.body,
   );
@@ -2347,6 +2312,7 @@ function AppInner() {
               </React.Suspense>
             ) : (
               <ComponentErrorBoundary fallback={<div style={FALLBACK_VIEW_STYLE}>View failed to render. Try refreshing.</div>}>
+                {/* DeckBrowserView — always mounted, fades content during lid-lift */}
                 <DeckBrowserView
                   data={deckBrowserData}
                   isPremium={isPremium}
@@ -2355,29 +2321,35 @@ function AppInner() {
                   onLidClick={handleLidClick}
                   onLidAnimEnd={lidLift.onAnimationComplete}
                   searchBarRef={searchBarRef}
-                  onCanvasSend={handleCanvasSend}
+                  onSearchSubmit={handleLidSearch}
                 />
-                {/* Lid-Lift overlay elements — CockpitBar + SparkBurst + AgentCanvas */}
+                {/* Lid-Lift overlay: CockpitBar + SparkBurst */}
                 {lidLift.state !== 'idle' && (
-                  <>
-                    <LidLiftTransition
-                      state={lidLift.state}
-                      onAnimationComplete={lidLift.onAnimationComplete}
-                      deckName={deckBrowserData?.roots?.[0]?.name || null}
-                      onClose={() => lidLift.close(canvasMessages.length > 0)}
-                    />
-                    <AgentCanvas
-                      messages={canvasMessages}
-                      streamingText={canvasStreaming}
-                      isLoading={canvasIsLoading}
-                      renderMessage={(msg, i) => (
-                        <ChatMessage key={msg.id || i} message={msg} />
-                      )}
-                      renderStreaming={() => canvasStreaming != null ? (
-                        <StreamingChatMessage content={canvasStreaming} />
-                      ) : null}
-                    />
-                  </>
+                  <LidLiftTransition
+                    state={lidLift.state}
+                    onAnimationComplete={lidLift.onAnimationComplete}
+                    deckName={deckBrowserData?.roots?.[0]?.name || null}
+                    onClose={() => lidLift.close(smartSearch.hasResults || smartSearch.isSearching)}
+                  />
+                )}
+                {/* GraphView overlay — renders search visualizations when lid-lift is open */}
+                {(lidLift.state === 'open' || lidLift.state === 'animating') && (
+                  <div style={{
+                    position: 'absolute', inset: 0, zIndex: 3,
+                    opacity: lidLift.state === 'animating' ? 0 : 1,
+                    transition: 'opacity 0.3s ease',
+                    pointerEvents: lidLift.state === 'open' ? 'auto' : 'none',
+                  }}>
+                    <React.Suspense fallback={<div style={{ flex: 1 }} />}>
+                      <GraphView
+                        onToggleView={() => {}}
+                        isPremium={isPremium}
+                        deckData={deckBrowserData}
+                        smartSearch={smartSearch}
+                        bridge={bridgeRef.current}
+                      />
+                    </React.Suspense>
+                  </div>
                 )}
               </ComponentErrorBoundary>
             )
@@ -2444,6 +2416,7 @@ function AppInner() {
               termDefinition={smartSearch.termDefinition}
               imageSelectedCardIds={smartSearch.imageSelectedCardIds}
               searchStreamId={smartSearch.searchStreamId}
+              hideActionDock={lidIsActive}
             />
           )}
         </div>

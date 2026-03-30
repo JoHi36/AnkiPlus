@@ -10,6 +10,8 @@ interface UsePlusiVoiceReturn {
   voiceState: VoiceState;
   /** Duration of current recording in ms (updated every 100ms) */
   recordingDuration: number;
+  lastVoiceText: string;
+  lastVoiceAudio: string | null;
 }
 
 // Minimum recording duration to avoid accidental taps (ms)
@@ -20,6 +22,8 @@ export default function usePlusiVoice(options?: UsePlusiVoiceOptions): UsePlusiV
   onMoodChangeRef.current = options?.onMoodChange;
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [lastVoiceText, setLastVoiceText] = useState('');
+  const [lastVoiceAudio, setLastVoiceAudio] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const startTimeRef = useRef(0);
@@ -107,8 +111,10 @@ export default function usePlusiVoice(options?: UsePlusiVoiceOptions): UsePlusiV
   // Listen for Plusi voice response from Python
   useEffect(() => {
     const handleVoiceResponse = (e: CustomEvent) => {
-      const { audio, mood } = e.detail?.data || e.detail || {};
+      const { audio, mood, text } = e.detail?.data || e.detail || {};
       if (mood && onMoodChangeRef.current) onMoodChangeRef.current(mood);
+      if (text) setLastVoiceText(text);
+      if (audio) setLastVoiceAudio(audio);
       if (!audio) {
         setVoiceState('idle');
         return;
@@ -149,5 +155,5 @@ export default function usePlusiVoice(options?: UsePlusiVoiceOptions): UsePlusiV
     };
   }, []);
 
-  return { voiceState, recordingDuration };
+  return { voiceState, recordingDuration, lastVoiceText, lastVoiceAudio };
 }
