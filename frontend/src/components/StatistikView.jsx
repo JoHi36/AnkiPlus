@@ -185,6 +185,7 @@ const LOADING_STYLE = {
 
 const PAGE_STYLE = {
   flex: 1, display: 'flex', flexDirection: 'column', gap: 24,
+  justifyContent: 'center',
   maxWidth: 780, margin: '0 auto', width: '100%',
   padding: '24px 0 100px',
   overflowY: 'auto', scrollbarWidth: 'thin',
