@@ -2,6 +2,10 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 
 type VoiceState = 'idle' | 'recording' | 'processing' | 'speaking';
 
+interface UsePlusiVoiceOptions {
+  onMoodChange?: (mood: string) => void;
+}
+
 interface UsePlusiVoiceReturn {
   voiceState: VoiceState;
   /** Duration of current recording in ms (updated every 100ms) */
@@ -11,7 +15,9 @@ interface UsePlusiVoiceReturn {
 // Minimum recording duration to avoid accidental taps (ms)
 const MIN_RECORDING_MS = 300;
 
-export default function usePlusiVoice(): UsePlusiVoiceReturn {
+export default function usePlusiVoice(options?: UsePlusiVoiceOptions): UsePlusiVoiceReturn {
+  const onMoodChangeRef = useRef(options?.onMoodChange);
+  onMoodChangeRef.current = options?.onMoodChange;
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
   const [recordingDuration, setRecordingDuration] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -102,6 +108,7 @@ export default function usePlusiVoice(): UsePlusiVoiceReturn {
   useEffect(() => {
     const handleVoiceResponse = (e: CustomEvent) => {
       const { audio, mood } = e.detail?.data || e.detail || {};
+      if (mood && onMoodChangeRef.current) onMoodChangeRef.current(mood);
       if (!audio) {
         setVoiceState('idle');
         return;

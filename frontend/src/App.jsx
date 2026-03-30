@@ -49,6 +49,9 @@ import { registerDefaultRenderers } from './reasoning/defaultRenderers';
 import { ReasoningProvider, useReasoningDispatch, useReasoningStore } from './reasoning/store';
 import useSmartSearch from './hooks/useSmartSearch';
 import usePlusiVoice from './hooks/usePlusiVoice';
+import { useLidLift } from './hooks/useLidLift';
+import LidLiftTransition from './components/LidLiftTransition';
+import AgentCanvas from './components/AgentCanvas';
 
 // Register step renderers once at module load time
 registerDefaultRenderers();
@@ -202,6 +205,8 @@ function AppInner() {
   const reviewTrailHook = useReviewTrail();
   const insightsHook = useInsights();
   const smartSearch = useSmartSearch();
+  const lidLift = useLidLift();
+  const searchBarRef = useRef(null);
 
   // SearchSidebar delayed unmount — slide out before removing
   const searchSidebarShouldShow = smartSearch.hasResults || smartSearch.isSearching;
@@ -222,6 +227,83 @@ function AppInner() {
     }
   }, [searchSidebarShouldShow]);
 
+  // ── Lid-Lift: trigger handler (FLIP measurement + state machine) ──
+  const handleLidClick = useCallback(() => {
+    if (lidLift.state !== 'idle') return;
+    // FLIP step 1: measure current position before switching to fixed
+    const rect = searchBarRef.current?.measureRect();
+    if (!rect) return;
+    lidLift.trigger();
+  }, [lidLift]);
+
+  // Canvas messages — track messages sent during this lid-lift session
+  const [canvasMessages, setCanvasMessages] = useState([]);
+  const [canvasStreaming, setCanvasStreaming] = useState(null);
+  const [canvasIsLoading, setCanvasIsLoading] = useState(false);
+
+  // Send message directly via bridge (not App.handleSend which switches views)
+  const handleCanvasSend = useCallback((text) => {
+    if (!text.trim()) return;
+    const userMsg = { role: 'user', content: text, id: `canvas-${Date.now()}` };
+    setCanvasMessages(prev => [...prev, userMsg]);
+    setCanvasIsLoading(true);
+    setCanvasStreaming('');
+
+    // Send via bridge directly — the Python handler will stream back
+    if (window.ankiBridge) {
+      window.ankiBridge.addMessage('sendMessage', {
+        text: text.trim(),
+        context: JSON.stringify({ source: 'agentCanvas' }),
+      });
+    }
+  }, []);
+
+  // Listen for AI response events targeted at agent canvas
+  useEffect(() => {
+    const onTextChunk = (e) => {
+      if (lidLift.state !== 'open' && lidLift.state !== 'animating') return;
+      setCanvasStreaming(prev => (prev || '') + (e.detail?.text || ''));
+    };
+    const onStreamEnd = (e) => {
+      setCanvasStreaming(prev => {
+        if (prev != null) {
+          setCanvasMessages(msgs => [...msgs, { role: 'assistant', content: prev, id: `canvas-ai-${Date.now()}` }]);
+        }
+        return null;
+      });
+      setCanvasIsLoading(false);
+    };
+    window.addEventListener('ankiTextChunk', onTextChunk);
+    window.addEventListener('ankiStreamEnd', onStreamEnd);
+    return () => {
+      window.removeEventListener('ankiTextChunk', onTextChunk);
+      window.removeEventListener('ankiStreamEnd', onStreamEnd);
+    };
+  }, [lidLift.state]);
+
+  // Reset canvas messages when lid closes
+  useEffect(() => {
+    if (lidLift.state === 'idle') {
+      setCanvasMessages([]);
+      setCanvasStreaming(null);
+      setCanvasIsLoading(false);
+    }
+  }, [lidLift.state]);
+
+  // ESC key closes lid-lift (reverse if no messages, instant reset if messages)
+  useEffect(() => {
+    if (lidLift.state !== 'open') return;
+    const handler = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        lidLift.close(canvasMessages.length > 0);
+      }
+    };
+    window.addEventListener('keydown', handler, true); // capture phase
+    return () => window.removeEventListener('keydown', handler, true);
+  }, [lidLift.state, lidLift.close, canvasMessages.length]);
+
   const initialView = (() => {
     try { const p = new URLSearchParams(window.location.search).get('view'); if (p === 'statistik') return 'statistik'; if (p === 'deckBrowser') return 'deckBrowser'; } catch {}
     return 'chat';
@@ -233,7 +315,6 @@ function AppInner() {
   // Fullscreen view state (merged from MainApp)
   const [ankiState, setAnkiState] = useState('deckBrowser');
   const [viewMode, setViewMode] = useState('graph'); // 'graph' | 'decks'
-  const lidLift = useLidLift();
   const [deckBrowserData, setDeckBrowserData] = useState(null);
   const [overviewData, setOverviewData] = useState(null);
   const messagesEndRef = useRef(null);
@@ -404,7 +485,7 @@ function AppInner() {
 
   // Mascot state
   const { mood, setEventMood, setAiMood, resetMood } = useMascot();
-  const { voiceState, recordingDuration } = usePlusiVoice();
+  const { voiceState, recordingDuration } = usePlusiVoice({ onMoodChange: setAiMood });
   const [mascotEnabled, setMascotEnabled] = useState(false);
   const mascotEnabledRef = useRef(false);
   useEffect(() => {
@@ -1873,24 +1954,6 @@ function AppInner() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [headerHeight, handleTrailNavigateLeft, handleTrailNavigateRight]);
 
-  // SPACE triggers lid-lift, ESC closes it (deckBrowser view only)
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (activeView !== 'deckBrowser') return;
-      if (e.code === 'Space' && lidLift.state === 'idle' && document.activeElement?.tagName !== 'TEXTAREA' && document.activeElement?.tagName !== 'INPUT') {
-        e.preventDefault();
-        lidLift.trigger();
-      }
-      if (e.key === 'Escape' && lidLift.isOpen) {
-        e.preventDefault();
-        const hasMessages = chatHook.messages.length > 0;
-        lidLift.close(hasMessages);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeView, lidLift.state, lidLift.isOpen, chatHook.messages.length]);
-
   // Report text field focus state to Python for global shortcut routing
   useEffect(() => {
     const onFocusIn = (e) => {
@@ -2276,17 +2339,6 @@ function AppInner() {
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden', position: 'relative' }}>
             {persistentTopBar}
 
-            {activeView === 'deckBrowser' && (
-              <LidLiftTransition
-                state={lidLift.state}
-                onAnimationComplete={lidLift.onAnimationComplete}
-                deckName={overviewData?.deckName || null}
-                cardCount={overviewData?.totalCards}
-                onStartLearning={() => executeAction('deck.study', { deckId: overviewData?.deckId })}
-                onClose={() => lidLift.close(false)}
-              />
-            )}
-
             <div style={FLEX_COL_FILL}>
               {activeView === 'deckBrowser' && (
                 viewMode === 'graph' ? (
@@ -2299,7 +2351,34 @@ function AppInner() {
                   data={deckBrowserData}
                   isPremium={isPremium}
                   onToggleView={() => setViewMode('graph')}
+                  lidState={lidLift.state}
+                  onLidClick={handleLidClick}
+                  onLidAnimEnd={lidLift.onAnimationComplete}
+                  searchBarRef={searchBarRef}
+                  onCanvasSend={handleCanvasSend}
                 />
+                {/* Lid-Lift overlay elements — CockpitBar + SparkBurst + AgentCanvas */}
+                {lidLift.state !== 'idle' && (
+                  <>
+                    <LidLiftTransition
+                      state={lidLift.state}
+                      onAnimationComplete={lidLift.onAnimationComplete}
+                      deckName={deckBrowserData?.roots?.[0]?.name || null}
+                      onClose={() => lidLift.close(canvasMessages.length > 0)}
+                    />
+                    <AgentCanvas
+                      messages={canvasMessages}
+                      streamingText={canvasStreaming}
+                      isLoading={canvasIsLoading}
+                      renderMessage={(msg, i) => (
+                        <ChatMessage key={msg.id || i} message={msg} />
+                      )}
+                      renderStreaming={() => canvasStreaming != null ? (
+                        <StreamingChatMessage content={canvasStreaming} />
+                      ) : null}
+                    />
+                  </>
+                )}
               </ComponentErrorBoundary>
             )
           )}
@@ -2882,22 +2961,6 @@ function AppInner() {
         onSend = handleSend;
         actionPrimary = { label: 'Schließen', shortcut: 'ESC', onClick: () => setReviewChatOpen(false) };
         actionSecondary = { label: '', shortcut: '', onClick: () => {} };
-      } else if (activeView === 'deckBrowser') {
-        topSlot = undefined;
-        hideInput = false;
-        placeholder = 'Stelle eine Frage...';
-        onSend = (text) => {
-          lidLift.trigger();
-          handleSend(text);
-        };
-        actionPrimary = {
-          label: 'Öffnen', shortcut: 'SPACE',
-          onClick: () => lidLift.trigger(),
-        };
-        actionSecondary = {
-          label: 'Senden', shortcut: '↵',
-          onClick: () => {},
-        };
       } else {
         // Normal chat mode (non-review)
         topSlot = undefined;
@@ -2923,16 +2986,12 @@ function AppInner() {
       // Settings offset shifts everything right when settings panel is open
       const sOff = settingsOpen ? 'var(--ds-settings-width)' : '0px';
       // All modes: use left+right for bounds, maxWidth+margin:auto for centering
-      const isDeckIdle = activeView === 'deckBrowser' && lidLift.state === 'idle';
-
       const posStyle = isReviewSidebar
         ? { left: 'calc(100% - var(--ds-sidebar-width) + var(--ds-space-2xl))', right: 'var(--ds-space-2xl)', bottom: 'var(--ds-space-xl)' }
-        : isDeckIdle
-          ? { left: `calc(${sOff} + 50% - 210px)`, right: `calc(50% - 210px)`, top: '50px', bottom: 'auto' }
-          : { left: `calc(${sOff} + var(--ds-space-lg))`, right: 'var(--ds-space-lg)', bottom: isReview ? 'var(--ds-space-xl)' : 'var(--ds-space-lg)' };
+        : { left: `calc(${sOff} + var(--ds-space-lg))`, right: 'var(--ds-space-lg)', bottom: isReview ? 'var(--ds-space-xl)' : 'var(--ds-space-lg)' };
 
       return (
-        <div ref={dockPulseRef} className={lidLift.state === 'animating' ? 'lid-drop' : lidLift.isReversing ? 'lid-reverse' : ''} style={{
+        <div ref={dockPulseRef} style={{
           position: 'fixed', zIndex: 60,
           ...posStyle,
           maxWidth: 'var(--ds-content-width)',
