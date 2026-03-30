@@ -108,11 +108,6 @@ export default function StatistikView({ deckData }) {
   // ── Level 1: Wissenslandschaft ───────────────────────────────────────────
   return (
     <div style={PAGE_STYLE}>
-      {/* CTA Header */}
-      <div style={CTA_STYLE}>
-        <span style={CTA_TEXT_STYLE}>Wähle deinen Fokus</span>
-      </div>
-
       {/* Hero: Treemap */}
       {deckData?.roots?.length > 0 ? (
         <KnowledgeHeatmap
@@ -146,34 +141,38 @@ export default function StatistikView({ deckData }) {
         </div>
       </div>
 
-      {/* Bottom dock — appears when decks are selected */}
-      {selectionSummary && (
-        <div style={DOCK_WRAP_STYLE}>
-          <div className="ds-frosted" style={DOCK_STYLE}>
-            <div style={DOCK_STATS_STYLE}>
-              <div style={DOCK_STAT_STYLE}>
-                <span style={DOCK_STAT_VALUE_STYLE}>{selectionSummary.dueReview}</span>
-                <span style={DOCK_STAT_LABEL_STYLE}>Pflege</span>
+      {/* Bottom dock — always visible, centered on canvas */}
+      <div style={DOCK_WRAP_STYLE}>
+        <div className="ds-frosted" style={DOCK_STYLE}>
+          {selectionSummary ? (
+            <>
+              <div style={DOCK_STATS_STYLE}>
+                <div style={DOCK_STAT_STYLE}>
+                  <span style={DOCK_STAT_VALUE_STYLE}>{selectionSummary.dueReview}</span>
+                  <span style={DOCK_STAT_LABEL_STYLE}>Pflege</span>
+                </div>
+                <span style={DOCK_PLUS_STYLE}>+</span>
+                <div style={DOCK_STAT_STYLE}>
+                  <span style={{ ...DOCK_STAT_VALUE_STYLE, color: 'var(--ds-green)' }}>
+                    {selectionSummary.dueNew}
+                  </span>
+                  <span style={DOCK_STAT_LABEL_STYLE}>Neue</span>
+                </div>
+                <span style={DOCK_EQUALS_STYLE}>=</span>
+                <div style={DOCK_STAT_STYLE}>
+                  <span style={DOCK_TOTAL_VALUE_STYLE}>{selectionSummary.total}</span>
+                  <span style={DOCK_STAT_LABEL_STYLE}>Gesamt</span>
+                </div>
               </div>
-              <span style={DOCK_PLUS_STYLE}>+</span>
-              <div style={DOCK_STAT_STYLE}>
-                <span style={{ ...DOCK_STAT_VALUE_STYLE, color: 'var(--ds-green)' }}>
-                  {selectionSummary.dueNew}
-                </span>
-                <span style={DOCK_STAT_LABEL_STYLE}>Neue</span>
-              </div>
-              <span style={DOCK_EQUALS_STYLE}>=</span>
-              <div style={DOCK_STAT_STYLE}>
-                <span style={DOCK_TOTAL_VALUE_STYLE}>{selectionSummary.total}</span>
-                <span style={DOCK_STAT_LABEL_STYLE}>Gesamt</span>
-              </div>
-            </div>
-            <button onClick={handleSetFocus} style={DOCK_BUTTON_STYLE}>
-              Fokus festlegen
-            </button>
-          </div>
+              <button onClick={handleSetFocus} style={DOCK_BUTTON_STYLE}>
+                Fokus festlegen
+              </button>
+            </>
+          ) : (
+            <span style={DOCK_HINT_STYLE}>Fokus wählen</span>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -190,15 +189,6 @@ const PAGE_STYLE = {
   padding: '16px 36px 100px',
   overflowY: 'auto', scrollbarWidth: 'thin',
   alignItems: 'center',
-};
-
-const CTA_STYLE = {
-  textAlign: 'center', padding: '8px 0',
-};
-
-const CTA_TEXT_STYLE = {
-  fontSize: 15, fontWeight: 500, color: 'var(--ds-text-secondary)',
-  letterSpacing: 0.2,
 };
 
 const EMPTY_STYLE = {
@@ -233,8 +223,8 @@ const LOADING_BLOCK_STYLE = {
 // ── Bottom Dock ──────────────────────────────────────────────────────────────
 
 const DOCK_WRAP_STYLE = {
-  position: 'fixed', bottom: 22, left: '50%',
-  transform: 'translateX(-50%)', zIndex: 100,
+  position: 'sticky', bottom: 22,
+  zIndex: 100, alignSelf: 'center',
 };
 
 const DOCK_STYLE = {
@@ -281,4 +271,9 @@ const DOCK_BUTTON_STYLE = {
   border: 'none', fontSize: 13, fontWeight: 600,
   fontFamily: 'inherit', cursor: 'pointer',
   transition: 'opacity 0.15s',
+};
+
+const DOCK_HINT_STYLE = {
+  fontSize: 13, color: 'var(--ds-text-muted)',
+  padding: '2px 12px',
 };
