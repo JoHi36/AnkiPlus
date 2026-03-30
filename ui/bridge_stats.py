@@ -16,7 +16,10 @@ _DAY_ROLLOVER_HOUR = 4
 
 
 def _compute_daily_mature_pct(revlog_rows, dates, total_cards):
-    """Reconstruct daily mature_pct from review history.
+    """Reconstruct daily mastery from review history using continuous weighting.
+
+    Each card contributes min(1.0, max(0, interval) / 21) instead of a binary
+    mature/young classification.
 
     Args:
         revlog_rows: list of (card_id, date_str, interval) tuples from revlog.
@@ -24,7 +27,7 @@ def _compute_daily_mature_pct(revlog_rows, dates, total_cards):
         total_cards: total card count in collection.
 
     Returns:
-        list of floats — one mature_pct per date.
+        list of floats — one mastery percentage per date.
     """
     if total_cards == 0 or not dates:
         return [0.0] * len(dates)
@@ -39,9 +42,8 @@ def _compute_daily_mature_pct(revlog_rows, dates, total_cards):
     for d in dates:
         for card_id, interval in reviews_by_date.get(d, []):
             card_intervals[card_id] = interval
-        mature = sum(1 for ivl in card_intervals.values() if ivl >= 21)
-        young = sum(1 for ivl in card_intervals.values() if 0 < ivl < 21)
-        pct = round((mature + young * 0.5) / total_cards * 100, 1)
+        weighted = sum(min(1.0, max(0, ivl) / 21) for ivl in card_intervals.values())
+        pct = round(weighted / total_cards * 100, 1)
         result.append(pct)
 
     return result
@@ -114,18 +116,29 @@ def get_trajectory_data():
 
         avg_new_7d = round(sum(new_counts_last_7) / max(len(new_counts_last_7), 1), 1)
 
-        # Current maturity percentage across all cards
-        # (queried first so `total` is available for mature_pct reconstruction)
+        # Current mastery using retrieval probability
         try:
-            total = mw.col.db.scalar("SELECT COUNT(*) FROM cards") or 0
-            mature = mw.col.db.scalar("SELECT COUNT(*) FROM cards WHERE ivl >= 21") or 0
-            young = mw.col.db.scalar("SELECT COUNT(*) FROM cards WHERE ivl > 0 AND ivl < 21") or 0
-            if total > 0:
-                current_pct = round((mature + young * 0.5) / total * 100, 1)
-            else:
-                current_pct = 0.0
+            from .retrieval import compute_deck_mastery
+        except ImportError:
+            from ui.retrieval import compute_deck_mastery
+
+        try:
+            fsrs_enabled = False
+            try:
+                fsrs_enabled = mw.col.get_config("fsrs", False)
+            except Exception:
+                pass
+
+            today_dn = mw.col.sched.today
+            card_rows = mw.col.db.all(
+                "SELECT ivl, due, queue, data FROM cards"
+            )
+            current_pct = compute_deck_mastery(card_rows, today_dn, fsrs_enabled)
+            total = len(card_rows)
+            mature = sum(1 for ivl, _, q, _ in card_rows if ivl >= 21 and q >= 0)
+            young = sum(1 for ivl, _, q, _ in card_rows if 0 < ivl < 21 and q >= 0)
         except Exception as e:
-            logger.warning("get_trajectory_data: card maturity query failed: %s", e)
+            logger.warning("get_trajectory_data: mastery query failed: %s", e)
             current_pct = 0.0
             total = 0
             mature = 0
@@ -290,17 +303,29 @@ def get_deck_trajectory(deck_id_str):
 
         avg_new_7d = round(sum(new_counts_last_7) / max(len(new_counts_last_7), 1), 1)
 
-        # Current maturity for this deck's cards
+        # Current mastery using retrieval probability
         try:
-            mature = mw.col.db.scalar(
-                "SELECT COUNT(*) FROM cards WHERE id IN %s AND ivl >= 21" % card_in_clause
-            ) or 0
-            young = mw.col.db.scalar(
-                "SELECT COUNT(*) FROM cards WHERE id IN %s AND ivl > 0 AND ivl < 21" % card_in_clause
-            ) or 0
-            current_pct = round((mature + young * 0.5) / total * 100, 1)
+            from .retrieval import compute_deck_mastery
+        except ImportError:
+            from ui.retrieval import compute_deck_mastery
+
+        try:
+            fsrs_enabled = False
+            try:
+                fsrs_enabled = mw.col.get_config("fsrs", False)
+            except Exception:
+                pass
+
+            today_dn = mw.col.sched.today
+            card_rows = mw.col.db.all(
+                "SELECT ivl, due, queue, data FROM cards WHERE id IN %s"
+                % card_in_clause
+            )
+            current_pct = compute_deck_mastery(card_rows, today_dn, fsrs_enabled)
+            mature = sum(1 for ivl, _, q, _ in card_rows if ivl >= 21 and q >= 0)
+            young = sum(1 for ivl, _, q, _ in card_rows if 0 < ivl < 21 and q >= 0)
         except Exception as e:
-            logger.warning("get_deck_trajectory: card maturity query failed: %s", e)
+            logger.warning("get_deck_trajectory: mastery query failed: %s", e)
             current_pct = 0.0
             mature = 0
             young = 0
