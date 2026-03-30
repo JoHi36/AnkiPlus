@@ -6,6 +6,9 @@ _aqt = types.ModuleType('aqt')
 _aqt.mw = None
 _aqt.qt = types.ModuleType('aqt.qt')
 _aqt.utils = types.ModuleType('aqt.utils')
+_aqt.utils.showInfo = lambda *a, **kw: None
+_aqt.utils.showWarning = lambda *a, **kw: None
+_aqt.utils.showCritical = lambda *a, **kw: None
 sys.modules.update({'aqt': _aqt, 'aqt.qt': _aqt.qt, 'aqt.utils': _aqt.utils})
 
 from ai.rag_analyzer import RagAnalysis, analyze_query
