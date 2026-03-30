@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import useStatistikData from '../hooks/useStatistikData';
 import useFocusManager from '../hooks/useFocusManager';
 import useDeckFocus from '../hooks/useDeckFocus';
@@ -78,6 +78,13 @@ export default function StatistikView({ deckData }) {
     setActiveFocusId(null);
     goBackDeck();
   }, [activeFocusId, deleteFocus, setActiveFocusId, goBackDeck]);
+
+  // Auto-load trajectory for the first focus when in aggregated view
+  useEffect(() => {
+    if (hasFocuses && !activeFocusId && !showTreemap && focuses[0]?.deckIds?.length > 0) {
+      focusDeck({ id: focuses[0].deckIds[0], name: focuses[0].deckNames?.[0] });
+    }
+  }, [hasFocuses, activeFocusId, showTreemap, focuses, focusDeck]);
 
   if (loading || focusLoading) {
     return (
