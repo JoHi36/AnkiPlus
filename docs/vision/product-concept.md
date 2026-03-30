@@ -70,9 +70,16 @@ No feature should feel complex on its own. The complexity of the platform arises
 
 At any given moment, there is one primary interactive glass element (frosted glass material) on screen. This is the user's focal point for input — the search bar in Stapel, the chat input in Session. Exception: In Stapel with an active agent, two glass objects coexist (search bar = "new query" entry point at top, action dock = "enter session" at bottom), justified because they serve different phases of the flow (ask → act).
 
-### 4. Agents Are Everywhere
+### 4. Every Agent Has a Channel
 
-Agents are not bound to views. They are bound to capabilities. The Tutor agent can answer questions in Stapel (state-based result on canvas), assist during Session (chat-based explanation), and suggest study plans in Statistik. The agent adapts its output format to the view it's operating in, but its knowledge and personality remain consistent.
+Each agent owns exactly one UI channel. The channel determines the agent — no routing needed, no @mentions, no agent-switching mid-conversation. The user interacts with the right agent by using the right part of the interface:
+
+- **Research Agent → Stapel** (search bar → canvas + sidebar). State-based: one query = one result.
+- **Tutor Agent → Session** (chat sidebar during card review). History-based: conversation builds over cards.
+- **Plusi → Plusi bubble** (click Plusi icon → speech bubble). Compact: personality + app help.
+- **Prüfungs-Agent → Reviewer input** (inline during card answer). Evaluates answers, generates MC.
+
+Agents share capabilities (RAG, web search) but differ in prompt, context, and output format. The Tutor auto-triggers web search when card similarity is low (cos < 0.60); the Research Agent leads with web research and uses more cards as context references. Both use the same RAG pipeline — differentiated by orchestration, not by toolset.
 
 ### 5. The Interface Communicates Through Behavior
 
@@ -87,7 +94,7 @@ Tab names, deck terminology, card concepts — all use Anki vocabulary. The user
 
 ## The Agent Model in Stapel (Detail)
 
-The Stapel view's agent interaction follows a specific pattern:
+The Stapel view is the **Research Agent's channel**. Every search query goes to Research — no routing decision needed.
 
 ```
 1. DEFAULT STATE
@@ -97,23 +104,22 @@ The Stapel view's agent interaction follows a specific pattern:
 
 2. USER TYPES QUERY → Search bar
    - Search bar slides up, becomes compact (shows last query)
-   - Canvas fills with agent-generated visual content (left ~65%)
-   - Sidebar appears with structured text content (right ~35%)
+   - Research Agent activates: canvas fills with visual content (left ~65%)
+   - Sidebar appears with structured text (right ~35%)
    - Action dock slides in from bottom-right
-   - Agent identity visible (name, color, icon in sidebar header)
+   - Agent identity visible (Research green, icon in sidebar header)
 
 3. USER TYPES FOLLOW-UP → Same search bar (now at top)
-   - Router evaluates: same agent or different?
-   - If same agent: canvas + sidebar update (state replacement)
-   - If different agent: full color transition, new canvas + sidebar
-   - Router uses invisible history for context
+   - Research Agent processes with invisible history context
+   - Canvas + sidebar update (state replacement)
+   - No agent switching — always Research in this view
 
 4. USER ACTS → Action dock (e.g., "100 Karten kreuzen")
-   - Transitions to Session view with prepared card set
+   - Transitions to Session view (→ Tutor Agent takes over)
    - Or closes agent state, returns to deck list
 ```
 
-The search bar is the universal entry point. After the first query, it doubles as the follow-up input. The dock is for actions, not text input.
+The search bar is the universal entry point. After the first query, it doubles as the follow-up input. The dock is for actions, not text input. Transitioning from Stapel to Session is a natural channel switch — Research hands off context to Tutor by opening a prepared card set.
 
 ## Layout Architecture
 
