@@ -34,7 +34,7 @@ export interface SubagentConfig {
   isDefault?: boolean;
   description?: string;
   tools?: string[];
-  canHandoffTo?: string[];
+  channel?: string;  // 'stapel', 'session', 'plusi', 'reviewer-inline'
   // Agent Studio UI fields
   widgetType?: string;
   submenuLabel?: string;
@@ -76,18 +76,6 @@ export function setToolRegistry(tools: ToolConfig[]): void {
   toolRegistry = new Map(tools.map(t => [t.name, t]));
 }
 
-/**
- * Build regex for @Name or @Label detection from enabled agents.
- * Returns null if no agents are enabled.
- */
-export function getDirectCallPattern(): RegExp | null {
-  const agents = [...registry.values()].filter(a => a.enabled);
-  if (agents.length === 0) return null;
-  const names = agents.map(a => a.name);
-  const labels = agents.map(a => a.label);
-  const allPatterns = [...new Set([...names, ...labels])];
-  return new RegExp('^@(' + allPatterns.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')\\b', 'i');
-}
 
 /**
  * Look up agent by name (case-insensitive).

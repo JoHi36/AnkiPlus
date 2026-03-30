@@ -5,7 +5,6 @@
 export {
   getRegistry,
   setRegistry,
-  getDirectCallPattern,
   findAgent,
   getDefaultAgent,
   getNonDefaultAgents,
