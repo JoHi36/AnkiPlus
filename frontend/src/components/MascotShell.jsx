@@ -35,31 +35,11 @@ const BODY_TILT = 3.5;
 /** Jump initial velocity in px/s */
 const JUMP_VELOCITY = 380;
 
-const RECORDING_RING_STYLE = {
-  position: 'absolute',
-  inset: -4,
-  borderRadius: '50%',
-  border: '2px solid var(--ds-red)',
-  animation: 'plusi-voice-pulse 1s ease-in-out infinite',
-  pointerEvents: 'none',
-};
-
-const PROCESSING_RING_STYLE = {
-  position: 'absolute',
-  inset: -4,
-  borderRadius: '50%',
-  border: '2px solid var(--ds-accent)',
-  animation: 'plusi-voice-pulse 1.5s ease-in-out infinite',
-  pointerEvents: 'none',
-};
-
-const SPEAKING_RING_STYLE = {
-  position: 'absolute',
-  inset: -6,
-  borderRadius: '50%',
-  border: '2px solid var(--ds-green)',
-  animation: 'plusi-voice-pulse 0.8s ease-in-out infinite',
-  pointerEvents: 'none',
+// Voice state → Plusi mood mapping (uses existing MascotCharacter animations)
+const VOICE_STATE_MOOD = {
+  recording: 'curious',    // Plusi is listening — attentive, curious
+  processing: 'thinking',  // Plusi is thinking — existing thinking animation
+  speaking: 'happy',       // Plusi is talking — lively, engaged
 };
 
 export default function MascotShell({ mood = 'neutral', onEvent, enabled = true, voiceState }) {
@@ -619,7 +599,9 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true,
 
   // During drag, overrideMoodRef is set but state isn't updated (avoids re-render flicker).
   // After drag, state is updated normally.
-  const effectiveMood = overrideMood || (eventBubble ? eventBubble.mood : mood);
+  // Voice state overrides mood (recording=curious, processing=thinking, speaking=happy)
+  const voiceMood = voiceState && voiceState !== 'idle' ? VOICE_STATE_MOOD[voiceState] : null;
+  const effectiveMood = voiceMood || overrideMood || (eventBubble ? eventBubble.mood : mood);
   // Animation class — always set. During drag, animationName is killed via DOM.
   const animClass = mood === 'happy' || mood === 'excited'
     ? 'plusi-dock-bounce'
@@ -646,9 +628,6 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true,
             size={48}
             tapKey={tapKey}
           />
-          {voiceState === 'recording' && <div style={RECORDING_RING_STYLE} />}
-          {voiceState === 'processing' && <div style={PROCESSING_RING_STYLE} />}
-          {voiceState === 'speaking' && <div style={SPEAKING_RING_STYLE} />}
         </div>
 
         {eventBubble && (
