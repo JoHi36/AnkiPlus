@@ -903,6 +903,11 @@ function AppInner() {
           if (streamId) {
             _rd({ type: 'PHASE', streamId, phase: 'complete' });
           }
+          // Plusi bubble: flush accumulated text on msg_done
+          if (plusiTextAccRef.current) {
+            setLastPlusiText(plusiTextAccRef.current);
+            plusiTextAccRef.current = '';
+          }
         }
         if (payload.type === 'msg_error' || payload.type === 'msg_cancelled') {
           const _rd = reasoningDispatchRef.current;
