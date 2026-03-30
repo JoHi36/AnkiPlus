@@ -1837,28 +1837,11 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                     </span>
                 );
             })()}
-            {/* Router ThoughtStream — BEFORE AgenticCell (routing decision) */}
-            {showRouterThoughtStream && (
-                <ThoughtStream
-                    pipelineSteps={routerSteps}
-                    steps={[]}
-                    citations={{}}
-                    message=""
-                    variant="router"
-                />
-            )}
+            {/* Router ThoughtStream removed — orchestration hidden */}
             {/* ── v2: Structured Agent Cells ── */}
             {hasV2Data && !isUser && (
               <>
-                {/* Router Orchestration — streamId for live pacing, steps for saved */}
-                {(orchestrationSteps.length > 0 || (isStreaming && requestId)) && (
-                  <ReasoningDisplay
-                    streamId={isStreaming && requestId ? `router-${requestId}` : undefined}
-                    steps={isStreaming && requestId ? undefined : orchestrationSteps}
-                    mode="full"
-                    agentColor={'var(--ds-text-muted)'}
-                  />
-                )}
+                {/* Router Orchestration — hidden (user doesn't need to see routing) */}
                 {/* Agent Cells — ordered blocks */}
                 {(message_prop.agentCells || []).map((cell, i) => {
                   const hasReasoningData = (isStreaming && requestId) || cell.pipelineSteps?.length > 0 || agentSteps.length > 0;
@@ -1905,44 +1888,39 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                       }
                     });
                   }
-                  // Fallback: if no text yet but citations exist, show total count
-                  if (citedCount === 0 && !cell.text && cellCitations) {
+                  // Fallback: if citation remapping found nothing, count from citations dict
+                  if (citedCount === 0 && cellCitations && Object.keys(cellCitations).length > 0) {
                     citedCount = Object.keys(cellCitations).length;
                     cardSourceCount = Object.values(cellCitations).filter((c) => c && !c.url && !c.web_url).length;
                   }
 
+                  // Header shows SourceCountBadge when done, nothing during loading
+                  // (phase label is in the body via loadingHint)
                   let headerMeta = null;
-                  if (cellIsStreaming && hasReasoningData) {
-                    headerMeta = (
-                      <ReasoningDisplay
-                        streamId={requestId ? `${cell.agent}-${requestId}` : undefined}
-                        steps={undefined}
-                        mode="dots"
-                      />
-                    );
-                  } else if (!cellIsStreaming && citedCount > 0) {
+                  if (!cellIsStreaming && citedCount > 0) {
                     headerMeta = (
                       <SourceCountBadge count={citedCount} cardCount={cardSourceCount} />
                     );
                   }
 
+                  // ── Debug logging (survives esbuild strip) ──
+                  if (typeof window !== 'undefined' && window.__REASONING_DEBUG__) {
+                    const _rlog = Function.prototype.bind.call(globalThis.console.log, globalThis.console);
+                    _rlog('[REASONING]', new Date().toISOString().slice(11,23), `ChatMsg: agent=${cell.agent} streaming=${cellIsStreaming} reasoning=${hasReasoningData} cited=${citedCount} meta=${headerMeta ? 'SET' : 'NULL'} status=${cell.status}`);
+                  }
+
+                  // Show loading state until text arrives (covers 'loading' AND 'thinking' phases)
+                  const showLoading = (cell.status === 'loading' || cell.status === 'thinking') && !cell.text;
+
                   return (
                   <AgenticCell
                     key={`${cell.agent}-${i}`}
                     agentName={cell.agent}
-                    isLoading={cell.status === 'loading'}
+                    isLoading={showLoading}
                     loadingHint={cell.loadingHint || ''}
                     headerMeta={headerMeta}
                   >
-                    {/* Step label during streaming */}
-                    {cellIsStreaming && hasReasoningData && (
-                      <ReasoningDisplay
-                        streamId={requestId ? `${cell.agent}-${requestId}` : undefined}
-                        mode="compact"
-                        hideCounter
-                        hasOutput={Boolean(cell.text)}
-                      />
-                    )}
+                    {/* Step label moved to header — no duplicate in body */}
                     {/* Text content */}
                     {cell.text && cell.status !== 'loading' && !cell.sources?.length && (() => {
                       // Strip HANDOFF signal from display text

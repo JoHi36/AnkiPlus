@@ -76,7 +76,14 @@ export default function AgenticCell({
   }, [badgeLogo]);
 
   // Determine what goes in the right meta slot
-  const rightMeta = headerMeta || badgeLogoElement;
+  // Badge logo only shows during loading — after content arrives, headerMeta (SourceCountBadge) takes over
+  const rightMeta = headerMeta || (isLoading ? badgeLogoElement : null);
+
+  // ── Debug logging (survives esbuild strip) ──
+  if (typeof window !== 'undefined' && window.__REASONING_DEBUG__) {
+    const _rlog = Function.prototype.bind.call(globalThis.console.log, globalThis.console);
+    _rlog('[REASONING]', new Date().toISOString().slice(11,23), `Cell: agent=${agentName} loading=${isLoading} meta=${headerMeta ? 'HEADER' : 'NULL'} badge=${badgeLogo} → ${rightMeta === badgeLogoElement ? 'BADGE("' + badgeLogo + '")' : rightMeta ? 'HEADER' : 'NONE'}`);
+  }
 
   return (
     <div
@@ -122,10 +129,9 @@ export default function AgenticCell({
 
       {isLoading ? (
         <div className="agent-cell-content">
-          <div className="agent-cell-loading-hint" style={isTransparent ? {} : { color }}>{hint}</div>
-          <div className="agent-cell-shimmer" style={{ background: tint6 }} />
-          <div className="agent-cell-shimmer" style={{ background: tint6, width: '78%' }} />
-          <div className="agent-cell-shimmer" style={{ background: tint6, width: '85%' }} />
+          <div className="agent-cell-loading-hint" style={isTransparent ? {} : { color: 'var(--ds-text-secondary)' }}>{hint}</div>
+          <div className="agent-cell-shimmer" style={{ background: tint6, opacity: 0.5 }} />
+          <div className="agent-cell-shimmer" style={{ background: tint6, width: '65%', opacity: 0.3 }} />
         </div>
       ) : (
         <div className="agent-cell-content">{children}</div>

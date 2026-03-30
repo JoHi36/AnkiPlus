@@ -98,11 +98,21 @@ export default function useAgenticMessage() {
   }, [updateMsg]);
 
   // Pipeline step handler — accumulates steps on cells for persistence (finalize reads cell.pipelineSteps).
-  // Also maintains cell status transitions and early citation extraction.
+  // Also maintains cell status transitions, loading hint, and early citation extraction.
   const handlePipelineStep = useCallback((payload) => {
     const targetAgent = payload.agent || payload.data?.agent;
     // Skip orchestrating/router steps — those are handled separately
     const isAgentStep = payload.step !== 'orchestrating' && payload.step !== 'router';
+
+    // 3 user-facing phases mapped from pipeline steps:
+    //   Kontext      ← orchestrating, router, kg_enrichment
+    //   Quellensuche ← sql_search, semantic_search, merge
+    //   Synthese     ← generating, web_search
+    // Results accumulate: "8 Begriffe · Quellensuche..." → "8 Begriffe · 12 Quellen · Synthese..."
+    const step = payload.step;
+    const pStatus = payload.status;
+    const data = payload.data || {};
+
     updateMsg(prev => {
       if (!prev) return prev;
       const cells = prev.agentCells.map(c => {
@@ -114,6 +124,49 @@ export default function useAgenticMessage() {
         }
         // Transition loading → thinking so AgenticCell renders content instead of shimmer
         const newStatus = c.status === 'loading' ? 'thinking' : c.status;
+
+        // Accumulate phase results on the cell
+        const results = c._phaseResults || [];
+        let newResults = results;
+        let newHint = c.loadingHint;
+
+        // Phase 1: Kontext
+        if (step === 'orchestrating' || step === 'router' || step === 'kg_enrichment') {
+          if (pStatus === 'active' && !results.length) {
+            newHint = 'Kontext...';
+          } else if (pStatus === 'done' && step === 'kg_enrichment') {
+            const n = (data.terms && data.terms.length) || (data.tier1_terms && data.tier1_terms.length) || 0;
+            if (n > 0 && !results.some(r => r.phase === 'kontext')) {
+              newResults = [...results, { phase: 'kontext', label: `${n} Begriffe` }];
+            }
+          }
+        }
+        // Phase 2: Quellensuche
+        else if (step === 'sql_search' || step === 'semantic_search' || step === 'merge') {
+          if (pStatus === 'active' && step === 'sql_search') {
+            const prefix = newResults.map(r => r.label).join(' \u00b7 ');
+            newHint = prefix ? `${prefix} \u00b7 Quellensuche...` : 'Quellensuche...';
+          } else if (pStatus === 'done' && step === 'merge') {
+            const total = data.total || 0;
+            if (total > 0 && !newResults.some(r => r.phase === 'quellen')) {
+              newResults = [...newResults, { phase: 'quellen', label: `${total} Quellen` }];
+            }
+          }
+        }
+        // Phase 3: Synthese
+        else if (step === 'generating' || step === 'web_search') {
+          if (pStatus === 'active') {
+            const prefix = newResults.map(r => r.label).join(' \u00b7 ');
+            const verb = step === 'web_search' ? 'Web-Recherche...' : 'Synthese...';
+            newHint = prefix ? `${prefix} \u00b7 ${verb}` : verb;
+          }
+        }
+
+        // If results changed, rebuild hint with accumulated labels
+        if (newResults !== results && newResults.length > results.length) {
+          const prefix = newResults.map(r => r.label).join(' \u00b7 ');
+          newHint = prefix;
+        }
         // Extract early citations from sources_ready step
         const newCitations = payload.step === 'sources_ready' && payload.data?.citations
           ? { ...(c.citations || {}), ...payload.data.citations }
@@ -129,7 +182,7 @@ export default function useAgenticMessage() {
             newPipelineSteps = [...newPipelineSteps, stepObj];
           }
         }
-        return { ...c, status: newStatus, citations: newCitations, pipelineSteps: newPipelineSteps };
+        return { ...c, status: newStatus, loadingHint: newHint, _phaseResults: newResults, citations: newCitations, pipelineSteps: newPipelineSteps };
       });
       return { ...prev, agentCells: cells };
     });

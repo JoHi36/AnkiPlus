@@ -1,4 +1,5 @@
 import React from 'react';
+import { reasoningLog } from './debugLog';
 import { useReasoningStream } from './useReasoningStream';
 import FullReasoningDisplay from './FullReasoningDisplay';
 import CompactReasoningDisplay from './CompactReasoningDisplay';
@@ -44,6 +45,8 @@ export default function ReasoningDisplay({
   const agentColor = colorOverride || storeColor;
   // Citations: prefer prop (from cell/message data), fall back to store
   const citations = (citationsProp && Object.keys(citationsProp).length > 0) ? citationsProp : storeCitations;
+
+  reasoningLog(`Display mode=${mode} stream=${streamId} content=${hasContent} phase=${phase} steps=${displaySteps.length}`, displaySteps.map(s => `${s.step}:${s.status}`));
 
   if (!hasContent) return null;
 

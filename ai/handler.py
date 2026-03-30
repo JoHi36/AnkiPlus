@@ -417,13 +417,15 @@ class AIHandler:
             }}],
         })
 
-        # v2: Create agent cell (status='loading' triggers shimmer in frontend)
-        self._emit_msg_event("agent_cell", {
-            "messageId": request_id or '',
-            "agent": agent_name,
-            "status": "loading",
-            "data": {}
-        })
+        # v2: Update agent cell if agent changed from default (tutor → other)
+        # The initial agent_cell was already sent in get_response_with_rag()
+        if agent_name != 'tutor':
+            self._emit_msg_event("agent_cell", {
+                "messageId": request_id or '',
+                "agent": agent_name,
+                "status": "loading",
+                "data": {}
+            })
 
         # Load shared memory for context
         memory_context = ''
@@ -637,8 +639,14 @@ class AIHandler:
         self._fallback_in_progress = False
         request_id = getattr(self, '_current_request_id', None)
 
-        # v2: Start
+        # v2: Start — emit agent cell IMMEDIATELY so UI shows Tutor with "Kontext..."
         self._emit_msg_event("msg_start", {"messageId": request_id or ''})
+        self._emit_msg_event("agent_cell", {
+            "messageId": request_id or '',
+            "agent": "tutor",
+            "status": "loading",
+            "data": {"loadingHint": "Kontext..."}
+        })
         self._emit_pipeline_step("orchestrating", "active")
 
         try:

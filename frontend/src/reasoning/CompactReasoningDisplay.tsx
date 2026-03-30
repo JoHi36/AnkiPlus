@@ -1,6 +1,7 @@
 import React from 'react';
 import type { DisplayStep, StreamPhase } from './types';
 import { getStepRenderer, getFallbackRenderer } from './stepRegistry';
+import { reasoningLog } from './debugLog';
 
 interface CompactProps {
   displaySteps: DisplayStep[];
@@ -51,13 +52,18 @@ export default function CompactReasoningDisplay({ displaySteps, phase, agentColo
   const completedCount = displaySteps.filter(s => s.status === 'done').length;
   const totalCount = displaySteps.length;
 
-  if (!currentStep) return null;
+  if (!currentStep) {
+    reasoningLog('Compact: no currentStep → null');
+    return null;
+  }
 
   const renderer = getStepRenderer(currentStep.step) || getFallbackRenderer(currentStep.step);
   const isActive = currentStep.status === 'active';
   const title = isActive
     ? (typeof renderer.activeTitle === 'function' ? renderer.activeTitle(currentStep.data) : renderer.activeTitle)
     : renderer.doneLabel(currentStep.data, currentStep.status);
+
+  reasoningLog(`Compact: step=${currentStep.step} status=${currentStep.status} title="${title}" ${completedCount}/${totalCount}`);
 
   // Dynamic styles (depend on props/state)
   const dotStyle: React.CSSProperties = {

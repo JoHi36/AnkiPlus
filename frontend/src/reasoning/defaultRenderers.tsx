@@ -23,12 +23,12 @@ const RESPONSE_LENGTH_LABELS: Record<string, string> = {
 
 const STEP_NAMES: Record<string, string> = {
   router: 'Analyse',
-  orchestrating: 'Routing',
-  sql_search: 'Keyword-Suche',
-  semantic_search: 'Semantische Suche',
-  kg_search: 'Knowledge Graph',
-  merge: 'Zusammenführung',
-  generating: 'Generierung',
+  orchestrating: 'Zuordnung',
+  sql_search: 'Recherche',
+  semantic_search: 'Recherche',
+  kg_search: 'Recherche',
+  merge: 'Auswertung',
+  generating: 'Formulierung',
   web_search: 'Web-Recherche',
 };
 

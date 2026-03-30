@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useReasoningStore } from './store';
 import type { ReasoningStep, DisplayStep, StreamPhase } from './types';
 import { STEP_MIN_VISIBILITY } from './types';
+import { reasoningLog } from './debugLog';
 
 const EMPTY_STEPS: ReasoningStep[] = [];
 
@@ -155,6 +156,7 @@ function useAdaptivePacing(rawSteps: ReasoningStep[], isLive: boolean): DisplayS
       if (!knownRef.current.has(s.step)) {
         knownRef.current.add(s.step);
         queueRef.current.push(s);
+        reasoningLog(`Pacing: queued "${s.step}" status=${s.status} queue=${queueRef.current.length} displayed=${displaySteps.length}`);
       }
     }
 
