@@ -929,17 +929,22 @@
           clearTimeout(transitionTimer);
           transitionTimer = null;
         }
-        // Opacity crossfade
-        wrapper.style.transition = 'opacity 0.25s ease';
-        wrapper.style.opacity = '0';
+        // Smooth morph: scale down slightly + blur, swap, scale back
+        wrapper.style.transition = 'transform 0.15s ease-in, filter 0.15s ease-in, opacity 0.15s ease-in';
+        wrapper.style.transform = 'scale(0.92)';
+        wrapper.style.filter = 'blur(2px)';
+        wrapper.style.opacity = '0.7';
         stopEngine();
         transitionTimer = setTimeout(function () {
           transitionTimer = null;
           currentMood = newMood;
           render();
+          wrapper.style.transition = 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.2s ease-out, opacity 0.2s ease-out';
+          wrapper.style.transform = 'scale(1)';
+          wrapper.style.filter = 'blur(0)';
           wrapper.style.opacity = '1';
           startEngine();
-        }, 250);
+        }, 150);
       },
 
       /** Swap mood instantly — no crossfade. Used during physics animations. */
