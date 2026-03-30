@@ -455,6 +455,7 @@ function AppInner() {
   const [activeAgentName, setActiveAgentName] = useState(null);
   const [stickyAgent, setStickyAgent] = useState(null);
   const [lastPlusiText, setLastPlusiText] = useState(null);
+  const plusiTextAccRef = useRef('');
 
   // Detect subagent routing from reasoning store (covers both direct @Name and router delegation)
   useEffect(() => {
@@ -880,8 +881,14 @@ function AppInner() {
         // is up-to-date when components re-render with the chat state change
         // v2 events use 'messageId', v1 uses 'requestId' — accept both
         if (payload.type === 'text_chunk' || payload.type === 'streaming') {
+          // Accumulate Plusi text for the chat bubble
+          const chunkAgent = payload.data?.agent || payload.agent || '';
+          const chunkText = payload.data?.chunk || payload.chunk || '';
+          if (chunkAgent === 'plusi' && chunkText) {
+            plusiTextAccRef.current += chunkText;
+          }
           const _rd = reasoningDispatchRef.current;
-          const agentPrefix = payload.data?.agent || payload.agent || '';
+          const agentPrefix = chunkAgent;
           const reqId = payload.requestId || payload.messageId || '';
           const streamId = agentPrefix ? `${agentPrefix}-${reqId}` : reqId;
           if (streamId) {
@@ -1247,8 +1254,9 @@ function AppInner() {
 
             // Update mood if provided (Plusi compatibility)
             if (payload.mood) setAiMood(payload.mood);
-            if (payload.agent === 'plusi' && payload.text) {
-              setLastPlusiText(payload.text);
+            if (payload.agent === 'plusi' && plusiTextAccRef.current) {
+              setLastPlusiText(plusiTextAccRef.current);
+              plusiTextAccRef.current = '';
             }
           }
         }
