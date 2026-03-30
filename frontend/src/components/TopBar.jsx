@@ -6,6 +6,17 @@ import React, { useRef, useState, useEffect, useLayoutEffect } from 'react';
 let _lastTab = 'stapel';
 let _lastIndicator = null; // { left, width } from last mount
 
+// Static style constants
+const ESC_BADGE_STYLE = {
+  fontSize: 9, fontWeight: 500,
+  background: 'var(--ds-hover-tint)',
+  border: '1px solid var(--ds-border-subtle)',
+  padding: '2px 7px', borderRadius: 5,
+  color: 'var(--ds-text-muted)',
+};
+const ESC_LABEL_STYLE = { fontSize: 11, color: 'var(--ds-text-muted)' };
+const ESC_WRAPPER_STYLE = { display: 'flex', alignItems: 'center', gap: 6 };
+
 /**
  * TopBar — unified top bar for all views.
  * Adapts content based on activeView and ankiState.
@@ -21,6 +32,7 @@ export default function TopBar({
   onTabClick,
   onSidebarToggle,
   settingsOpen = false,
+  canvasMode = false,
 }) {
   const activeTab = activeView === 'statistik' ? 'statistik'
     : (ankiState === 'overview' || ankiState === 'review') ? 'session'
@@ -46,9 +58,17 @@ export default function TopBar({
     </button>
   );
 
-  // Left content — depends on view
+  // Left content — depends on view and canvasMode
   let leftContent;
-  if (ankiState === 'overview') {
+  if (canvasMode) {
+    leftContent = (
+      <div style={ESC_WRAPPER_STYLE}>
+        {plusButton}
+        <kbd style={ESC_BADGE_STYLE}>ESC</kbd>
+        <span style={ESC_LABEL_STYLE}>Verlassen</span>
+      </div>
+    );
+  } else if (ankiState === 'overview') {
     const shortDeck = deckName ? deckName.split('::').pop() : '';
     leftContent = (
       <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -74,9 +94,11 @@ export default function TopBar({
     );
   }
 
-  // Right content
+  // Right content — hide stats in canvasMode, keep empty slot for layout balance
   let rightContent;
-  if (ankiState === 'overview') {
+  if (canvasMode) {
+    rightContent = null;
+  } else if (ankiState === 'overview') {
     rightContent = (
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11, fontWeight: 600, color: 'var(--ds-stat-new)', fontVariantNumeric: 'tabular-nums' }}>{dueNew}</span>
@@ -189,6 +211,7 @@ export default function TopBar({
           return (
             <button
               key={id}
+              id={id === 'session' ? 'topbar-session-tab' : undefined}
               ref={el => { tabRefs.current[id] = el; }}
               onClick={() => onTabClick?.(id)}
               style={{
