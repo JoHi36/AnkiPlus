@@ -32,6 +32,7 @@ export default function SearchSidebar({
   termDefinition,
   imageSelectedCardIds = [],  // NEW — from ImageCanvas selection
   searchStreamId,  // From useSmartSearch — ReasoningStore stream ID for live pipeline display
+  hideActionDock = false,  // When lid-lift is active, the DeckSearchBar at bottom replaces this dock
 }) {
 
   // All hooks must be called unconditionally (before any early return)
@@ -204,11 +205,14 @@ export default function SearchSidebar({
       width: 'var(--ds-sidebar-width, 380px)',
       minWidth: 'var(--ds-sidebar-width, 380px)',
       flexShrink: 0,
-      background: 'var(--ds-bg-deep)',
-      borderLeft: '1px solid var(--ds-border-subtle)',
+      background: 'var(--ds-bg-canvas)',
+      border: '1px solid var(--ds-border-subtle)',
+      borderRadius: 14,
+      boxShadow: 'var(--ds-shadow-lg)',
       display: 'flex',
       flexDirection: 'column',
       overflow: 'hidden',
+      margin: '10px 10px 10px 0',
       animation: isExiting
         ? 'slideOutRight 0.3s ease-in forwards'
         : shouldAnimate ? 'slideInRight 0.3s ease-out' : 'none',
@@ -746,7 +750,7 @@ export default function SearchSidebar({
       </div>
 
       {/* Bottom dock — ChatInput like reviewer */}
-      <div style={{
+      {!hideActionDock && <div style={{
         flexShrink: 0,
         padding: '0 12px 14px',
       }}>
@@ -810,7 +814,7 @@ export default function SearchSidebar({
             },
           }}
         />
-      </div>
+      </div>}
     </div>
   );
 }
