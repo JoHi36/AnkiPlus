@@ -221,8 +221,7 @@ const SECONDARY_ROW_STYLE = {
 
 const STREAK_WIDGET_STYLE = {
   flex: '0 0 60px', display: 'flex', flexDirection: 'column',
-  alignItems: 'center', justifyContent: 'flex-end',
-  paddingBottom: 4,
+  alignItems: 'center', justifyContent: 'center',
 };
 
 const STREAK_FLAME_STYLE = { fontSize: 20, lineHeight: 1 };
