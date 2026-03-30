@@ -47,17 +47,36 @@ function squarify(items, x, y, w, h) {
   return result;
 }
 
-// ─── Color by strength ──────────────────────────────────────────────────────
+// ─── Color by mastery ───────────────────────────────────────────────────────
 
-function strengthColor(s) {
-  // Subtle, transparent gradient — heatmap is secondary to search bar
-  if (s < 0.15) return 'color-mix(in srgb, var(--ds-red) 25%, transparent)';
-  if (s < 0.30) return 'color-mix(in srgb, var(--ds-red) 20%, transparent)';
-  if (s < 0.45) return 'color-mix(in srgb, var(--ds-yellow) 20%, transparent)';
-  if (s < 0.60) return 'color-mix(in srgb, var(--ds-yellow) 18%, transparent)';
-  if (s < 0.75) return 'color-mix(in srgb, var(--ds-green) 18%, transparent)';
-  if (s < 0.85) return 'color-mix(in srgb, var(--ds-green) 16%, transparent)';
-  return 'color-mix(in srgb, var(--ds-green) 14%, transparent)';
+function masteryColor(strength) {
+  const pct = Math.max(0, Math.min(1, strength));
+  let r, g, b;
+  if (pct < 0.3) {
+    const t = pct / 0.3;
+    r = 248; g = Math.round(113 + t * 33); b = Math.round(113 - t * 53);
+  } else if (pct < 0.5) {
+    const t = (pct - 0.3) / 0.2;
+    r = 251; g = Math.round(146 + t * 45); b = Math.round(60 - t * 24);
+  } else if (pct < 0.7) {
+    const t = (pct - 0.5) / 0.2;
+    r = Math.round(251 - t * 88); g = Math.round(191 + t * 39); b = Math.round(36 + t * 17);
+  } else {
+    const t = Math.min(1, (pct - 0.7) / 0.3);
+    r = Math.round(163 - t * 89); g = Math.round(230 - t * 8); b = Math.round(53 + t * 75);
+  }
+  return { r, g, b };
+}
+
+function masteryGradientStyle(strength) {
+  const { r, g, b } = masteryColor(strength);
+  return {
+    background: `linear-gradient(135deg, rgba(${r},${g},${b},0.16), rgba(${r},${g},${b},0.04))`,
+    borderColor: `rgba(${r},${g},${b},0.12)`,
+    textColor: `rgba(${r},${g},${b},0.85)`,
+    labelColor: `rgba(${r},${g},${b},0.4)`,
+    metaColor: `rgba(${r},${g},${b},0.25)`,
+  };
 }
 
 // ─── Flatten deck tree ───────────────────────────────────────────────────────
@@ -86,6 +105,9 @@ function flattenLevel(roots) {
 }
 
 // ─── Main component ──────────────────────────────────────────────────────────
+
+const CELL_GAP = 3;
+const CELL_RADIUS = 14;
 
 const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSelectDeck, selectedDeckId }, ref) {
   const containerRef = useRef(null);
@@ -157,8 +179,8 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
   useEffect(() => {
     if (!containerSize.w || !containerSize.h) return;
     const items = flattenLevel(currentRoots);
-    // Sort ascending by strength (weakest top-left)
-    items.sort((a, b) => a.strength - b.strength);
+    // Sort descending by strength (strongest top-left)
+    items.sort((a, b) => b.strength - a.strength);
     const mapped = items.map(d => ({ ...d, value: d.cards }));
     const layout = squarify(mapped, 0, 0, containerSize.w, containerSize.h);
     setCells(layout);
@@ -223,7 +245,7 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ width: '100%', maxWidth: 680, display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 6 }}>
       {/* Treemap container */}
       <div
         ref={containerRef}
@@ -231,9 +253,8 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
           width: '100%',
           aspectRatio: '16/9',
           position: 'relative',
-          borderRadius: 10,
+          borderRadius: 16,
           overflow: 'hidden',
-          background: 'var(--ds-bg-deep)',
         }}
       >
         {cells.map((cell, i) => {
@@ -241,37 +262,39 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
           const isOther = animState === 'morphOut' && morphTarget && morphTarget.id !== cell.id;
           const isNew = animState === 'morphIn';
 
+          const colors = masteryGradientStyle(cell.strength);
+
           let cellStyle = {
             position: 'absolute',
-            left: cell.x,
-            top: cell.y,
-            width: cell.w,
-            height: cell.h,
+            left: cell.x + CELL_GAP,
+            top: cell.y + CELL_GAP,
+            width: cell.w - CELL_GAP * 2,
+            height: cell.h - CELL_GAP * 2,
             boxSizing: 'border-box',
             cursor: 'pointer',
             display: 'flex',
             flexDirection: 'column',
-            justifyContent: 'flex-end',
+            justifyContent: 'center',
+            alignItems: 'center',
             padding: '12px 14px',
-            backgroundColor: strengthColor(cell.strength),
-            border: '1px solid var(--ds-border-subtle)',
+            background: colors.background,
+            border: '1px solid ' + colors.borderColor,
+            borderRadius: CELL_RADIUS,
             transition: [
               'left 0.55s cubic-bezier(0.4,0,0.15,1)',
               'top 0.55s cubic-bezier(0.4,0,0.15,1)',
               'width 0.55s cubic-bezier(0.4,0,0.15,1)',
               'height 0.55s cubic-bezier(0.4,0,0.15,1)',
               'opacity 0.3s ease',
-              'background-color 0.55s ease',
+              'background 0.55s ease',
             ].join(', '),
-            outline: selectedDeckId === cell.id ? '2px solid var(--ds-text-tertiary)' : 'none',
-            outlineOffset: -2,
           };
 
           if (isMorphTarget && animState === 'morphOut') {
             cellStyle = {
               ...cellStyle,
               left: 0, top: 0, width: containerSize.w, height: containerSize.h,
-              backgroundColor: 'var(--ds-bg-deep)',
+              background: 'transparent',
               zIndex: 20,
             };
           } else if (isOther) {
@@ -295,38 +318,42 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({ deckData, onSele
                 <>
                   {showPct && (
                     <div style={{
-                      fontSize: 22, fontWeight: 200,
-                      color: 'var(--ds-text-secondary)',
+                      fontSize: 10, fontWeight: 600,
+                      color: colors.labelColor,
+                      letterSpacing: 1,
+                      textTransform: 'uppercase',
                       lineHeight: 1,
-                      marginBottom: 4,
+                      marginBottom: 2,
                       transition: 'opacity 0.2s',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      maxWidth: '100%',
+                      textAlign: 'center',
                     }}>
-                      {pct}%
+                      {cell.name}
+                      {cell.hasChildren && (
+                        <span style={{ opacity: 0.5, fontWeight: 400 }}> ›</span>
+                      )}
                     </div>
                   )}
                   <div style={{
-                    fontSize: Math.max(10, Math.min(13, cell.w / 12)),
-                    fontWeight: 600,
-                    color: 'var(--ds-text-primary)',
-                    lineHeight: 1.2,
-                    textShadow: '0 1px 4px var(--ds-shadow-color, rgba(0,0,0,0.4))',
-                    overflow: 'hidden',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
+                    fontSize: Math.max(18, Math.min(34, cell.w / 8)),
+                    fontWeight: 200,
+                    color: colors.textColor,
+                    lineHeight: 1,
+                    textAlign: 'center',
                     transition: 'opacity 0.2s',
                   }}>
-                    {cell.name}
-                    {cell.hasChildren && (
-                      <span style={{ opacity: 0.5, fontWeight: 400, fontSize: '0.85em' }}> ›</span>
-                    )}
+                    {pct}%
                   </div>
                   {showMeta && (
                     <div style={{
                       fontSize: 11,
-                      color: 'var(--ds-text-tertiary)',
+                      color: colors.metaColor,
                       marginTop: 3,
                       transition: 'opacity 0.2s',
+                      textAlign: 'center',
                     }}>
                       {cell.cards} Karten
                     </div>
