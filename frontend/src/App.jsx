@@ -2480,7 +2480,6 @@ function AppInner() {
               onSelectTerm={smartSearch.selectTerm}
               termDefinition={smartSearch.termDefinition}
               imageSelectedCardIds={smartSearch.imageSelectedCardIds}
-              searchStreamId={smartSearch.searchStreamId}
             />
           )}
         </div>
@@ -2709,7 +2708,7 @@ function AppInner() {
                             const prevInRender = messagesToRender[localIdx - 1];
                             return prevInRender && prevInRender.from !== 'user' ? <FadeSeparator /> : null;
                           })()}
-                          {msg && typeof msg.text === 'string' && msg.text && (
+                          {msg && ((typeof msg.text === 'string' && msg.text) || (msg.agentCells && msg.agentCells.length > 0)) && (
                             <div
                               className="mb-6"
                               data-message-id={msg.id}
@@ -2717,7 +2716,7 @@ function AppInner() {
                             >
                               <ErrorBoundary>
                                 <ChatMessage
-                                  message={msg.text}
+                                  message={msg.text || (msg.agentCells ? msg.agentCells.map(c => c.text || '').join('\n') : '')}
                                   from={msg.from || 'bot'}
                                   cardContext={cardContextHook.cardContext}
                                   steps={msg.steps || EMPTY_STEPS}
