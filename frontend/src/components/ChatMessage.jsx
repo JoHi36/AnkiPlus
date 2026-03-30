@@ -18,6 +18,7 @@ import SourceCountBadge from '../reasoning/SourceCountBadge';
 import ToolWidgetRenderer from './ToolWidgetRenderer';
 import { ComponentErrorBoundary } from './ErrorBoundary';
 import AgenticCell from './AgenticCell';
+import ActivityLine from './ActivityLine';
 import ResearchContent from './ResearchContent';
 import mermaid from 'mermaid';
 // SmilesDrawer wird dynamisch importiert, da es CommonJS ist und Vite-Probleme verursachen kann
@@ -1454,10 +1455,15 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
       : fixedMessage;
 
     return (
-      <div className="pt-4">
+      <div style={{ paddingTop: 16 }}>
         <div
-          className="text-[14.5px] font-medium leading-[1.45]"
-          style={{ color: 'var(--ds-text-primary)' }}
+          style={{
+            fontSize: 21,
+            fontWeight: 700,
+            letterSpacing: '-0.3px',
+            lineHeight: 1.3,
+            color: 'var(--ds-text-primary)',
+          }}
         >
           {displayText}
         </div>
@@ -1912,6 +1918,85 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                   // Show loading state until text arrives (covers 'loading' AND 'thinking' phases)
                   const showLoading = (cell.status === 'loading' || cell.status === 'thinking') && !cell.text;
 
+                  // Tutor: render without AgenticCell wrapper
+                  if (cell.agent === 'tutor') {
+                    const stepCount = cell.pipelineSteps?.length || 0;
+                    const totalCards = cell.pipelineSteps?.find(s => s.data?.total_cards)?.data?.total_cards || 0;
+
+                    return (
+                      <div key={`${cell.agent}-${i}`}>
+                        {/* Activity Line — during streaming show dots, after show summary */}
+                        {cellIsStreaming && hasReasoningData ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--ds-text-tertiary)', marginBottom: 8 }}>
+                            <span style={{ fontWeight: 600, color: 'var(--ds-text-secondary)' }}>tutor</span>
+                            <span style={{ opacity: 0.3 }}>·</span>
+                            <ReasoningDisplay
+                              streamId={requestId ? `${cell.agent}-${requestId}` : undefined}
+                              steps={undefined}
+                              mode="dots"
+                            />
+                          </div>
+                        ) : (
+                          <ActivityLine
+                            agentName="tutor"
+                            cardCount={totalCards}
+                            stepCount={stepCount}
+                            citedCount={citedCount}
+                            cardSourceCount={cardSourceCount}
+                          />
+                        )}
+
+                        {/* Step label during streaming */}
+                        {cellIsStreaming && hasReasoningData && (
+                          <ReasoningDisplay
+                            streamId={requestId ? `${cell.agent}-${requestId}` : undefined}
+                            mode="compact"
+                            hideCounter
+                            hasOutput={Boolean(cell.text)}
+                          />
+                        )}
+
+                        {/* Text content */}
+                        {cell.text && cell.status !== 'loading' && !cell.sources?.length && (() => {
+                          let cleanText = cell.text.replace(/\n?HANDOFF:?\s*\w+\s+REASON:?\s*.+?\s+QUERY:?\s*.+$/s, '').trim();
+                          if (!cleanText) return null;
+                          if (Object.keys(remapOldToNew).length > 0) {
+                            cleanText = cleanText.replace(/\[(\d+)\](?!\()/g, (match, numStr) => {
+                              const oldIdx = parseInt(numStr, 10);
+                              const newIdx = remapOldToNew[oldIdx];
+                              const citIdKey = backendIndexToCitId[oldIdx];
+                              if (newIdx && citIdKey) return `[${newIdx}](citation:${citIdKey})`;
+                              return match;
+                            });
+                          }
+                          return (
+                            <SafeMarkdownRenderer
+                              content={cleanText}
+                              MermaidDiagram={MermaidDiagram}
+                              isStreaming={cell.status === 'streaming'}
+                              citations={cellCitations || {}}
+                              citationIndices={cellCitationIndices}
+                              bridge={bridge}
+                              onPreviewCard={onPreviewCard}
+                            />
+                          );
+                        })()}
+
+                        {/* Tool widgets */}
+                        {cell.toolResults && cell.toolResults.length > 0 && (
+                          <ComponentErrorBoundary>
+                            <ToolWidgetRenderer
+                              toolResults={cell.toolResults}
+                              bridge={bridge}
+                              onPreviewCard={onPreviewCard}
+                            />
+                          </ComponentErrorBoundary>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // Other agents: keep existing AgenticCell wrapper below
                   return (
                   <AgenticCell
                     key={`${cell.agent}-${i}`}
