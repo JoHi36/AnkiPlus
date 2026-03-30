@@ -223,8 +223,8 @@ const LOADING_BLOCK_STYLE = {
 // ── Bottom Dock ──────────────────────────────────────────────────────────────
 
 const DOCK_WRAP_STYLE = {
-  position: 'sticky', bottom: 22,
-  zIndex: 100, alignSelf: 'center',
+  position: 'fixed', bottom: 22, left: '50%',
+  transform: 'translateX(-50%)', zIndex: 100,
 };
 
 const DOCK_STYLE = {
