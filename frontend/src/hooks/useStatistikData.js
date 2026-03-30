@@ -45,10 +45,14 @@ export default function useStatistikData() {
   const [loading, setLoading] = useState(true);
 
   const fetch = useCallback(() => {
-    // Always use mock data for now — bridge integration comes in next iteration
-    // TODO: wire up bridge once getStatistikData handler is verified
-    setData(MOCK_DATA);
-    setLoading(false);
+    // Request from bridge if available
+    if (window.ankiBridge) {
+      window.ankiBridge.addMessage('getStatistikData', {});
+    } else {
+      // Dev mode — use mock data
+      setData(MOCK_DATA);
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
