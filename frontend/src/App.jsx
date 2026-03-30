@@ -1254,9 +1254,11 @@ function AppInner() {
 
             // Update mood if provided (Plusi compatibility)
             if (payload.mood) setAiMood(payload.mood);
-            if (payload.agent === 'plusi' && plusiTextAccRef.current) {
-              setLastPlusiText(plusiTextAccRef.current);
+            if (agentName === 'plusi') {
+              const accText = plusiTextAccRef.current;
               plusiTextAccRef.current = '';
+              if (accText) setLastPlusiText(accText);
+              else if (payload.text) setLastPlusiText(payload.text);
             }
           }
         }
