@@ -1,11 +1,9 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import useStatistikData from '../hooks/useStatistikData';
 import useFocusManager from '../hooks/useFocusManager';
-import useDeckFocus from '../hooks/useDeckFocus';
 import KnowledgeHeatmap from './KnowledgeHeatmap';
 import YearHeatmap from './YearHeatmap';
 import TimeOfDayChart from './TimeOfDayChart';
-import FocusTabs from './FocusTabs';
 import AggregatedPlanView from './AggregatedPlanView';
 import FocusDetailView from './FocusDetailView';
 
@@ -15,20 +13,11 @@ export default function StatistikView({ deckData }) {
     focuses, hasFocuses, loading: focusLoading,
     activeFocusId, activeFocus, setActiveFocusId,
     createFocus, deleteFocus,
+    trajectories, suggestions, aggregateTrajectory,
   } = useFocusManager();
-
-  const {
-    trajectory: deckTrajectory,
-    suggestion,
-    loading: deckLoading,
-    focusDeck,
-    goBack: goBackDeck,
-  } = useDeckFocus();
 
   const [showTreemap, setShowTreemap] = useState(false);
   const [selectedCells, setSelectedCells] = useState([]);
-  const [deadlineInput, setDeadlineInput] = useState('');
-  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const selectedDeckIds = useMemo(() => selectedCells.map(c => c.id), [selectedCells]);
 
@@ -55,50 +44,22 @@ export default function StatistikView({ deckData }) {
   }, [selectedCells]);
 
   const handleCreateFocus = useCallback(() => {
-    if (!deadlineInput || !selectedCells.length) return;
-    createFocus(selectedCells, deadlineInput);
+    if (!selectedCells.length) return;
+    createFocus(selectedCells);
     setSelectedCells([]);
-    setDeadlineInput('');
-    setShowDatePicker(false);
     setShowTreemap(false);
-  }, [selectedCells, deadlineInput, createFocus]);
-
-  // Track which focus row is selected (for chart switching, not page navigation)
-  const [selectedFocusIdx, setSelectedFocusIdx] = useState(0);
-
-  const handleSelectFocusRow = useCallback((focusId) => {
-    const idx = focuses.findIndex(f => f.id === focusId);
-    if (idx >= 0) {
-      setSelectedFocusIdx(idx);
-      const focus = focuses[idx];
-      if (focus.deckIds?.length > 0) {
-        focusDeck({ id: focus.deckIds[0], name: focus.deckNames?.[0] });
-      }
-    }
-  }, [focuses, focusDeck]);
+  }, [selectedCells, createFocus]);
 
   const handleSelectFocus = useCallback((focusId) => {
     setActiveFocusId(focusId);
-    const focus = focuses.find(f => f.id === focusId);
-    if (focus && focus.deckIds?.length > 0) {
-      focusDeck({ id: focus.deckIds[0], name: focus.deckNames?.[0] });
-    }
-  }, [focuses, focusDeck, setActiveFocusId]);
+  }, [setActiveFocusId]);
 
   const handleBackFromDetail = useCallback((action) => {
     if (action === 'delete' && activeFocusId) {
       deleteFocus(activeFocusId);
     }
     setActiveFocusId(null);
-    goBackDeck();
-  }, [activeFocusId, deleteFocus, setActiveFocusId, goBackDeck]);
-
-  // Auto-load trajectory for the first focus when in aggregated view
-  useEffect(() => {
-    if (hasFocuses && !activeFocusId && !showTreemap && focuses[0]?.deckIds?.length > 0) {
-      focusDeck({ id: focuses[0].deckIds[0], name: focuses[0].deckNames?.[0] });
-    }
-  }, [hasFocuses, activeFocusId, showTreemap, focuses, focusDeck]);
+  }, [activeFocusId, deleteFocus, setActiveFocusId]);
 
   if (loading || focusLoading) {
     return (
@@ -111,36 +72,39 @@ export default function StatistikView({ deckData }) {
   const heatmapData = data?.heatmap || data?.year_heatmap;
   const todData = data?.timeOfDay || data?.time_of_day;
 
-  // ── Ebene 2: Focus Detail ────────────────────────────────────────────────
+  // -- Ebene 2: Focus Detail ------------------------------------------------
   if (activeFocus) {
     return (
       <div style={PAGE_STYLE}>
         <FocusDetailView
           focus={activeFocus}
-          trajectory={deckTrajectory}
-          suggestion={suggestion}
+          trajectory={trajectories[activeFocusId]}
+          suggestion={suggestions[activeFocusId]}
           onBack={handleBackFromDetail}
         />
       </div>
     );
   }
 
-  // ── Ebene 1: Aggregated Plan (when focuses exist and not in treemap mode)
+  // -- Ebene 1: Aggregated Plan (when focuses exist and not in treemap mode) -
   if (hasFocuses && !showTreemap) {
     return (
       <div style={PAGE_STYLE}>
         <AggregatedPlanView
           focuses={focuses}
-          selectedFocusId={focuses[selectedFocusIdx]?.id || focuses[0]?.id}
-          onSelectFocus={handleSelectFocusRow}
+          onSelectFocus={handleSelectFocus}
           onAddFocus={() => setShowTreemap(true)}
-          trajectoryData={deckTrajectory}
+          trajectories={trajectories}
+          suggestions={suggestions}
+          aggregateTrajectory={aggregateTrajectory}
+          heatmapData={heatmapData}
+          todData={todData}
         />
       </div>
     );
   }
 
-  // ── Ebene 0: Treemap (no focuses or adding new focus) ────────────────────
+  // -- Ebene 0: Treemap (no focuses or adding new focus) ---------------------
   return (
     <div style={PAGE_STYLE}>
       {hasFocuses && (
@@ -191,25 +155,7 @@ export default function StatistikView({ deckData }) {
       {/* Bottom dock */}
       <div style={DOCK_WRAP_STYLE}>
         <div className="ds-frosted" style={DOCK_STYLE}>
-          {showDatePicker ? (
-            <div style={DATE_PICKER_ROW_STYLE}>
-              <span style={{ fontSize: 12, color: 'var(--ds-text-secondary)' }}>Bis wann?</span>
-              <input
-                type="date"
-                value={deadlineInput}
-                onChange={e => setDeadlineInput(e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
-                style={DATE_INPUT_STYLE}
-              />
-              <button
-                onClick={handleCreateFocus}
-                disabled={!deadlineInput}
-                style={{ ...DOCK_BUTTON_STYLE, opacity: deadlineInput ? 1 : 0.4 }}
-              >
-                Starten
-              </button>
-            </div>
-          ) : selectionSummary ? (
+          {selectionSummary ? (
             <>
               <div style={DOCK_STATS_STYLE}>
                 <div style={DOCK_STAT_STYLE}>
@@ -229,7 +175,7 @@ export default function StatistikView({ deckData }) {
                   <span style={DOCK_STAT_LABEL_STYLE}>Gesamt</span>
                 </div>
               </div>
-              <button onClick={() => setShowDatePicker(true)} style={DOCK_BUTTON_STYLE}>
+              <button onClick={handleCreateFocus} style={DOCK_BUTTON_STYLE}>
                 Fokus festlegen
               </button>
             </>
@@ -242,7 +188,7 @@ export default function StatistikView({ deckData }) {
   );
 }
 
-// ── Styles ──────────────────────────────────────────────────────────────────
+// -- Styles ------------------------------------------------------------------
 
 const LOADING_STYLE = { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' };
 const PAGE_STYLE = {
@@ -295,15 +241,8 @@ const DOCK_PLUS_STYLE = { fontSize: 14, color: 'var(--ds-text-muted)', fontWeigh
 const DOCK_EQUALS_STYLE = { fontSize: 14, color: 'var(--ds-text-tertiary)', fontWeight: 300 };
 const DOCK_BUTTON_STYLE = {
   padding: '8px 20px', borderRadius: 10,
-  background: 'var(--ds-accent)', color: '#fff',
+  background: 'var(--ds-accent)', color: 'white',
   border: 'none', fontSize: 13, fontWeight: 600,
   fontFamily: 'inherit', cursor: 'pointer', transition: 'opacity 0.15s',
 };
 const DOCK_HINT_STYLE = { fontSize: 13, color: 'var(--ds-text-muted)', padding: '2px 12px' };
-const DATE_PICKER_ROW_STYLE = { display: 'flex', alignItems: 'center', gap: 12 };
-const DATE_INPUT_STYLE = {
-  padding: '6px 10px', borderRadius: 8,
-  border: '1px solid var(--ds-border-subtle)',
-  background: 'var(--ds-bg-canvas)', color: 'var(--ds-text-primary)',
-  fontSize: 13, fontFamily: 'inherit',
-};

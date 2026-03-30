@@ -5,9 +5,6 @@ import SessionSuggestion from './SessionSuggestion';
 
 export default function FocusDetailView({ focus, trajectory, suggestion, onBack }) {
   const color = getFocusColor(focus.colorIndex);
-  const daysLeft = focus.deadline
-    ? Math.max(0, Math.ceil((new Date(focus.deadline) - new Date()) / (1000 * 60 * 60 * 24)))
-    : null;
 
   return (
     <div style={CONTAINER_STYLE}>
@@ -18,11 +15,6 @@ export default function FocusDetailView({ focus, trajectory, suggestion, onBack 
             <span style={{ ...DOT_STYLE, background: color }} />
             <span style={FOCUS_NAME_STYLE}>{(focus.deckNames || []).join(', ')}</span>
           </div>
-          {daysLeft !== null && (
-            <span style={DEADLINE_STYLE}>
-              {daysLeft > 0 ? `${daysLeft} Tage bis ${focus.deadline}` : 'Deadline erreicht'}
-            </span>
-          )}
         </div>
       </div>
 
@@ -60,7 +52,6 @@ const BACK_STYLE = {
 const FOCUS_INFO_STYLE = { display: 'flex', flexDirection: 'column', gap: 4 };
 const DOT_STYLE = { width: 8, height: 8, borderRadius: '50%' };
 const FOCUS_NAME_STYLE = { fontSize: 15, fontWeight: 500, color: 'var(--ds-text-primary)' };
-const DEADLINE_STYLE = { fontSize: 12, color: 'var(--ds-text-muted)' };
 const LOADING_STYLE = { display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 };
 const DELETE_STYLE = {
   background: 'none', border: 'none', padding: '8px 0',
