@@ -126,9 +126,8 @@ export default function StatistikView({ deckData }) {
       <div style={SECONDARY_ROW_STYLE}>
         {/* Streak widget (square) */}
         <div style={STREAK_WIDGET_STYLE}>
-          <div style={STREAK_FLAME_STYLE}>🔥</div>
           <div style={STREAK_VALUE_STYLE}>{heatmapData?.streak || 0}</div>
-          <div style={STREAK_UNIT_STYLE}>Tage</div>
+          <div style={STREAK_UNIT_STYLE}>Tage Streak</div>
           {(heatmapData?.best_streak || 0) > 0 && (
             <div style={STREAK_BEST_STYLE}>
               Bester: {heatmapData.best_streak}
