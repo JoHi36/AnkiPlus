@@ -107,7 +107,7 @@ function flattenLevel(roots) {
 
 const CELL_GAP = 4;
 const CELL_RADIUS = 14;
-const MIN_CELL_DIM = 40; // minimum width/height after gap to render a cell
+const MIN_AREA_FRAC = 0.03; // every cell gets at least 3% of total area
 
 const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({
   deckData, onSelectDeck, onDrillDown, selectedDeckIds = [],
@@ -180,7 +180,10 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({
     if (!containerSize.w || !containerSize.h) return;
     const items = flattenLevel(currentRoots);
     items.sort((a, b) => b.strength - a.strength);
-    const mapped = items.map(d => ({ ...d, value: d.cards }));
+    // Ensure every deck gets a minimum area so tiny decks aren't invisible
+    const totalCards = items.reduce((s, d) => s + d.cards, 0);
+    const minValue = totalCards * MIN_AREA_FRAC;
+    const mapped = items.map(d => ({ ...d, value: Math.max(d.cards, minValue) }));
     // Lay out inside padded area so cells don't clip at container edges
     const pad = CELL_GAP;
     const layout = squarify(mapped, pad, pad, containerSize.w - pad * 2, containerSize.h - pad * 2);
@@ -250,8 +253,6 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({
         {cells.map((cell) => {
           const effectiveW = cell.w - CELL_GAP * 2;
           const effectiveH = cell.h - CELL_GAP * 2;
-          // Skip cells too small to render properly
-          if (effectiveW < MIN_CELL_DIM || effectiveH < MIN_CELL_DIM) return null;
 
           const isMorphTarget = animState !== 'idle' && morphTarget?.id === cell.id;
           const isOther = animState === 'morphOut' && morphTarget && morphTarget.id !== cell.id;
