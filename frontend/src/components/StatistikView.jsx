@@ -1,118 +1,88 @@
-import React, { useState, useMemo } from 'react';
+import React from 'react';
 import useStatistikData from '../hooks/useStatistikData';
-import TrajectoryChart from './TrajectoryChart';
-import DailyBreakdown from './DailyBreakdown';
+import useDeckFocus from '../hooks/useDeckFocus';
 import KnowledgeHeatmap from './KnowledgeHeatmap';
+import TrajectoryChart from './TrajectoryChart';
+import SessionSuggestion from './SessionSuggestion';
 import YearHeatmap from './YearHeatmap';
 import TimeOfDayChart from './TimeOfDayChart';
 
 export default function StatistikView({ deckData }) {
   const { data, loading } = useStatistikData();
-  const [scopeDeckId, setScopeDeckId] = useState(null); // null = all
-
-  // Build deck options from deckData roots
-  const deckOptions = useMemo(() => {
-    if (!deckData?.roots) return [];
-    return deckData.roots.map(d => ({ id: d.id, name: d.name }));
-  }, [deckData]);
-
-  // Filter deckData for scope
-  const scopedDeckData = useMemo(() => {
-    if (!scopeDeckId || !deckData?.roots) return deckData;
-    const selected = deckData.roots.find(d => d.id === scopeDeckId);
-    if (!selected) return deckData;
-    return { ...deckData, roots: selected.children || [] };
-  }, [deckData, scopeDeckId]);
+  const {
+    focusedDeckId,
+    trajectory: deckTrajectory,
+    suggestion,
+    loading: deckLoading,
+    focusDeck,
+    goBack,
+  } = useDeckFocus();
 
   if (loading || !data) {
     return (
       <div style={LOADING_STYLE}>
-        <span style={{ color: 'var(--ds-text-muted)', fontSize: 13 }}>Statistik wird geladen…</span>
+        <span style={{ color: 'var(--ds-text-muted)', fontSize: 13 }}>
+          Statistik wird geladen…
+        </span>
       </div>
     );
   }
 
-  const { trajectory, daily, heatmap, timeOfDay } = data;
-  // Handle both naming conventions from bridge
-  const dailyData = daily || data.daily_breakdown;
-  const heatmapData = heatmap || data.year_heatmap;
-  const todData = timeOfDay || data.time_of_day;
+  const heatmapData = data.heatmap || data.year_heatmap;
+  const todData = data.timeOfDay || data.time_of_day;
 
-  const totalDaily = (dailyData?.new || 0) + (dailyData?.young || 0) + (dailyData?.mature || 0);
-  const growthPct = trajectory?.total > 0
-    ? ((dailyData?.new || 0) / trajectory.total * 100).toFixed(1)
-    : '0';
+  // ── Level 2: Deck Focus ──────────────────────────────────────────────────
+  if (focusedDeckId) {
+    const traj = deckTrajectory;
+    return (
+      <div style={PAGE_STYLE}>
+        <button onClick={goBack} style={BACK_BUTTON_STYLE}>
+          ← Übersicht
+        </button>
 
+        {deckLoading && !traj ? (
+          <div style={LOADING_BLOCK_STYLE}>
+            <span style={{ color: 'var(--ds-text-muted)', fontSize: 13 }}>
+              Lade Verlauf…
+            </span>
+          </div>
+        ) : traj ? (
+          <TrajectoryChart
+            days={traj.days || []}
+            currentPct={traj.current_pct || 0}
+            totalCards={traj.total_cards || 0}
+            matureCards={traj.mature_cards || 0}
+            youngCards={traj.young_cards || 0}
+            avgNew7d={traj.avg_new_7d || 0}
+          />
+        ) : null}
+
+        <SessionSuggestion suggestion={suggestion} />
+      </div>
+    );
+  }
+
+  // ── Level 1: Wissenslandschaft ───────────────────────────────────────────
   return (
     <div style={PAGE_STYLE}>
-      {/* Deck Scope Selector */}
-      <div style={SCOPE_ROW_STYLE}>
-        <div style={SCOPE_PILLS_STYLE}>
-          <button
-            style={scopeDeckId === null ? SCOPE_PILL_ACTIVE_STYLE : SCOPE_PILL_STYLE}
-            onClick={() => setScopeDeckId(null)}
-          >
-            Alle Stapel
-          </button>
-          {deckOptions.map(d => (
-            <button
-              key={d.id}
-              style={scopeDeckId === d.id ? SCOPE_PILL_ACTIVE_STYLE : SCOPE_PILL_STYLE}
-              onClick={() => setScopeDeckId(d.id)}
-            >
-              {d.name}
-            </button>
-          ))}
+      <div style={HERO_SECTION_STYLE}>
+        <div style={HERO_HEADER_STYLE}>
+          <span style={HERO_TITLE_STYLE}>Wissensstand</span>
         </div>
-      </div>
-
-      {/* Trajectory Hero */}
-      <TrajectoryChart
-        days={trajectory?.days || []}
-        currentPct={trajectory?.current_pct || 0}
-        totalCards={trajectory?.total_cards || 0}
-        matureCards={trajectory?.mature_cards || 0}
-        youngCards={trajectory?.young_cards || 0}
-        avgNew7d={trajectory?.avg_new_7d || 0}
-      />
-
-      <div style={DIVIDER_STYLE} />
-
-      {/* Mid row: Dein Tag + Wissensstand */}
-      <div style={MID_ROW_STYLE}>
-        <div style={DAILY_COL_STYLE}>
-          <DailyBreakdown
-            newCount={dailyData?.new || 0}
-            youngCount={dailyData?.young || 0}
-            matureCount={dailyData?.mature || 0}
-            growthPct={growthPct}
+        {deckData?.roots?.length > 0 ? (
+          <KnowledgeHeatmap
+            deckData={deckData}
+            onSelectDeck={focusDeck}
+            selectedDeckId={null}
           />
-        </div>
-        <div style={KNOWLEDGE_COL_STYLE}>
-          <div style={SECTION_HEADER_STYLE}>
-            <span style={SECTION_TITLE_STYLE}>Wissensstand</span>
-            <span style={SECTION_HINT_STYLE}>Tippe für Ziel</span>
-          </div>
-          <div style={TREEMAP_WRAP_STYLE}>
-            {scopedDeckData?.roots?.length > 0 ? (
-              <KnowledgeHeatmap
-                deckData={scopedDeckData}
-                onSelectDeck={() => {}}
-                selectedDeckId={null}
-              />
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--ds-text-muted)', fontSize: 12 }}>
-                Deck-Daten werden geladen…
-              </div>
-            )}
-          </div>
-        </div>
+        ) : (
+          <div style={EMPTY_STYLE}>Deck-Daten werden geladen…</div>
+        )}
       </div>
 
       <div style={DIVIDER_STYLE} />
 
-      {/* Bottom row: Heatmap + Tageszeit */}
-      <div style={BOTTOM_ROW_STYLE}>
+      <div style={SECONDARY_ROW_STYLE}>
         <div style={HEATMAP_COL_STYLE}>
           <YearHeatmap
             levels={heatmapData?.levels || []}
@@ -129,75 +99,61 @@ export default function StatistikView({ deckData }) {
           />
         </div>
       </div>
-
-      {/* Goal Input Dock */}
-      <div style={GOAL_WRAP_STYLE}>
-        <div className="ds-frosted" style={GOAL_INPUT_STYLE}>
-          <span style={GOAL_ICON_STYLE}>◎</span>
-          <span style={GOAL_TEXT_STYLE}>Was willst du bis wann schaffen?</span>
-          <span style={KBD_STYLE}>⌘K</span>
-        </div>
-      </div>
     </div>
   );
 }
 
+// ── Styles ──────────────────────────────────────────────────────────────────
+
 const LOADING_STYLE = {
   flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
 };
+
 const PAGE_STYLE = {
   flex: 1, display: 'flex', flexDirection: 'column', gap: 28,
   maxWidth: 900, margin: '0 auto', width: '100%',
   padding: '16px 36px 80px',
   overflowY: 'auto', scrollbarWidth: 'none',
 };
-const SCOPE_ROW_STYLE = {
+
+const HERO_SECTION_STYLE = {
+  display: 'flex', flexDirection: 'column', gap: 12,
+};
+
+const HERO_HEADER_STYLE = {
+  display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
   padding: '0 4px',
 };
-const SCOPE_PILLS_STYLE = {
-  display: 'flex', gap: 6, flexWrap: 'wrap',
+
+const HERO_TITLE_STYLE = {
+  fontSize: 13, fontWeight: 500, color: 'var(--ds-text-tertiary)',
+  letterSpacing: 0.3,
 };
-const SCOPE_PILL_STYLE = {
-  padding: '4px 12px', fontSize: 11, fontWeight: 500, fontFamily: 'inherit',
-  border: '1px solid var(--ds-border-subtle)', borderRadius: 8,
-  background: 'transparent', color: 'var(--ds-text-tertiary)',
-  cursor: 'pointer', transition: 'all 0.15s',
+
+const EMPTY_STYLE = {
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  height: 200, color: 'var(--ds-text-muted)', fontSize: 12,
 };
-const SCOPE_PILL_ACTIVE_STYLE = {
-  ...SCOPE_PILL_STYLE,
-  background: 'var(--ds-active-tint)',
-  color: 'var(--ds-text-primary)',
-  borderColor: 'var(--ds-border-medium)',
-};
+
 const DIVIDER_STYLE = {
   height: 1, background: 'var(--ds-border-subtle)', margin: '0 4px',
 };
-const MID_ROW_STYLE = { display: 'flex', gap: 28, padding: '0 4px' };
-const DAILY_COL_STYLE = { flex: '0 0 260px' };
-const KNOWLEDGE_COL_STYLE = { flex: 1, display: 'flex', flexDirection: 'column' };
-const BOTTOM_ROW_STYLE = { display: 'flex', gap: 28, padding: '0 4px' };
+
+const SECONDARY_ROW_STYLE = {
+  display: 'flex', gap: 28, padding: '0 4px',
+};
+
 const HEATMAP_COL_STYLE = { flex: 1 };
+
 const TIME_COL_STYLE = { flex: '0 0 170px' };
-const SECTION_HEADER_STYLE = {
-  display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10,
+
+const BACK_BUTTON_STYLE = {
+  background: 'none', border: 'none', padding: '4px 0',
+  color: 'var(--ds-accent)', fontSize: 13, fontWeight: 500,
+  fontFamily: 'inherit', cursor: 'pointer', alignSelf: 'flex-start',
 };
-const SECTION_TITLE_STYLE = {
-  fontSize: 13, fontWeight: 500, color: 'var(--ds-text-tertiary)', letterSpacing: 0.3,
-};
-const SECTION_HINT_STYLE = { fontSize: 10, color: 'var(--ds-text-muted)' };
-const TREEMAP_WRAP_STYLE = { flex: 1, minHeight: 120 };
-const GOAL_WRAP_STYLE = {
-  position: 'fixed', bottom: 22, left: '50%', transform: 'translateX(-50%)', zIndex: 100,
-};
-const GOAL_INPUT_STYLE = {
-  display: 'flex', alignItems: 'center', gap: 10,
-  padding: '10px 20px', borderRadius: 14, minWidth: 360,
-  border: '1px solid var(--ds-border-subtle)',
-  boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-};
-const GOAL_ICON_STYLE = { fontSize: 13, color: 'var(--ds-text-muted)' };
-const GOAL_TEXT_STYLE = { flex: 1, fontSize: 13, color: 'var(--ds-text-muted)' };
-const KBD_STYLE = {
-  fontSize: 9, color: 'var(--ds-text-muted)',
-  padding: '2px 5px', border: '1px solid var(--ds-border-subtle)', borderRadius: 4,
+
+const LOADING_BLOCK_STYLE = {
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  height: 200,
 };
