@@ -382,9 +382,9 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({
 
         {/* Color legend */}
         <div style={LEGEND_WRAP_STYLE}>
-          <span style={LEGEND_LABEL_STYLE}>schwach</span>
-          <div style={LEGEND_BAR_STYLE} />
           <span style={LEGEND_LABEL_STYLE}>stark</span>
+          <div style={LEGEND_BAR_STYLE} />
+          <span style={LEGEND_LABEL_STYLE}>schwach</span>
         </div>
       </div>
     </div>
@@ -442,7 +442,7 @@ const LEGEND_LABEL_STYLE = {
 
 const LEGEND_BAR_STYLE = {
   width: 64, height: 4, borderRadius: 2,
-  background: 'linear-gradient(90deg, var(--ds-red), var(--ds-yellow), var(--ds-green))',
+  background: 'linear-gradient(90deg, var(--ds-green), var(--ds-yellow), var(--ds-red))',
 };
 
 export default KnowledgeHeatmap;
