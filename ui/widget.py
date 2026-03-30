@@ -88,7 +88,7 @@ class AIRequestThread(QThread):
     pipeline_signal = pyqtSignal(str, str, str, object)  # requestId, step, status, data
     msg_event_signal = pyqtSignal(str, str, object)  # requestId, eventType, data
 
-    def __init__(self, ai_handler, text, widget_ref, history=None, mode='compact', request_id=None, insights=None):
+    def __init__(self, ai_handler, text, widget_ref, history=None, mode='compact', request_id=None, insights=None, agent_name=None):
         super().__init__()
         self._handler_ref = weakref.ref(ai_handler) if ai_handler is not None else None
         self._widget_ref = weakref.ref(widget_ref) if widget_ref is not None else None
@@ -98,6 +98,7 @@ class AIRequestThread(QThread):
         self.request_id = request_id or str(uuid.uuid4())
         self._cancelled = False
         self.insights = insights
+        self.agent_name = agent_name
 
     def cancel(self):
         """Cancel the request."""
@@ -167,7 +168,8 @@ class AIRequestThread(QThread):
             bot_msg = handler.get_response_with_rag(
                 self.text, context=context, history=card_history,
                 mode=self.mode, callback=stream_callback,
-                insights=self.insights
+                insights=self.insights,
+                agent_name=self.agent_name
             )
 
             if not self._cancelled:
@@ -892,7 +894,7 @@ class KGDefinitionThread(QThread):
 
 
 class SmartSearchAgentThread(QThread):
-    """Dispatch Tutor agent for Smart Search answer + parallel cluster labeling."""
+    """Dispatch Research agent for Smart Search answer + parallel cluster labeling."""
     result_signal = pyqtSignal(str)  # JSON for graph.quickAnswer (cluster labels only)
     pipeline_signal = pyqtSignal(str, str, str, object)
     msg_event_signal = pyqtSignal(str, str, object)
@@ -945,11 +947,11 @@ class SmartSearchAgentThread(QThread):
             handler._pipeline_signal_callback = pipeline_callback
             handler._msg_event_callback = msg_event_callback
 
-            # Run Tutor + cluster labeling in parallel
+            # Run Research agent + cluster labeling in parallel
             from concurrent.futures import ThreadPoolExecutor
 
             with ThreadPoolExecutor(max_workers=2) as pool:
-                # 1. Tutor agent answer (blocking, streams via callbacks)
+                # 1. Research agent answer (blocking, streams via callbacks)
                 tutor_future = pool.submit(
                     handler.dispatch_smart_search,
                     query=self.query,
@@ -1309,7 +1311,8 @@ class ChatbotWidget(QWidget):
             self.current_request = message
             self.handle_message_from_ui(
                 message, history=data.get('history'), mode=data.get('mode', 'compact'),
-                request_id=data.get('requestId'))
+                request_id=data.get('requestId'),
+                agent_name=data.get('agent'))
 
     def _msg_cancel_request(self, data):
         if not self.current_request:
@@ -2327,7 +2330,7 @@ class ChatbotWidget(QWidget):
             items.append({"name": m["name"], "label": m["label"]})
         return items
 
-    def handle_message_from_ui(self, message: str, history=None, mode='compact', request_id=None):
+    def handle_message_from_ui(self, message: str, history=None, mode='compact', request_id=None, agent_name=None):
         """
         Verarbeitet Nachrichten von der UI
 
@@ -2406,7 +2409,7 @@ class ChatbotWidget(QWidget):
 
             # Start AI request thread immediately — card history loading happens inside the thread
             # to avoid blocking the main Qt thread
-            self._ai_thread = AIRequestThread(ai, text, self, history=history, mode=mode, request_id=request_id, insights=card_insights)
+            self._ai_thread = AIRequestThread(ai, text, self, history=history, mode=mode, request_id=request_id, insights=card_insights, agent_name=agent_name)
             self._ai_thread._card_context_for_history = self.current_card_context
             self._ai_thread.chunk_signal.connect(self.on_streaming_chunk)
             self._ai_thread.finished_signal.connect(self.on_streaming_finished)
@@ -2458,6 +2461,8 @@ class ChatbotWidget(QWidget):
         if not self._stream_queue:
             return
         payload = self._stream_queue.pop(0)
+        if payload.get('type') == 'msg_done':
+            logger.info("📤 DELIVERING msg_done to JS (queue had %s remaining)", len(self._stream_queue))
         self._send_to_js(payload)
         if self._stream_queue:
             self._stream_timer.start(self.STREAM_DELIVERY_MS)
@@ -3522,7 +3527,7 @@ class ChatbotWidget(QWidget):
             from ai.handler import get_ai_handler
         ai_handler = get_ai_handler(self)
 
-        # Ensure cards have an 'answer' field for Tutor context
+        # Ensure cards have an 'answer' field for Research agent context
         for card in cards_data:
             if 'answer' not in card:
                 card['answer'] = card.get('deck', '')

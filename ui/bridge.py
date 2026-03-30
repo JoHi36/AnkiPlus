@@ -731,9 +731,14 @@ class WebBridge(QObject):
             data = json.loads(data_json)
             card_id = data.get('cardId') or data.get('card_id')
             message = data.get('message', data)
+            sender = message.get('sender') or message.get('from', '?')
+            has_cells = bool(message.get('agent_cells'))
+            text_len = len(message.get('text', ''))
+            logger.info("📥 saveCardMessage: card=%s sender=%s text=%dch agentCells=%s", card_id, sender, text_len, has_cells)
             if not card_id:
                 return json.dumps({'success': False, 'error': 'Missing cardId'})
             success = save_message(card_id, message)
+            logger.info("📥 saveCardMessage: result=%s", success)
             return json.dumps({'success': success, 'error': None})
         except Exception as e:
             logger.error("Fehler in saveCardMessage: %s", e)
@@ -1391,7 +1396,8 @@ class WebBridge(QObject):
 
     @pyqtSlot(str, str, str)
     def subagentDirect(self, agent_name, text, extra_json='{}'):
-        """Route @Name messages to the appropriate subagent."""
+        """DEPRECATED: Route via sendMessage with agent param instead."""
+        logger.info("subagentDirect called (deprecated) — agent=%s", agent_name)
         try:
             extra = json.loads(extra_json) if extra_json else {}
             self.widget._handle_subagent_direct(agent_name, text, extra)
