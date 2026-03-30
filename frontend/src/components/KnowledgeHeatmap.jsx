@@ -105,8 +105,9 @@ function flattenLevel(roots) {
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
-const CELL_GAP = 3;
+const CELL_GAP = 4;
 const CELL_RADIUS = 14;
+const MIN_CELL_DIM = 40; // minimum width/height after gap to render a cell
 
 const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({
   deckData, onSelectDeck, onDrillDown, selectedDeckIds = [],
@@ -180,7 +181,9 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({
     const items = flattenLevel(currentRoots);
     items.sort((a, b) => b.strength - a.strength);
     const mapped = items.map(d => ({ ...d, value: d.cards }));
-    const layout = squarify(mapped, 0, 0, containerSize.w, containerSize.h);
+    // Lay out inside padded area so cells don't clip at container edges
+    const pad = CELL_GAP;
+    const layout = squarify(mapped, pad, pad, containerSize.w - pad * 2, containerSize.h - pad * 2);
     setCells(layout);
   }, [currentRoots, containerSize]);
 
@@ -245,6 +248,11 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({
         style={CONTAINER_STYLE}
       >
         {cells.map((cell) => {
+          const effectiveW = cell.w - CELL_GAP * 2;
+          const effectiveH = cell.h - CELL_GAP * 2;
+          // Skip cells too small to render properly
+          if (effectiveW < MIN_CELL_DIM || effectiveH < MIN_CELL_DIM) return null;
+
           const isMorphTarget = animState !== 'idle' && morphTarget?.id === cell.id;
           const isOther = animState === 'morphOut' && morphTarget && morphTarget.id !== cell.id;
           const isSelected = selectedSet.has(cell.id);
@@ -254,8 +262,8 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({
             position: 'absolute',
             left: cell.x + CELL_GAP,
             top: cell.y + CELL_GAP,
-            width: cell.w - CELL_GAP * 2,
-            height: cell.h - CELL_GAP * 2,
+            width: effectiveW,
+            height: effectiveH,
             boxSizing: 'border-box',
             cursor: 'pointer',
             display: 'flex',
