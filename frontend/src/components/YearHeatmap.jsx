@@ -78,13 +78,13 @@ const LEGEND_SQUARE_STYLE = {
   borderRadius: 2,
 };
 
-// Level colors — opacity variants of ds-accent (#0A84FF) + empty state
+// Level colors — green mastery tones (matches treemap palette)
 const LEVEL_COLORS = [
   'rgba(255,255,255,0.025)',
-  'rgba(10,132,255,0.15)',
-  'rgba(10,132,255,0.32)',
-  'rgba(10,132,255,0.55)',
-  'rgba(10,132,255,0.85)',
+  'rgba(74,222,128,0.12)',
+  'rgba(74,222,128,0.28)',
+  'rgba(74,222,128,0.50)',
+  'rgba(74,222,128,0.80)',
 ];
 
 // Month names for labels

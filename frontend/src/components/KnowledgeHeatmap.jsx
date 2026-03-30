@@ -235,18 +235,6 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({
     setAnimState('idle');
   }, [currentPath, deckData]);
 
-  // ── Overall mastery for the bar ─────────────────────────────────────────
-
-  const overallMastery = useMemo(() => {
-    if (!cells.length) return 0;
-    let totalCards = 0, weightedStrength = 0;
-    for (const c of cells) {
-      totalCards += c.cards;
-      weightedStrength += c.strength * c.cards;
-    }
-    return totalCards > 0 ? weightedStrength / totalCards : 0;
-  }, [cells]);
-
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -383,21 +371,11 @@ const KnowledgeHeatmap = forwardRef(function KnowledgeHeatmap({
           )}
         </div>
 
-        {/* Mastery gradient bar */}
-        <div style={MASTERY_BAR_WRAP_STYLE}>
-          <div style={MASTERY_BAR_BG_STYLE}>
-            <div style={{
-              ...MASTERY_BAR_FILL_STYLE,
-              width: `${Math.round(overallMastery * 100)}%`,
-            }} />
-            <div style={{
-              ...MASTERY_BAR_INDICATOR_STYLE,
-              left: `${Math.round(overallMastery * 100)}%`,
-            }} />
-          </div>
-          <span style={MASTERY_BAR_LABEL_STYLE}>
-            {Math.round(overallMastery * 100)}%
-          </span>
+        {/* Color legend */}
+        <div style={LEGEND_WRAP_STYLE}>
+          <span style={LEGEND_LABEL_STYLE}>schwach</span>
+          <div style={LEGEND_BAR_STYLE} />
+          <span style={LEGEND_LABEL_STYLE}>stark</span>
         </div>
       </div>
     </div>
@@ -445,31 +423,17 @@ const CRUMB_SEP_STYLE = {
   color: 'var(--ds-text-tertiary)', opacity: 0.5,
 };
 
-const MASTERY_BAR_WRAP_STYLE = {
-  display: 'flex', alignItems: 'center', gap: 8,
+const LEGEND_WRAP_STYLE = {
+  display: 'flex', alignItems: 'center', gap: 6,
 };
 
-const MASTERY_BAR_BG_STYLE = {
-  width: 80, height: 4, borderRadius: 2,
-  background: 'var(--ds-border-subtle)',
-  position: 'relative', overflow: 'visible',
+const LEGEND_LABEL_STYLE = {
+  fontSize: 10, color: 'var(--ds-text-muted)',
 };
 
-const MASTERY_BAR_FILL_STYLE = {
-  height: '100%', borderRadius: 2,
+const LEGEND_BAR_STYLE = {
+  width: 64, height: 4, borderRadius: 2,
   background: 'linear-gradient(90deg, var(--ds-red), var(--ds-yellow), var(--ds-green))',
-  transition: 'width 0.5s ease',
-};
-
-const MASTERY_BAR_INDICATOR_STYLE = {
-  position: 'absolute', top: -2, width: 8, height: 8,
-  borderRadius: '50%', background: 'var(--ds-text-primary)',
-  transform: 'translateX(-50%)', transition: 'left 0.5s ease',
-};
-
-const MASTERY_BAR_LABEL_STYLE = {
-  fontSize: 11, fontWeight: 500, color: 'var(--ds-text-secondary)',
-  fontVariantNumeric: 'tabular-nums',
 };
 
 export default KnowledgeHeatmap;

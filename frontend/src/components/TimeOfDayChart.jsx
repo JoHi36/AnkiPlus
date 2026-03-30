@@ -63,9 +63,11 @@ const GREEN_DOT_STYLE = {
 // ─── Bar color helper ─────────────────────────────────────────────────────────
 
 function barColor(value) {
-  if (value >= 0.7) return 'var(--ds-green)';
-  if (value >= 0.3) return 'var(--ds-accent)';
-  return 'var(--ds-border-medium)';
+  // Green intensity matches treemap mastery palette
+  if (value >= 0.7) return 'rgba(74,222,128,0.80)';
+  if (value >= 0.4) return 'rgba(74,222,128,0.45)';
+  if (value >= 0.15) return 'rgba(74,222,128,0.20)';
+  return 'rgba(74,222,128,0.08)';
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
