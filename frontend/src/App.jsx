@@ -50,7 +50,7 @@ import { ReasoningProvider, useReasoningDispatch, useReasoningStore } from './re
 import useSmartSearch from './hooks/useSmartSearch';
 import usePlusiVoice from './hooks/usePlusiVoice';
 import { useLidLift } from './hooks/useLidLift';
-import LidLiftTransition from './components/LidLiftTransition';
+import DeckPopup from './components/DeckPopup';
 
 // Register step renderers once at module load time
 registerDefaultRenderers();
@@ -2282,6 +2282,7 @@ function AppInner() {
       onTabClick={handleTabClick}
       onSidebarToggle={handleSidebarToggle}
       settingsOpen={settingsOpen}
+      canvasMode={lidIsActive}
     />
   );
 
@@ -2338,19 +2339,22 @@ function AppInner() {
                   searchBarRef={searchBarRef}
                   onSearchSubmit={handleLidSearch}
                 />
-                {/* Lid-Lift overlay: CockpitBar + SparkBurst */}
-                {lidLift.state !== 'idle' && (
-                  <LidLiftTransition
-                    state={lidLift.state}
-                    onAnimationComplete={lidLift.onAnimationComplete}
+                {/* Deck popup overlay — shows deck info when lid-lift is active */}
+                {lidIsActive && (
+                  <DeckPopup
                     deckName={deckBrowserData?.roots?.[0]?.name || null}
-                    onClose={() => lidLift.close(smartSearch.hasResults || smartSearch.isSearching)}
+                    cardCount={deckBrowserData?.totalDue}
+                    onStartLearning={() => {
+                      const firstDeck = deckBrowserData?.roots?.[0];
+                      if (firstDeck) executeAction('deck.study', { deckId: firstDeck.id });
+                    }}
                   />
                 )}
                 {/* GraphView overlay — renders search visualizations when lid-lift is open */}
                 {(lidLift.state === 'open' || lidLift.state === 'animating') && (
                   <div style={{
                     position: 'absolute', inset: 0, zIndex: 3,
+                    overflow: 'visible',
                     opacity: lidLift.state === 'animating' ? 0 : 1,
                     transition: 'opacity 0.3s ease',
                     pointerEvents: lidLift.state === 'open' ? 'auto' : 'none',
