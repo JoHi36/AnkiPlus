@@ -22,6 +22,7 @@ import ErrorBoundary, { ComponentErrorBoundary } from './components/ErrorBoundar
 import PaywallModal from './components/PaywallModal';
 import TokenBar from './components/TokenBar';
 import SectionDivider from './components/SectionDivider';
+import FadeSeparator from './components/FadeSeparator';
 import ReviewTrailIndicator from './components/ReviewTrailIndicator';
 import { setRegistry, findAgent } from '@shared/config/subagentRegistry';
 import { registerAction, executeAction, bridgeAction } from './actions';
@@ -208,9 +209,9 @@ function AppInner() {
   const searchBarRef = useRef(null);
 
   // SearchSidebar delayed unmount — slide out before removing
-  // Also show sidebar when lid-lift is active (agent canvas mode)
+  // Only show sidebar when there are actual search results or a search is running
   const lidIsActive = lidLift.state === 'animating' || lidLift.state === 'open';
-  const searchSidebarShouldShow = smartSearch.hasResults || smartSearch.isSearching || lidIsActive;
+  const searchSidebarShouldShow = smartSearch.hasResults || smartSearch.isSearching;
   const [searchSidebarMounted, setSearchSidebarMounted] = useState(false);
   const [searchSidebarExiting, setSearchSidebarExiting] = useState(false);
   useEffect(() => {
@@ -229,11 +230,15 @@ function AppInner() {
   }, [searchSidebarShouldShow]);
 
   // ── Lid-Lift: trigger handler (FLIP measurement + state machine) ──
+  // Global FLIP rect — persists across tab switches
+  const flipRectGlobal = useRef(null);
+
   const handleLidClick = useCallback(() => {
     if (lidLift.state !== 'idle') return;
     // FLIP step 1: measure current position before switching to fixed
     const rect = searchBarRef.current?.measureRect();
     if (!rect) return;
+    flipRectGlobal.current = rect;
     // Reset sidebar animation flag so it slides in fresh
     if (smartSearch.sidebarHasAnimated) {
       smartSearch.sidebarHasAnimated.current = false;
@@ -254,8 +259,9 @@ function AppInner() {
       if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
-        const hasResults = smartSearch.hasResults || smartSearch.isSearching;
-        lidLift.close(hasResults);
+        lidLift.close(false);
+        smartSearch.reset();
+        document.activeElement?.blur();
       }
     };
     window.addEventListener('keydown', handler, true);
@@ -269,6 +275,20 @@ function AppInner() {
   const [activeView, setActiveView] = useState(initialView); // 'chat' | 'deckBrowser' | 'overview' | 'review' | 'statistik'
   const activeViewRef = useRef('chat');
   useEffect(() => { activeViewRef.current = activeView; }, [activeView]);
+
+  // SPACE key opens lid-lift from deckBrowser idle state
+  useEffect(() => {
+    if (activeView !== 'deckBrowser' || lidLift.state !== 'idle') return;
+    const handler = (e) => {
+      if (e.key !== ' ') return;
+      const tag = (e.target?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return;
+      e.preventDefault();
+      handleLidClick();
+    };
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
+  }, [activeView, lidLift.state, handleLidClick]);
 
   // Fullscreen view state (merged from MainApp)
   const [ankiState, setAnkiState] = useState('deckBrowser');
@@ -1760,7 +1780,7 @@ function AppInner() {
    */
   const handleSend = (text, options) => {
     options = options || {};
-    if (activeView !== 'chat' && activeView !== 'review') {
+    if (activeView !== 'chat' && activeView !== 'review' && activeView !== 'deckBrowser') {
       setActiveView('chat');
     }
 
@@ -2065,7 +2085,7 @@ function AppInner() {
       reviewChatWasOpenRef.current = false;
       setTimeout(() => setReviewChatOpen(true), 200);
     }
-  }, [activeView, reviewChatOpen]);
+  }, [activeView, reviewChatOpen, lidLift]);
 
   const handleSidebarToggle = useCallback(() => {
     setSettingsOpen(prev => !prev);
@@ -2315,64 +2335,90 @@ function AppInner() {
         {settingsPanel}
         {mascotElement}
 
-        {/* Flex row: left (TopBar + content) + right (SearchSidebar via GraphView) */}
+        {/* TopBar — OUTSIDE flex row so sidebar doesn't push it */}
+        {persistentTopBar}
+
+        {/* Flex row: left (content) + right (SearchSidebar) */}
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden', position: 'relative' }}>
-            {persistentTopBar}
 
             <div style={FLEX_COL_FILL}>
-              {activeView === 'deckBrowser' && (
-                viewMode === 'graph' ? (
+              {/* DeckBrowser — always mounted to preserve lid-lift state across tab switches */}
+              <div style={{
+                flex: activeView === 'deckBrowser' ? 1 : undefined,
+                display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                position: activeView === 'deckBrowser' ? 'relative' : 'absolute',
+                inset: activeView === 'deckBrowser' ? undefined : 0,
+                visibility: activeView === 'deckBrowser' ? 'visible' : 'hidden',
+                pointerEvents: activeView === 'deckBrowser' ? 'auto' : 'none',
+              }}>
+                {viewMode === 'graph' ? (
                   <React.Suspense fallback={<div style={{ flex: 1 }} />}>
                     <GraphView onToggleView={() => setViewMode('decks')} isPremium={isPremium} deckData={deckBrowserData} smartSearch={smartSearch} bridge={bridgeRef.current} />
-              </React.Suspense>
-            ) : (
-              <ComponentErrorBoundary fallback={<div style={FALLBACK_VIEW_STYLE}>View failed to render. Try refreshing.</div>}>
-                {/* DeckBrowserView — always mounted, fades content during lid-lift */}
-                <DeckBrowserView
-                  data={deckBrowserData}
-                  isPremium={isPremium}
-                  onToggleView={() => setViewMode('graph')}
-                  lidState={lidLift.state}
-                  onLidClick={handleLidClick}
-                  onLidAnimEnd={lidLift.onAnimationComplete}
-                  searchBarRef={searchBarRef}
-                  onSearchSubmit={handleLidSearch}
-                />
-                {/* Deck popup overlay — shows deck info when lid-lift is active */}
-                {lidIsActive && (
-                  <DeckPopup
-                    deckName={deckBrowserData?.roots?.[0]?.name || null}
-                    cardCount={deckBrowserData?.totalDue}
-                    onStartLearning={() => {
-                      const firstDeck = deckBrowserData?.roots?.[0];
-                      if (firstDeck) executeAction('deck.study', { deckId: firstDeck.id });
-                    }}
-                  />
-                )}
-                {/* GraphView overlay — renders search visualizations when lid-lift is open */}
-                {(lidLift.state === 'open' || lidLift.state === 'animating') && (
-                  <div style={{
-                    position: 'absolute', inset: 0, zIndex: 3,
-                    overflow: 'visible',
-                    opacity: lidLift.state === 'animating' ? 0 : 1,
-                    transition: 'opacity 0.3s ease',
-                    pointerEvents: lidLift.state === 'open' ? 'auto' : 'none',
-                  }}>
-                    <React.Suspense fallback={<div style={{ flex: 1 }} />}>
-                      <GraphView
-                        onToggleView={() => {}}
-                        isPremium={isPremium}
-                        deckData={deckBrowserData}
-                        smartSearch={smartSearch}
-                        bridge={bridgeRef.current}
+                  </React.Suspense>
+                ) : (
+                  <ComponentErrorBoundary fallback={<div style={FALLBACK_VIEW_STYLE}>View failed to render. Try refreshing.</div>}>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
+                    <DeckBrowserView
+                      data={deckBrowserData}
+                      isPremium={isPremium}
+                      lidState={lidLift.state}
+                      canvasOpen={searchSidebarMounted || lidIsActive}
+                      onLidClick={handleLidClick}
+                      onLidAnimEnd={lidLift.onAnimationComplete}
+                      searchBarRef={searchBarRef}
+                      onSearchSubmit={handleLidSearch}
+                      flipRect={flipRectGlobal.current}
+                    />
+                    {/* Deck popup overlay — shows only when user selects a cluster/term */}
+                    {lidIsActive && (smartSearch.selectedClusterId || smartSearch.selectedTerm) && (
+                      <DeckPopup
+                        deckName={smartSearch.selectedClusterLabel || smartSearch.selectedTerm?.label || null}
+                        cardCount={smartSearch.selectedCluster?.cards?.length || smartSearch.selectedTerm?.cardIds?.length || 0}
+                        onStartLearning={() => {
+                          const termCardIds = smartSearch.selectedTerm?.cardIds;
+                          if (termCardIds?.length) {
+                            window.ankiBridge?.addMessage('startTermStack', {
+                              term: smartSearch.selectedTerm.label,
+                              cardIds: JSON.stringify(termCardIds.map(Number)),
+                            });
+                            return;
+                          }
+                          const cards = smartSearch.selectedCluster?.cards;
+                          if (cards?.length) {
+                            window.ankiBridge?.addMessage('startTermStack', {
+                              term: smartSearch.query,
+                              cardIds: JSON.stringify(cards.map(c => Number(c.id))),
+                            });
+                          }
+                        }}
                       />
-                    </React.Suspense>
-                  </div>
+                    )}
+                    {/* GraphView overlay — renders search visualizations when lid-lift is open */}
+                    {(lidLift.state === 'open' || lidLift.state === 'animating') && (
+                      <div style={{
+                        position: 'absolute', inset: 0, zIndex: 3,
+                        display: 'flex', flexDirection: 'column',
+                        overflow: 'visible',
+                        opacity: lidLift.state === 'animating' ? 0 : 1,
+                        transition: 'opacity 0.3s ease',
+                        pointerEvents: lidLift.state === 'open' ? 'auto' : 'none',
+                      }}>
+                        <React.Suspense fallback={<div style={{ flex: 1 }} />}>
+                          <GraphView
+                            onToggleView={() => {}}
+                            isPremium={isPremium}
+                            deckData={deckBrowserData}
+                            smartSearch={smartSearch}
+                            bridge={bridgeRef.current}
+                          />
+                        </React.Suspense>
+                      </div>
+                    )}
+                    </div>
+                  </ComponentErrorBoundary>
                 )}
-              </ComponentErrorBoundary>
-            )
-          )}
+              </div>
           {activeView === 'overview' && (
             <ComponentErrorBoundary fallback={<div style={FALLBACK_VIEW_STYLE}>View failed to render. Try refreshing.</div>}>
               <OverviewView
@@ -2390,8 +2436,8 @@ function AppInner() {
           )}
         </div>
           </div>
-          {/* SearchSidebar — at flex-row level, pushes TopBar + content */}
-          {searchSidebarMounted && (
+          {/* SearchSidebar — only visible in Stapel view */}
+          {searchSidebarMounted && activeView === 'deckBrowser' && (
             <SearchSidebar
               visible={true}
               isExiting={searchSidebarExiting}
@@ -2435,7 +2481,6 @@ function AppInner() {
               termDefinition={smartSearch.termDefinition}
               imageSelectedCardIds={smartSearch.imageSelectedCardIds}
               searchStreamId={smartSearch.searchStreamId}
-              hideActionDock={lidIsActive}
             />
           )}
         </div>
@@ -2659,9 +2704,14 @@ function AppInner() {
                               lowScorePulse={section.performanceData && section.performanceData.score < 40}
                             />
                           )}
+                          {/* Fade separator between Q&A blocks */}
+                          {msg.from === 'user' && localIdx > 0 && (() => {
+                            const prevInRender = messagesToRender[localIdx - 1];
+                            return prevInRender && prevInRender.from !== 'user' ? <FadeSeparator /> : null;
+                          })()}
                           {msg && typeof msg.text === 'string' && msg.text && (
-                            <div 
-                              className="mb-6" 
+                            <div
+                              className="mb-6"
                               data-message-id={msg.id}
                               data-message-from={msg.from || 'bot'}
                             >
