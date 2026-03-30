@@ -185,24 +185,22 @@ const LOADING_STYLE = {
 
 const PAGE_STYLE = {
   flex: 1, display: 'flex', flexDirection: 'column', gap: 24,
-  maxWidth: 900, margin: '0 auto', width: '100%',
-  padding: '16px 36px 100px',
+  maxWidth: 780, margin: '0 auto', width: '100%',
+  padding: '24px 0 100px',
   overflowY: 'auto', scrollbarWidth: 'thin',
-  alignItems: 'center',
 };
 
 const EMPTY_STYLE = {
   display: 'flex', alignItems: 'center', justifyContent: 'center',
   height: 200, color: 'var(--ds-text-muted)', fontSize: 12,
-  width: '100%',
 };
 
 const DIVIDER_STYLE = {
-  height: 1, background: 'var(--ds-border-subtle)', width: '100%',
+  height: 1, background: 'var(--ds-border-subtle)',
 };
 
 const SECONDARY_ROW_STYLE = {
-  display: 'flex', gap: 28, width: '100%',
+  display: 'flex', gap: 28,
 };
 
 const HEATMAP_COL_STYLE = { flex: 1 };
@@ -217,7 +215,7 @@ const BACK_BUTTON_STYLE = {
 
 const LOADING_BLOCK_STYLE = {
   display: 'flex', alignItems: 'center', justifyContent: 'center',
-  height: 200, width: '100%',
+  height: 200,
 };
 
 // ── Bottom Dock ──────────────────────────────────────────────────────────────
