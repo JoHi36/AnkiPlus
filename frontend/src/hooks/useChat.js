@@ -467,6 +467,13 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
         };
         // Add saved message FIRST, then clear live message in same batch
         setMessages(prev => [...prev, savedMsg]);
+        // Persist bot message to SQLite
+        if (cardSessionHookRef.current) {
+          const cardId = cardSessionHookRef.current.currentCardId;
+          if (cardId) {
+            queueMicrotask(() => cardSessionHookRef.current?.saveMessage(cardId, savedMsg));
+          }
+        }
         // Reset window globals for next request
         window._livePipelineSteps = [];
         window._livePipelineCitations = {};

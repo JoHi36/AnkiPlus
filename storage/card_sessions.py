@@ -197,6 +197,18 @@ def _migrate_schema(db):
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+    # v2 agent cells migration: add agent_cells and orchestration columns
+    if 'agent_cells' not in cols:
+        try:
+            db.execute("ALTER TABLE messages ADD COLUMN agent_cells TEXT")
+        except sqlite3.OperationalError:
+            pass
+    if 'orchestration' not in cols:
+        try:
+            db.execute("ALTER TABLE messages ADD COLUMN orchestration TEXT")
+        except sqlite3.OperationalError:
+            pass
+
     db.commit()
 
 
@@ -240,7 +252,7 @@ def load_card_session(card_id):
     ).fetchall()
     messages = []
     for r in rows:
-        m = _parse_json_fields(dict(r), ('steps', 'citations', 'pipeline_data'))
+        m = _parse_json_fields(dict(r), ('steps', 'citations', 'pipeline_data', 'agent_cells', 'orchestration'))
         messages.append(m)
 
     return {
@@ -378,12 +390,14 @@ def save_message(card_id, message):
         steps = _to_json(message.get('steps'))
         citations = _to_json(message.get('citations'))
         pipeline_data = _to_json(message.get('pipeline_data'))
+        agent_cells = _to_json(message.get('agent_cells') or message.get('agentCells'))
+        orchestration = _to_json(message.get('orchestration'))
         request_id = message.get('request_id') or message.get('requestId')
 
         msg_id = message.get('id') or str(uuid.uuid4())
         db.execute("""
-            INSERT OR REPLACE INTO messages (id, card_id, section_id, text, sender, created_at, steps, citations, request_id, deck_id, source, pipeline_data)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO messages (id, card_id, section_id, text, sender, created_at, steps, citations, request_id, deck_id, source, pipeline_data, agent_cells, orchestration)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             msg_id,
             card_id,
@@ -397,6 +411,8 @@ def save_message(card_id, message):
             deck_id,
             message.get('source', 'tutor'),
             pipeline_data,
+            agent_cells,
+            orchestration,
         ))
 
         db.execute("UPDATE card_sessions SET updated_at = ? WHERE card_id = ?", (now, card_id))
@@ -446,7 +462,7 @@ def load_deck_messages(deck_id, limit=50):
 
     messages = []
     for r in rows:
-        m = _parse_json_fields(dict(r), ('steps', 'citations', 'pipeline_data'))
+        m = _parse_json_fields(dict(r), ('steps', 'citations', 'pipeline_data', 'agent_cells', 'orchestration'))
         messages.append(m)
 
     # Reverse to get chronological (oldest first) order

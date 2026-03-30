@@ -92,6 +92,8 @@ export function useCardSession(bridge) {
         from: m.sender || m.from || 'user',
         createdAt: m.created_at || m.createdAt,
         timestamp: m.created_at || m.createdAt || m.timestamp,
+        agentCells: m.agent_cells || m.agentCells || null,
+        orchestration: m.orchestration || null,
       })),
     };
 
@@ -133,17 +135,24 @@ export function useCardSession(bridge) {
 
     // Via Bridge speichern
     if (window.ankiBridge) {
+      // Build text: for v2 messages, extract from agentCells if top-level text is empty
+      let text = message.text || '';
+      if (!text && message.agentCells && message.agentCells.length > 0) {
+        text = message.agentCells.map(c => c.text || '').join('\n').trim();
+      }
       const payload = {
         cardId: numericCardId,
         message: {
           id: message.id,
-          text: message.text,
+          text: text,
           sender: message.from || message.sender || 'user',
           section_id: message.sectionId || message.section_id,
           created_at: message.createdAt || message.timestamp || new Date().toISOString(),
           steps: message.steps,
           citations: message.citations,
           pipeline_data: message.pipeline_data,
+          agent_cells: message.agentCells || null,
+          orchestration: message.orchestration || null,
         }
       };
       window.ankiBridge.addMessage('saveCardMessage', JSON.stringify(payload));
