@@ -373,25 +373,25 @@ Jede Tutor-Antwort folgt dieser Architektur (von oben nach unten):
 │    ⚠ Widerspruch / Fehler / Unsicherheit        │
 │    Wird VOR der Antwort angezeigt                │
 ├─────────────────────────────────────────────────┤
-│ 2. PARAPHRASE                                   │
-│    "Du fragst also, ob..."                      │
-│    Zeigt dem User: ich hab dich verstanden       │
-├─────────────────────────────────────────────────┤
-│ 3. KOMPAKTE ANTWORT                             │
+│ 2. KOMPAKTE ANTWORT                             │
 │    Ja/Nein/Der Begriff ist X [1]                │
 │    1-2 Sätze, sofort die Kernaussage + Quelle   │
+│    Paraphrasiert die Frage IMPLIZIT durch        │
+│    Präzision — nie explizit "Du fragst ob..."   │
 ├─────────────────────────────────────────────────┤
-│ 4. ERKLÄRUNG                                    │
+│ 3. ERKLÄRUNG                                    │
 │    Ausführlich, mit Quellen [1][2][3]            │
 │    Tiefe, Kontext, Zusammenhänge                │
 ├─────────────────────────────────────────────────┤
-│ 5. ZUSAMMENFASSUNG / MERKE                      │
+│ 4. ZUSAMMENFASSUNG / MERKE                      │
 │    Takeaway, das hängenbleibt                   │
 │    Quellen nur wenn nötig                       │
 └─────────────────────────────────────────────────┘
 ```
 
-Nicht jede Antwort braucht alle 5 Blöcke. Einfache Faktenfragen können direkt mit Block 3 (Kompakte Antwort) beantwortet werden. Safety Check erscheint nur wenn tatsächlich ein Problem vorliegt.
+Nicht jede Antwort braucht alle 4 Blöcke. Einfache Faktenfragen können direkt mit Block 2 (Kompakte Antwort) beantwortet werden. Safety Check erscheint nur wenn tatsächlich ein Problem vorliegt.
+
+**Keine explizite Paraphrase.** Die kompakte Antwort zeigt durch ihre Präzision, dass die Frage verstanden wurde. "Ja — das Broca-Areal steuert die motorische Sprachproduktion [1]." beweist Verständnis, ohne "Du fragst ob..." davor zu setzen. Bei vagen/kontextabhängigen Fragen paraphrasiert die Antwort implizit: "Die **Aortenklappe** öffnet sich bei Systole..." (statt "Wie funktioniert das?").
 
 ### Wissenshierarchie
 
@@ -425,7 +425,6 @@ Aktuelle Leitlinien empfehlen logopädische Frühintervention [3]."
 ```
 
 **Platzierung:**
-- **Paraphrase** — keine Quellen (ist User-Input)
 - **Kompakte Antwort** — JA, Quelle direkt an der Kernaussage
 - **Erklärung** — jede Fakten-Aussage mit Quelle
 - **Zusammenfassung/Merke** — nur wenn nötig, leichter
@@ -455,6 +454,80 @@ Der Safety-Block erscheint am Anfang der Antwort, VOR allem anderen. Er wird nur
 3. **Level 3:** Fallback-Modell ohne RAG (bei jedem Error aus Level 2)
 
 Fehlermeldung an User nur wenn alle 3 Level scheitern.
+
+### Generation Benchmark
+
+Der Generation-Benchmark evaluiert die Qualität der Tutor-Antworten per LLM-Bewertung. Jeder Test-Case definiert Erwartungen an **Struktur**, **Inhalt** und **Safety**.
+
+**Test-Case Format:**
+
+```json
+{
+  "id": "gen_001",
+  "query": "Ist das Broca-Areal für Sprachverständnis zuständig?",
+  "card_context": { "card_id": 12345, "terms": ["Broca", "Sprachproduktion"] },
+  "retrieval_cards": [1234, 4821, 4835],
+  "expectations": {
+    "structure": {
+      "has_safety_check": true,
+      "safety_type": "implicit_error",
+      "has_compact_answer": true,
+      "has_explanation": true
+    },
+    "content": {
+      "must_contain": ["motorische Sprachproduktion", "Wernicke"],
+      "must_not_contain": ["Sprachverständnis ist korrekt"],
+      "corrects_misconception": true
+    },
+    "sources": {
+      "min_card_citations": 1,
+      "no_uncited_facts": true,
+      "web_only_if_needed": true
+    }
+  }
+}
+```
+
+**Metriken (LLM-evaluiert):**
+
+| Metrik | Beschreibung | Bewertung |
+|--------|-------------|-----------|
+| **Struktur-Compliance** | Folgt die Antwort der 4-Block-Architektur? | 0/1 pro Block |
+| **Safety-Detection** | Erkennt der Tutor implizite Fehler / Widersprüche? | 0/1 |
+| **Kompaktheit** | Ist die kompakte Antwort wirklich kompakt (≤2 Sätze)? | 0/1 |
+| **Fakten-Korrektheit** | Stimmen die Aussagen mit den Quellen überein? | 0-1 (anteilig) |
+| **Quellen-Nutzung** | Sind Fakten korrekt zitiert? Keine erfundenen Quellen? | 0-1 |
+| **Quellen-Transparenz** | Ist klar was aus Karten vs Weltwissen vs Web kommt? | 0/1 |
+| **Vollständigkeit** | Enthält die Antwort alle erwarteten Aspekte? | 0-1 (anteilig) |
+| **Keine Halluzination** | Erfindet der Tutor keine Fakten die nicht in Quellen stehen? | 0/1 |
+
+**Evaluierungs-Pipeline:**
+
+```
+Test-Case → Tutor generiert Antwort → LLM (Gemini) bewertet gegen Erwartungen → Score
+```
+
+Der Evaluierungs-LLM bekommt: die Frage, die Karten (Ground Truth), die generierte Antwort, und die Erwartungen. Er bewertet jede Metrik einzeln.
+
+**Test-Kategorien:**
+
+| Kategorie | Testet | Beispiel |
+|-----------|--------|----------|
+| `factual` | Korrekte Fakten aus Karten | "Was macht ATP?" |
+| `safety_error` | Erkennt der Tutor User-Fehler? | "Broca = Verständnis, oder?" |
+| `safety_contradiction` | Erkennt der Tutor Quellen-Widersprüche? | Zwei Karten mit verschiedenen Werten |
+| `safety_no_source` | Kommuniziert der Tutor fehlende Quellen? | Frage zu Thema ohne Karten |
+| `comparison` | Vergleicht ähnliche Konzepte sauber? | "Unterschied Broca / Wernicke?" |
+| `context_vague` | Versteht der Tutor vage Fragen im Kontext? | "Wie funktioniert das?" (auf Karte) |
+| `citation_quality` | Korrekte Zuordnung Fakt → Quelle? | Prüft ob [1] wirklich aus Karte 1 stammt |
+
+**Key Files:**
+
+| File | Responsibility |
+|------|---------------|
+| `benchmark/generation_cases.json` | Test-Cases (noch zu erstellen) |
+| `scripts/benchmark_generation.py` | Runner + LLM-Evaluierung (noch zu erstellen) |
+| `scripts/benchmark_serve.py` | Dashboard — Generation-Tab (Platzhalter existiert) |
 
 ### Key Files (Generation)
 

@@ -578,7 +578,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <div class="error-banner" id="error-banner"></div>
 
 <!-- Docs Tab (hidden by default) -->
-<div id="docs-panel" style="display:none;background:var(--ds-bg-canvas);border-radius:var(--ds-radius-lg);padding:24px 32px;border:1px solid var(--ds-border-medium);max-width:900px;margin:0 auto;font-size:var(--ds-text-md);line-height:1.8;color:var(--ds-text-primary)">
+<div id="docs-panel" style="display:none;max-width:900px;margin:0 auto;font-size:var(--ds-text-md);line-height:1.8;color:var(--ds-text-primary)">
   <div id="docs-content" style="white-space:pre-wrap;font-family:var(--ds-font-sans)">Loading docs...</div>
   <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--ds-border-medium);font-size:var(--ds-text-xs);color:var(--ds-text-secondary)" id="docs-path"></div>
 </div>
@@ -619,17 +619,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   </div>
 </div>
 
-<!-- Generation Tab (placeholder) -->
+<!-- Generation Tab -->
 <div id="generation-panel" style="display:none">
-  <div style="background:var(--ds-bg-canvas);border-radius:var(--ds-radius-lg);padding:48px 32px;border:1px solid var(--ds-border-medium);max-width:700px;margin:0 auto;text-align:center">
-    <div style="font-size:var(--ds-text-xl);color:var(--ds-text-primary);margin-bottom:12px">Generation Evaluation</div>
-    <div style="font-size:var(--ds-text-md);color:var(--ds-text-secondary);line-height:1.7">
-      Bewertet die Antwortqualität des Tutor-Modells.<br>
-      Input: Frage + gefundene Karten → Output: generierte Antwort.<br>
-      Metriken: Vollständigkeit, Korrektheit, Quellennutzung.<br><br>
-      <span style="color:var(--ds-text-tertiary)">Wird als nächster Schritt implementiert.</span>
-    </div>
-  </div>
+  <div id="gen-summary" style="margin-bottom:24px"></div>
+  <div id="gen-categories" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px"></div>
+  <div id="gen-cases"></div>
 </div>
 
 <!-- Live Test Tab -->
@@ -724,6 +718,7 @@ function switchSubTab(tab) {
   // Load data
   if (tab === 'router') loadRouterResults();
   if (tab === 'docs') loadDocs();
+  if (tab === 'generation') loadGeneration();
   if (tab === 'retrieval') {
     if (_data) {
       renderSummary(_data.aggregate);
@@ -787,6 +782,163 @@ function loadDocs() {
     }
   }).catch(function(e) {
     document.getElementById('docs-content').textContent = 'Failed to load: ' + e;
+  });
+}
+
+function loadGeneration() {
+  fetch('/api/generation_results').then(function(r){return r.json()}).then(function(data) {
+    var el = document.getElementById('gen-summary');
+    if (!data || !data.aggregate) {
+      el.textContent = 'Keine Generation-Ergebnisse. Starte: python3 scripts/benchmark_generation.py';
+      return;
+    }
+    var agg = data.aggregate;
+    var overall = Math.round((agg.overall_score || 0) * 100);
+    var det = Math.round((agg.overall_deterministic || 0) * 100);
+    var n = data.config.total_cases || 0;
+    var ts = data.timestamp || '';
+    var barColor = overall >= 80 ? 'var(--ds-green)' : overall >= 50 ? 'var(--ds-yellow)' : 'var(--ds-red)';
+
+    // Summary
+    el.textContent = '';
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:baseline;gap:16px;margin-bottom:8px';
+    var big = document.createElement('span');
+    big.style.cssText = 'font-size:36px;font-weight:700;color:' + barColor;
+    big.textContent = overall + '%';
+    var sub = document.createElement('span');
+    sub.style.cssText = 'font-size:var(--ds-text-lg);color:var(--ds-text-secondary)';
+    sub.textContent = 'Overall (det ' + det + '%)';
+    var meta = document.createElement('span');
+    meta.style.cssText = 'font-size:var(--ds-text-sm);color:var(--ds-text-tertiary);margin-left:auto';
+    meta.textContent = n + ' cases \u00b7 ' + ts;
+    row.appendChild(big); row.appendChild(sub); row.appendChild(meta);
+    el.appendChild(row);
+    var bar = document.createElement('div');
+    bar.style.cssText = 'height:6px;background:var(--ds-bg-overlay);border-radius:3px;overflow:hidden';
+    var fill = document.createElement('div');
+    fill.style.cssText = 'height:100%;width:' + overall + '%;background:' + barColor + ';border-radius:3px';
+    bar.appendChild(fill);
+    el.appendChild(bar);
+
+    // Categories
+    var catEl = document.getElementById('gen-categories');
+    catEl.textContent = '';
+    var cats = agg.by_category || {};
+    for (var cat in cats) {
+      var c = cats[cat];
+      var avg = Math.round((c.avg || 0) * 100);
+      var detA = Math.round((c.det_avg || 0) * 100);
+      var col = avg >= 80 ? 'var(--ds-green)' : avg >= 50 ? 'var(--ds-yellow)' : 'var(--ds-red)';
+      var pill = document.createElement('div');
+      pill.style.cssText = 'background:var(--ds-bg-canvas);border:1px solid var(--ds-border-medium);border-radius:var(--ds-radius-md);padding:12px 16px;min-width:140px';
+      var label = document.createElement('div');
+      label.style.cssText = 'font-size:var(--ds-text-xs);color:var(--ds-text-tertiary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px';
+      label.textContent = cat.replace(/_/g, ' ');
+      var num = document.createElement('div');
+      num.style.cssText = 'font-size:24px;font-weight:700;color:' + col;
+      num.textContent = avg + '%';
+      var info = document.createElement('div');
+      info.style.cssText = 'font-size:var(--ds-text-xs);color:var(--ds-text-secondary)';
+      info.textContent = 'det ' + detA + '% \u00b7 ' + c.passed + '/' + c.total;
+      pill.appendChild(label); pill.appendChild(num); pill.appendChild(info);
+      catEl.appendChild(pill);
+    }
+
+    // Cases
+    var casesEl = document.getElementById('gen-cases');
+    casesEl.textContent = '';
+    var cases = data.cases || [];
+    for (var i = 0; i < cases.length; i++) {
+      var cs = cases[i];
+      var score = Math.round((cs.total_score || 0) * 100);
+      var detS = Math.round((cs.det_total || 0) * 100);
+      var llmS = Math.round((cs.llm_total || 0) * 100);
+      var icon = score >= 70 ? '\u2713' : score >= 40 ? '\u25b3' : '\u2717';
+      var cCol = score >= 70 ? 'var(--ds-green)' : score >= 40 ? 'var(--ds-yellow)' : 'var(--ds-red)';
+
+      var details = document.createElement('details');
+      details.style.cssText = 'background:var(--ds-bg-canvas);border:1px solid var(--ds-border-medium);border-radius:var(--ds-radius-md);margin-bottom:8px;overflow:hidden';
+
+      var summary = document.createElement('summary');
+      summary.style.cssText = 'padding:12px 16px;cursor:pointer;display:flex;align-items:center;gap:12px';
+      var sIcon = document.createElement('span');
+      sIcon.style.cssText = 'color:' + cCol + ';font-size:16px;width:20px';
+      sIcon.textContent = icon;
+      var sId = document.createElement('span');
+      sId.style.cssText = 'font-family:var(--ds-font-mono);font-size:var(--ds-text-sm);color:var(--ds-text-secondary);min-width:200px';
+      sId.textContent = cs.id;
+      var sQ = document.createElement('span');
+      sQ.style.cssText = 'font-size:var(--ds-text-sm);color:var(--ds-text-primary);flex:1';
+      sQ.textContent = cs.query;
+      var sScore = document.createElement('span');
+      sScore.style.cssText = 'font-size:var(--ds-text-sm);font-weight:600;color:' + cCol;
+      sScore.textContent = score + '%';
+      summary.appendChild(sIcon); summary.appendChild(sId); summary.appendChild(sQ); summary.appendChild(sScore);
+      details.appendChild(summary);
+
+      var body = document.createElement('div');
+      body.style.cssText = 'padding:0 16px 16px;border-top:1px solid var(--ds-border-medium)';
+
+      // Deterministic badges
+      var dHead = document.createElement('div');
+      dHead.style.cssText = 'margin-top:12px;margin-bottom:8px;font-size:var(--ds-text-xs);color:var(--ds-text-tertiary);text-transform:uppercase';
+      dHead.textContent = 'Deterministic (' + detS + '%)';
+      body.appendChild(dHead);
+      var dBadges = document.createElement('div');
+      var dets = cs.deterministic || {};
+      for (var k in dets) {
+        var ds = dets[k];
+        var dCol = ds.score >= 1 ? 'var(--ds-green)' : ds.score >= 0.5 ? 'var(--ds-yellow)' : 'var(--ds-red)';
+        var badge = document.createElement('span');
+        badge.style.cssText = 'display:inline-block;margin:2px 4px;padding:2px 8px;border-radius:4px;font-size:11px;background:var(--ds-bg-overlay);color:' + dCol;
+        badge.textContent = k + ': ' + Math.round(ds.score * 100) + '%';
+        dBadges.appendChild(badge);
+      }
+      body.appendChild(dBadges);
+
+      // LLM badges
+      var lHead = document.createElement('div');
+      lHead.style.cssText = 'margin-top:12px;margin-bottom:8px;font-size:var(--ds-text-xs);color:var(--ds-text-tertiary);text-transform:uppercase';
+      lHead.textContent = 'LLM Eval (' + llmS + '%)';
+      body.appendChild(lHead);
+      var lBadges = document.createElement('div');
+      var llm = cs.llm || {};
+      if (!llm.parse_error) {
+        for (var lk in llm) {
+          if (lk === 'notes') continue;
+          if (typeof llm[lk] === 'number') {
+            var lCol = llm[lk] >= 0.8 ? 'var(--ds-green)' : llm[lk] >= 0.5 ? 'var(--ds-yellow)' : 'var(--ds-red)';
+            var lBadge = document.createElement('span');
+            lBadge.style.cssText = 'display:inline-block;margin:2px 4px;padding:2px 8px;border-radius:4px;font-size:11px;background:var(--ds-bg-overlay);color:' + lCol;
+            lBadge.textContent = lk + ': ' + Math.round(llm[lk] * 100) + '%';
+            lBadges.appendChild(lBadge);
+          }
+        }
+        if (llm.notes) {
+          var note = document.createElement('div');
+          note.style.cssText = 'font-size:12px;color:var(--ds-text-secondary);margin-top:6px;font-style:italic';
+          note.textContent = llm.notes;
+          lBadges.appendChild(note);
+        }
+      }
+      body.appendChild(lBadges);
+
+      // Response preview
+      var rHead = document.createElement('div');
+      rHead.style.cssText = 'margin-top:12px;margin-bottom:4px;font-size:var(--ds-text-xs);color:var(--ds-text-tertiary);text-transform:uppercase';
+      rHead.textContent = 'Tutor Response';
+      body.appendChild(rHead);
+      var rBox = document.createElement('div');
+      rBox.style.cssText = 'font-size:var(--ds-text-sm);color:var(--ds-text-primary);background:var(--ds-bg-deep);padding:12px;border-radius:var(--ds-radius-sm);white-space:pre-wrap;line-height:1.6;max-height:300px;overflow-y:auto';
+      rBox.textContent = (cs.tutor_response || '').substring(0, 500);
+      body.appendChild(rBox);
+
+      details.appendChild(body);
+      casesEl.appendChild(details);
+    }
+  }).catch(function(e) {
+    document.getElementById('gen-summary').textContent = 'Error: ' + e;
   });
 }
 </script>
@@ -1860,6 +2012,17 @@ class BenchmarkHandler(BaseHTTPRequestHandler):
                 with open(ROUTER_RESULTS_PATH, "r", encoding="utf-8") as fh:
                     raw = fh.read()
                 self._send(200, "application/json", raw)
+            except OSError as exc:
+                self._send_error_json(500, str(exc))
+
+        elif self.path == "/api/generation_results":
+            gen_path = os.path.join(PROJECT_ROOT, "benchmark", "generation_results.json")
+            if not os.path.isfile(gen_path):
+                self._send_json(200, {})
+                return
+            try:
+                with open(gen_path, "r", encoding="utf-8") as fh:
+                    self._send(200, "application/json", fh.read())
             except OSError as exc:
                 self._send_error_json(500, str(exc))
 
