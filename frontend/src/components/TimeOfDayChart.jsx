@@ -1,65 +1,5 @@
 import React from 'react';
 
-// ─── Static style constants ───────────────────────────────────────────────────
-
-const CONTAINER_STYLE = {};
-
-const HEADER_STYLE = {
-  marginBottom: 14,
-};
-
-const LABEL_STYLE = {
-  fontSize: 13,
-  fontWeight: 500,
-  letterSpacing: 0.3,
-  color: 'var(--ds-text-tertiary)',
-};
-
-const SUBTITLE_STYLE = {
-  fontSize: 12,
-  color: 'var(--ds-text-muted)',
-  marginTop: 2,
-};
-
-const BARS_WRAPPER_STYLE = {
-  display: 'flex',
-  alignItems: 'flex-end',
-  gap: 3,
-  height: 64,
-  marginBottom: 6,
-};
-
-const HOUR_LABELS_STYLE = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  paddingLeft: 0,
-};
-
-const HOUR_LABEL_STYLE = {
-  fontSize: 10,
-  color: 'var(--ds-text-muted)',
-  width: '25%',
-};
-
-const FOOTER_STYLE = {
-  marginTop: 12,
-  paddingTop: 10,
-  borderTop: '1px solid var(--ds-border-subtle)',
-  display: 'flex',
-  alignItems: 'center',
-  gap: 7,
-  fontSize: 12,
-  color: 'var(--ds-text-secondary)',
-};
-
-const GREEN_DOT_STYLE = {
-  width: 8,
-  height: 8,
-  borderRadius: '50%',
-  background: 'var(--ds-green)',
-  flexShrink: 0,
-};
-
 // ─── Bar color helper ─────────────────────────────────────────────────────────
 
 function barColor(value) {
@@ -78,18 +18,12 @@ export default function TimeOfDayChart({
   bestEnd = 11,
 }) {
   const safeHours = Array.from({ length: 24 }, (_, i) => Math.min(1, Math.max(0, hours[i] ?? 0)));
-  const MIN_BAR_H = 4; // px — always visible even at 0
+  const MIN_BAR_H = 3;
 
   return (
     <div style={CONTAINER_STYLE}>
-      {/* Header */}
-      <div style={HEADER_STYLE}>
-        <div style={LABEL_STYLE}>Tageszeit</div>
-        <div style={SUBTITLE_STYLE}>Aktivität</div>
-      </div>
-
       {/* Bars */}
-      <div style={BARS_WRAPPER_STYLE}>
+      <div style={BARS_STYLE}>
         {safeHours.map((val, h) => {
           const barH = Math.max(MIN_BAR_H, Math.round(val * 60));
           return (
@@ -98,7 +32,7 @@ export default function TimeOfDayChart({
               style={{
                 flex: 1,
                 height: barH,
-                borderRadius: 3,
+                borderRadius: 2,
                 background: barColor(val),
                 opacity: val === 0 ? 0.35 : 1,
                 transition: 'height 0.3s ease',
@@ -108,25 +42,36 @@ export default function TimeOfDayChart({
         })}
       </div>
 
-      {/* Hour labels every 6h */}
-      <div style={HOUR_LABELS_STYLE}>
-        {[0, 6, 12, 18].map(h => (
-          <div key={h} style={HOUR_LABEL_STYLE}>
-            {h === 0 ? '0h' : `${h}h`}
-          </div>
-        ))}
-      </div>
-
-      {/* Footer */}
+      {/* Footer: best time */}
       <div style={FOOTER_STYLE}>
-        <div style={GREEN_DOT_STYLE} />
-        <span>
-          Am besten:{' '}
-          <span style={{ fontWeight: 600, color: 'var(--ds-text-primary)' }}>
-            {bestStart}–{bestEnd} Uhr
-          </span>
+        <div style={DOT_STYLE} />
+        <span style={BEST_STYLE}>
+          <b>{bestStart}–{bestEnd}</b>
         </span>
       </div>
     </div>
   );
 }
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
+const CONTAINER_STYLE = {
+  display: 'flex', flexDirection: 'column', gap: 6,
+};
+
+const BARS_STYLE = {
+  display: 'flex', alignItems: 'flex-end', gap: 1, height: 64,
+};
+
+const FOOTER_STYLE = {
+  display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center',
+};
+
+const DOT_STYLE = {
+  width: 5, height: 5, borderRadius: '50%',
+  background: 'rgba(74,222,128,0.80)', flexShrink: 0,
+};
+
+const BEST_STYLE = {
+  fontSize: 9, color: 'var(--ds-text-muted)',
+};

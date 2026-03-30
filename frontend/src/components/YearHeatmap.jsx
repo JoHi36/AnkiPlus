@@ -62,19 +62,19 @@ const GRID_STYLE = {
 const FOOTER_STYLE = {
   display: 'flex',
   alignItems: 'center',
-  gap: 6,
-  marginTop: 10,
+  gap: 4,
+  marginTop: 6,
   justifyContent: 'flex-end',
 };
 
 const FOOTER_LABEL_STYLE = {
-  fontSize: 10,
+  fontSize: 9,
   color: 'var(--ds-text-muted)',
 };
 
 const LEGEND_SQUARE_STYLE = {
-  width: 10,
-  height: 10,
+  width: 8,
+  height: 8,
   borderRadius: 2,
 };
 
@@ -134,23 +134,25 @@ export default function YearHeatmap({
       )}
 
       {/* Month labels */}
-      <div style={{ position: 'relative', height: 14, marginBottom: 4 }}>
-        {monthLabels.map(({ name, col }) => (
-          <span
-            key={name}
-            style={{
-              position: 'absolute',
-              left: `${(col / 52) * 100}%`,
-              fontSize: 10,
-              color: 'var(--ds-text-muted)',
-              transform: 'translateX(-50%)',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {name}
-          </span>
-        ))}
-      </div>
+      {!hideHeader && (
+        <div style={{ position: 'relative', height: 14, marginBottom: 4 }}>
+          {monthLabels.map(({ name, col }) => (
+            <span
+              key={name}
+              style={{
+                position: 'absolute',
+                left: `${(col / 52) * 100}%`,
+                fontSize: 10,
+                color: 'var(--ds-text-muted)',
+                transform: 'translateX(-50%)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {name}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Grid */}
       <div style={GRID_STYLE}>

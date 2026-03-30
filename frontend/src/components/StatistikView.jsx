@@ -217,36 +217,34 @@ const DIVIDER_STYLE = {
 };
 
 const SECONDARY_ROW_STYLE = {
-  display: 'flex', gap: 12, alignItems: 'flex-end',
+  display: 'flex', gap: 20, alignItems: 'flex-end',
 };
 
 const STREAK_WIDGET_STYLE = {
-  flex: '0 0 100px', display: 'flex', flexDirection: 'column',
-  alignItems: 'center', justifyContent: 'center',
-  padding: '16px 8px',
-  borderRadius: 14, border: '1px solid var(--ds-border-subtle)',
-  background: 'var(--ds-bg-canvas)',
+  flex: '0 0 60px', display: 'flex', flexDirection: 'column',
+  alignItems: 'center', justifyContent: 'flex-end',
+  paddingBottom: 4,
 };
 
-const STREAK_FLAME_STYLE = { fontSize: 24, lineHeight: 1 };
+const STREAK_FLAME_STYLE = { fontSize: 20, lineHeight: 1 };
 
 const STREAK_VALUE_STYLE = {
-  fontSize: 28, fontWeight: 600, color: 'var(--ds-text-primary)',
-  lineHeight: 1, marginTop: 6,
+  fontSize: 32, fontWeight: 200, color: 'var(--ds-text-primary)',
+  lineHeight: 1, marginTop: 4,
 };
 
 const STREAK_UNIT_STYLE = {
-  fontSize: 11, color: 'var(--ds-text-muted)', marginTop: 2,
+  fontSize: 10, color: 'var(--ds-text-muted)', marginTop: 2,
 };
 
 const STREAK_BEST_STYLE = {
-  fontSize: 10, color: 'var(--ds-text-muted)', marginTop: 8,
-  opacity: 0.6,
+  fontSize: 9, color: 'var(--ds-text-muted)', marginTop: 6,
+  opacity: 0.5,
 };
 
 const HEATMAP_COL_STYLE = { flex: 1, minWidth: 0 };
 
-const TIME_COL_STYLE = { flex: '0 0 150px' };
+const TIME_COL_STYLE = { flex: '0 0 100px' };
 
 const BACK_BUTTON_STYLE = {
   background: 'none', border: 'none', padding: '4px 0',
