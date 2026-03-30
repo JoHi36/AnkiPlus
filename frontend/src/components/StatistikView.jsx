@@ -122,16 +122,32 @@ export default function StatistikView({ deckData }) {
 
       <div style={DIVIDER_STYLE} />
 
-      {/* Secondary charts */}
+      {/* Secondary: 3 widgets — Streak | Activity | TimeOfDay */}
       <div style={SECONDARY_ROW_STYLE}>
+        {/* Streak widget (square) */}
+        <div style={STREAK_WIDGET_STYLE}>
+          <div style={STREAK_FLAME_STYLE}>🔥</div>
+          <div style={STREAK_VALUE_STYLE}>{heatmapData?.streak || 0}</div>
+          <div style={STREAK_UNIT_STYLE}>Tage</div>
+          {(heatmapData?.best_streak || 0) > 0 && (
+            <div style={STREAK_BEST_STYLE}>
+              Bester: {heatmapData.best_streak}
+            </div>
+          )}
+        </div>
+
+        {/* Activity heatmap (wide) */}
         <div style={HEATMAP_COL_STYLE}>
           <YearHeatmap
             levels={heatmapData?.levels || []}
             totalYear={heatmapData?.total_year || 0}
             streak={heatmapData?.streak || 0}
             bestStreak={heatmapData?.best_streak || 0}
+            hideHeader
           />
         </div>
+
+        {/* TimeOfDay widget (square) */}
         <div style={TIME_COL_STYLE}>
           <TimeOfDayChart
             hours={todData?.hours || []}
@@ -201,12 +217,36 @@ const DIVIDER_STYLE = {
 };
 
 const SECONDARY_ROW_STYLE = {
-  display: 'flex', gap: 28,
+  display: 'flex', gap: 12, alignItems: 'flex-end',
 };
 
-const HEATMAP_COL_STYLE = { flex: 1 };
+const STREAK_WIDGET_STYLE = {
+  flex: '0 0 100px', display: 'flex', flexDirection: 'column',
+  alignItems: 'center', justifyContent: 'center',
+  padding: '16px 8px',
+  borderRadius: 14, border: '1px solid var(--ds-border-subtle)',
+  background: 'var(--ds-bg-canvas)',
+};
 
-const TIME_COL_STYLE = { flex: '0 0 170px' };
+const STREAK_FLAME_STYLE = { fontSize: 24, lineHeight: 1 };
+
+const STREAK_VALUE_STYLE = {
+  fontSize: 28, fontWeight: 600, color: 'var(--ds-text-primary)',
+  lineHeight: 1, marginTop: 6,
+};
+
+const STREAK_UNIT_STYLE = {
+  fontSize: 11, color: 'var(--ds-text-muted)', marginTop: 2,
+};
+
+const STREAK_BEST_STYLE = {
+  fontSize: 10, color: 'var(--ds-text-muted)', marginTop: 8,
+  opacity: 0.6,
+};
+
+const HEATMAP_COL_STYLE = { flex: 1, minWidth: 0 };
+
+const TIME_COL_STYLE = { flex: '0 0 150px' };
 
 const BACK_BUTTON_STYLE = {
   background: 'none', border: 'none', padding: '4px 0',

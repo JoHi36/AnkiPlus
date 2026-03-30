@@ -97,6 +97,7 @@ export default function YearHeatmap({
   totalYear = 0,
   streak = 0,
   bestStreak = 0,
+  hideHeader = false,
 }) {
   // Pad to 364 cells (52 weeks × 7 days)
   const CELLS = 52 * 7;
@@ -118,17 +119,19 @@ export default function YearHeatmap({
   return (
     <div style={CONTAINER_STYLE}>
       {/* Header */}
-      <div style={HEADER_STYLE}>
-        <div style={LABEL_STYLE}>Aktivität</div>
-        <div style={HEADER_RIGHT_STYLE}>
-          <div style={STREAK_BADGE_STYLE}>
-            <span>🔥</span>
-            <span>{streak}</span>
-            <span style={{ fontWeight: 400, color: 'var(--ds-text-muted)', fontSize: 11 }}>Tage</span>
+      {!hideHeader && (
+        <div style={HEADER_STYLE}>
+          <div style={LABEL_STYLE}>Aktivität</div>
+          <div style={HEADER_RIGHT_STYLE}>
+            <div style={STREAK_BADGE_STYLE}>
+              <span>🔥</span>
+              <span>{streak}</span>
+              <span style={{ fontWeight: 400, color: 'var(--ds-text-muted)', fontSize: 11 }}>Tage</span>
+            </div>
+            <div style={TOTAL_STYLE}>{totalYear} dieses Jahr</div>
           </div>
-          <div style={TOTAL_STYLE}>{totalYear} dieses Jahr</div>
         </div>
-      </div>
+      )}
 
       {/* Month labels */}
       <div style={{ position: 'relative', height: 14, marginBottom: 4 }}>
