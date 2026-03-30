@@ -450,6 +450,8 @@ register_agent(AgentDefinition(
     channel='stapel',
     uses_rag=True,
     # Execution
+    # Note: run_research() is the legacy chat path. The primary Research
+    # pipeline is SearchCardsThread in ui/widget.py (agent-kanal-paradigma).
     run_module='research',
     run_function='run_research',
     # Tools
