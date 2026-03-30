@@ -10,15 +10,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Agentisches System — Architektonisches Grundprinzip
 
-**AnkiPlus ist eine agentische Lernplattform.** Es gibt EIN agentisches System mit Agenten (Tutor, Research, Plusi, Help) die plattformweit operieren — nicht an Views gebunden. Jedes neue Feature MUSS als Teil des agentischen Systems gedacht werden: "Welcher Agent macht das?" → über den Agent-Loop (`ai/handler.py`) implementieren, nicht als standalone Funktion.
+**AnkiPlus ist eine agentische Lernplattform.** Jeder Agent hat einen eigenen Kanal (UI-Bereich). Der Kanal bestimmt den Agenten — kein Router, kein @mention, kein Agent-Wechsel im Gespräch.
+
+| Agent | Kanal | Modus |
+|-------|-------|-------|
+| Research | Stapel (Suchleiste → Canvas + Sidebar) | State-basiert |
+| Tutor | Session (Seitenfenster-Chat) | Chat-basiert, kartengebunden |
+| Plusi/Help | Plusi-Sprechblase | Kompakt, Personality + App-Hilfe |
+| Prüfungs-Agent | Reviewer-Input (künftig) | Inline-Bewertung |
 
 **Drei kognitive Modi:** Stapel = Finden (state-basiert), Session = Lernen (verlaufsbasiert), Statistik = Planen. Vollständiges Konzeptdokument: `docs/vision/product-concept.md`.
 
-**Canvas + State-Modell:** Der Stapel-Tab ist ein Canvas auf dem Agenten visuelle Ergebnisse darstellen. Daneben ein State-basierter Bereich (kein Chat-Verlauf). Ein Zustand = die gesamte Ansicht. Neuer Zustand nur durch bewusste Vertiefung/neue Anfrage. Der Router hält unsichtbar den vollen Verlauf für kontextsensitives Routing.
+**Canvas + State-Modell:** Der Stapel-Tab ist ein Canvas auf dem der Research Agent visuelle Ergebnisse darstellt. Daneben ein State-basierter Bereich (kein Chat-Verlauf). Ein Zustand = die gesamte Ansicht. Neuer Zustand nur durch bewusste Vertiefung/neue Anfrage.
 
 **Ein-Glas-Regel:** Zu jedem Zeitpunkt gibt es maximal ein primäres Glas-Eingabeelement auf dem Screen. Ausnahme in der Stapelansicht: Suchleiste (oben, Eingabe) + Action-Dock (unten, Aktion) koexistieren als zwei Phasen eines Flows (Fragen → Handeln).
 
-**Agent-Handoff:** Tutor kann an Research übergeben wenn Karten nicht reichen (`ai/handoff.py`). Visuell: jeder Agent als eigene `AgenticCell` mit Icon + Name. Pipeline-Steps sichtbar via `ReasoningStream`. Agent-Wechsel kommunizieren sich durch Farbübergänge des gesamten Screens.
+**RAG-Analyse:** Agenten die RAG nutzen (Tutor, Research) rufen `analyze_query()` (`ai/rag_analyzer.py`) auf — extrahiert aus dem alten Router. Liefert `search_needed`, `resolved_intent`, `retrieval_mode`, `search_scope`. Der Backend-`/router`-Endpoint bleibt, das `agent`-Feld wird ignoriert.
+
+**Agenten-Fusion:** Tutor und Research teilen dieselbe RAG-Pipeline und Web-Search-Tools. Unterschied: Tutor erklärt kartenbasiert (Web-Search als Fallback bei cos < 0.60), Research recherchiert web-first mit mehr Kartenreferenzen. Gleiche Tools, verschiedene Orchestrierung.
 
 ## Overview
 
