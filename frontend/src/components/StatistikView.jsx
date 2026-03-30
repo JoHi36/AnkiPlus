@@ -188,7 +188,7 @@ const PAGE_STYLE = {
   flex: 1, display: 'flex', flexDirection: 'column', gap: 24,
   maxWidth: 900, margin: '0 auto', width: '100%',
   padding: '16px 36px 100px',
-  overflowY: 'auto', scrollbarWidth: 'none',
+  overflowY: 'auto', scrollbarWidth: 'thin',
   alignItems: 'center',
 };
 

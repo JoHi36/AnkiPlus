@@ -411,7 +411,7 @@ const WRAPPER_STYLE = {
 };
 
 const CONTAINER_STYLE = {
-  width: '100%', aspectRatio: '16/9',
+  width: '100%', aspectRatio: '16/9', maxHeight: 420,
   position: 'relative', borderRadius: 16, overflow: 'hidden',
 };
 
