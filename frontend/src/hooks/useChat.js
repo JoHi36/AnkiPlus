@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef, startTransition } from 'react';
 import { updateSession, updateSessionSections, createSession, findSessionByDeck } from '../utils/sessions';
-import { getDirectCallPattern, findAgent, getDefaultAgent } from '@shared/config/subagentRegistry';
 import useAgenticMessage from './useAgenticMessage';
 import { useReasoningStore, useReasoningDispatch } from '../reasoning/store';
 
@@ -165,7 +164,7 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
    * @param {string} text - Die Nachricht
    * @param {object} context - Kontext mit pendingDeckSession, setCurrentSessionId, etc. und mode
    */
-  const handleSend = useCallback((text, context) => {
+  const handleSend = useCallback((text, context, { agent } = {}) => {
 
     // Generate a unique request ID to correlate streaming/error/metadata responses
     const requestId = crypto.randomUUID?.() ||
@@ -332,45 +331,12 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       content: msg.text
     }));
 
-    // @Subagent direct mode — detect via registry, emit synthetic pipeline, route via subagentDirect
-    const directCallPattern = getDirectCallPattern();
-    const directMatch = directCallPattern ? directCallPattern.exec(text) : null;
-
-    if (directMatch) {
-      const agentName = directMatch[1].toLowerCase();
-      const agent = findAgent(agentName);
-      // Default agent (Tutor) goes through normal sendMessage → handler.py routing
-      // Only non-default agents use subagentDirect
-      if (agent && !agent.isDefault) {
-        // Emit synthetic orchestrating step via reasoning store
-        const routerStreamId = `router-${requestId}`;
-        reasoningDispatch({ type: 'STEP', streamId: routerStreamId, step: 'orchestrating', status: 'active', data: {} });
-
-        // After 700ms, mark orchestrating as done with subagent info
-        setTimeout(() => {
-          reasoningDispatch({
-            type: 'STEP', streamId: routerStreamId, step: 'orchestrating', status: 'done',
-            data: { search_needed: false, retrieval_mode: `subagent:${agentName}`, response_length: 'short', scope: 'none', scope_label: '' }
-          });
-          reasoningDispatch({ type: 'AGENT_META', streamId: routerStreamId, agentName });
-        }, 700);
-
-        // Strip @Name prefix and route via generic bridge method
-        const cleanText = text.replace(directCallPattern, '').trim() || text;
-        if (bridge && bridge.subagentDirect) {
-          bridge.subagentDirect(agentName, cleanText, JSON.stringify({}));
-        } else {
-        }
-        return; // Skip normal sendMessage flow
-      }
-    }
-
     // Store message for potential retry
     setLastFailedMessage({ text, context });
 
     if (bridge && bridge.sendMessage) {
       try {
-        bridge.sendMessage(text, conversationHistory, mode, requestId);
+        bridge.sendMessage(text, conversationHistory, mode, requestId, agent);
         setConnectionStatus('connected');
       } catch (err) {
         setError(err.message || 'Fehler beim Senden der Nachricht');
@@ -435,6 +401,8 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
       return;
     }
     if (payload.type === 'msg_done') {
+      // DEBUG: trace msg_done arrival
+      window._debugMsgDone = { received: true, timestamp: Date.now(), payload: JSON.stringify(payload).slice(0, 200) };
       // Finalize: build saved message from live state, then smooth transition.
       // finalize() marks currentMessage as 'done' (keeps it alive for one render)
       // while setMessages adds the saved version. A cleanup effect clears it later.
@@ -465,14 +433,29 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
           orchestration: finalMsg.orchestration,
           ...(payload.webSources ? { webSources: payload.webSources } : {}),
         };
+        // DEBUG: trace savedMsg content
+        window._debugSavedMsg = {
+          hasText: !!savedMsg.text,
+          textLen: (savedMsg.text || '').length,
+          textPreview: (savedMsg.text || '').slice(0, 80),
+          hasAgentCells: !!(savedMsg.agentCells?.length),
+          cellCount: savedMsg.agentCells?.length || 0,
+          cellTexts: (savedMsg.agentCells || []).map(c => (c.text || '').slice(0, 40)),
+          from: savedMsg.from,
+        };
         // Add saved message FIRST, then clear live message in same batch
         setMessages(prev => [...prev, savedMsg]);
         // Persist bot message to SQLite
-        if (cardSessionHookRef.current) {
-          const cardId = cardSessionHookRef.current.currentCardId;
-          if (cardId) {
-            queueMicrotask(() => cardSessionHookRef.current?.saveMessage(cardId, savedMsg));
-          }
+        const _csHook = cardSessionHookRef.current;
+        const _cardId = _csHook?.currentCardId;
+        window._debugBotSave = {
+          hasHook: !!_csHook,
+          cardId: _cardId || 'NONE',
+          textLen: (savedMsg.text || '').length,
+          cellTexts: (savedMsg.agentCells || []).map(c => (c.text || '').length),
+        };
+        if (_csHook && _cardId) {
+          queueMicrotask(() => _csHook?.saveMessage(_cardId, savedMsg));
         }
         // Reset window globals for next request
         window._livePipelineSteps = [];

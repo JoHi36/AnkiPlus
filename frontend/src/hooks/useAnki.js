@@ -16,14 +16,15 @@ export function useAnki() {
       if (window.ankiBridge && window.ankiBridge.addMessage) {
         
         const bridgeWrapper = {
-          sendMessage: (msg, history = null, mode = 'compact', requestId = null) => {
+          sendMessage: (msg, history = null, mode = 'compact', requestId = null, agent = undefined) => {
             if (window.ankiBridge) {
-              // Sende Nachricht mit optionaler Historie, Modus und requestId
+              // Sende Nachricht mit optionaler Historie, Modus, requestId und agent
               window.ankiBridge.addMessage('sendMessage', {
                 message: msg,
                 history: history,
                 mode: mode,
-                requestId: requestId
+                requestId: requestId,
+                agent: agent
               });
             }
           },
@@ -407,7 +408,7 @@ export function useAnki() {
           currentRequestTimeout: null
         };
         setBridge({
-          sendMessage: (msg, history = null, mode = 'compact', requestId = null) => {
+          sendMessage: (msg, history = null, mode = 'compact', requestId = null, agent = undefined) => {
             if (mockState.currentRequestTimeout) {
               clearTimeout(mockState.currentRequestTimeout);
               mockState.currentRequestTimeout = null;
@@ -420,9 +421,9 @@ export function useAnki() {
                 const historyInfo = history ? ` (Mit ${history.length} Nachrichten Historie)` : '';
                 const modeInfo = mode === 'detailed' ? ' [Ausführlich]' : ' [Kompakt]';
                 const mockResponse = `Das ist eine simulierte Antwort auf deine Nachricht: "${msg}".${historyInfo}${modeInfo} Im Browser-Modus werden nur Mock-Antworten angezeigt.`;
-                window.ankiReceive({ 
-                  type: 'bot', 
-                  message: mockResponse 
+                window.ankiReceive({
+                  type: 'bot',
+                  message: mockResponse
                 });
               }
               mockState.currentRequestTimeout = null;
