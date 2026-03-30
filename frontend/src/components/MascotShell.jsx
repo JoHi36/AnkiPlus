@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import MascotCharacter from './MascotCharacter';
+import PlusiChatBubble from './PlusiChatBubble';
 
 const EVENT_REACTIONS = {
   card_correct:  { text: 'Richtig! ✨', mood: 'happy' },
@@ -42,10 +43,11 @@ const VOICE_STATE_MOOD = {
   speaking: 'happy',       // Plusi is talking — lively, engaged
 };
 
-export default function MascotShell({ mood = 'neutral', onEvent, enabled = true, voiceState }) {
+export default function MascotShell({ mood = 'neutral', onEvent, enabled = true, voiceState, plusiText, voiceAudio, voiceTranscript }) {
   const [eventBubble, setEventBubble] = useState(null);
   const [tapKey, setTapKey] = useState(0);
   const [overrideMood, setOverrideMood] = useState(null);
+  const [bubbleOpen, setBubbleOpen] = useState(false);
 
   const eventTimerRef = useRef(null);
   const dockRef = useRef(null);
@@ -123,6 +125,24 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true,
       if (physicsRAFRef.current) cancelAnimationFrame(physicsRAFRef.current);
     };
   }, []);
+
+  // Close bubble on click outside
+  useEffect(() => {
+    if (!bubbleOpen) return;
+    const handleClickOutside = (e) => {
+      const dock = dockRef.current;
+      if (dock && !dock.contains(e.target)) {
+        setBubbleOpen(false);
+      }
+    };
+    const timer = setTimeout(() => {
+      document.addEventListener('pointerdown', handleClickOutside);
+    }, 100);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('pointerdown', handleClickOutside);
+    };
+  }, [bubbleOpen]);
 
   // ─── Eye tracking + proximity awareness ───────────────────────────
   useEffect(() => {
@@ -428,6 +448,7 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true,
 
     setTapKey((k) => k + 1);
     setEventBubble(null);
+    setBubbleOpen((prev) => !prev);
 
     const now = Date.now();
     tapTimesRef.current.push(now);
@@ -601,7 +622,8 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true,
   // After drag, state is updated normally.
   // Voice state overrides mood (recording=curious, processing=thinking, speaking=happy)
   const voiceMood = voiceState && voiceState !== 'idle' ? VOICE_STATE_MOOD[voiceState] : null;
-  const effectiveMood = voiceMood || overrideMood || (eventBubble ? eventBubble.mood : mood);
+  const bubbleMood = bubbleOpen ? 'curious' : null;
+  const effectiveMood = voiceMood || bubbleMood || overrideMood || (eventBubble ? eventBubble.mood : mood);
   // Animation class — always set. During drag, animationName is killed via DOM.
   const animClass = mood === 'happy' || mood === 'excited'
     ? 'plusi-dock-bounce'
@@ -635,6 +657,15 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true,
             {eventBubble.text}
           </div>
         )}
+
+        <PlusiChatBubble
+          open={bubbleOpen}
+          onClose={() => setBubbleOpen(false)}
+          plusiText={plusiText}
+          voiceAudio={voiceAudio}
+          voiceTranscript={voiceTranscript}
+          voiceState={voiceState}
+        />
       </div>
     </>
   );
