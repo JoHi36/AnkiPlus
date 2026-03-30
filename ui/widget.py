@@ -1261,6 +1261,7 @@ class ChatbotWidget(QWidget):
             'getStatistikData': self._msg_get_statistik_data,
             'getDeckTrajectory': self._msg_get_deck_trajectory,
             'getDeckSessionSuggestion': self._msg_get_deck_session_suggestion,
+            'getDeckMastery': self._msg_get_deck_mastery,
             # Card review (React ReviewerView)
             'card.flip': self._msg_flip_card,
             'card.rate': self._msg_rate_card,
@@ -2875,6 +2876,20 @@ class ChatbotWidget(QWidget):
             logger.warning("Failed to parse getDeckSessionSuggestion response: %s", e)
             parsed = {"error": "Parse error"}
         self._send_to_frontend("deckSessionSuggestion", parsed)
+
+    def _msg_get_deck_mastery(self, data=None):
+        """Fetch deck mastery and send to frontend."""
+        deck_id = data.get("deckId") if data else None
+        if not deck_id:
+            self._send_to_frontend("deckMastery", {"error": "No deckId"})
+            return
+        result = self.bridge.getDeckMastery(str(deck_id))
+        try:
+            parsed = json.loads(result)
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning("Failed to parse getDeckMastery response: %s", e)
+            parsed = {"error": "Parse error"}
+        self._send_to_frontend("deckMastery", parsed)
 
     def _msg_toggle_settings(self, data=None):
         try:

@@ -1491,3 +1491,17 @@ class WebBridge(QObject):
             logger.exception("getDeckSessionSuggestion error: %s", e)
             return json.dumps({"error": str(e)})
 
+    @pyqtSlot(str, result=str)
+    def getDeckMastery(self, deck_id_str):
+        """Return current retrieval-based mastery for a specific deck."""
+        try:
+            try:
+                from .bridge_stats import get_deck_mastery
+            except ImportError:
+                from ui.bridge_stats import get_deck_mastery
+            result = get_deck_mastery(deck_id_str)
+            return json.dumps(result)
+        except Exception as e:
+            logger.exception("getDeckMastery error: %s", e)
+            return json.dumps({"error": str(e)})
+

@@ -767,3 +767,72 @@ def get_deck_session_suggestion(deck_id_str):
     except Exception as e:
         logger.exception("get_deck_session_suggestion failed: %s", e)
         return {"error": str(e)}
+
+
+def get_deck_mastery(deck_id_str):
+    """Compute current retrieval-based mastery for a specific deck.
+
+    Args:
+        deck_id_str: deck ID as string.
+
+    Returns:
+        dict with keys:
+          - mastery: float (0-100)
+          - totalCards: int
+          - isFsrs: bool
+    """
+    try:
+        from ..utils.anki import run_on_main_thread
+    except ImportError:
+        from utils.anki import run_on_main_thread
+
+    try:
+        from .retrieval import compute_deck_mastery
+    except ImportError:
+        from ui.retrieval import compute_deck_mastery
+
+    def _collect():
+        from aqt import mw
+
+        if mw is None or mw.col is None:
+            return {"error": "No collection"}
+
+        did = int(deck_id_str)
+        deck = mw.col.decks.get(did)
+        if deck is None:
+            return {"error": "Deck not found"}
+
+        deck_name = deck["name"]
+        all_decks = mw.col.decks.all()
+        prefix = deck_name + "::"
+        all_dids = [did]
+        for d in all_decks:
+            if d["name"].startswith(prefix):
+                all_dids.append(d["id"])
+
+        did_clause = _sql_in(all_dids)
+
+        fsrs_enabled = False
+        try:
+            fsrs_enabled = mw.col.get_config("fsrs", False)
+        except Exception:
+            pass
+
+        today_dn = mw.col.sched.today
+        card_rows = mw.col.db.all(
+            "SELECT ivl, due, queue, data FROM cards WHERE did IN %s" % did_clause
+        )
+
+        mastery = compute_deck_mastery(card_rows, today_dn, fsrs_enabled)
+
+        return {
+            "mastery": mastery,
+            "totalCards": len(card_rows),
+            "isFsrs": fsrs_enabled,
+        }
+
+    try:
+        return run_on_main_thread(_collect, timeout=9)
+    except Exception as e:
+        logger.exception("get_deck_mastery failed: %s", e)
+        return {"error": str(e)}
