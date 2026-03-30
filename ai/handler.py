@@ -27,9 +27,9 @@ except ImportError:
     )
 
 try:
-    from .router import route_message
+    from .rag_analyzer import analyze_query
 except ImportError:
-    from router import route_message
+    from rag_analyzer import analyze_query
 
 try:
     from ..utils.logging import get_logger
@@ -386,20 +386,18 @@ class AIHandler:
 
         # Orchestration — always show agent routing, never search details.
         # Search details (retrieval_mode, scope) are agent-internal pipeline steps.
-        routing_result = extra_kwargs.get('routing_result')
-        method = 'default'
+        rag_analysis = extra_kwargs.get('routing_result')  # RagAnalysis or None
         response_length = 'medium'
-        if routing_result:
-            method = getattr(routing_result, 'method', 'default')
-            response_length = getattr(routing_result, 'response_length', 'medium')
+        if rag_analysis:
+            response_length = getattr(rag_analysis, 'response_length', 'medium')
 
         context = extra_kwargs.get('context')
         has_card = bool(context and context.get('cardId'))
         orch_data = {
-            'search_needed': False,
+            'search_needed': getattr(rag_analysis, 'search_needed', False) if rag_analysis else False,
             'retrieval_mode': 'agent:%s' % agent_name,
-            'method': method,
-            'scope': 'none',
+            'method': 'channel',
+            'scope': getattr(rag_analysis, 'search_scope', 'none') if rag_analysis else 'none',
             'scope_label': agent_name,
             'response_length': response_length,
             'has_card': has_card,
@@ -410,7 +408,7 @@ class AIHandler:
         self._emit_msg_event("orchestration", {
             "messageId": request_id or '',
             "agent": agent_name,
-            "mode": method,
+            "mode": "channel",
             "steps": [{"step": "orchestrating", "status": "done", "data": {
                 "agent": agent_name,
                 **orch_data,
@@ -453,9 +451,9 @@ class AIHandler:
         # Emit strategy step — always visible in the agent's reasoning area.
         search_needed = False
         resolved_intent = ''
-        if routing_result:
-            search_needed = getattr(routing_result, 'search_needed', False)
-            resolved_intent = getattr(routing_result, 'resolved_intent', '') or ''
+        if rag_analysis:
+            search_needed = getattr(rag_analysis, 'search_needed', False)
+            resolved_intent = getattr(rag_analysis, 'resolved_intent', '') or ''
         agent_emit_step("strategy", "done", {
             'search_needed': search_needed,
             'resolved_intent': resolved_intent,
@@ -581,10 +579,10 @@ class AIHandler:
         return text
 
     def dispatch_smart_search(self, query, cards_data, cluster_info, request_id=None):
-        """Dispatch Tutor agent for Smart Search with pre-loaded card context.
+        """Dispatch Research agent for Smart Search with pre-loaded card context.
 
-        Skips routing — always uses Tutor. Cards are passed as pre-loaded RAG
-        context so the Tutor skips its own retrieval pipeline.
+        Skips routing — always uses Research. Cards are passed as pre-loaded RAG
+        context so the Research agent skips its own retrieval pipeline.
 
         Args:
             query: The user's search query.
@@ -593,14 +591,14 @@ class AIHandler:
             request_id: Optional request ID for v2 event correlation.
 
         Returns:
-            str: The Tutor's response text.
+            str: The Research agent's response text.
         """
         try:
             from .agents import get_agent, lazy_load_run_fn
         except ImportError:
             from agents import get_agent, lazy_load_run_fn
 
-        agent_def = get_agent('tutor')
+        agent_def = get_agent('research')
         run_fn = lazy_load_run_fn(agent_def)
 
         self._current_request_id = request_id
@@ -613,7 +611,7 @@ class AIHandler:
         }
 
         return self._dispatch_agent(
-            agent_name='tutor',
+            agent_name='research',
             run_fn=run_fn,
             situation=query,
             request_id=request_id,
@@ -632,45 +630,36 @@ class AIHandler:
     # ---- Pure dispatcher (all agents go through _dispatch_agent) ----------------
 
     def get_response_with_rag(self, user_message, context=None, history=None,
-                              mode='compact', callback=None, insights=None):
+                              mode='compact', callback=None, insights=None,
+                              agent_name=None):
         """Dispatch user message to the appropriate agent."""
         self._current_request_steps = []
         self._current_step_labels = []
         self._fallback_in_progress = False
         request_id = getattr(self, '_current_request_id', None)
+        agent_name = agent_name or 'tutor'
 
-        # v2: Start — emit agent cell IMMEDIATELY so UI shows Tutor with "Kontext..."
+        # v2: Start — emit agent cell with the known agent
         self._emit_msg_event("msg_start", {"messageId": request_id or ''})
         self._emit_msg_event("agent_cell", {
             "messageId": request_id or '',
-            "agent": "tutor",
+            "agent": agent_name,
             "status": "loading",
             "data": {"loadingHint": "Kontext..."}
         })
         self._emit_pipeline_step("orchestrating", "active")
 
         try:
-            # Route message to agent
-            session_context = {
-                'locked_agent': None,
-                'mode': 'card_session' if context and context.get('cardId') else 'free_chat',
-                'deck_name': (context or {}).get('deckName', ''),
-                'has_card': bool(context and context.get('cardId')),
-            }
-            routing_result = route_message(user_message, session_context, self.config,
-                                            card_context=context, chat_history=history)
-            logger.info("Router: agent=%s, method=%s", routing_result.agent, routing_result.method)
-
-            # Load agent
+            # Load agent directly — no routing needed (agent-kanal-paradigma)
             try:
                 from .agents import get_agent, get_default_agent, lazy_load_run_fn
             except ImportError:
                 from agents import get_agent, get_default_agent, lazy_load_run_fn
 
-            agent_def = get_agent(routing_result.agent)
+            agent_def = get_agent(agent_name)
             if not agent_def:
                 agent_def = get_default_agent()
-                logger.info("Agent %s not found, using default", routing_result.agent)
+                logger.info("Agent %s not found, using default", agent_name)
 
             try:
                 run_fn = lazy_load_run_fn(agent_def)
@@ -679,14 +668,20 @@ class AIHandler:
                 agent_def = get_default_agent()
                 run_fn = lazy_load_run_fn(agent_def)
 
-            clean_msg = routing_result.clean_message or user_message
+            # RAG analysis — only for agents that need it
+            rag_analysis = None
+            if agent_def.uses_rag:
+                rag_analysis = analyze_query(
+                    user_message, card_context=context, chat_history=history)
+            logger.info("Agent: %s, uses_rag=%s, search_needed=%s",
+                        agent_def.name, agent_def.uses_rag,
+                        getattr(rag_analysis, 'search_needed', None))
 
             # Dispatch — same path for ALL agents
-            logger.info("[DEBUG] Dispatching to agent=%s, run_fn=%s", agent_def.name, run_fn.__name__ if hasattr(run_fn, '__name__') else str(run_fn))
             return self._dispatch_agent(
                 agent_name=agent_def.name,
                 run_fn=run_fn,
-                situation=clean_msg,
+                situation=user_message,
                 request_id=request_id,
                 on_finished=agent_def.on_finished,
                 extra_kwargs={
@@ -694,7 +689,7 @@ class AIHandler:
                     'history': history,
                     'mode': mode,
                     'insights': insights,
-                    'routing_result': routing_result,
+                    'routing_result': rag_analysis,  # Keep kwarg name for agent compat
                     'callback': callback,
                     **agent_def.extra_kwargs,
                 },
