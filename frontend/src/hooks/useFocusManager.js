@@ -24,6 +24,8 @@ export default function useFocusManager() {
   const loadQueueRef = useRef([]);
   const currentLoadRef = useRef(null);
   const trajReceivedRef = useRef(false);
+  const suggReceivedRef = useRef(false);
+  const loadedFocusIdsRef = useRef(new Set());
 
   const processQueue = useCallback(() => {
     if (loadQueueRef.current.length === 0 || !window.ankiBridge) {
@@ -33,6 +35,7 @@ export default function useFocusManager() {
     const next = loadQueueRef.current.shift();
     currentLoadRef.current = next.focusId;
     trajReceivedRef.current = false;
+    suggReceivedRef.current = false;
     window.ankiBridge.addMessage('getDeckTrajectory', { deckId: next.deckId });
     window.ankiBridge.addMessage('getDeckSessionSuggestion', { deckId: next.deckId });
   }, []);
@@ -51,7 +54,7 @@ export default function useFocusManager() {
           window.ankiBridge.addMessage('getFocuses', {});
         }
       }
-      // Multi-trajectory loading: assign responses to the current focus being loaded
+      // Multi-trajectory loading: track both responses independently, advance when both arrive
       if (payload?.type === 'deckTrajectory' && payload.data && !payload.data.error) {
         const focusId = currentLoadRef.current;
         if (focusId) {
@@ -61,11 +64,15 @@ export default function useFocusManager() {
       }
       if (payload?.type === 'deckSessionSuggestion' && payload.data && !payload.data.error) {
         const focusId = currentLoadRef.current;
-        if (focusId && trajReceivedRef.current) {
+        if (focusId) {
           setSuggestions(prev => ({ ...prev, [focusId]: payload.data }));
-          currentLoadRef.current = null;
-          processQueue();
+          suggReceivedRef.current = true;
         }
+      }
+      // Advance queue only when both responses received (order-independent)
+      if (currentLoadRef.current && trajReceivedRef.current && suggReceivedRef.current) {
+        currentLoadRef.current = null;
+        processQueue();
       }
     };
 
@@ -82,8 +89,6 @@ export default function useFocusManager() {
   }, [processQueue]);
 
   // Load trajectories when focuses arrive (only for new ones)
-  const loadedFocusIdsRef = useRef(new Set());
-
   useEffect(() => {
     if (focuses.length === 0 || !window.ankiBridge) return;
 
