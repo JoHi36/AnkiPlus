@@ -364,11 +364,7 @@ export function useAnki() {
               window.ankiBridge.addMessage('saveMascotEnabled', enabled);
             }
           },
-          subagentDirect: (agentName, text, extraJson) => {
-            if (window.ankiBridge) {
-              window.ankiBridge.addMessage('subagentDirect', { agent_name: agentName, text, ...JSON.parse(extraJson || '{}') });
-            }
-          },
+          // subagentDirect removed — all agents use sendMessage with agent param
           saveTheme: (theme) => {
             if (window.ankiBridge) {
               window.ankiBridge.addMessage('saveTheme', theme);
@@ -527,13 +523,7 @@ export function useAnki() {
               window.ankiReceive({ type: 'mascotEnabledSaved', data: { enabled } });
             }
           },
-          subagentDirect: (agentName, text, extraJson) => {
-            setTimeout(() => {
-              if (window.ankiReceive) {
-                window.ankiReceive({ type: 'subagent_result', agent_name: agentName, text: `Mock response from ${agentName}: "${text}"`, error: false });
-              }
-            }, 800);
-          },
+          // subagentDirect removed — all agents use sendMessage with agent param
           saveTheme: (theme) => {
             document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
             if (window.ankiReceive) {

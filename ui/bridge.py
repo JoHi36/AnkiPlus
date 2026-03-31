@@ -1394,15 +1394,7 @@ class WebBridge(QObject):
         except Exception as e:
             logger.exception("saveMascotEnabled error: %s", e)
 
-    @pyqtSlot(str, str, str)
-    def subagentDirect(self, agent_name, text, extra_json='{}'):
-        """DEPRECATED: Route via sendMessage with agent param instead."""
-        logger.info("subagentDirect called (deprecated) — agent=%s", agent_name)
-        try:
-            extra = json.loads(extra_json) if extra_json else {}
-            self.widget._handle_subagent_direct(agent_name, text, extra)
-        except Exception as e:
-            logger.exception("subagentDirect error: %s", e)
+    # subagentDirect removed — all agents use sendMessage with agent param (agent-kanal-paradigma)
 
     @pyqtSlot(result=str)
     def getSubagentRegistry(self):

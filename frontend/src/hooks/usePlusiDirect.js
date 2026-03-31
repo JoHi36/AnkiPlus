@@ -6,9 +6,9 @@ export function usePlusiDirect() {
   const sendDirect = useCallback((text, deckId = null) => {
     if (!text?.trim() || !window.ankiBridge) return;
     setIsLoading(true);
-    window.ankiBridge.addMessage('subagentDirect', {
-      agent_name: 'plusi',
-      text: text.trim(),
+    window.ankiBridge.addMessage('sendMessage', {
+      message: text.trim(),
+      agent: 'plusi',
     });
   }, []);
 

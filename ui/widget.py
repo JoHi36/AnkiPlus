@@ -184,27 +184,6 @@ class AIRequestThread(QThread):
                 handler._msg_event_callback = None
 
 
-class SubagentThread(QThread):
-    """Generic thread for any subagent — keeps UI responsive."""
-    finished_signal = pyqtSignal(str, object)   # agent_name, result dict
-    error_signal = pyqtSignal(str, str)         # agent_name, error message
-
-    def __init__(self, agent_name, run_fn, text, **kwargs):
-        super().__init__()
-        self.agent_name = agent_name
-        self.run_fn = run_fn
-        self.text = text
-        self.kwargs = kwargs
-
-    def run(self):
-        try:
-            result = self.run_fn(situation=self.text, **self.kwargs)
-            self.finished_signal.emit(self.agent_name, result)
-        except Exception as e:
-            logger.exception("SubagentThread[%s] error: %s", self.agent_name, e)
-            self.error_signal.emit(self.agent_name, str(e))
-
-
 class VoiceThread(QThread):
     """Thread for Plusi voice pipeline: STT → Plusi agent → TTS."""
     result_signal = pyqtSignal(object)  # {"audio": base64, "mood": str, "text": str}
@@ -1245,7 +1224,7 @@ class ChatbotWidget(QWidget):
             'debugLog': self._msg_debug_log,
             'plusiPanel': self._msg_plusi_settings,
             'plusiSettings': self._msg_plusi_settings,
-            'subagentDirect': self._msg_subagent_direct,
+            # subagentDirect removed — agents use sendMessage with agent param (agent-kanal-paradigma)
             'plusiLike': self._msg_plusi_like,
             'resetPlusi': self._msg_reset_plusi,
             'textFieldFocus': self._msg_text_field_focus,
@@ -2088,80 +2067,8 @@ class ChatbotWidget(QWidget):
         if hasattr(self, '_voice_thread'):
             self._voice_thread = None
 
-    def _msg_subagent_direct(self, data):
-        """Handle @Name subagent direct call from frontend."""
-        msg_data = data if isinstance(data, dict) else json.loads(data) if isinstance(data, str) else {}
-        agent_name = msg_data.get('agent_name', '')
-        text = msg_data.get('text', '')
-        extra = {k: v for k, v in msg_data.items() if k not in ('agent_name', 'text')}
-        if agent_name and text:
-            self._handle_subagent_direct(agent_name, text, extra)
-
-    def _handle_subagent_direct(self, agent_name, text, extra=None):
-        """Route @Name messages to the appropriate subagent in a background thread."""
-        try:
-            from ..ai.agents import AGENT_REGISTRY, lazy_load_run_fn
-        except ImportError:
-            from ai.agents import AGENT_REGISTRY, lazy_load_run_fn
-        agent = AGENT_REGISTRY.get(agent_name)
-        if not agent:
-            logger.warning("Unknown subagent: %s", agent_name)
-            return
-        if not self.config.get(agent.enabled_key, False):
-            logger.info("Subagent %s is disabled", agent_name)
-            return
-        run_fn = lazy_load_run_fn(agent)
-        kwargs = {**agent.extra_kwargs, **(extra or {})}
-        thread = SubagentThread(agent_name, run_fn, text, **kwargs)
-        thread.finished_signal.connect(self._on_subagent_finished)
-        thread.error_signal.connect(self._on_subagent_error)
-        self._active_subagent_thread = thread
-        thread.start()
-
-    def _on_subagent_finished(self, agent_name, result):
-        """Handle subagent result on main thread — emit to JS + run agent-specific side effects."""
-        try:
-            payload = {
-                'type': 'subagent_result',
-                'agent_name': agent_name,
-                'result': result,  # Pass full result dict — agent-specific
-                # Legacy Plusi fields for backwards compatibility
-                'text': result.get('text', ''),
-                'mood': result.get('mood', 'neutral'),
-                'meta': result.get('meta', ''),
-                'friendship': result.get('friendship', {}),
-                'silent': result.get('silent', False),
-                'error': result.get('error', False),
-            }
-            self.web_view.page().runJavaScript(
-                f"window.ankiReceive({json.dumps(payload)});"
-            )
-            # Run agent-specific post-processing (mood sync, panel notify, etc.)
-            try:
-                from ..ai.agents import AGENT_REGISTRY
-            except ImportError:
-                from ai.agents import AGENT_REGISTRY
-            agent = AGENT_REGISTRY.get(agent_name)
-            if agent and agent.on_finished:
-                try:
-                    agent.on_finished(self, agent_name, result)
-                except Exception as e:
-                    logger.error("Subagent[%s] on_finished error: %s", agent_name, e)
-        except Exception as e:
-            logger.error("Subagent[%s] finished handler error: %s", agent_name, e)
-
-    def _on_subagent_error(self, agent_name, error_msg):
-        """Handle subagent error on main thread."""
-        logger.error("Subagent[%s] error: %s", agent_name, error_msg)
-        payload = {
-            'type': 'subagent_result',
-            'agent_name': agent_name,
-            'text': '',
-            'error': True,
-        }
-        self.web_view.page().runJavaScript(
-            f"window.ankiReceive({json.dumps(payload)});"
-        )
+    # subagentDirect, SubagentThread, _on_subagent_finished removed.
+    # All agents now go through sendMessage with agent param (agent-kanal-paradigma).
 
     def _sync_plusi_integrity(self):
         """Sync integrity glow and sleep state to dock."""

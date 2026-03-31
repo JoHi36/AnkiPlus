@@ -193,9 +193,9 @@ export default function PlusiChatBubble({
       const text = inputText.trim();
       if (!text) return;
       if (window.ankiBridge) {
-        window.ankiBridge.addMessage('subagentDirect', {
-          agent_name: 'plusi',
-          text: text,
+        window.ankiBridge.addMessage('sendMessage', {
+          message: text,
+          agent: 'plusi',
         });
       }
       setInputText('');
