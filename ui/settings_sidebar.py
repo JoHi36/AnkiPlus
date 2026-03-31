@@ -60,6 +60,8 @@ def _handle_sidebar_message(msg_type, data):
         'sidebarCopyLogs': _msg_copy_logs,
         'sidebarOpenUpgrade': _msg_open_upgrade,
         'sidebarLogout': _msg_logout,
+        'sidebarGetRemoteQR': _msg_get_remote_qr,
+        'sidebarGetRemoteStatus': _msg_get_remote_status,
         'jsError': _msg_js_error,
     }
     handler = handlers.get(msg_type)
@@ -210,6 +212,84 @@ def _msg_copy_logs(_data):
         _send_to_sidebar("sidebarLogsCopied", {})
     except Exception:
         logger.exception("_msg_copy_logs failed")
+
+
+def _msg_get_remote_qr(_data):
+    """Generate pairing QR code, start relay client, and send result to sidebar."""
+    import base64
+    try:
+        try:
+            from ..plusi.remote_ws import get_client, start_remote
+        except ImportError:
+            from plusi.remote_ws import get_client, start_remote
+
+        config = get_config()
+        tg = config.get("telegram", {})
+        relay_url = tg.get("relay_url", "").strip()
+        remote_app_url = tg.get("remote_app_url", "").strip()
+
+        if not relay_url:
+            _send_to_sidebar("sidebarRemoteQR", {"error": "relay_url not configured"})
+            return
+
+        if not start_remote():
+            _send_to_sidebar("sidebarRemoteQR", {"error": "Could not connect to relay"})
+            return
+
+        client = get_client()
+        if not client or not client.pair_code:
+            _send_to_sidebar("sidebarRemoteQR", {"error": "No pair code generated"})
+            return
+
+        pair_url = f"{remote_app_url}?pair={client.pair_code}"
+
+        import io
+        try:
+            import qrcode
+            qr = qrcode.QRCode(version=1, box_size=8, border=2)
+            qr.add_data(pair_url)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="#FFFFFF", back_color="#141416")
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+            data_url = f"data:image/png;base64,{b64}"
+        except ImportError:
+            logger.warning("qrcode library not installed, returning URL only")
+            data_url = ""
+
+        _send_to_sidebar("sidebarRemoteQR", {
+            "qr_data_url": data_url,
+            "pair_code": client.pair_code,
+            "pair_url": pair_url,
+        })
+    except Exception:
+        logger.exception("_msg_get_remote_qr failed")
+        _send_to_sidebar("sidebarRemoteQR", {"error": "Unbekannter Fehler"})
+
+
+def _msg_get_remote_status(_data):
+    """Get current remote connection status and send to sidebar."""
+    try:
+        try:
+            from ..plusi.remote_ws import get_client
+        except ImportError:
+            from plusi.remote_ws import get_client
+
+        client = get_client()
+        if not client:
+            _send_to_sidebar("sidebarRemoteStatus", {"connected": False, "peer_connected": False})
+            return
+
+        _send_to_sidebar("sidebarRemoteStatus", {
+            "connected": client.is_connected,
+            "peer_connected": client.is_peer_connected,
+            "pair_code": client.pair_code,
+            "mode": client.mode,
+        })
+    except Exception:
+        logger.exception("_msg_get_remote_status failed")
+        _send_to_sidebar("sidebarRemoteStatus", {"connected": False, "peer_connected": False})
 
 
 def _msg_js_error(data):

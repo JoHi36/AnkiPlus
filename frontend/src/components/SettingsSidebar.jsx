@@ -22,6 +22,146 @@ const THEME_OPTIONS = [
   { value: 'light',  label: 'Hell',   icon: Sun },
 ];
 
+// ---------------------------------------------------------------------------
+// Module-level style constants
+// ---------------------------------------------------------------------------
+
+const QR_CONTAINER_STYLE = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 'var(--ds-space-md)',
+  padding: 'var(--ds-space-lg)',
+  background: 'var(--ds-bg-canvas)',
+  borderRadius: 'var(--ds-radius-lg)',
+  border: '1px solid var(--ds-border)',
+};
+
+const QR_IMG_STYLE = {
+  width: 200,
+  height: 200,
+  borderRadius: 'var(--ds-radius-md)',
+};
+
+const STATUS_DOT_STYLE = {
+  width: 8,
+  height: 8,
+  borderRadius: '50%',
+  display: 'inline-block',
+  marginRight: 'var(--ds-space-xs)',
+};
+
+// ---------------------------------------------------------------------------
+// RemoteSection
+// ---------------------------------------------------------------------------
+
+function RemoteSection() {
+  const [qrData, setQrData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [remoteStatus, setRemoteStatus] = useState({ connected: false, peer_connected: false });
+
+  // Listen for responses from Python
+  useEffect(() => {
+    const handler = (e) => {
+      const payload = e.detail;
+      if (!payload || typeof payload !== 'object') return;
+
+      if (payload.type === 'sidebarRemoteQR') {
+        const d = payload.data || {};
+        setLoading(false);
+        if (d.error) {
+          setError(d.error);
+        } else {
+          setQrData(d);
+        }
+      }
+      if (payload.type === 'sidebarRemoteStatus') {
+        const d = payload.data || {};
+        setRemoteStatus(d);
+      }
+    };
+    window.addEventListener('ankiReceive', handler);
+    return () => window.removeEventListener('ankiReceive', handler);
+  }, []);
+
+  // Poll status every 2 seconds when QR is shown
+  useEffect(() => {
+    if (!qrData) return;
+    const interval = setInterval(() => {
+      bridgeAction('sidebarGetRemoteStatus');
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [qrData]);
+
+  const generateQR = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    bridgeAction('sidebarGetRemoteQR');
+  }, []);
+
+  return (
+    <div style={{ marginTop: 'var(--ds-space-lg)' }}>
+      <h3 style={{ fontSize: 'var(--ds-text-md)', fontWeight: 600, color: 'var(--ds-text-primary)', marginBottom: 'var(--ds-space-sm)' }}>
+        Remote
+      </h3>
+
+      {!qrData ? (
+        <button
+          onClick={generateQR}
+          disabled={loading}
+          style={{
+            width: '100%',
+            padding: 'var(--ds-space-md)',
+            borderRadius: 'var(--ds-radius-lg)',
+            border: '1px solid var(--ds-border)',
+            background: 'var(--ds-bg-canvas)',
+            color: 'var(--ds-text-primary)',
+            fontSize: 'var(--ds-text-sm)',
+            cursor: loading ? 'wait' : 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          {loading ? 'Verbindung wird hergestellt...' : 'Remote verbinden'}
+        </button>
+      ) : (
+        <div style={QR_CONTAINER_STYLE}>
+          {remoteStatus.peer_connected ? (
+            <div style={{ textAlign: 'center' }}>
+              <span style={{ ...STATUS_DOT_STYLE, background: 'var(--ds-green)' }} />
+              <span style={{ fontSize: 'var(--ds-text-md)', color: 'var(--ds-green)' }}>Verbunden</span>
+            </div>
+          ) : (
+            <>
+              {qrData.qr_data_url ? (
+                <img src={qrData.qr_data_url} alt="QR Code" style={QR_IMG_STYLE} />
+              ) : (
+                <div style={{ fontSize: 'var(--ds-text-sm)', color: 'var(--ds-text-secondary)', textAlign: 'center' }}>
+                  Öffne auf deinem Handy:<br />
+                  <span style={{ color: 'var(--ds-accent)', wordBreak: 'break-all' }}>{qrData.pair_url}</span>
+                </div>
+              )}
+              <p style={{ fontSize: 'var(--ds-text-sm)', color: 'var(--ds-text-tertiary)', textAlign: 'center' }}>
+                Scanne mit deinem Handy
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
+      {error && (
+        <p style={{ fontSize: 'var(--ds-text-sm)', color: 'var(--ds-red)', marginTop: 'var(--ds-space-xs)' }}>
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main export
+// ---------------------------------------------------------------------------
+
 export default function SettingsSidebar() {
   const [status, setStatus] = useState({
     tier: 'free',
@@ -255,6 +395,10 @@ export default function SettingsSidebar() {
           ))}
         </div>
       </div>
+
+      {/* Remote Section */}
+      <div style={{ height: 1, background: 'var(--ds-border-subtle)', margin: '12px 0' }} />
+      <RemoteSection />
 
       {/* Divider + Logout */}
       {status.isAuthenticated && (
