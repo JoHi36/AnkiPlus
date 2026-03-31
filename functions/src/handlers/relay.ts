@@ -62,7 +62,7 @@ export async function relayHandler(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // ── create_pair: Anki creates a new pairing code ──
+  // ── create_pair: Anki creates a new pairing code + session ──
   if (action === 'create_pair') {
     if (!RELAY_SECRET || secret !== RELAY_SECRET) {
       res.status(401).json({ error: 'Invalid secret' });
@@ -70,7 +70,16 @@ export async function relayHandler(req: Request, res: Response): Promise<void> {
     }
     const pairCode = generatePairCode();
     const ankiToken = generateToken();
-    pendingPairs.set(pairCode, { ankiToken, secret, createdAt: Date.now() });
+    const sessionId = generateToken().slice(0, 16);
+    const now = Date.now();
+    // Create session immediately so Anki can poll right away
+    sessions.set(sessionId, {
+      anki: { token: ankiToken, queue: [], lastSeen: now },
+      pwa: { token: '', queue: [], lastSeen: 0 },
+      pairCode,
+    });
+    // Also store in pendingPairs so join_pair can find the session
+    pendingPairs.set(pairCode, { ankiToken, secret, createdAt: now });
     res.json({ ok: true, pair_code: pairCode, session_token: ankiToken });
     return;
   }
@@ -84,13 +93,27 @@ export async function relayHandler(req: Request, res: Response): Promise<void> {
     }
     pendingPairs.delete(pair_code);
     const pwaToken = generateToken();
-    const sessionId = generateToken().slice(0, 16);
     const now = Date.now();
-    sessions.set(sessionId, {
-      anki: { token: pending.ankiToken, queue: [{ type: 'peer_connected' }], lastSeen: now },
-      pwa: { token: pwaToken, queue: [], lastSeen: now },
-      pairCode: pair_code,
-    });
+    // Find the existing session by anki token
+    let found = false;
+    for (const s of sessions.values()) {
+      if (s.anki.token === pending.ankiToken) {
+        s.pwa.token = pwaToken;
+        s.pwa.lastSeen = now;
+        s.anki.queue.push({ type: 'peer_connected' });
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      // Session expired between create_pair and join_pair — create fresh
+      const sessionId = generateToken().slice(0, 16);
+      sessions.set(sessionId, {
+        anki: { token: pending.ankiToken, queue: [{ type: 'peer_connected' }], lastSeen: now },
+        pwa: { token: pwaToken, queue: [], lastSeen: now },
+        pairCode: pair_code,
+      });
+    }
     res.json({ ok: true, session_token: pwaToken });
     return;
   }

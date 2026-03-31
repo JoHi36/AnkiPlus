@@ -547,6 +547,8 @@ class ChatbotWidget(QWidget):
             'sidebarOpenNativeSettings': lambda d: __import__('aqt', fromlist=['mw']).mw.onPrefs(),
             'sidebarOpenUpgrade': lambda d: __import__('webbrowser').open('https://anki-plus.vercel.app/#pricing'),
             'sidebarLogout': self._msg_sidebar_logout,
+            'sidebarGetRemoteQR': self._msg_get_remote_qr,
+            'sidebarGetRemoteStatus': self._msg_get_remote_status,
         }
         return handlers.get(msg_type)
 
@@ -2139,6 +2141,84 @@ class ChatbotWidget(QWidget):
                 self._send_to_frontend('sidebarLogsCopied', {})
         except Exception:
             logger.exception("_msg_copy_logs failed")
+
+    def _msg_get_remote_qr(self, data=None):
+        """Generate QR code for remote pairing and send to frontend."""
+        try:
+            try:
+                from ..plusi.remote_ws import get_client, start_remote
+                from ..config import get_config
+            except ImportError:
+                from plusi.remote_ws import get_client, start_remote
+                from config import get_config
+
+            config = get_config()
+            tg = config.get("telegram", {})
+            relay_url = tg.get("relay_url", "").strip()
+            remote_app_url = tg.get("remote_app_url", "").strip()
+
+            if not relay_url:
+                self._send_to_frontend('sidebarRemoteQR', {"error": "relay_url not configured"})
+                return
+
+            if not start_remote():
+                self._send_to_frontend('sidebarRemoteQR', {"error": "Could not connect to relay"})
+                return
+
+            client = get_client()
+            if not client or not client.pair_code:
+                self._send_to_frontend('sidebarRemoteQR', {"error": "No pair code generated"})
+                return
+
+            pair_url = f"{remote_app_url}?pair={client.pair_code}"
+
+            import io
+            import base64
+            data_url = ""
+            try:
+                import qrcode
+                qr = qrcode.QRCode(version=1, box_size=8, border=2)
+                qr.add_data(pair_url)
+                qr.make(fit=True)
+                img = qr.make_image(fill_color="#FFFFFF", back_color="#141416")
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+                data_url = f"data:image/png;base64,{b64}"
+            except ImportError:
+                logger.warning("qrcode library not installed")
+
+            self._send_to_frontend('sidebarRemoteQR', {
+                "qr_data_url": data_url,
+                "pair_code": client.pair_code,
+                "pair_url": pair_url,
+            })
+        except Exception as e:
+            logger.exception("_msg_get_remote_qr error: %s", e)
+            self._send_to_frontend('sidebarRemoteQR', {"error": str(e)})
+
+    def _msg_get_remote_status(self, data=None):
+        """Send remote connection status to frontend."""
+        try:
+            try:
+                from ..plusi.remote_ws import get_client
+            except ImportError:
+                from plusi.remote_ws import get_client
+
+            client = get_client()
+            if not client:
+                self._send_to_frontend('sidebarRemoteStatus', {"connected": False, "peer_connected": False})
+                return
+
+            self._send_to_frontend('sidebarRemoteStatus', {
+                "connected": client.is_connected,
+                "peer_connected": client.is_peer_connected,
+                "pair_code": client.pair_code,
+                "mode": client.mode,
+            })
+        except Exception as e:
+            logger.exception("_msg_get_remote_status error: %s", e)
+            self._send_to_frontend('sidebarRemoteStatus', {"connected": False, "peer_connected": False})
 
     def _msg_request_current_card(self, data=None):
         """Send current card data to React (called when entering review from tab)."""
