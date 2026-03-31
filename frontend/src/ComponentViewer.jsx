@@ -2355,7 +2355,7 @@ export default function ComponentViewer() {
             </div>
           </Showcase>
 
-          <VariantLabel>Tutor — fertig (summary bar + content)</VariantLabel>
+          <VariantLabel>Tutor — fertig (doneLabel: "6 Quellen")</VariantLabel>
           <Showcase>
             <div style={{ maxWidth: 560 }}>
               <ThinkingIndicator
@@ -2365,6 +2365,7 @@ export default function ComponentViewer() {
                   { name: 'Synthese', status: 'done' },
                 ]}
                 agentLabel="Tutor"
+                doneLabel="6 Quellen"
               />
               <div style={{ marginTop: 14, fontSize: 15, color: 'var(--ds-text-primary)', lineHeight: 1.65 }}>
                 Die Zellschichten der Haut bestehen aus drei Hauptschichten:

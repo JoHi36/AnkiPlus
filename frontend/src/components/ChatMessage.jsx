@@ -1217,10 +1217,10 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
 });
 
 /** Live ThinkingIndicator that subscribes to ReasoningStore */
-function TutorThinkingLive({ requestId, agentName, agentLabel, showSkeleton }) {
+function TutorThinkingLive({ requestId, agentName, agentLabel, showSkeleton, doneLabel }) {
   const streamId = requestId ? `${agentName}-${requestId}` : undefined;
   const phases = useThinkingPhases(streamId, agentName);
-  return <ThinkingIndicator phases={phases} agentLabel={agentLabel || 'Tutor'} showSkeleton={showSkeleton} />;
+  return <ThinkingIndicator phases={phases} agentLabel={agentLabel || 'Tutor'} showSkeleton={showSkeleton} doneLabel={doneLabel} />;
 }
 
 /**
@@ -1936,6 +1936,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                             agentName={cell.agent || 'tutor'}
                             agentLabel="Tutor"
                             showSkeleton={!cell.text && (cellIsStreaming || showLoading)}
+                            doneLabel={!cellIsStreaming && citedCount > 0 ? `${citedCount} Quellen` : undefined}
                           />
                         </div>
 

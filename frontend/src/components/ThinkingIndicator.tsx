@@ -13,6 +13,7 @@ interface ThinkingIndicatorProps {
   phases: ThinkingPhase[] | null;
   agentLabel?: string;             // "Tutor", "Research", "Prüfer"
   showSkeleton?: boolean;          // Show skeleton lines below bar
+  doneLabel?: string;              // Override summary when all done, e.g. "6 Quellen"
 }
 
 /* ── Bar layout ── */
@@ -73,7 +74,7 @@ const SKELETON_LINE: React.CSSProperties = {
 
 const SKELETON_WIDTHS = ['92%', '78%', '65%', '85%'];
 
-function ThinkingIndicator({ phases, agentLabel, showSkeleton }: ThinkingIndicatorProps) {
+function ThinkingIndicator({ phases, agentLabel, showSkeleton, doneLabel }: ThinkingIndicatorProps) {
   // Determine what to show on the right side of the bar
   const activePhase = phases?.find(p => p.status === 'active');
   const allDone = phases && phases.length > 0 && phases.every(p => p.status === 'done' || p.status === 'pending');
@@ -113,9 +114,9 @@ function ThinkingIndicator({ phases, agentLabel, showSkeleton }: ThinkingIndicat
                 </>
               )}
             </>
-          ) : allDone && dataPoints.length > 0 ? (
+          ) : allDone && (doneLabel || dataPoints.length > 0) ? (
             <span style={{ color: 'var(--ds-text-tertiary)' }}>
-              {dataPoints.join(' · ')}
+              {doneLabel || dataPoints.join(' · ')}
             </span>
           ) : null}
         </div>
