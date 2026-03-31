@@ -26,7 +26,7 @@ const BUBBLE_CONTAINER: React.CSSProperties = {
   borderRadius: 16,
   boxShadow: 'var(--ds-shadow-md)',
   zIndex: 81,
-  overflow: 'hidden',
+  overflow: 'visible',
   animation: 'plusi-bubble-in 200ms var(--ds-ease) both',
 };
 
@@ -37,6 +37,7 @@ const SCROLL_AREA: React.CSSProperties = {
   overflowY: 'auto',
   padding: '14px 16px',
   scrollbarWidth: 'none',
+  borderRadius: 16,
 };
 
 const TEXT_STYLE: React.CSSProperties = {
