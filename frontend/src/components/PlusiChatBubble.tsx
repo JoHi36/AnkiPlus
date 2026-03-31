@@ -7,6 +7,7 @@ type BubbleState = 'typing' | 'waiting' | 'response' | 'voice';
 interface PlusiChatBubbleProps {
   open: boolean;
   onClose: () => void;
+  onWaiting?: (waiting: boolean) => void;
   plusiText: string | null;
   voiceAudio: string | null;
   voiceTranscript: string | null;
@@ -136,7 +137,7 @@ const VOICE_TRANSCRIPT: React.CSSProperties = {
 /* ── Component ── */
 
 export default function PlusiChatBubble({
-  open, onClose, plusiText, voiceAudio, voiceTranscript, voiceState,
+  open, onClose, onWaiting, plusiText, voiceAudio, voiceTranscript, voiceState,
 }: PlusiChatBubbleProps) {
   const [bubbleState, setBubbleState] = useState<BubbleState>('typing');
   const [inputText, setInputText] = useState('');
@@ -148,7 +149,7 @@ export default function PlusiChatBubble({
   const [maxWidth, _setMaxWidth] = useState(_persistedMaxWidth);
   const setMaxHeight = useCallback((h: number) => { _persistedMaxHeight = h; _setMaxHeight(h); }, []);
   const setMaxWidth = useCallback((w: number) => { _persistedMaxWidth = w; _setMaxWidth(w); }, []);
-  const [size, setSize] = useState({ w: 0, h: 0 });
+  const [size, setSize] = useState({ w: 200, h: 44 });
   const [isOverflowing, setIsOverflowing] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -216,6 +217,11 @@ export default function PlusiChatBubble({
     if (bubbleState === 'typing' && inputRef.current) inputRef.current.focus();
   }, [bubbleState]);
 
+  // Sync waiting state to parent for mood control
+  useEffect(() => {
+    onWaiting?.(bubbleState === 'waiting');
+  }, [bubbleState, onWaiting]);
+
   const handleResponseClick = useCallback(() => {
     setBubbleState('typing'); setDisplayText(null); setInputText('');
   }, []);
@@ -270,8 +276,7 @@ export default function PlusiChatBubble({
       <style>{PLUSI_BUBBLE_CSS}</style>
 
       {/* SVG bubble shape — fill + border, exactly like ComponentViewer */}
-      {w > 0 && h > 0 && (
-        <svg
+      <svg
           width={svgW}
           height={svgH}
           style={{
@@ -285,7 +290,6 @@ export default function PlusiChatBubble({
           <path d={d} fill="var(--ds-bg-frosted)" />
           <path d={d} fill="none" stroke="var(--ds-border-subtle)" strokeWidth="1" />
         </svg>
-      )}
 
       {/* Content — positioned over the SVG */}
       <div
