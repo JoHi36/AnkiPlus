@@ -379,14 +379,14 @@ body.sidebar-resizing * {
   background: var(--ds-accent-10);
 }
 
-/* ── SearchSidebar slide-in/out ── */
+/* ── SearchSidebar expand/collapse ── */
 @keyframes slideInRight {
-  from { transform: translateX(100%); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+  from { width: 0; min-width: 0; opacity: 0; }
+  to { width: var(--ds-sidebar-width, 380px); min-width: var(--ds-sidebar-width, 380px); opacity: 1; }
 }
 @keyframes slideOutRight {
-  from { transform: translateX(0); opacity: 1; }
-  to { transform: translateX(100%); opacity: 0; }
+  from { width: var(--ds-sidebar-width, 380px); min-width: var(--ds-sidebar-width, 380px); opacity: 1; }
+  to { width: 0; min-width: 0; opacity: 0; }
 }
 
 @keyframes searchBarSlideIn {
@@ -409,40 +409,165 @@ body.sidebar-resizing * {
   100% { stroke-dashoffset: -40; opacity: 0; }
 }
 
-/* ── Lid-Lift Animation — SearchBar → ChatInput ── */
+/* ── Lid-Lift Animation — parametric via CSS custom properties ──
+   Set on the element: --lid-from-y, --lid-to-y, --lid-travel,
+   --lid-from-w, --lid-to-w, --lid-grow                         */
+
 @keyframes lidDrop {
-  0%   { top: 50px; width: 420px; transform: translateX(-50%) rotateX(0deg); transform-origin: center bottom; }
-  8%   { top: 48px; width: 420px; transform: translateX(-50%) rotateX(-8deg); transform-origin: center bottom; }
-  14%  { top: 46px; width: 420px; transform: translateX(-50%) rotateX(-18deg); transform-origin: center bottom; }
-  20%  { top: 45px; width: 420px; transform: translateX(-50%) rotateX(-24deg); transform-origin: center bottom; }
-  26%  { top: 52px; width: 420px; transform: translateX(-50%) rotateX(-14deg); transform-origin: center center; }
-  32%  { top: 72px; width: 428px; transform: translateX(-50%) rotateX(-5deg); }
-  38%  { top: 115px; width: 444px; transform: translateX(-50%) rotateX(-1deg); }
-  44%  { top: 175px; width: 464px; transform: translateX(-50%) rotateX(0deg); }
-  52%  { top: 255px; width: 486px; transform: translateX(-50%); }
-  60%  { top: 330px; width: 504px; transform: translateX(-50%); }
-  68%  { top: 385px; width: 515px; transform: translateX(-50%); }
-  76%  { top: 415px; width: 520px; transform: translateX(-50%); }
-  84%  { top: 425px; width: 521px; transform: translateX(-50%); }
-  92%  { top: 427px; width: 520px; transform: translateX(-50%); }
-  100% { top: 426px; width: 520px; height: 50px; transform: translateX(-50%); }
+  0%   {
+    top: var(--lid-from-y);
+    width: var(--lid-from-w);
+    transform: translateX(-50%) rotateX(0deg);
+    transform-origin: center bottom;
+  }
+  8%   {
+    top: calc(var(--lid-from-y) - 2px);
+    width: var(--lid-from-w);
+    transform: translateX(-50%) rotateX(-8deg);
+    transform-origin: center bottom;
+  }
+  14%  {
+    top: calc(var(--lid-from-y) - 4px);
+    width: var(--lid-from-w);
+    transform: translateX(-50%) rotateX(-18deg);
+    transform-origin: center bottom;
+  }
+  20%  {
+    top: calc(var(--lid-from-y) - 5px);
+    width: var(--lid-from-w);
+    transform: translateX(-50%) rotateX(-24deg);
+    transform-origin: center bottom;
+  }
+  26%  {
+    top: calc(var(--lid-from-y) + var(--lid-travel) * 0.005);
+    width: var(--lid-from-w);
+    transform: translateX(-50%) rotateX(-14deg);
+    transform-origin: center center;
+  }
+  32%  {
+    top: calc(var(--lid-from-y) + var(--lid-travel) * 0.06);
+    width: calc(var(--lid-from-w) + var(--lid-grow) * 0.08);
+    transform: translateX(-50%) rotateX(-5deg);
+  }
+  38%  {
+    top: calc(var(--lid-from-y) + var(--lid-travel) * 0.17);
+    width: calc(var(--lid-from-w) + var(--lid-grow) * 0.24);
+    transform: translateX(-50%) rotateX(-1deg);
+  }
+  44%  {
+    top: calc(var(--lid-from-y) + var(--lid-travel) * 0.33);
+    width: calc(var(--lid-from-w) + var(--lid-grow) * 0.44);
+    transform: translateX(-50%) rotateX(0deg);
+  }
+  52%  {
+    top: calc(var(--lid-from-y) + var(--lid-travel) * 0.55);
+    width: calc(var(--lid-from-w) + var(--lid-grow) * 0.66);
+    transform: translateX(-50%);
+  }
+  60%  {
+    top: calc(var(--lid-from-y) + var(--lid-travel) * 0.74);
+    width: calc(var(--lid-from-w) + var(--lid-grow) * 0.84);
+    transform: translateX(-50%);
+  }
+  68%  {
+    top: calc(var(--lid-from-y) + var(--lid-travel) * 0.89);
+    width: calc(var(--lid-from-w) + var(--lid-grow) * 0.95);
+    transform: translateX(-50%);
+  }
+  76%  {
+    top: calc(var(--lid-from-y) + var(--lid-travel) * 0.97);
+    width: var(--lid-to-w);
+    transform: translateX(-50%);
+  }
+  84%  {
+    top: calc(var(--lid-to-y) - 1px);
+    width: calc(var(--lid-to-w) + 1px);
+    transform: translateX(-50%);
+  }
+  92%  {
+    top: calc(var(--lid-to-y) + 1px);
+    width: var(--lid-to-w);
+    transform: translateX(-50%);
+  }
+  100% {
+    top: var(--lid-to-y);
+    width: var(--lid-to-w);
+    height: 50px;
+    transform: translateX(-50%);
+  }
 }
 
 @keyframes lidReverse {
-  0%   { top: 426px; width: 520px; height: 50px; transform: translateX(-50%); }
-  15%  { top: 380px; width: 510px; transform: translateX(-50%); }
-  30%  { top: 280px; width: 490px; transform: translateX(-50%); }
-  45%  { top: 180px; width: 465px; transform: translateX(-50%); }
-  60%  { top: 100px; width: 440px; transform: translateX(-50%) rotateX(-5deg); }
-  75%  { top: 60px; width: 425px; transform: translateX(-50%) rotateX(-10deg); transform-origin: center bottom; }
-  90%  { top: 52px; width: 420px; transform: translateX(-50%) rotateX(-3deg); transform-origin: center bottom; }
-  100% { top: 50px; width: 420px; transform: translateX(-50%) rotateX(0deg); transform-origin: center bottom; }
+  0%   {
+    top: var(--lid-to-y);
+    width: var(--lid-to-w);
+    height: 50px;
+    transform: translateX(-50%);
+  }
+  15%  {
+    top: calc(var(--lid-to-y) - var(--lid-travel) * 0.12);
+    width: calc(var(--lid-to-w) - var(--lid-grow) * 0.1);
+    transform: translateX(-50%);
+  }
+  30%  {
+    top: calc(var(--lid-to-y) - var(--lid-travel) * 0.39);
+    width: calc(var(--lid-to-w) - var(--lid-grow) * 0.3);
+    transform: translateX(-50%);
+  }
+  45%  {
+    top: calc(var(--lid-to-y) - var(--lid-travel) * 0.65);
+    width: calc(var(--lid-to-w) - var(--lid-grow) * 0.55);
+    transform: translateX(-50%);
+  }
+  60%  {
+    top: calc(var(--lid-from-y) + var(--lid-travel) * 0.13);
+    width: calc(var(--lid-from-w) + var(--lid-grow) * 0.2);
+    transform: translateX(-50%) rotateX(-5deg);
+  }
+  75%  {
+    top: calc(var(--lid-from-y) + var(--lid-travel) * 0.03);
+    width: calc(var(--lid-from-w) + var(--lid-grow) * 0.05);
+    transform: translateX(-50%) rotateX(-10deg);
+    transform-origin: center bottom;
+  }
+  90%  {
+    top: calc(var(--lid-from-y) + 2px);
+    width: var(--lid-from-w);
+    transform: translateX(-50%) rotateX(-3deg);
+    transform-origin: center bottom;
+  }
+  100% {
+    top: var(--lid-from-y);
+    width: var(--lid-from-w);
+    transform: translateX(-50%) rotateX(0deg);
+    transform-origin: center bottom;
+  }
 }
 
-.lid-drop {
+.lid-dropping {
   animation: lidDrop 0.36s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-.lid-reverse {
+.lid-reversing {
   animation: lidReverse 0.36s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.lid-open {
+  /* No animation — parked at end position via inline style */
+}
+
+/* ── Agent Canvas Mode — hide deck content via CSS class on wrapper ── */
+.agent-canvas-active .deck-browser-wordmark,
+.agent-canvas-active .deck-browser-list,
+.agent-canvas-active .deck-browser-badges {
+  display: none !important;
+}
+
+/* ThinkingIndicator pulse */
+@keyframes thinking-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.8); }
+}
+.thinking-dot-pulse {
+  animation: thinking-pulse 1.5s ease-in-out infinite;
 }
