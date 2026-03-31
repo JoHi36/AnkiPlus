@@ -1,10 +1,147 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import ChatInput from './ChatInput';
 import ResizeHandle from './ResizeHandle';
-import AgenticCell from './AgenticCell';
-import ReasoningDisplay from '../reasoning/ReasoningDisplay';
+import CitationBadge from './CitationBadge';
+import ThinkingIndicator from './ThinkingIndicator';
+import { useThinkingPhases } from '../hooks/useThinkingPhases';
+
+// Also keep SafeMarkdownRenderer export removal clean
+// (was imported but no longer needed for Definition tab)
+
+const SKELETON_STYLE = { borderRadius: 4, background: 'var(--ds-hover-tint)' };
+
+/**
+ * ResearchMarkdown — Markdown renderer with [N] citation badge support.
+ * Uses the same styling as Tutor (remarkGfm, remarkMath, rehypeKatex)
+ * but handles [1], [2, 3] references directly via cardRefs.
+ */
+const CITE_MARKER = '%%CITE:';
+const CITE_RE = /%%CITE:(\d+)%%/g;
+
+function ResearchMarkdown({ content, cardRefs, bridge }) {
+  const refs = cardRefs || {};
+
+  // Pre-process: escape [N] citations BEFORE markdown parser sees them
+  // [2, 3] → %%CITE:2%%%%CITE:3%%    [1] → %%CITE:1%%
+  const processed = (content || '')
+    .replace(/\[(\d+(?:\s*,\s*\d+)+)\]/g, (_, inner) =>
+      inner.split(',').map(n => `${CITE_MARKER}${n.trim()}%%`).join('')
+    )
+    .replace(/\[(\d+)\]/g, (_, n) => `${CITE_MARKER}${n}%%`);
+
+  // Render citation markers inside any text node
+  const renderWithCites = (children) => {
+    const result = [];
+    React.Children.forEach(children, child => {
+      if (typeof child !== 'string') { result.push(child); return; }
+      if (!child.includes(CITE_MARKER)) { result.push(child); return; }
+      const parts = child.split(CITE_RE);
+      // parts alternates: [text, num, text, num, ...]
+      for (let i = 0; i < parts.length; i++) {
+        if (i % 2 === 0) {
+          if (parts[i]) result.push(parts[i]);
+        } else {
+          const num = parts[i];
+          const ref = refs[num];
+          if (ref) {
+            const cardId = String(ref.id || ref.noteId || num);
+            result.push(
+              <CitationBadge
+                key={`cite-${num}-${i}`}
+                cardId={cardId}
+                citation={{ noteId: cardId, question: ref.question || '' }}
+                index={parseInt(num, 10)}
+                bridge={bridge}
+                onClick={() => bridge?.openPreview?.(cardId)}
+              />
+            );
+          } else {
+            result.push(`[${num}]`);
+          }
+        }
+      }
+    });
+    return result.length === 1 ? result[0] : <>{result}</>;
+  };
+
+  return (
+    <div className="markdown-content">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
+        components={{
+          p: ({ children }) => <p className="mb-4 text-[15px] leading-[1.8]" style={{ color: 'var(--ds-text-secondary)' }}>{renderWithCites(children)}</p>,
+          strong: ({ children }) => (
+            <span className="font-semibold px-1 rounded-sm" style={{ color: 'var(--ds-text-primary)', background: 'color-mix(in srgb, var(--ds-accent) 15%, transparent)' }}>{children}</span>
+          ),
+          em: ({ children }) => <em style={{ color: 'var(--ds-text-secondary)' }}>{children}</em>,
+          ul: (props) => <ul className="mb-5 ml-5 list-disc space-y-2" style={{ color: 'var(--ds-text-secondary)' }} {...props} />,
+          ol: (props) => <ol className="mb-5 ml-5 list-decimal space-y-2" style={{ color: 'var(--ds-text-secondary)' }} {...props} />,
+          li: ({ children }) => <li className="pl-1 leading-[1.8]">{renderWithCites(children)}</li>,
+          h1: ({ children }) => <h1 className="text-xl font-bold mt-6 mb-3" style={{ color: 'var(--ds-text-primary)' }}>{children}</h1>,
+          h2: ({ children }) => <h2 className="text-lg font-bold mt-5 mb-3" style={{ color: 'var(--ds-text-primary)' }}>{children}</h2>,
+          h3: ({ children }) => <h3 className="text-base font-semibold mt-4 mb-2" style={{ color: 'var(--ds-text-primary)' }}>{children}</h3>,
+          table: (props) => (
+            <div className="my-4 overflow-hidden rounded-xl border" style={{ borderColor: 'var(--ds-border-subtle)' }}>
+              <table className="min-w-full" {...props} />
+            </div>
+          ),
+          thead: (props) => <thead style={{ background: 'var(--ds-hover-tint)' }} {...props} />,
+          th: (props) => <th className="px-4 py-2 text-left text-xs font-semibold uppercase" style={{ color: 'var(--ds-text-secondary)', borderBottom: '1px solid var(--ds-border-subtle)' }} {...props} />,
+          td: (props) => <td className="px-4 py-2 text-sm" style={{ color: 'var(--ds-text-primary)', borderBottom: '1px solid var(--ds-border-subtle)' }} {...props} />,
+          hr: () => <hr className="my-5 border-0 h-px" style={{ background: 'linear-gradient(to right, transparent, var(--ds-border-medium), transparent)' }} />,
+          blockquote: ({ children }) => (
+            <blockquote className="border-l-2 pl-4 py-2 my-4" style={{ borderColor: 'color-mix(in srgb, var(--ds-accent) 40%, transparent)', color: 'var(--ds-text-primary)' }}>
+              {children}
+            </blockquote>
+          ),
+        }}
+      >
+        {processed}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
+function SkeletonBlock({ lines = [0.8, 0.6, 0.9], dotted = false }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: dotted ? 10 : 8 }}>
+      {lines.map((w, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: dotted ? 10 : 0 }}>
+          {dotted && (
+            <div style={{
+              width: 8, height: 8, borderRadius: '50%',
+              ...SKELETON_STYLE,
+              animation: 'pulse 1.5s ease-in-out infinite',
+              animationDelay: `${i * 0.12}s`,
+            }} />
+          )}
+          <div style={{
+            height: 13,
+            width: `${w * 100}%`,
+            ...SKELETON_STYLE,
+            animation: 'pulse 1.5s ease-in-out infinite',
+            animationDelay: `${i * 0.12}s`,
+          }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SearchThinking({ streamId }) {
+  const phases = useThinkingPhases(streamId, 'research');
+  if (!phases) return null;
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <ThinkingIndicator phases={phases} />
+    </div>
+  );
+}
 
 export default function SearchSidebar({
   query,
@@ -31,8 +168,7 @@ export default function SearchSidebar({
   onSelectTerm,
   termDefinition,
   imageSelectedCardIds = [],  // NEW — from ImageCanvas selection
-  searchStreamId,  // From useSmartSearch — ReasoningStore stream ID for live pipeline display
-  hideActionDock = false,  // When lid-lift is active, the DeckSearchBar at bottom replaces this dock
+  searchStreamId,              // NEW — for ThinkingIndicator
 }) {
 
   // All hooks must be called unconditionally (before any early return)
@@ -208,7 +344,7 @@ export default function SearchSidebar({
       background: 'var(--ds-bg-canvas)',
       border: '1px solid var(--ds-border-subtle)',
       borderRadius: 14,
-      boxShadow: 'var(--ds-shadow-lg)',
+      boxShadow: 'none',
       display: 'flex',
       flexDirection: 'column',
       overflow: 'hidden',
@@ -220,142 +356,104 @@ export default function SearchSidebar({
       {/* Resize handle — same as session sidebar */}
       <ResizeHandle />
 
-      {/* Fixed header: Agent + Reasoning + Tabs */}
+      {/* Agent header — icon + name */}
       <div style={{
         flexShrink: 0,
-        padding: '16px 20px 0',
+        padding: '14px 20px 0',
         display: 'flex',
-        flexDirection: 'column',
+        alignItems: 'center',
         gap: 8,
       }}>
-        {/* Tutor AgenticCell + Reasoning Steps — fixed, not scrollable */}
-        <AgenticCell
-          agentName="tutor"
-          isLoading={!answerText && isSearching}
-          loadingHint="Analysiert deine Karten..."
-          headerMeta={
-            <span style={{
-              fontSize: 11, fontWeight: 500,
-              color: 'var(--ds-text-tertiary)',
-              letterSpacing: '0.2px',
-            }}>
-              aus {totalCards || '...'} Karten
-            </span>
-          }
-        >
-          {/* Pipeline steps — live from ReasoningStore with pacing + animation */}
-          {searchStreamId && (
-            <ReasoningDisplay
-              streamId={searchStreamId}
-              mode="full"
-              hasOutput={Boolean(answerText)}
-              bridge={bridge}
-            />
-          )}
-        </AgenticCell>
+        <div style={{
+          width: 22, height: 22,
+          borderRadius: 6,
+          background: 'color-mix(in srgb, #00D084 12%, transparent)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0,
+        }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="#00D084" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="M11 3a15 15 0 0 1 4 8 15 15 0 0 1-4 8"/>
+            <path d="M11 3a15 15 0 0 0-4 8 15 15 0 0 0 4 8"/>
+            <path d="M3 11h16"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65" strokeWidth="2"/>
+          </svg>
+        </div>
+        <span style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: 'var(--ds-text-primary)',
+          letterSpacing: '-0.01em',
+        }}>
+          Research
+        </span>
+      </div>
+
+      {/* Tab bar — always visible */}
+      <div style={{
+        flexShrink: 0,
+        padding: '10px 20px 0',
+      }}>
+        <div style={{
+          display: 'flex', gap: 0,
+          background: 'var(--ds-hover-tint)',
+          borderRadius: 6,
+          overflow: 'hidden',
+        }}>
+          {[
+            { key: 'definition', label: 'Definition' },
+            { key: 'clusters', label: 'Perspektiven' },
+            { key: 'terms', label: 'Begriffe' },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => handleTabChange(tab.key)}
+              style={{
+                flex: 1,
+                padding: '6px 12px',
+                fontSize: 11, fontWeight: 500,
+                fontFamily: 'inherit',
+                border: 'none', cursor: 'pointer',
+                color: sidebarTab === tab.key ? 'var(--ds-text-primary)' : 'var(--ds-text-tertiary)',
+                background: sidebarTab === tab.key ? 'var(--ds-active-tint)' : 'transparent',
+                transition: 'color 0.15s, background 0.15s',
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Scrollable content — only tab content scrolls */}
       <div style={{
         flex: 1,
         overflowY: 'auto',
-        padding: '0 20px 12px',
+        padding: '12px 20px 12px',
         display: 'flex',
         flexDirection: 'column',
         gap: 14,
         scrollbarWidth: 'none',
       }}>
 
-        {/* Cluster skeleton — shown while searching, before clusters arrive */}
-        {!clusters && isSearching && (
-          <div style={{
-            borderTop: '1px solid var(--ds-border-subtle)',
-            paddingTop: 12,
-          }}>
-            <div style={{
-              fontSize: 10, fontWeight: 600,
-              color: 'var(--ds-text-tertiary)',
-              letterSpacing: '0.5px',
-              marginBottom: 10,
-            }}>
-              PERSPEKTIVEN
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {[0.7, 0.85, 0.6, 0.75, 0.5].map((w, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{
-                    width: 8, height: 8, borderRadius: '50%',
-                    background: 'var(--ds-hover-tint)',
-                    animation: 'pulse 1.5s ease-in-out infinite',
-                    animationDelay: `${i * 0.15}s`,
-                  }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{
-                      height: 13, borderRadius: 4,
-                      background: 'var(--ds-hover-tint)',
-                      width: `${w * 100}%`,
-                      animation: 'pulse 1.5s ease-in-out infinite',
-                      animationDelay: `${i * 0.15}s`,
-                    }} />
-                    <div style={{
-                      height: 10, borderRadius: 3,
-                      background: 'var(--ds-hover-tint)',
-                      width: '40%', marginTop: 4,
-                      animation: 'pulse 1.5s ease-in-out infinite',
-                      animationDelay: `${i * 0.15 + 0.05}s`,
-                    }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* ═══ Tab Content ═══ */}
+        <div>
+            {/* ThinkingIndicator for Research channel */}
+            {isSearching && searchStreamId && (
+              <SearchThinking streamId={searchStreamId} />
+            )}
 
-        {/* ═══ Tab Bar: Cluster / Begriffe ═══ */}
-        {(answerText || clusters?.length > 1 || kgSubgraph?.nodes?.length > 0) && (
-          <div style={{
-            borderTop: '1px solid var(--ds-border-subtle)',
-            paddingTop: 12,
-          }}>
-            {/* Tab bar */}
-            <div style={{
-              display: 'flex', gap: 0, marginBottom: 12,
-              background: 'var(--ds-hover-tint)',
-              borderRadius: 6,
-              overflow: 'hidden',
-            }}>
-              {[
-                { key: 'definition', label: 'Definition' },
-                { key: 'clusters', label: 'Perspektiven' },
-                { key: 'terms', label: 'Begriffe' },
-              ].map(tab => (
-                <button
-                  key={tab.key}
-                  onClick={() => handleTabChange(tab.key)}
-                  style={{
-                    flex: 1,
-                    padding: '6px 12px',
-                    fontSize: 11, fontWeight: 500,
-                    fontFamily: 'inherit',
-                    border: 'none', cursor: 'pointer',
-                    color: sidebarTab === tab.key ? 'var(--ds-text-primary)' : 'var(--ds-text-tertiary)',
-                    background: sidebarTab === tab.key ? 'var(--ds-active-tint)' : 'transparent',
-                    transition: 'color 0.15s, background 0.15s',
-                  }}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-            {/* ── Definition tab ── */}
+            {/* ── Definition tab: skeleton while loading ── */}
+            {sidebarTab === 'definition' && !answerText && isSearching && (
+              <SkeletonBlock lines={[0.95, 0.8, 0.6, 0.9, 0.5]} />
+            )}
+            {/* ── Definition tab: content ── */}
             {sidebarTab === 'definition' && answerText && (
-              <div style={{
-                fontSize: 14,
-                color: 'var(--ds-text-secondary)',
-                lineHeight: 1.65,
-              }}>
-                {renderMarkdownWithRefs(answerText)}
-              </div>
+              <ResearchMarkdown content={answerText} cardRefs={cardRefs} bridge={bridge} />
+            )}
+            {/* ── Clusters tab: skeleton while loading ── */}
+            {sidebarTab === 'clusters' && !clusters && isSearching && (
+              <SkeletonBlock lines={[0.7, 0.85, 0.6, 0.75, 0.5]} dotted />
             )}
             {/* ── Clusters tab ── */}
             {sidebarTab === 'clusters' && clusters?.length > 1 && (
@@ -520,6 +618,10 @@ export default function SearchSidebar({
             </div>
             )}
 
+            {/* ── Terms tab: skeleton while loading ── */}
+            {sidebarTab === 'terms' && !kgSubgraph?.nodes?.length && !selectedTerm && isSearching && (
+              <SkeletonBlock lines={[0.5, 0.7, 0.4, 0.6, 0.55, 0.45]} dotted />
+            )}
             {/* ── Terms tab (Knowledge Graph) ── */}
             {sidebarTab === 'terms' && selectedTerm ? (
               /* Term drill-down view — identical layout to cluster drill-down */
@@ -745,76 +847,9 @@ export default function SearchSidebar({
               );
             })() : null}
 
-          </div>
-        )}
+        </div>
       </div>
 
-      {/* Bottom dock — ChatInput like reviewer */}
-      {!hideActionDock && <div style={{
-        flexShrink: 0,
-        padding: '0 12px 14px',
-      }}>
-        <ChatInput
-          onSend={(text) => { if (text.trim() && onSearch) onSearch(text); }}
-          isLoading={isSearching}
-          placeholder="Neue Suche..."
-          hideInput={true}
-          topSlot={
-            <div style={{
-              padding: '10px 16px', textAlign: 'center',
-              borderBottom: '1px solid var(--ds-border-subtle)',
-            }}>
-              <div style={{
-                fontSize: 14, fontWeight: 600,
-                color: 'var(--ds-text-primary)',
-              }}>
-                {stackLabel}
-              </div>
-              <div style={{
-                fontSize: 12, color: 'var(--ds-text-secondary)', marginTop: 3,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              }}>
-                {stackCardCount} Karten
-                {learnStats && (
-                  <>
-                    <span style={{ color: 'var(--ds-text-muted)' }}>·</span>
-                    <span>{learnStats.pct}% gelernt</span>
-                    {learnStats.due > 0 && (
-                      <>
-                        <span style={{ color: 'var(--ds-text-muted)' }}>·</span>
-                        <span style={{ color: 'var(--ds-yellow)' }}>{learnStats.due} fällig</span>
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          }
-          actionPrimary={{
-            label: `${stackCardCount} Karten kreuzen`,
-            shortcut: 'Enter',
-            onClick: () => {
-              if (sidebarTab === 'definition' && imageCardCount > 0) {
-                window.ankiBridge?.addMessage('startTermStack', {
-                  term: query,
-                  cardIds: JSON.stringify(imageSelectedCardIds),
-                });
-              } else {
-                onStartStack?.();
-              }
-            },
-          }}
-          actionSecondary={{
-            label: 'Schließen',
-            shortcut: 'Esc',
-            onClick: () => {
-              if (multiSelect) { setMultiSelect(false); setMultiIds(new Set()); }
-              else if (selectedClusterId) handleDrillUp();
-              else if (selectedTerm) onSelectTerm?.(null);
-            },
-          }}
-        />
-      </div>}
     </div>
   );
 }

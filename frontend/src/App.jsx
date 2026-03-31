@@ -2480,6 +2480,7 @@ function AppInner() {
               onSelectTerm={smartSearch.selectTerm}
               termDefinition={smartSearch.termDefinition}
               imageSelectedCardIds={smartSearch.imageSelectedCardIds}
+              searchStreamId={smartSearch.searchStreamId}
             />
           )}
         </div>
