@@ -386,6 +386,7 @@ export default function ComponentViewer() {
   /* ── Plusi widget controls ── */
   const [plusiMood, setPlusiMood] = useState('neutral');
   const [plusiSize, setPlusiSize] = useState(52);
+  const [bubbleProto, setBubbleProto] = useState({ a: 'response', b: 'response', c: 'response' });
 
   const toggleTheme = useCallback(() => {
     const next = theme === 'dark' ? 'light' : 'dark';
@@ -2282,6 +2283,111 @@ export default function ComponentViewer() {
                   </div>
                 </div>
               </div>
+            </div>
+          </Showcase>
+
+          {/* ── Plusi Bubble — 4 States with SVG Snake Border ── */}
+          <VariantLabel>Chat Bubble — 4 Zustände</VariantLabel>
+          <style>{`
+            @keyframes plusi-snake { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -1; } }
+            @keyframes plusi-snake-reverse { from { stroke-dashoffset: 0; } to { stroke-dashoffset: 1; } }
+            @keyframes plusi-cursor-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+            .plusi-bubble-scroll { overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+            .plusi-bubble-scroll::-webkit-scrollbar { display: none; }
+            .plusi-md { font-size: 12.5px; line-height: 1.65; font-family: 'SF Mono', 'SFMono-Regular', 'Menlo', monospace; color: var(--ds-text-primary); letter-spacing: -0.02em; }
+            .plusi-md strong { color: var(--ds-accent); font-weight: 600; }
+            .plusi-md em { color: var(--ds-text-secondary); font-style: normal; opacity: 0.7; }
+            .plusi-md code { font-size: 11.5px; padding: 1px 5px; border-radius: 4px; background: var(--ds-hover-tint); color: var(--ds-accent); }
+            .plusi-md p { margin: 0 0 8px 0; }
+            .plusi-md p:last-child { margin-bottom: 0; }
+            .plusi-md ul, .plusi-md ol { margin: 4px 0; padding-left: 16px; }
+            .plusi-md li { margin: 2px 0; }
+            .plusi-md li::marker { color: var(--ds-text-muted); }
+            .plusi-md a { color: var(--ds-accent); text-decoration: none; border-bottom: 1px solid var(--ds-accent-20); }
+            .plusi-md blockquote { margin: 6px 0; padding: 4px 10px; border-left: 2px solid var(--ds-accent-30); color: var(--ds-text-secondary); font-style: italic; }
+            .plusi-md hr { border: none; border-top: 1px solid var(--ds-border-subtle); margin: 8px 0; }
+          `}</style>
+
+          {/* State 1: Leer + Kein Fokus — WhatsApp tail RIGHT (user input) */}
+          <Showcase>
+            <div style={{ fontSize: 'var(--ds-text-xs)', fontWeight: 600, color: 'var(--ds-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 'var(--ds-space-md)' }}>Leer — kein Fokus (Tail rechts)</div>
+            <div style={{ position: 'relative', width: '100%', minHeight: 140, background: 'var(--ds-bg-deep)', borderRadius: 'var(--ds-radius-lg)', padding: 'var(--ds-space-xl)', display: 'flex', alignItems: 'flex-end' }}>
+              <div style={{ flexShrink: 0, marginRight: 12, zIndex: 2, marginBottom: 6 }}><MascotCharacter mood="neutral" size={48} /></div>
+              <div style={{ position: 'relative' }}>
+                <svg width={308} height={48} style={{ display: 'block' }}>
+                  <path d="M 8 0 H 292 A 8 8 0 0 1 300 8 V 38 C 300 44 304 46 308 48 C 304 48 294 46 288 46 H 8 A 8 8 0 0 1 0 38 V 8 A 8 8 0 0 1 8 0 Z" fill="var(--ds-bg-frosted)" />
+                  <path d="M 8 0 H 292 A 8 8 0 0 1 300 8 V 38 C 300 44 304 46 308 48 C 304 48 294 46 288 46 H 8 A 8 8 0 0 1 0 38 V 8 A 8 8 0 0 1 8 0 Z" fill="none" stroke="var(--ds-border-subtle)" strokeWidth="1" />
+                </svg>
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 8, bottom: 2, display: 'flex', alignItems: 'center', padding: '0 14px' }}>
+                  <span className="plusi-md" style={{ color: 'var(--ds-text-muted)' }}>Schreib Plusi...</span>
+                </div>
+              </div>
+            </div>
+          </Showcase>
+
+          {/* State 2: Leer + Fokus — WhatsApp tail RIGHT, dual snakes */}
+          <Showcase>
+            <div style={{ fontSize: 'var(--ds-text-xs)', fontWeight: 600, color: 'var(--ds-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 'var(--ds-space-md)' }}>Leer — Fokus (Dual Snake, Tail rechts)</div>
+            <div style={{ position: 'relative', width: '100%', minHeight: 140, background: 'var(--ds-bg-deep)', borderRadius: 'var(--ds-radius-lg)', padding: 'var(--ds-space-xl)', display: 'flex', alignItems: 'flex-end' }}>
+              <div style={{ flexShrink: 0, marginRight: 12, zIndex: 2, marginBottom: 6 }}><MascotCharacter mood="curious" size={48} /></div>
+              <div style={{ position: 'relative' }}>
+                <svg width={308} height={48} style={{ display: 'block' }}>
+                  <path d="M 8 0 H 292 A 8 8 0 0 1 300 8 V 38 C 300 44 304 46 308 48 C 304 48 294 46 288 46 H 8 A 8 8 0 0 1 0 38 V 8 A 8 8 0 0 1 8 0 Z" fill="var(--ds-bg-frosted)" />
+                  <path d="M 8 0 H 292 A 8 8 0 0 1 300 8 V 38 C 300 44 304 46 308 48 C 304 48 294 46 288 46 H 8 A 8 8 0 0 1 0 38 V 8 A 8 8 0 0 1 8 0 Z" fill="none" stroke="var(--ds-border-subtle)" strokeWidth="1" />
+                  {/* Snake 1 — clockwise */}
+                  <path d="M 8 0 H 292 A 8 8 0 0 1 300 8 V 38 C 300 44 304 46 308 48 C 304 48 294 46 288 46 H 8 A 8 8 0 0 1 0 38 V 8 A 8 8 0 0 1 8 0 Z" fill="none" stroke="var(--ds-accent)" strokeWidth="1" pathLength="1" strokeDasharray="0.08 0.92" strokeLinecap="round" opacity="0.45" style={{ animation: 'plusi-snake 4s linear infinite' }} />
+                  {/* Snake 2 — counter-clockwise (opposite side) */}
+                  <path d="M 8 0 H 292 A 8 8 0 0 1 300 8 V 38 C 300 44 304 46 308 48 C 304 48 294 46 288 46 H 8 A 8 8 0 0 1 0 38 V 8 A 8 8 0 0 1 8 0 Z" fill="none" stroke="var(--ds-accent)" strokeWidth="1" pathLength="1" strokeDasharray="0.08 0.92" strokeDashoffset="0.5" strokeLinecap="round" opacity="0.45" style={{ animation: 'plusi-snake 4s linear infinite' }} />
+                </svg>
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 8, bottom: 2, display: 'flex', alignItems: 'center', padding: '0 14px' }}>
+                  <span className="plusi-md" style={{ color: 'var(--ds-text-placeholder)', animation: 'plusi-cursor-blink 1s step-end infinite' }}>|</span>
+                </div>
+              </div>
+            </div>
+          </Showcase>
+
+          {/* State 3: Antwort — Tail links auf Mundhöhe (Plusi spricht), keine Snake */}
+          <Showcase>
+            <div style={{ fontSize: 'var(--ds-text-xs)', fontWeight: 600, color: 'var(--ds-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 'var(--ds-space-md)' }}>Antwort — Tail links (Plusi spricht)</div>
+            <div style={{ position: 'relative', width: '100%', minHeight: 220, background: 'var(--ds-bg-deep)', borderRadius: 'var(--ds-radius-lg)', padding: 'var(--ds-space-xl)', display: 'flex', alignItems: 'flex-end' }}>
+              <div style={{ flexShrink: 0, marginRight: 12, zIndex: 2, marginBottom: 6 }}><MascotCharacter mood={plusiMood} size={48} /></div>
+              <div style={{ position: 'relative' }}>
+                {/* Tail emerges from left side at y≈127 — aligned with Plusi's mouth (~25px from bottom) */}
+                <svg width={312} height={152} style={{ display: 'block' }}>
+                  <path d="M 20 0 H 304 A 8 8 0 0 1 312 8 V 142 A 8 8 0 0 1 304 150 H 20 A 8 8 0 0 1 12 142 V 135 C 12 132 6 129 2 127 C 6 125 12 122 12 119 V 8 A 8 8 0 0 1 20 0 Z" fill="var(--ds-bg-frosted)" />
+                  <path d="M 20 0 H 304 A 8 8 0 0 1 312 8 V 142 A 8 8 0 0 1 304 150 H 20 A 8 8 0 0 1 12 142 V 135 C 12 132 6 129 2 127 C 6 125 12 122 12 119 V 8 A 8 8 0 0 1 20 0 Z" fill="none" stroke="var(--ds-border-subtle)" strokeWidth="1" />
+                </svg>
+                <div className="plusi-bubble-scroll" style={{ position: 'absolute', top: 0, left: 16, right: 0, bottom: 8, maxHeight: 150, padding: '12px 14px' }}>
+                  <div className="plusi-md">
+                    <p>Talgdrüsen produzieren Talg durch <strong>holokrine Sekretion</strong>. Bei dieser Art zerfällt die gesamte Drüsenzelle — ziemlich brutal eigentlich.</p>
+                    <p>Die Endstücke bestehen aus <strong>ballenförmigen Epithelzellen</strong> mit Lipidtröpfchen. Basalzellen am Drüsenboden sorgen für den <code>Zellnachschub</code>.</p>
+                    <p><em>Aber hey — dafür hast du geschmeidige Haut.</em></p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Showcase>
+
+          {/* ── Plusi Markdown Showcase ── */}
+          <VariantLabel>Plusi Markdown — Compact Format</VariantLabel>
+          <Showcase>
+            <div style={{ fontSize: 'var(--ds-text-xs)', fontWeight: 600, color: 'var(--ds-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 'var(--ds-space-md)' }}>Alle Elemente</div>
+            <div style={{ maxWidth: 320, padding: '14px 16px', background: 'var(--ds-bg-frosted)', borderRadius: 8, border: '1px solid var(--ds-border-subtle)' }}>
+              <div className="plusi-md">
+                <p>Normaler Text in <strong>SF Mono</strong>. Keywords leuchten in <strong>Accent-Blau</strong>.</p>
+                <p>Inline <code>code</code> für Fachbegriffe. <em>Kursiv für Nebenbemerkungen.</em></p>
+                <blockquote>Blockquote — Plusi zitiert sich selbst</blockquote>
+                <ul>
+                  <li>Listen sind kompakt</li>
+                  <li>Kein Abstand verschwendet</li>
+                </ul>
+                <hr />
+                <p>Trenner für Gedankensprünge. <a href="#">Links</a> in Accent.</p>
+              </div>
+            </div>
+            <div style={{ marginTop: 'var(--ds-space-lg)', fontSize: 'var(--ds-text-xs)', color: 'var(--ds-text-tertiary)', lineHeight: 1.6 }}>
+              <strong style={{ color: 'var(--ds-text-secondary)' }}>Nicht unterstützt:</strong> Tabellen, H1-H6, Code-Blöcke, Bilder.
+              Plusi redet in kompakten Absätzen — keine Strukturdokumente.
             </div>
           </Showcase>
 
