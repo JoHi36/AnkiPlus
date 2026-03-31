@@ -45,8 +45,8 @@ export function useThinkingPhases(
   agentName?: string,
   agentColor?: string
 ): ThinkingPhase[] | null {
-  const store = useReasoningStore();
-  const stream = streamId ? store.streams[streamId] : undefined;
+  const { state: store } = useReasoningStore();
+  const stream = streamId ? store?.streams?.[streamId] : undefined;
 
   return useMemo(() => {
     if (!stream || stream.steps.length === 0) return null;
