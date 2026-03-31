@@ -362,9 +362,6 @@ register_agent(AgentDefinition(
         'search_image',
         'create_mermaid_diagram',
         'get_learning_stats',
-        'search_web',
-        'search_pubmed',
-        'search_wikipedia',
     ],
     # Context
     context_sources=[
@@ -402,9 +399,6 @@ register_agent(AgentDefinition(
                 Slot(ref='search_image', mode='on'),
                 Slot(ref='create_mermaid_diagram', mode='on'),
                 Slot(ref='get_learning_stats', mode='on'),
-                Slot(ref='search_web', mode='on'),
-                Slot(ref='search_pubmed', mode='on'),
-                Slot(ref='search_wikipedia', mode='on'),
             ],
             outputs=[Slot(ref='chat_response', mode='locked'), Slot(ref='widget', mode='on')],
         ),
@@ -447,13 +441,7 @@ register_agent(AgentDefinition(
     # Context
     context_sources=['session', 'deck_info', 'memory'],
     # Routing
-    main_model_hint=(
-        'Use search_web tool ONLY when: (1) user explicitly asks for sources/citations from the internet, '
-        '(2) your own knowledge is clearly insufficient AND the user\'s cards don\'t cover the topic, '
-        '(3) user asks about very recent or time-sensitive information. '
-        'Do NOT use when: LERNMATERIAL contains relevant cards, your knowledge is sufficient, '
-        'or the question is about the user\'s own cards/deck.'
-    ),
+    main_model_hint='',
     # Labels
     pipeline_label='Research',
     reasoning_steps=[
