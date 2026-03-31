@@ -1,13 +1,11 @@
-# plusi/storage.py
-"""Legacy compatibility shim — real storage is in plusi/memory.py.
-
-This module re-exports the full legacy implementation so that existing
-callers and unit tests continue to work unchanged. New code should use
-PlusiMemory from plusi/memory.py directly.
+# plusi_storage.py
 """
-# New canonical storage class — use this in new code.
-from .memory import PlusiMemory  # noqa: F401
+Persistent storage for Plusi sub-agent.
 
+Two tables in a separate SQLite database (plusi.db):
+- plusi_history: conversation log (tutor context + Plusi response + mood)
+- plusi_memory: key-value store for user knowledge (future-ready)
+"""
 import sqlite3
 import json
 import os
