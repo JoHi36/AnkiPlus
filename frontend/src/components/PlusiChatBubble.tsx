@@ -15,50 +15,66 @@ interface PlusiChatBubbleProps {
 
 const DEFAULT_MAX_HEIGHT = 200;
 const MIN_BUBBLE_HEIGHT = 60;
+const R = 8; // corner radius — matches ComponentViewer
+const TAIL_EXTEND = 8; // how far tail extends beyond body
+const TAIL_DROP = 2; // how far tail drops below body
 
-// Persist max height across remounts within the same session
 let _persistedMaxHeight = DEFAULT_MAX_HEIGHT;
+let _persistedMaxWidth = 280;
 
-const BUBBLE_CONTAINER: React.CSSProperties = {
-  position: 'absolute',
-  bottom: 8,
-  left: 60,
-  maxWidth: 280,
-  minWidth: 180,
-  background: 'var(--ds-bg-frosted)',
-  backdropFilter: 'blur(40px) saturate(1.8)',
-  WebkitBackdropFilter: 'blur(40px) saturate(1.8)',
-  border: '1px solid var(--ds-border-subtle)',
-  borderRadius: 16,
-  boxShadow: 'var(--ds-shadow-md)',
-  zIndex: 81,
-  overflow: 'visible',
-  animation: 'plusi-bubble-in 200ms var(--ds-ease) both',
-};
+/* ── SVG path generators — identical curves to ComponentViewer ── */
 
-/* Tail is now rendered inline as SVG — see PlusiTail below */
+/** Left tail (Plusi speaks) — tail at bottom-left pointing toward mascot */
+function leftTailPath(w: number, h: number): string {
+  // Body: x=12..w+12, y=0..h. Tail tip at (4, h+2).
+  const bw = w + 12; // total SVG body right edge
+  return [
+    `M ${12 + R} 0`,
+    `H ${bw - R}`,
+    `A ${R} ${R} 0 0 1 ${bw} ${R}`,
+    `V ${h - R}`,
+    `A ${R} ${R} 0 0 1 ${bw - R} ${h}`,
+    `H 24`,
+    `C 18 ${h} 8 ${h + TAIL_DROP} 4 ${h + TAIL_DROP}`,
+    `C 8 ${h} 12 ${h - 2} 12 ${h - 8}`,
+    `V ${R}`,
+    `A ${R} ${R} 0 0 1 ${12 + R} 0`,
+    'Z',
+  ].join(' ');
+}
 
-const SCROLL_AREA: React.CSSProperties = {
-  overflowY: 'auto',
-  padding: '14px 16px',
-  scrollbarWidth: 'none',
-  borderRadius: 16,
-};
+/** Right tail (user speaks) — tail at bottom-right pointing away from mascot */
+function rightTailPath(w: number, h: number): string {
+  // Body: x=0..w, y=0..h. Tail tip at (w+8, h+2).
+  return [
+    `M ${R} 0`,
+    `H ${w - R}`,
+    `A ${R} ${R} 0 0 1 ${w} ${R}`,
+    `V ${h - R}`,
+    `C ${w} ${h - 2} ${w + 4} ${h} ${w + TAIL_EXTEND} ${h + TAIL_DROP}`,
+    `C ${w + 4} ${h + TAIL_DROP} ${w - 6} ${h} ${w - 12} ${h}`,
+    `H ${R}`,
+    `A ${R} ${R} 0 0 1 0 ${h - R}`,
+    `V ${R}`,
+    `A ${R} ${R} 0 0 1 ${R} 0`,
+    'Z',
+  ].join(' ');
+}
 
-/* Text style now handled by .plusi-md CSS class (see PLUSI_BUBBLE_CSS) */
+/* ── Styles ── */
 
 const INPUT_STYLE: React.CSSProperties = {
   width: '100%',
   background: 'transparent',
   border: 'none',
   outline: 'none',
-  fontSize: 13,
-  lineHeight: 1.55,
+  fontSize: 12.5,
+  lineHeight: 1.65,
+  letterSpacing: '-0.02em',
   color: 'var(--ds-text-primary)',
-  fontFamily: "'Space Grotesk', var(--ds-font-sans)",
+  fontFamily: "'SF Mono', 'SFMono-Regular', 'Menlo', monospace",
   resize: 'none',
   padding: '14px 16px',
-  maxHeight: DEFAULT_MAX_HEIGHT,
   overflowY: 'auto',
   scrollbarWidth: 'none',
 };
@@ -117,6 +133,8 @@ const VOICE_TRANSCRIPT: React.CSSProperties = {
   lineHeight: 1.5,
 };
 
+/* ── Component ── */
+
 export default function PlusiChatBubble({
   open, onClose, plusiText, voiceAudio, voiceTranscript, voiceState,
 }: PlusiChatBubbleProps) {
@@ -127,85 +145,79 @@ export default function PlusiChatBubble({
   const [audioDuration, setAudioDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [maxHeight, _setMaxHeight] = useState(_persistedMaxHeight);
-  const setMaxHeight = useCallback((h: number) => {
-    _persistedMaxHeight = h;
-    _setMaxHeight(h);
-  }, []);
+  const [maxWidth, _setMaxWidth] = useState(_persistedMaxWidth);
+  const setMaxHeight = useCallback((h: number) => { _persistedMaxHeight = h; _setMaxHeight(h); }, []);
+  const setMaxWidth = useCallback((w: number) => { _persistedMaxWidth = w; _setMaxWidth(w); }, []);
+  const [size, setSize] = useState({ w: 0, h: 0 });
   const [isOverflowing, setIsOverflowing] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; startW: number; startH: number } | null>(null);
 
-  // Detect overflow in response scroll area
+  // Measure content size with ResizeObserver
+  useEffect(() => {
+    if (!contentRef.current) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setSize({ w: Math.ceil(width), h: Math.ceil(height) });
+    });
+    ro.observe(contentRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  // Detect overflow
   useEffect(() => {
     if (bubbleState === 'response' && scrollRef.current) {
       setIsOverflowing(scrollRef.current.scrollHeight > maxHeight);
     }
   }, [bubbleState, displayText, maxHeight]);
 
-  // Drag-to-resize from top-right handle
+  // Corner resize (both width + height)
   const handleResizeStart = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    dragRef.current = { startY: e.clientY, startHeight: maxHeight };
-    const el = e.currentTarget as HTMLElement;
-    el.setPointerCapture(e.pointerId);
-  }, [maxHeight]);
+    dragRef.current = { startX: e.clientX, startY: e.clientY, startW: maxWidth, startH: maxHeight };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }, [maxWidth, maxHeight]);
 
   const handleResizeMove = useCallback((e: React.PointerEvent) => {
     if (!dragRef.current) return;
-    // Dragging UP increases height (negative deltaY = larger)
-    const deltaY = dragRef.current.startY - e.clientY;
-    const newHeight = Math.max(MIN_BUBBLE_HEIGHT, dragRef.current.startHeight + deltaY);
-    setMaxHeight(newHeight);
-  }, []);
+    const dx = e.clientX - dragRef.current.startX;
+    const dy = dragRef.current.startY - e.clientY; // up = bigger
+    setMaxWidth(Math.max(180, dragRef.current.startW + dx));
+    setMaxHeight(Math.max(MIN_BUBBLE_HEIGHT, dragRef.current.startH + dy));
+  }, [setMaxWidth, setMaxHeight]);
 
-  const handleResizeEnd = useCallback(() => {
-    dragRef.current = null;
-  }, []);
+  const handleResizeEnd = useCallback(() => { dragRef.current = null; }, []);
+
+  // Determine tail direction: response = left (Plusi), typing/waiting = right (user)
+  const tail = bubbleState === 'response' || bubbleState === 'voice' ? 'left' : 'right';
 
   // When plusiText arrives, show response
   useEffect(() => {
-    if (plusiText && open) {
-      setDisplayText(plusiText);
-      setBubbleState('response');
-    }
+    if (plusiText && open) { setDisplayText(plusiText); setBubbleState('response'); }
   }, [plusiText, open]);
 
   useEffect(() => {
-    if (voiceAudio && open) {
-      setBubbleState('voice');
-    }
+    if (voiceAudio && open) setBubbleState('voice');
   }, [voiceAudio, open]);
 
   useEffect(() => {
-    if (voiceState === 'processing' && open) {
-      setBubbleState('waiting');
-    }
+    if (voiceState === 'processing' && open) setBubbleState('waiting');
   }, [voiceState, open]);
 
-  // Reset to typing state when bubble opens
   useEffect(() => {
-    if (open) {
-      setBubbleState('typing');
-      setInputText('');
-      setDisplayText(null);
-    }
+    if (open) { setBubbleState('typing'); setInputText(''); setDisplayText(null); }
   }, [open]);
 
-  // Auto-focus input when in typing state
   useEffect(() => {
-    if (bubbleState === 'typing' && inputRef.current) {
-      inputRef.current.focus();
-    }
+    if (bubbleState === 'typing' && inputRef.current) inputRef.current.focus();
   }, [bubbleState]);
 
-  // Click on response text → back to typing
   const handleResponseClick = useCallback(() => {
-    setBubbleState('typing');
-    setDisplayText(null);
-    setInputText('');
+    setBubbleState('typing'); setDisplayText(null); setInputText('');
   }, []);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -214,127 +226,112 @@ export default function PlusiChatBubble({
       const text = inputText.trim();
       if (!text) return;
       if (window.ankiBridge) {
-        window.ankiBridge.addMessage('sendMessage', {
-          message: text,
-          agent: 'plusi',
-        });
+        window.ankiBridge.addMessage('sendMessage', { message: text, agent: 'plusi' });
       }
       setInputText('');
       setBubbleState('waiting');
     }
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      onClose();
-    }
+    if (e.key === 'Escape') { e.preventDefault(); onClose(); }
   }, [inputText, onClose]);
 
   const togglePlayback = useCallback(() => {
     if (!voiceAudio) return;
-    if (isPlaying && audioRef.current) {
-      audioRef.current.pause();
-      setIsPlaying(false);
-      return;
-    }
+    if (isPlaying && audioRef.current) { audioRef.current.pause(); setIsPlaying(false); return; }
     const player = new Audio(`data:audio/wav;base64,${voiceAudio}`);
     audioRef.current = player;
     player.ontimeupdate = () => {
-      if (player.duration) {
-        setAudioProgress(player.currentTime / player.duration);
-        setAudioDuration(player.duration);
-      }
+      if (player.duration) { setAudioProgress(player.currentTime / player.duration); setAudioDuration(player.duration); }
     };
-    player.onended = () => {
-      setIsPlaying(false);
-      setAudioProgress(0);
-    };
+    player.onended = () => { setIsPlaying(false); setAudioProgress(0); };
     player.play();
     setIsPlaying(true);
   }, [voiceAudio, isPlaying]);
 
   useEffect(() => {
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-    };
+    return () => { if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; } };
   }, []);
 
   if (!open) return null;
 
+  // SVG dimensions
+  const { w, h } = size;
+  const d = tail === 'left' ? leftTailPath(w, h) : rightTailPath(w, h);
+  const svgW = tail === 'left' ? w + 12 : w + TAIL_EXTEND;
+  const svgH = h + TAIL_DROP;
+
   return (
-    <div style={BUBBLE_CONTAINER}>
+    <div style={{
+      position: 'absolute',
+      bottom: 8,
+      left: tail === 'left' ? 48 : 60,
+      zIndex: 81,
+      animation: 'plusi-bubble-in 200ms var(--ds-ease) both',
+    }}>
       <style>{PLUSI_BUBBLE_CSS}</style>
-      {/* WhatsApp-style tail — left side, pointing toward Plusi */}
-      <svg
-        width="22" height="28"
-        style={{ position: 'absolute', bottom: 8, left: -19, display: 'block' }}
-      >
-        {/* Fill extends 2px into bubble (x=20→22) to cover its left border */}
-        <path
-          d="M 22 0 L 22 18 C 20 24 12 27 2 28 C 10 25 18 21 20 12 Z"
-          fill="var(--ds-bg-frosted)"
-        />
-        {/* Stroke only on outer curve, not the edge touching the bubble */}
-        <path
-          d="M 20 18 C 20 24 12 27 2 28 C 10 25 18 21 20 12"
-          fill="none" stroke="var(--ds-border-subtle)" strokeWidth="1"
-        />
-      </svg>
 
-      {bubbleState === 'typing' && (
-        <textarea
-          ref={inputRef}
-          style={INPUT_STYLE}
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Schreib Plusi..."
-          rows={1}
-          onInput={(e) => {
-            const el = e.target as HTMLTextAreaElement;
-            el.style.height = 'auto';
-            el.style.height = Math.min(el.scrollHeight, maxHeight) + 'px';
+      {/* SVG bubble shape — fill + border, exactly like ComponentViewer */}
+      {w > 0 && h > 0 && (
+        <svg
+          width={svgW}
+          height={svgH}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: tail === 'left' ? -12 : 0,
+            pointerEvents: 'none',
+            filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))',
           }}
-        />
+        >
+          <path d={d} fill="var(--ds-bg-frosted)" />
+          <path d={d} fill="none" stroke="var(--ds-border-subtle)" strokeWidth="1" />
+        </svg>
       )}
 
-      {bubbleState === 'waiting' && (
-        <div style={THINKING_DOTS_STYLE}>
-          <div style={DOT_BASE} className="thinking-dot-pulse" />
-          <div style={DOT_BASE} className="thinking-dot-pulse" />
-          <div style={DOT_BASE} className="thinking-dot-pulse" />
-        </div>
-      )}
+      {/* Content — positioned over the SVG */}
+      <div
+        ref={contentRef}
+        style={{
+          position: 'relative',
+          zIndex: 1,
+          maxWidth: maxWidth,
+          minWidth: 160,
+        }}
+      >
+        {bubbleState === 'typing' && (
+          <textarea
+            ref={inputRef}
+            style={{ ...INPUT_STYLE, maxHeight }}
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Schreib Plusi..."
+            rows={1}
+            onInput={(e) => {
+              const el = e.target as HTMLTextAreaElement;
+              el.style.height = 'auto';
+              el.style.height = Math.min(el.scrollHeight, maxHeight) + 'px';
+            }}
+          />
+        )}
 
-      {bubbleState === 'response' && displayText && (
-        <>
-          {/* Resize handle — top-right corner, visible only when content overflows */}
-          {isOverflowing && (
-            <div
-              onPointerDown={handleResizeStart}
-              onPointerMove={handleResizeMove}
-              onPointerUp={handleResizeEnd}
-              onPointerCancel={handleResizeEnd}
-              style={{
-                position: 'absolute', top: 0, right: 0,
-                width: 28, height: 28,
-                cursor: 'ns-resize', zIndex: 2,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                borderRadius: '0 16px 0 8px',
-              }}
-            >
-              <div style={{
-                width: 14, height: 3,
-                borderTop: '1px solid var(--ds-text-muted)',
-                borderBottom: '1px solid var(--ds-text-muted)',
-                opacity: 0.4,
-              }} />
-            </div>
-          )}
+        {bubbleState === 'waiting' && (
+          <div style={THINKING_DOTS_STYLE}>
+            <div style={DOT_BASE} className="thinking-dot-pulse" />
+            <div style={DOT_BASE} className="thinking-dot-pulse" />
+            <div style={DOT_BASE} className="thinking-dot-pulse" />
+          </div>
+        )}
+
+        {bubbleState === 'response' && displayText && (
           <div
             ref={scrollRef}
-            style={{ ...SCROLL_AREA, maxHeight, cursor: 'pointer' }}
+            style={{
+              maxHeight,
+              overflowY: 'auto',
+              padding: '14px 16px',
+              scrollbarWidth: 'none',
+              cursor: 'pointer',
+            }}
             className="plusi-bubble-scroll"
             onClick={handleResponseClick}
           >
@@ -344,34 +341,58 @@ export default function PlusiChatBubble({
               </ReactMarkdown>
             </div>
           </div>
-        </>
-      )}
+        )}
 
-      {bubbleState === 'voice' && (
-        <>
-          <div style={VOICE_ROW}>
-            <button style={VOICE_PLAY} onClick={togglePlayback}>
-              <span style={{ color: 'var(--ds-accent)', fontSize: 10, marginLeft: 1 }}>
-                {isPlaying ? '⏸' : '▶'}
+        {bubbleState === 'voice' && (
+          <>
+            <div style={VOICE_ROW}>
+              <button style={VOICE_PLAY} onClick={togglePlayback}>
+                <span style={{ color: 'var(--ds-accent)', fontSize: 10, marginLeft: 1 }}>
+                  {isPlaying ? '⏸' : '▶'}
+                </span>
+              </button>
+              <div style={VOICE_BAR_BG}>
+                <div style={{
+                  height: '100%',
+                  width: `${audioProgress * 100}%`,
+                  background: 'var(--ds-accent)',
+                  borderRadius: 2,
+                  transition: 'width 100ms linear',
+                }} />
+              </div>
+              <span style={VOICE_TIME}>
+                {audioDuration > 0 ? `0:${String(Math.round(audioDuration)).padStart(2, '0')}` : '0:00'}
               </span>
-            </button>
-            <div style={VOICE_BAR_BG}>
-              <div style={{
-                height: '100%',
-                width: `${audioProgress * 100}%`,
-                background: 'var(--ds-accent)',
-                borderRadius: 2,
-                transition: 'width 100ms linear',
-              }} />
             </div>
-            <span style={VOICE_TIME}>
-              {audioDuration > 0 ? `0:${String(Math.round(audioDuration)).padStart(2, '0')}` : '0:00'}
-            </span>
-          </div>
-          {voiceTranscript && (
-            <div style={VOICE_TRANSCRIPT}>"{voiceTranscript}"</div>
-          )}
-        </>
+            {voiceTranscript && (
+              <div style={VOICE_TRANSCRIPT}>"{voiceTranscript}"</div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Resize handle — top-right corner */}
+      {isOverflowing && (
+        <div
+          onPointerDown={handleResizeStart}
+          onPointerMove={handleResizeMove}
+          onPointerUp={handleResizeEnd}
+          onPointerCancel={handleResizeEnd}
+          style={{
+            position: 'absolute', top: 2, right: -4,
+            width: 20, height: 20,
+            cursor: 'nwse-resize', zIndex: 3,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <div style={{
+            width: 10, height: 3,
+            borderTop: '1px solid var(--ds-text-muted)',
+            borderBottom: '1px solid var(--ds-text-muted)',
+            opacity: 0.4,
+            transform: 'rotate(-45deg)',
+          }} />
+        </div>
       )}
     </div>
   );
