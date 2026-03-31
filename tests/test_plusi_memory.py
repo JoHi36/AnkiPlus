@@ -313,7 +313,91 @@ class TestDiary:
 
 
 # ---------------------------------------------------------------------------
-# 6. DB path defaults to plusi/ directory
+# 6. recall() — embedding-based semantic memory retrieval
+# ---------------------------------------------------------------------------
+
+import struct
+
+
+def _fake_embedding(values):
+    """Pack a list of floats into a BLOB for testing."""
+    return struct.pack(f'{len(values)}f', *values)
+
+
+class TestRecall:
+
+    def test_recall_returns_most_similar(self, tmp_memory):
+        """Memories nearest to the query embedding rank highest."""
+        # Three 3-dimensional embeddings
+        emb_a = _fake_embedding([1.0, 0.0, 0.0])  # points along X
+        emb_b = _fake_embedding([0.0, 1.0, 0.0])  # points along Y
+        emb_c = _fake_embedding([1.0, 0.1, 0.0])  # close to X (a)
+
+        tmp_memory.store("memory A", emb_a)
+        tmp_memory.store("memory B", emb_b)
+        tmp_memory.store("memory C", emb_c)
+
+        # Query almost identical to A/C direction
+        query = _fake_embedding([1.0, 0.05, 0.0])
+        results = tmp_memory.recall(query, limit=3)
+
+        assert len(results) == 3
+        texts = [r["text"] for r in results]
+        # A and C must be ranked above B (query is far from B)
+        assert texts.index("memory B") > texts.index("memory A") or \
+               texts.index("memory B") > texts.index("memory C")
+
+    def test_recall_updates_access_count(self, tmp_memory):
+        """Recalling a memory must increment its access_count."""
+        emb = _fake_embedding([1.0, 0.0])
+        mid = tmp_memory.store("track me", emb)
+
+        before = tmp_memory.get(mid)["access_count"]
+        query = _fake_embedding([1.0, 0.0])
+        tmp_memory.recall(query, limit=5)
+        after = tmp_memory.get(mid)["access_count"]
+
+        assert after == before + 1
+
+    def test_recall_empty_returns_empty(self, tmp_memory):
+        """recall() on an empty DB returns an empty list."""
+        query = _fake_embedding([1.0, 0.0, 0.0])
+        results = tmp_memory.recall(query, limit=5)
+        assert results == []
+
+    def test_recall_respects_limit(self, tmp_memory):
+        """recall() returns at most *limit* results."""
+        base = [1.0, 0.0, 0.0]
+        for i in range(10):
+            emb = _fake_embedding([1.0 - i * 0.01, 0.0, float(i) * 0.01])
+            tmp_memory.store(f"memory {i}", emb)
+
+        query = _fake_embedding([1.0, 0.0, 0.0])
+        results = tmp_memory.recall(query, limit=3)
+        assert len(results) == 3
+
+    def test_recall_result_shape(self, tmp_memory):
+        """Each result dict must have the expected keys."""
+        emb = _fake_embedding([1.0, 0.0])
+        tmp_memory.store("shape test", emb, mood="freudig")
+
+        query = _fake_embedding([1.0, 0.0])
+        results = tmp_memory.recall(query, limit=5)
+
+        assert len(results) == 1
+        r = results[0]
+        assert "id" in r
+        assert "text" in r
+        assert "created_at" in r
+        assert "mood" in r
+        assert "relevance" in r
+        assert isinstance(r["relevance"], float)
+        assert r["text"] == "shape test"
+        assert r["mood"] == "freudig"
+
+
+# ---------------------------------------------------------------------------
+# 7. DB path defaults to plusi/ directory
 # ---------------------------------------------------------------------------
 
 class TestDefaultDbPath:
