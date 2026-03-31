@@ -3896,28 +3896,57 @@ class ChatbotWidget(QWidget):
         except (AttributeError, RuntimeError) as e:
             logger.debug("Could not send reviewer step %s: %s", phase, e)
 
+    def _send_prufer_pipeline_step(self, request_id, step, status, data=None):
+        """Emit a unified pipeline_step event for the Prüfer ThinkingIndicator."""
+        import json as _json
+        payload = {
+            'type': 'pipeline_step',
+            'step': step,
+            'status': status,
+            'agent': 'prufer',
+            'requestId': request_id,
+            'data': data or {},
+        }
+        try:
+            js = "window.dispatchEvent(new CustomEvent('reviewer.pipeline_step', {detail: %s}));" % _json.dumps(payload)
+            from aqt import mw
+            mw.taskman.run_on_main(lambda js=js: self.web_view.page().runJavaScript(js))
+        except (AttributeError, RuntimeError) as e:
+            logger.debug("Could not send prufer pipeline step %s: %s", step, e)
+
     def _msg_evaluate_answer(self, data):
         """Evaluate user's text answer against correct answer via AI."""
         import threading
+        import uuid
         try:
             parsed = json.loads(data) if isinstance(data, str) else data
             question = parsed.get('question', '')
             user_answer = parsed.get('userAnswer', '')
             correct_answer = parsed.get('correctAnswer', '')
 
+            eval_request_id = str(uuid.uuid4())
+
             def _run():
                 try:
+                    # Unified pipeline steps for ThinkingIndicator
+                    self._send_prufer_pipeline_step(eval_request_id, 'orchestrating', 'active')
+                    self._send_prufer_pipeline_step(eval_request_id, 'orchestrating', 'done', {'agent': 'prufer'})
+
+                    # Legacy reviewer steps (kept for DockLoading)
                     self._send_reviewer_step('analyzing', 'Analysiere Antwort…')
                     self._send_reviewer_step('comparing', 'Vergleiche mit korrekter Antwort…')
+
+                    self._send_prufer_pipeline_step(eval_request_id, 'generating', 'active')
                     self._send_reviewer_step('evaluating', 'KI bewertet…')
 
                     from ..ai.prufer import evaluate_answer
                     result = evaluate_answer(question, user_answer, correct_answer)
 
+                    self._send_prufer_pipeline_step(eval_request_id, 'generating', 'done')
                     self._send_reviewer_step('done', 'Bewertung abgeschlossen')
 
                     def _inject():
-                        self._send_to_frontend('reviewer.evaluationResult', result)
+                        self._send_to_frontend('reviewer.evaluationResult', {**result, '_requestId': eval_request_id})
                     from aqt import mw
                     mw.taskman.run_on_main(_inject)
                 except Exception as e:
@@ -3936,6 +3965,7 @@ class ChatbotWidget(QWidget):
     def _msg_generate_mc(self, data):
         """Generate multiple choice options via AI."""
         import threading
+        import uuid
         from aqt import mw
         try:
             parsed = json.loads(data) if isinstance(data, str) else data
@@ -3947,20 +3977,29 @@ class ChatbotWidget(QWidget):
             from ..custom_reviewer import _get_deck_context_answers_sync
             deck_answers = _get_deck_context_answers_sync(card_id)
 
+            mc_request_id = str(uuid.uuid4())
+
             def _run():
                 try:
+                    # Unified pipeline steps for ThinkingIndicator
+                    self._send_prufer_pipeline_step(mc_request_id, 'orchestrating', 'active')
+                    self._send_prufer_pipeline_step(mc_request_id, 'orchestrating', 'done', {'agent': 'prufer'})
+
+                    # Legacy
                     self._send_reviewer_step('cache', 'Prüfe gespeicherte Optionen…')
 
                     # Check cache
                     from ..storage.mc_cache import get_cached_mc, save_mc_cache
                     cached = get_cached_mc(card_id, question, correct_answer) if card_id else None
                     if cached:
+                        self._send_prufer_pipeline_step(mc_request_id, 'generating', 'done')
                         self._send_reviewer_step('done', 'Aus Cache geladen')
                         def _inject():
                             self._send_to_frontend('reviewer.mcOptions', cached)
                         mw.taskman.run_on_main(_inject)
                         return
 
+                    self._send_prufer_pipeline_step(mc_request_id, 'generating', 'active')
                     self._send_reviewer_step('generating', 'Generiere Multiple-Choice-Optionen…')
 
                     from ..ai.prufer import generate_mc
@@ -3977,6 +4016,7 @@ class ChatbotWidget(QWidget):
                     if card_id and result and len(result) >= 4 and not is_fallback:
                         save_mc_cache(card_id, question, correct_answer, result)
 
+                    self._send_prufer_pipeline_step(mc_request_id, 'generating', 'done')
                     self._send_reviewer_step('done', 'Optionen erstellt')
 
                     def _inject():
