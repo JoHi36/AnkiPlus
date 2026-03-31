@@ -36,6 +36,10 @@ class RagAnalysis:
     retrieval_mode: str = 'both'
     search_scope: str = 'current_deck'
     response_length: str = 'medium'
+    # Query fields — resolved by backend router from card context + chat history
+    precise_queries: list = None
+    broad_queries: list = None
+    embedding_queries: list = None
 
 
 # Backwards compat alias
@@ -110,6 +114,9 @@ def analyze_query(user_message, card_context=None, chat_history=None,
             retrieval_mode=parsed.get('retrieval_mode') or 'both',
             search_scope=parsed.get('search_scope') or 'current_deck',
             response_length=parsed.get('response_length') or 'medium',
+            precise_queries=parsed.get('precise_queries'),
+            broad_queries=parsed.get('broad_queries'),
+            embedding_queries=parsed.get('embedding_queries'),
         )
 
     except Exception as e:
