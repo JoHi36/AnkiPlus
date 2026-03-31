@@ -230,15 +230,17 @@ export default function PlusiChatBubble({
     <div style={BUBBLE_CONTAINER}>
       {/* WhatsApp-style tail — left side, pointing toward Plusi */}
       <svg
-        width="10" height="16"
-        style={{ position: 'absolute', bottom: 10, left: -9, display: 'block' }}
+        width="22" height="28"
+        style={{ position: 'absolute', bottom: 8, left: -19, display: 'block' }}
       >
+        {/* Fill extends 2px into bubble (x=20→22) to cover its left border */}
         <path
-          d="M 10 0 L 10 10 C 10 13 6 15 1 16 C 5 14 9 12 9 6 Z"
+          d="M 22 0 L 22 18 C 20 24 12 27 2 28 C 10 25 18 21 20 12 Z"
           fill="var(--ds-bg-frosted)"
         />
+        {/* Stroke only on outer curve, not the edge touching the bubble */}
         <path
-          d="M 10 10 C 10 13 6 15 1 16 C 5 14 9 12 9 6"
+          d="M 20 18 C 20 24 12 27 2 28 C 10 25 18 21 20 12"
           fill="none" stroke="var(--ds-border-subtle)" strokeWidth="1"
         />
       </svg>
