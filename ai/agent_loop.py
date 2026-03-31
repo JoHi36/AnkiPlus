@@ -170,6 +170,7 @@ def run_agent_loop(
     """
     iteration = 0
     text_result = ""
+    _prev_call_key = None  # Loop detection: (name, args_json)
 
     while iteration < MAX_ITERATIONS:
         iteration += 1
@@ -195,6 +196,13 @@ def run_agent_loop(
         function_name = function_call.get("name", "")
         function_args = function_call.get("args", {})
         logger.info("agent_loop: Tool-Call erkannt: %s", function_name)
+
+        # Loop detection: abort if model repeats the exact same tool call
+        call_key = (function_name, json.dumps(function_args, sort_keys=True))
+        if call_key == _prev_call_key:
+            logger.warning("agent_loop: Duplicate tool call detected (%s), breaking loop", function_name)
+            break
+        _prev_call_key = call_key
 
         # Pre-execution: loading placeholder for widget tools
         tool_def = registry.get(function_name)

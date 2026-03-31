@@ -153,8 +153,8 @@ class TestRunAgentLoop:
 
         def mock_stream(urls, data, callback, **kw):
             call_count[0] += 1
-            # Always return a tool call
-            return ("", {"name": "fake_tool", "args": {}})
+            # Return different args each time to avoid duplicate-call detection
+            return ("", {"name": "fake_tool", "args": {"i": call_count[0]}})
 
         # Register a fake tool
         from ai.tools import registry, ToolDefinition
@@ -175,6 +175,34 @@ class TestRunAgentLoop:
         finally:
             # Clean up: remove the fake tool
             registry._tools.pop("fake_tool", None)
+
+    def test_duplicate_tool_call_breaks_loop(self):
+        """Loop should break early when model repeats the same tool call."""
+        call_count = [0]
+
+        def mock_stream(urls, data, callback, **kw):
+            call_count[0] += 1
+            # Always return identical tool call — triggers duplicate detection
+            return ("", {"name": "dup_tool", "args": {"q": "same"}})
+
+        from ai.tools import registry, ToolDefinition
+        registry.register(ToolDefinition(
+            name="dup_tool",
+            schema={"name": "dup_tool", "description": "test", "parameters": {"type": "object", "properties": {}}},
+            execute_fn=lambda args: "ok",
+            display_type="silent",
+        ))
+
+        try:
+            result = run_agent_loop(
+                stream_fn=mock_stream,
+                stream_urls=["http://fake"],
+                data={"contents": [], "generationConfig": {}},
+            )
+            # Should break after 2 iterations (first call + duplicate detected)
+            assert call_count[0] == 2
+        finally:
+            registry._tools.pop("dup_tool", None)
 
     def test_tool_call_then_text(self):
         """Loop: first iteration returns tool call, second returns text."""
