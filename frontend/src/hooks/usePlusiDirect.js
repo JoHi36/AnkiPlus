@@ -6,10 +6,10 @@ export function usePlusiDirect() {
   const sendDirect = useCallback((text, deckId = null) => {
     if (!text?.trim() || !window.ankiBridge) return;
     setIsLoading(true);
-    window.ankiBridge.addMessage('plusiDirect', JSON.stringify({
+    window.ankiBridge.addMessage('subagentDirect', {
+      agent_name: 'plusi',
       text: text.trim(),
-      deck_id: deckId,
-    }));
+    });
   }, []);
 
   const handleResult = useCallback((data) => {

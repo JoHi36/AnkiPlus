@@ -448,7 +448,7 @@ register_agent(AgentDefinition(
     enabled_key='research_enabled',
     # Channel
     channel='stapel',
-    uses_rag=True,
+    uses_rag=False,  # Stapel pipeline (SearchCardsThread) has its own search, doesn't use analyze_query()
     # Execution
     # Note: run_research() is the legacy chat path. The primary Research
     # pipeline is SearchCardsThread in ui/widget.py (agent-kanal-paradigma).
@@ -485,7 +485,7 @@ register_agent(AgentDefinition(
             label='Web-Recherche',
             description='Recherchiert über Perplexity, PubMed und Wikipedia',
             mode='locked',
-            triggers=[Slot(ref='mention_research', mode='locked'), Slot(ref='router', mode='on')],
+            triggers=[Slot(ref='router', mode='locked')],
             tools=[
                 Slot(ref='search_perplexity', mode='locked'),
                 Slot(ref='search_pubmed', mode='on'),

@@ -57,7 +57,6 @@ for t in [
     ('card_answer_shown', 'Antwort zeigen', 'trigger', 'Karte wurde aufgedeckt'),
     ('chat', 'Chat', 'trigger', 'Nachricht im Chat'),
     ('mention_plusi', '@Plusi', 'trigger', 'Direkte Erwähnung von Plusi'),
-    ('mention_research', '@Research', 'trigger', 'Direkte Erwähnung von Research'),
     ('timer', 'Timer', 'trigger', 'Zeitgesteuerter Auslöser'),
     ('mood_event', 'Mood-Event', 'trigger', 'Stimmungsänderung erkannt'),
     ('router', 'Router', 'trigger', 'Automatische Weiterleitung'),

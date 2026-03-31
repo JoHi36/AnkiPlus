@@ -150,6 +150,6 @@ def test_agent_channel_binding():
 def test_rag_agents():
     from ai.agents import AGENT_REGISTRY
     assert AGENT_REGISTRY['tutor'].uses_rag is True
-    assert AGENT_REGISTRY['research'].uses_rag is True
+    assert AGENT_REGISTRY['research'].uses_rag is False
     assert AGENT_REGISTRY['plusi'].uses_rag is False
     assert AGENT_REGISTRY['help'].uses_rag is False
