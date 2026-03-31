@@ -643,7 +643,7 @@ register_agent(AgentDefinition(
             label='Autonomes Denken',
             description='Plusi denkt eigenständig nach, reflektiert und entwickelt sich weiter',
             mode='locked',
-            triggers=[Slot(ref='timer', mode='locked'), Slot(ref='mention_plusi', mode='on'), Slot(ref='mood_event', mode='on')],
+            triggers=[Slot(ref='timer', mode='locked'), Slot(ref='mood_event', mode='on')],
             tools=[
                 Slot(ref='reflect', mode='locked'),
                 Slot(ref='research', mode='on'),
@@ -662,7 +662,7 @@ register_agent(AgentDefinition(
             label='Chat-Begleitung',
             description='Reagiert auf Chat-Nachrichten mit Persönlichkeit und Humor',
             mode='locked',
-            triggers=[Slot(ref='mention_plusi', mode='locked'), Slot(ref='chat', mode='on')],
+            triggers=[Slot(ref='chat', mode='on')],
             tools=[Slot(ref='respond', mode='locked'), Slot(ref='humor', mode='on')],
             outputs=[Slot(ref='chat_response', mode='locked'), Slot(ref='emotion', mode='on')],
         ),

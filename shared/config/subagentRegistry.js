@@ -7,7 +7,6 @@ export {
   setRegistry,
   findAgent,
   getDefaultAgent,
-  getNonDefaultAgents,
   getToolRegistry,
   setToolRegistry,
 } from './subagentRegistry.ts';

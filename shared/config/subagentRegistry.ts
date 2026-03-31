@@ -94,9 +94,3 @@ export function getDefaultAgent(): SubagentConfig | undefined {
   return undefined;
 }
 
-/**
- * Return all enabled non-default agents (the ones that show badges).
- */
-export function getNonDefaultAgents(): SubagentConfig[] {
-  return [...registry.values()].filter(a => a.enabled && !(a as any).isDefault);
-}
