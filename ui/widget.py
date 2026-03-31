@@ -3911,8 +3911,8 @@ class ChatbotWidget(QWidget):
                     self._send_reviewer_step('comparing', 'Vergleiche mit korrekter Antwort…')
                     self._send_reviewer_step('evaluating', 'KI bewertet…')
 
-                    from ..custom_reviewer import _call_ai_evaluation
-                    result = _call_ai_evaluation(question, user_answer, correct_answer)
+                    from ..ai.prufer import evaluate_answer
+                    result = evaluate_answer(question, user_answer, correct_answer)
 
                     self._send_reviewer_step('done', 'Bewertung abgeschlossen')
 
@@ -3963,8 +3963,8 @@ class ChatbotWidget(QWidget):
 
                     self._send_reviewer_step('generating', 'Generiere Multiple-Choice-Optionen…')
 
-                    from ..custom_reviewer import _call_ai_mc_generation
-                    result = _call_ai_mc_generation(question, correct_answer, deck_answers)
+                    from ..ai.prufer import generate_mc
+                    result = generate_mc(question, correct_answer, deck_answers)
 
                     # Cache (skip fallbacks)
                     is_fallback = any(
@@ -3976,9 +3976,6 @@ class ChatbotWidget(QWidget):
                     )
                     if card_id and result and len(result) >= 4 and not is_fallback:
                         save_mc_cache(card_id, question, correct_answer, result)
-
-                    import random
-                    random.shuffle(result)
 
                     self._send_reviewer_step('done', 'Optionen erstellt')
 

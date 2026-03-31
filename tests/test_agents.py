@@ -145,6 +145,7 @@ def test_agent_channel_binding():
     assert AGENT_REGISTRY['research'].channel == 'stapel'
     assert AGENT_REGISTRY['plusi'].channel == 'plusi'
     assert AGENT_REGISTRY['help'].channel == 'plusi'
+    assert AGENT_REGISTRY['prufer'].channel == 'reviewer-inline'
 
 
 def test_rag_agents():

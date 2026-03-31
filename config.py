@@ -53,6 +53,7 @@ DEFAULT_CONFIG = {
     # Agent orchestration
     "tutor_enabled": True,           # Always True — Tutor cannot be disabled
     "help_enabled": True,            # Help agent toggle
+    "prufer_enabled": True,          # Prufer agent toggle (reviewer-inline)
     "default_interaction_mode": "auto",  # 'auto', 'tutor', 'research', 'help', 'plusi'
     "router_model": "gemini-2.5-flash",  # Router model selection
     "max_chain_depth": 2,            # Max agents in a handoff chain

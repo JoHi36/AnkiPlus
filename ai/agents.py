@@ -561,6 +561,47 @@ register_agent(AgentDefinition(
 ))
 
 
+# ---------------------------------------------------------------------------
+# Prufer -- Reviewer Inline Channel
+# ---------------------------------------------------------------------------
+
+_PRUFER_ICON = ''.join([
+    '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" ',
+    'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">',
+    '<path d="M9 11l3 3L22 4"/>',
+    '<path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+    '</svg>',
+])
+
+register_agent(AgentDefinition(
+    name='prufer',
+    label='Prufer',
+    description='Bewertet Antworten und generiert Multiple-Choice-Fragen',
+    # Visual
+    color='#AF52DE',
+    icon_type='svg',
+    icon_svg=_PRUFER_ICON,
+    # Channel binding
+    channel='reviewer-inline',
+    uses_rag=False,
+    # Configuration
+    enabled_key='prufer_enabled',
+    is_default=False,
+    # Execution
+    run_module='ai.prufer',
+    run_function='run_prufer',
+    # Tools (future -- for now evaluation is prompt-based)
+    tools=[],
+    context_sources=[],
+    # UI
+    pipeline_label='Prufer',
+    loading_hint_template='Prufer bewertet...',
+    # Model -- uses default model from handler
+    premium_model='',
+    fast_model='',
+))
+
+
 # ── Plusi ──
 
 register_agent(AgentDefinition(

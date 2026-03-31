@@ -443,155 +443,21 @@ def _ai_get_response_sync(prompt):
 
 
 def _call_ai_evaluation(question, user_answer, correct_answer):
-    """Call AI to evaluate the user's answer. Returns {score, feedback, missing}."""
+    """DEPRECATED: Use ai.prufer.evaluate_answer() instead."""
     try:
-        prompt = f"""Vergleiche die Antwort des Lernenden mit der korrekten Antwort.
-Erkläre in 1-2 Sätzen SPEZIFISCH was in der Antwort des Lernenden fehlte oder falsch war.
-Erkläre NICHT die gesamte Lösung neu — die korrekte Antwort ist dem Lernenden bereits sichtbar.
-Fokussiere auf: Was hat der Lernende geschrieben? Was fehlte konkret?
-
-FRAGE:
-{question}
-
-KORREKTE ANTWORT:
-{correct_answer}
-
-ANTWORT DES LERNENDEN:
-{user_answer}
-
-Antworte NUR mit JSON: {{"score": 0-100, "feedback": "..."}}"""
-
-        response = _ai_get_response_sync(prompt)
-
-        if response:
-            # Try to parse JSON from response
-            cleaned = response.strip()
-            if cleaned.startswith('```'):
-                cleaned = cleaned.split('\n', 1)[1] if '\n' in cleaned else cleaned[3:]
-                if cleaned.endswith('```'):
-                    cleaned = cleaned[:-3]
-                cleaned = cleaned.strip()
-            if cleaned.startswith('json'):
-                cleaned = cleaned[4:].strip()
-
-            result = json.loads(cleaned)
-            return {
-                "score": max(0, min(100, int(result.get("score", 50)))),
-                "feedback": result.get("feedback", "Bewertung abgeschlossen."),
-                "missing": result.get("missing", "")
-            }
-
-    except json.JSONDecodeError as e:
-        logger.error("CustomReviewer: JSON parse error in evaluation: %s", e)
-        return {"score": 50, "feedback": "Bewertung konnte nicht vollständig durchgeführt werden."}
-    except (KeyError, ValueError, TypeError) as e:
-        logger.error("CustomReviewer: AI evaluation error: %s", e)
-
-    # Fallback: simple text comparison
-    return _fallback_evaluation(user_answer, correct_answer)
-
-
-def _fallback_evaluation(user_answer, correct_answer):
-    """Simple fallback evaluation without AI."""
-    user_words = set(user_answer.lower().split())
-    correct_words = set(correct_answer.lower().split())
-
-    if not correct_words:
-        return {"score": 50, "feedback": "Keine Referenzantwort verfügbar."}
-
-    # Simple word overlap
-    common = user_words & correct_words
-    # Remove very common words
-    stopwords = {'der', 'die', 'das', 'ein', 'eine', 'und', 'oder', 'ist', 'sind',
-                 'in', 'von', 'zu', 'mit', 'auf', 'für', 'an', 'bei', 'the', 'a',
-                 'an', 'is', 'are', 'in', 'of', 'to', 'and', 'or', 'for', 'with'}
-    meaningful_correct = correct_words - stopwords
-    meaningful_common = common - stopwords
-
-    if not meaningful_correct:
-        return {"score": 50, "feedback": "Bewertung nicht möglich."}
-
-    score = int((len(meaningful_common) / len(meaningful_correct)) * 100)
-    score = max(0, min(100, score))
-
-    if score >= 70:
-        feedback = "Gute Antwort! Die wesentlichen Punkte sind richtig."
-    elif score >= 40:
-        feedback = "Teilweise richtig. Einige wichtige Aspekte fehlen."
-    else:
-        feedback = "Die Antwort weicht deutlich von der erwarteten Antwort ab."
-
-    return {"score": score, "feedback": feedback}
+        from ..ai.prufer import evaluate_answer
+    except ImportError:
+        from ai.prufer import evaluate_answer
+    return evaluate_answer(question, user_answer, correct_answer)
 
 
 def _call_ai_mc_generation(question, correct_answer, deck_answers=None):
-    """Call AI to generate MC options with explanations. Returns [{text, correct, explanation}, ...]."""
+    """DEPRECATED: Use ai.prufer.generate_mc() instead."""
     try:
-        deck_context = ""
-        if deck_answers:
-            deck_context = "\n\nDECK-KONTEXT (Inspiration für Distraktoren):\n"
-            for i, ans in enumerate(deck_answers, 1):
-                deck_context += f"- {ans}\n"
-
-        prompt = f"""Erstelle 4 MC-Optionen für diese Karteikarten-Frage. 1 korrekt, 3 plausibel falsch.
-Jede Option: kurze Erklärung (max 1 Satz, warum richtig/falsch).
-
-FRAGE: {question}
-KORREKTE ANTWORT: {correct_answer}{deck_context}
-
-Antworte NUR mit JSON-Array:
-[{{"text":"...","correct":true,"explanation":"..."}},{{"text":"...","correct":false,"explanation":"..."}},{{"text":"...","correct":false,"explanation":"..."}},{{"text":"...","correct":false,"explanation":"..."}}]"""
-
-        response = _ai_get_response_sync(prompt)
-
-        if response:
-            cleaned = response.strip()
-            # Try to extract JSON from various wrapper formats
-            if cleaned.startswith('```'):
-                cleaned = cleaned.split('\n', 1)[1] if '\n' in cleaned else cleaned[3:]
-                if cleaned.endswith('```'):
-                    cleaned = cleaned[:-3]
-                cleaned = cleaned.strip()
-            if cleaned.startswith('json'):
-                cleaned = cleaned[4:].strip()
-
-            # Find the JSON array in the response (may have leading text)
-            bracket_start = cleaned.find('[')
-            bracket_end = cleaned.rfind(']')
-            if bracket_start >= 0 and bracket_end > bracket_start:
-                cleaned = cleaned[bracket_start:bracket_end + 1]
-
-            options = json.loads(cleaned)
-            if isinstance(options, list) and len(options) >= 4:
-                # Ensure all options have explanation field
-                for opt in options:
-                    if 'explanation' not in opt:
-                        opt['explanation'] = ''
-                logger.info("CustomReviewer: AI MC generation SUCCESS — %s options", len(options))
-                return options[:4]
-            else:
-                logger.debug("CustomReviewer: AI returned invalid options list (len=%s)", len(options) if isinstance(options, list) else 'not-list')
-        else:
-            logger.debug("CustomReviewer: AI returned no response for MC generation")
-
-    except json.JSONDecodeError as e:
-        logger.error("CustomReviewer: JSON parse error in MC generation: %s", e)
-    except (KeyError, ValueError, TypeError) as e:
-        logger.error("CustomReviewer: AI MC generation error: %s", e)
-
-    # Fallback: generate simple options from correct answer
-    return _fallback_mc_generation(correct_answer)
-
-
-def _fallback_mc_generation(correct_answer):
-    """Simple fallback MC generation without AI."""
-    short = correct_answer[:80] if len(correct_answer) > 80 else correct_answer
-    return [
-        {"text": short, "correct": True, "explanation": "Dies ist die korrekte Antwort."},
-        {"text": "Keine der genannten Optionen", "correct": False, "explanation": "Die korrekte Antwort ist oben aufgeführt."},
-        {"text": "Alle genannten Optionen sind richtig", "correct": False, "explanation": "Nur eine der Optionen ist korrekt."},
-        {"text": "Die Frage kann nicht beantwortet werden", "correct": False, "explanation": "Die Frage hat eine klare Antwort."},
-    ]
+        from ..ai.prufer import generate_mc
+    except ImportError:
+        from ai.prufer import generate_mc
+    return generate_mc(question, correct_answer, deck_answers)
 
 
 def handle_custom_pycmd(handled: Tuple[bool, any], message: str, context) -> Tuple[bool, any]:
