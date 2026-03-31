@@ -137,6 +137,7 @@ def run_tutor(situation, emit_step=None, memory=None,
                         'noteId': str(card_id),
                         'question': (card.get('question') or '')[:60],
                         'source': 'smart_search',
+                        'index': i + 1,  # Stable index for [N] inline references
                     }
         if emit_step:
             emit_step("sources_ready", "done", {"citations": citations})
@@ -504,6 +505,7 @@ def _build_current_card_context(context):
                 'deckName': context.get('deckName', ''),
                 'isCurrentCard': True,
                 'sources': ['current'],
+                'index': 1,  # Stable index for [N] inline references
             }
         }
     }

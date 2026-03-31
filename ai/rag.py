@@ -845,12 +845,16 @@ def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="c
                     citation_fields[field_name] = field_clean[:100] if field_clean else ""
 
             # Füge aktuelle Karte hinzu (überschreibt falls bereits vorhanden)
+            # Index: use existing index if card was already retrieved, else next available
+            _existing = citations.get(str(current_note_id), {})
+            _current_index = _existing.get("index") or (len(citations) + 1)
             citations[str(current_note_id)] = {
                 "noteId": current_note_id,
                 "cardId": current_card_id,
                 "fields": citation_fields,
                 "deckName": current_deck_name,
-                "isCurrentCard": True  # WICHTIG: Flag für Frontend
+                "isCurrentCard": True,  # WICHTIG: Flag für Frontend
+                "index": _current_index,  # Stable index for [N] inline references
             }
             logger.info("RAG Retrieval: Aktuelle Karte (Note %s) zu Citations hinzugefügt", current_note_id)
 

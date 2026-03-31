@@ -189,6 +189,7 @@ def retrieve_rag_context(
             _a = context.get('answer') or ''
             _q_clean = re.sub(r'<[^>]+>', ' ', _q).strip()[:200]
             _a_clean = re.sub(r'<[^>]+>', ' ', _a).strip()[:200]
+            # Index: use next position after all retrieved cards
             citations[current_note_id] = {
                 'noteId': context.get('noteId', context['cardId']),
                 'cardId': context['cardId'],
@@ -198,6 +199,7 @@ def retrieve_rag_context(
                 'deckName': context.get('deckName', ''),
                 'isCurrentCard': True,
                 'sources': ['current'],
+                'index': len(citations) + 1,  # Stable index for [N] inline references
             }
             context_string = (
                 f"Note {current_note_id} (aktuelle Karte):\n"
