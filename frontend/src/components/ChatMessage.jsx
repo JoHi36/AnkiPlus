@@ -15,6 +15,8 @@ import WebCitationBadge from './WebCitationBadge';
 import ThoughtStream from './ThoughtStream';
 import ReasoningDisplay from '../reasoning/ReasoningDisplay';
 import SourceCountBadge from '../reasoning/SourceCountBadge';
+import ThinkingIndicator from './ThinkingIndicator';
+import { useThinkingPhases } from '../hooks/useThinkingPhases';
 import ToolWidgetRenderer from './ToolWidgetRenderer';
 import { ComponentErrorBoundary } from './ErrorBoundary';
 import AgenticCell from './AgenticCell';
@@ -1216,6 +1218,14 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
   return prevSmiles === nextSmiles;
 });
 
+/** Live ThinkingIndicator that subscribes to ReasoningStore */
+function TutorThinkingLive({ requestId, agentName, collapsed, agentLabel }) {
+  const streamId = requestId ? `${agentName}-${requestId}` : undefined;
+  const phases = useThinkingPhases(streamId, agentName);
+  if (!phases) return null;
+  return <ThinkingIndicator phases={phases} collapsed={collapsed} agentLabel={agentLabel} />;
+}
+
 /**
  * ChatMessage Komponente - INTENT BASED RENDERING
  * Analysiert JSON-Daten oder Intents und rendert die entsprechende High-End Card.
@@ -1920,40 +1930,17 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
 
                   // Tutor: render without AgenticCell wrapper
                   if (cell.agent === 'tutor') {
-                    const stepCount = cell.pipelineSteps?.length || 0;
-                    const totalCards = cell.pipelineSteps?.find(s => s.data?.total_cards)?.data?.total_cards || 0;
-
                     return (
                       <div key={`${cell.agent}-${i}`}>
-                        {/* Activity Line — during streaming show dots, after show summary */}
+                        {/* ThinkingIndicator — unified reasoning display */}
                         {cellIsStreaming && hasReasoningData ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--ds-text-tertiary)', marginBottom: 8 }}>
-                            <span style={{ fontWeight: 600, color: 'var(--ds-text-secondary)' }}>tutor</span>
-                            <span style={{ opacity: 0.3 }}>·</span>
-                            <ReasoningDisplay
-                              streamId={requestId ? `${cell.agent}-${requestId}` : undefined}
-                              steps={undefined}
-                              mode="dots"
-                            />
+                          <div style={{ marginBottom: 10 }}>
+                            <TutorThinkingLive requestId={requestId} agentName={cell.agent || 'tutor'} />
                           </div>
                         ) : (
-                          <ActivityLine
-                            agentName="tutor"
-                            cardCount={totalCards}
-                            stepCount={stepCount}
-                            citedCount={citedCount}
-                            cardSourceCount={cardSourceCount}
-                          />
-                        )}
-
-                        {/* Step label during streaming */}
-                        {cellIsStreaming && hasReasoningData && (
-                          <ReasoningDisplay
-                            streamId={requestId ? `${cell.agent}-${requestId}` : undefined}
-                            mode="compact"
-                            hideCounter
-                            hasOutput={Boolean(cell.text)}
-                          />
+                          <div style={{ marginBottom: 8 }}>
+                            <TutorThinkingLive requestId={requestId} agentName={cell.agent || 'tutor'} collapsed agentLabel="Tutor" />
+                          </div>
                         )}
 
                         {/* Text content */}
@@ -2145,7 +2132,7 @@ MemoizedChatMessage.displayName = 'ChatMessage';
 export default MemoizedChatMessage;
 
 // Separate Komponente für sicheres Markdown-Rendering mit Error Boundary
-function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, citations = {}, citationIndices = {}, bridge = null, onPreviewCard }) {
+export function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, citations = {}, citationIndices = {}, bridge = null, onPreviewCard }) {
   const [hasError, setHasError] = React.useState(false);
   const [errorMsg, setErrorMsg] = React.useState('');
   
