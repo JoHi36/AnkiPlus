@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Settings, Copy, LogOut, ChevronRight, Sun, Moon, Monitor } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { bridgeAction } from '../actions';
 
 const PLAN_MAP = {
@@ -133,13 +134,14 @@ function RemoteSection() {
             </div>
           ) : (
             <>
-              {qrData.qr_data_url ? (
-                <img src={qrData.qr_data_url} alt="QR Code" style={QR_IMG_STYLE} />
-              ) : (
-                <div style={{ fontSize: 'var(--ds-text-sm)', color: 'var(--ds-text-secondary)', textAlign: 'center' }}>
-                  Öffne auf deinem Handy:<br />
-                  <span style={{ color: 'var(--ds-accent)', wordBreak: 'break-all' }}>{qrData.pair_url}</span>
-                </div>
+              {qrData.pair_url && (
+                <QRCodeSVG
+                  value={qrData.pair_url}
+                  size={180}
+                  bgColor="transparent"
+                  fgColor="var(--ds-text-primary, #e5e5e5)"
+                  level="M"
+                />
               )}
               <p style={{ fontSize: 'var(--ds-text-sm)', color: 'var(--ds-text-tertiary)', textAlign: 'center' }}>
                 Scanne mit deinem Handy
