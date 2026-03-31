@@ -2983,7 +2983,7 @@ function AppInner() {
       let reviewTopSlot = null;
       if (isReview && reviewer) {
         const s = reviewer.state;
-        if (reviewer.isLoading) reviewTopSlot = <DockLoading steps={s.aiSteps} />;
+        if (reviewer.isLoading) reviewTopSlot = <DockLoading streamId={reviewer.pruferStreamId} steps={s.aiSteps} />;
         else if (s.mode === 'evaluated') reviewTopSlot = <DockEvalResult result={s.evalResult} />;
         else if (s.mode === 'answer') reviewTopSlot = <DockTimer frozenElapsed={s.frozenElapsed} rating={s.selectedRating} onCycleRating={reviewer.handleCycleRating} />;
         else if (s.mode === 'mc_active' || s.mode === 'mc_result') reviewTopSlot = <DockStars stars={s.mcStars} rating={s.selectedRating} isResult={s.mode === 'mc_result'} />;

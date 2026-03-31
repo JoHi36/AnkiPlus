@@ -1,4 +1,6 @@
 import React from 'react';
+import ThinkingIndicator from './ThinkingIndicator';
+import { useThinkingPhases } from '../hooks/useThinkingPhases';
 
 /**
  * Dock sub-components for the reviewer ChatInput's topSlot.
@@ -11,12 +13,26 @@ const RATING_COLORS = {
   3: 'var(--ds-green)', 4: 'var(--ds-accent)',
 };
 
-export function DockLoading({ steps }) {
-  const last = steps[steps.length - 1];
+export function DockLoading({ streamId, steps }) {
+  const phases = useThinkingPhases(streamId, 'prufer');
+
+  // If we have phases from ReasoningStore, use ThinkingIndicator
+  if (phases) {
+    return (
+      <div style={{ padding: '12px 16px', minHeight: 48 }}>
+        <ThinkingIndicator phases={phases} />
+      </div>
+    );
+  }
+
+  // Fallback: old spinner style but updated to SF Mono + thinking-dot-pulse
+  const last = steps?.[steps.length - 1];
   return (
-    <div style={{ padding: '12px 16px', minHeight: 48, display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span className="loading loading-spinner loading-xs" style={{ color: 'var(--ds-accent)' }} />
-      <span style={{ fontSize: 13, color: 'var(--ds-text-secondary)' }}>{last?.label || 'KI bewertet\u2026'}</span>
+    <div style={{ padding: '12px 16px', minHeight: 48, display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: 'var(--ds-font-mono)', fontSize: 11.5, letterSpacing: '0.02em' }}>
+      <span className="thinking-dot-pulse" style={{ width: 5, height: 5, borderRadius: '50%', background: '#AF52DE', flexShrink: 0 }} />
+      <span style={{ color: 'var(--ds-text-secondary)', fontWeight: 500 }}>
+        {last?.label || 'Evaluation'}
+      </span>
     </div>
   );
 }
