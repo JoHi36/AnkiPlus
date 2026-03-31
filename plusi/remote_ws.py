@@ -1,7 +1,9 @@
-"""plusi/remote_ws.py — Polling relay client for Telegram Mini App remote.
+"""plusi/remote_ws.py — Polling relay client for PWA remote.
 
-Connects to the Firebase relay endpoint so a Telegram Mini App can control
-Anki remotely. Runs a polling loop in a daemon thread.
+Connects to the Firebase relay endpoint so a PWA on the user's phone can
+control Anki remotely. Uses pair-code auth: Anki creates a pair code, the
+user scans a QR, the PWA joins using the code. Runs a polling loop in a
+daemon thread.
 """
 
 import json
@@ -109,10 +111,11 @@ def _relay_post(relay_url, payload):
 class RelayClient:
     """Manages connection to the Firebase relay for remote control."""
 
-    def __init__(self, relay_url, chat_id, secret):
+    def __init__(self, relay_url, secret):
         self.relay_url = relay_url
-        self.chat_id = str(chat_id)
         self.secret = secret
+        self.pair_code = None
+        self.session_token = None
         self.mode = "duo"
         self._connected = False
         self._peer_connected = False
@@ -120,6 +123,7 @@ class RelayClient:
         self._thread = None
         self._action_handler = None
         self._on_peer_change = None
+        self._on_pair_created = None
 
     @property
     def is_connected(self):
@@ -137,21 +141,34 @@ class RelayClient:
         """Set callback for peer connect/disconnect: handler(connected: bool)."""
         self._on_peer_change = handler
 
+    def set_pair_created_handler(self, handler):
+        """Set callback fired when a pair is created: handler(pair_code: str)."""
+        self._on_pair_created = handler
+
+    def _build_create_pair_payload(self):
+        """Return the create_pair action payload."""
+        return {"action": "create_pair", "secret": self.secret}
+
     def start(self):
         """Start the polling thread."""
         if self._thread and self._thread.is_alive():
             return True
 
-        # Register with relay
-        resp = _relay_post(self.relay_url, {
-            "action": "register",
-            "chat_id": self.chat_id,
-            "client": "anki",
-            "secret": self.secret,
-        })
+        # Create pair with relay
+        resp = _relay_post(self.relay_url, self._build_create_pair_payload())
         if not resp or not resp.get("ok"):
-            logger.error("remote_ws: relay registration failed")
+            logger.error("remote_ws: relay pair creation failed")
             return False
+
+        self.pair_code = resp.get("pair_code")
+        self.session_token = resp.get("session_token")
+
+        if not self.pair_code or not self.session_token:
+            logger.error("remote_ws: relay response missing pair_code or session_token")
+            return False
+
+        if self._on_pair_created:
+            self._on_pair_created(self.pair_code)
 
         self._connected = True
         self._peer_connected = resp.get("peer_connected", False)
@@ -166,7 +183,8 @@ class RelayClient:
             name="AnkiRemoteRelay",
         )
         self._thread.start()
-        logger.info("remote_ws: started (peer_connected=%s)", self._peer_connected)
+        logger.info("remote_ws: started (pair_code=%s, peer_connected=%s)",
+                    self.pair_code, self._peer_connected)
         return True
 
     def stop(self):
@@ -176,10 +194,11 @@ class RelayClient:
 
         _relay_post(self.relay_url, {
             "action": "disconnect",
-            "chat_id": self.chat_id,
-            "client": "anki",
-            "secret": self.secret,
+            "session_token": self.session_token,
         })
+
+        self.pair_code = None
+        self.session_token = None
 
         if self._peer_connected:
             self._peer_connected = False
@@ -189,14 +208,12 @@ class RelayClient:
         logger.info("remote_ws: stopped")
 
     def send(self, message):
-        """Send a message to the Mini App via relay."""
+        """Send a message to the PWA via relay."""
         if not self._connected:
             return
         _relay_post(self.relay_url, {
             "action": "send",
-            "chat_id": self.chat_id,
-            "client": "anki",
-            "secret": self.secret,
+            "session_token": self.session_token,
             "message": message,
         })
 
@@ -213,9 +230,7 @@ class RelayClient:
             try:
                 resp = _relay_post(self.relay_url, {
                     "action": "poll",
-                    "chat_id": self.chat_id,
-                    "client": "anki",
-                    "secret": self.secret,
+                    "session_token": self.session_token,
                 })
 
                 if resp and resp.get("ok"):
@@ -272,10 +287,9 @@ def get_client():
         tg = config.get("telegram", {})
         relay_url = tg.get("relay_url", "").strip()
         secret = tg.get("relay_secret", "").strip()
-        chat_id = tg.get("chat_id", "")
         if not relay_url or not secret:
             return None
-        _client = RelayClient(relay_url, chat_id, secret)
+        _client = RelayClient(relay_url, secret)
     return _client
 
 

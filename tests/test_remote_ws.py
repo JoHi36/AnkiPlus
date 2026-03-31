@@ -91,19 +91,41 @@ class TestRelayClient:
         from plusi.remote_ws import RelayClient
         client = RelayClient(
             relay_url="https://example.com/api/relay",
-            chat_id="123",
             secret="test",
         )
         assert client.relay_url == "https://example.com/api/relay"
-        assert client.chat_id == "123"
+        assert client.pair_code is None
+        assert client.session_token is None
         assert not client.is_connected
         assert client.mode == "duo"
 
     def test_client_set_mode(self):
         from plusi.remote_ws import RelayClient
-        client = RelayClient("https://x.com/api/relay", "1", "s")
+        client = RelayClient("https://x.com/api/relay", "s")
         client.mode = "solo"
         assert client.mode == "solo"
+
+
+class TestCreatePair:
+    """Test _build_create_pair_payload."""
+
+    def test_payload_action(self):
+        from plusi.remote_ws import RelayClient
+        client = RelayClient("https://x.com/api/relay", "mysecret")
+        payload = client._build_create_pair_payload()
+        assert payload["action"] == "create_pair"
+
+    def test_payload_secret(self):
+        from plusi.remote_ws import RelayClient
+        client = RelayClient("https://x.com/api/relay", "mysecret")
+        payload = client._build_create_pair_payload()
+        assert payload["secret"] == "mysecret"
+
+    def test_payload_no_extra_fields(self):
+        from plusi.remote_ws import RelayClient
+        client = RelayClient("https://x.com/api/relay", "s")
+        payload = client._build_create_pair_payload()
+        assert set(payload.keys()) == {"action", "secret"}
 
 
 class TestActionHandler:
@@ -139,7 +161,7 @@ class TestRelayClientCallbacks:
 
     def test_peer_connected_callback(self):
         from plusi.remote_ws import RelayClient
-        client = RelayClient("https://x.com/api/relay", "1", "s")
+        client = RelayClient("https://x.com/api/relay", "s")
         events = []
         client.set_peer_change_handler(lambda c: events.append(c))
         client._handle_message({"type": "peer_connected"})
@@ -148,7 +170,7 @@ class TestRelayClientCallbacks:
 
     def test_peer_disconnected_callback(self):
         from plusi.remote_ws import RelayClient
-        client = RelayClient("https://x.com/api/relay", "1", "s")
+        client = RelayClient("https://x.com/api/relay", "s")
         client._peer_connected = True
         events = []
         client.set_peer_change_handler(lambda c: events.append(c))
@@ -158,7 +180,7 @@ class TestRelayClientCallbacks:
 
     def test_action_callback(self):
         from plusi.remote_ws import RelayClient
-        client = RelayClient("https://x.com/api/relay", "1", "s")
+        client = RelayClient("https://x.com/api/relay", "s")
         actions = []
         client.set_action_handler(lambda t, p: actions.append((t, p)))
         client._handle_message({"type": "rate", "ease": 2})
@@ -166,8 +188,17 @@ class TestRelayClientCallbacks:
 
     def test_unknown_message_no_callback(self):
         from plusi.remote_ws import RelayClient
-        client = RelayClient("https://x.com/api/relay", "1", "s")
+        client = RelayClient("https://x.com/api/relay", "s")
         actions = []
         client.set_action_handler(lambda t, p: actions.append((t, p)))
         client._handle_message({"type": "bogus_xyz"})
         assert actions == []
+
+    def test_pair_created_handler(self):
+        from plusi.remote_ws import RelayClient
+        client = RelayClient("https://x.com/api/relay", "s")
+        codes = []
+        client.set_pair_created_handler(lambda code: codes.append(code))
+        # Simulate the callback being fired
+        client._on_pair_created("ABC123")
+        assert codes == ["ABC123"]
