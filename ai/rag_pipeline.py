@@ -21,6 +21,9 @@ except ImportError:
     from utils.logging import get_logger
 logger = get_logger(__name__)
 
+PERPLEXITY_QUERY_MAX_LEN = 500
+PERPLEXITY_TIMEOUT_S = 15
+
 
 @dataclass
 class RagResult:
@@ -30,6 +33,59 @@ class RagResult:
     cards_found: int
     retrieval_state: Any = None  # RetrievalState if hybrid was used
     keyword_hits: int = 0  # SQL keyword search hit count (0 = topic not in cards)
+    web_sources: List[Dict[str, Any]] = field(default_factory=list)  # Perplexity web sources
+
+
+def _call_perplexity(query: str, auth_token: Optional[str] = None, backend_url: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Call the backend /research endpoint to get Perplexity web results.
+
+    Args:
+        query: The user's search query (truncated to 500 chars).
+        auth_token: Optional auth token; fetched from config if not provided.
+        backend_url: Optional backend URL; fetched from config if not provided.
+
+    Returns:
+        Dict with 'text', 'sources', 'tokens' keys, or None on failure.
+    """
+    try:
+        import requests
+    except ImportError:
+        logger.warning("requests library not available, cannot call Perplexity")
+        return None
+
+    try:
+        try:
+            from ..config import get_backend_url, get_auth_token
+        except ImportError:
+            from config import get_backend_url, get_auth_token
+
+        url = backend_url or get_backend_url()
+        token = auth_token or get_auth_token()
+
+        if not url:
+            logger.warning("No backend URL configured, skipping Perplexity call")
+            return None
+
+        headers = {"Content-Type": "application/json"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
+        response = requests.post(
+            f"{url}/research",
+            json={"message": query[:PERPLEXITY_QUERY_MAX_LEN]},
+            headers=headers,
+            timeout=PERPLEXITY_TIMEOUT_S,
+        )
+        response.raise_for_status()
+        data = response.json()
+        return {
+            "text": data.get("text", ""),
+            "sources": data.get("sources", []),
+            "tokens": data.get("tokens", {}),
+        }
+    except Exception as e:
+        logger.warning("Perplexity call failed: %s", e)
+        return None
 
 
 def retrieve_rag_context(
@@ -181,6 +237,30 @@ def retrieve_rag_context(
     context_string = retrieval_result["context_string"]
     citations = retrieval_result.get("citations", {})
 
+    # Auto web search: if confidence is low, augment with Perplexity results
+    web_context = None
+    confidence = retrieval_result.get("confidence", "medium")
+    if confidence == "low":
+        logger.info("RAG confidence is low, calling Perplexity for query: %s", user_message[:80])
+        _emit("web_search", "running", {"query": user_message[:200]})
+        web_context = _call_perplexity(user_message)
+        if web_context and web_context.get("text"):
+            sources = web_context.get("sources", [])
+            source_lines = "\n".join(
+                f"[[WEB:{i + 1}]] {s.get('title', 'Quelle')} ({s.get('url', '')})"
+                for i, s in enumerate(sources)
+            )
+            context_string = (
+                context_string
+                + f"\n\n--- WEB-RECHERCHE (Perplexity) ---\n{web_context['text']}"
+                + (f"\n\nWeb-Quellen:\n{source_lines}" if source_lines else "")
+            )
+            _emit("web_search", "done", {"sources_count": len(sources)})
+            logger.info("Perplexity returned %d web sources", len(sources))
+        else:
+            _emit("web_search", "error", {"reason": "no results"})
+            logger.warning("Perplexity returned no usable web context")
+
     # Inject current card if not already in results
     if context and context.get('cardId'):
         current_note_id = str(context.get('noteId', context['cardId']))
@@ -224,6 +304,7 @@ def retrieve_rag_context(
         cards_found=len(citations),
         retrieval_state=retrieval_state,
         keyword_hits=retrieval_result.get("keyword_count", 0),
+        web_sources=web_context.get("sources", []) if web_context else [],
     )
 
 
