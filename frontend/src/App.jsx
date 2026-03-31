@@ -3023,7 +3023,10 @@ function AppInner() {
         placeholder = 'Frage stellen...';
         onSend = handleSend;
         actionPrimary = { label: 'Schließen', shortcut: 'ESC', onClick: () => setReviewChatOpen(false) };
-        actionSecondary = { label: '', shortcut: '', onClick: () => {} };
+        const hasSidebarMessages = chatHook.messages.length > 0;
+        actionSecondary = hasSidebarMessages
+          ? { label: 'Zusammenfassen', shortcut: '↵', onClick: () => window.dispatchEvent(new CustomEvent('compactConfirmed')) }
+          : { label: '', shortcut: '', onClick: () => {} };
       } else {
         // Normal chat mode (non-review)
         topSlot = undefined;
