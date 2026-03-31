@@ -172,30 +172,30 @@ k=120 Semantic Secondary  █████████             schwächste �
 
 **Warum diese Reihenfolge?** Deine eigenen Worte sind am wertvollsten (Tier 1). Router-Terme ergänzen fehlende Synonyme und verwandte Begriffe. Focus re-rankt den Kandidaten-Pool nach Frage-Relevanz. Was der Intent ergänzt (Tier 2) hilft bei vagen Fragen.
 
-### Pipeline Detail (6 Phases)
+### Pipeline Detail (5 Phases)
 
 ```
 USER QUESTION: "wie lang ist der dünndarm"
     |
     v
 PHASE 1: ROUTER (~250ms, backend LLM)
-    Agent routing + context resolution + question focus
+    Agent routing + context resolution
     Output: {
       agent: "tutor",
       search_needed: true,
       resolved_intent: "Dünndarm, Jejunum, Ileum, Duodenum",
-      query_focus: "Längenangabe, Maß, Gesamtlänge"
+      associated_terms: ["Duodenum", "Dickdarm", "Peristaltik"]
     }
     - resolved_intent = THEMA (welche Fachbegriffe sind relevant?)
-    - query_focus     = FRAGERICHTUNG (was genau will der User wissen?)
+    - associated_terms = LLM-Weltwissen (Terme die der User nicht sagte)
     |
     v
 PHASE 2: TERM EXTRACTION + EMBEDDING (~200ms, 1 API call)
     Extract terms: ["Dünndarm"]
-    Batch embed: [terms, query, resolved_intent, query_focus]
+    Batch embed: [terms, query, resolved_intent]
     -> term vectors (for KG fuzzy matching)
     -> sentence vector (for KG expansion + semantic search)
-    -> focus vector (for boost in Phase 6)
+    -> intent vector (for secondary semantic search)
     |
     v
 PHASE 3: KG ENRICHMENT (~30ms, local)
@@ -210,40 +210,105 @@ PHASE 3: KG ENRICHMENT (~30ms, local)
        Embedding: "wie lang ist der dünndarm Duodenum Jejunum Ileumschlingen"
     |
     v
-PHASE 4: PARALLEL SEARCH
-    SQL Search: Anki find_cards() with generated queries
-    Semantic Search: cosine similarity against 8k+ card embeddings
-    Tag Search: Anki find_cards() with "tag:*term*"
-    Feedback Loop: top-5 semantic hits -> extract KG terms -> additional SQL
+PHASE 4: PARALLEL SEARCH (5 lanes — see "Inputs to Parallel Retrieval" below)
+    Lane 1-2: SQL Search (precise + broad from KG enrichment)
+    Lane 3:   Semantic Search (primary + secondary embedding vectors)
+    Lane 4:   Associated Terms (Router's LLM terms as own SQL lane)
+    Lane 5:   Feedback SQL (KG terms from top semantic hits)
     |
     v
-PHASE 5: RRF FUSION + FOCUS
-    1. Collect all cards found by SQL, Semantic, and Tag searches → candidate pool
-    2. For each candidate: compute focus_rank from cosine(focus_vector, card_embedding)
-    3. Combine ALL signals via Reciprocal Rank Fusion:
+PHASE 5: RRF FUSION + CONFIDENCE
+    Combine ALL signals via Reciprocal Rank Fusion:
 
-       score(card) = 1/(k + sql_rank) + 1/(k + sem_rank) + 1/(k + focus_rank)
+       score(card) = Σ 1/(k + rank_i) for each lane that found the card
 
     k-values by tier (lower k = more weight):
-      Precise Primary:    k=50
-      Semantic Primary:   k=60
-      Focus:              k=55   (NEW — between Precise and Semantic)
-      Broad Primary:      k=70
-      Precise Secondary:  k=90
-      Broad Secondary:    k=110
-      Semantic Secondary: k=120
-
-    KEY PRINCIPLE: Focus is a signal IN the fusion, not a post-processing step.
-    - Card matching SQL + Semantic + Focus → 3 contributions → highest score
-    - Card matching SQL + Semantic, low Focus → 2 strong + 1 weak → good score
-    - Card matching SQL only, low Focus → 1 contribution → low score
-    - Card not found by any search → not in candidate pool → Focus irrelevant
+      Precise Primary:    k=50     (AND queries from user's terms)
+      Semantic Primary:   k=60     (embedding from user's query)
+      Router SQL/Embed:   k=65     (associated_terms — own lane)
+      Broad Primary:      k=70     (OR queries from user's terms)
+      Precise Secondary:  k=90     (AND from resolved_intent)
+      Broad Secondary:    k=110    (OR from resolved_intent)
+      Semantic Secondary: k=120    (embedding from intent)
     |
     v
 CONFIDENCE CHECK
-    high (>threshold) → answer from cards
-    low (<threshold)  → trigger web search
+    top_score >= 0.025  → HIGH  → answer from cards
+    top_score >= 0.012  → MEDIUM → answer from cards + caveat
+    top_score <  0.012  → LOW   → trigger Perplexity web search
 ```
+
+### Inputs to Parallel Retrieval — Two Sources, Five Lanes
+
+The retrieval lanes don't receive raw user text. They receive **pre-processed query formulations** from two upstream sources that each contribute different things:
+
+```
+USER: "Wie funktioniert Absorption im Dünndarm?"
+                    |
+        +-----------+-----------+
+        v                       v
+   BACKEND /router         KG ENRICHMENT
+   (LLM-based,            (local, free,
+    ~250ms, costs tokens)   ~30ms, no API)
+        |                       |
+        v                       v
+   Understands INTENT      Understands VOCABULARY
+   (world knowledge)       (your collection's terms)
+```
+
+**Source 1: Backend Router (LLM)** — Sees the message + current card + last assistant reply. Reasons about **what the user means**, not what words they used. Returns:
+- `resolved_intent`: "Absorptionsmechanismen im Dünndarm" — feeds into Tier 2 of KG enrichment
+- `associated_terms`: ["Jejunum", "Ileum", "GIP", "Resorption"] — domain vocabulary the LLM knows but the user didn't say. Gets its own RRF lane (k=65).
+
+**Source 2: KG Enrichment (local)** — Runs after the router. Takes the user's raw text, extracts terms, then expands them using the local Knowledge Graph. No API call. Three steps:
+
+```
+Step 1 — Term Extraction
+    "Wie funktioniert Absorption im Dünndarm?"
+    Strip stopwords → Detect compounds → Keep abbreviations
+    → terms = ["Absorption", "Dünndarm"]
+
+Step 2 — Two-Tier Expansion
+    TIER 1 (Primary, from user's query):
+      KG filter: Is "Absorption" in KG? → YES → use for SQL
+      Sentence embedding (sim ≥ 0.55): → finds "Resorption"(0.72), "Mukosa"(0.61)
+      Graph edges (co-occurrence): Dünndarm→Jejunum(w=12), →Ileum(w=8)
+
+    TIER 2 (Secondary, from resolved_intent — only NEW terms):
+      Same process, but lower weight in RRF (k=90-120)
+
+Step 3 — Deterministic Query Building (no LLM)
+    Precise (up to 5, priority-ordered):
+      1. Original terms         → "Absorption", "Dünndarm"
+      2. High-weight edges ≥1.0 → "Jejunum"(1.2), "Resorption"(1.5)
+      3. Embedding expansions   → "Mukosa"(0.61)
+    Broad (up to 8 terms as OR):
+      "Absorption" OR "Dünndarm" OR "Jejunum" OR "Resorption" OR "Mukosa"
+    Embedding (enriched text):
+      original question + top expansion terms appended
+```
+
+**What each lane actually receives:**
+
+| Lane | Input Source | What it gets | How it searches | RRF k |
+|------|-------------|--------------|-----------------|-------|
+| **Precise SQL** | KG enrichment | Priority-ordered quoted terms: `"Absorption"`, `"Dünndarm"`, `"Jejunum"` | `mw.col.find_cards()` per term. Cascade: run until ≥5 notes, then STOP. | 50 (primary) / 90 (secondary) |
+| **Broad SQL** | KG enrichment | All terms as OR: `"Absorption" OR "Dünndarm" OR "Jejunum" OR ...` | `mw.col.find_cards()`. Only runs if precise found <5 notes. | 70 (primary) / 110 (secondary) |
+| **Semantic** | Embedding vectors from Phase 2 | primary_vec (user question embedded) + secondary_vec (resolved_intent embedded) | Cosine similarity vs all card embeddings. Best score per card across both vectors. | 60 (primary) / 120 (secondary) |
+| **Associated Terms** | Router's `associated_terms` | Up to 10 LLM-generated terms as OR SQL: `"Jejunum" OR "Ileum" OR "GIP"` | `mw.col.find_cards()`. Own lane, own ranking from 1. | 65 |
+| **Feedback SQL** | Generated AFTER semantic returns | KG terms from top-5 semantic hits that weren't already searched. E.g. semantic found a card about "Bürstensaum" → feedback query includes it. | `mw.col.find_cards()`. Only runs if semantic found cards with new KG terms. | secondary tier |
+
+**Why two sources?**
+
+| | Backend Router (LLM) | KG Enrichment (local) |
+|---|---|---|
+| **Cost** | API tokens | Free |
+| **Latency** | ~250ms | ~30ms |
+| **Strength** | Understands intent, paraphrases, context | Finds exact vocabulary in YOUR cards |
+| **Weakness** | Doesn't know your card content | Doesn't understand intent |
+| **Example** | Knows "Absorption" relates to "Resorption" from medical knowledge | Knows YOUR deck has "Bürstensaum" linked to "Dünndarm" via co-occurrence |
+
+The router brings **world knowledge**. The KG brings **your-collection knowledge**. Together they cover both "what should exist" and "what actually exists in your deck."
 
 ## Key Files
 
@@ -319,21 +384,20 @@ Precise SQL queries are ordered by relevance:
 
 Max 5 precise queries to reduce noise.
 
-## Backend Router (resolved_intent)
+## Backend Router
 
-The backend router (`functions/src/handlers/router.ts`) now returns only 3 fields:
+The backend router (`functions/src/handlers/router.ts`) provides two things the local system can't derive:
 
-```json
-{
-  "agent": "tutor",
-  "search_needed": true,
-  "resolved_intent": "clear description of what the user wants to know"
-}
-```
+1. **`resolved_intent`** — What the user actually means, in domain-specific language. Critical for context-dependent questions. When a user asks "explain that" while looking at a card about the small intestine, the router resolves this to "detailed explanation of the structure and segments of the small intestine (duodenum, jejunum, ileum)".
 
-**Status:** Deployed. The old query generation fields (precise_queries, broad_queries, embedding_queries, retrieval_mode, search_scope, max_sources, response_length) are removed from the router prompt. Query generation is now handled entirely by local KG enrichment, which is deterministic and does not require an LLM call.
+2. **`associated_terms`** — Domain terms the LLM knows are relevant but the user didn't say. E.g. for "Dünndarm" → ["Duodenum", "Jejunum", "Ileum", "Peristaltik"]. Gets its own RRF lane (k=65).
 
-**resolved_intent** is critical for context-dependent questions. When a user asks "explain that" while looking at a card about the small intestine, the router resolves this to a specific intent like "detailed explanation of the structure and segments of the small intestine (duodenum, jejunum, ileum)". This resolved intent feeds into KG enrichment as secondary tier terms.
+**Two retrieval paths exist:**
+
+- **EnrichedRetrieval (primary):** Uses only `resolved_intent` + `associated_terms` from the router. All SQL/embedding queries are generated locally by KG enrichment — deterministic, no LLM.
+- **HybridRetrieval (fallback):** Uses the router's legacy query fields (`precise_queries`, `broad_queries`, `embedding_queries`) directly. Only activated if EnrichedRetrieval fails.
+
+The router still returns legacy query fields for backward compatibility, but EnrichedRetrieval ignores them. Query generation belongs to the KG enrichment layer.
 
 ## RRF Scoring
 
@@ -641,7 +705,7 @@ python3 run_tests.py -k test_kg_builder -v     # KG builder tests
 - **`compute_rrf()` extended:** Accepts optional `extra_lanes` parameter — list of `(dict, k_value)` tuples for additional RRF signals without modifying the core function signature.
 
 ### v2.1 (2026-03-27)
-- **Backend Router simplified:** Now returns only 3 fields (agent, search_needed, resolved_intent). Query generation moved entirely to local KG enrichment.
+- **Backend Router decoupled from query generation:** EnrichedRetrieval uses only `resolved_intent` + `associated_terms` from the router. All SQL/embedding queries generated locally by KG enrichment. HybridRetrieval (fallback) still uses legacy query fields.
 - **Tag-based search added:** Searches Anki hierarchical tags via `tag:*term*` wildcards using KG-enriched terms.
 - **Card content cache:** `card_content` table in card_sessions.db, populated during background embedding. Enables offline text search and benchmark export.
 - **Benchmark dashboard:** Docs tab now renders proper markdown instead of raw preformatted text.
