@@ -1716,73 +1716,40 @@ class ChatbotWidget(QWidget):
                 "ankiEmbeddingStatusLoaded")
 
     def _msg_get_plusi_menu_data(self, data=None):
-        """Return all data needed for the Plusi Menu view."""
+        """Return Plusi menu data: diary + subscriptions + budget."""
         try:
-            try:
-                from ..plusi.storage import (
-                    compute_personality_position, get_memory,
-                    get_friendship_data, load_diary, get_category
-                )
-                from ..config import get_config
-            except ImportError:
-                from plusi.storage import (
-                    compute_personality_position, get_memory,
-                    get_friendship_data, load_diary, get_category
-                )
-                from config import get_config
+            from ..plusi.memory import PlusiMemory
+            from ..plusi.budget import PlusicBudget
+            from ..plusi.event_bus import EventBus
 
-            # Personality
-            position = compute_personality_position()
-            trail = get_memory('personality', 'trail', default=[])
+            mem = PlusiMemory()
+            budget = PlusicBudget()
+            bus = EventBus.get()
 
-            # Current state — mood from most recent diary entry
-            state_data = get_category('state')
-            last_mood = 'neutral'
-            try:
-                diary_entries = load_diary(limit=1)
-                if diary_entries:
-                    last_mood = diary_entries[0].get('mood', 'neutral')
-            except Exception as e:
-                logger.debug("Could not load last diary mood: %s", e)
+            diary = mem.load_diary(limit=50)
+            subs = bus.list_subscriptions()
+            budget_status = budget.status()
 
-            state = {
-                'energy': state_data.get('energy', 5),
-                'mood': last_mood,
-                'obsession': state_data.get('obsession', None),
-            }
-
-            # Friendship
-            friendship = get_friendship_data()
-
-            # Diary (full list)
-            diary = load_diary(limit=50)
-
-            # Autonomy config
-            config = get_config()
-            autonomy = config.get('plusi_autonomy', {})
+            # Get last mood from diary or default
+            last_mood = diary[0]['mood'] if diary else 'neutral'
 
             result = {
-                'personality': {
-                    'position': {'x': position['x'], 'y': position['y']},
-                    'quadrant': position['quadrant'],
-                    'quadrant_label': position['quadrant_label'],
-                    'confident': position['confident'],
-                    'trail': trail,
-                },
-                'state': state,
-                'friendship': friendship,
                 'diary': diary,
-                'autonomy': autonomy,
+                'subscriptions': [{'name': s.get('name', ''), 'event': s.get('event', ''),
+                                   'condition': str(s.get('condition', '')),
+                                   'prompt': s.get('wake_prompt', s.get('prompt', ''))}
+                                  for s in subs],
+                'budget': budget_status,
+                'mood': last_mood,
             }
 
-            self._send_to_frontend_with_event(
-                'plusiMenuData', result, 'ankiPlusiMenuDataLoaded'
-            )
-        except Exception:
-            logger.exception("Failed to load Plusi menu data")
-            self._send_to_frontend_with_event(
-                'plusiMenuData', {}, 'ankiPlusiMenuDataLoaded'
-            )
+            self._send_to_frontend_with_event('plusiMenuData', result, 'ankiPlusiMenuDataLoaded')
+        except Exception as e:
+            logger.exception("plusi menu data failed: %s", e)
+            self._send_to_frontend_with_event('plusiMenuData', {
+                'diary': [], 'subscriptions': [], 'budget': {'used': 0, 'cap': 20, 'remaining': 20},
+                'mood': 'neutral',
+            }, 'ankiPlusiMenuDataLoaded')
 
     def _msg_save_plusi_autonomy(self, data):
         """Save Plusi autonomy config (token budget, capabilities)."""

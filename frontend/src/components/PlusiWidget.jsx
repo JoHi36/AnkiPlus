@@ -18,16 +18,18 @@ const MOOD_LABELS = {
   proud:      'stolz',
   sleeping:   'schläft...',
   reflecting: 'reflektiert...',
+  frustrated: 'frustriert',
+  worried:    'besorgt',
+  jealous:    'eifersüchtig',
 };
 
 /**
  * PlusiContent — body content for Plusi agent, rendered inside AgenticCell.
- * Handles: markdown text, friendship footer, double-tap like.
+ * Handles: markdown text, double-tap like.
  */
 export default function PlusiContent({
   mood = 'neutral',
   text = '',
-  friendship = null,
   isFrozen = false,
   isLoading = false,
 }) {
@@ -88,36 +90,6 @@ export default function PlusiContent({
         )}
       </div>
 
-      {/* Friendship footer */}
-      {friendship && (
-        <div className="plusi-footer">
-          <div className="plusi-footer-row">
-            <div className="plusi-footer-left">
-              <span className="plusi-level-name" style={{ color: colorMix(50) }}>{friendship.levelName}</span>
-              {friendship.delta > 0 && (
-                <span className="plusi-delta" style={{ color: colorMix(60) }}>▲ +{friendship.delta}</span>
-              )}
-              {friendship.delta < 0 && (
-                <span className="plusi-delta" style={{ color: colorMix(55) }}>▼ {friendship.delta}</span>
-              )}
-            </div>
-            <span className="plusi-points">
-              {friendship.level >= 4 ? '★ Max' : `${friendship.points} / ${friendship.maxPoints}`}
-            </span>
-          </div>
-          <div className="plusi-bar-bg">
-            <div
-              className="plusi-bar-fill"
-              style={{
-                width: friendship.level >= 4
-                  ? '100%'
-                  : `${Math.min(100, (friendship.points / friendship.maxPoints) * 100)}%`,
-                background: colorMix(50),
-              }}
-            />
-          </div>
-        </div>
-      )}
     </>
   );
 }
@@ -172,52 +144,6 @@ const PLUSI_CONTENT_CSS = `
     color: var(--ds-text-placeholder);
     font-style: italic;
     margin: 0;
-  }
-
-  /* ── Footer ── */
-  .plusi-footer {
-    padding: 6px 0 0;
-    margin-top: 8px;
-    border-top: 1px solid var(--ds-hover-tint);
-  }
-
-  .plusi-footer-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 4px;
-  }
-
-  .plusi-footer-left {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-  }
-
-  .plusi-level-name {
-    font-size: 9px;
-  }
-
-  .plusi-delta {
-    font-size: 8px;
-  }
-
-  .plusi-points {
-    font-size: 8px;
-    color: var(--ds-text-muted);
-  }
-
-  .plusi-bar-bg {
-    height: 2px;
-    background: var(--ds-border-subtle);
-    border-radius: 1px;
-    overflow: hidden;
-  }
-
-  .plusi-bar-fill {
-    height: 100%;
-    border-radius: 1px;
-    transition: width 0.5s ease;
   }
 
   /* ── Heart Like ── */
