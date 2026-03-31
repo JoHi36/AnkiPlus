@@ -1033,7 +1033,7 @@ registry.register(ToolDefinition(
     execute_fn=execute_search_web,
     category='research',
     config_key='research',
-    agent='research',
+    agent='_deprecated',  # Web search is now automatic pipeline behavior (rag_pipeline.py)
     display_type='widget',
     timeout_seconds=15,
     label='Websuche',
@@ -1114,7 +1114,7 @@ registry.register(ToolDefinition(
     execute_fn=execute_search_pubmed,
     category='research',
     config_key='research',
-    agent='research',
+    agent='_deprecated',  # Web search is now automatic pipeline behavior (rag_pipeline.py)
     display_type='widget',
     timeout_seconds=15,
     label='PubMed-Suche',
@@ -1201,7 +1201,7 @@ registry.register(ToolDefinition(
     execute_fn=execute_search_wikipedia,
     category='research',
     config_key='research',
-    agent='research',
+    agent='_deprecated',  # Web search is now automatic pipeline behavior (rag_pipeline.py)
     display_type='widget',
     timeout_seconds=15,
     label='Wikipedia-Suche',
