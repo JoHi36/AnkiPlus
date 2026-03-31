@@ -8,7 +8,7 @@ export default defineConfig({
     sourcemap: false,
     minify: true,
   },
-  base: '/remote/',
+  base: '/',
   server: {
     port: 3001,
   },
