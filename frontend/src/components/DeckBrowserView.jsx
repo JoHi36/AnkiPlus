@@ -1,42 +1,36 @@
 import React from 'react';
 import DeckSearchBar from './DeckSearchBar';
 import { DeckNode } from './DeckNode';
-import AccountBadge from './AccountBadge';
 import PlusiDock from './PlusiDock';
 import { useDeckTree } from '../hooks/useDeckTree';
 import { executeAction, bridgeAction } from '../actions';
 
 const MAX_W = 'var(--ds-content-width)';
 
-export default function DeckBrowserView({ data, isPremium, onToggleView }) {
-  const { isExpanded, toggleExpanded } = useDeckTree();
+export default function DeckBrowserView({ data, isPremium, lidState, canvasOpen, sidebarOpen, onLidClick, onLidAnimEnd, searchBarRef, onSearchSubmit, flipRect }) {
+  const { isExpanded, toggleExpanded, ensureRootsExpanded } = useDeckTree();
 
   if (!data) return null;
 
   const { roots = [], totalDue = 0 } = data;
 
-  const handleStudy = (deckId) => {
-    executeAction('deck.study', { deckId });
-  };
+  /* Auto-expand top-level decks on first render */
+  ensureRootsExpanded(roots);
 
-  const handleSelect = (deckId) => {
-    executeAction('deck.select', { deckId });
-  };
-
-  const handleSearchSubmit = (text) => {
-    executeAction('chat.open', { text });
-  };
+  const hide = canvasOpen || lidState === 'animating' || lidState === 'open' || lidState === 'reversing';
 
   return (
     <div style={{
       flex: 1, overflow: 'hidden',
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       padding: '0 20px',
+      position: 'relative',
     }}>
-      {/* Wordmark — fixed at top, never scrolls */}
+      {/* Wordmark */}
       <div style={{
-        flexShrink: 0, paddingTop: 64,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexShrink: 0, paddingTop: 120,
+        display: hide ? 'none' : 'flex',
+        alignItems: 'center', justifyContent: 'center',
         gap: 10, marginBottom: 24, width: '100%', maxWidth: MAX_W,
         position: 'relative',
       }}>
@@ -65,54 +59,34 @@ export default function DeckBrowserView({ data, isPremium, onToggleView }) {
         >
           {isPremium ? 'Pro' : 'Free'}
         </span>
-
-        {/* Knowledge Graph toggle */}
-        {onToggleView && (
-          <button
-            onClick={onToggleView}
-            style={{
-              position: 'absolute',
-              right: 0,
-              bottom: 0,
-              background: 'var(--ds-hover-tint)',
-              border: '1px solid var(--ds-border)',
-              borderRadius: 8,
-              padding: '6px 14px',
-              color: 'var(--ds-text-secondary)',
-              fontSize: 12,
-              fontWeight: 500,
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-              transition: 'color 0.15s, background 0.15s',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.color = 'var(--ds-text-primary)';
-              e.currentTarget.style.background = 'var(--ds-active-tint)';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.color = 'var(--ds-text-secondary)';
-              e.currentTarget.style.background = 'var(--ds-hover-tint)';
-            }}
-          >
-            Knowledge Graph
-          </button>
-        )}
       </div>
 
-      {/* Search Bar — fixed, never scrolls, same max-width */}
+
+
+      {/* SearchBar — ALWAYS visible, animates via lid-lift */}
       <div style={{
         flexShrink: 0, width: '100%', maxWidth: MAX_W,
-        marginBottom: 16,
+        marginBottom: 16, zIndex: 50,
+        position: 'relative',
       }}>
-        <DeckSearchBar onSubmit={handleSearchSubmit} />
+        <DeckSearchBar
+          ref={searchBarRef}
+          onSubmit={onSearchSubmit}
+          lidState={lidState}
+          onLidClick={onLidClick}
+          onLidAnimEnd={onLidAnimEnd}
+          externalFlipRect={flipRect}
+          sidebarOpen={sidebarOpen}
+        />
       </div>
 
-      {/* Deck List — only this scrolls, clipped right at the search bar bottom edge */}
+      {/* Deck List */}
       <div style={{
         flex: 1, overflowY: 'auto',
         width: '100%', maxWidth: MAX_W,
         paddingBottom: 100,
         scrollbarWidth: 'none',
+        display: hide ? 'none' : 'block',
       }}>
         {roots.map((node, idx) => (
           <DeckNode
@@ -120,9 +94,9 @@ export default function DeckBrowserView({ data, isPremium, onToggleView }) {
             node={node}
             depth={0}
             isExpanded={isExpanded}
-            onToggle={toggleExpanded}
-            onStudy={handleStudy}
-            onSelect={handleSelect}
+            onToggle={(id) => toggleExpanded(id)}
+            onStudy={(deckId) => executeAction('deck.study', { deckId })}
+            onSelect={(deckId) => executeAction('deck.select', { deckId })}
             index={idx}
           />
         ))}
@@ -137,9 +111,9 @@ export default function DeckBrowserView({ data, isPremium, onToggleView }) {
         )}
       </div>
 
-      {/* Fixed position elements */}
-      <AccountBadge isPremium={isPremium} onClick={() => executeAction('settings.toggle')} />
-      <PlusiDock onClick={() => executeAction('plusi.ask')} />
+      <div style={{ display: hide ? 'none' : undefined }}>
+        <PlusiDock onClick={() => executeAction('plusi.ask')} />
+      </div>
     </div>
   );
 }

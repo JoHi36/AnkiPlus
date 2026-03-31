@@ -2880,17 +2880,7 @@ function AppInner() {
                             </div>
                           );
                         })()}
-                        {/* DEBUG: show save state */}
-                        {typeof window !== 'undefined' && window._debugBotSave && (
-                          <div style={{ fontSize: 9, color: '#ff6b6b', padding: '4px 8px', fontFamily: 'monospace', background: 'rgba(255,0,0,0.1)', borderRadius: 4, margin: '4px 0' }}>
-                            SAVE: hook={String(window._debugBotSave.hasHook)} card={window._debugBotSave.cardId} text={window._debugBotSave.textLen}ch cells={JSON.stringify(window._debugBotSave.cellTexts)}
-                          </div>
-                        )}
-                        {typeof window !== 'undefined' && window._debugMsgDone && (
-                          <div style={{ fontSize: 9, color: '#4ecdc4', padding: '4px 8px', fontFamily: 'monospace', background: 'rgba(0,255,200,0.1)', borderRadius: 4, margin: '4px 0' }}>
-                            MSG_DONE: received={String(window._debugMsgDone.received)} t={window._debugMsgDone.timestamp}
-                          </div>
-                        )}
+                        {/* Debug bars removed — were showing SAVE/MSG_DONE state */}
                         {/* Streaming Message - handles both Loading (Thinking) and Generating phases */}
                         {/* CRITICAL: Only render StreamingChatMessage if no saved bot message exists yet */}
                         {/* This prevents double-rendering when message is saved but timeout hasn't cleared streamingMessage */}

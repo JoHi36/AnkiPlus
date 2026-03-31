@@ -438,7 +438,7 @@ def get_google_response(user_message, model, api_key, context=None, history=None
 def get_google_response_streaming(user_message, model, api_key, context=None, history=None,
                                   mode='compact', callback=None, rag_context=None,
                                   suppress_error_callback=False, system_prompt_override=None,
-                                  config=None, pipeline_step_callback=None):
+                                  config=None, pipeline_step_callback=None, agent='tutor'):
     """Send a streaming chat request to the backend /chat endpoint.
 
     All parameters are preserved for backward compatibility.
@@ -468,6 +468,7 @@ def get_google_response_streaming(user_message, model, api_key, context=None, hi
         system_prompt_override=system_prompt_override,
         config=config,
         stream=True,
+        agent=agent,
     )
 
     url = _get_backend_chat_url()

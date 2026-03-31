@@ -67,7 +67,7 @@ export default function AggregatedPlanView({
         )}
 
         <div style={ZONE1_FOOTER_STYLE}>
-          <span style={DUE_LABEL_STYLE}>{totalDue} Karten heute</span>
+          <span style={DUE_LABEL_STYLE}>{totalDue} Karten fällig</span>
           <button
             style={LEARN_ALL_STYLE}
             onClick={() => {
@@ -115,7 +115,7 @@ export default function AggregatedPlanView({
               </div>
               <span style={ROW_PCT_STYLE}>{Math.round(pct)}%</span>
               <span style={{ ...ROW_PACE_STYLE, color }}>+{pace}/T</span>
-              <span style={ROW_DUE_STYLE}>{due}</span>
+              <span style={ROW_DUE_STYLE}>{due} fällig</span>
               <span style={ROW_CHEVRON_STYLE}>›</span>
             </button>
           );

@@ -1,129 +1,143 @@
-# Statistik als Lernplan — Two-Level Flow
+# Statistik als Lernplan — Design Spec
 
+**Status:** Approved
 **Date:** 2026-03-30
-**Status:** Draft (Brainstorming-Ergebnis, needs detailed design)
-**Depends on:** TrajectoryChart v2 (implemented), KnowledgeHeatmap (existing)
+**Depends on:** TrajectoryChart v2 (done), KnowledgeHeatmap (existing), bridge_stats.py (existing)
 
----
+## Overview
 
-## Vision
+Die StatistikView wird zu einem Two-Level Flow umgebaut. Level 1 zeigt eine Wissenslandschaft (Polished Treemap), Level 2 zeigt Fokus-Details für ein einzelnes Deck mit Trajectory + Lernvorschlag.
 
-Die Statistik-Seite wird von einem passiven Dashboard zu einem aktiven Lernplan-Tool umgebaut. Zwei Ebenen: erst sehen wo man steht (Treemap), dann verstehen wohin es geht (Trajectory), und am Ende bekommen was man tun soll (Session-Vorschlag).
+## Level 1 — Wissenslandschaft
 
-## Two-Level Architecture
+### Hero: Polished Treemap
 
-### Level 1: Wissenslandschaft (Outer)
+Die bestehende KnowledgeHeatmap wird visuell überarbeitet:
 
-**Hero-Element:** KnowledgeHeatmap (Treemap) — volle Breite, prominenter als aktuell.
-Zeigt alle Decks als farbige Blöcke. Rot = schwach, Grün = stark. Drill-down durch Tap.
+**Layout:**
+- Squarify-Algorithmus bleibt (echte Proportionen nach Kartenzahl)
+- **6px Gaps** zwischen allen Blöcken
+- **14px border-radius** auf allen Blöcken
+- Subtile **Gradienten** statt Flat-Fills (heller oben-links, dunkler unten-rechts)
+- Volle Breite, Hero-Position oben in der StatistikView
 
-**Darüber:** "Worauf möchtest du dich fokussieren?"
+**Farbe = Mastery-Encoding:**
+- Durchgehender **rot → orange → gelb → gelbgrün → grün** Farbverlauf
+- Basiert auf `mastery_pct` = `(mature_cards + young_cards * 0.5) / total_cards`
+- Farbstops: 0% = `#F87171`, 30% = `#FB923C`, 50% = `#FBBF24`, 70% = `#A3E635`, 90%+ = `#4ADE80`
+- Opacity-Stufen: Label ~40%, Prozentwert ~85%, Kartenzahl ~25%, Hintergrund-Gradient 5-18%
+- Border: gleiche Farbe, ~10-12% Opacity
 
-**Drumherum (sekundär):**
-- GitHub-Style Aktivitäts-Heatmap (YearHeatmap) — zeigt Konsistenz
-- TimeOfDay-Chart — zeigt optimale Lernzeiten
-- Streak-Info — motivational
+**Sortierung:**
+- **Stärkstes Deck zuerst** (oben-links = grün, unten-rechts = rot)
+- Motivierendes Framing: "Worauf kann ich aufbauen?"
+- Sortierung erfolgt VOR dem Squarify-Algorithmus (Input-Array nach mastery_pct DESC sortieren)
 
-**Interaktion:** User tappt auf einen Deck-Block → Übergang zu Level 2.
+**Interaktion:**
+- **Single-Tap** → Level 2 (Deck-Fokus mit Trajectory + SessionSuggestion)
+- **Long-Press** → Drill-Down in Kinder-Decks (bestehende Morph-Animation, nur bei Parent-Decks mit Kindern)
 
-**Persistenz:** Die letzte Auswahl wird gespeichert. Beim nächsten Öffnen der Statistik wird der zuletzt fokussierte Stapel direkt angeboten (aber nicht erzwungen — man kann jederzeit zurück zur Treemap).
+**Block-Content:**
+- Deck-Name (uppercase, letter-spacing, niedrige Opacity)
+- Mastery-Prozent (großer Font, hohe Opacity)
+- Kartenzahl (klein, sehr niedrige Opacity) — nur wenn Block groß genug
 
-### Level 2: Stapel-Fokus (Inner)
+### Sekundäre Charts (unter der Treemap, scrollbar)
 
-**Betreten durch:** Tap auf Deck-Block in der Treemap.
+- **YearHeatmap** — jährliche Aktivitäts-Konsistenz (bestehend)
+- **TimeOfDayChart** — optimale Lernzeiten (bestehend)
 
-**Inhalt:**
-1. **TrajectoryChart** — Fortschrittsverlauf + Prediction für genau diesen Stapel
-   - Damped Holt Forecast mit Dynamik-Score
-   - Confidence Band (oberer Rand = Potential, unterer Rand = Decay-Szenario)
-   - W/M/J Zeitraum-Umschalter
-   - Header Value Swap bei Hover
-2. **Session-Vorschlag** — "Was du heute brauchst für diesen Stapel"
-   - Berechnet rückwärts aus der Prediction
-   - Zeigt: X Pflege-Reviews + Y neue Karten = Z Karten gesamt
-   - Berücksichtigt Deck-Mastery (hohes Deck braucht mehr Pflege, niedriges braucht mehr Neue)
+Keine Änderungen an diesen Komponenten nötig.
 
-**Nicht enthalten auf Level 2:**
-- Keine YearHeatmap (gehört zur Außenebene)
-- Keine TimeOfDay (gehört zur Außenebene)
-- Keine DailyBreakdown (der Session-Vorschlag ersetzt das)
-- Minimal, fokussiert auf diesen einen Stapel
+## Level 2 — Stapel-Fokus
 
-**Navigation:** Back-Button oder Swipe → zurück zur Treemap.
+### Betreten
 
-## Session-Vorschlag: Umgekehrte Prediction
+- Tap auf Deck-Block in der Treemap
+- **Morph-Transition:** Block expandiert zu voller Breite (bestehende Animationslogik adaptieren)
 
-Die Kernberechnung: gegeben die Prediction-Kurve, was muss der User HEUTE tun um auf Kurs zu bleiben?
+### Inhalte
 
-### Formel
+**1. TrajectoryChart (bestehend)**
+- Zeigt per-Deck Fortschrittsverlauf + Prediction
+- Nutzt den bestehenden TrajectoryChart mit useTrajectoryModel
+- Daten kommen von neuem `getDeckTrajectory(deckId)` Bridge-Call
 
-```
-target_pct_tomorrow = prediction_line[1]  // Wert morgen laut Prediction
-delta_pct = target_pct_tomorrow - current_pct
-delta_cards = delta_pct / 100 * total_cards_in_deck
+**2. SessionSuggestion (neu)**
+- Informativer Lernvorschlag: "X Pflege + Y Neue = Z Karten heute"
+- Dynamisch berechnet, passiv nutzbar — kein "Jetzt lernen" Button
+- Berechnung rückwärts aus Prediction-Kurve: welcher tägliche Mix hält die Kurve auf Kurs?
+- Zeigt: `dueReview` (Pflege), empfohlene `newCards`, Summe
+- Visuell: kompakte Card unter dem TrajectoryChart, Design-System-konform (`.ds-frosted` oder `.ds-canvas`)
 
-// Aufschlüsselung:
-new_cards_needed = max(0, ceil(delta_cards))
-due_cards_today = cards_due_in_deck  // von Anki's Scheduler
-maintenance_cards = due_cards_today
+### Verlassen
 
-suggested_session = {
-  neue: new_cards_needed,
-  pflege: maintenance_cards,
-  gesamt: new_cards_needed + maintenance_cards,
-}
-```
+- Back-Button oben-links → collapsiert zurück zur Treemap
+- Oder: Swipe-Back (falls framer-motion unterstützt)
 
-### Anpassung nach Mastery
+## Backend
 
-- **Niedriger Mastery (< 30%):** Mehr neue Karten, weniger Pflege. Jede neue Karte bewegt den Prozentsatz stark.
-- **Mittlerer Mastery (30-70%):** Balance aus Neuen und Pflege.
-- **Hoher Mastery (> 70%):** Hauptsächlich Pflege (viele mature Karten werden fällig). Wenige neue Karten bewegen den Prozentsatz kaum noch.
+### Neuer Bridge-Call: `getDeckTrajectory(deckId)`
 
-### Backend-Anforderungen
+- Separater Call (nicht in `getStatistikData` integriert)
+- Cachebar: Frontend cached Ergebnisse pro deckId für die Session
+- Rückgabe: gleiche Struktur wie `get_trajectory_data()`, aber gefiltert auf ein Deck
+- Implementation: `bridge_stats.py` erweitern um `get_deck_trajectory(deck_id)`
 
-Neue Bridge-Methode nötig: `getDeckSessionSuggestion(deckId)` die zurückgibt:
-- `due_new`: Anzahl neue Karten die in diesem Deck verfügbar sind
-- `due_review`: Anzahl fällige Review-Karten in diesem Deck
-- `total_cards`: Gesamt-Karten im Deck
-- `mature_cards`: Mature Karten im Deck
-- `young_cards`: Young Karten im Deck
+### Neuer Bridge-Call: `getDeckSessionSuggestion(deckId)`
 
-## Scope-Frage: Deck vs. Gesamt
+- Berechnet empfohlene Session für heute
+- Rückgabe: `{ dueReview: number, recommendedNew: number, total: number, deckName: string }`
+- Logik: `dueReview` = aktuell fällige Reviews, `recommendedNew` = basierend auf Deck-Limits und aktueller Auslastung
 
-- **mature_pct**: immer relativ zum gewählten Deck (nicht global)
-- **Dynamik**: berechnet aus den Review-Counts des gewählten Decks
-- **Wachstum (neue Karten/Tag)**: ist global — wenn du 20 neue Karten am Tag lernst, ist das über alle Decks verteilt
+### Bestehende Calls
 
-## Transition Design
+- `getStatistikData()` — unverändert (liefert weiterhin globale Daten für Level 1)
+- KnowledgeHeatmap-Daten kommen bereits über `getStatistikData()` → Feld `treemap`/`knowledge`
 
-**Treemap → Stapel-Fokus:**
-- Tap auf Deck-Block
-- Block expandiert (morph-Animation, bereits in KnowledgeHeatmap implementiert als drill-down)
-- Überblendung zu Level 2
+## Persistenz
 
-**Zurück:**
-- Back-Button oder Swipe
-- Level 2 collapsiert zurück zum Treemap-Block
+- Letzte Deck-Auswahl wird in `config.json` gespeichert (`last_statistik_deck_id`)
+- Beim Öffnen der StatistikView: wenn ein gespeichertes Deck existiert, optional automatisch Level 2 öffnen (oder nur den Block visuell hervorheben — TBD beim Finetuning)
 
-## Was bereits existiert
+## Änderungen an bestehenden Komponenten
 
-- `KnowledgeHeatmap.jsx` — Treemap mit Drill-Down, Squarify-Layout, Strength-Coloring ✅
-- `TrajectoryChart.jsx` — Damped Holt, Dynamik, Confidence Band, Hover ✅
-- `YearHeatmap.jsx` — GitHub-Style Activity Grid ✅
-- `TimeOfDayChart.jsx` — Stunden-Distribution ✅
-- `DailyBreakdown.jsx` — Tages-Aufschlüsselung ✅
-- `bridge_stats.py` — Backend-Daten für alle Charts ✅
-- `StatistikView.jsx` — aktueller Container (muss umgebaut werden)
+### KnowledgeHeatmap.jsx — Major Refactor
 
-## Was neu gebaut werden muss
+- Farb-System: weg von 7-Level strength-Farben, hin zu kontinuierlichem Mastery-Gradient
+- Sortierung: Input-Array nach mastery_pct DESC sortieren vor Squarify
+- Styling: Gaps (6px), border-radius (14px), Gradienten
+- Tap-Handler: Single-Tap feuert `onDeckSelect(deckId)` statt Drill-Down
+- Long-Press: bestehender Drill-Down nur für Parent-Decks mit Kindern
+- Bestehende Breadcrumb-Navigation bleibt für Drill-Down
 
-1. **StatistikView Rewrite** — Two-Level State Machine (outer/inner)
-2. **SessionSuggestion-Komponente** — zeigt den Vorschlag im Level 2
-3. **Backend: `getDeckSessionSuggestion`** — per-Deck Session-Daten
-4. **Backend: `getDeckTrajectory`** — per-Deck Trajectory-Daten (mature_pct pro Tag für ein spezifisches Deck, nicht global)
-5. **Persistenz** — letzte Deck-Auswahl speichern/laden
+### StatistikView.jsx — Layout-Umbau
 
-## Mockups
+- Treemap wird Hero (oben, volle Breite)
+- TrajectoryChart verschwindet aus Level 1 (nur noch in Level 2)
+- Level-2-State: `selectedDeckId` → zeigt Deck-Fokus-View
+- Transition-Animation zwischen Level 1 und Level 2
 
-Brainstorming-Session Mockups: `.superpowers/brainstorm/24974-1774810098/content/`
+### bridge.py / widget.py — Neue Message-Handler
+
+- `getDeckTrajectory` Message-Handler
+- `getDeckSessionSuggestion` Message-Handler
+
+### bridge_stats.py — Neue Funktionen
+
+- `get_deck_trajectory(deck_id)` — per-Deck 180-Tage-Trajectory
+- `get_deck_session_suggestion(deck_id)` — Lernvorschlag-Berechnung
+
+## Nicht in Scope
+
+- "Jetzt lernen" Button (bewusst nur informativ)
+- Anpassung von Anki-Tageslimits
+- Änderungen an YearHeatmap oder TimeOfDayChart
+- Neue Python-Tests (bridge_stats hat keine bestehenden Tests)
+
+## Design-System Compliance
+
+- Alle Farben über `var(--ds-*)` Tokens oder berechnete HSLA-Werte basierend auf Mastery
+- Treemap-Blöcke: keine CSS-Klassen, SVG-Rendering (wie bestehend)
+- SessionSuggestion: `.ds-frosted` oder `.ds-canvas` Material
+- Schriften: SF Pro (system-ui), Brand-Font nur für Plusi

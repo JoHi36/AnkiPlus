@@ -92,8 +92,23 @@ export function useCardSession(bridge) {
         from: m.sender || m.from || 'user',
         createdAt: m.created_at || m.createdAt,
         timestamp: m.created_at || m.createdAt || m.timestamp,
-        agentCells: m.agent_cells || m.agentCells || null,
-        orchestration: m.orchestration || null,
+        agentCells: (() => {
+          const raw = m.agent_cells || m.agentCells;
+          if (!raw) return null;
+          // Might be double-encoded string from SQLite
+          if (typeof raw === 'string') {
+            try { return JSON.parse(raw); } catch { return null; }
+          }
+          return raw;
+        })(),
+        orchestration: (() => {
+          const raw = m.orchestration;
+          if (!raw) return null;
+          if (typeof raw === 'string') {
+            try { return JSON.parse(raw); } catch { return null; }
+          }
+          return raw;
+        })(),
       })),
     };
 

@@ -15,7 +15,7 @@ interface ThinkingIndicatorProps {
 const INDICATOR_STYLE: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
-  gap: 5,
+  gap: 7,
 };
 
 const STEP_STYLE: React.CSSProperties = {

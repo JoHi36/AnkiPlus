@@ -584,102 +584,45 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
           <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
         )}
 
-        {/* Loading state — Invisible Addiction plus animation */}
-        {isSearching && !hasResults && (
-          <div style={{
-            position: 'absolute', inset: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 5,
-          }}>
-            <PlusLoader size={100} speed={6} />
-          </div>
-        )}
-
-        {/* Graph mode toggle removed — controlled by sidebar tab */}
-
-        {/* ═══ DEFAULT STATE: DeckBrowser frame with toggle ═══ */}
+        {/* ═══ Center state: Loading OR empty hint (never both) ═══ */}
         {!hasResults && (
           <div style={{
-            flex: 1, overflow: 'hidden',
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            padding: '0 20px',
-            opacity: isSearching ? 0 : 1,
-            transition: 'opacity 0.25s ease-out',
-            pointerEvents: isSearching ? 'none' : 'auto',
+            position: 'absolute',
+            top: 50, left: 0, right: 0, bottom: 80,
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            zIndex: 5, userSelect: 'none', pointerEvents: 'none',
           }}>
-            {/* Wordmark — matches DeckBrowserView exactly */}
-            <div style={{
-              flexShrink: 0, paddingTop: 64,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              gap: 10, marginBottom: 24, width: '100%', maxWidth: MAX_W,
-              position: 'relative',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'baseline' }}>
+            {isSearching ? (
+              <PlusLoader size={200} speed={6} />
+            ) : (
+              <>
                 <span style={{
-                  fontFamily: '-apple-system, "SF Pro Display", system-ui, sans-serif',
-                  fontSize: 46, fontWeight: 700, letterSpacing: '-1.8px',
-                  color: 'var(--ds-text-primary)', lineHeight: 1,
-                }}>Anki</span>
-                <span style={{
-                  fontFamily: '-apple-system, "SF Pro Display", system-ui, sans-serif',
-                  fontSize: 46, fontWeight: 300, letterSpacing: '-1px',
-                  color: 'var(--ds-text-muted)', lineHeight: 1,
-                }}>.plus</span>
-              </div>
-              <span
-                style={{
-                  fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
-                  padding: '4px 9px', borderRadius: 7, alignSelf: 'center',
-                  marginTop: 4, cursor: 'pointer', whiteSpace: 'nowrap',
-                  ...(isPremium
-                    ? { background: 'var(--ds-accent-10)', border: '1px solid var(--ds-accent-20)', color: 'var(--ds-accent)' }
-                    : { background: 'var(--ds-hover-tint)', border: '1px solid var(--ds-border-medium)', color: 'var(--ds-text-placeholder)' }),
-                }}
-                onClick={() => executeAction('settings.toggle')}
-              >
-                {isPremium ? 'Pro' : 'Free'}
-              </span>
-            </div>
-
-            {/* Search Bar */}
-            <div style={{
-              flexShrink: 0, width: '100%', maxWidth: MAX_W,
-              marginBottom: 16,
-            }}>
-              <DeckSearchBar
-                onSubmit={(text) => { if (text.trim()) search(text); }}
-              />
-            </div>
-
-            {/* Content area — deck list */}
-            <div style={{
-              flex: 1, overflowY: 'auto',
-              width: '100%', maxWidth: MAX_W,
-              paddingBottom: 60,
-              scrollbarWidth: 'none',
-            }}>
-              {(deckData?.roots || []).map((node, idx) => (
-                <DeckNode
-                  key={node.id}
-                  node={node}
-                  depth={0}
-                  isExpanded={isExpanded}
-                  onToggle={toggleExpanded}
-                  onStudy={(deckId) => executeAction('deck.study', { deckId })}
-                  onSelect={(deckId) => executeAction('deck.select', { deckId })}
-                  index={idx}
-                />
-              ))}
-              {(!deckData?.roots || deckData.roots.length === 0) && (
-                <div style={{
-                  textAlign: 'center', padding: '40px 0',
-                  color: 'var(--ds-text-muted)', fontSize: 13,
+                  fontSize: 15, fontWeight: 600,
+                  letterSpacing: '0.5px',
+                  color: 'var(--ds-text-muted)',
+                  marginBottom: 10,
                 }}>
-                  Keine Stapel vorhanden
+                  Agent Canvas
+                </span>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  color: 'var(--ds-text-placeholder)',
+                  fontSize: 11, fontWeight: 500,
+                }}>
+                  <kbd style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    padding: '2px 6px', borderRadius: 5,
+                    background: 'var(--ds-hover-tint)',
+                    border: '1px solid var(--ds-border)',
+                    fontSize: 10, fontWeight: 600,
+                    fontFamily: 'inherit', lineHeight: 1,
+                    color: 'var(--ds-text-tertiary)',
+                  }}>ESC</kbd>
+                  <span>zum Verlassen</span>
                 </div>
-              )}
-            </div>
-
+              </>
+            )}
           </div>
         )}
 

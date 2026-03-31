@@ -66,6 +66,13 @@ const DIVIDER_STYLE: React.CSSProperties = {
   flexShrink: 0,
 };
 
+const ARROW_SVG_STYLE: React.CSSProperties = {
+  position: 'absolute',
+  top: -(ARROW_SIZE),
+  overflow: 'visible',
+  zIndex: 1,
+};
+
 const LEARN_BTN_STYLE: React.CSSProperties = {
   fontSize: 12,
   color: 'var(--ds-accent)',
@@ -162,13 +169,7 @@ export default function DeckPopup({
             width={ARROW_SIZE * 2}
             height={ARROW_SIZE}
             viewBox={`0 0 ${ARROW_SIZE * 2} ${ARROW_SIZE}`}
-            style={{
-              position: 'absolute',
-              top: -(ARROW_SIZE),
-              left: pos.arrowLeft - ARROW_SIZE,
-              overflow: 'visible',
-              zIndex: 1,
-            }}
+            style={{ ...ARROW_SVG_STYLE, left: pos.arrowLeft - ARROW_SIZE }}
           >
             {/* Border arrow (slightly larger, behind) */}
             <polygon

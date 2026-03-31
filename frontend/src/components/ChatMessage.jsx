@@ -1932,11 +1932,11 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                       <div key={`${cell.agent}-${i}`}>
                         {/* ThinkingIndicator — unified reasoning display */}
                         {cellIsStreaming && hasReasoningData ? (
-                          <div style={{ marginBottom: 10 }}>
+                          <div style={{ marginTop: 4, marginBottom: 16 }}>
                             <TutorThinkingLive requestId={requestId} agentName={cell.agent || 'tutor'} />
                           </div>
                         ) : (
-                          <div style={{ marginBottom: 8 }}>
+                          <div style={{ marginBottom: 12 }}>
                             <TutorThinkingLive requestId={requestId} agentName={cell.agent || 'tutor'} collapsed agentLabel="Tutor" />
                           </div>
                         )}
