@@ -465,12 +465,9 @@ function formatCardContext(ctx: any): string {
     );
   }
 
-  const isQuestion = ctx.isQuestion !== false;
-  if (isQuestion) {
-    parts.push('WICHTIG: Die Kartenantwort ist noch NICHT aufgedeckt.');
-  } else {
-    parts.push('WICHTIG: Die Kartenantwort ist bereits aufgedeckt.');
-  }
+  // Tutor channel: card is always open (Session mode).
+  // isQuestion flag kept for future Prüfer agent (reviewer-inline, card closed).
+  parts.push('Die Karte ist aufgedeckt — Frage und Antwort sind sichtbar.');
 
   return parts.join('\n');
 }
