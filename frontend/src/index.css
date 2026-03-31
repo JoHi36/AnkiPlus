@@ -571,3 +571,13 @@ body.sidebar-resizing * {
 .thinking-dot-pulse {
   animation: thinking-pulse 1.5s ease-in-out infinite;
 }
+
+/* ThinkingIndicator skeleton shimmer */
+@keyframes thinking-shimmer {
+  0% { opacity: 0.04; }
+  50% { opacity: 0.08; }
+  100% { opacity: 0.04; }
+}
+.thinking-skeleton-shimmer {
+  animation: thinking-shimmer 1.8s ease-in-out infinite;
+}

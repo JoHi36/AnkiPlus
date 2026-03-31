@@ -1217,11 +1217,10 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
 });
 
 /** Live ThinkingIndicator that subscribes to ReasoningStore */
-function TutorThinkingLive({ requestId, agentName, collapsed, agentLabel }) {
+function TutorThinkingLive({ requestId, agentName, agentLabel, showSkeleton }) {
   const streamId = requestId ? `${agentName}-${requestId}` : undefined;
   const phases = useThinkingPhases(streamId, agentName);
-  if (!phases) return null;
-  return <ThinkingIndicator phases={phases} collapsed={collapsed} agentLabel={agentLabel} />;
+  return <ThinkingIndicator phases={phases} agentLabel={agentLabel || 'Tutor'} showSkeleton={showSkeleton} />;
 }
 
 /**
@@ -1930,16 +1929,15 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                   if (cell.agent === 'tutor') {
                     return (
                       <div key={`${cell.agent}-${i}`}>
-                        {/* ThinkingIndicator — unified reasoning display */}
-                        {cellIsStreaming && hasReasoningData ? (
-                          <div style={{ marginTop: 4, marginBottom: 16 }}>
-                            <TutorThinkingLive requestId={requestId} agentName={cell.agent || 'tutor'} />
-                          </div>
-                        ) : (
-                          <div style={{ marginBottom: 12 }}>
-                            <TutorThinkingLive requestId={requestId} agentName={cell.agent || 'tutor'} collapsed agentLabel="Tutor" />
-                          </div>
-                        )}
+                        {/* Agent status bar — always visible */}
+                        <div style={{ marginBottom: cell.text ? 14 : 0 }}>
+                          <TutorThinkingLive
+                            requestId={requestId}
+                            agentName={cell.agent || 'tutor'}
+                            agentLabel="Tutor"
+                            showSkeleton={!cell.text && (cellIsStreaming || showLoading)}
+                          />
+                        </div>
 
                         {/* Text content */}
                         {cell.text && cell.status !== 'loading' && !cell.sources?.length && (() => {
