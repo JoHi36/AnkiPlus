@@ -51,6 +51,7 @@ DEFAULT_CONFIG = {
         "keep_awake": False,
         "relay_url": "",
         "relay_secret": "",
+        "remote_app_url": "",
     },
     "mascot_enabled": False,
     "research_enabled": True,  # Research Agent enabled

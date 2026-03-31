@@ -1484,3 +1484,79 @@ class WebBridge(QObject):
             logger.exception("saveSystemQuality error: %s", e)
             return json.dumps({"error": str(e)})
 
+    @pyqtSlot(result=str)
+    def getRemoteQR(self):
+        """Generate pairing QR code and start relay client."""
+        try:
+            try:
+                from ..plusi.remote_ws import get_client, start_remote
+                from ..config import get_config
+            except ImportError:
+                from plusi.remote_ws import get_client, start_remote
+                from config import get_config
+
+            config = get_config()
+            tg = config.get("telegram", {})
+            relay_url = tg.get("relay_url", "").strip()
+            remote_app_url = tg.get("remote_app_url", "").strip()
+
+            if not relay_url:
+                return json.dumps({"error": "relay_url not configured"})
+
+            if not start_remote():
+                return json.dumps({"error": "Could not connect to relay"})
+
+            client = get_client()
+            if not client or not client.pair_code:
+                return json.dumps({"error": "No pair code generated"})
+
+            pair_url = f"{remote_app_url}?pair={client.pair_code}"
+
+            import io
+            try:
+                import qrcode
+                qr = qrcode.QRCode(version=1, box_size=8, border=2)
+                qr.add_data(pair_url)
+                qr.make(fit=True)
+                img = qr.make_image(fill_color="#FFFFFF", back_color="#141416")
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+                data_url = f"data:image/png;base64,{b64}"
+            except ImportError:
+                logger.warning("qrcode library not installed, returning URL only")
+                data_url = ""
+
+            return json.dumps({
+                "qr_data_url": data_url,
+                "pair_code": client.pair_code,
+                "pair_url": pair_url,
+            })
+
+        except Exception as e:
+            logger.exception("getRemoteQR error: %s", e)
+            return json.dumps({"error": str(e)})
+
+    @pyqtSlot(result=str)
+    def getRemoteStatus(self):
+        """Get current remote connection status."""
+        try:
+            try:
+                from ..plusi.remote_ws import get_client
+            except ImportError:
+                from plusi.remote_ws import get_client
+
+            client = get_client()
+            if not client:
+                return json.dumps({"connected": False, "peer_connected": False})
+
+            return json.dumps({
+                "connected": client.is_connected,
+                "peer_connected": client.is_peer_connected,
+                "pair_code": client.pair_code,
+                "mode": client.mode,
+            })
+        except Exception as e:
+            logger.exception("getRemoteStatus error: %s", e)
+            return json.dumps({"connected": False, "peer_connected": False})
+
