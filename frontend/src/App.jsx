@@ -39,22 +39,19 @@ import SidebarShell from './components/SidebarShell';
 import SearchSidebar from './components/SearchSidebar';
 import DeckSearchBar from './components/DeckSearchBar';
 import AgenticCell from './components/AgenticCell';
+import ThinkingIndicator from './components/ThinkingIndicator';
+import { useThinkingPhases } from './hooks/useThinkingPhases';
 import TopBar from './components/TopBar';
 import DeckBrowserView from './components/DeckBrowserView';
 import OverviewView from './components/OverviewView';
 import StatistikView from './components/StatistikView';
 import ContextTags from './components/ContextTags';
 import ResizeHandle, { loadPersistedWidth, applyWidth } from './components/ResizeHandle';
-import ReasoningDisplay from './reasoning/ReasoningDisplay';
-import { registerDefaultRenderers } from './reasoning/defaultRenderers';
 import { ReasoningProvider, useReasoningDispatch, useReasoningStore } from './reasoning/store';
 import useSmartSearch from './hooks/useSmartSearch';
 import usePlusiVoice from './hooks/usePlusiVoice';
 import { useLidLift } from './hooks/useLidLift';
 import DeckPopup from './components/DeckPopup';
-
-// Register step renderers once at module load time
-registerDefaultRenderers();
 
 // Lazy-loaded heavy components
 const GraphView = React.lazy(() => import('./components/GraphView'));
@@ -111,6 +108,24 @@ function normalizeSections(sections) {
       ? JSON.parse(s.performance_data || 'null')
       : (s.performance_data || s.performanceData || null),
   }));
+}
+
+/** Renders ThinkingIndicator for the active Tutor stream during loading. */
+function TutorThinking({ activeAgentName, activeAgentColor }) {
+  const { state } = useReasoningStore();
+  // Find the active agent stream (non-router, non-complete)
+  const activeStreamId = Object.keys(state.streams).find(sid => {
+    const s = state.streams[sid];
+    return !sid.startsWith('router-') && s.phase !== 'complete' && s.steps.length > 0;
+  });
+  const agentName = activeStreamId?.split('-')[0] || activeAgentName || 'tutor';
+  const phases = useThinkingPhases(activeStreamId, agentName, activeAgentColor);
+  if (!phases) return null;
+  return (
+    <div className="w-full flex-none mb-2" style={CONTENT_WIDTH_CENTERED}>
+      <ThinkingIndicator phases={phases} />
+    </div>
+  );
 }
 
 /**
@@ -2880,52 +2895,10 @@ function AppInner() {
                         {/* CRITICAL: Only render StreamingChatMessage if no saved bot message exists yet */}
                         {/* This prevents double-rendering when message is saved but timeout hasn't cleared streamingMessage */}
                         {/* Robust: Text-Vergleich verhindert Dopplung auch bei Race Conditions */}
-                        {/* Pipeline ReasoningStream — Router + Agent split (data from reasoning store) */}
-                        {chatHook.isLoading && !chatHook.currentMessage && !(nextMsg && nextMsg.from === 'bot' && nextMsg.text) && (() => {
-                          // Collect steps from all active reasoning store streams
-                          const rSteps = [];
-                          const aSteps = [];
-                          let storeAgentName = activeAgentName || 'tutor';
-                          let storeCitations = {};
-                          for (const [sid, stream] of Object.entries(reasoningState.streams)) {
-                            if (stream.phase === 'complete') continue;
-                            if (sid.startsWith('router-')) {
-                              rSteps.push(...stream.steps);
-                              if (stream.agentName) storeAgentName = stream.agentName;
-                            } else {
-                              aSteps.push(...stream.steps);
-                              if (stream.citations) storeCitations = { ...storeCitations, ...stream.citations };
-                            }
-                          }
-                          const liveAgentName = storeAgentName;
-                          return (
-                            <div className="w-full flex-none mb-2" style={CONTENT_WIDTH_CENTERED}>
-                              {/* Router ReasoningDisplay (before agent) */}
-                              {rSteps.length > 0 && (
-                                <ReasoningDisplay
-                                  steps={rSteps}
-                                  mode="full"
-                                  agentColor={activeAgentColor}
-                                />
-                              )}
-                              {/* Agent ReasoningDisplay inside AgenticCell */}
-                              {(aSteps.length > 0 || chatHook.streamingMessage) && (
-                                <AgenticCell agentName={liveAgentName} isLoading={aSteps.length === 0 && !chatHook.streamingMessage}>
-                                  {aSteps.length > 0 && (
-                                    <ReasoningDisplay
-                                      steps={aSteps}
-                                      mode="full"
-                                      hasOutput={Boolean(chatHook.streamingMessage)}
-                                      agentColor={activeAgentColor}
-                                      bridge={bridge}
-                                      onPreviewCard={handlePreviewCard}
-                                    />
-                                  )}
-                                </AgenticCell>
-                              )}
-                            </div>
-                          );
-                        })()}
+                        {/* Pipeline ThinkingIndicator — unified reasoning display */}
+                        {chatHook.isLoading && !chatHook.currentMessage && !(nextMsg && nextMsg.from === 'bot' && nextMsg.text) && (
+                          <TutorThinking activeAgentName={activeAgentName} activeAgentColor={activeAgentColor} />
+                        )}
                         {/* Initial routing skeleton removed — ReasoningStream handles skeleton internally */}
                         {(chatHook.isLoading || chatHook.streamingMessage) && !chatHook.currentMessage && !(
                           nextMsg &&

@@ -13,14 +13,12 @@ import MultipleChoiceCard from './MultipleChoiceCard';
 import CitationBadge from './CitationBadge';
 import WebCitationBadge from './WebCitationBadge';
 import ThoughtStream from './ThoughtStream';
-import ReasoningDisplay from '../reasoning/ReasoningDisplay';
 import SourceCountBadge from '../reasoning/SourceCountBadge';
 import ThinkingIndicator from './ThinkingIndicator';
 import { useThinkingPhases } from '../hooks/useThinkingPhases';
 import ToolWidgetRenderer from './ToolWidgetRenderer';
 import { ComponentErrorBoundary } from './ErrorBoundary';
 import AgenticCell from './AgenticCell';
-import ActivityLine from './ActivityLine';
 import ResearchContent from './ResearchContent';
 import mermaid from 'mermaid';
 // SmilesDrawer wird dynamisch importiert, da es CommonJS ist und Vite-Probleme verursachen kann

@@ -12,7 +12,6 @@ import StatsWidget from './components/StatsWidget';
 import CompactWidget from './components/CompactWidget';
 import ImageWidget from './components/ImageWidget';
 import MascotCharacter from './components/MascotCharacter';
-import ReasoningDisplay from './reasoning/ReasoningDisplay';
 import ReviewFeedback from './components/ReviewFeedback';
 import { DockEvalResult, DockTimer, DockStars, DockLoading } from './components/ReviewerDock';
 import SourceCard from './components/SourceCard';
@@ -50,12 +49,6 @@ const MOCK_BRIDGE = {
 };
 
 /* ── Demo data for new showcases ── */
-
-const DEMO_REASONING_STEPS = [
-  { step: 'routing', status: 'done', data: { agent: 'Tutor' }, timestamp: Date.now() - 3000 },
-  { step: 'rag_search', status: 'done', data: { mode: 'hybrid', count: 4 }, timestamp: Date.now() - 2000 },
-  { step: 'generating', status: 'active', data: {}, timestamp: Date.now() - 1000 },
-];
 
 const DEMO_SOURCE_KEYWORD = {
   noteId: 1001,
@@ -128,7 +121,6 @@ const NAV = [
     { id: 'topbar', label: 'TopBar' },
     { id: 'thoughtstream', label: 'ThoughtStream' },
     { id: 'chatmessage', label: 'ChatMessage' },
-    { id: 'reasoning', label: 'ReasoningDisplay' },
     { id: 'reviewfeedback', label: 'ReviewFeedback' },
     { id: 'dockwidgets', label: 'Dock Widgets' },
     { id: 'sourcecard', label: 'SourceCard' },
@@ -1666,35 +1658,6 @@ export default function ComponentViewer() {
             />
           </Showcase>
 
-          {/* ReasoningDisplay */}
-          <SubHeader id="reasoning" label="Reasoning Display" refs={sectionRefs} />
-          <Showcase label="Full mode (agent steps)">
-            <ReasoningDisplay
-              steps={DEMO_REASONING_STEPS}
-              mode="full"
-              agentColor="var(--ds-green)"
-            />
-          </Showcase>
-          <VariantLabel>Full mode (router steps, collapsed)</VariantLabel>
-          <Showcase>
-            <ReasoningDisplay
-              steps={[
-                { step: 'routing', status: 'done', data: { agent: 'Tutor' }, timestamp: Date.now() - 2000 },
-                { step: 'rag_search', status: 'done', data: { mode: 'semantic', count: 6 }, timestamp: Date.now() - 1000 },
-              ]}
-              mode="full"
-              agentColor="var(--ds-accent)"
-            />
-          </Showcase>
-          <VariantLabel>Compact mode</VariantLabel>
-          <Showcase>
-            <ReasoningDisplay
-              steps={DEMO_REASONING_STEPS}
-              mode="compact"
-              agentColor="var(--ds-accent)"
-            />
-          </Showcase>
-
           {/* ReviewFeedback */}
           <SubHeader id="reviewfeedback" label="Review Feedback" refs={sectionRefs} />
           <Showcase label="Score states">
@@ -2342,6 +2305,305 @@ export default function ComponentViewer() {
               Uses the neutral secondary color — no strong personality, just utility.
             </div>
           </Showcase>
+
+          {/* ═══════════════════════════════════════════════════════════ */}
+          {/* ThinkingIndicator — Unified Reasoning Display Prototype     */}
+          {/* ═══════════════════════════════════════════════════════════ */}
+
+          <SubHeader id="thinking-indicator" label="Thinking Indicator" refs={sectionRefs} />
+
+          {/* --- Tutor: Phase 1 aktiv --- */}
+          <VariantLabel>Tutor — Phase 1: Kontextanalyse (active)</VariantLabel>
+          <Showcase>
+            <div style={{ maxWidth: 520 }}>
+              <div style={{ fontSize: 'var(--ds-text-lg)', fontWeight: 600, color: 'var(--ds-text-primary)', marginBottom: 14 }}>
+                was gibt es für zellschichten
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: 'var(--ds-font-mono)', fontSize: 11.5, letterSpacing: '0.02em' }}>
+                  <span className="thinking-dot-pulse" style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--ds-accent)', flexShrink: 0, position: 'relative', top: -1 }} />
+                  <span style={{ color: 'var(--ds-text-secondary)', fontWeight: 500 }}>Kontextanalyse</span>
+                </div>
+              </div>
+            </div>
+          </Showcase>
+
+          {/* --- Tutor: Phase 2 aktiv --- */}
+          <VariantLabel>Tutor — Phase 2: Wissensabgleich (active)</VariantLabel>
+          <Showcase>
+            <div style={{ maxWidth: 520 }}>
+              <div style={{ fontSize: 'var(--ds-text-lg)', fontWeight: 600, color: 'var(--ds-text-primary)', marginBottom: 14 }}>
+                was gibt es für zellschichten
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: 'var(--ds-font-mono)', fontSize: 11.5, letterSpacing: '0.02em', color: 'var(--ds-text-tertiary)' }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--ds-text-tertiary)', flexShrink: 0, opacity: 0.5, position: 'relative', top: -1 }} />
+                  <span>Kontextanalyse</span>
+                  <span style={{ opacity: 0.4 }}>·</span>
+                  <span style={{ opacity: 0.6 }}>23 Begriffe</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: 'var(--ds-font-mono)', fontSize: 11.5, letterSpacing: '0.02em' }}>
+                  <span className="thinking-dot-pulse" style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--ds-accent)', flexShrink: 0, position: 'relative', top: -1 }} />
+                  <span style={{ color: 'var(--ds-text-secondary)', fontWeight: 500 }}>Wissensabgleich</span>
+                </div>
+              </div>
+            </div>
+          </Showcase>
+
+          {/* --- Tutor: Phase 3 aktiv --- */}
+          <VariantLabel>Tutor — Phase 3: Synthese (active)</VariantLabel>
+          <Showcase>
+            <div style={{ maxWidth: 520 }}>
+              <div style={{ fontSize: 'var(--ds-text-lg)', fontWeight: 600, color: 'var(--ds-text-primary)', marginBottom: 14 }}>
+                was gibt es für zellschichten
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: 'var(--ds-font-mono)', fontSize: 11.5, letterSpacing: '0.02em', color: 'var(--ds-text-tertiary)' }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--ds-text-tertiary)', flexShrink: 0, opacity: 0.5, position: 'relative', top: -1 }} />
+                  <span>Kontextanalyse</span>
+                  <span style={{ opacity: 0.4 }}>·</span>
+                  <span style={{ opacity: 0.6 }}>23 Begriffe</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: 'var(--ds-font-mono)', fontSize: 11.5, letterSpacing: '0.02em', color: 'var(--ds-text-tertiary)' }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--ds-text-tertiary)', flexShrink: 0, opacity: 0.5, position: 'relative', top: -1 }} />
+                  <span>Wissensabgleich</span>
+                  <span style={{ opacity: 0.4 }}>·</span>
+                  <span style={{ opacity: 0.6 }}>14 Karten</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: 'var(--ds-font-mono)', fontSize: 11.5, letterSpacing: '0.02em' }}>
+                  <span className="thinking-dot-pulse" style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--ds-accent)', flexShrink: 0, position: 'relative', top: -1 }} />
+                  <span style={{ color: 'var(--ds-text-secondary)', fontWeight: 500 }}>Synthese</span>
+                </div>
+              </div>
+            </div>
+          </Showcase>
+
+          {/* --- Tutor: Collapsed --- */}
+          <VariantLabel>Tutor — Collapsed (Antwort streamt)</VariantLabel>
+          <Showcase>
+            <div style={{ maxWidth: 520 }}>
+              <div style={{ fontSize: 'var(--ds-text-lg)', fontWeight: 600, color: 'var(--ds-text-primary)', marginBottom: 6 }}>
+                was gibt es für zellschichten
+              </div>
+              <div style={{ fontFamily: 'var(--ds-font-mono)', fontSize: 10.5, letterSpacing: '0.03em', color: 'var(--ds-text-tertiary)', marginBottom: 14, display: 'flex', gap: 6, alignItems: 'center' }}>
+                <span style={{ textTransform: 'uppercase', fontWeight: 600, opacity: 0.7 }}>Tutor</span>
+                <span style={{ opacity: 0.3 }}>·</span>
+                <span>23 Begriffe</span>
+                <span style={{ opacity: 0.3 }}>·</span>
+                <span>14 Karten</span>
+              </div>
+              <div style={{ fontSize: 15, color: 'var(--ds-text-primary)', lineHeight: 1.65 }}>
+                Die Zellschichten der Haut bestehen aus drei Hauptschichten:
+                <strong> Epidermis</strong>, <strong>Dermis</strong> und <strong>Subkutis</strong>...
+              </div>
+            </div>
+          </Showcase>
+
+          {/* --- Tutor: mit Web-Recherche --- */}
+          <VariantLabel>Tutor — mit Web-Recherche (cos &lt; 0.60)</VariantLabel>
+          <Showcase>
+            <div style={{ maxWidth: 520 }}>
+              <div style={{ fontSize: 'var(--ds-text-lg)', fontWeight: 600, color: 'var(--ds-text-primary)', marginBottom: 14 }}>
+                aktuelle Leitlinie Herzinsuffizienz
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: 'var(--ds-font-mono)', fontSize: 11.5, letterSpacing: '0.02em', color: 'var(--ds-text-tertiary)' }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--ds-text-tertiary)', flexShrink: 0, opacity: 0.5, position: 'relative', top: -1 }} />
+                  <span>Kontextanalyse</span>
+                  <span style={{ opacity: 0.4 }}>·</span>
+                  <span style={{ opacity: 0.6 }}>12 Begriffe</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: 'var(--ds-font-mono)', fontSize: 11.5, letterSpacing: '0.02em', color: 'var(--ds-text-tertiary)' }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--ds-text-tertiary)', flexShrink: 0, opacity: 0.5, position: 'relative', top: -1 }} />
+                  <span>Wissensabgleich</span>
+                  <span style={{ opacity: 0.4 }}>·</span>
+                  <span style={{ opacity: 0.6 }}>3 Karten</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: 'var(--ds-font-mono)', fontSize: 11.5, letterSpacing: '0.02em', color: 'var(--ds-text-tertiary)' }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--ds-text-tertiary)', flexShrink: 0, opacity: 0.5, position: 'relative', top: -1 }} />
+                  <span>Web-Recherche</span>
+                  <span style={{ opacity: 0.4 }}>·</span>
+                  <span style={{ opacity: 0.6 }}>4 Quellen</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: 'var(--ds-font-mono)', fontSize: 11.5, letterSpacing: '0.02em' }}>
+                  <span className="thinking-dot-pulse" style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--ds-accent)', flexShrink: 0, position: 'relative', top: -1 }} />
+                  <span style={{ color: 'var(--ds-text-secondary)', fontWeight: 500 }}>Synthese</span>
+                </div>
+              </div>
+            </div>
+          </Showcase>
+
+          {/* --- Research: Stapel --- */}
+          <VariantLabel>Research — Stapel (active)</VariantLabel>
+          <Showcase>
+            <div style={{ maxWidth: 520 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: 'var(--ds-font-mono)', fontSize: 11.5, letterSpacing: '0.02em', color: 'var(--ds-text-tertiary)' }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--ds-text-tertiary)', flexShrink: 0, opacity: 0.5, position: 'relative', top: -1 }} />
+                  <span>Kontextanalyse</span>
+                  <span style={{ opacity: 0.4 }}>·</span>
+                  <span style={{ opacity: 0.6 }}>38 Begriffe</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: 'var(--ds-font-mono)', fontSize: 11.5, letterSpacing: '0.02em', color: 'var(--ds-text-tertiary)' }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--ds-text-tertiary)', flexShrink: 0, opacity: 0.5, position: 'relative', top: -1 }} />
+                  <span>Wissensabgleich</span>
+                  <span style={{ opacity: 0.4 }}>·</span>
+                  <span style={{ opacity: 0.6 }}>42 Karten</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: 'var(--ds-font-mono)', fontSize: 11.5, letterSpacing: '0.02em' }}>
+                  <span className="thinking-dot-pulse" style={{ width: 5, height: 5, borderRadius: '50%', background: '#00D084', flexShrink: 0, position: 'relative', top: -1 }} />
+                  <span style={{ color: 'var(--ds-text-secondary)', fontWeight: 500 }}>Strukturanalyse</span>
+                  <span style={{ color: 'var(--ds-text-tertiary)', opacity: 0.6 }}>·</span>
+                  <span style={{ color: 'var(--ds-text-tertiary)', opacity: 0.6 }}>5 Cluster</span>
+                </div>
+              </div>
+            </div>
+          </Showcase>
+
+          {/* --- Prüfer: Evaluation --- */}
+          <VariantLabel>Prüfer — Evaluation (active)</VariantLabel>
+          <Showcase>
+            <div style={{ maxWidth: 520 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: 'var(--ds-font-mono)', fontSize: 11.5, letterSpacing: '0.02em', color: 'var(--ds-text-tertiary)' }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--ds-text-tertiary)', flexShrink: 0, opacity: 0.5, position: 'relative', top: -1 }} />
+                  <span>Kontextanalyse</span>
+                  <span style={{ opacity: 0.4 }}>·</span>
+                  <span style={{ opacity: 0.6 }}>11 Begriffe</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: 'var(--ds-font-mono)', fontSize: 11.5, letterSpacing: '0.02em', color: 'var(--ds-text-tertiary)' }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--ds-text-tertiary)', flexShrink: 0, opacity: 0.5, position: 'relative', top: -1 }} />
+                  <span>Wissensabgleich</span>
+                  <span style={{ opacity: 0.4 }}>·</span>
+                  <span style={{ opacity: 0.6 }}>8 Karten</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: 'var(--ds-font-mono)', fontSize: 11.5, letterSpacing: '0.02em' }}>
+                  <span className="thinking-dot-pulse" style={{ width: 5, height: 5, borderRadius: '50%', background: '#AF52DE', flexShrink: 0, position: 'relative', top: -1 }} />
+                  <span style={{ color: 'var(--ds-text-secondary)', fontWeight: 500 }}>Evaluation</span>
+                </div>
+              </div>
+            </div>
+          </Showcase>
+
+          {/* --- Prüfer: MC --- */}
+          <VariantLabel>Prüfer — MC-Generierung (active)</VariantLabel>
+          <Showcase>
+            <div style={{ maxWidth: 520 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: 'var(--ds-font-mono)', fontSize: 11.5, letterSpacing: '0.02em', color: 'var(--ds-text-tertiary)' }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--ds-text-tertiary)', flexShrink: 0, opacity: 0.5, position: 'relative', top: -1 }} />
+                  <span>Kontextanalyse</span>
+                  <span style={{ opacity: 0.4 }}>·</span>
+                  <span style={{ opacity: 0.6 }}>11 Begriffe</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: 'var(--ds-font-mono)', fontSize: 11.5, letterSpacing: '0.02em', color: 'var(--ds-text-tertiary)' }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--ds-text-tertiary)', flexShrink: 0, opacity: 0.5, position: 'relative', top: -1 }} />
+                  <span>Wissensabgleich</span>
+                  <span style={{ opacity: 0.4 }}>·</span>
+                  <span style={{ opacity: 0.6 }}>8 Karten</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: 'var(--ds-font-mono)', fontSize: 11.5, letterSpacing: '0.02em' }}>
+                  <span className="thinking-dot-pulse" style={{ width: 5, height: 5, borderRadius: '50%', background: '#AF52DE', flexShrink: 0, position: 'relative', top: -1 }} />
+                  <span style={{ color: 'var(--ds-text-secondary)', fontWeight: 500 }}>MC-Synthese</span>
+                </div>
+              </div>
+            </div>
+          </Showcase>
+
+          {/* --- Plusi --- */}
+          <VariantLabel>Plusi — Reflexion (kein RAG)</VariantLabel>
+          <Showcase>
+            <div style={{ maxWidth: 520 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: 'var(--ds-font-mono)', fontSize: 11.5, letterSpacing: '0.02em' }}>
+                  <span className="thinking-dot-pulse" style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--ds-accent)', flexShrink: 0, position: 'relative', top: -1 }} />
+                  <span style={{ color: 'var(--ds-text-secondary)', fontWeight: 500 }}>Reflexion</span>
+                </div>
+              </div>
+            </div>
+          </Showcase>
+
+          {/* --- Alle Kanäle nebeneinander --- */}
+          <VariantLabel>Vergleich — alle Kanäle, jeweils Phase 3 aktiv</VariantLabel>
+          <Showcase>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, maxWidth: 720 }}>
+              {/* Tutor */}
+              <div>
+                <div style={{ fontFamily: 'var(--ds-font-mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ds-text-tertiary)', marginBottom: 10, fontWeight: 600 }}>Tutor</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, fontFamily: 'var(--ds-font-mono)', fontSize: 11, letterSpacing: '0.02em', color: 'var(--ds-text-tertiary)' }}>
+                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--ds-text-tertiary)', flexShrink: 0, opacity: 0.4, position: 'relative', top: -1 }} />
+                    <span>Kontextanalyse · 23 Begriffe</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, fontFamily: 'var(--ds-font-mono)', fontSize: 11, letterSpacing: '0.02em', color: 'var(--ds-text-tertiary)' }}>
+                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--ds-text-tertiary)', flexShrink: 0, opacity: 0.4, position: 'relative', top: -1 }} />
+                    <span>Wissensabgleich · 14 Karten</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, fontFamily: 'var(--ds-font-mono)', fontSize: 11, letterSpacing: '0.02em' }}>
+                    <span className="thinking-dot-pulse" style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--ds-accent)', flexShrink: 0, position: 'relative', top: -1 }} />
+                    <span style={{ color: 'var(--ds-text-secondary)', fontWeight: 500 }}>Synthese</span>
+                  </div>
+                </div>
+              </div>
+              {/* Research */}
+              <div>
+                <div style={{ fontFamily: 'var(--ds-font-mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#00D084', marginBottom: 10, fontWeight: 600, opacity: 0.7 }}>Research</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, fontFamily: 'var(--ds-font-mono)', fontSize: 11, letterSpacing: '0.02em', color: 'var(--ds-text-tertiary)' }}>
+                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--ds-text-tertiary)', flexShrink: 0, opacity: 0.4, position: 'relative', top: -1 }} />
+                    <span>Kontextanalyse · 38 Begriffe</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, fontFamily: 'var(--ds-font-mono)', fontSize: 11, letterSpacing: '0.02em', color: 'var(--ds-text-tertiary)' }}>
+                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--ds-text-tertiary)', flexShrink: 0, opacity: 0.4, position: 'relative', top: -1 }} />
+                    <span>Wissensabgleich · 42 Karten</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, fontFamily: 'var(--ds-font-mono)', fontSize: 11, letterSpacing: '0.02em' }}>
+                    <span className="thinking-dot-pulse" style={{ width: 4, height: 4, borderRadius: '50%', background: '#00D084', flexShrink: 0, position: 'relative', top: -1 }} />
+                    <span style={{ color: 'var(--ds-text-secondary)', fontWeight: 500 }}>Strukturanalyse · 5 Cluster</span>
+                  </div>
+                </div>
+              </div>
+              {/* Prüfer */}
+              <div>
+                <div style={{ fontFamily: 'var(--ds-font-mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#AF52DE', marginBottom: 10, fontWeight: 600, opacity: 0.7 }}>Prüfer</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, fontFamily: 'var(--ds-font-mono)', fontSize: 11, letterSpacing: '0.02em', color: 'var(--ds-text-tertiary)' }}>
+                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--ds-text-tertiary)', flexShrink: 0, opacity: 0.4, position: 'relative', top: -1 }} />
+                    <span>Kontextanalyse · 11 Begriffe</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, fontFamily: 'var(--ds-font-mono)', fontSize: 11, letterSpacing: '0.02em', color: 'var(--ds-text-tertiary)' }}>
+                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--ds-text-tertiary)', flexShrink: 0, opacity: 0.4, position: 'relative', top: -1 }} />
+                    <span>Wissensabgleich · 8 Karten</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, fontFamily: 'var(--ds-font-mono)', fontSize: 11, letterSpacing: '0.02em' }}>
+                    <span className="thinking-dot-pulse" style={{ width: 4, height: 4, borderRadius: '50%', background: '#AF52DE', flexShrink: 0, position: 'relative', top: -1 }} />
+                    <span style={{ color: 'var(--ds-text-secondary)', fontWeight: 500 }}>Evaluation</span>
+                  </div>
+                </div>
+              </div>
+              {/* Plusi */}
+              <div>
+                <div style={{ fontFamily: 'var(--ds-font-mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ds-accent)', marginBottom: 10, fontWeight: 600, opacity: 0.7 }}>Plusi</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, fontFamily: 'var(--ds-font-mono)', fontSize: 11, letterSpacing: '0.02em' }}>
+                    <span className="thinking-dot-pulse" style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--ds-accent)', flexShrink: 0, position: 'relative', top: -1 }} />
+                    <span style={{ color: 'var(--ds-text-secondary)', fontWeight: 500 }}>Reflexion</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Showcase>
+
+          {/* --- CSS for pulse animation --- */}
+          <style>{`
+            @keyframes thinking-pulse {
+              0%, 100% { opacity: 1; transform: scale(1); }
+              50% { opacity: 0.35; transform: scale(0.8); }
+            }
+            .thinking-dot-pulse {
+              animation: thinking-pulse 1.5s ease-in-out infinite;
+            }
+          `}</style>
 
           {/* Footer */}
           <div style={{
