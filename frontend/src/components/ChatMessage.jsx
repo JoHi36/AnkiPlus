@@ -1861,19 +1861,20 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                   const cellIsStreaming = isStreaming && cell.status !== 'done' && cell.status !== 'error';
                   const cellCitations = cell.citations || citations;
 
-                  // Build citationIndices: remap backend indices to sequential 1,2,3...
-                  // based on order of appearance in the text
+                  // Build citationIndices: map backend [N] references to citation IDs.
+                  // Auto-assign sequential indices if backend didn't set them (dict order = LERNMATERIAL order).
                   const cellCitationIndices = {};
-                  // Map from backend index → citation id
                   const backendIndexToCitId = {};
                   if (cellCitations && Object.keys(cellCitations).length > 0) {
+                    let autoIdx = 1;
                     Object.entries(cellCitations).forEach(([citId, cit]) => {
                       if (cit) {
                         const id = cit.noteId || cit.cardId || citId;
                         const idKey = String(id);
-                        const backendIdx = cit.index || parseInt(citId, 10) || 0;
-                        if (backendIdx > 0) backendIndexToCitId[backendIdx] = idKey;
+                        const backendIdx = cit.index || autoIdx;
+                        backendIndexToCitId[backendIdx] = idKey;
                       }
+                      autoIdx++;
                     });
                   }
 
