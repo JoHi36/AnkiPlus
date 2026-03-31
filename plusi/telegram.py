@@ -458,6 +458,22 @@ class TelegramBot:
         self._thread.start()
         self._running = True
 
+        # Register Mini App menu button if relay is configured
+        try:
+            relay_url = tg_config.get("relay_url", "").strip()
+            if relay_url:
+                app_url = relay_url.replace("/api/relay", "/remote")
+                _api_call(token, "setChatMenuButton", {
+                    "menu_button": {
+                        "type": "web_app",
+                        "text": "Remote",
+                        "web_app": {"url": app_url},
+                    }
+                })
+                logger.info("telegram: Mini App menu button set")
+        except Exception as exc:
+            logger.warning("telegram: setChatMenuButton failed: %s", exc)
+
         # Start caffeinate if configured
         if tg_config.get("keep_awake", False):
             self._start_caffeinate()
