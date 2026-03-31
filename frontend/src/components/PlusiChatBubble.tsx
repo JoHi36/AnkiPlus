@@ -13,7 +13,8 @@ interface PlusiChatBubbleProps {
   voiceState: 'idle' | 'recording' | 'processing' | 'speaking';
 }
 
-const MAX_HEIGHT = 200;
+const DEFAULT_MAX_HEIGHT = 200;
+const MIN_BUBBLE_HEIGHT = 60;
 
 const BUBBLE_CONTAINER: React.CSSProperties = {
   position: 'absolute',
@@ -35,7 +36,6 @@ const BUBBLE_CONTAINER: React.CSSProperties = {
 /* Tail is now rendered inline as SVG — see PlusiTail below */
 
 const SCROLL_AREA: React.CSSProperties = {
-  maxHeight: MAX_HEIGHT,
   overflowY: 'auto',
   padding: '14px 16px',
   scrollbarWidth: 'none',
@@ -55,7 +55,7 @@ const INPUT_STYLE: React.CSSProperties = {
   fontFamily: "'Space Grotesk', var(--ds-font-sans)",
   resize: 'none',
   padding: '14px 16px',
-  maxHeight: MAX_HEIGHT,
+  maxHeight: DEFAULT_MAX_HEIGHT,
   overflowY: 'auto',
   scrollbarWidth: 'none',
 };
@@ -123,8 +123,40 @@ export default function PlusiChatBubble({
   const [audioProgress, setAudioProgress] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [maxHeight, setMaxHeight] = useState(DEFAULT_MAX_HEIGHT);
+  const [isOverflowing, setIsOverflowing] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
+
+  // Detect overflow in response scroll area
+  useEffect(() => {
+    if (bubbleState === 'response' && scrollRef.current) {
+      setIsOverflowing(scrollRef.current.scrollHeight > maxHeight);
+    }
+  }, [bubbleState, displayText, maxHeight]);
+
+  // Drag-to-resize from top-right handle
+  const handleResizeStart = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragRef.current = { startY: e.clientY, startHeight: maxHeight };
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture(e.pointerId);
+  }, [maxHeight]);
+
+  const handleResizeMove = useCallback((e: React.PointerEvent) => {
+    if (!dragRef.current) return;
+    // Dragging UP increases height (negative deltaY = larger)
+    const deltaY = dragRef.current.startY - e.clientY;
+    const newHeight = Math.max(MIN_BUBBLE_HEIGHT, dragRef.current.startHeight + deltaY);
+    setMaxHeight(newHeight);
+  }, []);
+
+  const handleResizeEnd = useCallback(() => {
+    dragRef.current = null;
+  }, []);
 
   // When plusiText arrives, show response
   useEffect(() => {
@@ -255,7 +287,7 @@ export default function PlusiChatBubble({
           onInput={(e) => {
             const el = e.target as HTMLTextAreaElement;
             el.style.height = 'auto';
-            el.style.height = Math.min(el.scrollHeight, MAX_HEIGHT) + 'px';
+            el.style.height = Math.min(el.scrollHeight, maxHeight) + 'px';
           }}
         />
       )}
@@ -269,17 +301,43 @@ export default function PlusiChatBubble({
       )}
 
       {bubbleState === 'response' && displayText && (
-        <div
-          style={{ ...SCROLL_AREA, cursor: 'pointer' }}
-          className="plusi-bubble-scroll"
-          onClick={handleResponseClick}
-        >
-          <div className="plusi-md">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {displayText}
-            </ReactMarkdown>
+        <>
+          {/* Resize handle — top-right corner, visible only when content overflows */}
+          {isOverflowing && (
+            <div
+              onPointerDown={handleResizeStart}
+              onPointerMove={handleResizeMove}
+              onPointerUp={handleResizeEnd}
+              onPointerCancel={handleResizeEnd}
+              style={{
+                position: 'absolute', top: 0, right: 0,
+                width: 28, height: 28,
+                cursor: 'ns-resize', zIndex: 2,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                borderRadius: '0 16px 0 8px',
+              }}
+            >
+              <div style={{
+                width: 14, height: 3,
+                borderTop: '1px solid var(--ds-text-muted)',
+                borderBottom: '1px solid var(--ds-text-muted)',
+                opacity: 0.4,
+              }} />
+            </div>
+          )}
+          <div
+            ref={scrollRef}
+            style={{ ...SCROLL_AREA, maxHeight, cursor: 'pointer' }}
+            className="plusi-bubble-scroll"
+            onClick={handleResponseClick}
+          >
+            <div className="plusi-md">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {displayText}
+              </ReactMarkdown>
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {bubbleState === 'voice' && (
