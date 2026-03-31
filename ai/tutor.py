@@ -175,9 +175,6 @@ def run_tutor(situation, emit_step=None, memory=None,
             if rag_context:
                 citations = rag_context.get('citations', {})
 
-    # Web search is handled dynamically by the model via tool calls (agent_loop).
-    # The model reads the cards first, then decides if it needs web search.
-
     # ------------------------------------------------------------------
     # 5. Build system prompt
     # ------------------------------------------------------------------
@@ -191,7 +188,6 @@ def run_tutor(situation, emit_step=None, memory=None,
     # ------------------------------------------------------------------
     # 6. Generate with 3-level fallback chain
     # ------------------------------------------------------------------
-    _web_tool_markers = []  # Collect search_web/pubmed/wikipedia tool results
 
     def _on_chunk(chunk, done, is_function_call=False):
         """Forward streaming chunks to both stream_callback and legacy callback."""
@@ -200,10 +196,7 @@ def run_tutor(situation, emit_step=None, memory=None,
         if not chunk:
             return
         if is_function_call:
-            # Collect web search tool markers for webSources resolution
-            if isinstance(chunk, str) and '[[TOOL:' in chunk and 'search_web' in chunk:
-                _web_tool_markers.append(chunk)
-            return
+            return  # Tool calls handled by agent_loop
         if stream_callback:
             stream_callback(chunk, False)
         if callback:
@@ -310,21 +303,6 @@ def run_tutor(situation, emit_step=None, memory=None,
     # ------------------------------------------------------------------
     final_text = result_text or ''
 
-    # Extract webSources from accumulated tool markers for [[WEB:N]] resolution
-    _extracted_web_sources = []
-    for marker in _web_tool_markers:
-        try:
-            import json as _json
-            # Parse [[TOOL:{...}]] content
-            match = __import__('re').search(r'\[\[TOOL:(\{.*\})\]\]', marker)
-            if match:
-                data = _json.loads(match.group(1))
-                sources = data.get('result', {}).get('sources', [])
-                if sources:
-                    _extracted_web_sources = sources
-        except (ValueError, KeyError):
-            pass
-
     if handoff_marker:
         final_text = final_text + '\n' + handoff_marker if final_text else handoff_marker
 
@@ -334,8 +312,8 @@ def run_tutor(situation, emit_step=None, memory=None,
         '_used_streaming': stream_callback is not None,
         '_handoff_marker': handoff_marker,
     }
-    if _extracted_web_sources:
-        result['webSources'] = _extracted_web_sources
+    if rag_result and hasattr(rag_result, 'web_sources') and rag_result.web_sources:
+        result['webSources'] = rag_result.web_sources
     return result
 
 
