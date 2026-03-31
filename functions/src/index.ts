@@ -1,7 +1,4 @@
-import * as functions from 'firebase-functions';
-import { setGlobalOptions } from 'firebase-functions/v2';
-
-setGlobalOptions({ region: 'europe-west1' });
+import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
 import express from 'express';
 import cors from 'cors';
@@ -126,5 +123,5 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
   });
 });
 
-// Export Cloud Function
-export const api = functions.https.onRequest(app);
+// Export Cloud Function (v1 API — do not upgrade to v2 without migration)
+export const api = functions.region('europe-west1').https.onRequest(app);

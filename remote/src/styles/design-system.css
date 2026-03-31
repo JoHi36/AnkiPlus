@@ -1,0 +1,613 @@
+/*
+ * ═══════════════════════════════════════════════════════════
+ * AnkiPlus Design System — Single Source of Truth
+ * ═══════════════════════════════════════════════════════════
+ *
+ * Material = Function
+ * Every surface communicates its purpose through its visual
+ * weight: deep backgrounds recede, canvas surfaces are neutral,
+ * frosted glass elevates interactive docks, overlays float.
+ * Color is reserved for meaning — never decoration.
+ *
+ * RENDERING CONTEXTS:
+ *   React frontend           — imported in frontend/src/main.jsx
+ *   Custom Reviewer HTML/CSS — @import or paste :root block
+ *   Shared TypeScript comps  — imported in shared/components/
+ *   Qt/QSS (Python)          — tokens extracted manually to QSS
+ *   Plusi inline HTML        — paste :root block into <style>
+ *
+ * DESIGN RULES:
+ *   1. No component may define its own colors — use tokens only
+ *   2. No borders on child elements inside a container
+ *   3. Separators are always 1px, always --ds-border-subtle
+ *   4. Backgrounds go deep → canvas → frosted as surfaces elevate
+ *   5. Buttons inside containers: transparent bg, text-color only
+ *   6. Border-radius is consistent per component tier
+ *   7. Interactive states use tint tokens, never hardcoded rgba
+ *   8. Rating aliases use var() so they adapt to light mode
+ * ═══════════════════════════════════════════════════════════
+ */
+
+
+/* ─────────────────────────────────────────────────────────
+   1. DARK MODE TOKENS  (default / :root)
+   ───────────────────────────────────────────────────────── */
+:root {
+
+  /* ── Backgrounds ── */
+  --ds-bg-deep:     #141416;   /* Chat panel, diary — deepest surface  */
+  --ds-bg-canvas:   #1C1C1E;   /* Main surface — neutral working area  */
+  --ds-bg-frosted:  #161618;   /* Input docks, frosted glass layers     */
+  --ds-bg-overlay:  #3A3A3C;   /* Tooltips, popovers — floating         */
+
+  /* ── Text — Opacity Hierarchy ── */
+  --ds-text-primary:     rgba(255, 255, 255, 0.92);
+  --ds-text-secondary:   rgba(255, 255, 255, 0.55);
+  --ds-text-tertiary:    rgba(255, 255, 255, 0.35);
+  --ds-text-placeholder: rgba(255, 255, 255, 0.30);
+  --ds-text-muted:       rgba(255, 255, 255, 0.18);
+
+  /* ── Borders — 2 Levels ── */
+  --ds-border-subtle: rgba(255, 255, 255, 0.06);
+  --ds-border-medium: rgba(255, 255, 255, 0.12);
+
+  /* ── Semantic Colors (Apple HIG dark palette) ── */
+  --ds-accent:  #0A84FF;
+  --ds-green:   #30D158;
+  --ds-yellow:  #FFD60A;
+  --ds-red:     #FF453A;
+  --ds-purple:  #BF5AF2;
+
+  /* ── Stats Colors ── */
+  --ds-stat-new:      rgba(10, 132, 255, 0.85);
+  --ds-stat-learning: rgba(255, 159, 10, 0.85);
+  --ds-stat-review:   rgba(48, 209, 88, 0.85);
+
+  /* ── Canvas Grid ── */
+  --ds-grid-dot: rgba(255, 255, 255, 0.04);   /* Dot grid on canvas — barely visible */
+
+  /* ── Interaction Tints ── */
+  --ds-hover-tint:  rgba(255, 255, 255, 0.04);
+  --ds-active-tint: rgba(255, 255, 255, 0.08);
+  --ds-green-tint:  rgba(48, 209, 88, 0.08);
+  --ds-red-tint:    rgba(255, 69, 58, 0.05);
+
+  /* ── Semantic Color Tints (for quiz/review states) ── */
+  --ds-accent-10:  color-mix(in srgb, var(--ds-accent) 10%, transparent);
+  --ds-accent-20:  color-mix(in srgb, var(--ds-accent) 20%, transparent);
+  --ds-accent-50:  color-mix(in srgb, var(--ds-accent) 50%, transparent);
+  --ds-green-5:    color-mix(in srgb, var(--ds-green) 5%, transparent);
+  --ds-green-10:   color-mix(in srgb, var(--ds-green) 10%, transparent);
+  --ds-green-20:   color-mix(in srgb, var(--ds-green) 20%, transparent);
+  --ds-green-30:   color-mix(in srgb, var(--ds-green) 30%, transparent);
+  --ds-green-50:   color-mix(in srgb, var(--ds-green) 50%, transparent);
+  --ds-red-5:      color-mix(in srgb, var(--ds-red) 5%, transparent);
+  --ds-red-10:     color-mix(in srgb, var(--ds-red) 10%, transparent);
+  --ds-red-20:     color-mix(in srgb, var(--ds-red) 20%, transparent);
+  --ds-red-50:     color-mix(in srgb, var(--ds-red) 50%, transparent);
+  --ds-yellow-5:   color-mix(in srgb, var(--ds-yellow) 5%, transparent);
+  --ds-yellow-10:  color-mix(in srgb, var(--ds-yellow) 10%, transparent);
+  --ds-yellow-20:  color-mix(in srgb, var(--ds-yellow) 20%, transparent);
+
+  /* ── Rating Aliases — var() refs so light mode overrides work ── */
+  --ds-rate-again: var(--ds-red);
+  --ds-rate-hard:  var(--ds-yellow);
+  --ds-rate-good:  var(--ds-green);
+  --ds-rate-easy:  var(--ds-accent);
+
+
+  /* ─────────────────────────────────────────────────────────
+     2. SPACING
+     ───────────────────────────────────────────────────────── */
+  --ds-space-xs:  4px;
+  --ds-space-sm:  8px;
+  --ds-space-md:  12px;
+  --ds-space-lg:  16px;
+  --ds-space-xl:  24px;
+  --ds-space-2xl: 32px;
+
+  /* Layout widths */
+  --ds-content-width: 680px;                                       /* Optimal reading measure (~65 chars at 15px) */
+  --ds-sidebar-width: 568px;                                       /* Chat sidebar (resizable via drag handle) */
+  --ds-dock-width: calc(var(--ds-sidebar-width) - 2 * var(--ds-space-2xl)); /* ChatInput dock = sidebar - 2×32px */
+  --ds-sidebar-tab-width: 44px;                                    /* Sidebar tab bar — vertical icon strip */
+  --ds-settings-width: 324px;                                      /* 280px content + 44px tab bar */
+
+
+  /* ─────────────────────────────────────────────────────────
+     3. BORDER RADIUS — 4 Tiers
+     ───────────────────────────────────────────────────────── */
+  --ds-radius-sm: 8px;    /* Pills, badges, small controls    */
+  --ds-radius-md: 12px;   /* Buttons, options, inline items   */
+  --ds-radius-lg: 16px;   /* Cards, docks, panels             */
+  --ds-radius-xl: 22px;   /* Page-level surfaces, large sheets */
+
+
+  /* ─────────────────────────────────────────────────────────
+     4. TYPOGRAPHY
+     ───────────────────────────────────────────────────────── */
+  --ds-font-sans:  -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  --ds-font-brand: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --ds-font-mono:  "SF Mono", "Cascadia Code", ui-monospace, monospace;
+
+  --ds-text-xs:   11px;
+  --ds-text-sm:   12px;
+  --ds-text-base: 13px;
+  --ds-text-md:   14px;
+  --ds-text-lg:   15px;
+  --ds-text-xl:   18px;
+  --ds-text-2xl:  20px;
+
+
+  /* ─────────────────────────────────────────────────────────
+     5. SHADOWS
+     ───────────────────────────────────────────────────────── */
+  --ds-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --ds-shadow-md: 0 4px 24px rgba(0, 0, 0, 0.35);
+  --ds-shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.5);
+
+
+  /* ─────────────────────────────────────────────────────────
+     6. ANIMATION
+     ───────────────────────────────────────────────────────── */
+  --ds-ease:     cubic-bezier(0.16, 1, 0.3, 1);
+  --ds-duration: 200ms;
+}
+
+
+/* ─────────────────────────────────────────────────────────
+   2. LIGHT MODE OVERRIDES
+   ───────────────────────────────────────────────────────── */
+[data-theme="light"] {
+  color-scheme: light;
+
+  --ds-bg-deep:     #D5D4D0;   /* Sidebar — warm gray, darker than canvas */
+  --ds-bg-canvas:   #E4E3DF;   /* Main surface — warm beige-gray */
+  --ds-bg-frosted:  #FAFAF8;   /* Frosted glass — near-white, the bright "glass" accent */
+  --ds-bg-overlay:  #CBCAC6;   /* Tooltips */
+
+  --ds-text-primary:     rgba(0, 0, 0, 0.85);
+  --ds-text-secondary:   rgba(60, 60, 67, 0.60);
+  --ds-text-tertiary:    rgba(60, 60, 67, 0.35);
+  --ds-text-placeholder: rgba(60, 60, 67, 0.30);
+  --ds-text-muted:       rgba(60, 60, 67, 0.22);
+
+  --ds-border-subtle: rgba(0, 0, 0, 0.10);
+  --ds-border-medium: rgba(0, 0, 0, 0.18);
+
+  --ds-accent:  #007AFF;
+  --ds-green:   #34C759;
+  --ds-yellow:  #FF9F0A;
+  --ds-red:     #FF3B30;
+  --ds-purple:  #AF52DE;
+
+  --ds-stat-new:      rgba(0, 122, 255, 0.85);
+  --ds-stat-learning: rgba(255, 159, 10, 0.85);
+  --ds-stat-review:   rgba(52, 199, 89, 0.85);
+
+  --ds-grid-dot: rgba(0, 0, 0, 0.04);
+
+  --ds-hover-tint:  rgba(0, 0, 0, 0.03);
+  --ds-active-tint: rgba(0, 0, 0, 0.06);
+  --ds-green-tint:  rgba(52, 199, 89, 0.08);
+  --ds-red-tint:    rgba(255, 59, 48, 0.06);
+
+  --ds-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.10);
+  --ds-shadow-md: 0 4px 20px rgba(0, 0, 0, 0.14);
+  --ds-shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.20);
+
+  /* Rating aliases re-resolve automatically via var(--ds-red) etc. */
+}
+
+
+/* ─────────────────────────────────────────────────────────
+   3. COMPONENT CLASSES  (.ds-*)
+   All properties reference tokens only — no hardcoded colors.
+   ───────────────────────────────────────────────────────── */
+
+/* ── Deep Material ──
+   Deepest surface — where AI lives. Chat panel, diary, ThoughtStream.
+   Pure color, no decoration. Recedes behind everything. */
+.ds-deep {
+  background: var(--ds-bg-deep);
+  border-radius: var(--ds-radius-lg);
+}
+
+/* ── Canvas Material ──
+   Neutral working surface with dot grid texture.
+   Content lives here: cards, deck lists, session history.
+   The grid is subtle — felt, not seen. */
+.ds-canvas {
+  background: var(--ds-bg-canvas);
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: var(--ds-radius-lg);
+  position: relative;
+}
+.ds-canvas::before,
+.ds-canvas-surface::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1; /* below content, above parent bg (thanks to isolation: isolate) */
+  border-radius: inherit;
+  background-image: radial-gradient(circle, var(--ds-grid-dot) 1px, transparent 1px);
+  background-size: 16px 16px;
+  background-position: center center;
+  pointer-events: none;
+  mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black 20%, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black 20%, transparent 70%);
+}
+
+/* Fullscreen canvas surface — no border, no radius, fills its container */
+.ds-canvas-surface {
+  background: var(--ds-bg-canvas);
+  position: relative;
+  isolation: isolate; /* stacking context so ::before z-index:-1 stays above bg */
+}
+
+/* ── Frosted Glass Material ──
+   Real glass: semi-opaque base + gradient overlay + strong blur + edge highlights.
+   The base layer ensures readability over any content (bright images, white bg).
+   The gradient + blur add the glass character on top. */
+.ds-frosted {
+  background:
+    linear-gradient(165deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.08) 100%),
+    rgba(28,28,30,0.82);
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255,255,255,0.28),
+    inset 1px 0 0 0 rgba(255,255,255,0.12),
+    inset 0 -1px 0 0 rgba(0,0,0,0.06),
+    inset -1px 0 0 0 rgba(0,0,0,0.04),
+    0 4px 24px rgba(0,0,0,0.25);
+  border-radius: var(--ds-radius-lg);
+}
+[data-theme="light"] .ds-frosted {
+  background:
+    linear-gradient(165deg, rgba(255,255,255,0.60) 0%, rgba(255,255,255,0.35) 100%),
+    rgba(240,240,244,0.78);
+  backdrop-filter: blur(40px) saturate(1.4);
+  -webkit-backdrop-filter: blur(40px) saturate(1.4);
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255,255,255,0.90),
+    inset 1px 0 0 0 rgba(255,255,255,0.40),
+    inset 0 -1px 0 0 rgba(0,0,0,0.06),
+    inset -1px 0 0 0 rgba(0,0,0,0.03),
+    0 2px 12px rgba(0,0,0,0.08);
+}
+
+/* ── Borderless Content Container (legacy alias for .ds-canvas without dot grid) ── */
+.ds-borderless {
+  background: var(--ds-bg-canvas);
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: var(--ds-radius-lg);
+}
+
+/* ── Input Dock ──
+   Extends .ds-frosted with layout (flex column, overflow hidden).
+   Apply BOTH classes: class="ds-frosted ds-input-dock" or just
+   ds-input-dock which duplicates the material for specificity.    */
+.ds-input-dock {
+  display: flex;
+  flex-direction: column;
+  /* Same frosted glass material as .ds-frosted */
+  background:
+    linear-gradient(165deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.08) 100%),
+    rgba(28,28,30,0.82);
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255,255,255,0.28),
+    inset 1px 0 0 0 rgba(255,255,255,0.12),
+    inset 0 -1px 0 0 rgba(0,0,0,0.06),
+    inset -1px 0 0 0 rgba(0,0,0,0.04),
+    0 4px 24px rgba(0,0,0,0.25);
+  border-radius: var(--ds-radius-lg);
+  overflow: hidden;
+}
+[data-theme="light"] .ds-input-dock {
+  background:
+    linear-gradient(165deg, rgba(255,255,255,0.60) 0%, rgba(255,255,255,0.35) 100%),
+    rgba(240,240,244,0.78);
+  backdrop-filter: blur(40px) saturate(1.4);
+  -webkit-backdrop-filter: blur(40px) saturate(1.4);
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255,255,255,0.90),
+    inset 1px 0 0 0 rgba(255,255,255,0.40),
+    inset 0 -1px 0 0 rgba(0,0,0,0.06),
+    inset -1px 0 0 0 rgba(0,0,0,0.03),
+    0 2px 12px rgba(0,0,0,0.08);
+}
+
+.ds-input-dock textarea {
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  color: var(--ds-text-primary);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-lg);
+  padding: var(--ds-space-md) var(--ds-space-lg);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ds-input-dock textarea::placeholder {
+  color: var(--ds-text-placeholder);
+}
+
+.ds-input-dock .ds-input-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-xs);
+  padding: var(--ds-space-sm) var(--ds-space-md);
+  border-top: 1px solid var(--ds-border-subtle);
+}
+
+.ds-input-dock .ds-action-btn {
+  background: transparent;
+  border: none;
+  color: var(--ds-text-secondary);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-base);
+  font-weight: 500;
+  padding: var(--ds-space-sm) var(--ds-space-md);
+  border-radius: var(--ds-radius-sm);
+  cursor: pointer;
+  transition: color var(--ds-duration) var(--ds-ease);
+}
+
+.ds-input-dock .ds-action-btn:hover {
+  color: var(--ds-text-primary);
+  /* Background intentionally unchanged — text color only */
+}
+
+.ds-input-dock .ds-send-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--ds-accent);
+  border: none;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin-left: auto;
+  flex-shrink: 0;
+  transition: opacity var(--ds-duration) var(--ds-ease),
+              transform var(--ds-duration) var(--ds-ease);
+}
+
+.ds-input-dock .ds-send-btn:hover {
+  opacity: 0.85;
+}
+
+.ds-input-dock .ds-send-btn[data-empty="true"] {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.7);
+}
+
+/* ── Split Action Row ──
+   Two equal buttons side-by-side with a 1px divider.
+   Used when the dock has primary + secondary actions (e.g. Show Answer / Overview). */
+.ds-input-dock .ds-split-actions {
+  display: flex;
+  align-items: center;
+  border-top: 1px solid var(--ds-border-subtle);
+}
+
+.ds-input-dock .ds-split-actions .ds-split-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--ds-border-subtle);
+  flex-shrink: 0;
+}
+
+.ds-input-dock .ds-split-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 44px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-base);
+  font-weight: 500;
+  color: var(--ds-text-tertiary);
+  padding: 0 var(--ds-space-md);
+  transition: background var(--ds-duration) var(--ds-ease);
+}
+
+.ds-input-dock .ds-split-btn:hover {
+  background: var(--ds-hover-tint);
+}
+
+.ds-input-dock .ds-split-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.ds-input-dock .ds-split-btn:first-child {
+  border-bottom-left-radius: var(--ds-radius-lg);
+  font-weight: 600;
+  color: var(--ds-text-primary);
+}
+
+.ds-input-dock .ds-split-btn:last-child {
+  border-bottom-right-radius: var(--ds-radius-lg);
+}
+
+.ds-input-dock .ds-split-btn .ds-kbd {
+  margin-left: 4px;
+}
+
+
+/* ── AI Thought Step ── */
+.ds-thought-step {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ds-space-sm);
+  padding: var(--ds-space-sm) var(--ds-space-md);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-hover-tint);
+  transition: background var(--ds-duration) var(--ds-ease);
+}
+
+.ds-thought-step:hover {
+  background: var(--ds-active-tint);
+}
+
+.ds-thought-step .ds-thought-icon {
+  color: var(--ds-text-tertiary);
+  flex-shrink: 0;
+}
+
+.ds-thought-step .ds-thought-text {
+  color: var(--ds-text-secondary);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-sm);
+  line-height: 1.5;
+}
+
+.ds-thought-step.ds-thought-active .ds-thought-text {
+  color: var(--ds-text-primary);
+}
+
+
+/* ── Multiple Choice Option ── */
+.ds-mc-option {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-sm);
+  padding: var(--ds-space-md) 14px;
+  border-radius: var(--ds-radius-md);
+  border: none;
+  background: transparent;
+  color: var(--ds-text-primary);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-md);
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+  transition: background var(--ds-duration) var(--ds-ease),
+              color var(--ds-duration) var(--ds-ease);
+}
+
+.ds-mc-option:hover {
+  background: var(--ds-hover-tint);
+}
+
+.ds-mc-option.correct {
+  background: var(--ds-green-tint);
+  color: var(--ds-green);
+}
+
+.ds-mc-option.wrong {
+  background: var(--ds-red-tint);
+  color: var(--ds-red);
+  text-decoration: line-through;
+}
+
+
+/* ── Review Result / Quiz Feedback ── */
+.ds-review-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-sm);
+  padding: var(--ds-space-md) var(--ds-space-lg);
+  border-radius: var(--ds-radius-lg);
+  border: 1px solid var(--ds-border-subtle);
+  background: var(--ds-bg-canvas);
+}
+
+.ds-review-result.correct {
+  border-color: var(--ds-green);
+  background: var(--ds-green-tint);
+}
+
+.ds-review-result.incorrect {
+  border-color: var(--ds-red);
+  background: var(--ds-red-tint);
+}
+
+.ds-review-result .ds-result-label {
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ds-text-tertiary);
+}
+
+.ds-review-result.correct .ds-result-label {
+  color: var(--ds-green);
+}
+
+.ds-review-result.incorrect .ds-result-label {
+  color: var(--ds-red);
+}
+
+.ds-review-result .ds-result-body {
+  color: var(--ds-text-primary);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-md);
+  line-height: 1.6;
+}
+
+
+/* ── Tab Bar / Segmented Control ── */
+.ds-tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: var(--ds-hover-tint);
+  border-radius: var(--ds-radius-sm);
+}
+
+.ds-tab {
+  flex: 1;
+  padding: var(--ds-space-xs) var(--ds-space-sm);
+  border-radius: calc(var(--ds-radius-sm) - 2px);
+  border: none;
+  background: transparent;
+  color: var(--ds-text-tertiary);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-xs);
+  font-weight: 500;
+  text-align: center;
+  cursor: pointer;
+  transition: background var(--ds-duration) var(--ds-ease),
+              color var(--ds-duration) var(--ds-ease);
+  white-space: nowrap;
+}
+
+.ds-tab:hover {
+  color: var(--ds-text-secondary);
+}
+
+.ds-tab.active,
+.ds-tab[aria-selected="true"] {
+  background: var(--ds-active-tint);
+  color: var(--ds-text-primary);
+  font-weight: 600;
+}
+
+
+/* ── Keyboard Hint ── */
+.ds-kbd {
+  font-family: var(--ds-font-mono);
+  font-size: 10px;
+  color: var(--ds-text-muted);
+  /* No background or border — just subtle monospaced text */
+}
