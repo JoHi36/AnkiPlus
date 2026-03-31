@@ -16,6 +16,9 @@ interface PlusiChatBubbleProps {
 const DEFAULT_MAX_HEIGHT = 200;
 const MIN_BUBBLE_HEIGHT = 60;
 
+// Persist max height across remounts within the same session
+let _persistedMaxHeight = DEFAULT_MAX_HEIGHT;
+
 const BUBBLE_CONTAINER: React.CSSProperties = {
   position: 'absolute',
   bottom: 8,
@@ -123,7 +126,11 @@ export default function PlusiChatBubble({
   const [audioProgress, setAudioProgress] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [maxHeight, setMaxHeight] = useState(DEFAULT_MAX_HEIGHT);
+  const [maxHeight, _setMaxHeight] = useState(_persistedMaxHeight);
+  const setMaxHeight = useCallback((h: number) => {
+    _persistedMaxHeight = h;
+    _setMaxHeight(h);
+  }, []);
   const [isOverflowing, setIsOverflowing] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
