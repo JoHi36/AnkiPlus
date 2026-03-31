@@ -396,86 +396,90 @@ def init_addon():
         from aqt.utils import showInfo
         showInfo(f"Fehler beim Laden des Chatbot-Addons: {str(e)}")
 
+_heartbeat_timer = None
+
+
+def _init_plusi_systems():
+    """Initialize event bus, heartbeat, and load saved subscriptions."""
+    global _heartbeat_timer
+
+    # Migration: backup old DB if needed
+    try:
+        from .plusi.migrate import migrate_if_needed
+        migrate_if_needed()
+    except Exception as e:
+        logger.error("plusi migration failed: %s", e)
+
+    try:
+        from .plusi.event_bus import EventBus
+        from .plusi.heartbeat import HEARTBEAT_INTERVAL_MS, run_heartbeat
+        from .plusi.memory import PlusiMemory
+        from .plusi.subscriptions import parse_condition
+        from .plusi.agent import wake_plusi
+        from aqt.qt import QTimer
+        from .plusi.budget import PlusicBudget
+
+        bus = EventBus.get()
+        mem = PlusiMemory()
+        budget = PlusicBudget()
+
+        # Load saved subscriptions from DB
+        try:
+            rows = mem._db.execute(
+                "SELECT name, event, condition_raw, wake_prompt "
+                "FROM plusi_subscriptions WHERE active = 1"
+            ).fetchall()
+            for row in rows:
+                name, event, cond_raw, prompt = row[0], row[1], row[2], row[3]
+                condition = parse_condition(cond_raw)
+                if condition:
+                    bus.add_subscription({
+                        'name': name, 'event': event,
+                        'condition': condition, 'wake_prompt': prompt,
+                    })
+            logger.info("loaded %d plusi subscriptions", len(rows))
+        except Exception as e:
+            logger.warning("failed to load plusi subscriptions: %s", e)
+
+        # Wire subscription firing to Plusi wake
+        def on_sub_fired(sub, event):
+            if not budget.can_wake():
+                logger.info("subscription '%s' fired but budget exhausted", sub['name'])
+                return
+            budget.spend()
+            try:
+                from datetime import datetime
+                mem._db.execute(
+                    "UPDATE plusi_subscriptions SET fire_count = fire_count + 1, "
+                    "last_fired_at = ? WHERE name = ?",
+                    (datetime.now().isoformat(), sub['name'])
+                )
+                mem._db.commit()
+            except Exception:
+                pass
+            try:
+                wake_plusi(prompt=sub['wake_prompt'],
+                           context={"trigger": sub['name'], "event": event},
+                           source='subscription')
+            except Exception as e:
+                logger.error("subscription wake failed: %s", e)
+
+        bus.on_subscription_fired = on_sub_fired
+
+        # Start heartbeat timer
+        _heartbeat_timer = QTimer()
+        _heartbeat_timer.timeout.connect(run_heartbeat)
+        _heartbeat_timer.start(HEARTBEAT_INTERVAL_MS)
+        logger.info("plusi heartbeat started (every %d ms)", HEARTBEAT_INTERVAL_MS)
+
+    except Exception as e:
+        logger.error("plusi systems init failed: %s", e)
+
+
 def on_profile_loaded():
     """Wird aufgerufen, wenn das Profil geladen ist"""
     init_addon()
-    # Plusi's periodic self-reflection system
-    # Timer opens a "window" — next interaction after window opens triggers reflect
-    import threading
-    import random
-    from PyQt6.QtCore import QTimer
-
-    # Global flag: when True, next Plusi interaction will trigger a reflect afterwards
-    global _plusi_reflect_pending, _plusi_reflect_lock
-    _plusi_reflect_pending = False
-    _plusi_reflect_lock = threading.Lock()
-
-    def _plusi_reflect_once():
-        """Run one self-reflection cycle in a background thread.
-        No-op if Plusi is disabled."""
-        try:
-            from .plusi.dock import is_plusi_enabled, sync_mood
-            if not is_plusi_enabled():
-                return
-            from .plusi.agent import self_reflect
-            sync_mood('reading')
-            try:
-                self_reflect()
-            except (AttributeError, RuntimeError, OSError) as e:
-                logger.error("Plusi self-reflect failed: %s", e)
-            sync_mood('neutral')
-            try:
-                from .plusi.panel import notify_new_diary_entry
-                notify_new_diary_entry()
-            except (AttributeError, ImportError) as e:
-                logger.debug("notify_new_diary_entry error: %s", e)
-        except Exception as e:
-            logger.error("Plusi reflect error: %s", e)
-
-    def _run_guarded_reflect():
-        """Run _plusi_reflect_once with a guard to prevent concurrent executions."""
-        if not _plusi_reflect_lock.acquire(blocking=False):
-            return
-        try:
-            _plusi_reflect_once()
-        finally:
-            _plusi_reflect_lock.release()
-
-    def _open_reflect_window():
-        """Open the reflection window — next interaction will trigger reflect.
-        Skips if Plusi is disabled but still schedules next check."""
-        global _plusi_reflect_pending
-        try:
-            from .plusi.dock import is_plusi_enabled
-            if not is_plusi_enabled():
-                _schedule_next_window()
-                return
-        except (AttributeError, ImportError) as e:
-            logger.debug("is_plusi_enabled check error: %s", e)
-        _plusi_reflect_pending = True
-        logger.debug("plusi reflect: window opened, waiting for next interaction")
-        # Schedule next window
-        _schedule_next_window()
-
-    def _schedule_next_window():
-        """Schedule the next reflection window with random 30-60 min interval."""
-        interval_ms = random.randint(30, 60) * 60 * 1000
-        interval_min = interval_ms // 60000
-        logger.debug("plusi reflect: next window in %s min", interval_min)
-        QTimer.singleShot(interval_ms, _open_reflect_window)
-
-    def check_and_trigger_reflect():
-        """Called after each Plusi interaction. If window is open, trigger reflect."""
-        global _plusi_reflect_pending
-        if _plusi_reflect_pending and not _plusi_reflect_lock.locked():
-            _plusi_reflect_pending = False
-            logger.debug("plusi reflect: triggered by interaction")
-            threading.Thread(target=_run_guarded_reflect, daemon=True).start()
-
-    # Initial reflect on startup (always, no window needed)
-    threading.Thread(target=_run_guarded_reflect, daemon=True).start()
-    # Schedule first window
-    _schedule_next_window()
+    _init_plusi_systems()
 
 def _emit_deck_selected(widget, deck_id, deck_name):
     """Helper: Emittiert deckSelected Event mit totalCards"""
@@ -526,6 +530,15 @@ def _emit_deck_selected(widget, deck_id, deck_name):
 
 def on_reviewer_did_show_question(card):
     """Wird aufgerufen, wenn eine Karte im Reviewer angezeigt wird"""
+    try:
+        from .plusi.event_bus import EventBus
+        EventBus.get().emit("card_reviewed", {
+            "card_id": card.id if hasattr(card, 'id') else 0,
+            "deck_name": mw.col.decks.name(card.did) if mw.col else "",
+        })
+    except Exception:
+        pass
+
     # Ensure native bottom bar stays suppressed
     config = mw.addonManager.getConfig(__name__) or {}
     if config.get("use_custom_reviewer", True):
@@ -597,6 +610,12 @@ def on_reviewer_did_answer_card(reviewer, card, ease):
 
 def on_state_will_change(new_state, old_state):
     """Wird aufgerufen, wenn sich der Anki-State ändert (z.B. review -> deckBrowser)"""
+    try:
+        from .plusi.event_bus import EventBus
+        EventBus.get().emit("state_changed", {"from_state": str(old_state), "to_state": str(new_state)})
+    except Exception:
+        pass
+
     _preview_state = None
     try:
         from .custom_reviewer import _preview_state as _ps

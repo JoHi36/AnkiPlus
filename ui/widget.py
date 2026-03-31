@@ -994,10 +994,10 @@ class ChatbotWidget(QWidget):
         if self.web_view:
             self.card_tracker = CardTracker(self)
 
-        # Plusi autonomous wake timer — checks every minute
-        self._plusi_wake_timer = QTimer()
-        self._plusi_wake_timer.timeout.connect(self._check_plusi_wake)
-        self._plusi_wake_timer.start(PLUSI_WAKE_CHECK_MS)
+        # Idle detection timer — emits app_idle event to EventBus every minute
+        self._idle_timer = QTimer()
+        self._idle_timer.timeout.connect(self._emit_idle)
+        self._idle_timer.start(PLUSI_WAKE_CHECK_MS)
     def _safe_json_loads(self, data, default=None, context=""):
         """Parse JSON safely, returning default on failure."""
         try:
@@ -1098,26 +1098,16 @@ class ChatbotWidget(QWidget):
         
         self.web_view.page().runJavaScript(js_code, handle_messages)
 
-    def _check_plusi_wake(self):
-        """Check if Plusi should wake up for autonomous action."""
+    def _emit_idle(self):
+        """Emit app_idle event to EventBus if the app has been inactive."""
         try:
-            from ..plusi.storage import get_memory
-            is_sleeping = get_memory('state', 'is_sleeping', False)
-            next_wake = get_memory('state', 'next_wake', None)
-
-            if not is_sleeping or not next_wake:
-                return
-
-            from datetime import datetime
-            wake_time = datetime.fromisoformat(next_wake)
-            if datetime.now() >= wake_time:
-                logger.info("plusi wake timer: triggering autonomous chain")
-                from ..plusi.agent import run_autonomous_chain
-                import threading
-                t = threading.Thread(target=run_autonomous_chain, daemon=True)
-                t.start()
-        except Exception as e:
-            logger.exception("plusi wake timer error: %s", e)
+            from ..plusi.event_bus import EventBus
+            bus = EventBus.get()
+            idle = bus.idle_minutes()
+            if idle >= 1:
+                bus.emit("app_idle", {"idle_minutes": int(idle)})
+        except Exception:
+            pass
 
     def _send_to_frontend(self, payload_type, data, extra=None):
         """Helper: Sendet Payload an das React-Frontend via ankiReceive."""
