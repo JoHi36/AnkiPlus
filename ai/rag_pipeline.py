@@ -139,10 +139,15 @@ def retrieve_rag_context(
     precise_queries = [q for q in (_get('precise_queries', []) or []) if q and q.strip()]
     broad_queries = [q for q in (_get('broad_queries', []) or []) if q and q.strip()]
 
-    # Fallback: use user_message as query when router didn't provide queries
-    if not precise_queries and not broad_queries and user_message and user_message.strip():
-        precise_queries = [user_message.strip()]
-        logger.debug("RAG pipeline: no queries from router, using user_message as fallback query")
+    # Build queries from resolved_intent if router didn't provide explicit queries
+    if not precise_queries and not broad_queries:
+        resolved_intent = _get('resolved_intent', '') or ''
+        if resolved_intent and resolved_intent.strip():
+            precise_queries = [resolved_intent.strip()]
+            logger.debug("RAG pipeline: using resolved_intent as query: %s", resolved_intent[:80])
+        elif user_message and user_message.strip():
+            precise_queries = [user_message.strip()]
+            logger.debug("RAG pipeline: no queries from router, using user_message as fallback query")
 
     logger.debug("RAG pipeline: mode=%s, scope=%s, max_notes=%s, precise=%d, broad=%d",
                  retrieval_mode, search_scope, max_notes, len(precise_queries), len(broad_queries))

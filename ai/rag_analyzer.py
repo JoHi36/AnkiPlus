@@ -40,6 +40,7 @@ class RagAnalysis:
     precise_queries: list = None
     broad_queries: list = None
     embedding_queries: list = None
+    associated_terms: list = None  # Domain terms from router (synonyms, related concepts)
 
 
 # Backwards compat alias
@@ -117,6 +118,7 @@ def analyze_query(user_message, card_context=None, chat_history=None,
             precise_queries=parsed.get('precise_queries'),
             broad_queries=parsed.get('broad_queries'),
             embedding_queries=parsed.get('embedding_queries'),
+            associated_terms=parsed.get('associated_terms'),
         )
 
     except Exception as e:
