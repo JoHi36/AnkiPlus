@@ -1,4 +1,7 @@
 import * as functions from 'firebase-functions';
+import { setGlobalOptions } from 'firebase-functions/v2';
+
+setGlobalOptions({ region: 'europe-west1' });
 import * as admin from 'firebase-admin';
 import express from 'express';
 import cors from 'cors';
@@ -124,6 +127,4 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 });
 
 // Export Cloud Function
-export const api = functions
-  .region('europe-west1')
-  .https.onRequest(app);
+export const api = functions.https.onRequest(app);
