@@ -45,6 +45,13 @@ DEFAULT_CONFIG = {
         "budget_per_hour": 2000,
         "enabled": True,
     },
+    "telegram": {
+        "enabled": False,
+        "bot_token": "",
+        "keep_awake": False,
+        "relay_url": "",
+        "relay_secret": "",
+    },
     "mascot_enabled": False,
     "research_enabled": True,  # Research Agent enabled
     "research_sources": {

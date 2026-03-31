@@ -73,6 +73,16 @@ def test_research_config_defaults():
     assert DEFAULT_CONFIG['ai_tools'].get('research') is True
 
 
+def test_telegram_config_has_relay_fields():
+    """New relay fields should have sensible defaults."""
+    from config import DEFAULT_CONFIG
+    tg = DEFAULT_CONFIG["telegram"]
+    assert "relay_url" in tg
+    assert "relay_secret" in tg
+    assert tg["relay_url"] == ""
+    assert tg["relay_secret"] == ""
+
+
 class TestSaveConfig:
     def test_save_creates_file(self, tmp_path, monkeypatch):
         config_path = tmp_path / "config.json"
