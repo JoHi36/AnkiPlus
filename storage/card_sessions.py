@@ -325,10 +325,13 @@ def save_card_session(card_id, data):
         for msg in data.get('messages', []):
             steps = _to_json(msg.get('steps'))
             citations = _to_json(msg.get('citations'))
+            pipeline_data = _to_json(msg.get('pipeline_data'))
+            agent_cells = _to_json(msg.get('agent_cells') or msg.get('agentCells'))
+            orchestration = _to_json(msg.get('orchestration'))
             request_id = msg.get('request_id') or msg.get('requestId')
             db.execute("""
-                INSERT OR REPLACE INTO messages (id, card_id, section_id, text, sender, created_at, steps, citations, request_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT OR REPLACE INTO messages (id, card_id, section_id, text, sender, created_at, steps, citations, request_id, pipeline_data, agent_cells, orchestration)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 msg.get('id'),
                 card_id,
@@ -339,6 +342,9 @@ def save_card_session(card_id, data):
                 steps,
                 citations,
                 request_id,
+                pipeline_data,
+                agent_cells,
+                orchestration,
             ))
 
         # Enforce message limit

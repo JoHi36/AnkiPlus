@@ -81,6 +81,12 @@ const FADE_MASK_STYLE = {
   background: 'linear-gradient(to bottom, var(--ds-bg-deep) 0%, var(--ds-bg-deep) 30%, transparent 100%)',
 };
 
+function _parseJsonField(raw) {
+  if (!raw) return null;
+  if (typeof raw === 'string') { try { return JSON.parse(raw); } catch { return null; } }
+  return raw;
+}
+
 function normalizeMessages(messages) {
   return messages.map(m => ({
     ...m,
@@ -89,6 +95,9 @@ function normalizeMessages(messages) {
     createdAt: m.created_at || m.createdAt,
     steps: typeof m.steps === 'string' ? JSON.parse(m.steps || '[]') : (m.steps || EMPTY_STEPS),
     citations: typeof m.citations === 'string' ? JSON.parse(m.citations || '{}') : (m.citations || EMPTY_CITATIONS),
+    agentCells: _parseJsonField(m.agent_cells || m.agentCells),
+    orchestration: _parseJsonField(m.orchestration),
+    pipelineData: _parseJsonField(m.pipeline_data || m.pipelineData),
   }));
 }
 
