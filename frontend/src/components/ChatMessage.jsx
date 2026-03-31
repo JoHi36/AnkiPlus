@@ -1901,10 +1901,15 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                       }
                     });
                   }
-                  // Fallback: if citation remapping found nothing, count from citations dict
+                  // Fallback 1: count from citations dict
                   if (citedCount === 0 && cellCitations && Object.keys(cellCitations).length > 0) {
                     citedCount = Object.keys(cellCitations).length;
                     cardSourceCount = Object.values(cellCitations).filter((c) => c && !c.url && !c.web_url).length;
+                  }
+                  // Fallback 2: count unique [N] refs directly from text
+                  if (citedCount === 0 && cell.text) {
+                    const textRefs = new Set((cell.text.match(/\[(\d+)\]/g) || []).map(m => m));
+                    if (textRefs.size > 0) citedCount = textRefs.size;
                   }
 
                   // Header shows SourceCountBadge when done, nothing during loading
@@ -1930,7 +1935,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                     return (
                       <div key={`${cell.agent}-${i}`}>
                         {/* Agent status bar — always visible */}
-                        <div style={{ marginBottom: cell.text ? 14 : 0 }}>
+                        <div style={{ marginTop: 2, marginBottom: cell.text ? 8 : 0 }}>
                           <TutorThinkingLive
                             requestId={requestId}
                             agentName={cell.agent || 'tutor'}

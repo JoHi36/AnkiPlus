@@ -93,7 +93,7 @@ function ThinkingIndicator({ phases, agentLabel, showSkeleton, doneLabel }: Thin
         {/* Middle: Line */}
         <span style={LINE_STYLE} />
 
-        {/* Right: Active step OR summary */}
+        {/* Right: Active step OR doneLabel OR summary */}
         <div style={RIGHT_STYLE}>
           {activePhase ? (
             <>
@@ -114,10 +114,10 @@ function ThinkingIndicator({ phases, agentLabel, showSkeleton, doneLabel }: Thin
                 </>
               )}
             </>
-          ) : allDone && (doneLabel || dataPoints.length > 0) ? (
-            <span style={{ color: 'var(--ds-text-tertiary)' }}>
-              {doneLabel || dataPoints.join(' · ')}
-            </span>
+          ) : doneLabel ? (
+            <span style={{ color: 'var(--ds-text-tertiary)' }}>{doneLabel}</span>
+          ) : allDone && dataPoints.length > 0 ? (
+            <span style={{ color: 'var(--ds-text-tertiary)' }}>{dataPoints.join(' · ')}</span>
           ) : null}
         </div>
       </div>
