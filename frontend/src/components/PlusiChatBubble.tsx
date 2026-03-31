@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 type BubbleState = 'typing' | 'waiting' | 'response' | 'voice';
 
@@ -40,12 +42,7 @@ const SCROLL_AREA: React.CSSProperties = {
   borderRadius: 16,
 };
 
-const TEXT_STYLE: React.CSSProperties = {
-  fontSize: 13,
-  lineHeight: 1.55,
-  color: 'var(--ds-text-primary)',
-  fontFamily: "'Space Grotesk', var(--ds-font-sans)",
-};
+/* Text style now handled by .plusi-md CSS class (see PLUSI_BUBBLE_CSS) */
 
 const INPUT_STYLE: React.CSSProperties = {
   width: '100%',
@@ -228,6 +225,7 @@ export default function PlusiChatBubble({
 
   return (
     <div style={BUBBLE_CONTAINER}>
+      <style>{PLUSI_BUBBLE_CSS}</style>
       {/* WhatsApp-style tail — left side, pointing toward Plusi */}
       <svg
         width="22" height="28"
@@ -276,7 +274,11 @@ export default function PlusiChatBubble({
           className="plusi-bubble-scroll"
           onClick={handleResponseClick}
         >
-          <div style={TEXT_STYLE}>{displayText}</div>
+          <div className="plusi-md">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {displayText}
+            </ReactMarkdown>
+          </div>
         </div>
       )}
 
@@ -309,3 +311,27 @@ export default function PlusiChatBubble({
     </div>
   );
 }
+
+const PLUSI_BUBBLE_CSS = `
+  .plusi-md {
+    font-size: 12.5px;
+    line-height: 1.65;
+    font-family: 'SF Mono', 'SFMono-Regular', 'Menlo', monospace;
+    color: var(--ds-text-primary);
+    letter-spacing: -0.02em;
+  }
+  .plusi-md strong { color: var(--ds-accent); font-weight: 600; }
+  .plusi-md em { color: var(--ds-text-secondary); font-style: normal; opacity: 0.7; }
+  .plusi-md code {
+    font-size: 11.5px; padding: 1px 5px; border-radius: 4px;
+    background: var(--ds-hover-tint); color: var(--ds-accent);
+  }
+  .plusi-md p { margin: 0 0 8px 0; }
+  .plusi-md p:last-child { margin-bottom: 0; }
+  .plusi-md ul, .plusi-md ol { margin: 4px 0; padding-left: 16px; }
+  .plusi-md li { margin: 2px 0; }
+  .plusi-md li::marker { color: var(--ds-text-muted); }
+  .plusi-md a { color: var(--ds-accent); text-decoration: none; border-bottom: 1px solid var(--ds-accent-20); }
+  .plusi-md blockquote { margin: 6px 0; padding: 4px 10px; border-left: 2px solid var(--ds-accent-30); color: var(--ds-text-secondary); font-style: italic; }
+  .plusi-md hr { border: none; border-top: 1px solid var(--ds-border-subtle); margin: 8px 0; }
+`;
