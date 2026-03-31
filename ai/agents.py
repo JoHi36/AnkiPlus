@@ -389,18 +389,8 @@ register_agent(AgentDefinition(
     premium_model='gemini-3-flash-preview',
     fast_model='gemini-2.5-flash',
     fallback_model='gemini-2.5-flash',
-    # Workflows
+    # Workflows (quiz moved to Prüfer agent)
     workflows=[
-        Workflow(
-            name='quiz',
-            label='Quiz & Abfrage',
-            description='Testet dein Wissen mit Fragen und Multiple Choice bevor du die Antwort siehst',
-            mode='locked',
-            triggers=[Slot(ref='card_question_shown', mode='locked')],
-            tools=[Slot(ref='ask_question', mode='locked'), Slot(ref='multiple_choice', mode='on')],
-            outputs=[Slot(ref='chat_response', mode='locked'), Slot(ref='mc_widget', mode='on')],
-            context_prompt='Die Karte ist verdeckt. Stelle eine Frage oder generiere Multiple Choice.',
-        ),
         Workflow(
             name='explain',
             label='Erklären & Vertiefen',
