@@ -3,20 +3,11 @@ import { AnimatePresence, motion } from 'framer-motion';
 import useRemoteSocket from './hooks/useRemoteSocket';
 import useCardState from './hooks/useCardState';
 import ConnectingScreen from './components/ConnectingScreen';
+import PairingScreen from './components/PairingScreen';
 import DeckPicker from './components/DeckPicker';
 import QuestionScreen from './components/QuestionScreen';
 import AnswerScreen from './components/AnswerScreen';
 import MCScreen from './components/MCScreen';
-
-const tg = window.Telegram?.WebApp;
-
-const INIT_DATA = tg?.initData || '';
-const CHAT_ID = (() => {
-  try {
-    const user = tg?.initDataUnsafe?.user;
-    return user?.id ? String(user.id) : '';
-  } catch { return ''; }
-})();
 
 const RELAY_URL = window.location.origin + '/api/relay';
 
@@ -59,13 +50,9 @@ const MODE_BTN = {
 
 export default function App() {
   const [mode, setMode] = useState(() => localStorage.getItem('remote-mode') || 'duo');
-  const { connected, peerConnected, send, messages, consumeMessages } = useRemoteSocket(RELAY_URL, CHAT_ID, INIT_DATA);
+  const { connected, peerConnected, needsPairing, send, messages, consumeMessages } = useRemoteSocket(RELAY_URL);
   const { card, phase, progress, mcOptions, deckList, cardKey } = useCardState(messages, consumeMessages);
   const [view, setView] = useState('remote');
-
-  useEffect(() => {
-    if (tg) { tg.expand(); tg.ready(); }
-  }, []);
 
   useEffect(() => {
     localStorage.setItem('remote-mode', mode);
@@ -83,6 +70,14 @@ export default function App() {
     send({ type: 'open_deck', deck_id: deckId });
     setView('remote');
   }, [send]);
+
+  if (needsPairing) {
+    return (
+      <div style={CONTAINER_STYLE}>
+        <PairingScreen />
+      </div>
+    );
+  }
 
   if (!connected || !peerConnected || !card) {
     return (
