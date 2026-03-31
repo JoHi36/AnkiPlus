@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 
-type BubbleState = 'empty' | 'typing' | 'waiting' | 'response' | 'voice';
+type BubbleState = 'typing' | 'waiting' | 'response' | 'voice';
 
 interface PlusiChatBubbleProps {
   open: boolean;
@@ -30,17 +30,7 @@ const BUBBLE_CONTAINER: React.CSSProperties = {
   animation: 'plusi-bubble-in 200ms var(--ds-ease) both',
 };
 
-const BUBBLE_ARROW: React.CSSProperties = {
-  position: 'absolute',
-  bottom: 16,
-  left: -7,
-  width: 12,
-  height: 12,
-  background: 'var(--ds-bg-frosted)',
-  borderLeft: '1px solid var(--ds-border-subtle)',
-  borderBottom: '1px solid var(--ds-border-subtle)',
-  transform: 'rotate(45deg)',
-};
+/* Tail is now rendered inline as SVG — see PlusiTail below */
 
 const SCROLL_AREA: React.CSSProperties = {
   maxHeight: MAX_HEIGHT,
@@ -54,19 +44,6 @@ const TEXT_STYLE: React.CSSProperties = {
   lineHeight: 1.55,
   color: 'var(--ds-text-primary)',
   fontFamily: "'Space Grotesk', var(--ds-font-sans)",
-};
-
-const PLACEHOLDER_STYLE: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 10,
-  padding: '14px 18px',
-  cursor: 'text',
-};
-
-const PLACEHOLDER_TEXT: React.CSSProperties = {
-  fontSize: 13,
-  color: 'var(--ds-text-placeholder)',
 };
 
 const INPUT_STYLE: React.CSSProperties = {
@@ -85,11 +62,18 @@ const INPUT_STYLE: React.CSSProperties = {
   scrollbarWidth: 'none',
 };
 
-const WAITING_STYLE: React.CSSProperties = {
-  padding: '14px 16px',
-  fontSize: 13,
-  color: 'var(--ds-text-tertiary)',
-  fontStyle: 'italic',
+const THINKING_DOTS_STYLE: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '16px 20px',
+};
+
+const DOT_BASE: React.CSSProperties = {
+  width: 6,
+  height: 6,
+  borderRadius: '50%',
+  background: 'var(--ds-text-tertiary)',
 };
 
 const VOICE_ROW: React.CSSProperties = {
@@ -132,17 +116,10 @@ const VOICE_TRANSCRIPT: React.CSSProperties = {
   lineHeight: 1.5,
 };
 
-const PENCIL_ICON = (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-    stroke="var(--ds-text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M17 3a2.85 2.85 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
-  </svg>
-);
-
 export default function PlusiChatBubble({
   open, onClose, plusiText, voiceAudio, voiceTranscript, voiceState,
 }: PlusiChatBubbleProps) {
-  const [bubbleState, setBubbleState] = useState<BubbleState>('empty');
+  const [bubbleState, setBubbleState] = useState<BubbleState>('typing');
   const [inputText, setInputText] = useState('');
   const [displayText, setDisplayText] = useState<string | null>(null);
   const [audioProgress, setAudioProgress] = useState(0);
@@ -151,6 +128,7 @@ export default function PlusiChatBubble({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // When plusiText arrives, show response
   useEffect(() => {
     if (plusiText && open) {
       setDisplayText(plusiText);
@@ -170,21 +148,27 @@ export default function PlusiChatBubble({
     }
   }, [voiceState, open]);
 
+  // Reset to typing state when bubble opens
   useEffect(() => {
-    if (!open) {
-      setBubbleState('empty');
+    if (open) {
+      setBubbleState('typing');
       setInputText('');
+      setDisplayText(null);
     }
   }, [open]);
 
+  // Auto-focus input when in typing state
   useEffect(() => {
     if (bubbleState === 'typing' && inputRef.current) {
       inputRef.current.focus();
     }
   }, [bubbleState]);
 
-  const handlePlaceholderClick = useCallback(() => {
+  // Click on response text → back to typing
+  const handleResponseClick = useCallback(() => {
     setBubbleState('typing');
+    setDisplayText(null);
+    setInputText('');
   }, []);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -243,14 +227,20 @@ export default function PlusiChatBubble({
 
   return (
     <div style={BUBBLE_CONTAINER}>
-      <div style={BUBBLE_ARROW} />
-
-      {bubbleState === 'empty' && (
-        <div style={PLACEHOLDER_STYLE} onClick={handlePlaceholderClick}>
-          {PENCIL_ICON}
-          <span style={PLACEHOLDER_TEXT}>Schreib was...</span>
-        </div>
-      )}
+      {/* WhatsApp-style tail — left side, pointing toward Plusi */}
+      <svg
+        width="10" height="16"
+        style={{ position: 'absolute', bottom: 10, left: -9, display: 'block' }}
+      >
+        <path
+          d="M 10 0 L 10 10 C 10 13 6 15 1 16 C 5 14 9 12 9 6 Z"
+          fill="var(--ds-bg-frosted)"
+        />
+        <path
+          d="M 10 10 C 10 13 6 15 1 16 C 5 14 9 12 9 6"
+          fill="none" stroke="var(--ds-border-subtle)" strokeWidth="1"
+        />
+      </svg>
 
       {bubbleState === 'typing' && (
         <textarea
@@ -270,11 +260,19 @@ export default function PlusiChatBubble({
       )}
 
       {bubbleState === 'waiting' && (
-        <div style={WAITING_STYLE}>Plusi denkt nach...</div>
+        <div style={THINKING_DOTS_STYLE}>
+          <div style={DOT_BASE} className="thinking-dot-pulse" />
+          <div style={DOT_BASE} className="thinking-dot-pulse" />
+          <div style={DOT_BASE} className="thinking-dot-pulse" />
+        </div>
       )}
 
       {bubbleState === 'response' && displayText && (
-        <div style={SCROLL_AREA} className="plusi-bubble-scroll">
+        <div
+          style={{ ...SCROLL_AREA, cursor: 'pointer' }}
+          className="plusi-bubble-scroll"
+          onClick={handleResponseClick}
+        >
           <div style={TEXT_STYLE}>{displayText}</div>
         </div>
       )}
