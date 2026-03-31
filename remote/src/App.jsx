@@ -9,7 +9,7 @@ import QuestionScreen from './components/QuestionScreen';
 import AnswerScreen from './components/AnswerScreen';
 import MCScreen from './components/MCScreen';
 
-const RELAY_URL = window.location.origin + '/api/relay';
+const RELAY_URL = 'https://europe-west1-ankiplus-b0ffb.cloudfunctions.net/api/relay';
 
 const SLIDE_VARIANTS = {
   enter: { x: '100%', opacity: 0 },
