@@ -15,6 +15,7 @@ import { verifyCheckoutSessionHandler } from './handlers/verifyCheckoutSession';
 import { migrationHandler } from './handlers/migration';
 import { routerHandler } from './handlers/router';
 import { embedHandler } from './handlers/embed';
+import { relayHandler } from './handlers/relay';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -98,6 +99,7 @@ app.post('/migrate-anonymous', validateToken, migrationHandler);
 // RAG routes (router + embeddings)
 app.post('/router', validateToken, routerHandler);
 app.post('/embed', validateToken, embedHandler);
+app.post('/relay', relayHandler);
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
