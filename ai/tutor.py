@@ -39,9 +39,14 @@ try:
 except ImportError:
     from handoff import parse_handoff, validate_handoff
 
+try:
+    from .citation_builder import CitationBuilder
+except ImportError:
+    from citation_builder import CitationBuilder
+
 
 def run_tutor(situation, emit_step=None, memory=None,
-              stream_callback=None, **kwargs):
+              stream_callback=None, citation_builder=None, **kwargs):
     """
     Tutor agent entry point — full RAG + streaming pipeline.
 
@@ -66,6 +71,9 @@ def run_tutor(situation, emit_step=None, memory=None,
     Returns:
         dict with 'text', 'citations', '_used_streaming'.
     """
+    if citation_builder is None:
+        citation_builder = CitationBuilder()
+
     # ------------------------------------------------------------------
     # 1. Extract parameters from kwargs
     # ------------------------------------------------------------------
@@ -115,7 +123,6 @@ def run_tutor(situation, emit_step=None, memory=None,
     # 4. RAG retrieval (or pre-loaded smart search context)
     # ------------------------------------------------------------------
     rag_context = None
-    citations = {}
     rag_result = None  # Will be set by normal RAG path
 
     if smart_search_context:
@@ -129,18 +136,20 @@ def run_tutor(situation, emit_step=None, memory=None,
             rag_lines.append("[%d] %s | %s" % (i + 1, q, a))
         if rag_lines:
             rag_context = {"context_string": "\n".join(rag_lines)}
-            # Build citations for card references
-            for i, card in enumerate(cards[:50]):
-                card_id = card.get('id') or card.get('card_id') or ''
+            # Register citations via CitationBuilder
+            for card in cards[:50]:
+                card_id = card.get('id') or card.get('card_id') or 0
                 if card_id:
-                    citations[str(card_id)] = {
-                        'noteId': str(card_id),
-                        'question': (card.get('question') or '')[:60],
-                        'source': 'smart_search',
-                        'index': i + 1,  # Stable index for [N] inline references
-                    }
+                    citation_builder.add_card(
+                        card_id=int(card_id),
+                        note_id=int(card_id),
+                        deck_name=card.get('deck', ''),
+                        front=(card.get('question') or '')[:60],
+                        back='',
+                        sources=['smart_search'],
+                    )
         if emit_step:
-            emit_step("sources_ready", "done", {"citations": citations})
+            emit_step("sources_ready", "done", {"citations": citation_builder.build()})
         logger.info("Tutor: using smart_search_context with %d cards", len(cards))
     else:
         # Normal path: RAG retrieval from routing result
@@ -162,10 +171,19 @@ def run_tutor(situation, emit_step=None, memory=None,
 
                 if rag_result.cards_found > 0:
                     rag_context = rag_result.rag_context
-                    citations = rag_result.citations
-                    logger.debug("Tutor RAG: %s citations", len(citations))
-                    if emit_step and citations:
-                        emit_step("sources_ready", "done", {"citations": citations})
+                    old_citations = rag_result.citations or {}
+                    for _note_id, cdata in old_citations.items():
+                        citation_builder.add_card(
+                            card_id=int(cdata.get('cardId', cdata.get('noteId', 0))),
+                            note_id=int(cdata.get('noteId', 0)),
+                            deck_name=cdata.get('deckName', ''),
+                            front=cdata.get('question', cdata.get('front', '')),
+                            back=cdata.get('answer', cdata.get('back', '')),
+                            sources=cdata.get('sources', []),
+                        )
+                    logger.debug("Tutor RAG: %s citations", len(old_citations))
+                    if emit_step and old_citations:
+                        emit_step("sources_ready", "done", {"citations": citation_builder.build()})
         except Exception as e:
             logger.warning("Tutor RAG retrieval failed: %s", e)
 
@@ -173,7 +191,16 @@ def run_tutor(situation, emit_step=None, memory=None,
         if not rag_context and context and context.get('cardId'):
             rag_context = _build_current_card_context(context)
             if rag_context:
-                citations = rag_context.get('citations', {})
+                old_citations = rag_context.get('citations', {})
+                for _note_id, cdata in old_citations.items():
+                    citation_builder.add_card(
+                        card_id=int(cdata.get('cardId', cdata.get('noteId', 0))),
+                        note_id=int(cdata.get('noteId', 0)),
+                        deck_name=cdata.get('deckName', ''),
+                        front=cdata.get('question', cdata.get('front', '')),
+                        back=cdata.get('answer', cdata.get('back', '')),
+                        sources=cdata.get('sources', []),
+                    )
 
     # ------------------------------------------------------------------
     # 5. Build system prompt
@@ -224,7 +251,7 @@ def run_tutor(situation, emit_step=None, memory=None,
         error_msg = 'Es ist ein Fehler aufgetreten. Bitte versuche es erneut.'
         if stream_callback:
             stream_callback(error_msg, True)
-        return {'text': error_msg, 'citations': {}}
+        return {'text': error_msg, 'citations': []}
 
     # Signal streaming done
     if stream_callback:
@@ -308,7 +335,7 @@ def run_tutor(situation, emit_step=None, memory=None,
 
     result = {
         'text': final_text,
-        'citations': citations,
+        'citations': citation_builder.build(),
         '_used_streaming': stream_callback is not None,
         '_handoff_marker': handoff_marker,
     }

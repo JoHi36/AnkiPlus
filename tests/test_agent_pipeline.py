@@ -465,7 +465,13 @@ class TestTutorRealAgent:
                     config={},
                     routing_result=routing,
                 )
-        assert result.get('citations') == test_citations
+        # citations is now an array (CitationBuilder output), not a dict
+        citations = result.get('citations')
+        assert isinstance(citations, list)
+        assert len(citations) == 1
+        assert citations[0]['type'] == 'card'
+        assert citations[0]['noteId'] == 123
+        assert citations[0]['front'] == 'ATP?'
 
     @patch('config.is_backend_mode', return_value=True)
     def test_tutor_error_handling(self, _mock_bm):
