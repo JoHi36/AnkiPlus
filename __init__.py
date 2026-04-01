@@ -393,143 +393,6 @@ def init_addon():
         from aqt.utils import showInfo
         showInfo(f"Fehler beim Laden des Chatbot-Addons: {str(e)}")
 
-def _start_remote_relay():
-    """Start remote relay client if configured."""
-    try:
-        from .plusi.remote_ws import start_remote, get_client
-        if start_remote():
-            logger.info("Remote relay started")
-            client = get_client()
-            if client:
-                client.set_action_handler(_handle_remote_action)
-                client.set_peer_change_handler(_handle_peer_change)
-    except Exception as e:
-        logger.error("Remote relay start failed: %s", e)
-
-
-def _handle_remote_action(action_type, params):
-    """Handle incoming actions from the Mini App."""
-    try:
-        from .plusi.telegram import (
-            _rate_card, _show_answer, _get_current_card, _open_deck,
-            _get_deck_list, _get_anki_state, _run_on_main,
-        )
-        from .plusi.remote_ws import get_client
-    except ImportError:
-        logger.error("remote: import failed for action handler")
-        return
-
-    client = get_client()
-    if not client:
-        return
-
-    if action_type == "flip":
-        _show_answer()
-        import time
-        time.sleep(0.3)
-        _send_current_card_state(client, phase="answer")
-
-    elif action_type == "rate":
-        ease = params.get("ease", 3)
-        _rate_card(ease)
-        import time
-        time.sleep(0.3)
-        _send_current_card_state(client, phase="question")
-
-    elif action_type == "open_deck":
-        deck_id = params.get("deck_id")
-        if deck_id:
-            _open_deck(int(deck_id))
-            import time
-            time.sleep(0.5)
-            _send_current_card_state(client, phase="question")
-
-    elif action_type == "set_mode":
-        mode = params.get("mode", "duo")
-        client.mode = mode
-        logger.info("remote: mode set to %s", mode)
-
-    elif action_type == "get_decks":
-        decks = _get_deck_list()
-        client.send({"type": "deck_list", "decks": decks})
-
-
-def _send_current_card_state(client, phase="question"):
-    """Send current card state to the Mini App."""
-    try:
-        from .plusi.telegram import _get_current_card, _get_anki_state, _run_on_main
-    except ImportError:
-        return
-
-    state = _get_anki_state()
-    if state == "review_answer":
-        phase = "answer"
-    elif state == "review_question":
-        phase = "question"
-
-    card = _get_current_card()
-    if not card or "error" in card:
-        client.send({"type": "card_state", "phase": "no_card",
-                      "front_html": "", "back_html": "", "deck": "",
-                      "progress": {"current": 0, "total": 0}, "card_id": 0})
-        return
-
-    def _get_counts():
-        import time as _time
-        if not mw or not mw.col:
-            return (0, 0)
-        counts = mw.col.sched.counts()
-        total = sum(counts)
-        reviewed = 0
-        try:
-            reviewed = mw.col.db.scalar(
-                "SELECT count() FROM revlog WHERE id > ?",
-                int((_time.time() - 86400) * 1000))
-        except Exception:
-            pass
-        return (reviewed, reviewed + total)
-
-    counts = _run_on_main(_get_counts) or (0, 0)
-
-    client.send_card_state(
-        phase=phase,
-        front_html=card.get("front", ""),
-        back_html=card.get("back", ""),
-        deck=card.get("deck", ""),
-        current=counts[0],
-        total=counts[1],
-        card_id=card.get("card_id", 0),
-    )
-
-
-def _handle_peer_change(connected):
-    """Handle Mini App connect/disconnect — notify React frontend.
-    Called from relay polling thread — must schedule UI work on main thread."""
-    from PyQt6.QtCore import QTimer
-
-    def _on_main():
-        try:
-            from .ui.main_view import get_main_view
-            view = get_main_view()
-            if view and hasattr(view, '_chatbot') and view._chatbot and view._chatbot.web_view:
-                payload = json.dumps({
-                    "type": "remoteConnected" if connected else "remoteDisconnected",
-                    "data": {"connected": connected}
-                })
-                view._chatbot.web_view.page().runJavaScript(
-                    f"window.ankiReceive && window.ankiReceive({payload});"
-                )
-            if connected:
-                from .plusi.remote_ws import get_client
-                client = get_client()
-                if client:
-                    _send_current_card_state(client)
-        except Exception as exc:
-            logger.debug("remote: peer_change notify error: %s", exc)
-
-    QTimer.singleShot(0, _on_main)
-
-
 def on_profile_loaded():
     """Wird aufgerufen, wenn das Profil geladen ist"""
     init_addon()
@@ -619,9 +482,12 @@ def on_profile_loaded():
     except Exception as e:
         logger.error("Telegram bot start failed: %s", e)
 
-    # Start remote relay if configured
-    # Remote relay is started on-demand when user clicks "Remote verbinden" in Settings
-    # _start_remote_relay()
+    # Start remote relay if previously paired (auto-reconnect)
+    try:
+        from .relay import start as start_relay
+        start_relay()
+    except Exception as e:
+        logger.error("Relay start failed: %s", e)
 
 def _emit_deck_selected(widget, deck_id, deck_name):
     """Helper: Emittiert deckSelected Event mit totalCards"""
@@ -885,8 +751,8 @@ def cleanup_addon():
 
         # Stop remote relay
         try:
-            from .plusi.remote_ws import stop_remote
-            stop_remote()
+            from .relay import stop as stop_relay
+            stop_relay()
         except Exception:
             pass
 
