@@ -152,12 +152,12 @@ def create_pair():
     or ``{"error": ...}`` on failure.
 
     Called from SettingsSidebar when the user clicks "Remote verbinden".
+
+    If a client is already connected (e.g. via auto-reconnect), creates a
+    new pair code on the same client without tearing down the connection.
+    The Firebase relay replaces the session doc keyed by uid, so this is safe.
     """
     global _client, _state_reporter
-
-    # Stop any existing client first
-    if _client:
-        stop()
 
     remote = _get_remote_config()
     relay_url = remote.get("relay_url", "")
@@ -166,6 +166,27 @@ def create_pair():
 
     if not relay_url:
         return {"error": "relay_url not configured"}
+
+    # If already connected with a pair code, just return the existing one
+    if _client and _client.is_connected and _client.pair_code:
+        pair_url = f"{app_url}?pair={_client.pair_code}"
+        logger.info("relay: reusing existing pair — code=%s", _client.pair_code)
+        return {"pair_code": _client.pair_code, "pair_url": pair_url}
+
+    # If client exists and is connected (auto-reconnect) but has no pair code,
+    # create a new pair code on the existing client
+    if _client and _client.is_connected:
+        pair_code = _client.create_pair()
+        if not pair_code:
+            return {"error": "create_pair failed"}
+        _save_session_token(_client.session_token)
+        pair_url = f"{app_url}?pair={pair_code}"
+        logger.info("relay: new pair on existing client — code=%s", pair_code)
+        return {"pair_code": pair_code, "pair_url": pair_url}
+
+    # No client or disconnected — full setup
+    if _client:
+        stop()
 
     try:
         from ..config import get_or_create_device_id
