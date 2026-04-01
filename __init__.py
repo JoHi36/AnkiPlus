@@ -503,25 +503,31 @@ def _send_current_card_state(client, phase="question"):
 
 
 def _handle_peer_change(connected):
-    """Handle Mini App connect/disconnect — notify React frontend."""
-    try:
-        from .ui.main_view import get_main_view
-        view = get_main_view()
-        if view and hasattr(view, '_chatbot') and view._chatbot and view._chatbot.web_view:
-            payload = json.dumps({
-                "type": "remoteConnected" if connected else "remoteDisconnected",
-                "data": {"connected": connected}
-            })
-            view._chatbot.web_view.page().runJavaScript(
-                f"window.ankiReceive && window.ankiReceive({payload});"
-            )
-        if connected:
-            from .plusi.remote_ws import get_client
-            client = get_client()
-            if client:
-                _send_current_card_state(client)
-    except Exception as exc:
-        logger.debug("remote: peer_change notify error: %s", exc)
+    """Handle Mini App connect/disconnect — notify React frontend.
+    Called from relay polling thread — must schedule UI work on main thread."""
+    from PyQt6.QtCore import QTimer
+
+    def _on_main():
+        try:
+            from .ui.main_view import get_main_view
+            view = get_main_view()
+            if view and hasattr(view, '_chatbot') and view._chatbot and view._chatbot.web_view:
+                payload = json.dumps({
+                    "type": "remoteConnected" if connected else "remoteDisconnected",
+                    "data": {"connected": connected}
+                })
+                view._chatbot.web_view.page().runJavaScript(
+                    f"window.ankiReceive && window.ankiReceive({payload});"
+                )
+            if connected:
+                from .plusi.remote_ws import get_client
+                client = get_client()
+                if client:
+                    _send_current_card_state(client)
+        except Exception as exc:
+            logger.debug("remote: peer_change notify error: %s", exc)
+
+    QTimer.singleShot(0, _on_main)
 
 
 def on_profile_loaded():
