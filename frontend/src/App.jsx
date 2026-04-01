@@ -48,8 +48,6 @@ import StatistikView from './components/StatistikView';
 import ContextTags from './components/ContextTags';
 import ResizeHandle, { loadPersistedWidth, applyWidth } from './components/ResizeHandle';
 import RemotePill from './components/RemotePill';
-import ReasoningStream from './reasoning/ReasoningStream';
-import { registerDefaultRenderers } from './reasoning/defaultRenderers';
 import { ReasoningProvider, useReasoningDispatch, useReasoningStore } from './reasoning/store';
 import useSmartSearch from './hooks/useSmartSearch';
 import usePlusiVoice from './hooks/usePlusiVoice';
@@ -472,66 +470,6 @@ function AppInner() {
   // NICHT automatisch wenn keine Session aktiv — Chat startet immer im Chat-Modus
   const showSessionOverview = forceShowOverview;
 
-  // ── Free Chat State ──────────────────────────────────────────────
-  const [activeChat, setActiveChat] = useState('session'); // "session" | "free"
-  const [remoteConnected, setRemoteConnected] = useState(false);
-
-  // activeChatRef must be declared AFTER activeChat (can't reference before initialization)
-  const activeChatRef = useRef('session');
-  useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
-
-  const freeChatHook = useFreeChat({
-    bridge,
-    onLoadingChange: (loading) => {
-      if (!loading) {
-        setActiveChat('session');
-      }
-    },
-    onCancelComplete: () => {
-      setActiveChat('session');
-    },
-  });
-  const freeChatHookRef = useRef(freeChatHook);
-  useEffect(() => { freeChatHookRef.current = freeChatHook; }, [freeChatHook]);
-
-  // ── Fullscreen FreeChat bridge (stable ref, delegates to bridgeAction) ──
-  const fullscreenBridge = useRef({
-    sendMessage: (data) => bridgeAction('chat.send', data),
-    cancelRequest: () => bridgeAction('chat.cancel'),
-    goToCard: (cardId) => bridgeAction('card.goTo', cardId),
-    openPreview: (cardId) => bridgeAction('card.preview', { cardId: String(cardId) }),
-  }).current;
-
-  // Hold-to-reset for fullscreen FreeChat
-  const holdToReset = useHoldToReset({
-    onReset: freeChatHook.clearMessages,
-    enabled: activeView === 'freeChat' && !mainInputFocused && !freeChatHook.isLoading,
-  });
-
-  // Stable refs for fullscreen FreeChat ankiReceive handlers
-  const fullscreenHandleDeckMessagesLoadedRef = useRef(freeChatHook.handleDeckMessagesLoaded);
-  const fullscreenHandleAnkiReceiveRef = useRef(freeChatHook.handleAnkiReceive);
-  const fullscreenLoadForDeckRef = useRef(freeChatHook.loadForDeck);
-  useEffect(() => { fullscreenHandleDeckMessagesLoadedRef.current = freeChatHook.handleDeckMessagesLoaded; }, [freeChatHook.handleDeckMessagesLoaded]);
-  useEffect(() => { fullscreenHandleAnkiReceiveRef.current = freeChatHook.handleAnkiReceive; }, [freeChatHook.handleAnkiReceive]);
-  useEffect(() => { fullscreenLoadForDeckRef.current = freeChatHook.loadForDeck; }, [freeChatHook.loadForDeck]);
-
-  // ── Free Chat Push: card messages → Free Chat ──────────────────
-  // When session chat saves a message, also push it to Free Chat for the chronological view
-  useEffect(() => {
-    chatHook.freeChatPushRef.current = (msg) => {
-      freeChatHook.setMessages(prev => [...prev, {
-        id: msg.id,
-        text: msg.text,
-        from: msg.from,
-        createdAt: new Date().toISOString(),
-      }]);
-    };
-    return () => { chatHook.freeChatPushRef.current = null; };
-  }, []);
-  const handleFreeChatOpenRef = useRef(null);
-
-
   // Theme state — 'dark' | 'light' | 'system'; resolvedTheme is the effective value
   const [theme, setTheme] = useState('dark');
   const [resolvedTheme, setResolvedTheme] = useState('dark');
@@ -552,6 +490,7 @@ function AppInner() {
   const { mood, setEventMood, setAiMood, resetMood } = useMascot();
   const { voiceState, recordingDuration, lastVoiceText, lastVoiceAudio } = usePlusiVoice({ onMoodChange: setAiMood });
   const [mascotEnabled, setMascotEnabled] = useState(false);
+  const [remoteConnected, setRemoteConnected] = useState(false);
   const mascotEnabledRef = useRef(false);
   useEffect(() => {
     mascotEnabledRef.current = mascotEnabled;
@@ -799,6 +738,16 @@ function AppInner() {
       // Also dispatch as CustomEvent so child components can listen safely
       window.dispatchEvent(new CustomEvent('ankiReceive', { detail: payload }));
 
+      // Remote control events (PWA)
+      if (payload.type === 'remoteConnected') {
+        setRemoteConnected(true);
+        return;
+      }
+      if (payload.type === 'remoteDisconnected') {
+        setRemoteConnected(false);
+        return;
+      }
+
       // Fullscreen state changes (merged from MainApp)
       if (payload.type === 'app.stateChanged' || payload.type === 'stateChanged') {
         const { state, data } = payload;
@@ -822,16 +771,6 @@ function AppInner() {
             setTimeout(() => setReviewChatOpen(true), 100); // slight delay for smooth entrance
           }
         }
-        return;
-      }
-
-      // Remote control events (Telegram Mini App)
-      if (payload.type === 'remoteConnected') {
-        setRemoteConnected(true);
-        return;
-      }
-      if (payload.type === 'remoteDisconnected') {
-        setRemoteConnected(false);
         return;
       }
 
@@ -2999,16 +2938,12 @@ function AppInner() {
         : { left: `calc(${sOff} + var(--ds-space-lg))`, right: 'var(--ds-space-lg)', bottom: isReview ? 'var(--ds-space-xl)' : 'var(--ds-space-lg)' };
 
       return (
-        <>
         <div ref={dockPulseRef} style={{
           position: 'fixed', zIndex: 60,
           ...posStyle,
           maxWidth: 'var(--ds-content-width)',
           marginLeft: 'auto', marginRight: 'auto',
-          transition: 'left 0.3s cubic-bezier(0.25, 1, 0.5, 1), right 0.3s cubic-bezier(0.25, 1, 0.5, 1), bottom 0.3s cubic-bezier(0.25, 1, 0.5, 1), max-width 0.3s cubic-bezier(0.25, 1, 0.5, 1), transform 0.3s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.3s ease',
-          transform: remoteConnected ? 'translateY(calc(100% + 40px))' : 'translateY(0)',
-          opacity: remoteConnected ? 0 : 1,
-          pointerEvents: remoteConnected ? 'none' : 'auto',
+          transition: 'left 0.3s cubic-bezier(0.25, 1, 0.5, 1), right 0.3s cubic-bezier(0.25, 1, 0.5, 1), bottom 0.3s cubic-bezier(0.25, 1, 0.5, 1), max-width 0.3s cubic-bezier(0.25, 1, 0.5, 1)',
         }}>
           <ChatInput
             onSend={onSend}
@@ -3028,15 +2963,6 @@ function AppInner() {
             actionSecondary={actionSecondary}
           />
         </div>
-        <div style={{
-          position: 'fixed', zIndex: 60,
-          bottom: 'var(--ds-space-xl)',
-          left: '50%',
-          transform: 'translateX(-50%)',
-        }}>
-          <RemotePill visible={remoteConnected} />
-        </div>
-        </>
       );
     })()}
 
