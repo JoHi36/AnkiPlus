@@ -2010,6 +2010,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                         isStreaming={isStreaming}
                         citations={citations}
                         citationIndices={{}}
+                        citationsArray={citationsArray}
                         renderTextWithCitations={renderTextWithCitations}
                         bridge={bridge}
                         onPreviewCard={onPreviewCard}
@@ -2036,6 +2037,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                     isStreaming={isStreaming}
                     citations={citations}
                     citationIndices={{}}
+                    citationsArray={citationsArray}
                     renderTextWithCitations={renderTextWithCitations}
                     bridge={bridge}
                     onPreviewCard={onPreviewCard}
@@ -2077,7 +2079,7 @@ MemoizedChatMessage.displayName = 'ChatMessage';
 export default MemoizedChatMessage;
 
 // Separate Komponente für sicheres Markdown-Rendering mit Error Boundary
-export function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, citations = {}, citationIndices = {}, renderTextWithCitations = null, bridge = null, onPreviewCard }) {
+export function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, citations = {}, citationIndices = {}, citationsArray = [], renderTextWithCitations = null, bridge = null, onPreviewCard }) {
   const [hasError, setHasError] = React.useState(false);
   const [errorMsg, setErrorMsg] = React.useState('');
   
@@ -2374,8 +2376,30 @@ export function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = fa
                             a: ({node, href, children, ...props}) => {
                               const childrenText = typeof children === 'string' ? children : Array.isArray(children) ? children.join('') : String(children || '');
 
-                              // FALLBACK: If link contains only a number (1, 2, 3) and citations exist, try to render as CitationRef
-                              // This handles cases where AI outputs [1] instead of [[CardID: 123]] (legacy AgenticCell path)
+                              // New path: if citationsArray is available and link text is a number, look up directly
+                              if (citationsArray && citationsArray.length > 0 && childrenText.match(/^\d+$/)) {
+                                const indexNum = parseInt(childrenText, 10);
+                                const matchedCitation = citationsArray.find(c => c.index === indexNum);
+                                if (matchedCitation) {
+                                  return (
+                                    <CitationRef
+                                      index={matchedCitation.index}
+                                      variant={matchedCitation.type || 'card'}
+                                      onClick={() => {
+                                        if (matchedCitation.type === 'web' && matchedCitation.url) {
+                                          if (window.ankiBridge) window.ankiBridge.addMessage('openUrl', { url: matchedCitation.url });
+                                          else window.open(matchedCitation.url, '_blank');
+                                        } else if (matchedCitation.cardId) {
+                                          if (onPreviewCard) onPreviewCard(matchedCitation);
+                                        }
+                                      }}
+                                      title={matchedCitation.front || matchedCitation.title || ''}
+                                    />
+                                  );
+                                }
+                              }
+
+                              // Legacy path: citationIndices-based rendering (for AgenticCell callers)
                               if (citations && Object.keys(citations).length > 0 && childrenText.match(/^\d+$/)) {
                                 const indexNum = parseInt(childrenText, 10);
                                 const citationEntry = Object.entries(citationIndices).find(([id, idx]) => idx === indexNum);
