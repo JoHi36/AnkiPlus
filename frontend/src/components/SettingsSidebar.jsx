@@ -72,11 +72,13 @@ function RemoteSection() {
       if (payload.type === 'sidebarRemoteQR') {
         setLoading(false);
         const d = payload.data || {};
-        if (d.error) {
-          console.error('Remote QR error:', d.error);
-          return;
+        if (d.error) return;
+        if (d.pair_url) {
+          setPairUrl(d.pair_url);
+        } else if (d.pair_code) {
+          // Fallback: construct URL from pair_code if pair_url missing
+          setPairUrl(`http://localhost:3001?pair=${d.pair_code}`);
         }
-        if (d.pair_url) setPairUrl(d.pair_url);
       }
       if (payload.type === 'sidebarRemoteStatus') {
         const d = payload.data || {};
@@ -86,10 +88,12 @@ function RemoteSection() {
       }
     };
     window.addEventListener('ankiReceive', handler);
-    // Check status on mount + generate QR if already connected
-    bridgeAction('sidebarGetRemoteStatus');
-    bridgeAction('sidebarGetRemoteQR');
-    return () => window.removeEventListener('ankiReceive', handler);
+    // Delay slightly so listener is guaranteed active before response arrives
+    const t = setTimeout(() => {
+      bridgeAction('sidebarGetRemoteStatus');
+      bridgeAction('sidebarGetRemoteQR');
+    }, 300);
+    return () => { clearTimeout(t); window.removeEventListener('ankiReceive', handler); };
   }, []);
 
   const generateQR = useCallback(() => {
