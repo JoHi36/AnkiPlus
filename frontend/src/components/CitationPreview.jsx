@@ -1,13 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import CardPreview from '../../../shared/components/CardPreview.jsx';
 
 /**
- * CitationPreview — Product wrapper that loads card data via the Anki bridge
- * and renders a CardPreview popup.
+ * CitationPreview — Loads card data via the Anki bridge and renders CardPreview popup.
  *
- * Props:
- *   cardId  — Anki card ID (number or string)
- *   onClose — Called after popup closes (or on silent error)
+ * Listens for `cardDetails` events from ankiReceive (the bridge's message queue system).
+ * The bridge sends card details as: ankiReceive({type: 'cardDetails', ...cardData})
  */
 
 const FETCH_TIMEOUT_MS = 5000;
@@ -23,7 +21,7 @@ export default function CitationPreview({ cardId, onClose }) {
 
     let settled = false;
 
-    // 5-second timeout fallback
+    // Timeout fallback
     const timer = setTimeout(() => {
       if (!settled) {
         settled = true;
@@ -31,36 +29,46 @@ export default function CitationPreview({ cardId, onClose }) {
       }
     }, FETCH_TIMEOUT_MS);
 
-    // Register callback in the bridge callback registry
-    const callbackKey = `cardPreview_${cardId}_${Date.now()}`;
-    window[callbackKey] = (result) => {
+    // Listen for cardDetails events from ankiReceive
+    const origReceive = window.ankiReceive;
+    const handleReceive = (payload) => {
+      // Call original handler first
+      if (origReceive) origReceive(payload);
+
       if (settled) return;
+      if (!payload || payload.type !== 'cardDetails') return;
+
+      // Check if this cardDetails matches our requested cardId
+      const data = payload.data || payload;
+      const responseCardId = data.cardId || data.card_id;
+
+      // Accept if cardId matches OR if no cardId in response (single-card mode)
+      if (responseCardId && String(responseCardId) !== String(cardId)) return;
+
       settled = true;
       clearTimeout(timer);
-      delete window[callbackKey];
 
-      try {
-        const parsed = typeof result === 'string' ? JSON.parse(result) : result;
-        if (parsed && (parsed.frontHtml || parsed.front)) {
-          setCardData(parsed);
-        } else {
-          onClose?.();
-        }
-      } catch {
+      if (data && (data.frontHtml || data.front || data.fields)) {
+        setCardData(data);
+      } else {
         onClose?.();
       }
     };
 
+    window.ankiReceive = handleReceive;
+
     // Request card details via bridge
     window.ankiBridge?.addMessage('getCardDetails', {
-      cardId,
-      callback: callbackKey,
+      cardId: String(cardId),
     });
 
     return () => {
       settled = true;
       clearTimeout(timer);
-      if (window[callbackKey]) delete window[callbackKey];
+      // Restore original handler
+      if (window.ankiReceive === handleReceive) {
+        window.ankiReceive = origReceive;
+      }
     };
   }, [cardId, onClose]);
 
