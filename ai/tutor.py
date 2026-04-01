@@ -215,21 +215,9 @@ def run_tutor(situation, emit_step=None, memory=None,
         'images': True, 'diagrams': True, 'molecules': False
     })
 
-    # Build citation instruction if RAG provided numbered cards
-    num_citations = len(citation_builder.build())
-    if num_citations > 0:
-        citation_instruction = (
-            "\n\n[REFERENZ-ANWEISUNG: Die Karteninhalte im Kontext sind mit [1], [2], [3] etc. nummeriert. "
-            "Verwende diese Nummern als Inline-Referenzen in deiner Antwort. "
-            "WICHTIG: Verwende VERSCHIEDENE Nummern für verschiedene Quellen — nicht überall dieselbe Nummer. "
-            "Wenn du Informationen aus Karte [3] verwendest, schreibe [3], nicht [1]. "
-            "Format: [N] direkt nach der Aussage. Verwende nur Nummern von 1 bis %d.]"
-        ) % num_citations
-        system_prompt = citation_instruction
-    else:
-        system_prompt = None
+    system_prompt = None  # Backend builds the system prompt with citation instructions
 
-    generation_situation = situation + (citation_instruction if num_citations > 0 else '')
+    generation_situation = situation
 
     # ------------------------------------------------------------------
     # 6. Generate with 3-level fallback chain

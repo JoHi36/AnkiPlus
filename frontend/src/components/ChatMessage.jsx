@@ -1907,8 +1907,10 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                               isStreaming={cell.status === 'streaming'}
                               citations={cellCitations || {}}
                               citationIndices={cellCitationIndices}
+                              citationsArray={citationsArray}
+                              renderTextWithCitations={renderTextWithCitations}
                               bridge={bridge}
-                              onPreviewCard={onPreviewCard}
+                              onPreviewCard={handleCitationPreview}
                             />
                           );
                         })()}
@@ -1967,8 +1969,10 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                           isStreaming={cell.status === 'streaming'}
                           citations={cellCitations || {}}
                           citationIndices={cellCitationIndices}
+                          citationsArray={citationsArray}
+                          renderTextWithCitations={renderTextWithCitations}
                           bridge={bridge}
-                          onPreviewCard={onPreviewCard}
+                          onPreviewCard={handleCitationPreview}
                         />
                       );
                     })()}

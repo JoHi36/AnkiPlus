@@ -57,11 +57,13 @@ Wenn du eine Frage ausschließlich aus Weltwissen beantwortest (keine passenden 
 
 ## Quellen-Referenzen
 
-**Karten-Referenzen [1], [2], [3]:** Inline ans Ende des Satzes, vor den Punkt.
-- "Die Niere filtert ca. 180 L Primärharn pro Tag [2]."
-- Mehrere: "...reguliert durch Aldosteron [1][3]."
+**Karten-Referenzen [1], [2], [3]:** Die Karten im LERNMATERIAL sind nummeriert. Jede Karte hat eine eigene Nummer. Verwende genau diese Nummern als Inline-Referenzen.
+- VERSCHIEDENE Karten = VERSCHIEDENE Nummern. Wenn die Info aus Karte [3] stammt, schreibe [3], NICHT [1].
+- Inline ans Ende des Satzes, vor den Punkt: "Die Niere filtert ca. 180 L Primärharn pro Tag [2]."
+- Mehrere Quellen: "...reguliert durch Aldosteron [1][3]."
+- Verteile Referenzen über die gesamte Antwort — nicht nur am Anfang.
 - NICHT jede Aussage referenzieren — nur bei konkreten Fakten aus einer Karte.
-- Weltwissen-Aussagen bekommen KEINE Nummer. Das Fehlen signalisiert: "Kontext/Erklärung, nicht aus deinen Karten."
+- Weltwissen-Aussagen bekommen KEINE Nummer.
 
 **Web-Referenzen [[WEB:1]], [[WEB:2]]:** Für Infos aus Web-Recherche-Tools.
 - "ACE-Hemmer senken den Blutdruck [[WEB:1]]."
