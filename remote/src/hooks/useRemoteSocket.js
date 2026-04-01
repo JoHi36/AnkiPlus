@@ -69,6 +69,23 @@ export default function useRemoteSocket(relayUrl) {
       }
 
       const params = new URLSearchParams(window.location.search);
+
+      // Direct token from URL (e.g. ?token=xxx) — reconnect without pairing
+      const urlToken = params.get('token');
+      if (urlToken && active) {
+        const resp = await post({ action: 'reconnect', session_token: urlToken });
+        if (resp?.ok) {
+          localStorage.setItem(TOKEN_KEY, urlToken);
+          tokenRef.current = urlToken;
+          setConnected(true);
+          setPeerConnected(resp.peer_connected || false);
+          setNeedsPairing(false);
+          window.history.replaceState({}, '', window.location.pathname);
+          startPolling();
+          return;
+        }
+      }
+
       const pairCode = params.get('pair');
       if (pairCode && active) {
         const resp = await post({ action: 'join_pair', pair_code: pairCode });

@@ -82,7 +82,7 @@ function RemoteSection() {
         const d = payload.data || {};
         if (d.connected) setConnected(true);
         if (d.peer_connected) setPeerConnected(true);
-        if (d.app_url) setAppUrl(d.app_url);
+        if (d.open_url) setAppUrl(d.open_url);
       }
     };
     window.addEventListener('ankiReceive', handler);

@@ -3099,7 +3099,14 @@ class ChatbotWidget(QWidget):
                 from ..relay import _get_remote_config, DEFAULTS
             except ImportError:
                 from relay import _get_remote_config, DEFAULTS
-            app_url = _get_remote_config().get("app_url", DEFAULTS["app_url"])
+            remote_cfg = _get_remote_config()
+            app_url = remote_cfg.get("app_url", DEFAULTS["app_url"])
+            # Build open URL: use token for direct reconnect
+            open_url = app_url
+            if client.session_token:
+                open_url = f"{app_url}?token={client.session_token}"
+            elif client.pair_code:
+                open_url = f"{app_url}?pair={client.pair_code}"
 
             self._send_to_frontend("sidebarRemoteStatus", {
                 "connected": client.is_connected,
@@ -3107,6 +3114,7 @@ class ChatbotWidget(QWidget):
                 "pair_code": client.pair_code,
                 "mode": client.mode,
                 "app_url": app_url,
+                "open_url": open_url,
             })
         except Exception:
             logger.exception("_msg_get_remote_status failed")
