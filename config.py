@@ -53,6 +53,12 @@ DEFAULT_CONFIG = {
         "relay_secret": "",
         "remote_app_url": "",
     },
+    "remote": {
+        "relay_url": "",
+        "relay_secret": "",
+        "app_url": "https://ankiplus.app/remote",
+        "session_token": None,
+    },
     "mascot_enabled": False,
     "research_enabled": True,  # Research Agent enabled
     "research_sources": {
