@@ -2145,6 +2145,8 @@ class ChatbotWidget(QWidget):
 
     def _msg_get_remote_qr(self, data=None):
         """Create pairing session and send QR data to frontend."""
+        from PyQt6.QtCore import QTimer
+
         def _do():
             try:
                 try:
@@ -2154,16 +2156,14 @@ class ChatbotWidget(QWidget):
 
                 result = create_pair()
                 if "error" in result:
-                    self._send_to_frontend("sidebarRemoteQR", result)
+                    QTimer.singleShot(0, lambda r=result: self._send_to_frontend("sidebarRemoteQR", r))
                     return
 
-                self._send_to_frontend("sidebarRemoteQR", {
-                    "pair_code": result["pair_code"],
-                    "pair_url": result["pair_url"],
-                })
+                payload = {"pair_code": result["pair_code"], "pair_url": result["pair_url"]}
+                QTimer.singleShot(0, lambda p=payload: self._send_to_frontend("sidebarRemoteQR", p))
             except Exception:
                 logger.exception("_msg_get_remote_qr failed")
-                self._send_to_frontend("sidebarRemoteQR", {"error": "Unbekannter Fehler"})
+                QTimer.singleShot(0, lambda: self._send_to_frontend("sidebarRemoteQR", {"error": "Unbekannter Fehler"}))
 
         threading.Thread(target=_do, daemon=True).start()
 
