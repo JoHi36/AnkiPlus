@@ -624,7 +624,7 @@ register_agent(AgentDefinition(
     premium_model='claude-sonnet',
     fast_model='gemini-2.5-flash',
     fallback_model='gemini-2.5-flash',
-    # Workflows
+    # Workflows (Plusi)
     workflows=[
         Workflow(
             name='autonomous',
@@ -655,4 +655,26 @@ register_agent(AgentDefinition(
             outputs=[Slot(ref='chat_response', mode='locked'), Slot(ref='emotion', mode='on')],
         ),
     ],
+))
+
+
+# ── Definition Agent ──
+
+register_agent(AgentDefinition(
+    name='definition',
+    label='Definition',
+    description='Generiert Definitionen fuer Fachbegriffe aus Karteninhalt',
+    color='#8E8E93',
+    icon_type='none',
+    channel='reviewer-term',
+    uses_rag=False,
+    run_module='ai.definition',
+    run_function='run_definition',
+    tools=[],
+    context_sources=['card', 'memory'],
+    is_default=False,
+    enabled_key='definition_enabled',
+    premium_model='gemini-2.5-flash',
+    fast_model='gemini-2.5-flash',
+    fallback_model='gemini-2.5-flash',
 ))
