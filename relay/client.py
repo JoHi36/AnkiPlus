@@ -45,6 +45,16 @@ def _relay_post(relay_url, payload):
         )
         with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
             return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        # Server returned an error status — try to parse the JSON body
+        try:
+            body = exc.read().decode("utf-8")
+            logger.warning("relay.client: HTTP %d: %s (payload action=%s)",
+                           exc.code, body, payload.get("action", "?"))
+            return json.loads(body)
+        except Exception:
+            logger.warning("relay.client: HTTP %d (no body)", exc.code)
+        return None
     except (urllib.error.URLError, TimeoutError) as exc:
         logger.debug("relay.client: post error: %s", exc)
         return None

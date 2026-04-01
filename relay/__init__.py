@@ -155,8 +155,14 @@ def create_pair():
     if not relay_url:
         return {"error": "relay_url not configured"}
 
+    try:
+        from ..config import get_or_create_device_id
+    except ImportError:
+        from config import get_or_create_device_id
+    uid = get_or_create_device_id()
+
     from .client import RelayClient
-    _client = RelayClient(relay_url, relay_secret)
+    _client = RelayClient(relay_url, relay_secret, uid=uid)
 
     pair_code = _client.create_pair()
     if not pair_code:
@@ -194,8 +200,14 @@ def start():
     if not relay_url or not session_token:
         return False
 
+    try:
+        from ..config import get_or_create_device_id
+    except ImportError:
+        from config import get_or_create_device_id
+    uid = get_or_create_device_id()
+
     from .client import RelayClient
-    _client = RelayClient(relay_url, relay_secret)
+    _client = RelayClient(relay_url, relay_secret, uid=uid)
 
     if not _client.reconnect(session_token):
         # Token expired — clear it so we don't retry every startup
