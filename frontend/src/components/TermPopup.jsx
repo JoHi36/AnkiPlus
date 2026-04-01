@@ -4,6 +4,9 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import { parseCitations } from '../utils/parseCitations';
+import CitationRef from '@shared/components/CitationRef';
+import CitationPreview from './CitationPreview';
 
 /**
  * TermPopup — Agentic term definition popup.
@@ -22,6 +25,7 @@ export default function TermPopup({
 }) {
   const panelRef = useRef(null);
   const [animIn, setAnimIn] = useState(false);
+  const [previewCardId, setPreviewCardId] = useState(null);
 
   useEffect(() => { requestAnimationFrame(() => setAnimIn(true)); }, [term]);
 
@@ -42,6 +46,18 @@ export default function TermPopup({
     return { left, top, arrowLeft };
   }, [x, y]);
 
+  const citationsArray = useMemo(() => {
+    if (!cardRefs) return [];
+    if (Array.isArray(cardRefs)) return cardRefs;
+    return Object.entries(cardRefs).map(([key, ref]) => ({
+      type: 'card',
+      index: parseInt(key, 10),
+      cardId: parseInt(ref.id || key, 10),
+      noteId: parseInt(ref.id || key, 10),
+      front: ref.question || '',
+    }));
+  }, [cardRefs]);
+
   // Expand [2, 3] → [2] [3]
   const cleanDef = useMemo(() => {
     if (!definition) return '';
@@ -52,36 +68,38 @@ export default function TermPopup({
 
   const renderDef = useCallback(() => {
     if (!cleanDef) return null;
-    return cleanDef.split(/(\[\d+\])/g).map((part, i) => {
-      const m = part.match(/^\[(\d+)\]$/);
-      if (m) {
-        const ref = cardRefs?.[m[1]];
+    const segments = parseCitations(cleanDef, citationsArray);
+    return segments.map((seg, i) => {
+      if (seg.type === 'citation') {
         return (
-          <span key={i} onClick={(e) => {
-            e.stopPropagation();
-            if (ref?.id) window.ankiBridge?.addMessage('openPreview', { cardId: ref.id });
-          }} title={ref?.question || `Karte ${m[1]}`} style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: 16, height: 16, borderRadius: 4,
-            background: 'var(--ds-accent-10)', color: 'var(--ds-accent)',
-            fontSize: 9, fontWeight: 700, cursor: 'pointer',
-            verticalAlign: 'super', margin: '0 1px', lineHeight: 1,
-          }}>{m[1]}</span>
+          <CitationRef
+            key={i}
+            index={seg.citation.index}
+            variant="card"
+            onClick={() => {
+              if (seg.citation.cardId) setPreviewCardId(seg.citation.cardId);
+            }}
+            title={seg.citation.front || `Karte ${seg.citation.index}`}
+          />
         );
       }
-      if (!part.trim()) return null;
+      if (!seg.content.trim()) return null;
       return (
         <ReactMarkdown key={i}
           remarkPlugins={[remarkGfm, remarkMath]}
           rehypePlugins={[rehypeKatex]}
           components={{
             p: ({ children }) => <>{children}</>,
-            strong: ({ children }) => <strong style={{ color: 'var(--ds-text-primary)', fontWeight: 600 }}>{children}</strong>,
+            strong: ({ children }) => (
+              <strong style={{ color: 'var(--ds-text-primary)', fontWeight: 600 }}>
+                {children}
+              </strong>
+            ),
           }}
-        >{part}</ReactMarkdown>
+        >{seg.content}</ReactMarkdown>
       );
     });
-  }, [cleanDef, cardRefs]);
+  }, [cleanDef, citationsArray]);
 
   const steps = useMemo(() => {
     if (loading) return [
@@ -229,6 +247,13 @@ export default function TermPopup({
           </div>
         </div>
       </div>
+
+      {previewCardId && (
+        <CitationPreview
+          cardId={previewCardId}
+          onClose={() => setPreviewCardId(null)}
+        />
+      )}
 
       <style>{`@keyframes tp-pulse { 0%,100% { opacity:.4 } 50% { opacity:1 } }`}</style>
     </>
