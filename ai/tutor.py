@@ -178,7 +178,13 @@ def run_tutor(situation, emit_step=None, memory=None,
                 if rag_result.cards_found > 0:
                     rag_context = rag_result.rag_context
                     old_citations = rag_result.citations or {}
-                    for _note_id, cdata in old_citations.items():
+                    # Sort by RAG index to ensure CitationBuilder indices match
+                    # what Gemini sees in LERNMATERIAL ([1], [2], [3]...)
+                    sorted_citations = sorted(
+                        old_citations.values(),
+                        key=lambda c: c.get('index', 999)
+                    )
+                    for cdata in sorted_citations:
                         citation_builder.add_card(
                             card_id=int(cdata.get('cardId', cdata.get('noteId', 0))),
                             note_id=int(cdata.get('noteId', 0)),
