@@ -9,7 +9,7 @@ import QuestionScreen from './components/QuestionScreen';
 import AnswerScreen from './components/AnswerScreen';
 import MCScreen from './components/MCScreen';
 
-const RELAY_URL = 'https://europe-west1-ankiplus-b0ffb.cloudfunctions.net/api/relay';
+const RELAY_URL = import.meta.env.VITE_RELAY_URL || 'https://europe-west1-ankiplus-b0ffb.cloudfunctions.net/api/relay';
 
 const SLIDE_VARIANTS = {
   enter: { x: '100%', opacity: 0 },
@@ -49,15 +49,18 @@ const MODE_BTN = {
 };
 
 export default function App() {
-  const [mode, setMode] = useState(() => localStorage.getItem('remote-mode') || 'duo');
-  const { connected, peerConnected, needsPairing, send, messages, consumeMessages } = useRemoteSocket(RELAY_URL);
+  const { connected, peerConnected, needsPairing, send, messages, consumeMessages, ankiState } = useRemoteSocket(RELAY_URL);
+  const [modeOverride, setModeOverride] = useState(null);
+  const effectiveMode = modeOverride || (ankiState === 'reviewing' ? 'duo' : 'solo');
   const { card, phase, progress, mcOptions, deckList, cardKey } = useCardState(messages, consumeMessages);
   const [view, setView] = useState('remote');
 
   useEffect(() => {
-    localStorage.setItem('remote-mode', mode);
-    send({ type: 'set_mode', mode });
-  }, [mode, send]);
+    if (modeOverride) {
+      localStorage.setItem('remote-mode', modeOverride);
+      send({ type: 'set_mode', mode: modeOverride });
+    }
+  }, [modeOverride, send]);
 
   useEffect(() => {
     if (view === 'decks') send({ type: 'get_decks' });
@@ -109,9 +112,9 @@ export default function App() {
         {['duo', 'solo'].map(m => (
           <button key={m} style={{
             ...MODE_BTN,
-            background: mode === m ? 'var(--ds-accent-10)' : 'transparent',
-            color: mode === m ? 'var(--ds-accent)' : 'var(--ds-text-tertiary)',
-          }} onClick={() => setMode(m)}>
+            background: effectiveMode === m ? 'var(--ds-accent-10)' : 'transparent',
+            color: effectiveMode === m ? 'var(--ds-accent)' : 'var(--ds-text-tertiary)',
+          }} onClick={() => setModeOverride(m)}>
             {m === 'duo' ? 'Duo' : 'Solo'}
           </button>
         ))}
@@ -132,9 +135,9 @@ export default function App() {
               <MCScreen card={card} progress={progress} mcOptions={mcOptions}
                         onSelect={handleMCSelect} onRate={handleRate} />
             ) : phase === 'question' ? (
-              <QuestionScreen card={card} progress={progress} mode={mode} onFlip={handleFlip} />
+              <QuestionScreen card={card} progress={progress} mode={effectiveMode} onFlip={handleFlip} />
             ) : phase === 'answer' ? (
-              <AnswerScreen card={card} progress={progress} mode={mode} onRate={handleRate} />
+              <AnswerScreen card={card} progress={progress} mode={effectiveMode} onRate={handleRate} />
             ) : (
               <ConnectingScreen peerConnected={false} />
             )}

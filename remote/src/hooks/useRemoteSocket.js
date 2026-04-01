@@ -9,6 +9,7 @@ export default function useRemoteSocket(relayUrl) {
   const [peerConnected, setPeerConnected] = useState(false);
   const [needsPairing, setNeedsPairing] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [ankiState, setAnkiState] = useState('idle');
   const tokenRef = useRef(localStorage.getItem(TOKEN_KEY));
   const pollRef = useRef(null);
 
@@ -35,6 +36,7 @@ export default function useRemoteSocket(relayUrl) {
         for (const msg of resp.messages) {
           if (msg.type === 'peer_connected') setPeerConnected(true);
           else if (msg.type === 'peer_disconnected') setPeerConnected(false);
+          else if (msg.type === 'anki_state') setAnkiState(msg.state);
           else setMessages(prev => [...prev, msg]);
         }
       } else if (resp?.error === 'Invalid session') {
@@ -105,5 +107,5 @@ export default function useRemoteSocket(relayUrl) {
     post({ action: 'send', session_token: token, message });
   }, [post]);
 
-  return { connected, peerConnected, needsPairing, send, messages, consumeMessages };
+  return { connected, peerConnected, needsPairing, send, messages, consumeMessages, ankiState };
 }
