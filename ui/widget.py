@@ -2145,8 +2145,10 @@ class ChatbotWidget(QWidget):
     def _msg_get_remote_qr(self, data=None):
         """Generate QR code for remote pairing and send to frontend."""
         import threading
+        logger.info("_msg_get_remote_qr: CALLED")
 
         def _do_remote_qr():
+            logger.info("_msg_get_remote_qr: thread started")
             try:
                 try:
                     from ..plusi.remote_ws import get_client, start_remote
@@ -2179,10 +2181,11 @@ class ChatbotWidget(QWidget):
                     "pair_code": client.pair_code,
                     "pair_url": pair_url,
                 }
-                QTimer.singleShot(0, lambda: self._send_sidebar_event('sidebarRemoteQR', result))
+                logger.info("_msg_get_remote_qr: sending result pair_code=%s pair_url=%s", client.pair_code, pair_url)
+                QTimer.singleShot(0, lambda: self._send_to_frontend('sidebarRemoteQR', result))
             except Exception as e:
                 logger.exception("_msg_get_remote_qr error: %s", e)
-                QTimer.singleShot(0, lambda: self._send_sidebar_event('sidebarRemoteQR', {"error": str(e)}))
+                QTimer.singleShot(0, lambda: self._send_to_frontend('sidebarRemoteQR', {"error": str(e)}))
 
         threading.Thread(target=_do_remote_qr, daemon=True).start()
 
@@ -2196,10 +2199,10 @@ class ChatbotWidget(QWidget):
 
             client = get_client()
             if not client:
-                self._send_sidebar_event('sidebarRemoteStatus', {"connected": False, "peer_connected": False})
+                self._send_to_frontend('sidebarRemoteStatus', {"connected": False, "peer_connected": False})
                 return
 
-            self._send_sidebar_event('sidebarRemoteStatus', {
+            self._send_to_frontend('sidebarRemoteStatus', {
                 "connected": client.is_connected,
                 "peer_connected": client.is_peer_connected,
                 "pair_code": client.pair_code,
@@ -2207,9 +2210,9 @@ class ChatbotWidget(QWidget):
             })
         except Exception as e:
             logger.exception("_msg_get_remote_status error: %s", e)
-            self._send_sidebar_event('sidebarRemoteStatus', {"connected": False, "peer_connected": False})
+            self._send_to_frontend('sidebarRemoteStatus', {"connected": False, "peer_connected": False})
 
-    def _send_sidebar_event(self, event_type, data):
+    def _send_to_frontend(self, event_type, data):
         """Send event to frontend via CustomEvent (works in both main app and sidebar)."""
         payload = json.dumps({"type": event_type, "data": data})
         js = f"window.dispatchEvent(new CustomEvent('ankiReceive', {{detail: {payload}}}));"

@@ -181,6 +181,15 @@ export default function SettingsSidebar() {
     bridgeAction('sidebarGetStatus');
   }, []);
 
+  // Ensure window.ankiReceive exists (sidebar may render without AppInner)
+  useEffect(() => {
+    if (!window.ankiReceive) {
+      window.ankiReceive = (payload) => {
+        window.dispatchEvent(new CustomEvent('ankiReceive', { detail: payload }));
+      };
+    }
+  }, []);
+
   // Listen for messages from Python via ankiReceive (safe — doesn't override the handler)
   useEffect(() => {
     const handler = (e) => {
