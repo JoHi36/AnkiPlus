@@ -14,6 +14,11 @@ try:
 except ImportError:
     from utils.logging import get_logger
 
+try:
+    from .citation_builder import CitationBuilder
+except ImportError:
+    from citation_builder import CitationBuilder
+
 logger = get_logger(__name__)
 
 
@@ -201,7 +206,7 @@ def _fallback_mc(correct_answer):
 # ---------------------------------------------------------------------------
 
 def run_prufer(situation='', emit_step=None, memory=None,
-               stream_callback=None, **kwargs):
+               stream_callback=None, citation_builder=None, **kwargs):
     """Prufer agent entry point.
 
     Args:
@@ -219,6 +224,9 @@ def run_prufer(situation='', emit_step=None, memory=None,
     Returns:
         dict with mode-specific results
     """
+    if citation_builder is None:
+        citation_builder = CitationBuilder()
+
     mode = kwargs.get('mode', 'evaluate')
 
     if mode == 'evaluate':
@@ -226,15 +234,15 @@ def run_prufer(situation='', emit_step=None, memory=None,
         user_answer = kwargs.get('user_answer', situation)
         correct_answer = kwargs.get('correct_answer', '')
         result = evaluate_answer(question, user_answer, correct_answer)
-        return {'text': result.get('feedback', ''), 'evaluation': result}
+        return {'text': result.get('feedback', ''), 'evaluation': result, 'citations': citation_builder.build()}
 
     elif mode == 'generate_mc':
         question = kwargs.get('question', '')
         correct_answer = kwargs.get('correct_answer', '')
         deck_answers = kwargs.get('deck_answers')
         options = generate_mc(question, correct_answer, deck_answers)
-        return {'text': '', 'mc_options': options}
+        return {'text': '', 'mc_options': options, 'citations': citation_builder.build()}
 
     else:
         logger.warning("Prufer: unknown mode %s", mode)
-        return {'text': 'Unbekannter Modus.', 'error': 'unknown_mode'}
+        return {'text': 'Unbekannter Modus.', 'error': 'unknown_mode', 'citations': []}
