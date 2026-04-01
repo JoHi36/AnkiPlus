@@ -20,7 +20,8 @@ ROUTER_RESULTS_PATH = os.path.join(PROJECT_ROOT, "benchmark", "router_results.js
 BENCHMARK_RUN_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "benchmark_run.py")
 BENCHMARK_GENERATE_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "benchmark_generate.py")
 BENCHMARK_ROUTER_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "benchmark_router.py")
-DOCS_PATH = os.path.join(PROJECT_ROOT, "docs", "reference", "RETRIEVAL_SYSTEM.md")
+DOCS_PATH = os.path.join(PROJECT_ROOT, "docs", "agents", "overview.md")
+AGENTS_DOCS_DIR = os.path.join(PROJECT_ROOT, "docs", "agents")
 DESIGN_CSS_PATH = os.path.join(PROJECT_ROOT, "shared", "styles", "design-system.css")
 HISTORY_DIR = os.path.join(PROJECT_ROOT, "benchmark", "history")
 
@@ -546,22 +547,145 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     font-size: 13px;
   }
   .error-banner.visible { display: block; }
+
+  /* ── App Layout (sidebar + main) ── */
+  .app-layout {
+    display: flex;
+    min-height: 100vh;
+    margin: -24px; /* undo body padding */
+  }
+
+  .sidebar {
+    width: 240px;
+    min-width: 240px;
+    background: var(--bg-card);
+    border-right: 1px solid var(--border);
+    padding: 24px 0;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+
+  .sidebar-header {
+    padding: 0 20px 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 16px;
+  }
+
+  .sidebar-header h1 {
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+
+  .sidebar-subtitle {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .sidebar-section { margin-bottom: 16px; }
+
+  .sidebar-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    padding: 8px 20px 4px;
+  }
+
+  .sidebar-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 7px 20px;
+    font-size: 13px;
+    font-family: var(--sans);
+    color: var(--text-muted);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+
+  .sidebar-item:hover {
+    color: var(--text);
+    background: var(--bg-hover);
+  }
+
+  .sidebar-item.active {
+    color: var(--blue);
+    background: color-mix(in srgb, var(--blue) 8%, transparent);
+    font-weight: 500;
+  }
+
+  .main-content {
+    flex: 1;
+    padding: 32px 40px;
+    max-width: 960px;
+    overflow-y: auto;
+  }
+
+  .agent-docs-container {
+    font-size: 14px;
+    line-height: 1.7;
+  }
 </style>
 </head>
 <body>
 
-<div class="header">
-  <div class="header-left">
-    <h1>AnkiPlus Dev Hub</h1>
-  </div>
-  <div class="header-right">
-    <button class="btn btn-primary" id="tab-top-benchmarks" onclick="switchTopTab('benchmarks')">Benchmarks</button>
-    <button class="btn" id="tab-top-design" onclick="switchTopTab('design')">Design System</button>
-  </div>
-</div>
+<div class="app-layout">
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <h1>AnkiPlus</h1>
+      <span class="sidebar-subtitle">Dev Hub</span>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Agents</div>
+      <button class="sidebar-item active" data-nav="agent-overview" onclick="loadAgent('overview')">Übersicht</button>
+      <button class="sidebar-item" data-nav="agent-tutor" onclick="loadAgent('tutor')">Tutor</button>
+      <button class="sidebar-item" data-nav="agent-research" onclick="loadAgent('research')">Research</button>
+      <button class="sidebar-item" data-nav="agent-definition" onclick="loadAgent('definition')">Definition</button>
+      <button class="sidebar-item" data-nav="agent-prufer" onclick="loadAgent('prufer')">Prüfer</button>
+      <button class="sidebar-item" data-nav="agent-plusi" onclick="loadAgent('plusi')">Plusi</button>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Tools</div>
+      <button class="sidebar-item" data-nav="tool-retrieval" onclick="showBenchmarkTool('retrieval')">Retrieval Benchmark</button>
+      <button class="sidebar-item" data-nav="tool-router" onclick="showBenchmarkTool('router')">Router Benchmark</button>
+      <button class="sidebar-item" data-nav="tool-generation" onclick="showBenchmarkTool('generation')">Generation Benchmark</button>
+      <button class="sidebar-item" data-nav="tool-livetest" onclick="showBenchmarkTool('livetest')">Live Test</button>
+      <button class="sidebar-item" data-nav="tool-design" onclick="showDesignSystem()">Design System</button>
+    </div>
+  </nav>
 
-<!-- Sub-nav for Benchmarks -->
-<div class="subnav" id="subnav-benchmarks">
+  <!-- Main content -->
+  <main class="main-content">
+
+  <div id="agent-docs" class="agent-docs-container">
+    <!-- Markdown docs rendered here -->
+  </div>
+
+  <!-- Components Tab (hidden by default) -->
+  <div id="components-panel" style="display:none">
+    <div id="components-frame-wrap" style="background:var(--ds-bg-canvas);border-radius:var(--ds-radius-lg);border:1px solid var(--ds-border-medium);overflow:hidden;height:calc(100vh - 120px)">
+      <iframe id="components-iframe" src="about:blank" style="width:100%;height:100%;border:none;background:var(--ds-bg-deep)"></iframe>
+    </div>
+    <div id="components-offline" style="display:none;text-align:center;padding:80px 20px;color:var(--ds-text-secondary)">
+      <div style="font-size:var(--ds-text-xl);margin-bottom:12px;color:var(--ds-text-primary)">Component Viewer not running</div>
+      <div style="font-size:var(--ds-text-md)">Start the Vite dev server:</div>
+      <code style="display:inline-block;margin-top:12px;padding:8px 16px;background:var(--ds-bg-deep);border-radius:var(--ds-radius-sm);font-family:var(--ds-font-mono);font-size:var(--ds-text-sm);color:var(--ds-accent)">cd frontend && npm run dev</code>
+    </div>
+  </div>
+
+  <div id="benchmark-wrapper">
+
+<div class="subnav" id="subnav-benchmarks" style="display:none">
   <div class="subnav-tabs">
     <div class="version-picker" style="margin-right:12px">
       <button class="version-btn" id="version-btn" onclick="toggleVersionPicker()">current</button>
@@ -581,18 +705,6 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <div id="docs-panel" style="display:none;max-width:900px;margin:0 auto;font-size:var(--ds-text-md);line-height:1.8;color:var(--ds-text-primary)">
   <div id="docs-content" style="white-space:pre-wrap;font-family:var(--ds-font-sans)">Loading docs...</div>
   <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--ds-border-medium);font-size:var(--ds-text-xs);color:var(--ds-text-secondary)" id="docs-path"></div>
-</div>
-
-<!-- Components Tab (hidden by default) -->
-<div id="components-panel" style="display:none">
-  <div id="components-frame-wrap" style="background:var(--ds-bg-canvas);border-radius:var(--ds-radius-lg);border:1px solid var(--ds-border-medium);overflow:hidden;height:calc(100vh - 120px)">
-    <iframe id="components-iframe" src="about:blank" style="width:100%;height:100%;border:none;background:var(--ds-bg-deep)"></iframe>
-  </div>
-  <div id="components-offline" style="display:none;text-align:center;padding:80px 20px;color:var(--ds-text-secondary)">
-    <div style="font-size:var(--ds-text-xl);margin-bottom:12px;color:var(--ds-text-primary)">Component Viewer not running</div>
-    <div style="font-size:var(--ds-text-md)">Start the Vite dev server:</div>
-    <code style="display:inline-block;margin-top:12px;padding:8px 16px;background:var(--ds-bg-deep);border-radius:var(--ds-radius-sm);font-family:var(--ds-font-mono);font-size:var(--ds-text-sm);color:var(--ds-accent)">cd frontend && npm run dev</code>
-  </div>
 </div>
 
 <!-- Router Tab (hidden by default) -->
@@ -669,6 +781,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 </div>
 
 </div>
+
+</div><!-- /benchmark-wrapper -->
 
 <script>
 // ── Two-level navigation ──
@@ -1741,9 +1855,102 @@ async function runLiveTest() {
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 
-// Load and show retrieval as default
-loadResults();
+// ── Agent Docs Loading ─────────────────────────────────────────────────────
+
+var _currentAgent = null;
+
+function _setActiveSidebar(el) {
+  document.querySelectorAll('.sidebar-item').forEach(function(s) { s.classList.remove('active'); });
+  if (el) el.classList.add('active');
+}
+
+async function loadAgent(name) {
+  // Update sidebar active state
+  var btn = document.querySelector('.sidebar-item[data-nav="agent-' + name + '"]');
+  _setActiveSidebar(btn);
+
+  // Show docs container, hide benchmark
+  document.getElementById('agent-docs').style.display = 'block';
+  document.getElementById('benchmark-wrapper').style.display = 'none';
+  document.getElementById('components-panel').style.display = 'none';
+
+  try {
+    var resp = await fetch('/api/agent_docs/' + name);
+    var data = await resp.json();
+    if (data.error) {
+      document.getElementById('agent-docs').textContent = 'Error: ' + data.error;
+      return;
+    }
+    // Server-rendered HTML from our own documentation files (trusted internal input,
+    // generated by _render_markdown on the local server — not user-supplied content)
+    document.getElementById('agent-docs').innerHTML = data.html;  // nosec: trusted server-rendered docs
+    _currentAgent = name;
+
+    // Render any Mermaid diagrams
+    try {
+      if (typeof mermaid !== 'undefined') {
+        await mermaid.run({nodes: document.querySelectorAll('#agent-docs .mermaid')});
+      }
+    } catch(e) { /* mermaid may not find nodes */ }
+
+    // For Tutor: also show benchmark section below docs
+    if (name === 'tutor') {
+      document.getElementById('benchmark-wrapper').style.display = 'block';
+      document.getElementById('subnav-benchmarks').style.display = 'flex';
+      switchSubTab('retrieval');
+      loadResults();
+    }
+  } catch(err) {
+    document.getElementById('agent-docs').textContent = 'Failed to load: ' + err.message;
+  }
+}
+
+function showBenchmarkTool(type) {
+  // Update sidebar
+  var btn = document.querySelector('.sidebar-item[data-nav="tool-' + type + '"]');
+  _setActiveSidebar(btn);
+
+  // Hide docs, show benchmark
+  document.getElementById('agent-docs').style.display = 'none';
+  document.getElementById('benchmark-wrapper').style.display = 'block';
+  document.getElementById('subnav-benchmarks').style.display = 'flex';
+  document.getElementById('components-panel').style.display = 'none';
+
+  // Switch to correct benchmark tab
+  if (type === 'retrieval') {
+    switchSubTab('retrieval');
+    loadResults();
+  } else if (type === 'router') {
+    loadRouterResults();
+    switchSubTab('router');
+  } else if (type === 'generation') {
+    loadGeneration();
+    switchSubTab('generation');
+  } else if (type === 'livetest') {
+    switchSubTab('livetest');
+  }
+}
+
+function showDesignSystem() {
+  var btn = document.querySelector('.sidebar-item[data-nav="tool-design"]');
+  _setActiveSidebar(btn);
+
+  document.getElementById('agent-docs').style.display = 'none';
+  document.getElementById('benchmark-wrapper').style.display = 'none';
+  document.getElementById('components-panel').style.display = 'block';
+  document.getElementById('subnav-benchmarks').style.display = 'none';
+  loadComponents();
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────
+
+// Load agent overview as default
+document.getElementById('benchmark-wrapper').style.display = 'none';
+loadAgent('overview');
 </script>
+
+  </main>
+</div><!-- /app-layout -->
 </body>
 </html>
 """
@@ -2028,13 +2235,30 @@ class BenchmarkHandler(BaseHTTPRequestHandler):
 
         elif self.path == "/api/docs":
             if not os.path.isfile(DOCS_PATH):
-                self._send_json(200, {"html": "<p>No docs found. Expected at: docs/reference/RETRIEVAL_SYSTEM.md</p>", "path": ""})
+                self._send_json(200, {"html": "<p>No docs found. Expected at: docs/agents/overview.md</p>", "path": ""})
                 return
             try:
                 with open(DOCS_PATH, "r", encoding="utf-8") as fh:
                     content = fh.read()
                 rendered_html = _render_markdown(content)
                 self._send_json(200, {"html": rendered_html, "path": DOCS_PATH})
+            except OSError as exc:
+                self._send_error_json(500, str(exc))
+
+        elif self.path.startswith("/api/agent_docs/"):
+            agent_name = self.path.split("/api/agent_docs/", 1)[1].rstrip("/")
+            if ".." in agent_name or "/" in agent_name:
+                self._send_error_json(400, "Invalid agent name")
+                return
+            doc_path = os.path.join(AGENTS_DOCS_DIR, f"{agent_name}.md")
+            if not os.path.isfile(doc_path):
+                self._send_error_json(404, f"No docs for agent: {agent_name}")
+                return
+            try:
+                with open(doc_path, "r", encoding="utf-8") as fh:
+                    content = fh.read()
+                rendered_html = _render_markdown(content)
+                self._send_json(200, {"html": rendered_html, "agent": agent_name, "path": doc_path})
             except OSError as exc:
                 self._send_error_json(500, str(exc))
 
