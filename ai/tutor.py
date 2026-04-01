@@ -25,9 +25,9 @@ logger = get_logger(__name__)
 # and to work in both addon and standalone contexts.
 
 try:
-    from .rag_pipeline import retrieve_rag_context
+    from .retrieval_agents.tutor_retrieval import retrieve_rag_context
 except ImportError:
-    from rag_pipeline import retrieve_rag_context
+    from retrieval_agents.tutor_retrieval import retrieve_rag_context
 
 try:
     from .gemini import get_google_response_streaming
