@@ -1,5 +1,7 @@
 """Tests for utils/text.py — HTML cleaning and image extraction."""
 
+import os
+
 from utils.text import clean_html, extract_images_from_html, clean_html_with_images
 
 
@@ -91,3 +93,92 @@ class TestCleanHtmlWithImages:
         text, images = clean_html_with_images(None)
         assert text == ""
         assert images == []
+
+
+class TestExtractImagesFiltering:
+    """Tests for extract_images_from_html and the filtering logic used by getCardImages."""
+
+    def test_skips_http_urls(self):
+        html = '<img src="http://example.com/pic.png"><img src="local.jpg">'
+        results = extract_images_from_html(html)
+        assert "http://example.com/pic.png" in results
+        assert "local.jpg" in results
+
+    def test_extracts_anki_media_filenames(self):
+        html = '<img src="anatomy_forearm.jpg"><img src="schema-2.png">'
+        results = extract_images_from_html(html)
+        assert results == ["anatomy_forearm.jpg", "schema-2.png"]
+
+    def test_handles_mixed_quotes_and_attrs(self):
+        html = '''<img class="big" src="a.jpg" width="200"><img src='b.png'>'''
+        results = extract_images_from_html(html)
+        assert results == ["a.jpg", "b.png"]
+
+
+class TestImageDeduplication:
+    """Tests for the dedup + URL-filtering logic that _msg_get_card_images uses."""
+
+    def _filter_and_dedup(self, fields_by_card):
+        """Simulate the dedup logic from _msg_get_card_images."""
+        seen = {}
+        for cid, fields in fields_by_card.items():
+            for field in fields:
+                for raw_src in extract_images_from_html(field):
+                    if raw_src.startswith(('http://', 'https://', 'file://', '/')):
+                        continue
+                    filename = os.path.basename(raw_src)
+                    if not filename:
+                        continue
+                    if filename not in seen:
+                        seen[filename] = {"filename": filename, "cardIds": []}
+                    if cid not in seen[filename]["cardIds"]:
+                        seen[filename]["cardIds"].append(cid)
+        return seen
+
+    def test_deduplicates_same_image_across_cards(self):
+        fields = {
+            1: ['<img src="anatomy.jpg">'],
+            2: ['<img src="anatomy.jpg">'],
+            3: ['<img src="other.png">'],
+        }
+        result = self._filter_and_dedup(fields)
+        assert len(result) == 2
+        assert result["anatomy.jpg"]["cardIds"] == [1, 2]
+        assert result["other.png"]["cardIds"] == [3]
+
+    def test_filters_remote_urls(self):
+        fields = {
+            1: ['<img src="http://example.com/pic.png"><img src="local.jpg">'],
+        }
+        result = self._filter_and_dedup(fields)
+        assert "pic.png" not in result
+        assert "local.jpg" in result
+
+    def test_filters_absolute_paths(self):
+        fields = {
+            1: ['<img src="/usr/share/pic.png"><img src="relative.jpg">'],
+        }
+        result = self._filter_and_dedup(fields)
+        assert "pic.png" not in result
+        assert "relative.jpg" in result
+
+    def test_normalizes_basename(self):
+        fields = {
+            1: ['<img src="subdir/image.jpg">'],
+        }
+        result = self._filter_and_dedup(fields)
+        assert "image.jpg" in result
+
+    def test_multiple_images_per_card(self):
+        fields = {
+            1: ['<img src="a.jpg"><img src="b.png">'],
+        }
+        result = self._filter_and_dedup(fields)
+        assert len(result) == 2
+        assert result["a.jpg"]["cardIds"] == [1]
+        assert result["b.png"]["cardIds"] == [1]
+
+    def test_empty_fields(self):
+        fields = {1: ['<p>No images here</p>']}
+        result = self._filter_and_dedup(fields)
+        assert len(result) == 0

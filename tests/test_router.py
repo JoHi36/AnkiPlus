@@ -1,169 +1,138 @@
-"""Tests for the unified router."""
+"""Tests for the router shim — backwards-compat layer over rag_analyzer."""
 import sys
 import types
 
-# Mock aqt module tree (same pattern as other tests)
+# Mock aqt module tree — must include showInfo etc. needed by config.py
 _aqt = types.ModuleType('aqt')
 _aqt.mw = None
 _aqt.qt = types.ModuleType('aqt.qt')
 _aqt.utils = types.ModuleType('aqt.utils')
+_aqt.utils.showInfo = lambda *a, **kw: None
+_aqt.utils.showWarning = lambda *a, **kw: None
+_aqt.utils.showCritical = lambda *a, **kw: None
 sys.modules.update({'aqt': _aqt, 'aqt.qt': _aqt.qt, 'aqt.utils': _aqt.utils})
 
-from ai.router import UnifiedRoutingResult
-
-
-def test_unified_routing_result_tutor_with_queries():
-    r = UnifiedRoutingResult(
-        agent='tutor', method='llm', reasoning='Lernfrage',
-        search_needed=True, retrieval_mode='both',
-        response_length='medium', max_sources='medium',
-        search_scope='collection',
-        precise_queries=['a AND b'], broad_queries=['a OR b'],
-        embedding_queries=['concept search'],
-    )
-    assert r.agent == 'tutor'
-    assert r.search_needed is True
-    assert len(r.precise_queries) == 1
-
-
-def test_unified_routing_result_non_tutor():
-    r = UnifiedRoutingResult(agent='plusi', method='heuristic', reasoning='Name detected')
-    assert r.agent == 'plusi'
-    assert r.search_needed is None
-    assert r.precise_queries is None
-
-
+import unittest
 from unittest.mock import patch, MagicMock
-from ai.router import unified_route
+
+from ai.router import UnifiedRoutingResult, RoutingResult, route_message
+from ai.rag_analyzer import RagAnalysis
 
 
-def _mock_gemini_response(json_text):
-    mock_resp = MagicMock()
-    mock_resp.raise_for_status = MagicMock()
-    mock_resp.json.return_value = {
-        'candidates': [{'content': {'parts': [{'text': json_text}]}}]
-    }
-    return mock_resp
+# ---------------------------------------------------------------------------
+# Backwards-compat: UnifiedRoutingResult must be RagAnalysis
+# ---------------------------------------------------------------------------
+
+def test_unified_routing_result_is_rag_analysis():
+    """UnifiedRoutingResult imported from ai.router must be RagAnalysis."""
+    assert UnifiedRoutingResult is RagAnalysis
 
 
-@patch('ai.router._requests')
-def test_unified_route_tutor_with_search(mock_requests):
-    mock_requests.post.return_value = _mock_gemini_response(
-        '{"agent":"tutor","search_needed":true,"retrieval_mode":"both",'
-        '"response_length":"medium","max_sources":"medium","search_scope":"collection",'
-        '"precise_queries":["a AND b"],"broad_queries":["a OR b"],"embedding_queries":["concept"]}'
-    )
-    result = unified_route(
-        user_message='warum ist die banane krumm',
-        session_context={'mode': 'free_chat', 'deck_name': '', 'has_card': False},
-        config={'api_key': 'test-key'},
-        card_context=None,
-        chat_history=[],
-    )
-    assert result.agent == 'tutor'
-    assert result.search_needed is True
-    assert result.precise_queries == ['a AND b']
+def test_routing_result_alias():
+    """RoutingResult must also be RagAnalysis."""
+    assert RoutingResult is RagAnalysis
 
 
-@patch('ai.router._requests')
-def test_unified_route_plusi(mock_requests):
-    mock_requests.post.return_value = _mock_gemini_response(
-        '{"agent":"plusi","reasoning":"Persoenliche Ansprache"}'
-    )
-    result = unified_route(
-        user_message='hey plusi wie gehts',
-        session_context={'mode': 'free_chat', 'deck_name': '', 'has_card': False},
-        config={'api_key': 'test-key'},
-        card_context=None,
-        chat_history=[],
-    )
-    assert result.agent == 'plusi'
-    assert result.search_needed is None
+# ---------------------------------------------------------------------------
+# RagAnalysis fields
+# ---------------------------------------------------------------------------
+
+class TestSlimRoutingResult(unittest.TestCase):
+
+    def test_default_fields(self):
+        r = RagAnalysis()
+        self.assertTrue(r.search_needed)
+        self.assertEqual(r.resolved_intent, '')
+        self.assertEqual(r.retrieval_mode, 'both')
+        self.assertEqual(r.search_scope, 'current_deck')
+        self.assertEqual(r.response_length, 'medium')
+
+    def test_resolved_intent_field(self):
+        result = UnifiedRoutingResult(
+            search_needed=True, resolved_intent='Laenge des Duenndarms'
+        )
+        self.assertEqual(result.resolved_intent, 'Laenge des Duenndarms')
+
+    def test_default_resolved_intent_is_empty_string(self):
+        result = UnifiedRoutingResult()
+        self.assertEqual(result.resolved_intent, '')
+
+    def test_custom_fields(self):
+        r = RagAnalysis(
+            search_needed=False,
+            resolved_intent='test intent',
+            retrieval_mode='sql',
+            search_scope='collection',
+            response_length='long',
+        )
+        self.assertFalse(r.search_needed)
+        self.assertEqual(r.resolved_intent, 'test intent')
+        self.assertEqual(r.retrieval_mode, 'sql')
+        self.assertEqual(r.search_scope, 'collection')
+        self.assertEqual(r.response_length, 'long')
 
 
-@patch('ai.router._requests')
-def test_unified_route_fallback_on_error(mock_requests):
-    mock_requests.post.side_effect = Exception('API error')
-    result = unified_route(
-        user_message='some question',
-        session_context={'mode': 'free_chat', 'deck_name': '', 'has_card': False},
-        config={'api_key': 'test-key'},
-        card_context=None,
-        chat_history=[],
-    )
-    assert result.agent == 'tutor'
-    assert result.method == 'default'
+# ---------------------------------------------------------------------------
+# route_message shim — delegates to analyze_query
+# ---------------------------------------------------------------------------
+
+def test_route_message_returns_rag_analysis():
+    """route_message shim must return a RagAnalysis instance."""
+    with patch('ai.rag_analyzer._requests') as mock_req, \
+         patch('ai.rag_analyzer.get_backend_url', return_value=''), \
+         patch('ai.rag_analyzer.get_auth_token', return_value=''):
+        result = route_message('warum ist die banane krumm')
+        assert isinstance(result, RagAnalysis)
 
 
-@patch('ai.router.unified_route')
-def test_route_message_passes_context_to_unified(mock_unified):
-    mock_unified.return_value = UnifiedRoutingResult(
-        agent='tutor', method='llm', search_needed=True,
-        retrieval_mode='both', precise_queries=['test'],
-        broad_queries=['test'], embedding_queries=['test'],
-    )
-    from ai.router import route_message
-    # Need at least one non-default agent enabled so LLM routing triggers
-    result = route_message(
-        'some question',
-        {'mode': 'card_session', 'deck_name': 'Bio', 'has_card': True},
-        {'api_key': 'test', 'research_enabled': True},
-        card_context={'cardId': 123, 'question': 'What is DNA?'},
-        chat_history=[{'role': 'user', 'content': 'hello'}],
-    )
-    assert result.agent == 'tutor'
-    assert result.search_needed is True
-    mock_unified.assert_called_once()
+def test_route_message_passes_card_context():
+    """route_message must forward card_context to analyze_query."""
+    with patch('ai.router.analyze_query') as mock_analyze:
+        mock_analyze.return_value = RagAnalysis()
+        card_ctx = {'cardId': 42, 'question': 'What is DNA?', 'deckName': 'Bio'}
+        route_message(
+            'erklaer mir DNA',
+            card_context=card_ctx,
+            chat_history=[{'role': 'user', 'content': 'hello'}],
+        )
+        mock_analyze.assert_called_once_with(
+            user_message='erklaer mir DNA',
+            card_context=card_ctx,
+            chat_history=[{'role': 'user', 'content': 'hello'}],
+        )
 
 
-def test_route_message_heuristic_plusi():
-    from ai.router import route_message
-    result = route_message(
-        'plusi wie gehts',
-        {'mode': 'free_chat', 'deck_name': '', 'has_card': False},
-        {},
-    )
-    assert result.agent == 'plusi'
-    assert result.method == 'heuristic'
+def test_route_message_shim_fallback_on_error():
+    """When analyze_query raises, the shim should propagate or default gracefully."""
+    with patch('ai.router.analyze_query') as mock_analyze:
+        mock_analyze.return_value = RagAnalysis(
+            search_needed=True, retrieval_mode='both', search_scope='current_deck'
+        )
+        result = route_message('some question')
+        assert isinstance(result, RagAnalysis)
+        assert result.search_needed is True
 
+
+# ---------------------------------------------------------------------------
+# Edge cases
+# ---------------------------------------------------------------------------
 
 def test_route_empty_query():
-    """Routing an empty string should not crash and should default to tutor."""
-    from ai.router import route_message
-    result = route_message(
-        '',
-        {'mode': 'free_chat', 'deck_name': '', 'has_card': False},
-        {},
-    )
-    assert result.agent == 'tutor'
+    """Routing an empty string should not crash and return a RagAnalysis."""
+    with patch('ai.router.analyze_query') as mock_analyze:
+        mock_analyze.return_value = RagAnalysis()
+        result = route_message('')
+        assert isinstance(result, RagAnalysis)
 
 
 def test_route_none_query():
-    """Routing None as the message should raise a clear error or default to tutor gracefully."""
-    from ai.router import route_message
-    try:
-        result = route_message(
-            None,
-            {'mode': 'free_chat', 'deck_name': '', 'has_card': False},
-            {},
+    """Routing None as the message should not crash — shim passes None to analyze_query."""
+    with patch('ai.router.analyze_query') as mock_analyze:
+        mock_analyze.return_value = RagAnalysis()
+        result = route_message(None)
+        assert isinstance(result, RagAnalysis)
+        mock_analyze.assert_called_once_with(
+            user_message=None,
+            card_context=None,
+            chat_history=None,
         )
-        # If it returns without raising, agent must still be a valid string
-        assert isinstance(result.agent, str)
-    except (TypeError, AttributeError):
-        pass  # Acceptable: explicit exception from None.lower() is a clear error
-
-
-@patch('ai.router._requests')
-def test_route_malformed_json_response(mock_requests):
-    """If the LLM returns malformed JSON, unified_route falls back to tutor."""
-    mock_requests.post.return_value = _mock_gemini_response('this is { not valid json !!!')
-    result = unified_route(
-        user_message='what is mitosis',
-        session_context={'mode': 'card_session', 'deck_name': 'Bio', 'has_card': True},
-        config={'api_key': 'test-key'},
-        card_context=None,
-        chat_history=[],
-    )
-    assert result.agent == 'tutor'
-    # method is 'llm' because the LLM was called (returned garbage, router recovered)
-    assert result.method in ('default', 'llm')

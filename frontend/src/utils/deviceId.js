@@ -17,7 +17,6 @@ export function getOrCreateDeviceId() {
     
     return deviceId;
   } catch (error) {
-    console.error('Error getting/creating Device-ID:', error);
     return null;
   }
 }
@@ -35,6 +34,5 @@ export function incrementQuotaUsage() {
     localStorage.setItem(key, newUsage.toString());
     
   } catch (error) {
-    console.error('Error incrementing quota usage:', error);
   }
 }

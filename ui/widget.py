@@ -4,6 +4,7 @@ Verwaltet das Web-basierte Chat-UI über QWebEngineView
 """
 
 import os
+import re
 import json
 import uuid
 import threading
@@ -88,7 +89,7 @@ class AIRequestThread(QThread):
     pipeline_signal = pyqtSignal(str, str, str, object)  # requestId, step, status, data
     msg_event_signal = pyqtSignal(str, str, object)  # requestId, eventType, data
 
-    def __init__(self, ai_handler, text, widget_ref, history=None, mode='compact', request_id=None, insights=None):
+    def __init__(self, ai_handler, text, widget_ref, history=None, mode='compact', request_id=None, insights=None, agent_name=None):
         super().__init__()
         self._handler_ref = weakref.ref(ai_handler) if ai_handler is not None else None
         self._widget_ref = weakref.ref(widget_ref) if widget_ref is not None else None
@@ -98,6 +99,7 @@ class AIRequestThread(QThread):
         self.request_id = request_id or str(uuid.uuid4())
         self._cancelled = False
         self.insights = insights
+        self.agent_name = agent_name
 
     def cancel(self):
         """Cancel the request."""
@@ -167,7 +169,8 @@ class AIRequestThread(QThread):
             bot_msg = handler.get_response_with_rag(
                 self.text, context=context, history=card_history,
                 mode=self.mode, callback=stream_callback,
-                insights=self.insights
+                insights=self.insights,
+                agent_name=self.agent_name
             )
 
             if not self._cancelled:
@@ -182,25 +185,60 @@ class AIRequestThread(QThread):
                 handler._msg_event_callback = None
 
 
-class SubagentThread(QThread):
-    """Generic thread for any subagent — keeps UI responsive."""
-    finished_signal = pyqtSignal(str, object)   # agent_name, result dict
-    error_signal = pyqtSignal(str, str)         # agent_name, error message
+class VoiceThread(QThread):
+    """Thread for Plusi voice pipeline: STT → Plusi agent → TTS."""
+    result_signal = pyqtSignal(object)  # {"audio": base64, "mood": str, "text": str}
+    mood_signal = pyqtSignal(str)       # Intermediate mood updates for dock
+    error_signal = pyqtSignal(str)      # Error message
 
-    def __init__(self, agent_name, run_fn, text, **kwargs):
+    def __init__(self, audio_base64):
         super().__init__()
-        self.agent_name = agent_name
-        self.run_fn = run_fn
-        self.text = text
-        self.kwargs = kwargs
+        self.audio_base64 = audio_base64
 
     def run(self):
         try:
-            result = self.run_fn(situation=self.text, **self.kwargs)
-            self.finished_signal.emit(self.agent_name, result)
+            try:
+                from ..ai.voice import voice_chat, generate_speech
+            except ImportError:
+                from ai.voice import voice_chat, generate_speech
+
+            # Single call: audio in → Plusi audio out (native)
+            self.mood_signal.emit('thinking')
+            result = voice_chat(self.audio_base64)
+            if not result:
+                self.error_signal.emit("Konnte Sprache nicht erkennen.")
+                return
+
+            plusi_text = result.get('text', '')
+            mood = result.get('mood', 'neutral')
+            audio_b64 = result.get('audio')
+
+            # If native audio worked, send directly
+            if audio_b64:
+                self.mood_signal.emit(mood)
+                logger.info("voice pipeline: native audio response, text=%d chars", len(plusi_text))
+                self.result_signal.emit({
+                    "audio": audio_b64,
+                    "mood": mood,
+                    "text": plusi_text,
+                })
+                return
+
+            # Fallback: model returned text only → use TTS
+            if plusi_text:
+                self.mood_signal.emit(mood)
+                logger.info("voice pipeline: text fallback, generating TTS for %d chars", len(plusi_text))
+                audio_b64 = generate_speech(plusi_text, mood=mood)
+                self.result_signal.emit({
+                    "audio": audio_b64,
+                    "mood": mood,
+                    "text": plusi_text,
+                })
+            else:
+                self.error_signal.emit("Keine Antwort von Plusi.")
         except Exception as e:
-            logger.exception("SubagentThread[%s] error: %s", self.agent_name, e)
-            self.error_signal.emit(self.agent_name, str(e))
+            logger.exception("voice pipeline error: %s", e)
+            self.error_signal.emit(str(e))
 
 
 class InsightExtractionThread(QThread):
@@ -287,6 +325,658 @@ class InsightExtractionThread(QThread):
                 self.error_signal.emit(self.card_id, str(e))
 
 
+class SearchCardsThread(QThread):
+    """Background thread for embedding-based card search."""
+    result_signal = pyqtSignal(str)  # JSON result string
+    pipeline_signal = pyqtSignal(str, str, str, object)  # requestId, step, status, data
+
+    def __init__(self, query, top_k, emb_mgr, widget_ref):
+        super().__init__()
+        self.query = query
+        self.top_k = top_k
+        self.emb_mgr = emb_mgr
+        self._widget_ref = weakref.ref(widget_ref) if widget_ref is not None else None
+        self._request_id = "search_%s" % id(self)
+
+    def _emit_step(self, step, status, data=None):
+        """Emit pipeline step — same format as session AI pipeline."""
+        self.pipeline_signal.emit(self._request_id, step, status, data or {})
+
+    def _expand_query(self, query):
+        """Use LLM to generate 3-4 expanded search queries for better recall."""
+        try:
+            try:
+                from ..ai.gemini import _get_backend_chat_url
+                from ..ai.auth import get_auth_headers
+            except ImportError:
+                from ai.gemini import _get_backend_chat_url
+                from ai.auth import get_auth_headers
+
+            import requests
+            url = _get_backend_chat_url()
+            if not url:
+                return []
+
+            prompt = (
+                "Generiere 3 alternative Suchbegriffe für diese Lernkarten-Suche: \"%s\"\n"
+                "Die Begriffe sollen verschiedene Aspekte und Synonyme abdecken.\n"
+                "Antworte NUR mit den 3 Begriffen, einer pro Zeile, ohne Nummerierung."
+            ) % query
+
+            resp = requests.post(
+                url, headers=get_auth_headers(), timeout=8,
+                json={"message": prompt, "model": "gemini-2.5-flash", "mode": "compact",
+                      "history": [], "stream": False}
+            )
+            if resp.status_code == 200:
+                text = resp.json().get("text") or resp.json().get("response") or ""
+                expanded = [line.strip() for line in text.strip().split("\n") if line.strip() and len(line.strip()) > 2]
+                logger.info("Query expansion for '%s': %d queries generated", query, len(expanded))
+                return expanded[:4]
+        except Exception as e:
+            logger.debug("Query expansion failed (non-critical): %s", e)
+        return []
+
+    def run(self):
+        try:
+            import re as _re
+
+            # === MULTI-QUERY HYBRID SEARCH ===
+            self._emit_step("orchestrating", "active", {"query": self.query})
+            self._emit_step("orchestrating", "done", {"agent": "tutor"})
+
+            # 1. Embed original query + expanded queries
+            self._emit_step("semantic_search", "active", {"query": self.query})
+            expanded_queries = self._expand_query(self.query)
+            all_queries = [self.query] + expanded_queries
+            logger.info("SearchCards: Searching with %d queries for '%s'", len(all_queries), self.query)
+
+            # Embed all queries in one batch
+            query_embs = self.emb_mgr.embed_texts(all_queries)
+
+            # 2. Vector search — each query contributes results
+            vector_ids = set()
+            scores = {}
+            hit_count = {}  # how many queries found each card
+            for qi, emb in enumerate(query_embs or []):
+                if not emb:
+                    continue
+                results = self.emb_mgr.search(emb, top_k=self.top_k * 2)
+                for cid, score in (results or []):
+                    vector_ids.add(cid)
+                    # Keep the best score across all queries
+                    if score > scores.get(cid, 0):
+                        scores[cid] = score
+                    hit_count[cid] = hit_count.get(cid, 0) + 1
+
+            # Multi-query boost: cards found by multiple queries get boosted
+            for cid, count in hit_count.items():
+                if count > 1:
+                    scores[cid] = scores.get(cid, 0) + 0.05 * (count - 1)
+
+            self._emit_step("semantic_search", "done", {"total_hits": len(vector_ids)})
+
+            # 2. SQL keyword search (exact matches)
+            self._emit_step("sql_search", "active")
+            sql_ids = set()
+            try:
+                try:
+                    from ..storage.kg_store import _get_db as kg_get_db
+                except ImportError:
+                    from storage.kg_store import _get_db as kg_get_db
+                db = kg_get_db()
+                # Search card text via kg_card_terms (terms contain keywords)
+                keywords = [w for w in self.query.split() if len(w) >= 3]
+                for kw in keywords:
+                    rows = db.execute(
+                        "SELECT DISTINCT card_id FROM kg_card_terms WHERE term LIKE ?",
+                        (f"%{kw}%",)
+                    ).fetchall()
+                    for r in rows:
+                        sql_ids.add(r[0])
+            except Exception as e:
+                logger.debug("SQL keyword search failed (non-critical): %s", e)
+
+            self._emit_step("sql_search", "done", {"total_hits": len(sql_ids)})
+
+            # 3. Merge: dual-match cards first, then vector-only, then sql-only
+            self._emit_step("merge", "active")
+            dual = vector_ids & sql_ids
+            vector_only = vector_ids - sql_ids
+            sql_only = sql_ids - vector_ids
+
+            # Score: dual matches get boosted, sql-only get base score
+            for cid in dual:
+                scores[cid] = scores.get(cid, 0.5) + 0.2  # boost
+            for cid in sql_only:
+                scores[cid] = 0.4  # base relevance for keyword matches
+
+            # Rank all candidates by score, take top-K
+            all_candidates = list(dual) + sorted(vector_only, key=lambda c: scores.get(c, 0), reverse=True) + sorted(sql_only, key=lambda c: scores.get(c, 0), reverse=True)
+            card_ids = list(dict.fromkeys(all_candidates))[:self.top_k]  # dedupe, limit
+            self._emit_step("merge", "done", {"total": len(card_ids), "keyword_count": len(sql_ids), "semantic_count": len(vector_ids)})
+
+            if not card_ids:
+                self.result_signal.emit(json.dumps({"type": "graph.searchCards", "data": {
+                    "cards": [], "edges": [], "query": self.query,
+                    "error": "Keine Karten gefunden" if not query_embs or not query_embs[0] else None}}))
+                return
+
+            # Tag source for each card
+            sources = {}
+            for cid in card_ids:
+                if cid in dual:
+                    sources[cid] = 'both'
+                elif cid in vector_ids:
+                    sources[cid] = 'semantic'
+                else:
+                    sources[cid] = 'keyword'
+
+            # Get card details from Anki (must run on main thread)
+            import threading
+            try:
+                from ..utils.anki import run_on_main_thread
+            except ImportError:
+                from utils.anki import run_on_main_thread
+
+            cards_data = []
+            event = threading.Event()
+
+            def _fetch():
+                try:
+                    from aqt import mw
+                    for cid in card_ids:
+                        try:
+                            card = mw.col.get_card(cid)
+                            note = card.note()
+                            fields = note.fields
+                            deck = mw.col.decks.get(card.did)
+                            deck_name = deck["name"] if deck else "Unknown"
+                            question = fields[0] if fields else ""
+                            question_clean = _re.sub(r'<[^>]+>', '', question)[:80]
+                            # Card review state: 0=new, 1=learning, 2=review(mature)
+                            is_due = card.queue > 0 and card.due <= mw.col.sched.today
+                            cards_data.append({
+                                "id": str(cid),
+                                "question": question_clean,
+                                "deck": deck_name.split("::")[-1],
+                                "deckFull": deck_name,
+                                "score": round(scores.get(cid, 0), 3),
+                                "source": sources.get(cid, "semantic"),
+                                "cardType": card.type,  # 0=new, 1=learn, 2=review
+                                "isDue": is_due,
+                            })
+                        except Exception:
+                            pass
+                finally:
+                    event.set()
+
+            run_on_main_thread(_fetch)
+            event.wait(timeout=10)
+
+            # Create star topology: all cards connect to central query node
+            edges = []
+            for card in cards_data:
+                edges.append({
+                    "source": "__query__",
+                    "target": card["id"],
+                    "similarity": card["score"],
+                })
+
+            # === CLUSTER COMPUTATION ===
+            # Compute pairwise similarity to find semantic clusters
+            card_embs = {}
+            with self.emb_mgr._lock:
+                for cid in card_ids:
+                    if cid in self.emb_mgr._card_ids:
+                        idx = self.emb_mgr._card_ids.index(cid)
+                        card_embs[cid] = self.emb_mgr._index[idx]
+
+            # Compute all pairwise similarities
+            cids_list = list(card_embs.keys())
+            all_sims = {}
+            for i in range(len(cids_list)):
+                for j in range(i + 1, len(cids_list)):
+                    a = card_embs[cids_list[i]]
+                    b = card_embs[cids_list[j]]
+                    dot = sum(x * y for x, y in zip(a, b))
+                    na = sum(x * x for x in a) ** 0.5
+                    nb = sum(x * x for x in b) ** 0.5
+                    if na > 0 and nb > 0:
+                        all_sims[(cids_list[i], cids_list[j])] = dot / (na * nb)
+
+            # Dynamic clustering — find the NATURAL number of clusters
+            # Instead of forcing a fixed target, find the threshold that gives
+            # the best cluster structure (reasonable size, not too many singletons).
+            # Range: 3-8 clusters for varied, interesting graphs.
+            n_cards = len(card_ids)
+            if n_cards < 6:
+                TARGET_CLUSTERS = 1
+            else:
+                # Dynamic: aim for clusters of avg 8-15 cards
+                # This gives 3 clusters for 30 cards, 5 for 60, 8 for 100
+                TARGET_CLUSTERS = max(3, min(8, round(n_cards / 12)))
+            best_threshold = 0.95
+            best_clusters = None
+
+            for threshold_10x in range(95, 40, -5):  # 0.95, 0.90, 0.85, ...
+                threshold = threshold_10x / 100.0
+                sim_pairs = {}
+                for (ci, cj), sim in all_sims.items():
+                    if sim > threshold:
+                        sim_pairs.setdefault(ci, set()).add(cj)
+                        sim_pairs.setdefault(cj, set()).add(ci)
+
+                # Connected components
+                assigned = set()
+                trial_clusters = []
+                for cid in card_ids:
+                    if cid in assigned:
+                        continue
+                    cluster = []
+                    queue = [cid]
+                    assigned.add(cid)
+                    while queue:
+                        current = queue.pop(0)
+                        cluster.append(current)
+                        for neighbor in sim_pairs.get(current, set()):
+                            if neighbor not in assigned:
+                                assigned.add(neighbor)
+                                queue.append(neighbor)
+                    trial_clusters.append(cluster)
+
+                # Filter out singleton clusters (merge into nearest)
+                real_clusters = [c for c in trial_clusters if len(c) >= 2]
+                singletons = [c[0] for c in trial_clusters if len(c) == 1]
+
+                if len(real_clusters) >= TARGET_CLUSTERS:
+                    best_clusters = real_clusters
+                    best_threshold = threshold
+                    # Assign singletons to nearest cluster
+                    for s in singletons:
+                        if s in card_embs:
+                            best_sim = -1
+                            best_ci = 0
+                            for ci, cluster in enumerate(best_clusters):
+                                for member in cluster:
+                                    key = (min(s, member), max(s, member))
+                                    sim = all_sims.get(key, 0)
+                                    if sim > best_sim:
+                                        best_sim = sim
+                                        best_ci = ci
+                            best_clusters[best_ci].append(s)
+                    break
+
+            # Merge smallest clusters if we have too many (cap at TARGET_CLUSTERS)
+            if best_clusters and len(best_clusters) > TARGET_CLUSTERS:
+                # Sort by size ascending, merge smallest into their nearest neighbor
+                while len(best_clusters) > TARGET_CLUSTERS:
+                    best_clusters.sort(key=lambda c: len(c))
+                    smallest = best_clusters.pop(0)
+                    # Find most similar cluster
+                    best_sim = -1
+                    best_ci = 0
+                    for ci, cluster in enumerate(best_clusters):
+                        total_sim = 0
+                        count = 0
+                        for s in smallest:
+                            for member in cluster:
+                                key = (min(s, member), max(s, member))
+                                total_sim += all_sims.get(key, 0)
+                                count += 1
+                        avg = total_sim / max(1, count)
+                        if avg > best_sim:
+                            best_sim = avg
+                            best_ci = ci
+                    best_clusters[best_ci].extend(smallest)
+
+            # Fallback: if no good split found, split evenly
+            if not best_clusters or len(best_clusters) < 2:
+                chunk_size = max(2, len(card_ids) // TARGET_CLUSTERS)
+                best_clusters = []
+                for i in range(0, len(card_ids), chunk_size):
+                    best_clusters.append(card_ids[i:i + chunk_size])
+
+            clusters = best_clusters
+            logger.debug("Clustering: %d clusters at threshold %.2f", len(clusters), best_threshold)
+
+            # Build cluster output
+            cards_by_id = {c["id"]: c for c in cards_data}
+            cluster_output = []
+            for i, cluster_cids in enumerate(clusters):
+                cluster_cards = [cards_by_id[str(cid)] for cid in cluster_cids if str(cid) in cards_by_id]
+                if not cluster_cards:
+                    continue
+                # Label: use original deck path (skip "KG:" filtered decks)
+                deck_counts = {}
+                for c in cluster_cards:
+                    d = c.get("deckFull", c.get("deck", ""))
+                    # Skip filtered deck names
+                    if d.startswith("KG:") or d.startswith("KG "):
+                        d = c.get("deck", "")
+                    # Use deepest sub-deck name
+                    parts = d.split("::")
+                    leaf = parts[-1].strip() if parts else d
+                    if leaf and not leaf.startswith("KG"):
+                        deck_counts[leaf] = deck_counts.get(leaf, 0) + 1
+                # Best label: use card content for uniqueness
+                # First try deck name, but if duplicate → use card snippet
+                best_card = max(cluster_cards, key=lambda c: c.get("score", 0))
+                q = best_card.get("question", "")
+                # Clean question text: strip cloze markers, take first meaningful words
+                import re as _re
+                q_clean = _re.sub(r'\{\{c\d+::', '', q)
+                q_clean = _re.sub(r'\}\}', '', q_clean)
+                q_clean = q_clean.strip()
+                card_snippet = " ".join(q_clean.split()[:3]) if q_clean else "Cluster %d" % (i + 1)
+
+                if deck_counts:
+                    deck_label = max(deck_counts, key=deck_counts.get)
+                    label = deck_label
+                else:
+                    label = card_snippet
+                # Truncate label to max 3 words
+                label_words = label.split()
+                if len(label_words) > 3:
+                    label = " ".join(label_words[:3])
+                cluster_output.append({
+                    "id": "cluster_%d" % i,
+                    "label": label,
+                    "cards": cluster_cards,
+                })
+
+            # Deduplicate cluster labels — if multiple clusters have same label, add card snippet
+            seen_labels = {}
+            for co in cluster_output:
+                if co["label"] in seen_labels:
+                    # Both the duplicate and the original get card-based labels
+                    orig = seen_labels[co["label"]]
+                    if orig.get("_snippet"):
+                        orig["label"] = orig["_snippet"]
+                    best = max(co["cards"], key=lambda c: c.get("score", 0))
+                    q = best.get("question", "")
+                    q = _re.sub(r'\{\{c\d+::', '', q)
+                    q = _re.sub(r'\}\}', '', q).strip()
+                    co["label"] = " ".join(q.split()[:3]) or co["label"]
+                else:
+                    seen_labels[co["label"]] = co
+                    co["_snippet"] = card_snippet  # store for potential dedup
+
+            # Clean up temp fields
+            for co in cluster_output:
+                co.pop("_snippet", None)
+
+            # Compute inter-cluster similarity (avg pairwise similarity between clusters)
+            cluster_links = []
+            for ci in range(len(clusters)):
+                for cj in range(ci + 1, len(clusters)):
+                    total_sim = 0
+                    count = 0
+                    for a in clusters[ci]:
+                        for b in clusters[cj]:
+                            key = (min(a, b), max(a, b))
+                            s = all_sims.get(key, 0)
+                            if s > 0:
+                                total_sim += s
+                                count += 1
+                    if count > 0:
+                        avg_sim = total_sim / count
+                        if avg_sim > 0.35:  # only show meaningful connections
+                            cluster_links.append({
+                                "source": "cluster_%d" % ci,
+                                "target": "cluster_%d" % cj,
+                                "value": round(avg_sim, 3),
+                                "type": "inter_cluster",
+                            })
+
+            self.result_signal.emit(json.dumps({
+                "type": "graph.searchCards",
+                "data": {
+                    "clusters": cluster_output,
+                    "clusterLinks": cluster_links,
+                    "cards": cards_data,
+                    "edges": edges,
+                    "query": self.query,
+                    "totalFound": len(cards_data),
+                }
+            }))
+
+        except Exception as e:
+            logger.exception("SearchCardsThread failed for query: %s", self.query)
+            self.result_signal.emit(json.dumps({"type": "graph.searchCards", "data": {
+                "cards": [], "edges": [], "error": str(e)}}))
+
+
+class KGDefinitionThread(QThread):
+    """Background thread for generating Knowledge Graph term definitions via LLM."""
+    result_signal = pyqtSignal(str)  # JSON result string
+
+    def __init__(self, term, widget_ref, search_query=None):
+        super().__init__()
+        self.term = term
+        self.search_query = search_query
+        self._widget_ref = weakref.ref(widget_ref) if widget_ref is not None else None
+
+    def run(self):
+        try:
+            try:
+                from ..storage.kg_store import get_definition, get_term_card_ids, save_definition, get_connected_terms
+                from .. import get_embedding_manager
+            except ImportError:
+                from storage.kg_store import get_definition, get_term_card_ids, save_definition, get_connected_terms
+                from __init__ import get_embedding_manager
+
+            # Check cache first
+            cached = get_definition(self.term)
+            if cached:
+                cached["connectedTerms"] = get_connected_terms(self.term)
+                self.result_signal.emit(json.dumps({
+                    "type": "graph.termDefinition",
+                    "data": cached
+                }))
+                return
+
+            # Use existing search() method for finding relevant cards
+            emb_mgr = get_embedding_manager()
+            if emb_mgr is None:
+                self.result_signal.emit(json.dumps({
+                    "type": "graph.termDefinition",
+                    "data": {"term": self.term, "error": "Embedding-Manager nicht verfügbar"}
+                }))
+                return
+
+            query = "Was ist %s? Definition" % self.term
+            query_emb = emb_mgr.embed_texts([query])
+            if not query_emb:
+                self.result_signal.emit(json.dumps({
+                    "type": "graph.termDefinition",
+                    "data": {"term": self.term, "error": "Embedding fehlgeschlagen"}
+                }))
+                return
+
+            # Find top cards by similarity, filtered to this term's cards
+            card_ids_set = set(get_term_card_ids(self.term))
+            all_results = emb_mgr.search(query_emb[0], top_k=50)
+            top_cards = [(cid, score) for cid, score in all_results if cid in card_ids_set][:8]
+
+            if len(top_cards) < 2:
+                connected = get_connected_terms(self.term)
+                self.result_signal.emit(json.dumps({
+                    "type": "graph.termDefinition",
+                    "data": {"term": self.term, "error": "Nicht genug Quellen", "connectedTerms": connected}
+                }))
+                return
+
+            # Get card texts (must happen on main thread)
+            import threading
+            try:
+                from ..utils.anki import run_on_main_thread
+            except ImportError:
+                from utils.anki import run_on_main_thread
+            card_texts = []
+            event = threading.Event()
+
+            def _fetch_texts():
+                try:
+                    from aqt import mw
+                    for cid, _ in top_cards:
+                        try:
+                            card = mw.col.get_card(cid)
+                            note = card.note()
+                            fields = note.fields
+                            card_texts.append({
+                                "question": fields[0] if fields else "",
+                                "answer": fields[1] if len(fields) > 1 else "",
+                            })
+                        except Exception:
+                            pass
+                finally:
+                    event.set()
+
+            run_on_main_thread(_fetch_texts)
+            event.wait(timeout=10)
+
+            # Generate definition via Gemini Flash
+            try:
+                from ..ai.gemini import generate_definition
+            except ImportError:
+                from ai.gemini import generate_definition
+            definition = generate_definition(self.term, card_texts, search_query=self.search_query)
+
+            # Build card refs for inline [1], [2] rendering
+            source_ids = [cid for cid, _ in top_cards]
+            card_refs = {}
+            for i, (cid, _) in enumerate(top_cards):
+                q = card_texts[i].get("question", "") if i < len(card_texts) else ""
+                card_refs[str(i + 1)] = {"id": str(cid), "question": q[:60]}
+
+            # Cache
+            save_definition(self.term, definition, source_ids, "llm")
+
+            connected = get_connected_terms(self.term)
+            self.result_signal.emit(json.dumps({
+                "type": "graph.termDefinition",
+                "data": {
+                    "term": self.term,
+                    "definition": definition,
+                    "sourceCount": len(source_ids),
+                    "generatedBy": "llm",
+                    "connectedTerms": connected,
+                    "cardRefs": card_refs,
+                }
+            }))
+        except Exception as e:
+            logger.exception("KG definition generation failed for %s", self.term)
+            self.result_signal.emit(json.dumps({
+                "type": "graph.termDefinition",
+                "data": {"term": self.term, "error": str(e)}
+            }))
+
+
+class SmartSearchAgentThread(QThread):
+    """Dispatch Research agent for Smart Search answer + parallel cluster labeling."""
+    result_signal = pyqtSignal(str)  # JSON for graph.quickAnswer (cluster labels only)
+    pipeline_signal = pyqtSignal(str, str, str, object)
+    msg_event_signal = pyqtSignal(str, str, object)
+    finished_signal = pyqtSignal(str)
+    error_signal = pyqtSignal(str, str)
+
+    def __init__(self, query, cards_data, cluster_info, ai_handler, widget_ref):
+        super().__init__()
+        self.query = query
+        self.cards_data = cards_data
+        self.cluster_info = cluster_info
+        self._handler_ref = weakref.ref(ai_handler) if ai_handler is not None else None
+        self._widget_ref = weakref.ref(widget_ref) if widget_ref is not None else None
+        self._request_id = "search_%s" % id(self)
+        self._cancelled = False
+
+    def cancel(self):
+        self._cancelled = True
+
+    def _generate_cluster_labels(self):
+        """Generate cluster labels via LLM (runs in parallel with Tutor)."""
+        try:
+            try:
+                from ..ai.gemini import generate_quick_answer
+            except ImportError:
+                from ai.gemini import generate_quick_answer
+            return generate_quick_answer(
+                self.query, self.cards_data, cluster_labels=self.cluster_info
+            )
+        except Exception:
+            logger.exception("Cluster labeling failed for: %s", self.query)
+            return {"clusterLabels": {}, "clusterSummaries": {}, "cardRefs": {}}
+
+    def run(self):
+        handler = self._handler_ref() if self._handler_ref else None
+        if handler is None:
+            logger.warning("SmartSearchAgentThread: handler destroyed, aborting")
+            return
+
+        try:
+            # Wire up pipeline/msg_event callbacks (same pattern as AIRequestThread)
+            def pipeline_callback(step, status, data):
+                if not self._cancelled:
+                    self.pipeline_signal.emit(self._request_id, step, status, data or {})
+
+            def msg_event_callback(event_type, data):
+                if not self._cancelled:
+                    self.msg_event_signal.emit(self._request_id, event_type, data or {})
+
+            handler._pipeline_signal_callback = pipeline_callback
+            handler._msg_event_callback = msg_event_callback
+
+            # Run Research agent + cluster labeling in parallel
+            from concurrent.futures import ThreadPoolExecutor
+
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                # 1. Research agent answer (blocking, streams via callbacks)
+                tutor_future = pool.submit(
+                    handler.dispatch_smart_search,
+                    query=self.query,
+                    cards_data=self.cards_data,
+                    cluster_info=self.cluster_info,
+                    request_id=self._request_id,
+                )
+
+                # 2. Cluster labels (parallel LLM call)
+                label_future = None
+                if self.cluster_info:
+                    label_future = pool.submit(self._generate_cluster_labels)
+
+                # Wait for both
+                tutor_future.result()  # raises on error
+
+                if label_future and not self._cancelled:
+                    label_result = label_future.result()
+                    self.result_signal.emit(json.dumps({
+                        "type": "graph.quickAnswer",
+                        "data": {
+                            "clusterLabels": label_result.get("clusterLabels", {}),
+                            "clusterSummaries": label_result.get("clusterSummaries", {}),
+                            "cardRefs": label_result.get("cardRefs", {}),
+                        }
+                    }))
+
+            if not self._cancelled:
+                self.finished_signal.emit(self._request_id)
+
+        except Exception as e:
+            if not self._cancelled:
+                logger.exception("SmartSearchAgentThread failed: %s", self.query)
+                self.error_signal.emit(self._request_id, str(e))
+                # Emit error to frontend so user sees feedback
+                self.result_signal.emit(json.dumps({
+                    "type": "graph.quickAnswer",
+                    "data": {"answer": "", "answerable": False, "clusterLabels": {}}
+                }))
+        finally:
+            if handler:
+                handler._pipeline_signal_callback = None
+                handler._msg_event_callback = None
+
+
 class ChatbotWidget(QWidget):
     """Web-basierte Chat-UI über QWebEngineView"""
 
@@ -300,16 +990,15 @@ class ChatbotWidget(QWidget):
         self.card_tracker = None  # Card-Tracker wird später initialisiert
         self.current_card_context = None  # Aktueller Karten-Kontext
         self._active_subagent_thread = None
-        self._freechat_was_open = False  # preserve FreeChat state across state changes
         self.setup_ui()
         # Card-Tracking wird nach UI-Setup initialisiert
         if self.web_view:
             self.card_tracker = CardTracker(self)
 
-        # Plusi autonomous wake timer — checks every minute
-        self._plusi_wake_timer = QTimer()
-        self._plusi_wake_timer.timeout.connect(self._check_plusi_wake)
-        self._plusi_wake_timer.start(PLUSI_WAKE_CHECK_MS)
+        # Idle detection timer — emits app_idle event to EventBus every minute
+        self._idle_timer = QTimer()
+        self._idle_timer.timeout.connect(self._emit_idle)
+        self._idle_timer.start(PLUSI_WAKE_CHECK_MS)
     def _safe_json_loads(self, data, default=None, context=""):
         """Parse JSON safely, returning default on failure."""
         try:
@@ -338,11 +1027,31 @@ class ChatbotWidget(QWidget):
         url.setQuery(f"v={int(time.time())}")
         self.web_view.loadFinished.connect(self._init_js_bridge)
         self.web_view.loadFinished.connect(self.push_initial_state)
+        self.web_view.page().featurePermissionRequested.connect(self._handle_permission_request)
         self.web_view.load(url)
 
         layout.addWidget(self.web_view)
         self.setLayout(layout)
     
+    def _handle_permission_request(self, origin, feature):
+        """Auto-grant microphone permission for Plusi voice."""
+        try:
+            from PyQt6.QtWebEngineCore import QWebEnginePage
+        except ImportError:
+            try:
+                from PyQt5.QtWebEngineWidgets import QWebEnginePage
+            except ImportError:
+                return
+        if feature == QWebEnginePage.Feature.MediaAudioCapture:
+            self.web_view.page().setFeaturePermission(
+                origin, feature, QWebEnginePage.PermissionPolicy.PermissionGrantedByUser
+            )
+            logger.info("Granted microphone permission for Plusi voice")
+        else:
+            self.web_view.page().setFeaturePermission(
+                origin, feature, QWebEnginePage.PermissionPolicy.PermissionDeniedByUser
+            )
+
     def _init_js_bridge(self):
         """Initialisiert die JavaScript-Bridge mit Message-Queue System"""
         # Erstelle globales JavaScript-Objekt für Message-Queue
@@ -390,26 +1099,16 @@ class ChatbotWidget(QWidget):
         
         self.web_view.page().runJavaScript(js_code, handle_messages)
 
-    def _check_plusi_wake(self):
-        """Check if Plusi should wake up for autonomous action."""
+    def _emit_idle(self):
+        """Emit app_idle event to EventBus if the app has been inactive."""
         try:
-            from ..plusi.storage import get_memory
-            is_sleeping = get_memory('state', 'is_sleeping', False)
-            next_wake = get_memory('state', 'next_wake', None)
-
-            if not is_sleeping or not next_wake:
-                return
-
-            from datetime import datetime
-            wake_time = datetime.fromisoformat(next_wake)
-            if datetime.now() >= wake_time:
-                logger.info("plusi wake timer: triggering autonomous chain")
-                from ..plusi.agent import run_autonomous_chain
-                import threading
-                t = threading.Thread(target=run_autonomous_chain, daemon=True)
-                t.start()
-        except Exception as e:
-            logger.exception("plusi wake timer error: %s", e)
+            from ..plusi.event_bus import EventBus
+            bus = EventBus.get()
+            idle = bus.idle_minutes()
+            if idle >= 1:
+                bus.emit("app_idle", {"idle_minutes": int(idle)})
+        except Exception:
+            pass
 
     def _send_to_frontend(self, payload_type, data, extra=None):
         """Helper: Sendet Payload an das React-Frontend via ankiReceive."""
@@ -481,8 +1180,6 @@ class ChatbotWidget(QWidget):
             'saveCardInsights': self._msg_save_card_insights,
             'getCardRevlog': self._msg_get_card_revlog,
             'markInsightsSeen': self._msg_mark_insights_seen,
-            'loadDeckMessages': self._msg_load_deck_messages,
-            'saveDeckMessage': self._msg_save_deck_message,
             # Config & Settings
             'saveSettings': self._msg_save_settings,
             'getCurrentConfig': self._msg_get_current_config,
@@ -490,6 +1187,7 @@ class ChatbotWidget(QWidget):
             'saveAITools': self._msg_save_ai_tools,
             'saveMascotEnabled': self._msg_save_mascot_enabled,
             'saveSubagentEnabled': self._msg_save_subagent_enabled,
+            'saveWorkflowConfig': self._msg_save_workflow_config,
             'getResearchSources': self._msg_get_research_sources,
             'saveResearchSources': self._msg_save_research_sources,
             'getEmbeddingStatus': self._msg_get_embedding_status,
@@ -509,13 +1207,15 @@ class ChatbotWidget(QWidget):
             'handleAuthDeepLink': self._msg_handle_auth_deep_link,
             # Media
             'fetchImage': self._msg_fetch_image,
+            # Voice
+            'voiceAudio': self._msg_voice_audio,
             # Utilities
             'openUrl': lambda d: self.bridge.openUrl(d.get('url', '') if isinstance(d, dict) else d),
             'pycmd': self._msg_pycmd,
             'debugLog': self._msg_debug_log,
             'plusiPanel': self._msg_plusi_settings,
             'plusiSettings': self._msg_plusi_settings,
-            'subagentDirect': self._msg_subagent_direct,
+            # subagentDirect removed — agents use sendMessage with agent param (agent-kanal-paradigma)
             'plusiLike': self._msg_plusi_like,
             'resetPlusi': self._msg_reset_plusi,
             'textFieldFocus': self._msg_text_field_focus,
@@ -528,13 +1228,16 @@ class ChatbotWidget(QWidget):
             'deck.options': self._msg_open_deck_options,
             # View actions
             'view.navigate': self._msg_navigate,
-            # Deck-level chat (FreeChat persistence)
-            'chat.load': self._msg_load_deck_messages,
-            'chat.save': self._msg_save_deck_message,
-            'chat.clear': self._msg_clear_deck_messages,
-            'chat.stateChanged': self._msg_freechat_state,
             # Stats
             'stats.open': self._msg_open_stats,
+            'getStatistikData': self._msg_get_statistik_data,
+            'getDeckTrajectory': self._msg_get_deck_trajectory,
+            'getDeckSessionSuggestion': self._msg_get_deck_session_suggestion,
+            'getDeckMastery': self._msg_get_deck_mastery,
+            # Focus CRUD
+            'saveFocus': self._msg_save_focus,
+            'getFocuses': self._msg_get_focuses,
+            'deleteFocus': self._msg_delete_focus,
             # Card review (React ReviewerView)
             'card.flip': self._msg_flip_card,
             'card.rate': self._msg_rate_card,
@@ -544,12 +1247,28 @@ class ChatbotWidget(QWidget):
             # Settings sidebar actions (forwarded from main bridge)
             'sidebarCopyLogs': self._msg_copy_logs,
             'sidebarGetStatus': self._msg_get_sidebar_status,
+            'sidebarGetIndexingStatus': self._msg_get_indexing_status,
             'sidebarSetTheme': self._msg_set_theme,
             'sidebarOpenNativeSettings': lambda d: __import__('aqt', fromlist=['mw']).mw.onPrefs(),
-            'sidebarOpenUpgrade': lambda d: __import__('webbrowser').open('https://anki-plus.vercel.app/#pricing'),
+            'sidebarOpenUpgrade': self._msg_sidebar_upgrade,
+            'sidebarConnect': self._msg_sidebar_connect,
             'sidebarLogout': self._msg_sidebar_logout,
             'sidebarGetRemoteQR': self._msg_get_remote_qr,
             'sidebarGetRemoteStatus': self._msg_get_remote_status,
+            # Knowledge Graph
+            'getGraphData': self._msg_get_graph_data,
+            'getTermCards': self._msg_get_term_cards,
+            'getGraphStatus': self._msg_get_graph_status,
+            'getCardKGTerms': self._msg_get_card_kg_terms,
+            'getTermDefinition': self._msg_get_term_definition,
+            'searchGraph': self._msg_search_graph,
+            'getDeckCrossLinks': self._msg_get_deck_cross_links,
+            'startTermStack': self._msg_start_term_stack,
+            'searchCards': self._msg_search_cards,
+            'getCardImages': self._msg_get_card_images,
+            'searchKgSubgraph': self._msg_search_kg_subgraph,
+            'subClusterCards': self._msg_sub_cluster,
+            'quickAnswer': lambda data: None,  # Reserved — triggered internally by searchCards
         }
         return handlers.get(msg_type)
 
@@ -564,7 +1283,8 @@ class ChatbotWidget(QWidget):
             self.current_request = message
             self.handle_message_from_ui(
                 message, history=data.get('history'), mode=data.get('mode', 'compact'),
-                request_id=data.get('requestId'))
+                request_id=data.get('requestId'),
+                agent_name=data.get('agent'))
 
     def _msg_cancel_request(self, data):
         if not self.current_request:
@@ -789,37 +1509,6 @@ class ChatbotWidget(QWidget):
         current['seen_hashes'] = hashes
         save_insights(int(card_id), current)
 
-    def _msg_load_deck_messages(self, data):
-        deck_id = data if isinstance(data, (int, str)) else data.get('deckId')
-        try:
-            deck_id = int(deck_id)
-        except (ValueError, TypeError):
-            logger.warning("_msg_load_deck_messages: Ungültige deckId: %s", deck_id)
-            return
-        try:
-            from ..storage.card_sessions import load_deck_messages
-        except ImportError:
-            from storage.card_sessions import load_deck_messages
-        messages = load_deck_messages(deck_id, limit=50)
-        self._send_to_frontend("deckMessagesLoaded", None, {"type": "deckMessagesLoaded", "deckId": deck_id, "messages": messages})
-
-    def _msg_save_deck_message(self, data):
-        msg_data = json.loads(data) if isinstance(data, str) else data
-        deck_id = msg_data.get('deckId')
-        if deck_id is None:
-            logger.warning("_msg_save_deck_message: Missing deckId")
-            return
-        try:
-            deck_id = int(deck_id)
-        except (ValueError, TypeError):
-            logger.warning("_msg_save_deck_message: Ungültige deckId: %s", deck_id)
-            return
-        try:
-            from ..storage.card_sessions import save_deck_message
-        except ImportError:
-            from storage.card_sessions import save_deck_message
-        save_deck_message(deck_id, msg_data.get('message', {}))
-
     def _msg_save_settings(self, data):
         if isinstance(data, dict):
             self._save_settings(data.get('api_key', ''), data.get('provider', 'google'), data.get('model_name', ''))
@@ -945,6 +1634,33 @@ class ChatbotWidget(QWidget):
         except Exception as e:
             logger.exception("saveSubagentEnabled error: %s", e)
 
+    def _msg_save_workflow_config(self, data):
+        """Save workflow or slot mode change to config."""
+        try:
+            agent_name = data.get('agent') if isinstance(data, dict) else None
+            workflow_name = data.get('workflow') if isinstance(data, dict) else None
+            slot_ref = data.get('slot')  # None if toggling whole workflow
+            mode = data.get('mode') if isinstance(data, dict) else None
+
+            if not agent_name or not workflow_name:
+                logger.warning("saveWorkflowConfig: missing agent or workflow in data: %s", data)
+                return
+
+            config = get_config()
+            wf_config = config.get('workflow_config', {})
+            agent_wf = wf_config.setdefault(agent_name, {})
+            wf = agent_wf.setdefault(workflow_name, {})
+
+            if slot_ref:
+                wf[slot_ref] = mode
+            else:
+                wf['_enabled'] = (mode != 'off')
+
+            update_config(workflow_config=wf_config)
+            logger.info("Saved workflow config: %s/%s/%s = %s", agent_name, workflow_name, slot_ref or '_enabled', mode)
+        except Exception as e:
+            logger.exception("saveWorkflowConfig error: %s", e)
+
     def _msg_get_research_sources(self, data):
         """Return current research source toggles."""
         config = get_config()
@@ -1003,73 +1719,40 @@ class ChatbotWidget(QWidget):
                 "ankiEmbeddingStatusLoaded")
 
     def _msg_get_plusi_menu_data(self, data=None):
-        """Return all data needed for the Plusi Menu view."""
+        """Return Plusi menu data: diary + subscriptions + budget."""
         try:
-            try:
-                from ..plusi.storage import (
-                    compute_personality_position, get_memory,
-                    get_friendship_data, load_diary, get_category
-                )
-                from ..config import get_config
-            except ImportError:
-                from plusi.storage import (
-                    compute_personality_position, get_memory,
-                    get_friendship_data, load_diary, get_category
-                )
-                from config import get_config
+            from ..plusi.memory import PlusiMemory
+            from ..plusi.budget import PlusicBudget
+            from ..plusi.event_bus import EventBus
 
-            # Personality
-            position = compute_personality_position()
-            trail = get_memory('personality', 'trail', default=[])
+            mem = PlusiMemory()
+            budget = PlusicBudget()
+            bus = EventBus.get()
 
-            # Current state — mood from most recent diary entry
-            state_data = get_category('state')
-            last_mood = 'neutral'
-            try:
-                diary_entries = load_diary(limit=1)
-                if diary_entries:
-                    last_mood = diary_entries[0].get('mood', 'neutral')
-            except Exception as e:
-                logger.debug("Could not load last diary mood: %s", e)
+            diary = mem.load_diary(limit=50)
+            subs = bus.list_subscriptions()
+            budget_status = budget.status()
 
-            state = {
-                'energy': state_data.get('energy', 5),
-                'mood': last_mood,
-                'obsession': state_data.get('obsession', None),
-            }
-
-            # Friendship
-            friendship = get_friendship_data()
-
-            # Diary (full list)
-            diary = load_diary(limit=50)
-
-            # Autonomy config
-            config = get_config()
-            autonomy = config.get('plusi_autonomy', {})
+            # Get last mood from diary or default
+            last_mood = diary[0]['mood'] if diary else 'neutral'
 
             result = {
-                'personality': {
-                    'position': {'x': position['x'], 'y': position['y']},
-                    'quadrant': position['quadrant'],
-                    'quadrant_label': position['quadrant_label'],
-                    'confident': position['confident'],
-                    'trail': trail,
-                },
-                'state': state,
-                'friendship': friendship,
                 'diary': diary,
-                'autonomy': autonomy,
+                'subscriptions': [{'name': s.get('name', ''), 'event': s.get('event', ''),
+                                   'condition': str(s.get('condition', '')),
+                                   'prompt': s.get('wake_prompt', s.get('prompt', ''))}
+                                  for s in subs],
+                'budget': budget_status,
+                'mood': last_mood,
             }
 
-            self._send_to_frontend_with_event(
-                'plusiMenuData', result, 'ankiPlusiMenuDataLoaded'
-            )
-        except Exception:
-            logger.exception("Failed to load Plusi menu data")
-            self._send_to_frontend_with_event(
-                'plusiMenuData', {}, 'ankiPlusiMenuDataLoaded'
-            )
+            self._send_to_frontend_with_event('plusiMenuData', result, 'ankiPlusiMenuDataLoaded')
+        except Exception as e:
+            logger.exception("plusi menu data failed: %s", e)
+            self._send_to_frontend_with_event('plusiMenuData', {
+                'diary': [], 'subscriptions': [], 'budget': {'used': 0, 'cap': 20, 'remaining': 20},
+                'mood': 'neutral',
+            }, 'ankiPlusiMenuDataLoaded')
 
     def _msg_save_plusi_autonomy(self, data):
         """Save Plusi autonomy config (token budget, capabilities)."""
@@ -1277,80 +1960,75 @@ class ChatbotWidget(QWidget):
         except Exception as e:
             logger.exception("plusi reset error: %s", e)
 
-    def _msg_subagent_direct(self, data):
-        """Handle @Name subagent direct call from frontend."""
-        msg_data = data if isinstance(data, dict) else json.loads(data) if isinstance(data, str) else {}
-        agent_name = msg_data.get('agent_name', '')
-        text = msg_data.get('text', '')
-        extra = {k: v for k, v in msg_data.items() if k not in ('agent_name', 'text')}
-        if agent_name and text:
-            self._handle_subagent_direct(agent_name, text, extra)
+    def _msg_voice_audio(self, data):
+        """Handle voice audio from React: run STT → Plusi → TTS pipeline."""
+        if not data or not isinstance(data, str):
+            logger.warning("voice: invalid audio data")
+            return
 
-    def _handle_subagent_direct(self, agent_name, text, extra=None):
-        """Route @Name messages to the appropriate subagent in a background thread."""
+        # Prevent concurrent voice requests
+        if hasattr(self, '_voice_thread') and self._voice_thread and self._voice_thread.isRunning():
+            logger.warning("voice: already processing, ignoring new request")
+            return
+
+        # Show thinking state on Plusi dock
         try:
-            from ..ai.agents import AGENT_REGISTRY, lazy_load_run_fn
-        except ImportError:
-            from ai.agents import AGENT_REGISTRY, lazy_load_run_fn
-        agent = AGENT_REGISTRY.get(agent_name)
-        if not agent:
-            logger.warning("Unknown subagent: %s", agent_name)
-            return
-        if not self.config.get(agent.enabled_key, False):
-            logger.info("Subagent %s is disabled", agent_name)
-            return
-        run_fn = lazy_load_run_fn(agent)
-        kwargs = {**agent.extra_kwargs, **(extra or {})}
-        thread = SubagentThread(agent_name, run_fn, text, **kwargs)
-        thread.finished_signal.connect(self._on_subagent_finished)
-        thread.error_signal.connect(self._on_subagent_error)
-        self._active_subagent_thread = thread
+            try:
+                from ..plusi.dock import sync_mood
+            except ImportError:
+                from plusi.dock import sync_mood
+            sync_mood('thinking')
+        except (ImportError, AttributeError):
+            pass
+
+        thread = VoiceThread(data)
+        thread.mood_signal.connect(self._on_voice_mood)
+        thread.result_signal.connect(self._on_voice_result)
+        thread.error_signal.connect(self._on_voice_error)
+        thread.finished.connect(lambda: self._cleanup_voice_thread())
+        self._voice_thread = thread
         thread.start()
 
-    def _on_subagent_finished(self, agent_name, result):
-        """Handle subagent result on main thread — emit to JS + run agent-specific side effects."""
+    def _on_voice_mood(self, mood):
+        """Update Plusi dock mood during voice pipeline."""
         try:
-            payload = {
-                'type': 'subagent_result',
-                'agent_name': agent_name,
-                'result': result,  # Pass full result dict — agent-specific
-                # Legacy Plusi fields for backwards compatibility
-                'text': result.get('text', ''),
-                'mood': result.get('mood', 'neutral'),
-                'meta': result.get('meta', ''),
-                'friendship': result.get('friendship', {}),
-                'silent': result.get('silent', False),
-                'error': result.get('error', False),
-            }
-            self.web_view.page().runJavaScript(
-                f"window.ankiReceive({json.dumps(payload)});"
-            )
-            # Run agent-specific post-processing (mood sync, panel notify, etc.)
             try:
-                from ..ai.agents import AGENT_REGISTRY
+                from ..plusi.dock import sync_mood
             except ImportError:
-                from ai.agents import AGENT_REGISTRY
-            agent = AGENT_REGISTRY.get(agent_name)
-            if agent and agent.on_finished:
-                try:
-                    agent.on_finished(self, agent_name, result)
-                except Exception as e:
-                    logger.error("Subagent[%s] on_finished error: %s", agent_name, e)
-        except Exception as e:
-            logger.error("Subagent[%s] finished handler error: %s", agent_name, e)
+                from plusi.dock import sync_mood
+            sync_mood(mood)
+        except (ImportError, AttributeError):
+            pass
 
-    def _on_subagent_error(self, agent_name, error_msg):
-        """Handle subagent error on main thread."""
-        logger.error("Subagent[%s] error: %s", agent_name, error_msg)
-        payload = {
-            'type': 'subagent_result',
-            'agent_name': agent_name,
-            'text': '',
-            'error': True,
-        }
-        self.web_view.page().runJavaScript(
-            f"window.ankiReceive({json.dumps(payload)});"
+    def _on_voice_result(self, result):
+        """Send voice response audio to React frontend."""
+        self._send_to_frontend_with_event(
+            "plusiVoiceResponse",
+            {"type": "plusiVoiceResponse", "data": result},
+            "plusiVoiceResponse"
         )
+        # Sync final mood
+        mood = result.get('mood', 'neutral') if result else 'neutral'
+        self._on_voice_mood(mood)
+
+    def _on_voice_error(self, error_msg):
+        """Handle voice pipeline error."""
+        logger.error("voice pipeline error: %s", error_msg)
+        self._send_to_frontend_with_event(
+            "plusiVoiceResponse",
+            {"type": "plusiVoiceResponse", "data": {"audio": None, "mood": "neutral", "text": ""}},
+            "plusiVoiceResponse"
+        )
+        # Reset Plusi mood
+        self._on_voice_mood('neutral')
+
+    def _cleanup_voice_thread(self):
+        """Cleanup after voice thread completes."""
+        if hasattr(self, '_voice_thread'):
+            self._voice_thread = None
+
+    # subagentDirect, SubagentThread, _on_subagent_finished removed.
+    # All agents now go through sendMessage with agent param (agent-kanal-paradigma).
 
     def _sync_plusi_integrity(self):
         """Sync integrity glow and sleep state to dock."""
@@ -1519,7 +2197,7 @@ class ChatbotWidget(QWidget):
             items.append({"name": m["name"], "label": m["label"]})
         return items
 
-    def handle_message_from_ui(self, message: str, history=None, mode='compact', request_id=None):
+    def handle_message_from_ui(self, message: str, history=None, mode='compact', request_id=None, agent_name=None):
         """
         Verarbeitet Nachrichten von der UI
 
@@ -1598,7 +2276,7 @@ class ChatbotWidget(QWidget):
 
             # Start AI request thread immediately — card history loading happens inside the thread
             # to avoid blocking the main Qt thread
-            self._ai_thread = AIRequestThread(ai, text, self, history=history, mode=mode, request_id=request_id, insights=card_insights)
+            self._ai_thread = AIRequestThread(ai, text, self, history=history, mode=mode, request_id=request_id, insights=card_insights, agent_name=agent_name)
             self._ai_thread._card_context_for_history = self.current_card_context
             self._ai_thread.chunk_signal.connect(self.on_streaming_chunk)
             self._ai_thread.finished_signal.connect(self.on_streaming_finished)
@@ -1613,18 +2291,72 @@ class ChatbotWidget(QWidget):
         js_code = f"window.ankiReceive({json.dumps(payload)});"
         self.web_view.page().runJavaScript(js_code)
 
+    # ── Streaming delivery queue ─────────────────────────────────────
+    # When the backend buffers SSE responses, all text_chunk events arrive
+    # in a single burst. Without spacing, React renders them as one block.
+    # This queue delivers events with ~30ms gaps so the UI streams visibly.
+    STREAM_DELIVERY_MS = 30  # ms between queued event deliveries
+
+    def _init_stream_queue(self):
+        """Lazy-init the streaming delivery queue."""
+        if not hasattr(self, '_stream_queue'):
+            self._stream_queue = []
+            self._stream_timer = QTimer()
+            self._stream_timer.setSingleShot(True)
+            self._stream_timer.timeout.connect(self._deliver_next_stream_event)
+
+    def _enqueue_stream_event(self, payload):
+        """Add event to the delivery queue and start draining if idle.
+
+        IMPORTANT: Never deliver synchronously here. All Qt signals from the AI
+        thread burst arrive in one event-loop tick. A 0ms timer ensures the queue
+        is fully populated before the first delivery fires.
+
+        NOTE: This queue spaces out delivery but does NOT create real streaming.
+        Google Cloud Functions (1st gen) buffer the entire SSE response — all
+        chunks arrive as one burst. Real streaming requires migrating to Cloud
+        Run (2nd gen) or another provider that supports HTTP streaming.
+        """
+        self._init_stream_queue()
+        self._stream_queue.append(payload)
+        if not self._stream_timer.isActive():
+            # 0ms timer fires after all pending signals are processed
+            self._stream_timer.start(0)
+
+    def _deliver_next_stream_event(self):
+        """Deliver the next queued event to JS and schedule the following one."""
+        if not self._stream_queue:
+            return
+        payload = self._stream_queue.pop(0)
+        if payload.get('type') == 'msg_done':
+            logger.info("📤 DELIVERING msg_done to JS (queue had %s remaining)", len(self._stream_queue))
+        self._send_to_js(payload)
+        if self._stream_queue:
+            self._stream_timer.start(self.STREAM_DELIVERY_MS)
+
     def on_msg_event(self, request_id, event_type, data):
-        """Handle v2 structured message events from the AI thread — delivered via Qt signal."""
-        if event_type in ('msg_start', 'agent_cell', 'msg_done', 'text_chunk'):
-            chunk_preview = ''
-            if event_type == 'text_chunk' and isinstance(data, dict):
-                chunk_preview = ' chunk=%d' % len(data.get('chunk', ''))
-            logger.info("[v2-signal] on_msg_event: type=%s, data_is_dict=%s%s",
-                        event_type, isinstance(data, dict), chunk_preview)
+        """Handle v2 structured message events from the AI thread — delivered via Qt signal.
+
+        text_chunk events (and events that follow them like agent_cell/done and msg_done)
+        are queued with spacing so the frontend renders streaming progressively.
+        """
         payload = {"type": event_type}
         if isinstance(data, dict):
             payload.update(data)
-        self._send_to_js(payload)
+
+        if event_type == 'text_chunk':
+            # Queue for progressive delivery
+            self._enqueue_stream_event(payload)
+        elif event_type in ('agent_cell', 'msg_done'):
+            # If streaming is in progress, queue behind text chunks
+            self._init_stream_queue()
+            if self._stream_queue:
+                self._enqueue_stream_event(payload)
+            else:
+                self._send_to_js(payload)
+        else:
+            # msg_start, orchestration — deliver immediately
+            self._send_to_js(payload)
 
     def on_pipeline_step(self, request_id, step, status, data):
         """Handle pipeline step events from the AI thread — delivered via Qt signal for real-time UI."""
@@ -1909,7 +2641,7 @@ class ChatbotWidget(QWidget):
             logger.error("_get_overview_data error: %s", e)
             return {'deckId': 0, 'deckName': '', 'dueNew': 0, 'dueLearning': 0, 'dueReview': 0}
 
-    # ── Deck/Overview/FreeChat Action Handlers (SP2 unification) ──
+    # ── Deck/Overview Action Handlers (SP2 unification) ──
 
     def _msg_study_deck(self, data):
         from aqt import mw
@@ -1951,24 +2683,6 @@ class ChatbotWidget(QWidget):
         except (AttributeError, RuntimeError) as e:
             logger.error("navigate error: %s", e)
 
-    def _msg_clear_deck_messages(self, data=None):
-        try:
-            try:
-                from ..storage.card_sessions import clear_deck_messages
-            except ImportError:
-                from storage.card_sessions import clear_deck_messages
-            count = clear_deck_messages()
-            self._send_to_frontend("chat.messagesCleared", {"count": count})
-        except (ImportError, AttributeError, RuntimeError) as e:
-            logger.error("clear_deck_messages error: %s", e)
-
-    def _msg_freechat_state(self, data):
-        try:
-            parsed = json.loads(data) if isinstance(data, str) else data
-            self._freechat_was_open = parsed.get('open', False)
-        except (json.JSONDecodeError, AttributeError, TypeError) as e:
-            logger.debug("Could not parse freechat state: %s", e)
-
     def _msg_create_deck(self, data=None):
         from aqt import mw
         try:
@@ -2000,6 +2714,80 @@ class ChatbotWidget(QWidget):
             mw.onStats()
         except (AttributeError, RuntimeError) as e:
             logger.warning("open_stats error: %s", e)
+
+    def _msg_get_statistik_data(self, data=None):
+        """Fetch all statistics data and send to frontend as 'statistikData'."""
+        result = self.bridge.getStatistikData()
+        try:
+            parsed = json.loads(result)
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning("Failed to parse bridge response for getStatistikData: %s", e)
+            parsed = {"error": "Parse error"}
+        self._send_to_frontend("statistikData", parsed)
+
+    def _msg_get_deck_trajectory(self, data=None):
+        """Fetch per-deck trajectory data and send to frontend."""
+        deck_id = data.get("deckId") if data else None
+        if not deck_id:
+            self._send_to_frontend("deckTrajectory", {"error": "No deckId"})
+            return
+        result = self.bridge.getDeckTrajectory(str(deck_id))
+        try:
+            parsed = json.loads(result)
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning("Failed to parse getDeckTrajectory response: %s", e)
+            parsed = {"error": "Parse error"}
+        self._send_to_frontend("deckTrajectory", parsed)
+
+    def _msg_get_deck_session_suggestion(self, data=None):
+        """Fetch per-deck session suggestion and send to frontend."""
+        deck_id = data.get("deckId") if data else None
+        if not deck_id:
+            self._send_to_frontend("deckSessionSuggestion", {"error": "No deckId"})
+            return
+        result = self.bridge.getDeckSessionSuggestion(str(deck_id))
+        try:
+            parsed = json.loads(result)
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning("Failed to parse getDeckSessionSuggestion response: %s", e)
+            parsed = {"error": "Parse error"}
+        self._send_to_frontend("deckSessionSuggestion", parsed)
+
+    def _msg_get_deck_mastery(self, data=None):
+        """Fetch deck mastery and send to frontend."""
+        deck_id = data.get("deckId") if data else None
+        if not deck_id:
+            self._send_to_frontend("deckMastery", {"error": "No deckId"})
+            return
+        result = self.bridge.getDeckMastery(str(deck_id))
+        try:
+            parsed = json.loads(result)
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning("Failed to parse getDeckMastery response: %s", e)
+            parsed = {"error": "Parse error"}
+        self._send_to_frontend("deckMastery", parsed)
+
+    def _msg_save_focus(self, data=None):
+        result = self.bridge.saveFocus(json.dumps(data or {}))
+        try:
+            parsed = json.loads(result)
+        except (json.JSONDecodeError, TypeError):
+            parsed = {"error": "Parse error"}
+        self._send_to_frontend("focusSaved", parsed)
+
+    def _msg_get_focuses(self, data=None):
+        result = self.bridge.getFocuses()
+        try:
+            parsed = json.loads(result)
+        except (json.JSONDecodeError, TypeError):
+            parsed = []
+        self._send_to_frontend("focusList", parsed)
+
+    def _msg_delete_focus(self, data=None):
+        focus_id = data.get("focusId") if data else None
+        if focus_id:
+            self.bridge.deleteFocus(focus_id)
+        self._msg_get_focuses()
 
     def _msg_toggle_settings(self, data=None):
         try:
@@ -2080,17 +2868,66 @@ class ChatbotWidget(QWidget):
             logger.error("_send_card_data error: %s", e)
 
     def _msg_get_sidebar_status(self, data=None):
-        """Send settings status to React."""
+        """Send settings status to React — fetches quota from backend."""
         try:
             config = get_config()
-            status = {
-                'tier': config.get('tier', 'free'),
+            auth_token = config.get('auth_token', '')
+            is_authenticated = bool(auth_token and config.get('auth_validated', False))
+            # Use cached tier as default so it survives restarts
+            tier = config.get('tier', 'free') if is_authenticated else 'free'
+            token_used = 0
+            token_limit = 0
+
+            # Send cached status immediately so UI doesn't flash "Starter"
+            self._send_to_frontend('sidebarStatus', {
+                'tier': tier,
                 'theme': config.get('theme', 'dark'),
-                'isAuthenticated': config.get('auth_validated', False),
-                'tokenUsed': config.get('token_used', 0),
-                'tokenLimit': config.get('token_limit', 0),
-            }
-            self._send_to_frontend('sidebarStatus', status)
+                'isAuthenticated': is_authenticated,
+                'tokenUsed': token_used,
+                'tokenLimit': token_limit,
+            })
+
+            # Then fetch live quota in background and update
+            if is_authenticated:
+                import threading
+                def _fetch_quota():
+                    try:
+                        try:
+                            from ..config import get_backend_url
+                        except ImportError:
+                            from config import get_backend_url
+                        backend_url = get_backend_url()
+                        if not backend_url or not auth_token:
+                            return
+                        import requests as _req
+                        resp = _req.get(
+                            '%s/user/quota' % backend_url.rstrip('/'),
+                            headers={'Authorization': 'Bearer %s' % auth_token.strip()},
+                            timeout=8,
+                        )
+                        if resp.status_code == 200:
+                            qdata = resp.json()
+                            live_tier = qdata.get('tier', 'free')
+                            tokens = qdata.get('tokens', {})
+                            daily = tokens.get('daily', {})
+                            live_used = daily.get('used', 0)
+                            live_limit = daily.get('limit', 0)
+                            update_config(tier=live_tier)
+                            # Update UI on main thread
+                            from aqt import mw
+                            if mw:
+                                mw.taskman.run_on_main(lambda: self._send_to_frontend('sidebarStatus', {
+                                    'tier': live_tier,
+                                    'theme': config.get('theme', 'dark'),
+                                    'isAuthenticated': True,
+                                    'tokenUsed': live_used,
+                                    'tokenLimit': live_limit,
+                                }))
+                    except Exception as e:
+                        logger.warning("sidebar quota fetch: %s", e)
+
+                threading.Thread(target=_fetch_quota, daemon=True, name="SidebarQuota").start()
+
         except (AttributeError, RuntimeError) as e:
             logger.warning("get_sidebar_status: %s", e)
 
@@ -2102,6 +2939,84 @@ class ChatbotWidget(QWidget):
             self._send_to_frontend('themeChanged', {'theme': theme})
         except (AttributeError, RuntimeError, json.JSONDecodeError) as e:
             logger.warning("set_theme: %s", e)
+
+    def _msg_sidebar_upgrade(self, data=None):
+        """Open upgrade or account management page."""
+        import webbrowser
+        config = get_config()
+        tier = config.get('tier', 'free')
+        is_auth = bool(config.get('auth_token') and config.get('auth_validated'))
+        if is_auth and tier != 'free':
+            webbrowser.open('https://anki-plus.vercel.app/account')
+        else:
+            webbrowser.open('https://anki-plus.vercel.app/login')
+
+    def _msg_sidebar_connect(self, data=None):
+        """Start link-auth flow."""
+        if self.bridge and hasattr(self.bridge, 'startLinkAuth'):
+            self.bridge.startLinkAuth()
+        else:
+            import webbrowser
+            webbrowser.open('https://anki-plus.vercel.app/login')
+
+    def _msg_get_indexing_status(self, data=None):
+        """Return embedding + KG term extraction progress to sidebar."""
+        try:
+            try:
+                from ..storage.kg_store import get_graph_status
+            except ImportError:
+                from storage.kg_store import get_graph_status
+
+            try:
+                from ..storage.card_sessions import load_all_embeddings
+            except ImportError:
+                from storage.card_sessions import load_all_embeddings
+
+            kg_status = get_graph_status()
+
+            embedded_count = 0
+            try:
+                for _ in load_all_embeddings():
+                    embedded_count += 1
+            except Exception:
+                pass
+
+            total_cards = 0
+            try:
+                if mw and mw.col and mw.col.db:
+                    total_cards = mw.col.db.scalar("SELECT COUNT() FROM cards") or 0
+            except Exception as e:
+                logger.debug("card count failed: %s", e)
+                # Fallback: use embedded count as approximation
+                total_cards = max(embedded_count, kg_status.get('totalCards', 0))
+
+            # KG term embeddings count (for fuzzy matching indicator)
+            kg_total_terms = kg_status.get('totalTerms', 0)
+            kg_embedded_terms = 0
+            try:
+                try:
+                    from ..storage.kg_store import get_unembedded_terms
+                except ImportError:
+                    from storage.kg_store import get_unembedded_terms
+                unembedded = len(get_unembedded_terms())
+                kg_embedded_terms = max(0, kg_total_terms - unembedded)
+            except Exception:
+                pass
+
+            self._send_to_frontend('indexingStatus', {
+                'embeddings': {'total': total_cards, 'done': embedded_count},
+                'kgTerms': {
+                    'total': total_cards,
+                    'done': kg_status.get('totalCards', 0),
+                    'totalTerms': kg_total_terms,
+                },
+                'kgTermEmbeddings': {
+                    'total': kg_total_terms,
+                    'done': kg_embedded_terms,
+                },
+            })
+        except Exception:
+            logger.exception("_msg_get_indexing_status failed")
 
     def _msg_sidebar_logout(self, data=None):
         """Clear auth tokens."""
@@ -2239,6 +3154,606 @@ class ChatbotWidget(QWidget):
         except Exception as e:
             logger.exception("pycmd error: %s", e)
 
+    # --- Knowledge Graph Handlers ---
+
+    def _msg_get_graph_data(self, data):
+        """Return full graph data for 3D rendering."""
+        try:
+            from ..storage.kg_store import get_graph_data
+        except ImportError:
+            from storage.kg_store import get_graph_data
+        try:
+            result = get_graph_data()
+            self._send_to_js({"type": "graph.data", "data": result})
+        except Exception:
+            logger.exception("getGraphData failed")
+            self._send_to_js({"type": "graph.data", "data": {"nodes": [], "edges": []}})
+
+    def _msg_get_term_cards(self, data):
+        """Return card IDs for a term."""
+        try:
+            from ..storage.kg_store import get_term_card_ids
+        except ImportError:
+            from storage.kg_store import get_term_card_ids
+        try:
+            term = data.get("term", "") if isinstance(data, dict) else ""
+            card_ids = get_term_card_ids(term)
+            self._send_to_js({"type": "graph.termCards", "data": {"term": term, "cardIds": card_ids}})
+        except Exception:
+            logger.exception("getTermCards failed")
+            self._send_to_js({"type": "graph.termCards", "data": {"cardIds": []}})
+
+    def _msg_get_graph_status(self, data):
+        """Return graph build status."""
+        try:
+            from ..storage.kg_store import get_graph_status
+        except ImportError:
+            from storage.kg_store import get_graph_status
+        try:
+            self._send_to_js({"type": "graph.status", "data": get_graph_status()})
+        except Exception:
+            logger.exception("getGraphStatus failed")
+            self._send_to_js({"type": "graph.status", "data": {"totalCards": 0, "totalTerms": 0}})
+
+    def _msg_get_card_kg_terms(self, data):
+        """Return KG terms for a specific card (for reviewer marking)."""
+        try:
+            from ..storage.kg_store import get_card_terms
+        except ImportError:
+            from storage.kg_store import get_card_terms
+        try:
+            card_id = int(data.get("cardId", 0)) if isinstance(data, dict) else 0
+            terms = get_card_terms(card_id)
+            logger.info("getCardKGTerms: card_id=%s → %d terms: %s",
+                        card_id, len(terms), terms[:5] if terms else "[]")
+            self._send_to_js({"type": "kg.cardTerms", "data": {"cardId": card_id, "terms": terms}})
+        except Exception:
+            logger.exception("getCardKGTerms failed")
+            self._send_to_js({"type": "kg.cardTerms", "data": {"terms": []}})
+
+    def _msg_get_term_definition(self, data):
+        """Check cache first; if miss, launch QThread to generate definition."""
+        try:
+            term = data.get("term", "") if isinstance(data, dict) else str(data)
+            search_query = data.get("searchQuery", "") if isinstance(data, dict) else ""
+            try:
+                from ..storage.kg_store import get_definition, get_connected_terms
+            except ImportError:
+                from storage.kg_store import get_definition, get_connected_terms
+            cached = get_definition(term)
+            if cached:
+                cached["connectedTerms"] = get_connected_terms(term)
+                self._send_to_js({"type": "graph.termDefinition", "data": cached})
+                return
+            self._start_kg_definition(term, search_query=search_query)
+        except Exception:
+            logger.exception("getTermDefinition handler failed")
+
+    def _msg_search_graph(self, data):
+        """Deck-based search: find decks containing cards with the given term."""
+        try:
+            query = data.get("query", "") if isinstance(data, dict) else str(data)
+            try:
+                from ..storage.kg_store import search_decks_by_term
+            except ImportError:
+                from storage.kg_store import search_decks_by_term
+            deck_ids = search_decks_by_term(query)
+            self._send_to_js({
+                "type": "graph.searchResult",
+                "data": {"matchedDeckIds": [str(d) for d in deck_ids], "query": query}
+            })
+        except Exception as e:
+            logger.exception("searchGraph failed")
+
+    def _msg_get_deck_cross_links(self, data):
+        """Return deck cross-link edges for graph rendering."""
+        try:
+            try:
+                from ..storage.kg_store import get_deck_cross_links
+            except ImportError:
+                from storage.kg_store import get_deck_cross_links
+            links = get_deck_cross_links()
+            self._send_to_js({"type": "graph.crossLinks", "data": links})
+        except Exception:
+            logger.exception("getDeckCrossLinks failed")
+            self._send_to_js({"type": "graph.crossLinks", "data": []})
+
+    def _msg_search_kg_subgraph(self, data):
+        """Build a Knowledge Graph subgraph from search result card IDs."""
+        try:
+            card_ids_str = data.get("cardIds", "[]") if isinstance(data, dict) else "[]"
+            card_ids = json.loads(card_ids_str)
+            query = data.get("query", "") if isinstance(data, dict) else ""
+
+            if not card_ids:
+                self._send_to_js({"type": "graph.kgSubgraph", "data": {"nodes": [], "edges": [], "query": query}})
+                return
+
+            try:
+                from ..storage.kg_store import _get_db as kg_get_db
+            except ImportError:
+                from storage.kg_store import _get_db as kg_get_db
+
+            db = kg_get_db()
+
+            # 1. Get all terms from these cards with counts
+            placeholders = ','.join('?' * len(card_ids))
+            term_rows = db.execute(
+                "SELECT term, COUNT(DISTINCT card_id) as card_count "
+                "FROM kg_card_terms WHERE card_id IN (%s) "
+                "GROUP BY term ORDER BY card_count DESC" % placeholders,
+                card_ids
+            ).fetchall()
+
+            if not term_rows:
+                self._send_to_js({"type": "graph.kgSubgraph", "data": {"nodes": [], "edges": [], "query": query}})
+                return
+
+            # Filter: only terms that appear in at least 2 cards (reduces noise)
+            terms = [r[0] for r in term_rows if r[1] >= 2]
+            term_counts = {r[0]: r[1] for r in term_rows if r[1] >= 2}
+
+            # Limit to top 40 terms by card count (keeps graph readable)
+            terms = terms[:40]
+
+            if not terms:
+                self._send_to_js({"type": "graph.kgSubgraph", "data": {"nodes": [], "edges": [], "query": query}})
+                return
+
+            # 2. Compute co-occurrence edges LIVE from kg_card_terms (all cards, not just search)
+            term_placeholders = ','.join('?' * len(terms))
+            edge_rows = db.execute(
+                "SELECT a.term, b.term, COUNT(DISTINCT a.card_id) as weight "
+                "FROM kg_card_terms a "
+                "JOIN kg_card_terms b ON a.card_id = b.card_id AND a.term < b.term "
+                "WHERE a.term IN (%s) AND b.term IN (%s) "
+                "GROUP BY a.term, b.term "
+                "HAVING weight >= 2 "
+                "ORDER BY weight DESC "
+                "LIMIT 200" % (term_placeholders, term_placeholders),
+                terms + terms
+            ).fetchall()
+
+            # 3. Get global frequencies for node sizing
+            freq_rows = db.execute(
+                "SELECT term, frequency FROM kg_terms WHERE term IN (%s)" % term_placeholders,
+                terms
+            ).fetchall()
+            global_freqs = {r[0]: r[1] for r in freq_rows}
+
+            # 4. Assign colors by clustering (simple: group by dominant deck)
+            deck_rows = db.execute(
+                "SELECT term, deck_id, COUNT(*) as cnt FROM kg_card_terms "
+                "WHERE card_id IN (%s) AND term IN (%s) "
+                "GROUP BY term, deck_id ORDER BY cnt DESC" % (placeholders, term_placeholders),
+                card_ids + terms
+            ).fetchall()
+
+            term_deck = {}
+            for r in deck_rows:
+                if r[0] not in term_deck:
+                    term_deck[r[0]] = r[1]
+
+            deck_colors = ['#3B6EA5', '#4A8C5C', '#B07D3A', '#7B5EA7', '#A0524B', '#4A9BAE', '#A69550', '#7A6B5D']
+            unique_decks = list(set(term_deck.values()))
+            deck_to_color = {d: deck_colors[i % len(deck_colors)] for i, d in enumerate(unique_decks)}
+
+            # Resolve deck names
+            from aqt import mw
+            deck_to_name = {}
+            for did in unique_decks:
+                try:
+                    name = mw.col.decks.name(did)
+                    deck_to_name[did] = name.split('::')[-1]  # short name
+                except Exception:
+                    deck_to_name[did] = "Deck %d" % did
+
+            # 5. Get card IDs per term (for the "kreuzen" feature)
+            term_card_ids = {}
+            card_rows = db.execute(
+                "SELECT term, card_id FROM kg_card_terms "
+                "WHERE card_id IN (%s) AND term IN (%s)" % (placeholders, term_placeholders),
+                card_ids + terms
+            ).fetchall()
+            for r in card_rows:
+                term_card_ids.setdefault(r[0], []).append(r[1])
+
+            # Build response
+            nodes = []
+            for term in terms:
+                did = term_deck.get(term, 0)
+                nodes.append({
+                    "id": term,
+                    "label": term,
+                    "frequency": global_freqs.get(term, 0),
+                    "subsetCount": term_counts.get(term, 0),
+                    "color": deck_to_color.get(did, '#7A6B5D'),
+                    "deckName": deck_to_name.get(did, ''),
+                    "deckId": did,
+                    "cardIds": list(set(term_card_ids.get(term, [])))[:50],
+                })
+
+            edges = [{"source": r[0], "target": r[1], "weight": r[2]} for r in edge_rows]
+
+            logger.info("KG subgraph for '%s': %d nodes, %d edges from %d cards",
+                        query, len(nodes), len(edges), len(card_ids))
+
+            self._send_to_js({"type": "graph.kgSubgraph", "data": {
+                "nodes": nodes, "edges": edges, "query": query, "totalCards": len(card_ids)}})
+
+        except Exception:
+            logger.exception("KG subgraph failed")
+            self._send_to_js({"type": "graph.kgSubgraph", "data": {"nodes": [], "edges": [], "query": query if 'query' in dir() else ""}})
+
+    def _msg_search_cards(self, data):
+        """Find top-N cards by embedding similarity. Runs in QThread to avoid blocking."""
+        query = data.get("query", "") if isinstance(data, dict) else str(data)
+        top_k = int(data.get("topK", 100)) if isinstance(data, dict) else 100
+
+        try:
+            from .. import get_embedding_manager
+        except ImportError:
+            try:
+                from __init__ import get_embedding_manager
+            except ImportError:
+                self._send_to_js({"type": "graph.searchCards", "data": {
+                    "cards": [], "edges": [], "error": "Import fehler"}})
+                return
+
+        emb_mgr = get_embedding_manager()
+        if not emb_mgr:
+            self._send_to_js({"type": "graph.searchCards", "data": {
+                "cards": [], "edges": [], "error": "Embedding nicht verfügbar"}})
+            return
+
+        # Launch in background thread so embed_texts() doesn't block the UI
+        thread = SearchCardsThread(query, top_k, emb_mgr, self)
+        thread.result_signal.connect(self._on_search_cards_result)
+        thread.pipeline_signal.connect(self.on_pipeline_step)
+        self._search_cards_thread = thread  # prevent GC
+        thread.start()
+
+    def _on_search_cards_result(self, result_json):
+        """Handle SearchCardsThread result — runs on main thread via signal."""
+        try:
+            payload = json.loads(result_json)
+            self._send_to_js(payload)
+            # Trigger quick answer from main thread (QThread must be created on main thread)
+            data = payload.get("data", {})
+            query = data.get("query", "")
+            cards = data.get("cards", [])[:50]
+            clusters = data.get("clusters", [])
+            if query and cards:
+                self._start_quick_answer(query, cards, clusters)
+        except Exception:
+            logger.exception("Failed to send search cards result")
+
+    def _start_quick_answer(self, query, cards_data, clusters):
+        """Launch SmartSearchAgentThread after search completes (must be called on main thread)."""
+        logger.info("Starting smart search agent for: %s (%d cards, %d clusters)", query, len(cards_data), len(clusters))
+
+        # Cancel any in-flight search agent thread
+        if hasattr(self, '_quick_answer_thread') and self._quick_answer_thread and self._quick_answer_thread.isRunning():
+            self._quick_answer_thread.cancel()
+
+        cluster_info = {}
+        for c in clusters:
+            cluster_info[c["id"]] = [card.get("question", "")[:40] for card in c.get("cards", [])[:3]]
+
+        # Get AI handler
+        try:
+            from ..ai.handler import get_ai_handler
+        except ImportError:
+            from ai.handler import get_ai_handler
+        ai_handler = get_ai_handler(self)
+
+        # Ensure cards have an 'answer' field for Research agent context
+        for card in cards_data:
+            if 'answer' not in card:
+                card['answer'] = card.get('deck', '')
+
+        self._quick_answer_thread = SmartSearchAgentThread(
+            query, cards_data, cluster_info, ai_handler, self
+        )
+        self._quick_answer_thread.result_signal.connect(self._on_quick_answer_result)
+        self._quick_answer_thread.pipeline_signal.connect(self.on_pipeline_step)
+        self._quick_answer_thread.msg_event_signal.connect(self.on_msg_event)
+        self._quick_answer_thread.error_signal.connect(
+            lambda req_id, err: logger.error("SmartSearch agent error: %s", err)
+        )
+        self._quick_answer_thread.start()
+
+    def _on_quick_answer_result(self, result_json):
+        """Handle QuickAnswerThread result."""
+        try:
+            self._send_to_js(json.loads(result_json))
+        except Exception:
+            logger.exception("Failed to send quick answer")
+
+    def _msg_get_card_images(self, data):
+        """Batch-extract deduplicated images from card HTML fields.
+
+        Runs synchronously on main thread (called from polling timer).
+        Request: { cardIds: JSON string of int array }
+        Response: graph.cardImages event with deduplicated image list.
+        """
+        try:
+            from ..utils.text import extract_images_from_html
+        except ImportError:
+            from utils.text import extract_images_from_html
+
+        card_ids_raw = data.get("cardIds", "[]") if isinstance(data, dict) else "[]"
+        try:
+            card_ids = json.loads(card_ids_raw)
+        except (ValueError, TypeError):
+            card_ids = []
+
+        if not card_ids:
+            self._send_to_js({"type": "graph.cardImages", "data": {"images": []}})
+            return
+
+        try:
+            from aqt import mw
+            if mw is None or mw.col is None:
+                self._send_to_js({"type": "graph.cardImages", "data": {"images": []}})
+                return
+
+            media_dir = mw.col.media.dir()
+            seen = {}  # filename -> entry dict
+
+            for cid in card_ids[:30]:  # Cap at 30
+                try:
+                    card = mw.col.get_card(int(cid))
+                    note = card.note()
+                    deck = mw.col.decks.get(card.did)
+                    deck_name = deck["name"].split("::")[-1] if deck else "Unknown"
+                    question = re.sub(r'<[^>]+>', '', note.fields[0])[:80] if note.fields else ""
+
+                    for field in note.fields:
+                        for raw_src in extract_images_from_html(field):
+                            # Skip remote URLs and absolute paths — only local media
+                            if raw_src.startswith(('http://', 'https://', 'file://', '/')):
+                                continue
+                            filename = os.path.basename(raw_src)
+                            if not filename:
+                                continue
+                            # Check file actually exists in media dir
+                            filepath = os.path.join(media_dir, filename)
+                            if not os.path.isfile(filepath):
+                                continue
+
+                            if filename not in seen:
+                                seen[filename] = {
+                                    "filename": filename,
+                                    "src": "file://" + filepath,
+                                    "cardIds": [],
+                                    "questions": {},
+                                    "decks": {},
+                                }
+                            entry = seen[filename]
+                            cid_int = int(cid)
+                            if cid_int not in entry["cardIds"]:
+                                entry["cardIds"].append(cid_int)
+                                entry["questions"][str(cid_int)] = question
+                                entry["decks"][str(cid_int)] = deck_name
+                except Exception:
+                    logger.debug("getCardImages: skipping card %s", cid, exc_info=True)
+
+            self._send_to_js({
+                "type": "graph.cardImages",
+                "data": {"images": list(seen.values())}
+            })
+        except Exception as e:
+            logger.exception("_msg_get_card_images failed: %s", e)
+            self._send_to_js({"type": "graph.cardImages", "data": {"images": []}})
+
+    def _msg_sub_cluster(self, data):
+        """Re-cluster a subset of cards into finer sub-clusters."""
+        try:
+            card_ids_str = data.get("cardIds", "[]") if isinstance(data, dict) else "[]"
+            card_ids = json.loads(card_ids_str)
+            cluster_id = data.get("clusterId", "") if isinstance(data, dict) else ""
+            parent_query = data.get("query", "") if isinstance(data, dict) else ""
+
+            if not card_ids or len(card_ids) < 4:
+                self._send_to_js({"type": "graph.subClusters", "data": {
+                    "clusterId": cluster_id, "subClusters": [], "tooFew": True}})
+                return
+
+            try:
+                from .. import get_embedding_manager
+            except ImportError:
+                from __init__ import get_embedding_manager
+
+            emb_mgr = get_embedding_manager()
+            if not emb_mgr:
+                self._send_to_js({"type": "graph.subClusters", "data": {
+                    "clusterId": cluster_id, "subClusters": [], "error": "No embeddings"}})
+                return
+
+            # Load embeddings for these cards
+            card_embs = {}
+            with emb_mgr._lock:
+                for i, cid in enumerate(emb_mgr._card_ids):
+                    if cid in card_ids:
+                        card_embs[cid] = emb_mgr._index[i]
+
+            if len(card_embs) < 4:
+                self._send_to_js({"type": "graph.subClusters", "data": {
+                    "clusterId": cluster_id, "subClusters": [], "tooFew": True}})
+                return
+
+            # Compute pairwise similarities
+            cids_list = list(card_embs.keys())
+            all_sims = {}
+            for i in range(len(cids_list)):
+                for j in range(i + 1, len(cids_list)):
+                    a, b = card_embs[cids_list[i]], card_embs[cids_list[j]]
+                    dot = sum(x * y for x, y in zip(a, b))
+                    na = sum(x * x for x in a) ** 0.5
+                    nb = sum(x * x for x in b) ** 0.5
+                    if na > 0 and nb > 0:
+                        all_sims[(cids_list[i], cids_list[j])] = dot / (na * nb)
+
+            # Target 2-4 sub-clusters
+            n = len(cids_list)
+            target = max(2, min(4, n // 4))
+
+            best_clusters = None
+            for threshold_10x in range(95, 40, -5):
+                threshold = threshold_10x / 100.0
+                sim_pairs = {}
+                for (ci, cj), sim in all_sims.items():
+                    if sim > threshold:
+                        sim_pairs.setdefault(ci, set()).add(cj)
+                        sim_pairs.setdefault(cj, set()).add(ci)
+
+                assigned = set()
+                trial_clusters = []
+                for cid in cids_list:
+                    if cid in assigned:
+                        continue
+                    cluster = []
+                    queue = [cid]
+                    assigned.add(cid)
+                    while queue:
+                        current = queue.pop(0)
+                        cluster.append(current)
+                        for neighbor in sim_pairs.get(current, set()):
+                            if neighbor not in assigned:
+                                assigned.add(neighbor)
+                                queue.append(neighbor)
+                    trial_clusters.append(cluster)
+
+                real = [c for c in trial_clusters if len(c) >= 2]
+                if len(real) >= target:
+                    best_clusters = real
+                    # Merge singletons
+                    for c in trial_clusters:
+                        if len(c) == 1:
+                            s = c[0]
+                            best_sim = -1
+                            best_ci = 0
+                            for ci, cl in enumerate(best_clusters):
+                                for m in cl:
+                                    key = (min(s, m), max(s, m))
+                                    sim = all_sims.get(key, 0)
+                                    if sim > best_sim:
+                                        best_sim = sim
+                                        best_ci = ci
+                            best_clusters[best_ci].append(s)
+                    break
+
+            if not best_clusters or len(best_clusters) < 2:
+                # Can't sub-cluster meaningfully
+                self._send_to_js({"type": "graph.subClusters", "data": {
+                    "clusterId": cluster_id, "subClusters": [], "tooFew": True}})
+                return
+
+            # Cap at target
+            while len(best_clusters) > target:
+                best_clusters.sort(key=lambda c: len(c))
+                smallest = best_clusters.pop(0)
+                best_sim = -1
+                best_ci = 0
+                for ci, cl in enumerate(best_clusters):
+                    total_sim = sum(all_sims.get((min(s, m), max(s, m)), 0)
+                                    for s in smallest for m in cl) / max(1, len(smallest) * len(cl))
+                    if total_sim > best_sim:
+                        best_sim = total_sim
+                        best_ci = ci
+                best_clusters[best_ci].extend(smallest)
+
+            # Build response with card data
+            from aqt import mw
+            sub_output = []
+            for si, sub_cids in enumerate(best_clusters):
+                cards = []
+                label_parts = []
+                for cid in sub_cids:
+                    try:
+                        card = mw.col.get_card(cid)
+                        note = card.note()
+                        q = note.fields[0] if note.fields else ''
+                        import re as _re
+                        q_clean = _re.sub(r'<[^>]+>', '', q)[:60]
+                        deck = mw.col.decks.name(card.did).split('::')[-1]
+                        cards.append({"id": str(cid), "question": q_clean, "deck": deck})
+                        if len(label_parts) < 2:
+                            label_parts.append(q_clean[:25])
+                    except Exception:
+                        cards.append({"id": str(cid), "question": "", "deck": ""})
+
+                sub_output.append({
+                    "id": "sub_%d" % si,
+                    "label": " / ".join(label_parts) if label_parts else "Sub %d" % (si + 1),
+                    "cards": cards,
+                })
+
+            logger.info("Sub-clustering for %s: %d cards → %d sub-clusters",
+                        cluster_id, len(card_ids), len(sub_output))
+
+            self._send_to_js({"type": "graph.subClusters", "data": {
+                "clusterId": cluster_id,
+                "subClusters": sub_output,
+                "query": parent_query,
+            }})
+
+        except Exception:
+            logger.exception("Sub-clustering failed")
+            self._send_to_js({"type": "graph.subClusters", "data": {
+                "clusterId": cluster_id if 'cluster_id' in dir() else "",
+                "subClusters": [], "error": "Sub-clustering failed"}})
+
+    def _msg_start_term_stack(self, data):
+        """Create filtered deck from card IDs and enter reviewer."""
+        try:
+            term = data.get("term", "KG Stack") if isinstance(data, dict) else "KG Stack"
+            card_ids_str = data.get("cardIds", "[]") if isinstance(data, dict) else "[]"
+            card_ids = json.loads(card_ids_str)
+            if not card_ids:
+                return
+            try:
+                from ..utils.anki import run_on_main_thread
+            except ImportError:
+                from utils.anki import run_on_main_thread
+
+            def _create_stack():
+                try:
+                    from aqt import mw
+                    # Clean up old KG filtered decks
+                    for d in mw.col.decks.all_names_and_ids():
+                        if d.name.startswith("KG: "):
+                            mw.col.decks.remove([d.id])
+                    # Create filtered deck
+                    search = " OR ".join("cid:%d" % cid for cid in card_ids[:100])
+                    did = mw.col.decks.new_filtered("KG: %s" % term)
+                    deck = mw.col.decks.get(did)
+                    deck["terms"] = [{"search": search, "limit": len(card_ids), "order": 0}]
+                    mw.col.decks.save(deck)
+                    mw.col.sched.rebuild_filtered_deck(did)
+                    mw.moveToState("review")
+                except Exception:
+                    logger.exception("Failed to create KG stack")
+
+            run_on_main_thread(_create_stack)
+        except Exception:
+            logger.exception("startTermStack handler failed")
+
+    def _start_kg_definition(self, term, search_query=None):
+        """Launch background thread for definition generation."""
+        self._kg_def_thread = KGDefinitionThread(term, self, search_query=search_query)
+        self._kg_def_thread.result_signal.connect(self._on_kg_result)
+        self._kg_def_thread.start()
+
+    def _on_kg_result(self, result_json):
+        """Handle KG thread result — push to frontend."""
+        try:
+            payload = json.loads(result_json)
+            self._send_to_js(payload)
+        except Exception:
+            logger.exception("Failed to send KG result to frontend")
+
     def _msg_flip_card(self, data=None):
         """Show answer side. Swallow web.eval to prevent mw.web DOM writes."""
         from aqt import mw
@@ -2301,28 +3816,57 @@ class ChatbotWidget(QWidget):
         except (AttributeError, RuntimeError) as e:
             logger.debug("Could not send reviewer step %s: %s", phase, e)
 
+    def _send_prufer_pipeline_step(self, request_id, step, status, data=None):
+        """Emit a unified pipeline_step event for the Prüfer ThinkingIndicator."""
+        import json as _json
+        payload = {
+            'type': 'pipeline_step',
+            'step': step,
+            'status': status,
+            'agent': 'prufer',
+            'requestId': request_id,
+            'data': data or {},
+        }
+        try:
+            js = "window.dispatchEvent(new CustomEvent('reviewer.pipeline_step', {detail: %s}));" % _json.dumps(payload)
+            from aqt import mw
+            mw.taskman.run_on_main(lambda js=js: self.web_view.page().runJavaScript(js))
+        except (AttributeError, RuntimeError) as e:
+            logger.debug("Could not send prufer pipeline step %s: %s", step, e)
+
     def _msg_evaluate_answer(self, data):
         """Evaluate user's text answer against correct answer via AI."""
         import threading
+        import uuid
         try:
             parsed = json.loads(data) if isinstance(data, str) else data
             question = parsed.get('question', '')
             user_answer = parsed.get('userAnswer', '')
             correct_answer = parsed.get('correctAnswer', '')
 
+            eval_request_id = str(uuid.uuid4())
+
             def _run():
                 try:
+                    # Unified pipeline steps for ThinkingIndicator
+                    self._send_prufer_pipeline_step(eval_request_id, 'orchestrating', 'active')
+                    self._send_prufer_pipeline_step(eval_request_id, 'orchestrating', 'done', {'agent': 'prufer'})
+
+                    # Legacy reviewer steps (kept for DockLoading)
                     self._send_reviewer_step('analyzing', 'Analysiere Antwort…')
                     self._send_reviewer_step('comparing', 'Vergleiche mit korrekter Antwort…')
+
+                    self._send_prufer_pipeline_step(eval_request_id, 'generating', 'active')
                     self._send_reviewer_step('evaluating', 'KI bewertet…')
 
-                    from ..custom_reviewer import _call_ai_evaluation
-                    result = _call_ai_evaluation(question, user_answer, correct_answer)
+                    from ..ai.prufer import evaluate_answer
+                    result = evaluate_answer(question, user_answer, correct_answer)
 
+                    self._send_prufer_pipeline_step(eval_request_id, 'generating', 'done')
                     self._send_reviewer_step('done', 'Bewertung abgeschlossen')
 
                     def _inject():
-                        self._send_to_frontend('reviewer.evaluationResult', result)
+                        self._send_to_frontend('reviewer.evaluationResult', {**result, '_requestId': eval_request_id})
                     from aqt import mw
                     mw.taskman.run_on_main(_inject)
                 except Exception as e:
@@ -2341,6 +3885,7 @@ class ChatbotWidget(QWidget):
     def _msg_generate_mc(self, data):
         """Generate multiple choice options via AI."""
         import threading
+        import uuid
         from aqt import mw
         try:
             parsed = json.loads(data) if isinstance(data, str) else data
@@ -2352,24 +3897,33 @@ class ChatbotWidget(QWidget):
             from ..custom_reviewer import _get_deck_context_answers_sync
             deck_answers = _get_deck_context_answers_sync(card_id)
 
+            mc_request_id = str(uuid.uuid4())
+
             def _run():
                 try:
+                    # Unified pipeline steps for ThinkingIndicator
+                    self._send_prufer_pipeline_step(mc_request_id, 'orchestrating', 'active')
+                    self._send_prufer_pipeline_step(mc_request_id, 'orchestrating', 'done', {'agent': 'prufer'})
+
+                    # Legacy
                     self._send_reviewer_step('cache', 'Prüfe gespeicherte Optionen…')
 
                     # Check cache
                     from ..storage.mc_cache import get_cached_mc, save_mc_cache
                     cached = get_cached_mc(card_id, question, correct_answer) if card_id else None
                     if cached:
+                        self._send_prufer_pipeline_step(mc_request_id, 'generating', 'done')
                         self._send_reviewer_step('done', 'Aus Cache geladen')
                         def _inject():
                             self._send_to_frontend('reviewer.mcOptions', cached)
                         mw.taskman.run_on_main(_inject)
                         return
 
+                    self._send_prufer_pipeline_step(mc_request_id, 'generating', 'active')
                     self._send_reviewer_step('generating', 'Generiere Multiple-Choice-Optionen…')
 
-                    from ..custom_reviewer import _call_ai_mc_generation
-                    result = _call_ai_mc_generation(question, correct_answer, deck_answers)
+                    from ..ai.prufer import generate_mc
+                    result = generate_mc(question, correct_answer, deck_answers)
 
                     # Cache (skip fallbacks)
                     is_fallback = any(
@@ -2382,9 +3936,7 @@ class ChatbotWidget(QWidget):
                     if card_id and result and len(result) >= 4 and not is_fallback:
                         save_mc_cache(card_id, question, correct_answer, result)
 
-                    import random
-                    random.shuffle(result)
-
+                    self._send_prufer_pipeline_step(mc_request_id, 'generating', 'done')
                     self._send_reviewer_step('done', 'Optionen erstellt')
 
                     def _inject():

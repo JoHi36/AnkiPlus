@@ -12,37 +12,35 @@ import { useCardSession } from './hooks/useCardSession';
 import { useReviewTrail } from './hooks/useReviewTrail';
 import { useModels } from './hooks/useModels';
 import { SessionContextProvider, useSessionContext } from './contexts/SessionContext';
-import Header from './components/Header';
-import SessionHeader from './components/SessionView/SessionHeader';
 import ChatMessage from './components/ChatMessage';
 import StreamingChatMessage from './components/StreamingChatMessage';
 import { getOrCreateDeviceId } from './utils/deviceId';
 import ChatInput from './components/ChatInput';
-import ThoughtStream from './components/ThoughtStream';
-import SessionOverview from './components/SessionOverview';
-// CardPreviewModal removed — replaced by universal Preview Mode (bridge.openPreview)
-import SessionList from './components/SessionView/SessionList';
 import ContextSurface from './components/ContextSurface';
 import DeckBrowser from './components/DeckBrowser';
-import ErrorBoundary from './components/ErrorBoundary';
+import ErrorBoundary, { ComponentErrorBoundary } from './components/ErrorBoundary';
 import PaywallModal from './components/PaywallModal';
 import TokenBar from './components/TokenBar';
 import SectionDivider from './components/SectionDivider';
+import FadeSeparator from './components/FadeSeparator';
 import ReviewTrailIndicator from './components/ReviewTrailIndicator';
-import { useFreeChat } from './hooks/useFreeChat';
-import { useHoldToReset } from './hooks/useHoldToReset';
-import { setRegistry, findAgent, getRegistry } from '@shared/config/subagentRegistry';
+import { setRegistry, findAgent } from '@shared/config/subagentRegistry';
 import { registerAction, executeAction, bridgeAction } from './actions';
 import { emit } from './eventBus';
+import { invokeAndRemove } from './utils/callbackRegistry';
+import { setPendingPerformance } from './utils/pendingPerformance';
 import { classifyCard } from './utils/cardClassifier';
 import MascotShell from './components/MascotShell';
 import { useMascot } from './hooks/useMascot';
 import InsightsDashboard from './components/InsightsDashboard';
 import useInsights from './hooks/useInsights';
-import TokenBudgetSlider from './components/TokenBudgetSlider';
 import SettingsSidebar from './components/SettingsSidebar';
 import SidebarShell from './components/SidebarShell';
+import SearchSidebar from './components/SearchSidebar';
+import DeckSearchBar from './components/DeckSearchBar';
 import AgenticCell from './components/AgenticCell';
+import ThinkingIndicator from './components/ThinkingIndicator';
+import { useThinkingPhases } from './hooks/useThinkingPhases';
 import TopBar from './components/TopBar';
 import DeckBrowserView from './components/DeckBrowserView';
 import OverviewView from './components/OverviewView';
@@ -52,22 +50,42 @@ import ResizeHandle, { loadPersistedWidth, applyWidth } from './components/Resiz
 import RemotePill from './components/RemotePill';
 import ReasoningStream from './reasoning/ReasoningStream';
 import { registerDefaultRenderers } from './reasoning/defaultRenderers';
+import { ReasoningProvider, useReasoningDispatch, useReasoningStore } from './reasoning/store';
+import useSmartSearch from './hooks/useSmartSearch';
+import usePlusiVoice from './hooks/usePlusiVoice';
+import { useLidLift } from './hooks/useLidLift';
+import DeckPopup from './components/DeckPopup';
 
-// Register step renderers once at module load time
-registerDefaultRenderers();
+// Lazy-loaded heavy components
+const GraphView = React.lazy(() => import('./components/GraphView'));
 
 // Stable empty references — prevent new object creation on every render
 const EMPTY_STEPS = [];
 const EMPTY_CITATIONS = {};
 
-// Map domain.past event names to useFreeChat's expected names (for fullscreen FreeChat)
-const EVENT_NAME_MAP = {
-  'chat.loadingChanged': 'loading',
-  'chat.chunkReceived': 'streaming',
-  'chat.responseCompleted': 'bot',
-  'chat.errorOccurred': 'error',
-  'chat.messagesCleared': 'deckMessagesCleared',
+/* ── module-level style constants ── */
+const SETTINGS_PANEL_STYLE = {
+  position: 'fixed', top: 0, left: 0, zIndex: 70,
+  width: 'var(--ds-settings-width)', height: '100vh',
+  background: 'var(--ds-bg-deep)',
+  borderRight: '1px solid var(--ds-border-subtle)',
+  display: 'flex', flexDirection: 'column', overflow: 'hidden',
 };
+const CONTENT_WIDTH_CENTERED = { maxWidth: 'var(--ds-content-width)', margin: '0 auto' };
+const FLEX_COL_FILL = { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' };
+const FALLBACK_VIEW_STYLE = { padding: 24, color: 'var(--ds-text-secondary)' };
+const DECK_BROWSER_INNER = { position: 'relative', flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' };
+const FADE_MASK_STYLE = {
+  position: 'absolute', bottom: -56, left: 0, right: 0,
+  height: 56, pointerEvents: 'none', zIndex: 10,
+  background: 'linear-gradient(to bottom, var(--ds-bg-deep) 0%, var(--ds-bg-deep) 30%, transparent 100%)',
+};
+
+function _parseJsonField(raw) {
+  if (!raw) return null;
+  if (typeof raw === 'string') { try { return JSON.parse(raw); } catch { return null; } }
+  return raw;
+}
 
 function normalizeMessages(messages) {
   return messages.map(m => ({
@@ -77,6 +95,9 @@ function normalizeMessages(messages) {
     createdAt: m.created_at || m.createdAt,
     steps: typeof m.steps === 'string' ? JSON.parse(m.steps || '[]') : (m.steps || EMPTY_STEPS),
     citations: typeof m.citations === 'string' ? JSON.parse(m.citations || '{}') : (m.citations || EMPTY_CITATIONS),
+    agentCells: _parseJsonField(m.agent_cells || m.agentCells),
+    orchestration: _parseJsonField(m.orchestration),
+    pipelineData: _parseJsonField(m.pipeline_data || m.pipelineData),
   }));
 }
 
@@ -92,13 +113,33 @@ function normalizeSections(sections) {
   }));
 }
 
+/** Renders ThinkingIndicator for the active Tutor stream during loading. */
+function TutorThinking({ activeAgentName, activeAgentColor }) {
+  const { state } = useReasoningStore();
+  // Find the active agent stream (non-router, non-complete)
+  const activeStreamId = Object.keys(state.streams).find(sid => {
+    const s = state.streams[sid];
+    return !sid.startsWith('router-') && s.phase !== 'complete' && s.steps.length > 0;
+  });
+  const agentName = activeStreamId?.split('-')[0] || activeAgentName || 'tutor';
+  const phases = useThinkingPhases(activeStreamId, agentName, activeAgentColor);
+  if (!phases) return null;
+  return (
+    <div className="w-full flex-none mb-2" style={CONTENT_WIDTH_CENTERED}>
+      <ThinkingIndicator phases={phases} />
+    </div>
+  );
+}
+
 /**
  * Inner App Component - wrapped by SessionContextProvider
  */
 function AppInner() {
   const { bridge, isReady } = useAnki();
   const sessionContext = useSessionContext();
-  
+  const reasoningDispatch = useReasoningDispatch();
+  const { state: reasoningState } = useReasoningStore();
+
   // Initialize Device-ID for anonymous users
   useEffect(() => {
     const deviceId = getOrCreateDeviceId();
@@ -124,7 +165,6 @@ function AppInner() {
             setAuthStatus(status);
           }
         } catch (e) {
-          console.error('Fehler beim Laden des Auth-Status:', e);
         }
       };
       
@@ -155,7 +195,6 @@ function AppInner() {
               setAuthStatus(status);
             }
           } catch (e) {
-            console.error('Fehler beim Laden des Auth-Status:', e);
           }
         }
         if (bridge && bridge.getAuthToken) {
@@ -192,16 +231,97 @@ function AppInner() {
   const cardSessionHook = useCardSession(bridge);
   const reviewTrailHook = useReviewTrail();
   const insightsHook = useInsights();
-  const [activeView, setActiveView] = useState('chat'); // 'chat' | 'deckBrowser' | 'overview' | 'freeChat' | 'review' | 'statistik'
+  const smartSearch = useSmartSearch();
+  const lidLift = useLidLift();
+  const searchBarRef = useRef(null);
+
+  // SearchSidebar delayed unmount — slide out before removing
+  // Only show sidebar when there are actual search results or a search is running
+  const lidIsActive = lidLift.state === 'animating' || lidLift.state === 'open';
+  const searchSidebarShouldShow = smartSearch.hasResults || smartSearch.isSearching;
+  const [searchSidebarMounted, setSearchSidebarMounted] = useState(false);
+  const [searchSidebarExiting, setSearchSidebarExiting] = useState(false);
+  useEffect(() => {
+    if (searchSidebarShouldShow) {
+      setSearchSidebarMounted(true);
+      setSearchSidebarExiting(false);
+    } else if (searchSidebarMounted) {
+      // Start exit animation, then unmount after 300ms
+      setSearchSidebarExiting(true);
+      const t = setTimeout(() => {
+        setSearchSidebarMounted(false);
+        setSearchSidebarExiting(false);
+      }, 300);
+      return () => clearTimeout(t);
+    }
+  }, [searchSidebarShouldShow]);
+
+  // ── Lid-Lift: trigger handler (FLIP measurement + state machine) ──
+  // Global FLIP rect — persists across tab switches
+  const flipRectGlobal = useRef(null);
+
+  const handleLidClick = useCallback(() => {
+    if (lidLift.state !== 'idle') return;
+    // FLIP step 1: measure current position before switching to fixed
+    const rect = searchBarRef.current?.measureRect();
+    if (!rect) return;
+    flipRectGlobal.current = rect;
+    // Reset sidebar animation flag so it slides in fresh
+    if (smartSearch.sidebarHasAnimated) {
+      smartSearch.sidebarHasAnimated.current = false;
+    }
+    lidLift.trigger();
+  }, [lidLift, smartSearch.sidebarHasAnimated]);
+
+  // Lid-lift search: triggers existing SmartSearch (SearchSidebar slides in)
+  const handleLidSearch = useCallback((text) => {
+    if (!text.trim()) return;
+    smartSearch.search(text.trim());
+  }, [smartSearch]);
+
+  // ESC key closes lid-lift (reverse if no search results, instant reset otherwise)
+  useEffect(() => {
+    if (lidLift.state !== 'open') return;
+    const handler = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        lidLift.close(false);
+        smartSearch.reset();
+        document.activeElement?.blur();
+      }
+    };
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
+  }, [lidLift.state, lidLift.close, smartSearch.hasResults, smartSearch.isSearching]);
+
+  const initialView = (() => {
+    try { const p = new URLSearchParams(window.location.search).get('view'); if (p === 'statistik') return 'statistik'; if (p === 'deckBrowser') return 'deckBrowser'; } catch {}
+    return 'chat';
+  })();
+  const [activeView, setActiveView] = useState(initialView); // 'chat' | 'deckBrowser' | 'overview' | 'review' | 'statistik'
   const activeViewRef = useRef('chat');
   useEffect(() => { activeViewRef.current = activeView; }, [activeView]);
 
+  // SPACE key opens lid-lift from deckBrowser idle state
+  useEffect(() => {
+    if (activeView !== 'deckBrowser' || lidLift.state !== 'idle') return;
+    const handler = (e) => {
+      if (e.key !== ' ') return;
+      const tag = (e.target?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return;
+      e.preventDefault();
+      handleLidClick();
+    };
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
+  }, [activeView, lidLift.state, handleLidClick]);
+
   // Fullscreen view state (merged from MainApp)
   const [ankiState, setAnkiState] = useState('deckBrowser');
+  const [viewMode, setViewMode] = useState('decks'); // 'graph' | 'decks'
   const [deckBrowserData, setDeckBrowserData] = useState(null);
   const [overviewData, setOverviewData] = useState(null);
-  const [freeChatTransition, setFreeChatTransition] = useState('idle');
-  const [mainInputFocused, setMainInputFocused] = useState(false);
   const messagesEndRef = useRef(null);
 
   // Card reviewer state
@@ -272,6 +392,7 @@ function AppInner() {
   const insightsHookRef = useRef(insightsHook);
   const sessionContextRef = useRef(sessionContext);
   const handlePerformanceCaptureRef = useRef(null);
+  const reasoningDispatchRef = useRef(reasoningDispatch);
   useEffect(() => {
     cardSessionHookRef.current = cardSessionHook;
     cardContextHookRef.current = cardContextHook;
@@ -282,6 +403,7 @@ function AppInner() {
     insightsHookRef.current = insightsHook;
     sessionContextRef.current = sessionContext;
     handlePerformanceCaptureRef.current = handlePerformanceCapture;
+    reasoningDispatchRef.current = reasoningDispatch;
   });
   // Ref für messages container (für Auto-Scroll)
   const messagesContainerRef = useRef(null);
@@ -409,6 +531,7 @@ function AppInner() {
   }, []);
   const handleFreeChatOpenRef = useRef(null);
 
+
   // Theme state — 'dark' | 'light' | 'system'; resolvedTheme is the effective value
   const [theme, setTheme] = useState('dark');
   const [resolvedTheme, setResolvedTheme] = useState('dark');
@@ -427,6 +550,7 @@ function AppInner() {
 
   // Mascot state
   const { mood, setEventMood, setAiMood, resetMood } = useMascot();
+  const { voiceState, recordingDuration, lastVoiceText, lastVoiceAudio } = usePlusiVoice({ onMoodChange: setAiMood });
   const [mascotEnabled, setMascotEnabled] = useState(false);
   const mascotEnabledRef = useRef(false);
   useEffect(() => {
@@ -436,21 +560,22 @@ function AppInner() {
 
   const [activeAgentColor, setActiveAgentColor] = useState(null);
   const [activeAgentName, setActiveAgentName] = useState(null);
-  const [stickyAgent, setStickyAgent] = useState(null);
 
-  // Detect subagent routing from pipeline steps (covers both direct @Name and router delegation)
+  const [lastPlusiText, setLastPlusiText] = useState(null);
+  const plusiTextAccRef = useRef('');
+
+  // Detect subagent routing from reasoning store (covers both direct @Name and router delegation)
   useEffect(() => {
-    const steps = chatHook?.pipelineSteps || [];
-    const routerDone = steps.find(s => s.step === 'router' && s.status === 'done');
-    if (routerDone) {
-      const rm = routerDone.data?.retrieval_mode || '';
-      if (rm.startsWith('subagent:')) {
-        const name = rm.split(':')[1];
+    // Look for any router stream with agent metadata
+    for (const [sid, stream] of Object.entries(reasoningState.streams)) {
+      if (sid.startsWith('router-') && stream.agentName) {
+        const name = stream.agentName;
         const agent = findAgent(name);
         if (agent && activeAgentName !== name) {
           setActiveAgentName(name);
           setActiveAgentColor(agent.color);
         }
+        break;
       }
     }
     // Clear when not loading
@@ -458,7 +583,7 @@ function AppInner() {
       setActiveAgentName(null);
       setActiveAgentColor(null);
     }
-  }, [chatHook?.pipelineSteps, chatHook?.isLoading]);
+  }, [reasoningState.streams, chatHook?.isLoading]);
 
   const [consecutiveWrong, setConsecutiveWrong] = useState(0);
   const activationCountRef = useRef(0);
@@ -544,11 +669,9 @@ function AppInner() {
   // Scroll to Interaction Container: Scrollt den Interaction Container an die Spitze des Viewports
   const scrollToInteractionContainer = useCallback(() => {
     if (!messagesContainerRef.current || !interactionContainerRef.current) {
-      console.warn('🔍 scrollToInteractionContainer: Missing container or interaction container');
       return;
     }
     
-    console.log('🔍 scrollToInteractionContainer: Starting scroll to interaction container');
     
     // Versuche mehrfach, das Element zu finden (mit Retry-Logik)
     const attemptScroll = (attempt = 0, maxAttempts = 10) => {
@@ -561,7 +684,6 @@ function AppInner() {
           setTimeout(() => attemptScroll(attempt + 1, maxAttempts), 50);
           return;
         }
-        console.warn('🔍 scrollToInteractionContainer: Container not found after', maxAttempts, 'attempts');
         return;
       }
       
@@ -598,7 +720,6 @@ function AppInner() {
   // Scroll to Last User Message: Scrollt zur letzten User-Nachricht beim Öffnen einer Session
   const scrollToLastUserMessage = useCallback(() => {
     if (!messagesContainerRef.current) {
-      console.warn('🔍 scrollToLastUserMessage: Missing container');
       return;
     }
     
@@ -615,7 +736,6 @@ function AppInner() {
           setTimeout(() => attemptScroll(attempt + 1, maxAttempts), 100);
           return;
         }
-        console.warn('🔍 scrollToLastUserMessage: No user messages found after', maxAttempts, 'attempts');
         // Fallback: Scroll nach unten
         container.scrollTo({
           top: container.scrollHeight,
@@ -671,7 +791,6 @@ function AppInner() {
     const originalMainHandler = window.ankiReceive;
     window.ankiReceive = (payload) => {
       if (!payload || typeof payload !== 'object') {
-        console.warn('⚠️ App.jsx: Ungültiges Payload:', payload);
         return;
       }
       
@@ -682,29 +801,17 @@ function AppInner() {
 
       // Fullscreen state changes (merged from MainApp)
       if (payload.type === 'app.stateChanged' || payload.type === 'stateChanged') {
-        const { state, data, freeChatWasOpen } = payload;
+        const { state, data } = payload;
         setAnkiState(state);
         if (state === 'deckBrowser') {
           setDeckBrowserData(data);
-          if (freeChatWasOpen) {
-            setActiveView('freeChat');
-            setFreeChatTransition('visible');
-            fullscreenLoadForDeckRef.current(0);
-          } else if (activeViewRef.current === 'review') {
+          if (activeViewRef.current === 'review') {
             // State bounce protection: Anki briefly fires deckBrowser during card advance.
             // Ignore deckBrowser if we're in review — wait for explicit user navigation.
           } else {
-            if (activeViewRef.current === 'freeChat') {
-              setFreeChatTransition('idle');
-            }
             setActiveView('deckBrowser');
           }
         } else if (state === 'overview') {
-          if (activeViewRef.current === 'freeChat') {
-            fullscreenBridge.cancelRequest();
-            setFreeChatTransition('idle');
-            bridgeAction('chat.stateChanged', { open: false });
-          }
           setOverviewData(data);
           setActiveView('overview');
         } else if (state === 'review') {
@@ -760,15 +867,59 @@ function AppInner() {
         return;
       }
 
-      // Reviewer inline events (evaluation, MC, AI steps) → forward as CustomEvents
-      if (payload.type && payload.type.startsWith('reviewer.')) {
+      // Smart Search events — route to useSmartSearch, NOT to session reasoning store
+      const _ssReqId = payload.requestId || payload.messageId || '';
+      if (_ssReqId.startsWith('search_') && [
+        'pipeline_step', 'text_chunk', 'streaming', 'agent_cell',
+        'orchestration', 'msg_start', 'msg_done', 'msg_error', 'msg_cancelled'
+      ].includes(payload.type)) {
+        window.dispatchEvent(new CustomEvent('smart_search.msg_event', { detail: payload }));
+        return;  // Don't let search events pollute session reasoning store
+      }
+
+      // Pipeline steps → centralized reasoning store dispatch
+      if (payload.type === 'pipeline_step') {
+        const _rd = reasoningDispatchRef.current;
+        const agentPrefix = payload.data?.agent || payload.agent || '';
+        const requestId = payload.requestId;
+
+        // Orchestration steps → router stream
+        if (payload.step === 'orchestrating' || payload.step === 'router') {
+          _rd({ type: 'STEP', streamId: `router-${requestId}`, step: payload.step, status: payload.status, data: payload.data });
+          // Auto-detect agent metadata
+          if (payload.data?.retrieval_mode) {
+            const rm = payload.data.retrieval_mode;
+            if (rm.startsWith('agent:') || rm.startsWith('subagent:')) {
+              _rd({ type: 'AGENT_META', streamId: `router-${requestId}`, agentName: rm.split(':')[1] });
+            }
+          }
+        }
+        // Agent-internal steps → agent stream
+        else {
+          const streamId = agentPrefix ? `${agentPrefix}-${requestId}` : requestId;
+          _rd({ type: 'STEP', streamId, step: payload.step, status: payload.status, data: payload.data });
+        }
+
+        // Extract citations from sources_ready step
+        if (payload.step === 'sources_ready' && payload.data?.citations) {
+          const agentStreamId = agentPrefix ? `${agentPrefix}-${requestId}` : requestId;
+          _rd({ type: 'CITATIONS', streamId: agentStreamId, citations: payload.data.citations });
+        }
+      }
+
+      // Knowledge Graph events → forward as CustomEvents
+      if (payload.type && payload.type.startsWith('graph.')) {
         window.dispatchEvent(new CustomEvent(payload.type, { detail: payload.data }));
         return;
       }
+      if (payload.type === 'kg.cardTerms') {
+        window.dispatchEvent(new CustomEvent('kg.cardTerms', { detail: payload.data }));
+        return;
+      }
 
-      // Fullscreen FreeChat messages loaded
-      if (payload.type === 'chat.messagesLoaded') {
-        fullscreenHandleDeckMessagesLoadedRef.current(payload);
+      // Reviewer inline events (evaluation, MC, AI steps) → forward as CustomEvents
+      if (payload.type && payload.type.startsWith('reviewer.')) {
+        window.dispatchEvent(new CustomEvent(payload.type, { detail: payload.data }));
         return;
       }
 
@@ -803,7 +954,6 @@ function AppInner() {
         try {
           originalMainHandler(payload);
         } catch (e) {
-          console.error('App.jsx: Error calling original handler', e);
         }
       }
 
@@ -844,23 +994,57 @@ function AppInner() {
         // Models Events
         _models.handleAnkiReceive(payload);
 
-        // Chat Events — mutual exclusion: only one hook receives each payload
-        const _freeChat = freeChatHookRef.current;
-        if (activeChatRef.current === 'free') {
-          _freeChat.handleAnkiReceive(payload);
-        } else {
-          _chat.handleAnkiReceive(payload);
+        // Reasoning PHASE dispatches — fire before chat hooks so the store
+        // is up-to-date when components re-render with the chat state change
+        // v2 events use 'messageId', v1 uses 'requestId' — accept both
+        if (payload.type === 'text_chunk' || payload.type === 'streaming') {
+          // Accumulate Plusi text for the chat bubble
+          const chunkAgent = payload.data?.agent || payload.agent || '';
+          const chunkText = payload.data?.chunk || payload.chunk || '';
+          if (chunkAgent === 'plusi' && chunkText) {
+            plusiTextAccRef.current += chunkText;
+          }
+          const _rd = reasoningDispatchRef.current;
+          const agentPrefix = chunkAgent;
+          const reqId = payload.requestId || payload.messageId || '';
+          const streamId = agentPrefix ? `${agentPrefix}-${reqId}` : reqId;
+          if (streamId) {
+            _rd({ type: 'PHASE', streamId, phase: 'generating' });
+          }
         }
+        if (payload.type === 'msg_done' || payload.type === 'response' || payload.type === 'bot') {
+          const _rd = reasoningDispatchRef.current;
+          const agentPrefix = payload.data?.agent || payload.agent || '';
+          const reqId = payload.requestId || payload.messageId || '';
+          const streamId = agentPrefix ? `${agentPrefix}-${reqId}` : reqId;
+          if (streamId) {
+            _rd({ type: 'PHASE', streamId, phase: 'complete' });
+          }
+          // Plusi bubble: flush accumulated text on msg_done
+          if (plusiTextAccRef.current) {
+            setLastPlusiText(plusiTextAccRef.current);
+            plusiTextAccRef.current = '';
+          }
+        }
+        if (payload.type === 'msg_error' || payload.type === 'msg_cancelled') {
+          const _rd = reasoningDispatchRef.current;
+          const agentPrefix = payload.data?.agent || payload.agent || '';
+          const reqId = payload.requestId || payload.messageId || '';
+          const streamId = agentPrefix ? `${agentPrefix}-${reqId}` : reqId;
+          if (streamId) {
+            _rd({ type: 'PHASE', streamId, phase: 'complete' });
+          }
+        }
+
+        // Chat Events
+        _chat.handleAnkiReceive(payload);
 
         // Deck Events
         if (payload.type === 'currentDeck') {
-          console.log('📚 App.jsx: Aktuelles Deck erhalten:', payload.data);
           _deck.setCurrentDeck(payload.data);
           _deck.handleDeckChange(payload.data);
         } else if (payload.type === 'availableDecks') {
-          console.log('📚 App.jsx: Verfügbare Decks erhalten:', payload.data?.decks?.length || 0);
         } else if (payload.type === 'openDeck') {
-          console.log('📚 App.jsx: Deck geöffnet, hole aktuelle Deck-Info...');
           const currentBridge = bridgeRef.current;
           if (currentBridge && currentBridge.getCurrentDeck) {
             setTimeout(() => {
@@ -873,7 +1057,6 @@ function AppInner() {
         if (payload.type === 'cardContext') {
           const newCardId = payload.data?.cardId;
           const isQuestion = payload.data?.isQuestion;
-          console.error('🔴 CARD_SWITCH: cardContext for cardId:', newCardId, 'isQuestion:', isQuestion);
 
           // Dedup: skip if this card was already processed (dual dispatch)
           if (newCardId && newCardId === lastProcessedCardRef.current) {
@@ -937,14 +1120,8 @@ function AppInner() {
           }
         }
 
-        // Deck Messages Loaded — route to Free Chat hook for persistence
-        if (payload.type === 'deckMessagesLoaded') {
-          _freeChat.handleDeckMessagesLoaded(payload);
-        }
-
         // Review Result Events
         if (payload.type === 'reviewResult' && payload.data) {
-          console.log('📊 App.jsx: Review result received:', payload.data);
           const { cardId, ease, rating, timeSeconds, score } = payload.data;
           if (cardId) {
             const section = _cardCtx.getSectionForCard(cardId);
@@ -958,8 +1135,7 @@ function AppInner() {
             if (section) {
               _perfCapture(section.id, perfData);
             } else {
-              window._pendingPerformanceData = window._pendingPerformanceData || {};
-              window._pendingPerformanceData[cardId] = perfData;
+              setPendingPerformance(String(cardId), perfData);
             }
           }
           // Mascot mood: ease 1=Again, 2=Hard, 3=Good, 4=Easy
@@ -978,7 +1154,6 @@ function AppInner() {
 
         // Evaluation Result Events
         if (payload.type === 'evaluationResult' && payload.data) {
-          console.log('📊 App.jsx: Evaluation result received:', payload.data);
           const { cardId, score, feedback, userAnswer } = payload.data;
           if (cardId) {
             const section = _cardCtx.getSectionForCard(cardId);
@@ -992,8 +1167,7 @@ function AppInner() {
             if (section) {
               _perfCapture(section.id, perfData);
             } else {
-              window._pendingPerformanceData = window._pendingPerformanceData || {};
-              window._pendingPerformanceData[cardId] = perfData;
+              setPendingPerformance(String(cardId), perfData);
             }
           }
         }
@@ -1003,19 +1177,9 @@ function AppInner() {
           const _chatHook = chatHookRef.current;
           if (_chatHook && _chatHook.handleSend) {
             setTimeout(() => {
-              _chatHook.handleSend(payload.data.text);
+              _chatHook.handleSend(payload.data.text, undefined, { agent: 'tutor' });
             }, 300);
           }
-        }
-
-        // Section Title Events — handled by the general mutual-exclusion block above.
-        // useFreeChat.handleAnkiReceive drops sectionTitleGenerated internally.
-        // No secondary dispatch needed here.
-
-        // Free Chat triggered from native DeckBrowser search bar
-        if (payload.type === 'startFreeChat' && payload.text) {
-          handleFreeChatOpenRef.current(payload.text);
-          return;
         }
 
         // Deck Events - deckSelected / deckExited
@@ -1032,48 +1196,23 @@ function AppInner() {
         }
 
         // Card Details Events
-        if (payload.type === 'cardDetails') {
-          console.log('🔍 App.jsx: Card Details erhalten:', payload.data);
-          if (window._getCardDetailsCallbacks && payload.callbackId) {
-            const callback = window._getCardDetailsCallbacks[payload.callbackId];
-            if (callback) {
-              delete window._getCardDetailsCallbacks[payload.callbackId];
-              callback.resolve(JSON.stringify(payload.data));
-            }
-          }
+        if (payload.type === 'cardDetails' && payload.callbackId) {
+          invokeAndRemove('getCardDetails', payload.callbackId, JSON.stringify(payload.data));
         }
 
         // Save Multiple Choice Result
-        if (payload.type === 'saveMultipleChoiceResult') {
-          if (window._saveMultipleChoiceCallbacks && payload.callbackId) {
-            const callback = window._saveMultipleChoiceCallbacks[payload.callbackId];
-            if (callback) {
-              delete window._saveMultipleChoiceCallbacks[payload.callbackId];
-              callback(JSON.stringify(payload.data));
-            }
-          }
+        if (payload.type === 'saveMultipleChoiceResult' && payload.callbackId) {
+          invokeAndRemove('saveMultipleChoice', payload.callbackId, JSON.stringify(payload.data));
         }
 
         // Load Multiple Choice Result
-        if (payload.type === 'loadMultipleChoiceResult') {
-          if (window._loadMultipleChoiceCallbacks && payload.callbackId) {
-            const callback = window._loadMultipleChoiceCallbacks[payload.callbackId];
-            if (callback) {
-              delete window._loadMultipleChoiceCallbacks[payload.callbackId];
-              callback(JSON.stringify(payload.data));
-            }
-          }
+        if (payload.type === 'loadMultipleChoiceResult' && payload.callbackId) {
+          invokeAndRemove('loadMultipleChoice', payload.callbackId, JSON.stringify(payload.data));
         }
 
         // Has Multiple Choice Result
-        if (payload.type === 'hasMultipleChoiceResult') {
-          if (window._hasMultipleChoiceCallbacks && payload.callbackId) {
-            const callback = window._hasMultipleChoiceCallbacks[payload.callbackId];
-            if (callback) {
-              delete window._hasMultipleChoiceCallbacks[payload.callbackId];
-              callback(JSON.stringify(payload.data));
-            }
-          }
+        if (payload.type === 'hasMultipleChoiceResult' && payload.callbackId) {
+          invokeAndRemove('hasMultipleChoice', payload.callbackId, JSON.stringify(payload.data));
         }
 
         // Deck Stats Events
@@ -1090,14 +1229,9 @@ function AppInner() {
           }));
         }
 
-        // AI State Events — route to active chat hook
+        // AI State Events
         if (payload.type === 'ai_state') {
-          console.log('🤖 App.jsx: AI State Update:', payload.message);
-          if (activeChatRef.current === 'free') {
-            _freeChat.handleAnkiReceive(payload);
-          } else {
-            _chat.handleAnkiReceive(payload);
-          }
+          _chat.handleAnkiReceive(payload);
           window.dispatchEvent(new CustomEvent('aiStateUpdate', {
             detail: { message: payload.message }
           }));
@@ -1154,98 +1288,7 @@ function AppInner() {
           }
         }
 
-        // Subagent Direct Result — unified handler for all subagent inline messages
-        if (payload.type === 'subagent_result') {
-          const agentName = payload.agent_name || 'unknown';
-          console.log(`Subagent[${agentName}] result received:`, payload.text?.substring(0, 50));
-
-          const _chatForAgent = chatHookRef.current;
-          if (_chatForAgent) {
-            // Mark pipeline steps as done
-            if (_chatForAgent.updatePipelineSteps) {
-              _chatForAgent.updatePipelineSteps(prev => {
-                return prev.map(s => s.status === 'active' ? {
-                  ...s, status: 'done',
-                  data: { ...s.data, search_needed: false, retrieval_mode: `subagent:${agentName}` },
-                  timestamp: Date.now()
-                } : s);
-              });
-            }
-
-            if (payload.error && agentName !== 'research') {
-              // For non-research agents, error = abort. Research shows error in widget.
-              console.error(`Subagent[${agentName}] error`);
-              if (_chatForAgent.setIsLoading) _chatForAgent.setIsLoading(false);
-              if (_chatForAgent.setStreamingMessage) _chatForAgent.setStreamingMessage('');
-              setActiveAgentColor(null);
-              setActiveAgentName(null);
-              return;
-            }
-            if (payload.silent) {
-              if (_chatForAgent.setIsLoading) _chatForAgent.setIsLoading(false);
-              if (_chatForAgent.setStreamingMessage) _chatForAgent.setStreamingMessage('');
-              setActiveAgentColor(null);
-              setActiveAgentName(null);
-              return;
-            }
-
-            // Set agent info for ThoughtStream and loading indicator
-            const agent = findAgent(agentName);
-            if (agent) {
-              setActiveAgentColor(agent.color);
-              setActiveAgentName(agentName);
-            }
-
-            // Build pipeline_data for persisted ThoughtStream
-            const subagentPipelineData = [{
-              step: 'orchestrating', status: 'done',
-              data: { search_needed: false, retrieval_mode: `subagent:${agentName}` },
-              timestamp: Date.now()
-            }];
-
-            if (_chatForAgent.appendMessageRef?.current) {
-              // Build agent-specific tool marker
-              let widgetMarker;
-              if (agentName === 'research' && payload.result) {
-                // Research Agent: only the widget marker — ResearchContent renders answer + sources
-                widgetMarker = `[[TOOL:${JSON.stringify({
-                  name: 'search_web',
-                  displayType: 'widget',
-                  result: payload.result,
-                })}]]`;
-                _chatForAgent.appendMessageRef.current(
-                  widgetMarker, 'bot', [], {}, null, [], subagentPipelineData
-                );
-              } else if (agentName === 'plusi' && payload.text) {
-                // Plusi: use spawn_plusi widget with mood/friendship
-                widgetMarker = `[[TOOL:${JSON.stringify({
-                  name: 'spawn_plusi',
-                  displayType: 'widget',
-                  result: {
-                    mood: payload.mood || 'neutral',
-                    text: payload.text,
-                    meta: payload.meta || '',
-                    friendship: payload.friendship || null,
-                  }
-                })}]]`;
-                _chatForAgent.appendMessageRef.current(
-                  widgetMarker, 'bot', [], {}, null, [], subagentPipelineData
-                );
-              } else if (payload.text) {
-                // Help and other agents: render as plain text
-                _chatForAgent.appendMessageRef.current(
-                  payload.text, 'bot', [], {}, null, [], subagentPipelineData
-                );
-              }
-            }
-            if (_chatForAgent.setIsLoading) _chatForAgent.setIsLoading(false);
-            if (_chatForAgent.setStreamingMessage) _chatForAgent.setStreamingMessage('');
-            setActiveAgentColor(null);
-
-            // Update mood if provided (Plusi compatibility)
-            if (payload.mood) setAiMood(payload.mood);
-          }
-        }
+        // subagent_result handler removed — all agents use v2 events (agent-kanal-paradigma)
 
         // Card Result — streak tracking + mascot reactions (only when Plusi enabled)
         if (payload.type === 'cardResult' && mascotEnabledRef.current) {
@@ -1273,10 +1316,6 @@ function AppInner() {
         if (payload.type === 'previewMode') {
           if (payload.data === null) {
             // Preview closed — restore previous chat state
-            const currentPreviewMode = previewModeRef.current;
-            if (currentPreviewMode?.previousChatState) {
-              setActiveChat(currentPreviewMode.previousChatState.activeChat || 'session');
-            }
             setPreviewMode(null);
           } else {
             const { stage, cardId } = payload.data;
@@ -1284,9 +1323,7 @@ function AppInner() {
               setPreviewMode({
                 stage: 'peek',
                 cardId,
-                previousChatState: {
-                  activeChat: activeChatRef.current,
-                }
+                previousChatState: {}
               });
             } else if (stage === 'card_chat') {
               setPreviewMode(prev => ({
@@ -1294,7 +1331,6 @@ function AppInner() {
                 stage: 'card_chat',
                 cardId
               }));
-              setActiveChat('session');
               const currentBridge = bridgeRef.current;
               if (currentBridge?.loadCardSession) {
                 currentBridge.loadCardSession(String(cardId));
@@ -1534,7 +1570,6 @@ function AppInner() {
       const prevLength = prevMessagesLengthRef.current;
       
       if (currentLength > prevLength && lastUserMessageIdRef.current === 'pending') {
-        console.log('🔍 Interaction Container: New user message detected, scrolling to container');
         // Sofort scrollen, dann Observer übernimmt
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
@@ -1747,24 +1782,14 @@ function AppInner() {
    */
   const handleSend = (text, options) => {
     options = options || {};
-    if (activeView !== 'chat' && activeView !== 'review') {
+    if (activeView !== 'chat' && activeView !== 'review' && activeView !== 'deckBrowser') {
       setActiveView('chat');
     }
-
-    // Prepend @AgentLabel prefix when a sticky agent is active,
-    // so the backend router dispatches to the correct subagent.
-    if (stickyAgent && !text.startsWith('@')) {
-      text = `@${stickyAgent.label} ${text}`;
-    }
-
-    // @Subagent intercept is now handled inside useChat.handleSend() via registry-based detection.
-    // No App.jsx-level interception needed — useChat routes via bridge.subagentDirect().
 
     // Auto-transition from peek to card_chat when user sends a message
     if (previewModeRef.current?.stage === 'peek') {
       const peekCardId = previewModeRef.current.cardId;
       setPreviewMode(prev => prev ? { ...prev, stage: 'card_chat' } : prev);
-      setActiveChat('session');
       const currentBridge = bridgeRef.current;
       if (currentBridge?.loadCardSession) {
         currentBridge.loadCardSession(String(peekCardId));
@@ -1781,12 +1806,6 @@ function AppInner() {
     const isFirstMessage = sessionContext.isTemporary && 
                           (!sessionContext.currentSession?.messages || sessionContext.currentSession.messages.length === 0);
     
-    console.log('📤 handleSend: Sending message', { 
-      text: text.substring(0, 50), 
-      currentMessagesCount: chatHook.messages.length,
-      isTemporary: sessionContext.isTemporary,
-      isFirstMessage 
-    });
     
     // Prepare context - use SessionContext's temporary session if available
     const pendingDeckSession = sessionContext.isTemporary && sessionContext.currentSession
@@ -1801,7 +1820,7 @@ function AppInner() {
     chatHook.handleSend(text, {
       pendingDeckSession: pendingDeckSession,
       setCurrentSessionId: (id) => {
-        const session = sessionContext.sessions.find(s => s.id === id) || 
+        const session = sessionContext.sessions.find(s => s.id === id) ||
                        (sessionContext.isTemporary && sessionContext.currentSession?.id === id ? sessionContext.currentSession : null);
         if (session) {
           sessionContext.setCurrentSession(session);
@@ -1817,14 +1836,13 @@ function AppInner() {
       tempSeenCardIds: sessionContext.isTemporary && sessionContext.currentSession
         ? sessionContext.currentSession.seenCardIds || []
         : deckTrackingHook.tempSeenCardIds
-    });
+    }, { agent: activeView === 'deckBrowser' ? 'research' : 'tutor' });
     
     // If this is the first message in a temporary session, persist it after a short delay
     // (allowing useChat to complete its session creation first)
     if (isFirstMessage) {
       setTimeout(() => {
         if (sessionContext.isTemporary && sessionContext.currentSession) {
-          console.log('💬 App.jsx: Erste Nachricht gesendet, persistiere temporäre Session');
           sessionContext.handleFirstMessage();
         }
       }, 100);
@@ -1926,18 +1944,6 @@ function AppInner() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [headerHeight, handleTrailNavigateLeft, handleTrailNavigateRight]);
 
-  // ⌘X — reset free chat history (stay in chat mode)
-  useEffect(() => {
-    const handler = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'x' && activeChat === 'free') {
-        e.preventDefault();
-        freeChatHookRef.current.resetMessages();
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [activeChat]);
-
   // Report text field focus state to Python for global shortcut routing
   useEffect(() => {
     const onFocusIn = (e) => {
@@ -1962,22 +1968,17 @@ function AppInner() {
 
   // Settings speichern
   const handleSaveSettings = (settings) => {
-    console.log('💾 App.jsx: Settings gespeichert:', settings);
     modelsHook.handleSaveSettings(settings);
   };
 
   // Panel schließen
   const handleClose = () => {
-    console.log('handleClose aufgerufen, bridge:', bridge);
     if (bridge && bridge.closePanel) {
-      console.log('Rufe bridge.closePanel auf');
       try {
         bridge.closePanel();
       } catch (e) {
-        console.error('Fehler beim Schließen:', e);
       }
     } else {
-      console.warn('bridge oder bridge.closePanel nicht verfügbar');
     }
   };
   
@@ -2028,45 +2029,8 @@ function AppInner() {
     setForceShowOverview(false);
   }, [bridge]);
 
-  // ── Free Chat Handlers ─────────────────────────────────────────
-  const handleFreeChatOpen = useCallback((text) => {
-    // Load persisted deck messages before opening (0 = global Free Chat fallback)
-    const deckId = sessionContext.currentSession?.deckId || 0;
-    freeChatHook.loadForDeck(deckId);
-    setForceShowOverview(true);
-    setActiveChat('free');
-  }, [sessionContext.currentSession?.deckId, freeChatHook]);
-  useEffect(() => { handleFreeChatOpenRef.current = handleFreeChatOpen; }, [handleFreeChatOpen]);
-
-  // ── Fullscreen FreeChat open/close (merged from MainApp) ──────
-  const openFullscreenFreeChat = useCallback((initialText) => {
-    freeChatHook.loadForDeck(0);
-    setFreeChatTransition('mounting');
-    setTimeout(() => {
-      setFreeChatTransition('entering');
-      setTimeout(() => setFreeChatTransition('visible'), 400);
-    }, 50);
-    setActiveView('freeChat');
-    bridgeAction('chat.stateChanged', { open: true });
-    if (initialText?.trim()) {
-      setTimeout(() => freeChatHook.handleSend(initialText, 'compact'), 600);
-    }
-  }, [freeChatHook]);
-
-  const closeFullscreenFreeChat = useCallback(() => {
-    if (freeChatHook.isLoading) fullscreenBridge.cancelRequest();
-    setFreeChatTransition('exiting');
-    bridgeAction('chat.stateChanged', { open: false });
-    setTimeout(() => {
-      setActiveView('deckBrowser');
-      setFreeChatTransition('idle');
-    }, 350);
-  }, [freeChatHook.isLoading, fullscreenBridge]);
-
   // ── Register fullscreen actions (merged from MainApp) ──────────
   useEffect(() => {
-    registerAction('chat.open', (data) => openFullscreenFreeChat(data?.text || ''), { label: 'Chat oeffnen', description: 'Open free chat overlay' });
-    registerAction('chat.close', () => closeFullscreenFreeChat(), { label: 'Chat schliessen', description: 'Close free chat overlay' });
     registerAction('deck.study', (data) => bridgeAction('deck.study', data), { label: 'Deck lernen', description: 'Start studying a deck' });
     registerAction('deck.select', (data) => bridgeAction('deck.select', data), { label: 'Deck auswaehlen', description: 'Select and open a deck' });
     registerAction('view.navigate', (data) => bridgeAction('view.navigate', data), { label: 'Navigieren', description: 'Navigate to a view' });
@@ -2079,7 +2043,6 @@ function AppInner() {
   const handleTabClick = useCallback((tab) => {
     const doNavigate = (target) => {
       if (target === 'stapel') {
-        if (activeView === 'freeChat') { executeAction('chat.close'); return; }
         setActiveView('deckBrowser');
         activeViewRef.current = 'deckBrowser';
         executeAction('view.navigate', 'deckBrowser');
@@ -2115,13 +2078,13 @@ function AppInner() {
       reviewChatWasOpenRef.current = false;
       setTimeout(() => setReviewChatOpen(true), 200);
     }
-  }, [activeView, reviewChatOpen]);
+  }, [activeView, reviewChatOpen, lidLift]);
 
   const handleSidebarToggle = useCallback(() => {
     setSettingsOpen(prev => !prev);
   }, []);
 
-  // ── Keyboard shortcuts for fullscreen FreeChat (merged from MainApp) ──
+  // ── Keyboard shortcuts (merged from MainApp) ──
   useEffect(() => {
     const handler = (e) => {
       // ESC closes review chat sidebar
@@ -2130,37 +2093,10 @@ function AppInner() {
         setReviewChatOpen(false);
         return;
       }
-      if (mainInputFocused) return;
-      if (activeView === 'freeChat') {
-        if (e.key === 'Escape' || e.key === ' ') {
-          e.preventDefault();
-          executeAction('chat.close');
-        }
-      } else if (activeView === 'deckBrowser') {
-        if (e.key === ' ') {
-          e.preventDefault();
-          executeAction('chat.open');
-        }
-      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [activeView, mainInputFocused, reviewChatOpen]);
-
-  // Focus tracking for fullscreen FreeChat input
-  const handleMainInputFocus = useCallback(() => {
-    setMainInputFocused(true);
-    bridgeAction('system.textFieldFocus', { focused: true });
-  }, []);
-  const handleMainInputBlur = useCallback(() => {
-    setMainInputFocused(false);
-    bridgeAction('system.textFieldFocus', { focused: false });
-  }, []);
-
-  // Auto-scroll to bottom on fullscreen FreeChat messages
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [freeChatHook.messages, freeChatHook.streamingMessage]);
+  }, [activeView, reviewChatOpen]);
 
   // (handleTrailNavigateLeft/Right defined earlier, before the keyboard useEffect)
 
@@ -2239,7 +2175,6 @@ function AppInner() {
     try {
       localStorage.setItem('anki_premium_status', 'true');
     } catch (e) {
-      console.warn('Fehler beim Speichern des Premium-Status:', e);
     }
     // Deep-Mode wird automatisch aktiviert, wenn der User den Button erneut klickt
     // Oder wir können es hier direkt aktivieren, wenn ChatInput einen Ref hat
@@ -2252,9 +2187,7 @@ function AppInner() {
     try {
       localStorage.setItem('anki_premium_status', 'false');
     } catch (e) {
-      console.warn('Fehler beim Zurücksetzen des Premium-Status:', e);
     }
-    console.log('🔓 Premium-Status zurückgesetzt (Developer Backdoor)');
   };
 
   // Berechne activeSectionTitle für Header - MEMOIZED für Performance
@@ -2334,18 +2267,12 @@ function AppInner() {
     }
   }, [sessionContext.currentSessionId, sessionContext.isTemporary, chatHook.messages.length, scrollToLastUserMessage]);
 
-  // ── Fullscreen views (DeckBrowser, Overview, FreeChat) — merged from MainApp ──
-  const isFreeChatAnimatingIn = freeChatTransition === 'entering' || freeChatTransition === 'visible';
-  const showFreeChat = activeView === 'freeChat' && freeChatTransition !== 'idle';
+  // ── Fullscreen views (DeckBrowser, Overview) — merged from MainApp ──
 
   // Settings panel — rendered as fixed overlay, visible on ALL views
   const settingsPanel = (
     <div style={{
-      position: 'fixed', top: 0, left: 0, zIndex: 70,
-      width: 'var(--ds-settings-width)', height: '100vh',
-      background: 'var(--ds-bg-deep)',
-      borderRight: '1px solid var(--ds-border-subtle)',
-      display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      ...SETTINGS_PANEL_STYLE,
       transform: settingsOpen ? 'translateX(0)' : 'translateX(-100%)',
       pointerEvents: settingsOpen ? 'auto' : 'none',
       transition: 'transform 0.35s cubic-bezier(0.25, 1, 0.5, 1)',
@@ -2359,7 +2286,7 @@ function AppInner() {
     <TopBar
       activeView={activeView}
       ankiState={ankiState}
-      messageCount={freeChatHook.messageCount}
+      messageCount={0}
       totalDue={deckBrowserData?.totalDue || 0}
       deckName={activeView === 'review' ? (cardData?.deckName || '') : (overviewData?.deckName || '')}
       dueNew={ankiState === 'overview' ? (overviewData?.dueNew || 0) : (deckBrowserData?.totalNew || 0)}
@@ -2368,7 +2295,7 @@ function AppInner() {
       onTabClick={handleTabClick}
       onSidebarToggle={handleSidebarToggle}
       settingsOpen={settingsOpen}
-      holdToResetProps={holdToReset}
+      canvasMode={lidIsActive}
     />
   );
 
@@ -2382,143 +2309,172 @@ function AppInner() {
       }}
       onEvent={eventTriggerRef}
       enabled={mascotEnabled}
+      voiceState={voiceState}
+      plusiText={lastPlusiText}
+      voiceAudio={lastVoiceAudio}
+      voiceTranscript={lastVoiceText}
     />,
     document.body,
   );
 
-  if (activeView === 'deckBrowser' || activeView === 'overview' || activeView === 'freeChat' || activeView === 'statistik') {
+  if (activeView === 'deckBrowser' || activeView === 'overview' || activeView === 'statistik') {
     return (
-      <div className={showFreeChat && isFreeChatAnimatingIn ? '' : 'ds-canvas-surface'} style={{
+      <div className="ds-canvas-surface" style={{
         position: 'fixed', inset: 0,
         display: 'flex', flexDirection: 'column',
-        background: showFreeChat && isFreeChatAnimatingIn ? 'var(--ds-bg-deep)' : undefined,
         marginLeft: settingsOpen ? 'var(--ds-settings-width)' : 0,
-        transition: `background-color 400ms cubic-bezier(0.25, 0.1, 0.25, 1), margin-left 0.35s cubic-bezier(0.25, 1, 0.5, 1)`,
+        transition: `margin-left 0.35s cubic-bezier(0.25, 1, 0.5, 1)`,
       }}>
         {settingsPanel}
         {mascotElement}
-        {persistentTopBar}
 
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {activeView === 'deckBrowser' && (
-            <DeckBrowserView data={deckBrowserData} isPremium={isPremium} />
-          )}
-          {activeView === 'overview' && (
-            <OverviewView
-              data={overviewData}
-              onStudy={() => executeAction('deck.study', { deckId: overviewData?.deckId })}
-              onBack={() => executeAction('view.navigate', 'deckBrowser')}
-              onOptions={() => bridgeAction('deck.options')}
-            />
-          )}
-          {activeView === 'statistik' && (
-            <StatistikView />
-          )}
-          {showFreeChat && (
-            <div style={{
-              flex: 1, display: 'flex', flexDirection: 'column',
-              opacity: isFreeChatAnimatingIn ? 1 : 0,
-              transform: isFreeChatAnimatingIn ? 'translateY(0)' : 'translateY(-12px)',
-              transition: 'opacity 350ms cubic-bezier(0.25, 0.1, 0.25, 1) 50ms, transform 350ms cubic-bezier(0.25, 0.1, 0.25, 1) 50ms',
-            }}>
-              {/* Messages area */}
+        {/* Flex row: left (canvas) + right (SearchSidebar) */}
+        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+          <div data-canvas style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden', position: 'relative' }}>
+            {/* TopBar — INSIDE canvas column so tabs/ESC center on canvas */}
+            {persistentTopBar}
+
+            <div style={FLEX_COL_FILL}>
+              {/* DeckBrowser — always mounted to preserve lid-lift state across tab switches */}
               <div style={{
-                flex: 1, overflowY: 'auto', padding: '20px 16px 120px',
-                maxWidth: 'var(--ds-content-width)', width: '100%', margin: '0 auto',
+                flex: activeView === 'deckBrowser' ? 1 : undefined,
+                display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                position: activeView === 'deckBrowser' ? 'relative' : 'absolute',
+                inset: activeView === 'deckBrowser' ? undefined : 0,
+                visibility: activeView === 'deckBrowser' ? 'visible' : 'hidden',
+                pointerEvents: activeView === 'deckBrowser' ? 'auto' : 'none',
               }}>
-                {freeChatHook.messages.length === 0 && !freeChatHook.isLoading && !freeChatHook.streamingMessage && (
-                  <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    height: '100%', color: 'var(--ds-text-muted)', fontSize: 13,
-                  }}>
-                    Stelle eine Frage...
-                  </div>
-                )}
-
-                {freeChatHook.messages.map((msg, idx) => (
-                  <div key={msg.id} style={{
-                    opacity: isFreeChatAnimatingIn ? 1 : 0,
-                    transform: isFreeChatAnimatingIn ? 'translateY(0)' : 'translateY(-8px)',
-                    transition: `opacity 250ms ease ${200 + Math.min(idx, 10) * 30}ms, transform 250ms ease ${200 + Math.min(idx, 10) * 30}ms`,
-                  }}>
-                    {msg.from === 'user' && (
-                      <>
-                        <div className="mb-1">
-                          <ErrorBoundary>
-                            <ChatMessage
-                              message={msg.text} from={msg.from} cardContext={null}
-                              steps={[]} citations={{}} pipelineSteps={[]}
-                              bridge={fullscreenBridge} isLastMessage={false}
-                            />
-                          </ErrorBoundary>
-                        </div>
-                        <ContextTags
-                          deckName={msg.deckName} cardFront={msg.cardFront}
-                          cardId={msg.cardId} bridge={fullscreenBridge}
-                        />
-                      </>
+                {viewMode === 'graph' ? (
+                  <React.Suspense fallback={<div style={{ flex: 1 }} />}>
+                    <GraphView onToggleView={() => setViewMode('decks')} isPremium={isPremium} deckData={deckBrowserData} smartSearch={smartSearch} bridge={bridgeRef.current} />
+                  </React.Suspense>
+                ) : (
+                  <ComponentErrorBoundary fallback={<div style={FALLBACK_VIEW_STYLE}>View failed to render. Try refreshing.</div>}>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
+                    <DeckBrowserView
+                      data={deckBrowserData}
+                      isPremium={isPremium}
+                      lidState={lidLift.state}
+                      canvasOpen={searchSidebarMounted || lidIsActive}
+                      sidebarOpen={searchSidebarMounted}
+                      onLidClick={handleLidClick}
+                      onLidAnimEnd={lidLift.onAnimationComplete}
+                      searchBarRef={searchBarRef}
+                      onSearchSubmit={handleLidSearch}
+                      flipRect={flipRectGlobal.current}
+                    />
+                    {/* Deck popup overlay — shows only when user selects a cluster/term */}
+                    {lidIsActive && (smartSearch.selectedClusterId || smartSearch.selectedTerm) && (
+                      <DeckPopup
+                        deckName={smartSearch.selectedClusterLabel || smartSearch.selectedTerm?.label || null}
+                        cardCount={smartSearch.selectedCluster?.cards?.length || smartSearch.selectedTerm?.cardIds?.length || 0}
+                        onStartLearning={() => {
+                          const termCardIds = smartSearch.selectedTerm?.cardIds;
+                          if (termCardIds?.length) {
+                            window.ankiBridge?.addMessage('startTermStack', {
+                              term: smartSearch.selectedTerm.label,
+                              cardIds: JSON.stringify(termCardIds.map(Number)),
+                            });
+                            return;
+                          }
+                          const cards = smartSearch.selectedCluster?.cards;
+                          if (cards?.length) {
+                            window.ankiBridge?.addMessage('startTermStack', {
+                              term: smartSearch.query,
+                              cardIds: JSON.stringify(cards.map(c => Number(c.id))),
+                            });
+                          }
+                        }}
+                      />
                     )}
-                    {msg.from === 'bot' && (
-                      <div className="mb-6">
-                        <ErrorBoundary>
-                          <ChatMessage
-                            message={msg.text} from={msg.from} cardContext={null}
-                            steps={msg.steps || []} citations={msg.citations || {}}
-                            pipelineSteps={[]} bridge={fullscreenBridge}
-                            isLastMessage={idx === freeChatHook.messages.length - 1}
+                    {/* GraphView overlay — renders search visualizations when lid-lift is open */}
+                    {(lidLift.state === 'open' || lidLift.state === 'animating') && (
+                      <div style={{
+                        position: 'absolute', inset: 0, zIndex: 3,
+                        display: 'flex', flexDirection: 'column',
+                        overflow: 'visible',
+                        opacity: lidLift.state === 'animating' ? 0 : 1,
+                        transition: 'opacity 0.3s ease',
+                        pointerEvents: lidLift.state === 'open' ? 'auto' : 'none',
+                      }}>
+                        <React.Suspense fallback={<div style={{ flex: 1 }} />}>
+                          <GraphView
+                            onToggleView={() => {}}
+                            isPremium={isPremium}
+                            deckData={deckBrowserData}
+                            smartSearch={smartSearch}
+                            bridge={bridgeRef.current}
                           />
-                        </ErrorBoundary>
+                        </React.Suspense>
                       </div>
                     )}
-                  </div>
-                ))}
-
-                {(freeChatHook.isLoading || freeChatHook.streamingMessage) && (
-                  <div className="w-full flex-none">
-                    <StreamingChatMessage
-                      message={freeChatHook.streamingMessage || ''} isStreaming={freeChatHook.isLoading}
-                      cardContext={null} steps={[]} citations={{}}
-                      pipelineSteps={[]} bridge={fullscreenBridge}
-                    />
-                  </div>
+                    </div>
+                  </ComponentErrorBoundary>
                 )}
-
-                <div ref={messagesEndRef} />
               </div>
-
-              {/* Input dock -- fixed bottom */}
-              <div style={{
-                position: 'fixed', bottom: 0, left: 0, right: 0,
-                padding: '0 16px 16px', maxWidth: 'var(--ds-content-width)', margin: '0 auto', width: '100%',
-                opacity: isFreeChatAnimatingIn ? 1 : 0,
-                transform: isFreeChatAnimatingIn ? 'translateY(0)' : 'translateY(8px)',
-                transition: 'opacity 250ms ease 150ms, transform 250ms ease 150ms',
-              }}>
-                <ChatInput
-                  onSend={(text) => freeChatHook.handleSend(text, 'compact')}
-                  isLoading={freeChatHook.isLoading}
-                  onStop={() => fullscreenBridge.cancelRequest()}
-                  cardContext={null}
-                  isPremium={true}
-                  onClose={() => executeAction('chat.close')}
-                  onFocus={handleMainInputFocus}
-                  onBlur={handleMainInputBlur}
-                  stickyAgent={stickyAgent}
-                  onStickyAgentChange={setStickyAgent}
-                  actionPrimary={{
-                    label: 'Schlie\u00DFen',
-                    shortcut: '\u2423',
-                    onClick: () => executeAction('chat.close'),
-                  }}
-                  actionSecondary={{
-                    label: 'Senden',
-                    shortcut: '\u21B5',
-                    onClick: () => {},
-                    disabled: freeChatHook.isLoading,
-                  }}
-                />
-              </div>
-            </div>
+          {activeView === 'overview' && (
+            <ComponentErrorBoundary fallback={<div style={FALLBACK_VIEW_STYLE}>View failed to render. Try refreshing.</div>}>
+              <OverviewView
+                data={overviewData}
+                onStudy={() => executeAction('deck.study', { deckId: overviewData?.deckId })}
+                onBack={() => executeAction('view.navigate', 'deckBrowser')}
+                onOptions={() => bridgeAction('deck.options')}
+              />
+            </ComponentErrorBoundary>
+          )}
+          {activeView === 'statistik' && (
+            <ComponentErrorBoundary fallback={<div style={FALLBACK_VIEW_STYLE}>View failed to render. Try refreshing.</div>}>
+              <StatistikView deckData={deckBrowserData} />
+            </ComponentErrorBoundary>
+          )}
+        </div>
+          </div>
+          {/* SearchSidebar — only visible in Stapel view */}
+          {searchSidebarMounted && activeView === 'deckBrowser' && (
+            <SearchSidebar
+              visible={true}
+              isExiting={searchSidebarExiting}
+              query={smartSearch.query}
+              answerText={smartSearch.answerText}
+              clusters={smartSearch.searchResult?.clusters}
+              clusterLabels={smartSearch.clusterLabels}
+              clusterSummaries={smartSearch.clusterSummaries}
+              selectedClusterId={smartSearch.selectedClusterId}
+              onSelectCluster={smartSearch.setSelectedClusterId}
+              bridge={bridgeRef.current}
+              onStartStack={() => {
+                // Term cards (KG mode) → cluster cards → all search cards
+                const termCardIds = smartSearch.selectedTerm?.cardIds;
+                if (termCardIds?.length) {
+                  window.ankiBridge?.addMessage('startTermStack', {
+                    term: smartSearch.selectedTerm.label,
+                    cardIds: JSON.stringify(termCardIds.map(Number)),
+                  });
+                  return;
+                }
+                const cards = smartSearch.selectedCluster?.cards || smartSearch.searchResult?.cards;
+                if (cards?.length) {
+                  window.ankiBridge?.addMessage('startTermStack', {
+                    term: smartSearch.query,
+                    cardIds: JSON.stringify(cards.map(c => Number(c.id))),
+                  });
+                }
+              }}
+              onSearch={smartSearch.search}
+              isSearching={smartSearch.isSearching}
+              totalCards={smartSearch.searchResult?.totalFound || 0}
+              cardRefs={smartSearch.cardRefs}
+              subClusters={smartSearch.subClusters}
+              isSubClustering={smartSearch.isSubClustering}
+              sidebarHasAnimated={smartSearch.sidebarHasAnimated}
+              kgSubgraph={smartSearch.kgSubgraph}
+              onGraphModeChange={smartSearch.setGraphMode}
+              selectedTerm={smartSearch.selectedTerm}
+              onSelectTerm={smartSearch.selectTerm}
+              termDefinition={smartSearch.termDefinition}
+              imageSelectedCardIds={smartSearch.imageSelectedCardIds}
+              searchStreamId={smartSearch.searchStreamId}
+            />
           )}
         </div>
       </div>
@@ -2570,7 +2526,9 @@ function AppInner() {
         <div className="ds-canvas-surface" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
           {persistentTopBar}
           <div key="review-content" className="view-enter" style={{ flex: 1, overflow: 'hidden' }}>
-            <ReviewerView cardData={cardData} reviewer={reviewer} />
+            <ComponentErrorBoundary fallback={<div style={FALLBACK_VIEW_STYLE}>View failed to render. Try refreshing.</div>}>
+              <ReviewerView cardData={cardData} reviewer={reviewer} />
+            </ComponentErrorBoundary>
           </div>
         </div>
       )}
@@ -2616,11 +2574,7 @@ function AppInner() {
         {activeView === 'chat' && (
         <div
           aria-hidden="true"
-          style={{
-            position: 'absolute', bottom: -56, left: 0, right: 0,
-            height: 56, pointerEvents: 'none', zIndex: 10,
-            background: 'linear-gradient(to bottom, var(--ds-bg-deep) 0%, var(--ds-bg-deep) 30%, transparent 100%)',
-          }}
+          style={FADE_MASK_STYLE}
         />
         )}
       </div>
@@ -2630,15 +2584,13 @@ function AppInner() {
       <main key={activeView === 'review' ? 'main-review' : `main-${activeView}`} className={`flex-1 overflow-hidden relative flex flex-col min-h-0 ${activeView !== 'review' ? 'view-enter' : ''}`} style={{ height: '100%' }}>
         {showSessionOverview ? (
           /* Deck Browser — flex column container for in-place chat transformation */
-          <div style={{ position: 'relative', flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div style={DECK_BROWSER_INNER}>
             <DeckBrowser
               bridge={bridge}
               sessions={sessionContext.sessions}
               onSelectSession={handleSelectSession}
               onOpenDeck={handleOpenDeck}
               headerHeight={headerHeight}
-              onFreeChatOpen={handleFreeChatOpen}
-              freeChatHook={freeChatHook}
             />
           </div>
         ) : (
@@ -2673,15 +2625,17 @@ function AppInner() {
               >
 
                 {chatHook.messages.length === 0 && !chatHook.isLoading && !chatHook.streamingMessage ? (
-            <InsightsDashboard
-              insights={insightsHook.insights}
-              cardStats={cardContextHook.cardContext?.stats || {}}
-              chartData={insightsHook.chartData}
-              isExtracting={insightsHook.isExtracting}
-              newInsightIds={insightsHook.newInsightIds}
-              noNewInsights={insightsHook.noNewInsights}
-              onCitationClick={(cardId) => bridge.goToCard?.(String(cardId))}
-            />
+            <ComponentErrorBoundary fallback={<div style={FALLBACK_VIEW_STYLE}>View failed to render. Try refreshing.</div>}>
+              <InsightsDashboard
+                insights={insightsHook.insights}
+                cardStats={cardContextHook.cardContext?.stats || {}}
+                chartData={insightsHook.chartData}
+                isExtracting={insightsHook.isExtracting}
+                newInsightIds={insightsHook.newInsightIds}
+                noNewInsights={insightsHook.noNewInsights}
+                onCitationClick={(cardId) => bridge.goToCard?.(String(cardId))}
+              />
+            </ComponentErrorBoundary>
           ) : (
             <>
               {/* Finde letzte User-Nachricht für Interaction Container */}
@@ -2743,31 +2697,36 @@ function AppInner() {
                               lowScorePulse={section.performanceData && section.performanceData.score < 40}
                             />
                           )}
-                          {msg && typeof msg.text === 'string' && msg.text && (
-                            <div 
-                              className="mb-6" 
+                          {/* Fade separator between Q&A blocks */}
+                          {msg.from === 'user' && localIdx > 0 && (() => {
+                            const prevInRender = messagesToRender[localIdx - 1];
+                            return prevInRender && prevInRender.from !== 'user' ? <FadeSeparator /> : null;
+                          })()}
+                          {msg && ((typeof msg.text === 'string' && msg.text) || (msg.agentCells && msg.agentCells.length > 0)) && (
+                            <div
+                              className="mb-6"
                               data-message-id={msg.id}
                               data-message-from={msg.from || 'bot'}
                             >
                               <ErrorBoundary>
                                 <ChatMessage
-                                  message={msg.text}
+                                  message={msg.text || (msg.agentCells ? msg.agentCells.map(c => c.text || '').join('\n') : '')}
                                   from={msg.from || 'bot'}
                                   cardContext={cardContextHook.cardContext}
                                   steps={msg.steps || EMPTY_STEPS}
                                   citations={msg.citations || EMPTY_CITATIONS}
                                   pipelineSteps={msg.pipeline_data || []}
+                                  agentCells={msg.agentCells}
+                                  orchestration={msg.orchestration}
                                   webSources={msg.webSources || null}
                                   bridge={bridge}
                                   isLastMessage={false}
                                   onAnswerSelect={(letter, isCorrect) => {
-                                    console.log(`User selected ${letter}, correct: ${isCorrect}`);
                                   }}
                                   onAutoFlip={() => {
                                     if (bridge && bridge.showAnswer) {
                                       bridge.showAnswer();
                                     } else {
-                                      console.warn('Bridge showAnswer not available');
                                     }
                                   }}
                                   onPreviewCard={handlePreviewCard}
@@ -2828,13 +2787,11 @@ function AppInner() {
                                 from="user"
                                 cardContext={cardContextHook.cardContext}
                                 onAnswerSelect={(letter, isCorrect) => {
-                                  console.log(`User selected ${letter}, correct: ${isCorrect}`);
                                 }}
                                 onAutoFlip={() => {
                                   if (bridge && bridge.showAnswer) {
                                     bridge.showAnswer();
                                   } else {
-                                    console.warn('Bridge showAnswer not available');
                                   }
                                 }}
                                 onPreviewCard={handlePreviewCard}
@@ -2847,12 +2804,38 @@ function AppInner() {
                         {/* No v1/v2 split. Live and saved messages always at the same place.
                             React sees the same <ChatMessage> component updating, not unmounting. */}
                         {/* ── ALL bot responses — single DOM position ── */}
-                        {/* React 18 batches setCurrentMessage(null) + setMessages([...new])
-                            in the same handler, so no intermediate frame. No ref buffer needed. */}
+                        {/* finalize() keeps currentMessage alive (status='done') for one render,
+                            then a cleanup effect clears it. No gap between live and saved. */}
                         {(() => {
                           const msg = chatHook.currentMessage || (nextMsg?.from === 'bot' ? nextMsg : null);
+                          // DEBUG: trace bot message rendering
+                          if (typeof window !== 'undefined') {
+                            window._debugLastInteraction = {
+                              hasCurrent: !!chatHook.currentMessage,
+                              currentStatus: chatHook.currentMessage?.status,
+                              nextMsg: nextMsg ? { from: nextMsg.from, hasText: !!nextMsg.text, hasAgentCells: !!(nextMsg.agentCells?.length), text: (nextMsg.text || '').slice(0, 50) } : null,
+                              resolvedMsg: msg ? { from: msg.from, hasText: !!msg.text, hasAgentCells: !!(msg.agentCells?.length) } : null,
+                              messagesCount: chatHook.messages.length,
+                              lastUserIdx: lastUserMessageIdx,
+                            };
+                          }
                           if (!msg) return null;
-                          const isLive = !!chatHook.currentMessage;
+                          // 'done' status means finalize() kept the message alive for smooth
+                          // transition — treat it as saved (not live) for rendering purposes.
+                          const isLive = !!chatHook.currentMessage && chatHook.currentMessage.status !== 'done';
+
+                          // For live v2 messages, read pipeline steps from the reasoning store
+                          // (cell.pipelineSteps was removed — store is the single source of truth)
+                          let livePipelineSteps = msg.agentCells?.[0]?.pipelineSteps || msg.pipeline_data || [];
+                          if (isLive && livePipelineSteps.length === 0) {
+                            const allSteps = [];
+                            for (const [sid, stream] of Object.entries(reasoningState.streams)) {
+                              if (stream.phase === 'complete') continue;
+                              allSteps.push(...stream.steps);
+                            }
+                            livePipelineSteps = allSteps;
+                          }
+
                           return (
                             <div className="w-full flex-none">
                               <ChatMessage
@@ -2864,7 +2847,8 @@ function AppInner() {
                                 status={isLive ? msg.status : 'done'}
                                 pipelineGeneration={chatHook.pipelineGenerationV2}
                                 citations={msg.agentCells?.[0]?.citations || msg.citations || {}}
-                                pipelineSteps={msg.agentCells?.[0]?.pipelineSteps || msg.pipeline_data || []}
+                                pipelineSteps={livePipelineSteps}
+                                requestId={isLive ? msg.id : undefined}
                                 webSources={msg.webSources || null}
                                 bridge={bridge}
                                 isStreaming={isLive}
@@ -2874,58 +2858,15 @@ function AppInner() {
                             </div>
                           );
                         })()}
+                        {/* Debug bars removed — were showing SAVE/MSG_DONE state */}
                         {/* Streaming Message - handles both Loading (Thinking) and Generating phases */}
                         {/* CRITICAL: Only render StreamingChatMessage if no saved bot message exists yet */}
                         {/* This prevents double-rendering when message is saved but timeout hasn't cleared streamingMessage */}
                         {/* Robust: Text-Vergleich verhindert Dopplung auch bei Race Conditions */}
-                        {/* Pipeline ReasoningStream — Router + Agent split */}
-                        {chatHook.isLoading && !chatHook.currentMessage && !(nextMsg && nextMsg.from === 'bot' && nextMsg.text) && (() => {
-                          const allSteps = chatHook.pipelineSteps || [];
-                          const rSteps = allSteps.filter(s => s.step === 'orchestrating');
-                          const aSteps = allSteps.filter(s => s.step !== 'orchestrating');
-                          // Detect agent name from orchestrating step data
-                          const liveAgentName = (() => {
-                            for (const s of rSteps) {
-                              const rm = s.data?.retrieval_mode || '';
-                              const m = rm.match(/^(?:subagent|agent):(\w+)$/);
-                              if (m) return m[1];
-                              if (s.data?.agent) return s.data.agent;
-                            }
-                            return activeAgentName || 'tutor';
-                          })();
-                          return (
-                            <div className="w-full flex-none mb-2" style={{ maxWidth: 'var(--ds-content-width)', margin: '0 auto' }}>
-                              {/* Router ReasoningStream (before agent) */}
-                              {rSteps.length > 0 && (
-                                <ReasoningStream
-                                  steps={rSteps}
-                                  agentColor={activeAgentColor}
-                                  citations={{}}
-                                  isStreaming={true}
-                                  message=""
-                                  variant="router"
-                                />
-                              )}
-                              {/* Agent ReasoningStream inside AgenticCell */}
-                              {(aSteps.length > 0 || chatHook.streamingMessage) && (
-                                <AgenticCell agentName={liveAgentName} isLoading={aSteps.length === 0 && !chatHook.streamingMessage}>
-                                  {aSteps.length > 0 && (
-                                    <ReasoningStream
-                                      steps={aSteps}
-                                      pipelineGeneration={chatHook.pipelineGeneration}
-                                      agentColor={activeAgentColor}
-                                      citations={chatHook.currentCitations || {}}
-                                      isStreaming={true}
-                                      bridge={bridge}
-                                      onPreviewCard={handlePreviewCard}
-                                      message={chatHook.streamingMessage || ''}
-                                    />
-                                  )}
-                                </AgenticCell>
-                              )}
-                            </div>
-                          );
-                        })()}
+                        {/* Pipeline ThinkingIndicator — unified reasoning display */}
+                        {chatHook.isLoading && !chatHook.currentMessage && !(nextMsg && nextMsg.from === 'bot' && nextMsg.text) && (
+                          <TutorThinking activeAgentName={activeAgentName} activeAgentColor={activeAgentColor} />
+                        )}
                         {/* Initial routing skeleton removed — ReasoningStream handles skeleton internally */}
                         {(chatHook.isLoading || chatHook.streamingMessage) && !chatHook.currentMessage && !(
                           nextMsg &&
@@ -2933,14 +2874,14 @@ function AppInner() {
                           typeof nextMsg.text === 'string' &&
                           nextMsg.text
                         ) && (
-                          <div className="w-full flex-none" style={{ maxWidth: 'var(--ds-content-width)', margin: '0 auto' }}>
+                          <div className="w-full flex-none" style={CONTENT_WIDTH_CENTERED}>
                             <StreamingChatMessage
                               message={chatHook.streamingMessage || ''}
                               isStreaming={chatHook.isLoading}
                               cardContext={cardContextHook.cardContext}
-                              steps={chatHook.currentSteps || []}
-                              citations={chatHook.currentCitations || {}}
-                              pipelineSteps={chatHook.pipelineSteps || []}
+                              steps={[]}
+                              citations={{}}
+                              pipelineSteps={[]}
                               bridge={bridge}
                               onPreviewCard={handlePreviewCard}
                             />
@@ -2964,16 +2905,6 @@ function AppInner() {
 
       </main>
 
-      {/* Mascot moved to main Anki window (plusi_dock.py) — no longer rendered in React */}
-
-      {!showSessionOverview && (
-        <>
-          {/* Old chat input removed — unified ChatInput is rendered below */}
-        </>
-      )}
-
-      {/* Card Preview Modal removed — replaced by universal Preview Mode */}
-
       {/* Paywall Modal */}
       <PaywallModal
         isOpen={showPaywall}
@@ -2993,7 +2924,7 @@ function AppInner() {
       let reviewTopSlot = null;
       if (isReview && reviewer) {
         const s = reviewer.state;
-        if (reviewer.isLoading) reviewTopSlot = <DockLoading steps={s.aiSteps} />;
+        if (reviewer.isLoading) reviewTopSlot = <DockLoading streamId={reviewer.pruferStreamId} steps={s.aiSteps} />;
         else if (s.mode === 'evaluated') reviewTopSlot = <DockEvalResult result={s.evalResult} />;
         else if (s.mode === 'answer') reviewTopSlot = <DockTimer frozenElapsed={s.frozenElapsed} rating={s.selectedRating} onCycleRating={reviewer.handleCycleRating} />;
         else if (s.mode === 'mc_active' || s.mode === 'mc_result') reviewTopSlot = <DockStars stars={s.mcStars} rating={s.selectedRating} isResult={s.mode === 'mc_result'} />;
@@ -3034,7 +2965,10 @@ function AppInner() {
         placeholder = 'Frage stellen...';
         onSend = handleSend;
         actionPrimary = { label: 'Schließen', shortcut: 'ESC', onClick: () => setReviewChatOpen(false) };
-        actionSecondary = { label: '', shortcut: '', onClick: () => {} };
+        const hasSidebarMessages = chatHook.messages.length > 0;
+        actionSecondary = hasSidebarMessages
+          ? { label: 'Zusammenfassen', shortcut: '↵', onClick: () => window.dispatchEvent(new CustomEvent('compactConfirmed')) }
+          : { label: '', shortcut: '', onClick: () => {} };
       } else {
         // Normal chat mode (non-review)
         topSlot = undefined;
@@ -3087,8 +3021,6 @@ function AppInner() {
             currentAuthToken={currentAuthToken}
             onClose={handleClose}
             plusiEnabled={isReview ? false : mascotEnabled}
-            stickyAgent={stickyAgent}
-            onStickyAgentChange={setStickyAgent}
             topSlot={topSlot}
             hideInput={hideInput}
             placeholder={placeholder}
@@ -3131,8 +3063,10 @@ export default function App() {
   const { bridge, isReady } = useAnki();
 
   return (
-    <SessionContextProvider bridge={bridge} isReady={isReady}>
-      <AppInner />
-    </SessionContextProvider>
+    <ReasoningProvider>
+      <SessionContextProvider bridge={bridge} isReady={isReady}>
+        <AppInner />
+      </SessionContextProvider>
+    </ReasoningProvider>
   );
 }

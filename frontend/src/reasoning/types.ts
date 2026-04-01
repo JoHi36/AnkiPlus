@@ -28,6 +28,5 @@ export interface StepRendererDef {
   hidden?: boolean;
 }
 
-export const MIN_STEP_INTERVAL = 800;
-
-export type CollapseRule = 'auto' | 'never' | 'immediate';
+export type StreamPhase = 'accumulating' | 'generating' | 'complete';
+export const STEP_MIN_VISIBILITY = 200;

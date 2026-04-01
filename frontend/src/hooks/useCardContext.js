@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { consumePendingPerformance } from '../utils/pendingPerformance';
 
 /**
  * Hook für Card-Context und Sections
@@ -19,12 +20,6 @@ export function useCardContext() {
    * Setzt nur den Kontext, erstellt KEINE Section automatisch
    */
   const handleCardContext = useCallback((cardContextData) => {
-    console.log('🃏 useCardContext: Karten-Kontext erhalten:', cardContextData?.cardId);
-    console.log('🃏 useCardContext: Karten-Kontext Details:', {
-      hasQuestion: !!cardContextData?.question,
-      questionLength: cardContextData?.question?.length,
-      cardId: cardContextData?.cardId
-    });
     
     setCardContext(cardContextData);
     
@@ -54,7 +49,6 @@ export function useCardContext() {
     // Prüfe ob Section bereits existiert
     const existingSection = sections.find(s => s.cardId === cardId);
     if (existingSection) {
-      console.log('🃏 useCardContext: Section existiert bereits:', existingSection.id);
       setCurrentSectionId(existingSection.id);
       return { sectionId: existingSection.id, section: null };
     }
@@ -71,13 +65,10 @@ export function useCardContext() {
     };
 
     // Attach pending performance data if available (from reviewer-side rating)
-    if (typeof window !== 'undefined' && window._pendingPerformanceData && window._pendingPerformanceData[cardId]) {
-      newSection.performanceData = window._pendingPerformanceData[cardId];
-      delete window._pendingPerformanceData[cardId];
-      console.log('🃏 useCardContext: Pending Performance-Daten angehängt:', newSection.performanceData.type, newSection.performanceData.score);
+    const pendingPerf = consumePendingPerformance(String(cardId));
+    if (pendingPerf) {
+      newSection.performanceData = pendingPerf;
     }
-
-    console.log('🃏 useCardContext: Neue Section erstellt:', sectionId, 'Titel:', initialTitle);
 
     setSections(prev => [...prev, newSection]);
     setCurrentSectionId(sectionId);
@@ -94,7 +85,6 @@ export function useCardContext() {
    * @param {string} newTitle - Der neue Titel
    */
   const updateSectionTitle = useCallback((sectionId, newTitle) => {
-    console.log('🃏 useCardContext: Section-Titel aktualisiert:', sectionId, '->', newTitle);
     setSections(prev => prev.map(section =>
       section.id === sectionId
         ? { ...section, title: newTitle }
@@ -115,10 +105,8 @@ export function useCardContext() {
   const updateSectionPerformance = useCallback((sectionId, performanceData) => {
     const targetId = sectionId || currentSectionId;
     if (!targetId) {
-      console.warn('⚠️ useCardContext: Keine Section-ID für Performance-Update');
       return;
     }
-    console.log('📊 useCardContext: Performance-Daten gespeichert:', targetId, performanceData?.type, performanceData?.score);
     setSections(prev => prev.map(section =>
       section.id === targetId
         ? { ...section, performanceData }
@@ -138,7 +126,6 @@ export function useCardContext() {
   
   // Scroll zu Abschnitt - State-basierter Ansatz für bessere Zuverlässigkeit
   const handleScrollToSection = useCallback((sectionId) => {
-    console.log('🔍 handleScrollToSection: Request für Section:', sectionId);
     // Setze State - useEffect wird reagieren
     setScrollToSectionId(sectionId);
   }, []);
@@ -147,7 +134,6 @@ export function useCardContext() {
   useEffect(() => {
     if (!scrollToSectionId) return;
     
-    console.log('🔍 useEffect: Scrolle zu Section:', scrollToSectionId);
     
     // Mehrere Versuche mit verschiedenen Timings
     const attemptScroll = (attempt = 1) => {
@@ -158,17 +144,14 @@ export function useCardContext() {
       
       if (!element || !container) {
         if (attempt < 5) {
-          console.log(`⚠️ Versuch ${attempt}: Element oder Container nicht gefunden, versuche erneut...`);
           setTimeout(() => attemptScroll(attempt + 1), 100 * attempt);
           return;
         } else {
-          console.error('❌ Alle Versuche fehlgeschlagen');
           setScrollToSectionId(null);
           return;
         }
       }
       
-      console.log('✅ Element und Container gefunden, scrolle...');
       
       // Direkte Scroll-Berechnung
       const containerRect = container.getBoundingClientRect();
@@ -176,14 +159,6 @@ export function useCardContext() {
       const relativeTop = elementRect.top - containerRect.top;
       const targetScroll = container.scrollTop + relativeTop - 100;
       
-      console.log('📊 Scroll-Details:', {
-        relativeTop,
-        currentScrollTop: container.scrollTop,
-        targetScroll,
-        containerHeight: container.clientHeight,
-        elementTop: elementRect.top,
-        containerTop: containerRect.top
-      });
       
       // Scrolle sofort (ohne smooth für sofortige Reaktion)
       container.scrollTop = Math.max(0, targetScroll);

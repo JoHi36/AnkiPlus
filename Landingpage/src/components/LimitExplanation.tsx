@@ -31,14 +31,14 @@ export function LimitExplanation({ tier, currentUsage, dailyLimit }: LimitExplan
       return {
         dailyLimit: 20_000,
         message: `${formatTokens(20_000)} Tokens pro Tag verfügbar.`,
-        upgradeMessage: 'Upgrade auf Student für 70K Tokens pro Tag',
+        upgradeMessage: 'Upgrade auf Pro für 70K Tokens pro Tag',
         upgradeTier: 'tier1' as const,
       };
     }
     return {
       dailyLimit: 70_000,
       message: `${formatTokens(70_000)} Tokens pro Tag verfügbar.`,
-      upgradeMessage: 'Upgrade auf Exam Pro für 210K Tokens pro Tag',
+      upgradeMessage: 'Upgrade auf Max für 210K Tokens pro Tag',
       upgradeTier: 'tier2' as const,
     };
   };
@@ -107,7 +107,7 @@ export function LimitInfoBox({ tier }: { tier: 'free' | 'tier1' | 'tier2' }) {
 
   const dailyLimit = tier === 'free' ? '20K' : '70K';
   const weeklyLimit = tier === 'free' ? '100K' : '350K';
-  const upgradeTier = tier === 'free' ? 'Student' : 'Exam Pro';
+  const upgradeTier = tier === 'free' ? 'Pro' : 'Max';
   const colorClass = tier === 'free' ? 'text-neutral-400' : 'text-teal-400/80';
   const borderClass = tier === 'free' ? 'border-white/10' : 'border-teal-500/20';
   const bgIconClass = tier === 'free' ? 'bg-white/5 text-neutral-400' : 'bg-teal-500/10 text-teal-400';

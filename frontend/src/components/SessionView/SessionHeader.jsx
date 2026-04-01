@@ -58,7 +58,6 @@ export default function SessionHeader({
             setAuthStatus(status);
           }
         } catch (e) {
-          console.error('Fehler beim Laden des Auth-Status:', e);
         }
       };
       
@@ -82,7 +81,6 @@ export default function SessionHeader({
               setAuthStatus(status);
             }
           } catch (e) {
-            console.error('Fehler beim Laden des Auth-Status:', e);
           }
         }
       } else if (event.detail && event.detail.type === 'refreshAuthStatus') {
@@ -95,7 +93,6 @@ export default function SessionHeader({
               setAuthStatus(status);
             }
           } catch (e) {
-            console.error('Fehler beim Laden des Auth-Status:', e);
           }
         }
       }
@@ -130,7 +127,6 @@ export default function SessionHeader({
           setQuotaStatus(data);
         }
       } catch (error) {
-        console.error('Error fetching quota:', error);
       }
     };
 

@@ -6,7 +6,6 @@
 
 import axios, { AxiosInstance } from 'axios';
 import https from 'https';
-import * as functions from 'firebase-functions';
 import { retryWithBackoff, RetryOptions } from './retry';
 
 // ---------------------------------------------------------------------------
@@ -91,17 +90,7 @@ function getApiKey(): string {
     return process.env.OPENROUTER_API_KEY;
   }
 
-  // Fall back to Firebase runtime config
-  try {
-    const cfg = functions.config();
-    if (cfg.openrouter?.api_key) {
-      return cfg.openrouter.api_key;
-    }
-  } catch {
-    // functions.config() may throw outside Firebase context
-  }
-
-  throw new Error('OpenRouter API key not configured. Set OPENROUTER_API_KEY env var or openrouter.api_key config.');
+  throw new Error('OpenRouter API key not configured. Set OPENROUTER_API_KEY environment variable.');
 }
 
 // ---------------------------------------------------------------------------
@@ -154,6 +143,7 @@ export async function chatCompletion(req: OpenRouterRequest): Promise<any> {
   const axiosConfig: any = {
     headers: {
       Authorization: `Bearer ${apiKey}`,
+      'X-No-Store': 'true',  // GDPR: Zero Data Retention — OpenRouter won't log prompts/responses
     },
   };
 
@@ -180,4 +170,37 @@ export async function chatCompletionWithRetry(
   }
 
   return retryWithBackoff(() => chatCompletion(req), retryOpts);
+}
+
+// ---------------------------------------------------------------------------
+// Generation cost lookup
+// ---------------------------------------------------------------------------
+
+export interface GenerationCost {
+  totalCost: number;       // USD
+  tokensPrompt: number;
+  tokensCompletion: number;
+}
+
+/**
+ * Fetch the actual cost of a generation from OpenRouter.
+ * Returns null if the lookup fails (non-blocking fallback).
+ */
+export async function fetchGenerationCost(generationId: string): Promise<GenerationCost | null> {
+  try {
+    const apiKey = getApiKey();
+    const resp = await openrouterClient.get(`/generation?id=${generationId}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      timeout: 5000,
+    });
+    const data = resp.data?.data;
+    if (!data || typeof data.total_cost !== 'number') return null;
+    return {
+      totalCost: data.total_cost,
+      tokensPrompt: data.native_tokens_prompt || data.tokens_prompt || 0,
+      tokensCompletion: data.native_tokens_completion || data.tokens_completion || 0,
+    };
+  } catch {
+    return null;
+  }
 }

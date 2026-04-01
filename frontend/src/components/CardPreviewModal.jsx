@@ -94,7 +94,6 @@ export default function CardPreviewModal({ card, isOpen, onClose, bridge }) {
                 setDetails(data);
             }
         } catch (err) {
-            console.error("Failed to load card details:", err);
             setError("Fehler beim Laden der Karte");
         } finally {
             setIsLoading(false);

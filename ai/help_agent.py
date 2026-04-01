@@ -86,14 +86,12 @@ def run_help(situation: str = '', emit_step=None, memory=None, stream_callback=N
         except ImportError:
             from config import get_config, is_backend_mode, get_backend_url, get_auth_token
 
-        config = get_config() or {}
-        api_key = config.get('api_key', '')
-        use_backend = is_backend_mode() and get_auth_token() and not api_key
-
-        if not api_key and not use_backend:
+        # Backend-only mode
+        backend_url = get_backend_url()
+        if not backend_url:
             return {
-                'text': 'Der Help-Agent benötigt eine API-Verbindung. '
-                        'Bitte konfiguriere deinen API-Key in den Einstellungen.',
+                'text': 'Der Help-Agent benötigt eine Backend-Verbindung. '
+                        'Bitte melde dich an oder konfiguriere die Verbindung.',
                 'error': True,
             }
 
@@ -102,58 +100,25 @@ def run_help(situation: str = '', emit_step=None, memory=None, stream_callback=N
         if memory_context:
             system_prompt += f"\n\nUSER-KONTEXT:\n{memory_context}"
 
-        # Build request contents
-        contents = [
-            {"role": "user", "parts": [{"text": situation}]}
-        ]
+        import requests
+        try:
+            from .auth import get_auth_headers
+        except ImportError:
+            from ai.auth import get_auth_headers
 
-        data = {
-            "contents": contents,
-            "systemInstruction": {
-                "parts": [{"text": system_prompt}]
-            },
-            "generationConfig": {
-                "temperature": 0.3,
-                "maxOutputTokens": 1024,
-            }
+        url = f"{backend_url}/chat"
+        headers = get_auth_headers()
+        payload = {
+            "message": situation,
+            "model": model,
+            "agent": "help",
+            "systemPrompt": system_prompt,
+            "stream": False,
         }
-
-        if use_backend:
-            # Backend mode — route through Vercel backend
-            import requests
-            backend_url = get_backend_url()
-            auth_token = get_auth_token()
-            url = f"{backend_url}/chat"
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {auth_token}",
-            }
-            payload = {
-                "message": situation,
-                "model": model,
-                "systemPrompt": system_prompt,
-            }
-            response = requests.post(url, json=payload, headers=headers, timeout=15)
-            response.raise_for_status()
-            result = response.json()
-            text = result.get('response', result.get('text', ''))
-        else:
-            # Direct Gemini API
-            import requests
-            url = (
-                f"https://generativelanguage.googleapis.com/v1beta/models/"
-                f"{model}:generateContent?key={api_key}"
-            )
-            headers = {"Content-Type": "application/json"}
-            response = requests.post(url, json=data, headers=headers, timeout=15)
-            response.raise_for_status()
-            result = response.json()
-
-            text = ''
-            if 'candidates' in result and result['candidates']:
-                parts = result['candidates'][0].get('content', {}).get('parts', [])
-                if parts:
-                    text = parts[0].get('text', '').strip()
+        response = requests.post(url, json=payload, headers=headers, timeout=15)
+        response.raise_for_status()
+        result = response.json()
+        text = result.get('response', result.get('text', ''))
 
         if not text:
             return {

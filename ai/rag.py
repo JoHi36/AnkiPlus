@@ -72,7 +72,10 @@ def extract_card_keywords(context):
 
 
 def is_standalone_question(user_message, context):
-    """Detect if a question is about a DIFFERENT topic than the current card.
+    """DEPRECATED: Router's resolved_intent handles context resolution now.
+    Kept for backwards compatibility during migration.
+
+    Detect if a question is about a DIFFERENT topic than the current card.
 
     Logic is inverted: assume context-dependent by default when a card is open.
     Only return True (standalone) if the question contains domain-specific words
@@ -126,7 +129,10 @@ def is_standalone_question(user_message, context):
 
 
 def fix_router_queries(router_result, user_message, context):
-    """Post-process router result: if question is context-dependent but queries don't contain card keywords, fix them."""
+    """DEPRECATED: KG enrichment (ai/kg_enrichment.py) handles query quality now.
+    Kept for backwards compatibility during migration.
+
+    Post-process router result: if question is context-dependent but queries don't contain card keywords, fix them."""
     logger.debug("_fix_router_queries: router_result=%s, context=%s, search_needed=%s", bool(router_result), bool(context), router_result.get('search_needed') if router_result else None)
     if not router_result or not context:
         logger.debug("_fix_router_queries: Skipping (no router_result or no context)")
@@ -187,9 +193,8 @@ def fix_router_queries(router_result, user_message, context):
 
 
 def rag_router(user_message, context=None, config=None, emit_step=None):
-    """DEPRECATED: Use unified_route() in router.py instead.
-    Kept as fallback for Level 1/2 routing (lock/heuristic) where search
-    strategy is not included in the routing result.
+    """DEPRECATED: Replaced by Router (ai/router.py) + KG Enrichment (ai/kg_enrichment.py).
+    Kept as fallback. Will be removed in future version.
 
     Stage 1: Router - Analysiert die Anfrage und entscheidet ob und wie gesucht werden soll.
 
@@ -376,11 +381,11 @@ QUERY RULES:
                     logger.info("Router (Backend): search_needed=%s", router_result.get('search_needed'))
                     # Weiter zur Validierung unten (gleicher Code wie bei direkter API)
             except (OSError, ValueError, requests.exceptions.RequestException) as be:
-                logger.warning("Router: Backend-Fehler: %s, Fallback auf direkte API", be)
-                use_backend = False
+                logger.warning("Router: Backend-Fehler: %s", be)
+                return None
 
-        # Wenn Backend erfolgreich war, überspringe direkte API
-        if use_backend and 'router_result' in locals() and router_result and router_result.get("search_needed") is not None:
+        # Validate backend result
+        if 'router_result' in locals() and router_result and router_result.get("search_needed") is not None:
             # Validierung des Backend-Ergebnisses
             retrieval_mode = router_result.get('retrieval_mode', 'both')
             if retrieval_mode not in ('sql', 'semantic', 'both'):
@@ -416,381 +421,9 @@ QUERY RULES:
             logger.info("Router (Backend): search_needed=%s, retrieval_mode=%s", router_result.get('search_needed'), retrieval_mode)
             return fix_router_queries(router_result, user_message, context)
 
-        # Direkter Gemini API Modus (Fallback oder wenn kein Backend)
-        router_api_key = api_key or config.get("api_key", "")
-        if not router_api_key:
-            logger.warning("Router: Kein API-Key verfügbar, überspringe direkte API")
-            return None
-
-        url_model_pairs = [
-            (f"https://generativelanguage.googleapis.com/v1beta/models/{router_model}:generateContent?key={router_api_key}", router_model),
-            (f"https://generativelanguage.googleapis.com/v1beta/models/{fallback_model}:generateContent?key={router_api_key}", fallback_model),
-        ]
-        headers = {"Content-Type": "application/json"}
-        logger.debug("Router: Direkter Gemini API Aufruf, Models: [%s, %s]", router_model, fallback_model)
-        data = {
-            "contents": [{"role": "user", "parts": [{"text": router_prompt}]}],
-            "generationConfig": {
-                "temperature": 0.1,
-                "maxOutputTokens": 1024,
-                "responseMimeType": "application/json"
-            }
-        }
-
-        last_error = None
-        for url, current_model in url_model_pairs:
-            try:
-                # Direkte Gemini API
-                logger.debug("Router: Direkter API-Aufruf an %s", current_model)
-                response = requests.post(url, json=data, headers=headers, timeout=10)
-                response.raise_for_status()
-                result = response.json()
-
-                if "error" in result:
-                    continue
-
-                if "candidates" in result and len(result["candidates"]) > 0:
-                    candidate = result["candidates"][0]
-                    if "content" in candidate and "parts" in candidate["content"]:
-                        parts = candidate["content"]["parts"]
-                        if len(parts) > 0:
-                            text = parts[0].get("text", "")
-
-                            # Parse JSON (kann in Code-Block sein)
-                            # Entferne Markdown-Code-Blöcke falls vorhanden
-                            text = re.sub(r'```json\s*', '', text)
-                            text = re.sub(r'```\s*', '', text)
-                            # Erweitertes Pattern für strategies Array
-                            json_match = re.search(r'\{.*?"search_needed".*?\}', text, re.DOTALL)
-                            if json_match:
-                                text = json_match.group(0)
-
-                            # Bereinige JSON: Entferne trailing commas
-                            # Pattern: Komma gefolgt von } oder ]
-                            text = re.sub(r',(\s*[}\]])', r'\1', text)
-
-                            try:
-                                router_result = json.loads(text)
-                            except json.JSONDecodeError as json_err:
-                                logger.warning("Router: JSON-Parse-Fehler nach Bereinigung: %s, Text: %s", json_err, text[:300])
-                                # Versuche nochmal mit strikterer Bereinigung
-                                # Entferne alle Kommentare (nicht standard JSON)
-                                text = re.sub(r'//.*?$', '', text, flags=re.MULTILINE)
-                                text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
-                                # Entferne trailing commas nochmal
-                                text = re.sub(r',(\s*[}\]])', r'\1', text)
-
-                                # Versuche unvollständiges JSON zu reparieren
-                                try:
-                                    router_result = json.loads(text)
-                                except json.JSONDecodeError as json_err2:
-                                    # Zähle öffnende und schließende Klammern
-                                    open_braces = text.count('{')
-                                    close_braces = text.count('}')
-                                    open_brackets = text.count('[')
-                                    close_brackets = text.count(']')
-
-                                    # Füge fehlende schließende Klammern hinzu
-                                    if open_braces > close_braces:
-                                        text += '\n' + '}' * (open_braces - close_braces)
-                                    if open_brackets > close_brackets:
-                                        text += '\n' + ']' * (open_brackets - close_brackets)
-
-                                    try:
-                                        router_result = json.loads(text)
-                                        logger.info("Router: Unvollständiges JSON repariert")
-                                    except json.JSONDecodeError:
-                                        # Letzter Versuch: Extrahiere precise_queries und broad_queries falls vorhanden
-                                        precise_match = re.search(r'"precise_queries"\s*:\s*\[(.*?)\]', text, re.DOTALL)
-                                        broad_match = re.search(r'"broad_queries"\s*:\s*\[(.*?)\]', text, re.DOTALL)
-                                        if precise_match or broad_match:
-                                            # Extrahiere Queries aus Arrays
-                                            precise_queries = []
-                                            broad_queries = []
-
-                                            if precise_match:
-                                                precise_text = precise_match.group(1)
-                                                precise_items = re.findall(r'"([^"]+)"', precise_text)
-                                                precise_queries = precise_items[:3]
-
-                                            if broad_match:
-                                                broad_text = broad_match.group(1)
-                                                broad_items = re.findall(r'"([^"]+)"', broad_text)
-                                                broad_queries = broad_items[:3]
-
-                                            if precise_queries or broad_queries:
-                                                router_result = {
-                                                    "search_needed": True,
-                                                    "retrieval_mode": "both",
-                                                    "embedding_queries": [],
-                                                    "precise_queries": precise_queries if precise_queries else [],
-                                                    "broad_queries": broad_queries if broad_queries else [],
-                                                    "search_scope": "current_deck"
-                                                }
-                                                logger.info("Router: Queries aus unvollständigem JSON extrahiert: %s precise, %s broad", len(precise_queries), len(broad_queries))
-                                            else:
-                                                raise json_err
-                                        else:
-                                            raise json_err
-
-                            # Validiere Struktur
-                            if "search_needed" in router_result:
-                                # Extract and validate retrieval_mode
-                                retrieval_mode = router_result.get('retrieval_mode', 'both')
-                                if retrieval_mode not in ('sql', 'semantic', 'both'):
-                                    retrieval_mode = 'both'
-                                router_result['retrieval_mode'] = retrieval_mode
-
-                                # Extract embedding_queries (array) with backward compat for embedding_query (string)
-                                embedding_queries = router_result.get("embedding_queries", [])
-                                if not isinstance(embedding_queries, list) or not embedding_queries:
-                                    legacy = router_result.get("embedding_query", "")
-                                    embedding_queries = [legacy] if legacy else []
-                                embedding_queries = [q for q in embedding_queries if q and q.strip()][:3]
-
-                                # Validiere precise_queries und broad_queries
-                                precise_queries = router_result.get("precise_queries", [])
-                                broad_queries = router_result.get("broad_queries", [])
-
-                                if not isinstance(precise_queries, list):
-                                    precise_queries = []
-                                if not isinstance(broad_queries, list):
-                                    broad_queries = []
-
-                                # Stelle sicher dass wir mindestens 3 Queries haben
-                                while len(precise_queries) < 3:
-                                    precise_queries.append("")
-                                while len(broad_queries) < 3:
-                                    broad_queries.append("")
-
-                                precise_queries = precise_queries[:3]
-                                broad_queries = broad_queries[:3]
-
-                                router_result["precise_queries"] = precise_queries
-                                router_result["broad_queries"] = broad_queries
-                                router_result["embedding_queries"] = embedding_queries
-
-                                # Remove legacy intent field if present
-                                router_result.pop("intent", None)
-                                router_result.pop("reasoning", None)
-
-                                # KRITISCHE VALIDIERUNG: Prüfe ob Queries die Nutzeranfrage wörtlich enthalten
-                                if precise_queries or broad_queries:
-                                    logger.debug("Router: Validiere %s precise_queries und %s broad_queries", len(precise_queries), len(broad_queries))
-                                    user_message_clean = user_message.lower().strip()
-                                    user_words = set(user_message_clean.split())
-                                    corrected_precise = []
-                                    corrected_broad = []
-
-                                    # Validiere precise_queries
-                                    for i, query in enumerate(precise_queries):
-                                        if not query or not query.strip():
-                                            continue
-                                        logger.debug("Router: Precise Query %s: '%s'", i+1, query[:80])
-                                        query_lower = query.lower().strip()
-                                        query_clean = query_lower.rstrip('.').rstrip('\u2026').rstrip('...')
-
-                                        contains_user_message = user_message_clean in query_clean or query_clean in user_message_clean
-                                        query_words = set(query_clean.split())
-                                        overlap = user_words.intersection(query_words)
-
-                                        if contains_user_message or (len(overlap) >= 3 and len(user_words) <= 15):
-                                            logger.warning("Router: Precise Query enthält Nutzeranfrage wörtlich: '%s'", query[:100])
-                                            if context:
-                                                question = context.get('question') or context.get('frontField') or ""
-                                                answer = context.get('answer') or ""
-
-                                                card_text = f"{question} {answer}".lower()
-                                                card_text = re.sub(r'<[^>]+>', ' ', card_text)
-                                                card_text = re.sub(r'[^\w\s]', ' ', card_text)
-                                                card_words = card_text.split()
-
-                                                stopwords = {'der', 'die', 'das', 'und', 'oder', 'ist', 'sind', 'wird', 'werden', 'auf', 'in', 'zu', 'für', 'mit', 'von', 'ein', 'eine', 'einer', 'einem', 'einen', 'mir', 'dir', 'uns', 'ihr', 'ihm', 'sie', 'er', 'es', 'diese', 'dieser', 'dieses', 'diesen', 'dem', 'den', 'des'}
-                                                important_words = [w for w in card_words if len(w) > 3 and w not in stopwords]
-
-                                                from collections import Counter
-                                                word_freq = Counter(important_words)
-                                                top_words = [word for word, count in word_freq.most_common(3)]
-
-                                                if top_words:
-                                                    new_query = " AND ".join(top_words)
-                                                    logger.info("Router: Korrigiere Precise Query zu: '%s'", new_query)
-                                                    corrected_precise.append(new_query)
-                                                else:
-                                                    corrected_precise.append(query)
-                                            else:
-                                                corrected_precise.append(query)
-                                        else:
-                                            corrected_precise.append(query)
-
-                                    # Validiere broad_queries
-                                    for i, query in enumerate(broad_queries):
-                                        if not query or not query.strip():
-                                            continue
-                                        logger.debug("Router: Broad Query %s: '%s'", i+1, query[:80])
-                                        query_lower = query.lower().strip()
-                                        query_clean = query_lower.rstrip('.').rstrip('\u2026').rstrip('...')
-
-                                        contains_user_message = user_message_clean in query_clean or query_clean in user_message_clean
-                                        query_words = set(query_clean.split())
-                                        overlap = user_words.intersection(query_words)
-                                        is_or_expansion = all(word in user_words or word == 'or' for word in query_words) and 'or' in query_clean
-
-                                        if contains_user_message or (len(overlap) >= 3 and len(user_words) <= 15) or is_or_expansion:
-                                            logger.warning("Router: Broad Query enthält Nutzeranfrage wörtlich: '%s'", query[:100])
-                                            if context:
-                                                question = context.get('question') or context.get('frontField') or ""
-                                                answer = context.get('answer') or ""
-
-                                                card_text = f"{question} {answer}".lower()
-                                                card_text = re.sub(r'<[^>]+>', ' ', card_text)
-                                                card_text = re.sub(r'[^\w\s]', ' ', card_text)
-                                                card_words = card_text.split()
-
-                                                stopwords = {'der', 'die', 'das', 'und', 'oder', 'ist', 'sind', 'wird', 'werden', 'auf', 'in', 'zu', 'für', 'mit', 'von', 'ein', 'eine', 'einer', 'einem', 'einen', 'mir', 'dir', 'uns', 'ihr', 'ihm', 'sie', 'er', 'es', 'diese', 'dieser', 'dieses', 'diesen', 'dem', 'den', 'des'}
-                                                important_words = [w for w in card_words if len(w) > 3 and w not in stopwords]
-
-                                                from collections import Counter
-                                                word_freq = Counter(important_words)
-                                                top_words = [word for word, count in word_freq.most_common(5)]
-
-                                                if top_words:
-                                                    new_query = " OR ".join(top_words)
-                                                    logger.info("Router: Korrigiere Broad Query zu: '%s'", new_query)
-                                                    corrected_broad.append(new_query)
-                                                else:
-                                                    corrected_broad.append(query)
-                                            else:
-                                                corrected_broad.append(query)
-                                        else:
-                                            corrected_broad.append(query)
-
-                                    # Stelle sicher dass wir 3 Queries haben
-                                    while len(corrected_precise) < 3:
-                                        corrected_precise.append("")
-                                    while len(corrected_broad) < 3:
-                                        corrected_broad.append("")
-
-                                    router_result["precise_queries"] = corrected_precise[:3]
-                                    router_result["broad_queries"] = corrected_broad[:3]
-
-                                    logger.info("Router: Validierung abgeschlossen: %s precise, %s broad", len([q for q in corrected_precise if q]), len([q for q in corrected_broad if q]))
-
-                                scope_label = ""
-                                if deck_name:
-                                    scope_label = deck_name.split("::")[-1]
-                                if emit_step:
-                                    emit_step("router", "done", {
-                                            "search_needed": router_result.get("search_needed", True),
-                                            "retrieval_mode": retrieval_mode,
-                                            "scope": router_result.get("search_scope", "current_deck"),
-                                            "scope_label": scope_label,
-                                            "max_sources": router_result.get("max_sources", "medium"),
-                                            "response_length": router_result.get("response_length", "medium")
-                                        })
-
-                                # Finale Log-Ausgabe
-                                logger.info("Router: search_needed=%s, retrieval_mode=%s, embedding_queries=%s, precise_queries=%s, broad_queries=%s, scope=%s", router_result.get('search_needed'), retrieval_mode, [q[:40] for q in embedding_queries], len([q for q in precise_queries if q]), len([q for q in broad_queries if q]), router_result.get('search_scope'))
-                                for i, q in enumerate(precise_queries):
-                                    if q:
-                                        logger.debug("   Precise Query %s: '%s'", i+1, q[:100])
-                                for i, q in enumerate(broad_queries):
-                                    if q:
-                                        logger.debug("   Broad Query %s: '%s'", i+1, q[:100])
-                                return fix_router_queries(router_result, user_message, context)
-
-            except requests.exceptions.HTTPError as e:
-                last_error = e
-                logger.warning("Router: HTTP-Fehler %s: %s", e.response.status_code, e.response.text[:300])
-                continue
-            except json.JSONDecodeError as e:
-                logger.warning("Router: JSON-Parse-Fehler: %s, Text: %s", e, text[:200])
-                continue
-            except Exception as e:
-                last_error = e
-                logger.warning("Router: Unerwarteter Fehler: %s: %s", type(e).__name__, e)
-                continue
-
-        logger.warning("Router: Alle URLs fehlgeschlagen, verwende Fallback")
-
-        # Fallback: Use extract_card_keywords (properly filters CSS/HTML artifacts)
-        fallback_precise = []
-        fallback_broad = []
-        fallback_embedding = ""
-        if context:
-            top_words = extract_card_keywords(context)
-            if top_words:
-                fallback_embedding = " ".join(top_words[:7])
-                # Build precise queries (AND pairs)
-                for i in range(0, min(len(top_words), 9), 3):
-                    chunk = top_words[i:i+3]
-                    if chunk:
-                        fallback_precise.append(" AND ".join(chunk))
-                # Build broad queries (OR groups)
-                fallback_broad = [" OR ".join(top_words[:5])]
-                if len(top_words) > 3:
-                    fallback_broad.append(" OR ".join(top_words[2:7]))
-                logger.info("Router Fallback: Keywords aus Karte extrahiert: %s", top_words[:9])
-
-        # Wenn keine Keywords extrahiert werden konnten, verwende minimale Queries
-        if not fallback_precise or not fallback_broad:
-            user_words = [w for w in user_message.lower().split() if len(w) > 3 and w not in {'hint', 'hinweis', 'antwort', 'verraten', 'verrate', 'gib', 'gibt', 'geben', 'mir', 'dir', 'uns', 'einen', 'eine', 'ohne', 'die', 'der', 'das'}]
-            if user_words:
-                fallback_embedding = " ".join(user_words[:7])
-                fallback_precise = [
-                    " AND ".join(user_words[:3]) if len(user_words) >= 3 else " AND ".join(user_words),
-                    " AND ".join(user_words[1:4]) if len(user_words) >= 4 else " AND ".join(user_words[:3]),
-                    " AND ".join(user_words[2:5]) if len(user_words) >= 5 else " AND ".join(user_words[:3])
-                ]
-                fallback_broad = [
-                    " OR ".join(user_words[:5]) if len(user_words) >= 5 else " OR ".join(user_words),
-                    " OR ".join(user_words[1:6]) if len(user_words) >= 6 else " OR ".join(user_words[:5]),
-                    " OR ".join(user_words[2:7]) if len(user_words) >= 7 else " OR ".join(user_words[:5])
-                ]
-                logger.warning("Router Fallback: Verwende minimale Keywords aus Nutzeranfrage: %s", user_words[:7])
-            else:
-                # Letzter Fallback: Verwende erste Wörter der Nutzeranfrage
-                words = user_message.split()[:9]
-                fallback_embedding = " ".join(words[:7])
-                if len(words) >= 3:
-                    fallback_precise = [
-                        " AND ".join(words[0:3]),
-                        " AND ".join(words[1:4]) if len(words) >= 4 else " AND ".join(words[:3]),
-                        " AND ".join(words[2:5]) if len(words) >= 5 else " AND ".join(words[:3])
-                    ]
-                    fallback_broad = [
-                        " OR ".join(words[0:5]) if len(words) >= 5 else " OR ".join(words),
-                        " OR ".join(words[1:6]) if len(words) >= 6 else " OR ".join(words[:5]),
-                        " OR ".join(words[2:7]) if len(words) >= 7 else " OR ".join(words[:5])
-                    ]
-                else:
-                    # Minimale Fallback
-                    fallback_precise = [" AND ".join(words)] * 3
-                    fallback_broad = [" OR ".join(words)] * 3
-                logger.warning("Router Fallback: Letzter Fallback mit ersten Wörtern: %s", words)
-
-        # Emit pipeline done for fallback
-        scope_label = ""
-        if deck_name:
-            scope_label = deck_name.split("::")[-1]
-        if emit_step:
-            emit_step("router", "done", {
-                "search_needed": True,
-                "retrieval_mode": "both",
-                "scope": "current_deck",
-                "scope_label": scope_label,
-                "max_sources": "medium",
-                "response_length": "medium"
-            })
-
-        return {
-            "search_needed": True,
-            "retrieval_mode": "both",
-            "embedding_queries": [fallback_embedding] if fallback_embedding else [],
-            "precise_queries": fallback_precise[:3] if fallback_precise else ["", "", ""],
-            "broad_queries": fallback_broad[:3] if fallback_broad else ["", "", ""],
-            "search_scope": "current_deck"
-        }
+        # No backend result — return None (direct API fallback removed)
+        logger.warning("Router: Backend did not return a result, returning None")
+        return None
 
     except Exception as e:
         logger.exception("Router Fehler: %s", e)
@@ -868,7 +501,7 @@ QUERY RULES:
         }
 
 
-def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="current_deck", context=None, max_notes=10, emit_state=None, emit_event=None):
+def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="current_deck", context=None, max_notes=30, emit_state=None, emit_event=None):
     """
     Stage 2: Multi-Query Cascade Retrieval Engine - Führt präzise und breite Queries in Cascade aus
 
@@ -931,20 +564,8 @@ def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="c
 
         # Helper function to build Anki query with deck restriction
         def build_anki_query(query, search_scope, context):
-            """Konstruiere Anki-Suchquery mit korrekter Deck-Name-Quote-Behandlung"""
-            if search_scope == "current_deck" and context and context.get('deckName'):
-                deck_name_query = context.get('deckName')
-                if 'deck:' in query.lower():
-                    pattern = r'deck:(["\']?)([^"\'\s\)]+(?:\s+[^"\'\s\)]+)*)\1'
-                    def replace_deck(match):
-                        deck_val = match.group(2)
-                        deck_val = deck_val.strip('"\'')
-                        return f'deck:"{deck_val}"'
-                    return re.sub(pattern, replace_deck, query, flags=re.IGNORECASE)
-                else:
-                    return f'deck:"{deck_name_query}" ({query})'
-            else:
-                return query
+            """Return query as-is. Always searches entire collection."""
+            return query
 
         # Helper function to execute query and aggregate results
         def execute_query(query, query_type, note_results):
@@ -1174,8 +795,9 @@ def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="c
                         seen_images.add(img)
                         unique_images.append(img)
 
-                # Formatiere Note für Context-String
-                note_parts = [f"Note {note_id} (found in {query_count} queries: {', '.join(queries_found)}):"]
+                # Formatiere Note für Context-String — [index] statt Note-ID
+                index = len(formatted_notes) + 1  # 1-based index
+                note_parts = [f"[{index}] (found in {query_count} queries: {', '.join(queries_found)}):"]
 
                 for field_name, field_clean in note_fields.items():
                     note_parts.append(f"Field {field_name}: {field_clean}")
@@ -1198,7 +820,8 @@ def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="c
                     "cardId": first_card_id,  # Erste Card-ID
                     "fields": citation_fields,
                     "deckName": deck_name,
-                    "isCurrentCard": False  # Will be set to True for current card below
+                    "isCurrentCard": False,  # Will be set to True for current card below
+                    "index": index  # Stable index for [N] inline references
                 }
 
             except (AttributeError, KeyError, IndexError, ValueError) as e:
@@ -1222,12 +845,16 @@ def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="c
                     citation_fields[field_name] = field_clean[:100] if field_clean else ""
 
             # Füge aktuelle Karte hinzu (überschreibt falls bereits vorhanden)
+            # Index: use existing index if card was already retrieved, else next available
+            _existing = citations.get(str(current_note_id), {})
+            _current_index = _existing.get("index") or (len(citations) + 1)
             citations[str(current_note_id)] = {
                 "noteId": current_note_id,
                 "cardId": current_card_id,
                 "fields": citation_fields,
                 "deckName": current_deck_name,
-                "isCurrentCard": True  # WICHTIG: Flag für Frontend
+                "isCurrentCard": True,  # WICHTIG: Flag für Frontend
+                "index": _current_index,  # Stable index for [N] inline references
             }
             logger.info("RAG Retrieval: Aktuelle Karte (Note %s) zu Citations hinzugefügt", current_note_id)
 

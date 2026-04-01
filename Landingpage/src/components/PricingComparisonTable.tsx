@@ -52,9 +52,9 @@ export function PricingComparisonTable() {
             <thead>
               <tr className="border-b border-white/[0.06]">
                 <th className="text-left p-5 font-semibold text-sm text-white/[0.92]">Feature</th>
-                <th className="text-center p-5 font-medium text-sm text-white/[0.35]">Starter</th>
-                <th className="text-center p-5 font-medium text-sm text-[#0a84ff]/70">Student</th>
-                <th className="text-center p-5 font-medium text-sm text-purple-400/70">Exam Pro</th>
+                <th className="text-center p-5 font-medium text-sm text-white/[0.35]">Free</th>
+                <th className="text-center p-5 font-medium text-sm text-[#0a84ff]/70">Pro</th>
+                <th className="text-center p-5 font-medium text-sm text-purple-400/70">Max</th>
               </tr>
             </thead>
             <tbody>
@@ -112,17 +112,17 @@ export function PricingComparisonTable() {
               <div className="border-t border-white/[0.06]">
                 <div className="p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/[0.35]">Starter</span>
+                    <span className="text-xs text-white/[0.35]">Free</span>
                     <div className="flex-1 mx-4 h-px bg-white/[0.04]" />
                     <div className="text-sm">{formatValue(feature.free)}</div>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-[#0a84ff]/60">Student</span>
+                    <span className="text-xs text-[#0a84ff]/60">Pro</span>
                     <div className="flex-1 mx-4 h-px bg-white/[0.04]" />
                     <div className="text-sm">{formatValue(feature.tier1)}</div>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-purple-400/60">Exam Pro</span>
+                    <span className="text-xs text-purple-400/60">Max</span>
                     <div className="flex-1 mx-4 h-px bg-white/[0.04]" />
                     <div className="text-sm">{formatValue(feature.tier2)}</div>
                   </div>

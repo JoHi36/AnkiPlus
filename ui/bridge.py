@@ -731,9 +731,14 @@ class WebBridge(QObject):
             data = json.loads(data_json)
             card_id = data.get('cardId') or data.get('card_id')
             message = data.get('message', data)
+            sender = message.get('sender') or message.get('from', '?')
+            has_cells = bool(message.get('agent_cells'))
+            text_len = len(message.get('text', ''))
+            logger.info("📥 saveCardMessage: card=%s sender=%s text=%dch agentCells=%s", card_id, sender, text_len, has_cells)
             if not card_id:
                 return json.dumps({'success': False, 'error': 'Missing cardId'})
             success = save_message(card_id, message)
+            logger.info("📥 saveCardMessage: result=%s", success)
             return json.dumps({'success': success, 'error': None})
         except Exception as e:
             logger.error("Fehler in saveCardMessage: %s", e)
@@ -754,60 +759,6 @@ class WebBridge(QObject):
         except Exception as e:
             logger.error("Fehler in saveCardSection: %s", e)
             return json.dumps({'success': False, 'error': str(e)})
-
-    @pyqtSlot(str, result=str)
-    def loadDeckMessages(self, deck_id_str):
-        """Load chronological messages for a deck (all cards + deck-level)."""
-        try:
-            from ..storage.card_sessions import load_deck_messages
-        except ImportError:
-            from storage.card_sessions import load_deck_messages
-        try:
-            deck_id = int(deck_id_str)
-            messages = load_deck_messages(deck_id, limit=50)
-            return json.dumps({"success": True, "messages": messages})
-        except Exception as e:
-            logger.error("loadDeckMessages error: %s", e)
-            return json.dumps({"success": False, "messages": [], "error": str(e)})
-
-    @pyqtSlot(str, result=str)
-    def saveDeckMessage(self, data_json):
-        """Save a deck-level message (no card association)."""
-        try:
-            from ..storage.card_sessions import save_deck_message
-        except ImportError:
-            from storage.card_sessions import save_deck_message
-        try:
-            data = json.loads(data_json)
-            deck_id = data.get('deckId')
-            if deck_id is None:
-                return json.dumps({"success": False, "error": "Missing deckId"})
-            try:
-                deck_id = int(deck_id)
-            except (ValueError, TypeError):
-                return json.dumps({"success": False, "error": "Invalid deckId"})
-            message = data.get('message')
-            if not isinstance(message, dict):
-                return json.dumps({"success": False, "error": "Missing or invalid message"})
-            success = save_deck_message(deck_id, message)
-            return json.dumps({"success": success})
-        except Exception as e:
-            logger.error("saveDeckMessage error: %s", e)
-            return json.dumps({"success": False, "error": str(e)})
-
-    @pyqtSlot(result=str)
-    def clearDeckMessages(self):
-        """Clear all free-chat messages (card_id IS NULL)."""
-        try:
-            from ..storage.card_sessions import clear_deck_messages
-        except ImportError:
-            from storage.card_sessions import clear_deck_messages
-        try:
-            count = clear_deck_messages()
-            return json.dumps({"success": True, "count": count})
-        except Exception as e:
-            logger.exception("clearDeckMessages error")
-            return json.dumps({"success": False, "error": str(e)})
 
     @pyqtSlot(str, str, result=str)
     def searchImage(self, query, image_type="general"):
@@ -1443,14 +1394,7 @@ class WebBridge(QObject):
         except Exception as e:
             logger.exception("saveMascotEnabled error: %s", e)
 
-    @pyqtSlot(str, str, str)
-    def subagentDirect(self, agent_name, text, extra_json='{}'):
-        """Route @Name messages to the appropriate subagent."""
-        try:
-            extra = json.loads(extra_json) if extra_json else {}
-            self.widget._handle_subagent_direct(agent_name, text, extra)
-        except Exception as e:
-            logger.exception("subagentDirect error: %s", e)
+    # subagentDirect removed — all agents use sendMessage with agent param (agent-kanal-paradigma)
 
     @pyqtSlot(result=str)
     def getSubagentRegistry(self):
@@ -1484,4 +1428,120 @@ class WebBridge(QObject):
             logger.exception("saveSystemQuality error: %s", e)
             return json.dumps({"error": str(e)})
 
+    @pyqtSlot(result=str)
+    def getStatistikData(self):
+        """Return all statistics data for StatistikView in a single call.
+
+        Calls all four bridge_stats functions and bundles the results.
+        Returns JSON with keys: trajectory, daily_breakdown, year_heatmap, time_of_day.
+        """
+        try:
+            try:
+                from .bridge_stats import (
+                    get_trajectory_data,
+                    get_daily_breakdown,
+                    get_year_heatmap,
+                    get_time_of_day,
+                )
+            except ImportError:
+                from ui.bridge_stats import (
+                    get_trajectory_data,
+                    get_daily_breakdown,
+                    get_year_heatmap,
+                    get_time_of_day,
+                )
+            result = {
+                "trajectory": get_trajectory_data(),
+                "daily_breakdown": get_daily_breakdown(),
+                "year_heatmap": get_year_heatmap(),
+                "time_of_day": get_time_of_day(),
+            }
+            return json.dumps(result)
+        except Exception as e:
+            logger.exception("getStatistikData error: %s", e)
+            return json.dumps({"error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    def getDeckTrajectory(self, deck_id_str):
+        """Return trajectory data for a specific deck."""
+        try:
+            try:
+                from .bridge_stats import get_deck_trajectory
+            except ImportError:
+                from ui.bridge_stats import get_deck_trajectory
+            result = get_deck_trajectory(deck_id_str)
+            return json.dumps(result)
+        except Exception as e:
+            logger.exception("getDeckTrajectory error: %s", e)
+            return json.dumps({"error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    def getDeckSessionSuggestion(self, deck_id_str):
+        """Return session suggestion for a specific deck."""
+        try:
+            try:
+                from .bridge_stats import get_deck_session_suggestion
+            except ImportError:
+                from ui.bridge_stats import get_deck_session_suggestion
+            result = get_deck_session_suggestion(deck_id_str)
+            return json.dumps(result)
+        except Exception as e:
+            logger.exception("getDeckSessionSuggestion error: %s", e)
+            return json.dumps({"error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    def getDeckMastery(self, deck_id_str):
+        """Return current retrieval-based mastery for a specific deck."""
+        try:
+            try:
+                from .bridge_stats import get_deck_mastery
+            except ImportError:
+                from ui.bridge_stats import get_deck_mastery
+            result = get_deck_mastery(deck_id_str)
+            return json.dumps(result)
+        except Exception as e:
+            logger.exception("getDeckMastery error: %s", e)
+            return json.dumps({"error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    def saveFocus(self, focus_json):
+        """Save a new focus."""
+        try:
+            try:
+                from .focus_store import save_focus
+            except ImportError:
+                from ui.focus_store import save_focus
+            data = json.loads(focus_json)
+            result = save_focus(data)
+            return json.dumps(result)
+        except Exception as e:
+            logger.exception("saveFocus error: %s", e)
+            return json.dumps({"error": str(e)})
+
+    @pyqtSlot(result=str)
+    def getFocuses(self):
+        """Return all active focuses."""
+        try:
+            try:
+                from .focus_store import get_focuses
+            except ImportError:
+                from ui.focus_store import get_focuses
+            return json.dumps(get_focuses())
+        except Exception as e:
+            logger.exception("getFocuses error: %s", e)
+            return json.dumps([])
+
+    @pyqtSlot(str, result=str)
+    def deleteFocus(self, focus_id):
+        """Archive a focus."""
+        try:
+            try:
+                from .focus_store import delete_focus
+            except ImportError:
+                from ui.focus_store import delete_focus
+            result = delete_focus(focus_id)
+            return json.dumps(result)
+        except Exception as e:
+            logger.exception("deleteFocus error: %s", e)
+            return json.dumps({"error": str(e)})
 

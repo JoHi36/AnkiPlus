@@ -15,9 +15,9 @@ import { updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthPro
 import { auth } from '../lib/firebase';
 
 const TIER_DISPLAY: Record<string, { name: string; price: string }> = {
-  free:  { name: 'Starter',  price: 'Kostenlos' },
-  tier1: { name: 'Student',  price: '4,99 € / Monat' },
-  tier2: { name: 'Exam Pro', price: '14,99 € / Monat' },
+  free:  { name: 'Free',  price: 'Kostenlos' },
+  tier1: { name: 'Pro',   price: '4,99 € / Monat' },
+  tier2: { name: 'Max',   price: '14,99 € / Monat' },
 };
 
 const API_URL = import.meta.env.VITE_BACKEND_URL || 'https://europe-west1-ankiplus-b0ffb.cloudfunctions.net/api';
@@ -131,7 +131,16 @@ export function AccountPage() {
   const handleDeleteAccount = async () => {
     if (!user || !auth) return;
     try {
-      await deleteUser(user);
+      // Call backend to delete all server-side data (Firestore, Stripe, Auth)
+      const token = await getAuthToken();
+      if (token) {
+        await fetch(`${API_URL}/user/account`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+      // Fallback: also try client-side deletion in case backend missed Auth
+      try { await deleteUser(user); } catch { /* backend already deleted */ }
       await logout();
       navigate('/');
     } catch (err: any) {
@@ -190,7 +199,7 @@ export function AccountPage() {
         <PageNav rightContent={
           <div className="flex items-center gap-4">
             <Link to="/" className="text-[13px] text-white/[0.35] font-light hover:text-white/[0.55] transition-colors">Startseite</Link>
-            <Button variant="outline" size="sm" onClick={handleLogout}>Abmelden</Button>
+            <Button variant="primary" size="sm" onClick={handleLogout}>Abmelden</Button>
           </div>
         } />
 
@@ -227,7 +236,7 @@ export function AccountPage() {
                   </Button>
                 )}
                 {tier !== 'free' && (
-                  <Button variant="outline" size="sm" onClick={handlePortal} disabled={portalLoading}>
+                  <Button variant="primary" size="sm" onClick={handlePortal} disabled={portalLoading}>
                     {portalLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Verwalten'}
                   </Button>
                 )}
@@ -312,6 +321,33 @@ export function AccountPage() {
                   </div>
                 </form>
               )}
+
+              {/* Data export row */}
+              <div className="flex justify-between items-center py-3.5 border-b border-white/[0.04]">
+                <span className="text-[13px] text-white/[0.35] font-light">Meine Daten</span>
+                <button onClick={async () => {
+                  try {
+                    const token = await getAuthToken();
+                    if (!token) return;
+                    const res = await fetch(`${API_URL}/user/data-export`, {
+                      headers: { Authorization: `Bearer ${token}` },
+                    });
+                    if (!res.ok) throw new Error('Export failed');
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `ankiplus-daten-export.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    setMessage({ type: 'success', text: 'Datenexport heruntergeladen.' });
+                  } catch {
+                    setMessage({ type: 'error', text: 'Datenexport fehlgeschlagen.' });
+                  }
+                }} className="text-[12px] text-[#0a84ff]">
+                  Exportieren (JSON)
+                </button>
+              </div>
 
               {/* Delete row */}
               <div className="flex justify-between items-center py-3.5">

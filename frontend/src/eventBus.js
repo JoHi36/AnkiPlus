@@ -19,10 +19,10 @@ export function off(event, callback) {
 
 export function emit(event, data) {
   listeners.get(event)?.forEach(cb => {
-    try { cb(data); } catch (e) { console.error('[EventBus]', event, e); }
+    try { cb(data); } catch (e) { /* silently handled */ }
   });
   listeners.get('*')?.forEach(cb => {
-    try { cb({ event, data }); } catch (e) { console.error('[EventBus] wildcard', e); }
+    try { cb({ event, data }); } catch (e) { /* silently handled */ }
   });
 }
 

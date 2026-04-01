@@ -6,6 +6,15 @@ AnkiPlus is not a chatbot attached to a flashcard app. It is an **agentic learni
 
 Every UI action is a tool. Every state change is an event. Every piece of context is queryable. Agents are first-class citizens, not afterthoughts.
 
+## Product Concept (Summary)
+
+For the full product concept (three cognitive modes, interaction model, design principles), see `product-concept.md`. Key points that shape the architecture:
+
+- **Agents are view-agnostic.** An agent operates across all three views (Stapel/Session/Statistik), adapting its output format to the view context. The agent registry, routing, and tool system must not assume a specific view.
+- **Stapel is state-based.** Agent interactions in Stapel produce a single state (Canvas + Sidebar), not a conversation. The router maintains invisible history for context, but the UI replaces state on each new query. This means the agent loop must support "single-shot with context" mode, not just streaming chat.
+- **Session is history-based.** Agent interactions in Session produce conversation turns anchored to a card. This is the traditional streaming chat mode.
+- **The router decides the agent.** Users don't always explicitly choose an agent. The router uses invisible history + heuristics to decide which agent handles a query. This requires the router to be context-aware across views.
+
 ## Three Infrastructure Pillars
 
 ### 1. Action Registry — Agents Can Act

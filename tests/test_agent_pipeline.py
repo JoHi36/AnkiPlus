@@ -388,7 +388,8 @@ class TestTutorRealAgent:
         source = inspect.getsource(run_tutor)
         assert "kwargs.get('model')" in source or "model = kwargs" in source
 
-    def test_tutor_calls_rag_pipeline(self):
+    @patch('config.is_backend_mode', return_value=True)
+    def test_tutor_calls_rag_pipeline(self, _mock_bm):
         """Tutor should call retrieve_rag_context when routing says search is needed."""
         from ai.tutor import run_tutor
 
@@ -409,12 +410,13 @@ class TestTutorRealAgent:
             with patch('ai.tutor.get_google_response_streaming', return_value='answer'):
                 result = run_tutor(
                     situation="Was ist ATP?",
-                    config={'api_key': 'fake-key'},
+                    config={},
                     routing_result=routing,
                 )
             mock_rag.assert_called_once()
 
-    def test_tutor_calls_streaming_generation(self):
+    @patch('config.is_backend_mode', return_value=True)
+    def test_tutor_calls_streaming_generation(self, _mock_bm):
         """Tutor should call get_google_response_streaming with stream_callback."""
         from ai.tutor import run_tutor
 
@@ -428,7 +430,7 @@ class TestTutorRealAgent:
         with patch('ai.tutor.get_google_response_streaming', return_value='streamed result') as mock_gen:
             result = run_tutor(
                 situation="Erkläre ATP",
-                config={'api_key': 'fake-key'},
+                config={},
                 routing_result=routing,
                 stream_callback=fake_stream,
             )
@@ -436,7 +438,8 @@ class TestTutorRealAgent:
             # stream_callback should have been signalled done
             assert any(d for _, d in chunks)
 
-    def test_tutor_returns_citations_from_rag(self):
+    @patch('config.is_backend_mode', return_value=True)
+    def test_tutor_returns_citations_from_rag(self, _mock_bm):
         """Tutor should return citations from the RAG pipeline."""
         from ai.tutor import run_tutor
 
@@ -459,12 +462,13 @@ class TestTutorRealAgent:
             with patch('ai.tutor.get_google_response_streaming', return_value='answer'):
                 result = run_tutor(
                     situation="Was ist ATP?",
-                    config={'api_key': 'fake-key'},
+                    config={},
                     routing_result=routing,
                 )
         assert result.get('citations') == test_citations
 
-    def test_tutor_error_handling(self):
+    @patch('config.is_backend_mode', return_value=True)
+    def test_tutor_error_handling(self, _mock_bm):
         """Tutor should catch exceptions and return error dict."""
         from ai.tutor import run_tutor
 
@@ -474,7 +478,7 @@ class TestTutorRealAgent:
         with patch('ai.tutor.get_google_response_streaming', side_effect=Exception('API timeout')):
             result = run_tutor(
                 situation="test",
-                config={'api_key': 'fake-key'},
+                config={},
                 routing_result=routing,
             )
         assert isinstance(result, dict)
@@ -504,7 +508,8 @@ class TestTutorFallback:
         )
         assert isinstance(result, dict)
 
-    def test_fallback_on_primary_failure(self):
+    @patch('config.is_backend_mode', return_value=True)
+    def test_fallback_on_primary_failure(self, _mock_bm):
         """When primary model fails, fallback model should be tried."""
         from ai.tutor import run_tutor
 
@@ -522,7 +527,7 @@ class TestTutorFallback:
         with patch('ai.tutor.get_google_response_streaming', side_effect=fake_streaming):
             result = run_tutor(
                 situation="test",
-                config={'api_key': 'fake-key'},
+                config={},
                 routing_result=routing,
                 model='primary-model',
                 fallback_model='fallback-model',
@@ -530,7 +535,8 @@ class TestTutorFallback:
         assert 'fallback-model' in call_args
         assert result['text'] == 'fallback answer'
 
-    def test_fallback_thins_rag_on_400_error(self):
+    @patch('config.is_backend_mode', return_value=True)
+    def test_fallback_thins_rag_on_400_error(self, _mock_bm):
         """400 errors should trigger thin RAG (top 3 cards) for fallback."""
         from ai.tutor import run_tutor
 
@@ -562,7 +568,7 @@ class TestTutorFallback:
             with patch('ai.tutor.get_google_response_streaming', side_effect=fake_streaming):
                 result = run_tutor(
                     situation="test",
-                    config={'api_key': 'fake-key'},
+                    config={},
                     routing_result=routing,
                     model='primary-model',
                     fallback_model='fallback-model',
@@ -573,7 +579,8 @@ class TestTutorFallback:
         assert fallback_rag is not None
         assert len(fallback_rag['cards']) <= 3
 
-    def test_level3_no_rag_on_double_failure(self):
+    @patch('config.is_backend_mode', return_value=True)
+    def test_level3_no_rag_on_double_failure(self, _mock_bm):
         """When both primary and fallback+RAG fail, try without RAG."""
         from ai.tutor import run_tutor
 
@@ -591,7 +598,7 @@ class TestTutorFallback:
         with patch('ai.tutor.get_google_response_streaming', side_effect=fake_streaming):
             result = run_tutor(
                 situation="test",
-                config={'api_key': 'fake-key'},
+                config={},
                 routing_result=routing,
                 model='primary-model',
                 fallback_model='fallback-model',
@@ -599,7 +606,8 @@ class TestTutorFallback:
         assert result['text'] == 'last resort answer'
         assert call_count[0] == 3
 
-    def test_all_levels_fail_returns_error(self):
+    @patch('config.is_backend_mode', return_value=True)
+    def test_all_levels_fail_returns_error(self, _mock_bm):
         """When all 3 levels fail, return a user-friendly error."""
         from ai.tutor import run_tutor
 
@@ -610,7 +618,7 @@ class TestTutorFallback:
                    side_effect=Exception("always fails")):
             result = run_tutor(
                 situation="test",
-                config={'api_key': 'fake-key'},
+                config={},
                 routing_result=routing,
                 model='primary-model',
                 fallback_model='fallback-model',
@@ -623,10 +631,10 @@ class TestTutorFallback:
 class TestHelpPipeline:
     """Test that the Help agent integrates with the dispatch system."""
 
-    @patch('config.get_config', return_value={'api_key': 'fake-key'})
-    @patch('config.is_backend_mode', return_value=False)
-    @patch('config.get_backend_url', return_value='')
-    @patch('config.get_auth_token', return_value='')
+    @patch('config.get_config', return_value={'api_key': ''})
+    @patch('config.is_backend_mode', return_value=True)
+    @patch('config.get_backend_url', return_value='https://test-backend.example.com')
+    @patch('config.get_auth_token', return_value='fake-token')
     def test_help_dispatches_via_pipeline(self, mock_auth_token, mock_backend_url,
                                           mock_backend_mode, mock_config):
         """Help agent runs through _dispatch_agent and emits correct events."""
@@ -634,7 +642,8 @@ class TestHelpPipeline:
         mock_resp = MagicMock()
         mock_resp.raise_for_status = MagicMock()
         mock_resp.json.return_value = {
-            'candidates': [{'content': {'parts': [{'text': 'Use Cmd+I to open the panel.'}]}}]
+            'response': 'Use Cmd+I to open the panel.',
+            'text': 'Use Cmd+I to open the panel.'
         }
         with patch.object(req_mod, 'post', return_value=mock_resp):
             from ai.handler import AIHandler
@@ -693,19 +702,16 @@ class TestResearchPipeline:
         sig = inspect.signature(run_research)
         assert 'situation' in sig.parameters
 
-    @patch('research.search.search')
-    @patch('research.get_config', return_value={'openrouter_api_key': 'fake', 'research_sources': {}})
-    def test_research_dispatches_via_pipeline(self, mock_config, mock_search):
-        """Research agent runs through _dispatch_agent."""
-        mock_result = MagicMock()
-        mock_result.error = None
-        mock_result.sources = [{'title': 'ATP Source'}]
-        mock_result.tool_used = 'pubmed'
-        mock_result.to_dict.return_value = {
-            'text': 'ATP is adenosine triphosphate.',
-            'sources': [],
-        }
-        mock_search.return_value = mock_result
+    @patch('ai.gemini.get_google_response_streaming')
+    @patch('research.get_config', return_value={'api_key': 'fake'})
+    def test_research_dispatches_via_pipeline(self, mock_config, mock_streaming):
+        """Research agent runs through _dispatch_agent with RAG pipeline."""
+        # Mock streaming to return text via callback
+        def fake_stream(user_message, model, api_key, callback=None, **kw):
+            if callback:
+                callback('ATP is adenosine triphosphate.', False)
+                callback('', True)
+        mock_streaming.side_effect = fake_stream
 
         from ai.handler import AIHandler
         handler = AIHandler()
@@ -1183,7 +1189,8 @@ class TestTutorHandoff:
             # Even if handoff is rejected, the signal should be stripped
             assert 'HANDOFF' not in result.get('text', '')
 
-    def test_tutor_without_handoff_returns_full_text(self):
+    @patch('config.is_backend_mode', return_value=True)
+    def test_tutor_without_handoff_returns_full_text(self, _mock_bm):
         """When no handoff signal, Tutor returns the full text unmodified."""
         from ai.tutor import run_tutor
 
@@ -1193,7 +1200,7 @@ class TestTutorHandoff:
         with patch('ai.tutor._call_generation', return_value='ATP is energy currency.'):
             result = run_tutor(
                 situation="What is ATP?",
-                config={'api_key': 'fake-key'},
+                config={},
                 routing_result=routing,
             )
         assert result['text'] == 'ATP is energy currency.'

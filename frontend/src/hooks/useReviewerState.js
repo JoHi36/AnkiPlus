@@ -1,5 +1,6 @@
-import { useReducer, useEffect, useCallback, useRef } from 'react';
+import { useReducer, useEffect, useCallback, useRef, useState } from 'react';
 import { bridgeAction } from '../actions';
+import { useReasoningDispatch } from '../reasoning/store';
 
 /**
  * useReviewerState — State machine for the card reviewer.
@@ -88,6 +89,8 @@ export { S, getPlainText };
 export default function useReviewerState(cardData, onPulse, onFollowUpKey) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const cardIdRef = useRef(null);
+  const [pruferStreamId, setPruferStreamId] = useState(null);
+  const reasoningDispatch = useReasoningDispatch();
 
   // Reset on new card
   useEffect(() => {
@@ -109,15 +112,24 @@ export default function useReviewerState(cardData, onPulse, onFollowUpKey) {
     const onEval = (e) => dispatch({ type: 'EVAL_RESULT', data: e.detail });
     const onMC = (e) => dispatch({ type: 'MC_OPTIONS', data: e.detail });
     const onStep = (e) => dispatch({ type: 'AI_STEP', step: e.detail });
+    const onPipeline = (e) => {
+      const d = e.detail;
+      const streamId = `prufer-${d.requestId}`;
+      setPruferStreamId(streamId);
+      reasoningDispatch({ type: 'STEP', streamId, step: d.step, status: d.status, data: d.data || {} });
+      reasoningDispatch({ type: 'AGENT_META', streamId, agentName: 'prufer' });
+    };
     window.addEventListener('reviewer.evaluationResult', onEval);
     window.addEventListener('reviewer.mcOptions', onMC);
     window.addEventListener('reviewer.aiStep', onStep);
+    window.addEventListener('reviewer.pipeline_step', onPipeline);
     return () => {
       window.removeEventListener('reviewer.evaluationResult', onEval);
       window.removeEventListener('reviewer.mcOptions', onMC);
       window.removeEventListener('reviewer.aiStep', onStep);
+      window.removeEventListener('reviewer.pipeline_step', onPipeline);
     };
-  }, []);
+  }, [reasoningDispatch]);
 
   // Actions
   const handleFlip = useCallback(() => bridgeAction('card.flip'), []);
@@ -199,5 +211,6 @@ export default function useReviewerState(cardData, onPulse, onFollowUpKey) {
     state, dispatch, S,
     showBack, isLoading, isRateable,
     handleFlip, handleRate, handleEvaluate, handleStartMC, handleMCSelect, handleCycleRating,
+    pruferStreamId,
   };
 }

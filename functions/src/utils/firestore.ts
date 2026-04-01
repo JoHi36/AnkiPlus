@@ -598,21 +598,27 @@ export async function debitTokens(
   normalizedTokens: number,
   rawInputTokens: number,
   rawOutputTokens: number,
-  costMicrodollars: number
+  costMicrodollars: number,
+  skipDaily = false
 ): Promise<void> {
   const db = getDb();
-  const dailyRef = db.collection('usage').doc(userId).collection('daily').doc(date);
   const weeklyRef = db.collection('usage').doc(userId).collection('weekly').doc(week);
 
   const batch = db.batch();
-  batch.set(dailyRef, {
-    tokensUsed: FieldValue.increment(normalizedTokens),
-    inputTokens: FieldValue.increment(rawInputTokens),
-    outputTokens: FieldValue.increment(rawOutputTokens),
-    requestCount: FieldValue.increment(1),
-    costMicrodollars: FieldValue.increment(costMicrodollars),
-    lastReset: Timestamp.now(),
-  }, { merge: true });
+
+  // Background tasks (KG extraction) only debit weekly, preserving daily chat budget
+  if (!skipDaily) {
+    const dailyRef = db.collection('usage').doc(userId).collection('daily').doc(date);
+    batch.set(dailyRef, {
+      tokensUsed: FieldValue.increment(normalizedTokens),
+      inputTokens: FieldValue.increment(rawInputTokens),
+      outputTokens: FieldValue.increment(rawOutputTokens),
+      requestCount: FieldValue.increment(1),
+      costMicrodollars: FieldValue.increment(costMicrodollars),
+      lastReset: Timestamp.now(),
+    }, { merge: true });
+  }
+
   batch.set(weeklyRef, {
     tokensUsed: FieldValue.increment(normalizedTokens),
     costMicrodollars: FieldValue.increment(costMicrodollars),

@@ -1,4 +1,17 @@
-"""Research Agent — web search sub-agent."""
+"""Research Agent — DEPRECATED as standalone chat agent.
+
+In the Agent-Kanal-Paradigma, the Stapel channel (SearchCardsThread + Clustering
++ KG + Canvas + Quick Answer) IS the Research Agent. This run_research() function
+was used for @Research mentions in chat, which no longer exist.
+
+The Stapel pipeline lives in:
+- ui/widget.py: SearchCardsThread (graph search, clustering)
+- ui/widget.py: KGDefinitionThread (term definitions)
+- ui/widget.py: QuickAnswerThread (LLM text generation)
+- frontend/src/hooks/useSmartSearch.js (frontend orchestration)
+
+This file is kept for backwards compatibility only.
+"""
 try:
     from ..utils.logging import get_logger
     from ..config import get_config
@@ -8,24 +21,190 @@ except ImportError:
 
 logger = get_logger(__name__)
 
+# Research system prompt — loaded from TypeScript source or fallback
+_RESEARCH_PROMPT_CACHE = None
 
-def run_research(situation: str = '', emit_step=None, memory=None, stream_callback=None, **kwargs) -> dict:
-    """Entry point called by the sub-agent system."""
-    from .search import search
+def _get_research_prompt():
+    """Load Research Agent prompt. Cached after first call."""
+    global _RESEARCH_PROMPT_CACHE
+    if _RESEARCH_PROMPT_CACHE:
+        return _RESEARCH_PROMPT_CACHE
 
+    # Try loading from TypeScript source
+    import os, re
+    prompt_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                               'functions', 'src', 'prompts', 'research.ts')
+    try:
+        with open(prompt_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        match = re.search(r'RESEARCH_PROMPT\s*=\s*`(.*?)`', content, re.DOTALL)
+        if match:
+            _RESEARCH_PROMPT_CACHE = match.group(1).replace('\\`', '`')
+            return _RESEARCH_PROMPT_CACHE
+    except (OSError, IOError):
+        pass
+
+    # Fallback
+    _RESEARCH_PROMPT_CACHE = (
+        "Du bist ein Wissens-Agent. Beantworte Fragen präzise auf Basis des Lernmaterials. "
+        "Inline-Referenzen [1], [2] für Fakten aus Karten. Sachlich, keine Floskeln."
+    )
+    return _RESEARCH_PROMPT_CACHE
+
+
+def run_research(situation: str = '', emit_step=None, memory=None,
+                 stream_callback=None, **kwargs) -> dict:
+    """Research agent entry point.
+
+    Pipeline:
+    1. Local: find cards via smart_search_context (pre-loaded) or RAG retrieval
+    2. Transport: cards sent as rag_context={"cards": [...]} → backend "insights"
+    3. Backend: generates answer with Research prompt + our cards
+
+    Returns:
+        dict with 'text', 'citations', '_used_streaming'.
+    """
     query = situation or kwargs.get('query', '')
+    if not query:
+        return {'text': '', 'citations': {}, '_used_streaming': False}
 
-    config = get_config()
-    api_key = config.get('openrouter_api_key', '')
-    enabled_sources = config.get('research_sources', {'pubmed': True, 'wikipedia': True})
+    config = kwargs.get('config') or get_config()
+    context = kwargs.get('context')
+    routing_result = kwargs.get('routing_result')
+    model = kwargs.get('model', 'gemini-3-flash-preview')
+    fallback_model = kwargs.get('fallback_model', 'gemini-2.5-flash')
+    callback = kwargs.get('callback')
+    rag_retrieve_fn = kwargs.get('rag_retrieve_fn')
+    embedding_manager = kwargs.get('embedding_manager')
+    smart_search_context = kwargs.get('smart_search_context')
 
-    logger.info("Research Agent searching: %s", query[:80])
-    result = search(query, api_key=api_key, enabled_sources=enabled_sources)
+    logger.info("Research Agent: query='%s'", query[:80])
 
-    if result.error:
-        logger.warning("Research Agent error: %s", result.error)
+    # ------------------------------------------------------------------
+    # 1. Find cards (local pipeline)
+    # ------------------------------------------------------------------
+    cards_for_backend = []
+    citations = {}
+
+    if smart_search_context:
+        # Smart Search path: cards already found by SearchCardsThread
+        cards = smart_search_context.get('cards_data', [])
+        for i, card in enumerate(cards[:50]):
+            card_id = str(card.get('id') or card.get('card_id') or '')
+            cards_for_backend.append({
+                'id': card_id,
+                'question': (card.get('question') or '')[:200],
+                'answer': (card.get('answer') or card.get('deck') or '')[:200],
+                'deck': card.get('deck', ''),
+            })
+            if card_id:
+                citations[str(i + 1)] = {
+                    'id': card_id,
+                    'noteId': card_id,
+                    'question': (card.get('question') or '')[:60],
+                    'source': 'smart_search',
+                }
+        if emit_step:
+            emit_step("sources_ready", "done", {"citations": citations})
+        logger.info("Research: %d cards from smart_search", len(cards_for_backend))
     else:
-        logger.info("Research Agent found %d sources via %s",
-                     len(result.sources), result.tool_used)
+        # Normal path: local RAG retrieval
+        try:
+            from ai.rag_pipeline import retrieve_rag_context
+        except ImportError:
+            try:
+                from ..ai.rag_pipeline import retrieve_rag_context
+            except ImportError:
+                from rag_pipeline import retrieve_rag_context
 
-    return result.to_dict()
+        if routing_result and (getattr(routing_result, 'search_needed', True) or
+                               (isinstance(routing_result, dict) and routing_result.get('search_needed', True))):
+            try:
+                rag_result = retrieve_rag_context(
+                    user_message=query,
+                    routing_result=routing_result,
+                    context=context,
+                    emit_step=emit_step,
+                    rag_retrieve_fn=rag_retrieve_fn,
+                    embedding_manager=embedding_manager,
+                )
+                if rag_result and rag_result.citations:
+                    citations = rag_result.citations
+                if rag_result and isinstance(rag_result.rag_context, dict):
+                    cards_for_backend = rag_result.rag_context.get('cards', [])
+                logger.info("Research RAG: %d citations", len(citations))
+            except Exception as e:
+                logger.warning("Research RAG failed: %s", e)
+
+    # ------------------------------------------------------------------
+    # 2. Send to backend: cards as insights + Research prompt
+    # ------------------------------------------------------------------
+    system_prompt = _get_research_prompt()
+
+    # Transport cards via rag_context → _build_chat_payload extracts as "insights"
+    rag_context = {"cards": cards_for_backend} if cards_for_backend else None
+
+    try:
+        try:
+            from ..ai.gemini import get_google_response_streaming
+        except ImportError:
+            from ai.gemini import get_google_response_streaming
+
+        text = ''
+        used_streaming = False
+
+        def _stream_wrapper(chunk, done, is_function_call=False, **_kw):
+            nonlocal text, used_streaming
+            if chunk:
+                text += chunk
+                used_streaming = True
+            if stream_callback:
+                stream_callback(chunk, done)
+            if callback:
+                callback(chunk, done, is_function_call)
+
+        get_google_response_streaming(
+            user_message=query,
+            model=model,
+            api_key='',
+            context=None,
+            history=[],
+            mode='compact',
+            callback=_stream_wrapper,
+            rag_context=rag_context,
+            system_prompt_override=system_prompt,
+            config=config,
+            agent='research',
+        )
+
+        return {
+            'text': text,
+            'citations': citations,
+            '_used_streaming': used_streaming,
+        }
+
+    except Exception as e:
+        logger.error("Research generation failed: %s", e)
+
+        # Fallback with simpler model
+        try:
+            text = ''
+            def _fb(chunk, done, is_fc=False, **_kw):
+                nonlocal text
+                if chunk:
+                    text += chunk
+
+            get_google_response_streaming(
+                user_message=query,
+                model=fallback_model,
+                api_key='',
+                callback=_fb,
+                rag_context=rag_context,
+                system_prompt_override=system_prompt,
+                config=config,
+                agent='research',
+            )
+            return {'text': text, 'citations': citations, '_used_streaming': True}
+        except Exception as e2:
+            logger.error("Research fallback also failed: %s", e2)
+            return {'text': '', 'citations': {}, '_used_streaming': False, 'error': str(e2)}

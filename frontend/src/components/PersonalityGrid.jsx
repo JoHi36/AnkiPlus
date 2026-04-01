@@ -25,20 +25,20 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
     <svg viewBox="0 0 360 96" style={{ width: '100%', display: 'block' }}>
       <defs>
         <linearGradient id="pgTL" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#5AC8FA" stopOpacity="0.08" />
-          <stop offset="100%" stopColor="#5AC8FA" stopOpacity="0" />
+          <stop offset="0%" stopColor="var(--ds-accent)" stopOpacity="0.08" />
+          <stop offset="100%" stopColor="var(--ds-accent)" stopOpacity="0" />
         </linearGradient>
         <linearGradient id="pgTR" x1="1" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#30D158" stopOpacity="0.08" />
-          <stop offset="100%" stopColor="#30D158" stopOpacity="0" />
+          <stop offset="0%" stopColor="var(--ds-green)" stopOpacity="0.08" />
+          <stop offset="100%" stopColor="var(--ds-green)" stopOpacity="0" />
         </linearGradient>
         <linearGradient id="pgBL" x1="0" y1="1" x2="1" y2="0">
-          <stop offset="0%" stopColor="#BF5AF2" stopOpacity="0.06" />
-          <stop offset="100%" stopColor="#BF5AF2" stopOpacity="0" />
+          <stop offset="0%" stopColor="var(--ds-purple)" stopOpacity="0.06" />
+          <stop offset="100%" stopColor="var(--ds-purple)" stopOpacity="0" />
         </linearGradient>
         <linearGradient id="pgBR" x1="1" y1="1" x2="0" y2="0">
-          <stop offset="0%" stopColor="#FF9F0A" stopOpacity="0.06" />
-          <stop offset="100%" stopColor="#FF9F0A" stopOpacity="0" />
+          <stop offset="0%" stopColor="var(--ds-yellow)" stopOpacity="0.06" />
+          <stop offset="100%" stopColor="var(--ds-yellow)" stopOpacity="0" />
         </linearGradient>
       </defs>
 
@@ -82,12 +82,12 @@ export default function PersonalityGrid({ position = { x: 0.5, y: 0.5 }, trail =
       {trailPts.length > 1 && (
         <polyline
           points={trailPts.map(p => `${p.sx},${p.sy}`).join(' ')}
-          fill="none" stroke="#0A84FF" strokeWidth="0.7"
+          fill="none" stroke="var(--ds-accent)" strokeWidth="0.7"
           opacity="0.2" strokeLinecap="round" />
       )}
       {trailPts.map((p, i) => i > 0 && (
         <circle key={i} cx={p.sx} cy={p.sy} r="1.2"
-          fill="#0A84FF"
+          fill="var(--ds-accent)"
           opacity={0.1 + (1 - i / trailPts.length) * 0.3} />
       ))}
 

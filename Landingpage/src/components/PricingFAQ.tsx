@@ -35,7 +35,7 @@ const faqItems: FAQItem[] = [
   },
   {
     question: 'Gibt es Studentenrabatte?',
-    answer: 'Aktuell bieten wir keine zusätzlichen Studentenrabatte an. Der Student-Plan (4,99€) ist bereits für alle optimiert.',
+    answer: 'Aktuell bieten wir keine zusätzlichen Studentenrabatte an. Der Pro-Plan (4,99€) ist bereits für alle optimiert.',
     category: 'billing',
   },
 ];

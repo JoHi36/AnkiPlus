@@ -87,7 +87,7 @@ function StatsInline({ dueNew, dueLearn, dueReview }) {
   );
 }
 
-export function DeckNode({ node, depth = 0, isExpanded, onToggle, onStudy, onSelect, index = 0 }) {
+export const DeckNode = React.memo(function DeckNode({ node, depth = 0, isExpanded, onToggle, onStudy, onSelect, index = 0 }) {
   const { id, display, dueNew, dueLearn, dueReview, children } = node;
   const hasChildren = Array.isArray(children) && children.length > 0;
   const expanded = isExpanded(id);
@@ -310,4 +310,4 @@ export function DeckNode({ node, depth = 0, isExpanded, onToggle, onStudy, onSel
       )}
     </div>
   );
-}
+});

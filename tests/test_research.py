@@ -22,10 +22,15 @@ def test_research_result_error():
     assert d['sources'] == []
 
 
-def test_perplexity_missing_key():
-    from research.perplexity import search_perplexity
-    result = search_perplexity('test', '')
-    assert result['error'] == 'No Perplexity API key configured'
+def test_openrouter_missing_auth():
+    """Backend research returns error when not authenticated."""
+    from unittest.mock import patch
+    with patch('config.get_backend_url', return_value=''), \
+         patch('config.get_auth_token', return_value=''):
+        from research.openrouter import search_via_openrouter
+        result = search_via_openrouter('test')
+        assert result['error'] is not None
+        assert 'authentifiziert' in result['error'].lower()
 
 
 def test_pubmed_search_function_exists():
@@ -40,10 +45,14 @@ def test_search_medical_query_detection():
     assert _is_medical_query('Studie zu Enzymaktivität')
     assert not _is_medical_query('French revolution causes')
 
-def test_search_no_api_key_returns_error():
-    from research.search import search
-    result = search('French revolution', api_key='')
-    assert 'OpenRouter' in result.error
+def test_search_no_auth_returns_error():
+    """search() returns error when backend is not authenticated."""
+    from unittest.mock import patch
+    with patch('config.get_backend_url', return_value=''), \
+         patch('config.get_auth_token', return_value=''):
+        from research.search import search
+        result = search('French revolution', api_key='')
+        assert result.error is not None
 
 def test_convert_citations():
     from research.search import _convert_citations

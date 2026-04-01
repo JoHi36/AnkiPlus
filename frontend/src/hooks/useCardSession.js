@@ -39,14 +39,12 @@ export function useCardSession(bridge) {
     if (!cardId) return;
 
     const numericCardId = Number(cardId);
-    console.log('🗂️ useCardSession: Lade Session für Karte:', numericCardId);
 
     setCurrentCardId(numericCardId);
 
     // Cache-Check — dispatch synthetic cardSessionLoaded so App restores messages
     const cached = sessionCacheRef.current.get(numericCardId);
     if (cached) {
-      console.log('🗂️ useCardSession: Cache-Hit für Karte:', numericCardId);
       setCurrentSession(cached);
       // Dispatch event so ankiReceive handler in App.jsx restores chat messages
       setTimeout(() => {
@@ -71,15 +69,11 @@ export function useCardSession(bridge) {
   const handleCardSessionLoaded = useCallback((data) => {
     const cardId = data?.cardId || data?.card_id;
     if (!cardId) {
-      console.warn('🗂️ useCardSession: cardSessionLoaded ohne cardId');
       setIsLoading(false);
       return;
     }
 
     const numericCardId = Number(cardId);
-    console.log('🗂️ useCardSession: Session geladen für Karte:', numericCardId,
-      'Messages:', data?.messages?.length || 0,
-      'Sections:', data?.sections?.length || 0);
 
     const sessionData = {
       session: data.session || null,
@@ -98,6 +92,23 @@ export function useCardSession(bridge) {
         from: m.sender || m.from || 'user',
         createdAt: m.created_at || m.createdAt,
         timestamp: m.created_at || m.createdAt || m.timestamp,
+        agentCells: (() => {
+          const raw = m.agent_cells || m.agentCells;
+          if (!raw) return null;
+          // Might be double-encoded string from SQLite
+          if (typeof raw === 'string') {
+            try { return JSON.parse(raw); } catch { return null; }
+          }
+          return raw;
+        })(),
+        orchestration: (() => {
+          const raw = m.orchestration;
+          if (!raw) return null;
+          if (typeof raw === 'string') {
+            try { return JSON.parse(raw); } catch { return null; }
+          }
+          return raw;
+        })(),
       })),
     };
 
@@ -139,17 +150,24 @@ export function useCardSession(bridge) {
 
     // Via Bridge speichern
     if (window.ankiBridge) {
+      // Build text: for v2 messages, extract from agentCells if top-level text is empty
+      let text = message.text || '';
+      if (!text && message.agentCells && message.agentCells.length > 0) {
+        text = message.agentCells.map(c => c.text || '').join('\n').trim();
+      }
       const payload = {
         cardId: numericCardId,
         message: {
           id: message.id,
-          text: message.text,
+          text: text,
           sender: message.from || message.sender || 'user',
           section_id: message.sectionId || message.section_id,
           created_at: message.createdAt || message.timestamp || new Date().toISOString(),
           steps: message.steps,
           citations: message.citations,
           pipeline_data: message.pipeline_data,
+          agent_cells: message.agentCells || null,
+          orchestration: message.orchestration || null,
         }
       };
       window.ankiBridge.addMessage('saveCardMessage', JSON.stringify(payload));

@@ -86,22 +86,12 @@ def get_section_title(question, answer="", config=None):
         logger.warning("get_section_title: API-Key ist sehr lang (%s Zeichen)!", len(api_key))
         logger.debug("   Erste 30 Zeichen: %s...", api_key[:30])
 
-    # Prüfe ob Backend-Modus aktiv ist
-    use_backend = is_backend_mode() and get_auth_token()
-
-    if not use_backend and not api_key:
-        logger.warning("get_section_title: API-Key ist leer nach Trimmen")
-        return "Lernkarte"
-
-    # IMMER Gemini 2.0 Flash für Titel (schneller, günstiger, stabiler als Preview)
-    # Gemini 3 Preview ist für Chat, aber für einfache Titel ist 2.0 besser
+    # Backend-only mode
     model = "gemini-2.5-flash"
-    logger.debug("  Verwende für Titel-Generierung: %s (immer 2.0 Flash für Stabilität)", model)
+    logger.debug("  Verwende für Titel-Generierung: %s", model)
 
     logger.debug("get_section_title: Schritt 4 - Request vorbereiten")
     logger.debug("  Modell: %s", model)
-    if not use_backend:
-        logger.debug("  API-Key Länge: %s", len(api_key))
     logger.debug("  Frage-Länge: %s", len(question_clean))
     logger.debug("  Frage-Inhalt (erste 100 Zeichen): %s...", question_clean[:100])
 
@@ -110,46 +100,31 @@ def get_section_title(question, answer="", config=None):
 
 Karteninhalt: {question_clean[:500]}"""
 
-    if use_backend:
-        # Backend-Modus: Verwende Backend-URL
-        backend_url = get_backend_url()
-        url = f"{backend_url}/chat"
-        logger.debug("  URL: %s", url)
+    backend_url = get_backend_url()
+    if not backend_url:
+        logger.warning("get_section_title: No backend URL configured")
+        return "Lernkarte"
 
-        # Backend-Format: message, model, mode, stream=false für non-streaming
-        backend_data = {
-            "message": prompt,
-            "model": model,
-            "mode": "compact",
-            "history": [],
-            "stream": False  # Non-streaming für Titel-Generierung
-        }
-        headers = get_auth_headers()
-    else:
-        # Fallback: Direkte Gemini API (API-Key-Modus)
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-        logger.debug("  URL (ohne Key): %s...", url.split('?')[0])
+    url = f"{backend_url}/chat"
+    logger.debug("  URL: %s", url)
 
-        data = {
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": 0.1,
-                "maxOutputTokens": 20
-            }
-        }
-        backend_data = None
-        headers = {"Content-Type": "application/json"}
+    # Backend-Format: message, model, mode, stream=false für non-streaming
+    backend_data = {
+        "message": prompt,
+        "model": model,
+        "mode": "compact",
+        "history": [],
+        "stream": False  # Non-streaming für Titel-Generierung
+    }
+    headers = get_auth_headers()
 
-    logger.debug("  Request-Daten Größe: %s Zeichen", len(str(backend_data if use_backend else data)))
+    logger.debug("  Request-Daten Größe: %s Zeichen", len(str(backend_data)))
     logger.debug("  Prompt Länge: %s Zeichen", len(prompt))
 
     try:
         logger.debug("get_section_title: Schritt 5 - API-Request senden")
         logger.debug("  Sende Request an %s...", model)
-        if use_backend:
-            response = requests.post(url, json=backend_data, headers=headers, timeout=15)
-        else:
-            response = requests.post(url, json=data, headers=headers, timeout=15)
+        response = requests.post(url, json=backend_data, headers=headers, timeout=15)
         logger.debug("  Response Status: %s", response.status_code)
         logger.debug("  Response Headers: %s", dict(response.headers))
 
@@ -182,56 +157,25 @@ Karteninhalt: {question_clean[:500]}"""
 
         # Extrahiere Titel aus Response (Backend oder direkte API)
         title = ""
-        if use_backend:
-            # Backend-Format: Prüfe verschiedene mögliche Formate
-            if "text" in result:
-                title = result["text"].strip()
-            elif "message" in result:
-                title = result["message"].strip()
-            elif "candidates" in result and len(result["candidates"]) > 0:
-                candidate = result["candidates"][0]
-                if "content" in candidate and "parts" in candidate["content"]:
-                    parts = candidate["content"]["parts"]
-                    if len(parts) > 0:
-                        title = parts[0].get("text", "").strip()
-
-            if not title:
-                logger.warning("get_section_title: Konnte Titel nicht aus Backend-Response extrahieren")
-                logger.debug("  Response Struktur: %s", list(result.keys()))
-                logger.debug("  Vollständige Response: %s", result)
-                return "Lernkarte"
-        else:
-            # Direkte Gemini API
-            if "candidates" not in result:
-                logger.warning("get_section_title: Kein 'candidates' Feld in Response")
-                logger.debug("  Response Struktur: %s", list(result.keys()))
-                logger.debug("  Vollständige Response: %s", result)
-                return "Lernkarte"
-
-            if len(result["candidates"]) == 0:
-                logger.warning("get_section_title: 'candidates' Array ist leer")
-                logger.debug("  Response: %s", result)
-                return "Lernkarte"
-
+        # Backend response format
+        if "text" in result:
+            title = result["text"].strip()
+        elif "message" in result:
+            title = result["message"].strip()
+        elif "response" in result:
+            title = result["response"].strip()
+        elif "candidates" in result and len(result["candidates"]) > 0:
             candidate = result["candidates"][0]
-            logger.debug("  Candidate Keys: %s", list(candidate.keys()) if isinstance(candidate, dict) else 'Nicht ein Dict')
+            if "content" in candidate and "parts" in candidate["content"]:
+                parts = candidate["content"]["parts"]
+                if len(parts) > 0:
+                    title = parts[0].get("text", "").strip()
 
-            if "content" not in candidate:
-                logger.warning("get_section_title: Kein 'content' Feld in Candidate")
-                logger.debug("  Candidate: %s", candidate)
-                return "Lernkarte"
-
-            if "parts" not in candidate["content"]:
-                logger.warning("get_section_title: Kein 'parts' Feld in Content")
-                logger.debug("  Content: %s", candidate['content'])
-                return "Lernkarte"
-
-            if len(candidate["content"]["parts"]) == 0:
-                logger.warning("get_section_title: 'parts' Array ist leer")
-                logger.debug("  Content: %s", candidate['content'])
-                return "Lernkarte"
-
-            title = candidate["content"]["parts"][0].get("text", "").strip()
+        if not title:
+            logger.warning("get_section_title: Konnte Titel nicht aus Backend-Response extrahieren")
+            logger.debug("  Response Struktur: %s", list(result.keys()))
+            logger.debug("  Vollständige Response: %s", result)
+            return "Lernkarte"
 
         logger.debug("get_section_title: Schritt 8 - Titel extrahieren")
         logger.debug("  Roher Titel: '%s' (Länge: %s)", title, len(title))
@@ -295,30 +239,16 @@ def fetch_available_models(provider, api_key):
 
 
 def fetch_google_models(api_key):
-    """Ruft Google-Modelle ab"""
-    # Prüfe ob Backend-Modus aktiv ist
-    use_backend = is_backend_mode() and get_auth_token()
+    """Ruft Google-Modelle ab — backend-only."""
+    # Backend-only mode
+    backend_url = get_backend_url()
+    if not backend_url:
+        logger.warning("fetch_google_models: No backend URL configured, using fallback list")
+        return [{"name": "gemini-3-flash-preview", "label": "Gemini 3 Flash"}]
 
-    if use_backend:
-        # Backend-Modus: Verwende Backend-URL
-        backend_url = get_backend_url()
-        urls = [f"{backend_url}/models"]
-        logger.debug("fetch_google_models: Verwende Backend-Modus: %s", urls[0])
-        headers = get_auth_headers()
-    else:
-        # Fallback: Direkte Gemini API (API-Key-Modus)
-        api_key = api_key.strip()
-        logger.debug("fetch_google_models: API-Key Länge: %s", len(api_key))
-        if len(api_key) > 50:
-            logger.warning("WARNUNG: API-Key ist sehr lang! Erste 30 Zeichen: %s...", api_key[:30])
-            logger.warning("Normalerweise sind Google API-Keys ~39 Zeichen lang")
-
-        # Versuche zuerst v1beta, dann v1 als Fallback
-        urls = [
-            f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}",
-            f"https://generativelanguage.googleapis.com/v1/models?key={api_key}"
-        ]
-        headers = {"Content-Type": "application/json"}
+    urls = [f"{backend_url}/models"]
+    logger.debug("fetch_google_models: Verwende Backend-Modus: %s", urls[0])
+    headers = get_auth_headers()
 
     # Gewünschte Modelle mit Labels
     # NUR Gemini 3 Flash für Chat (2.0 wird nur intern für Titel verwendet)
@@ -330,10 +260,7 @@ def fetch_google_models(api_key):
     for url in urls:
         try:
             logger.debug("fetch_google_models: Versuche URL: %s...", url.split('?')[0])
-            if use_backend:
-                response = requests.get(url, headers=headers, timeout=10)
-            else:
-                response = requests.get(url, timeout=10)
+            response = requests.get(url, headers=headers, timeout=10)
             logger.debug("fetch_google_models: Response Status: %s", response.status_code)
 
             # Bei Fehler, logge Details
@@ -349,10 +276,8 @@ def fetch_google_models(api_key):
             response.raise_for_status()
             data = response.json()
 
-            # Backend gibt möglicherweise direkt models-Array zurück
-            if use_backend and "models" in data:
-                models_list = data["models"]
-            elif "models" in data:
+            # Extract models list from backend response
+            if "models" in data:
                 models_list = data["models"]
             else:
                 models_list = []

@@ -27,7 +27,7 @@ function Toggle({ on, onChange }) {
           width: 14,
           height: 14,
           borderRadius: '50%',
-          background: '#fff',
+          background: 'var(--ds-bg-canvas)',
           transition: 'left 0.2s',
           boxShadow: 'var(--ds-shadow-sm)',
         }}

@@ -6,6 +6,17 @@ import React, { useRef, useState, useEffect, useLayoutEffect } from 'react';
 let _lastTab = 'stapel';
 let _lastIndicator = null; // { left, width } from last mount
 
+// Static style constants
+const ESC_BADGE_STYLE = {
+  fontSize: 9, fontWeight: 500,
+  background: 'var(--ds-hover-tint)',
+  border: '1px solid var(--ds-border-subtle)',
+  padding: '2px 7px', borderRadius: 5,
+  color: 'var(--ds-text-muted)',
+};
+const ESC_LABEL_STYLE = { fontSize: 11, color: 'var(--ds-text-muted)' };
+const ESC_WRAPPER_STYLE = { display: 'flex', alignItems: 'center', gap: 6 };
+
 /**
  * TopBar — unified top bar for all views.
  * Adapts content based on activeView and ankiState.
@@ -13,7 +24,6 @@ let _lastIndicator = null; // { left, width } from last mount
 export default function TopBar({
   activeView = 'deckBrowser',
   ankiState = 'deckBrowser',
-  messageCount = 0,
   totalDue = 0,
   deckName = '',
   dueNew = 0,
@@ -22,7 +32,7 @@ export default function TopBar({
   onTabClick,
   onSidebarToggle,
   settingsOpen = false,
-  holdToResetProps = {},
+  canvasMode = false,
 }) {
   const activeTab = activeView === 'statistik' ? 'statistik'
     : (ankiState === 'overview' || ankiState === 'review') ? 'session'
@@ -48,15 +58,14 @@ export default function TopBar({
     </button>
   );
 
-  // Left content — depends on view
+  // Left content — depends on view and canvasMode
   let leftContent;
-  if (activeView === 'freeChat') {
+  if (canvasMode) {
     leftContent = (
-      <div style={{ display: 'flex', alignItems: 'center' }}>
+      <div style={ESC_WRAPPER_STYLE}>
         {plusButton}
-        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--ds-text-tertiary)' }}>
-          {messageCount} {messageCount === 1 ? 'Nachricht' : 'Nachrichten'}
-        </span>
+        <kbd style={ESC_BADGE_STYLE}>ESC</kbd>
+        <span style={ESC_LABEL_STYLE}>Verlassen</span>
       </div>
     );
   } else if (ankiState === 'overview') {
@@ -85,10 +94,10 @@ export default function TopBar({
     );
   }
 
-  // Right content
+  // Right content — hide stats in canvasMode, keep empty slot for layout balance
   let rightContent;
-  if (activeView === 'freeChat') {
-    rightContent = <HoldToResetIndicator {...holdToResetProps} />;
+  if (canvasMode) {
+    rightContent = null;
   } else if (ankiState === 'overview') {
     rightContent = (
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
@@ -162,13 +171,20 @@ export default function TopBar({
     return () => clearTimeout(timer);
   }, [activeTab]);
 
+  // Float only on Stapel tab — solid bar elsewhere (Session, Review, etc.)
+  const isFloating = activeView === 'deckBrowser';
+
   return (
     <div style={{
+      ...(isFloating
+        ? { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20, pointerEvents: 'none' }
+        : { flexShrink: 0 }
+      ),
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '0 20px', height: 56, paddingTop: 4, flexShrink: 0,
+      padding: '0 20px', height: isFloating ? 48 : 56, paddingTop: 4,
       background: 'transparent',
     }}>
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>{leftContent}</div>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', ...(isFloating && { pointerEvents: 'auto' }) }}>{leftContent}</div>
       <div
         ref={tabContainerRef}
         style={{
@@ -176,6 +192,7 @@ export default function TopBar({
           display: 'flex', alignItems: 'center', gap: 2,
           padding: 3, borderRadius: 8,
           background: 'var(--ds-hover-tint)',
+          ...(isFloating && { pointerEvents: 'auto' }),
         }}
       >
         {/* Sliding indicator — the "pill" that glides between tabs */}
@@ -194,6 +211,7 @@ export default function TopBar({
           return (
             <button
               key={id}
+              id={id === 'session' ? 'topbar-session-tab' : undefined}
               ref={el => { tabRefs.current[id] = el; }}
               onClick={() => onTabClick?.(id)}
               style={{
@@ -212,34 +230,8 @@ export default function TopBar({
           );
         })}
       </div>
-      <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>{rightContent}</div>
+      <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', ...(isFloating && { pointerEvents: 'auto' }) }}>{rightContent}</div>
     </div>
   );
 }
 
-function HoldToResetIndicator({ progress = 0, isHolding = false }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <span style={{
-        fontSize: 10, fontWeight: 500, color: 'var(--ds-text-muted)',
-        opacity: isHolding ? 1 : 0.6, transition: 'opacity 0.15s',
-      }}>
-        Zur\u00fccksetzen
-      </span>
-      <span style={{
-        background: 'var(--ds-border-subtle)', padding: '2px 6px', borderRadius: 4,
-        fontSize: 10, fontWeight: 600, color: 'var(--ds-text-secondary)',
-        position: 'relative', overflow: 'hidden', minWidth: 18, textAlign: 'center',
-      }}>
-        R
-        <span style={{
-          position: 'absolute', left: 0, bottom: 0, height: 2,
-          width: `${progress * 100}%`,
-          background: progress > 0.8 ? 'var(--ds-red)' : 'var(--ds-text-muted)',
-          transition: isHolding ? 'none' : 'width 0.15s ease',
-          borderRadius: 1,
-        }} />
-      </span>
-    </div>
-  );
-}

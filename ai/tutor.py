@@ -2,12 +2,11 @@
 Tutor Agent — the default learning assistant.
 
 Explains card content, searches decks, creates diagrams.
-Handles the full pipeline: RAG retrieval -> system prompt -> streaming generation.
+Handles the full pipeline: RAG retrieval -> streaming generation.
 
 The Tutor is a REAL agent that:
 1. Calls the RAG pipeline (ai/rag_pipeline.py) for card retrieval
-2. Builds the system prompt (ai/system_prompt.py)
-3. Generates a streaming response via Gemini (ai/gemini.py)
+2. Generates a streaming response via the backend (ai/gemini.py proxies to backend)
 4. Detects HANDOFF signals and delegates to target agents (e.g. Research)
 5. Tracks usage in AgentMemory
 
@@ -29,11 +28,6 @@ try:
     from .rag_pipeline import retrieve_rag_context
 except ImportError:
     from rag_pipeline import retrieve_rag_context
-
-try:
-    from .system_prompt import get_system_prompt
-except ImportError:
-    from system_prompt import get_system_prompt
 
 try:
     from .gemini import get_google_response_streaming
@@ -60,7 +54,7 @@ def run_tutor(situation, emit_step=None, memory=None,
             config (dict): Application config (api_key, ai_tools, ...).
             context (dict): Current card context (cardId, noteId, question, answer, ...).
             history (list): Conversation history.
-            routing_result: Routing result with search parameters.
+            routing_result: RagAnalysis from rag_analyzer with search parameters.
             model (str): Primary model name.
             fallback_model (str): Fallback model name.
             mode (str): Response mode ('compact', etc.).
@@ -78,7 +72,7 @@ def run_tutor(situation, emit_step=None, memory=None,
     config = kwargs.get('config') or {}
     context = kwargs.get('context')
     history = kwargs.get('history', [])
-    routing_result = kwargs.get('routing_result')
+    rag_analysis = kwargs.get('routing_result')  # RagAnalysis from rag_analyzer
     model = kwargs.get('model', 'gemini-3-flash-preview')
     fallback_model = kwargs.get('fallback_model', 'gemini-2.5-flash')
     mode = kwargs.get('mode', 'compact')
@@ -86,6 +80,7 @@ def run_tutor(situation, emit_step=None, memory=None,
     callback = kwargs.get('callback')  # v1 legacy streaming callback
     rag_retrieve_fn = kwargs.get('rag_retrieve_fn')
     embedding_manager = kwargs.get('embedding_manager')
+    smart_search_context = kwargs.get('smart_search_context')
 
     # ------------------------------------------------------------------
     # 2. Track memory
@@ -97,65 +92,88 @@ def run_tutor(situation, emit_step=None, memory=None,
             pass
 
     # ------------------------------------------------------------------
-    # 3. Check API key / backend mode
+    # 3. Check backend mode
     # ------------------------------------------------------------------
-    api_key = config.get('api_key', '')
+    api_key = ''  # Legacy parameter — backend handles auth
     use_backend = False
-    if not api_key:
+    try:
         try:
-            try:
-                from ..config import is_backend_mode, get_auth_token
-            except ImportError:
-                from config import is_backend_mode, get_auth_token
-            if is_backend_mode() and get_auth_token():
-                use_backend = True
-        except (ImportError, AttributeError):
-            pass
+            from ..config import is_backend_mode
+        except ImportError:
+            from config import is_backend_mode
+        use_backend = is_backend_mode()
+    except (ImportError, AttributeError):
+        pass
 
-    if not api_key and not use_backend:
-        msg = 'Bitte konfiguriere zuerst den API-Schlüssel in den Einstellungen.'
+    if not use_backend:
+        msg = 'Backend nicht konfiguriert. Bitte verbinde dich in den Einstellungen.'
         if stream_callback:
             stream_callback(msg, True)
         return {'text': msg}
 
     # ------------------------------------------------------------------
-    # 4. RAG retrieval
+    # 4. RAG retrieval (or pre-loaded smart search context)
     # ------------------------------------------------------------------
     rag_context = None
     citations = {}
+    rag_result = None  # Will be set by normal RAG path
 
-    try:
-        if routing_result is not None:
-            # If no rag_retrieve_fn was provided, try to build one from ai/rag.py
-            _rag_fn = rag_retrieve_fn
-            if _rag_fn is None:
-                _rag_fn = _make_default_rag_retrieve_fn()
+    if smart_search_context:
+        # Smart Search: cards already found by SearchCardsThread
+        # Build RAG context string from pre-loaded cards
+        cards = smart_search_context.get('cards_data', [])
+        rag_lines = []
+        for i, card in enumerate(cards[:50]):
+            q = (card.get('question') or '')[:80]
+            a = (card.get('answer') or card.get('deck') or '')[:80]
+            rag_lines.append("[%d] %s | %s" % (i + 1, q, a))
+        if rag_lines:
+            rag_context = {"context_string": "\n".join(rag_lines)}
+            # Build citations for card references
+            for i, card in enumerate(cards[:50]):
+                card_id = card.get('id') or card.get('card_id') or ''
+                if card_id:
+                    citations[str(card_id)] = {
+                        'noteId': str(card_id),
+                        'question': (card.get('question') or '')[:60],
+                        'source': 'smart_search',
+                        'index': i + 1,  # Stable index for [N] inline references
+                    }
+        if emit_step:
+            emit_step("sources_ready", "done", {"citations": citations})
+        logger.info("Tutor: using smart_search_context with %d cards", len(cards))
+    else:
+        # Normal path: RAG retrieval from routing result
+        try:
+            if rag_analysis is not None:
+                _rag_fn = rag_retrieve_fn
+                if _rag_fn is None:
+                    _rag_fn = _make_default_rag_retrieve_fn()
 
-            rag_result = retrieve_rag_context(
-                user_message=situation,
-                context=context,
-                config=config,
-                routing_result=routing_result,
-                emit_step=emit_step,
-                embedding_manager=embedding_manager,
-                rag_retrieve_fn=_rag_fn,
-            )
+                rag_result = retrieve_rag_context(
+                    user_message=situation,
+                    context=context,
+                    config=config,
+                    routing_result=rag_analysis,
+                    emit_step=emit_step,
+                    embedding_manager=embedding_manager,
+                    rag_retrieve_fn=_rag_fn,
+                )
 
-            if rag_result.cards_found > 0:
-                rag_context = rag_result.rag_context
-                citations = rag_result.citations
-                logger.debug("Tutor RAG: %s citations", len(citations))
-                # Emit citations early so frontend can show source cards during generation
-                if emit_step and citations:
-                    emit_step("sources_ready", "done", {"citations": citations})
-    except Exception as e:
-        logger.warning("Tutor RAG retrieval failed: %s", e)
+                if rag_result.cards_found > 0:
+                    rag_context = rag_result.rag_context
+                    citations = rag_result.citations
+                    logger.debug("Tutor RAG: %s citations", len(citations))
+                    if emit_step and citations:
+                        emit_step("sources_ready", "done", {"citations": citations})
+        except Exception as e:
+            logger.warning("Tutor RAG retrieval failed: %s", e)
 
-    # Even without search results, include current card as context
-    if not rag_context and context and context.get('cardId'):
-        rag_context = _build_current_card_context(context)
-        if rag_context:
-            citations = rag_context.get('citations', {})
+        # Even without search results, include current card as context
+        if not rag_context and context and context.get('cardId'):
+            rag_context = _build_current_card_context(context)
+            if rag_context:
+                citations = rag_context.get('citations', {})
 
     # ------------------------------------------------------------------
     # 5. Build system prompt
@@ -163,23 +181,29 @@ def run_tutor(situation, emit_step=None, memory=None,
     ai_tools = config.get('ai_tools', {
         'images': True, 'diagrams': True, 'molecules': False
     })
-    system_prompt = get_system_prompt(mode=mode, tools=ai_tools, insights=insights)
+    system_prompt = None  # Backend builds the system prompt
+
+    generation_situation = situation
 
     # ------------------------------------------------------------------
     # 6. Generate with 3-level fallback chain
     # ------------------------------------------------------------------
+
     def _on_chunk(chunk, done, is_function_call=False):
         """Forward streaming chunks to both stream_callback and legacy callback."""
         if done:
-            return  # We handle the done signal after the call
-        if chunk and not is_function_call:
-            if stream_callback:
-                stream_callback(chunk, False)
-            if callback:
-                callback(chunk, False, False)
+            return
+        if not chunk:
+            return
+        if is_function_call:
+            return  # Tool calls handled by agent_loop
+        if stream_callback:
+            stream_callback(chunk, False)
+        if callback:
+            callback(chunk, False, False)
 
     result_text = _generate_with_fallback(
-        situation=situation,
+        situation=generation_situation,
         primary_model=model,
         fallback_model=fallback_model,
         api_key=api_key,
@@ -278,19 +302,24 @@ def run_tutor(situation, emit_step=None, memory=None,
     # 8. Return result
     # ------------------------------------------------------------------
     final_text = result_text or ''
+
     if handoff_marker:
         final_text = final_text + '\n' + handoff_marker if final_text else handoff_marker
 
-    return {
+    result = {
         'text': final_text,
         'citations': citations,
         '_used_streaming': stream_callback is not None,
         '_handoff_marker': handoff_marker,
     }
+    if rag_result and hasattr(rag_result, 'web_sources') and rag_result.web_sources:
+        result['webSources'] = rag_result.web_sources
+    return result
 
 
 def _call_generation(situation, model, api_key, config, system_prompt,
-                     context, history, mode, rag_context, on_chunk):
+                     context, history, mode, rag_context, on_chunk,
+                     pipeline_step_callback=None):
     """Call get_google_response_streaming with the given parameters.
 
     Returns the result text string. Raises on error.
@@ -302,6 +331,7 @@ def _call_generation(situation, model, api_key, config, system_prompt,
         rag_context=rag_context,
         system_prompt_override=system_prompt,
         config=config,
+        pipeline_step_callback=pipeline_step_callback,
     )
 
 
@@ -351,7 +381,8 @@ def _generate_with_fallback(situation, primary_model, fallback_model,
             emit_step("generating", "active")
         result_text = _call_generation(
             situation, primary_model, api_key, config, system_prompt,
-            context, history, mode, rag_context, on_chunk)
+            context, history, mode, rag_context, on_chunk,
+            pipeline_step_callback=emit_step)
         if emit_step:
             emit_step("generating", "done")
         return result_text
@@ -375,7 +406,8 @@ def _generate_with_fallback(situation, primary_model, fallback_model,
             emit_step("generating", "active")
         result_text = _call_generation(
             situation, fallback_model, api_key, config, system_prompt,
-            context, fallback_history, mode, fallback_rag, on_chunk)
+            context, fallback_history, mode, fallback_rag, on_chunk,
+            pipeline_step_callback=emit_step)
         if emit_step:
             emit_step("generating", "done")
         return result_text
@@ -391,7 +423,8 @@ def _generate_with_fallback(situation, primary_model, fallback_model,
             emit_step("generating", "active")
         result_text = _call_generation(
             situation, fallback_model, api_key, config, system_prompt,
-            context, [], mode, None, on_chunk)
+            context, [], mode, None, on_chunk,
+            pipeline_step_callback=emit_step)
         if emit_step:
             emit_step("generating", "done")
         return result_text
@@ -413,7 +446,7 @@ def _make_default_rag_retrieve_fn():
 
         def _rag_fn(precise_queries=None, broad_queries=None,
                      search_scope="current_deck", context=None,
-                     max_notes=10, **_kwargs):
+                     max_notes=30, **_kwargs):
             return rag_retrieve_cards(
                 precise_queries=precise_queries,
                 broad_queries=broad_queries,
@@ -450,6 +483,7 @@ def _build_current_card_context(context):
                 'deckName': context.get('deckName', ''),
                 'isCurrentCard': True,
                 'sources': ['current'],
+                'index': 1,  # Stable index for [N] inline references
             }
         }
     }

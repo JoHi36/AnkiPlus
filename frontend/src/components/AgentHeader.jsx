@@ -73,7 +73,7 @@ export default function AgentHeader({ agent, enabled, onToggle }) {
   // Description: tertiary when on, very dim when off
   const descColor = enabled
     ? 'var(--ds-text-tertiary)'
-    : 'rgba(255,255,255,0.18)';
+    : 'var(--ds-text-muted)';
 
   // Power icon
   const iconColor = enabled ? agentColor : 'var(--ds-text-muted)';
@@ -82,8 +82,8 @@ export default function AgentHeader({ agent, enabled, onToggle }) {
   // Background feedback on hover/press (only when interactive)
   let bgColor = 'transparent';
   if (!isDefault) {
-    if (pressed) bgColor = 'rgba(255,255,255,0.05)';
-    else if (hovered) bgColor = 'rgba(255,255,255,0.03)';
+    if (pressed) bgColor = 'var(--ds-active-tint)';
+    else if (hovered) bgColor = 'var(--ds-hover-tint)';
   }
 
   function handleClick() {

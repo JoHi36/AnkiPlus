@@ -16,7 +16,6 @@ export function executeAction(name, data) {
   if (action) {
     action.handler(data);
   } else {
-    console.warn('[ActionRegistry] Unknown action:', name);
   }
 }
 

@@ -644,7 +644,7 @@ function PhaseRow({ step, data, status, isActive, isFirst = false, animate = tru
         </span>
         {/* Checkmark */}
         {isDone && status !== 'error' && (
-          <span style={{ fontSize: 10, color: agentColor ? `${agentColor}80` : 'var(--ds-green-50)' }}>&#10003;</span>
+          <span style={{ fontSize: 10, color: agentColor ? `color-mix(in srgb, ${agentColor} 50%, transparent)` : 'var(--ds-green-50)' }}>&#10003;</span>
         )}
       </div>
 

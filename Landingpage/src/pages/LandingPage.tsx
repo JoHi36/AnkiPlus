@@ -3,12 +3,15 @@ import { useState, useCallback } from 'react';
 import {
   ChevronRight,
   CheckCircle2,
+  ShieldCheck,
+  Globe,
+  EyeOff,
 } from 'lucide-react';
 import { Button } from '@shared/components/Button';
 import { PricingComparisonTable } from '../components/PricingComparisonTable';
 import { PricingFAQ } from '../components/PricingFAQ';
 import { PricingGrid } from '../components/PricingGrid';
-import { InteractivePlayground } from '../components/demo/InteractivePlayground';
+import { DemoShell } from '../components/demo/DemoShell';
 import { TestimonialList } from '../components/TestimonialList';
 import { ParticlePlus } from '../components/ParticlePlus';
 import { OldAnkiMock } from '../components/demo/OldAnkiMock';
@@ -78,14 +81,14 @@ export function LandingPage() {
             </p>
 
             <div className="flex gap-3 justify-center">
-              <Button variant="primary" size="md" asChild>
+              <Button variant="ghost" size="md" asChild>
                 <Link to="/register">
                   Kostenlos starten
                   <ChevronRight className="w-3.5 h-3.5 ml-1.5" />
                 </Link>
               </Button>
 
-              <Button variant="outline" size="md" onClick={() => handleScrollTo('demo')}>
+              <Button variant="primary" size="md" onClick={() => handleScrollTo('demo')}>
                 Ausprobieren
               </Button>
             </div>
@@ -120,32 +123,30 @@ export function LandingPage() {
         <section id="demo" className="max-w-6xl mx-auto px-4 sm:px-6 pb-24 sm:pb-32 demo-glow relative" style={{ overflow: 'visible' }}>
 
           {/* Fixed-height container so both layers overlap during crossfade */}
-          <div className="relative h-[600px] md:h-[750px] rounded-2xl" style={{ zIndex: 1 }}>
-
+          <div
+            className="relative w-full rounded-2xl overflow-hidden border border-white/[0.08]"
+            style={{ zIndex: 1, aspectRatio: '16 / 10', minHeight: 400 }}
+          >
             {/* Old Anki — visible on load, crossfades out */}
-            <div
-              className="absolute inset-0 rounded-2xl overflow-hidden border border-white/[0.08]"
-              style={{
-                opacity: introDone ? 0 : 1,
-                transition: 'opacity 1.2s cubic-bezier(0.25, 0.1, 0.25, 1)',
-                pointerEvents: introDone ? 'none' : 'auto',
-                willChange: 'opacity',
-              }}
-            >
+            <div style={{
+              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+              opacity: introDone ? 0 : 1,
+              transition: 'opacity 1.2s cubic-bezier(0.25, 0.1, 0.25, 1)',
+              pointerEvents: introDone ? 'none' : 'auto',
+              zIndex: 1,
+            }}>
               <OldAnkiMock />
             </div>
 
-            {/* Modern Demo — crossfades in as old Anki fades out */}
-            <div
-              className="absolute inset-0 demo-blue-border demo-dot-grid rounded-2xl"
-              style={{
-                opacity: introDone ? 1 : 0,
-                transition: 'opacity 1.2s cubic-bezier(0.25, 0.1, 0.25, 1) 0.1s',
-                pointerEvents: introDone ? 'auto' : 'none',
-                willChange: 'opacity',
-              }}
-            >
-              <InteractivePlayground />
+            {/* Modern Demo — crossfades in */}
+            <div style={{
+              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+              opacity: introDone ? 1 : 0,
+              transition: 'opacity 1.2s cubic-bezier(0.25, 0.1, 0.25, 1) 0.1s',
+              pointerEvents: introDone ? 'auto' : 'none',
+              zIndex: 2,
+            }}>
+              <DemoShell />
             </div>
 
           </div>
@@ -201,17 +202,79 @@ export function LandingPage() {
       </main>
 
       {/* ═══ FOOTER ═══ */}
-      <footer className="border-t border-white/[0.06] py-8">
-        <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4">
+      <footer className="border-t border-white/[0.06] px-6 py-8">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+          {/* Left: Copyright */}
           <div className="text-white/[0.18] text-xs">
-            &copy; 2025 ANKI+
+            &copy; 2026 Anki.Plus &middot; Johannes Hinkel
           </div>
+
+          {/* Center: Trust items */}
+          <div className="flex flex-wrap justify-center gap-6 md:gap-8">
+            <TrustItem
+              icon={<ShieldCheck className="w-3.5 h-3.5" strokeWidth={1.5} />}
+              label="DSGVO-konform"
+              tooltip="Vollständige Datenschutzerklärung nach EU-DSGVO. Datenexport und Kontolöschung jederzeit möglich."
+            />
+            <TrustItem
+              icon={<Globe className="w-3.5 h-3.5" strokeWidth={1.5} />}
+              label="EU-Server"
+              tooltip="Alle KI-Anfragen werden über europäische Server verarbeitet. Deine Lerndaten verlassen die EU nicht."
+            />
+            <TrustItem
+              icon={<EyeOff className="w-3.5 h-3.5" strokeWidth={1.5} />}
+              label="Kein Tracking"
+              tooltip="Keine Cookies, kein Google Analytics, keine Weitergabe an Dritte. Wir sehen nur, was du uns zeigst."
+            />
+          </div>
+
+          {/* Right: Legal links */}
           <div className="flex gap-6 text-white/[0.18] text-xs">
-            <a href="#" className="hover:text-white/[0.35] transition-colors">Privacy</a>
-            <a href="#" className="hover:text-white/[0.35] transition-colors">Terms</a>
+            <Link to="/datenschutz" className="hover:text-white/[0.35] transition-colors">Datenschutz</Link>
+            <Link to="/impressum" className="hover:text-white/[0.35] transition-colors">Impressum</Link>
           </div>
         </div>
       </footer>
+    </div>
+  );
+}
+
+/* ─── Trust Item with hover popup ─── */
+function TrustItem({ icon, label, tooltip }: { icon: React.ReactNode; label: string; tooltip: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        className={`flex items-center gap-2 text-xs font-light tracking-wide transition-colors duration-300 ${
+          open ? 'text-[#0a84ff]' : 'text-white/[0.35] hover:text-[#0a84ff]'
+        }`}
+      >
+        {icon}
+        {label}
+      </button>
+
+      {/* Tooltip */}
+      <div
+        className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 pointer-events-none"
+        style={{
+          opacity: open ? 1 : 0,
+          transform: `translateX(-50%) translateY(${open ? '0' : '4px'})`,
+          transition: 'opacity 200ms ease, transform 200ms ease',
+        }}
+      >
+        <div className="bg-[#1a1a1c] border border-[#0a84ff]/20 rounded-xl px-4 py-3 text-[12px] text-white/[0.6] font-light leading-relaxed w-[220px] text-center shadow-lg shadow-[#0a84ff]/5">
+          {tooltip}
+        </div>
+        {/* Arrow */}
+        <div className="flex justify-center">
+          <div className="w-2 h-2 bg-[#1a1a1c] border-b border-r border-[#0a84ff]/20 rotate-45 -mt-1" />
+        </div>
+      </div>
     </div>
   );
 }

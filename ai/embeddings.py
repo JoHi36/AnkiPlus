@@ -58,11 +58,12 @@ class EmbeddingManager:
         self._api_key = api_key
         self._backend_url = backend_url
         self._auth_headers_fn = auth_headers_fn
-        self._backend_failed = False  # Skip backend after first auth failure
         self._index = []       # list of normalized float lists
         self._card_ids = []    # card_id list aligned with index rows
         self._lock = threading.Lock()
         self._background_thread = None
+        self._index_loaded = False  # lazy-load flag
+        self._kg_term_index = None  # cached KG term index
 
     def set_credentials(self, api_key=None, backend_url=None, auth_headers_fn=None):
         if api_key is not None:
@@ -74,72 +75,115 @@ class EmbeddingManager:
 
     # ── Embedding API ──
 
+    MODEL = "text-embedding-004"
+
     def embed_texts(self, texts):
+        """Embed texts via backend /embed endpoint."""
         if not texts:
             return []
 
         import requests as http_requests
+        try:
+            from ..config import get_backend_url, get_auth_token
+        except ImportError:
+            from config import get_backend_url, get_auth_token
 
-        # Backend-Modus: Embeddings über Cloud Function (skip if previously failed)
-        if self._backend_url and self._auth_headers_fn and not self._backend_failed:
-            try:
-                embed_url = f"{self._backend_url}/embed"
-                headers = {**self._auth_headers_fn(), "Content-Type": "application/json"}
-                body = {"texts": [t[:2000] for t in texts]}
+        backend_url = get_backend_url()
+        auth_token = get_auth_token()
 
-                response = http_requests.post(embed_url, json=body, headers=headers, timeout=5)
-                response.raise_for_status()
-                data = response.json()
-                return data.get("embeddings", [])
-            except (OSError, ValueError, KeyError) as e:
-                logger.warning("EmbeddingManager: Backend-Fehler: %s, Fallback auf direkte API (Backend wird übersprungen)", e)
-                self._backend_failed = True
-
-        # Direkter Gemini API Modus (Fallback)
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.MODEL}:batchEmbedContents"
-
-        if self._api_key:
-            url += f"?key={self._api_key}"
-            headers = {"Content-Type": "application/json"}
-        else:
-            logger.warning("EmbeddingManager: No credentials configured")
+        if not backend_url or not auth_token:
+            logger.warning("EmbeddingManager: No backend URL or auth token configured")
             return []
 
-        body = {
-            "requests": [
-                {
-                    "model": f"models/{self.MODEL}",
-                    "content": {"parts": [{"text": t[:2000]}]}
-                }
-                for t in texts
-            ]
-        }
-
-        response = http_requests.post(url, json=body, headers=headers, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-
-        embeddings = []
-        for item in data.get("embeddings", []):
-            vec = item["values"]
-            embeddings.append(vec)
-
-        return embeddings
+        try:
+            response = http_requests.post(
+                '%s/embed' % backend_url.rstrip('/'),
+                headers={
+                    'Authorization': 'Bearer %s' % auth_token,
+                    'Content-Type': 'application/json',
+                },
+                json={'texts': [t[:2000] for t in texts]},
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+            embeddings = data.get('embeddings', [])
+            if embeddings:
+                logger.debug("EmbeddingManager: %d texts embedded via backend", len(embeddings))
+                return embeddings
+            logger.warning("EmbeddingManager: Backend returned empty embeddings")
+            return []
+        except Exception as e:
+            logger.error("EmbeddingManager: Backend embed failed: %s", e)
+            return []
 
     def _card_to_text(self, card_data):
+        """Build embedding text from card content.
+
+        Strategy:
+        - Tags are NOT included (keyword search handles tag-based discovery)
+        - Answer/content fields are weighted higher (appear first, carry the knowledge)
+        - Cloze markers are resolved to reveal hidden text
+        - All content fields are included, not just question/answer
+        - HTML and entities are stripped
+        """
+        def _clean(val):
+            if not val:
+                return ''
+            # Remove sound references: [sound:filename.mp3]
+            clean = re.sub(r'\[sound:[^\]]+\]', '', val)
+            # Remove image references: <img src="..."> (already caught by HTML strip, but be safe)
+            clean = re.sub(r'\[image:[^\]]+\]', '', clean)
+            # Remove LaTeX: \(...\) and \[...\] and $...$ — keep the content inside
+            clean = re.sub(r'\\\((.+?)\\\)', r'\1', clean)
+            clean = re.sub(r'\\\[(.+?)\\\]', r'\1', clean)
+            # Remove MathJax/LaTeX commands but keep text content
+            clean = re.sub(r'\\(?:text|mathrm|textbf|textit)\{([^}]*)\}', r'\1', clean)
+            clean = re.sub(r'\\[a-zA-Z]+', ' ', clean)  # remaining LaTeX commands
+            clean = re.sub(r'[{}]', '', clean)  # leftover braces
+            # Strip HTML tags and entities
+            clean = re.sub(r'<[^>]+>', '', clean)
+            clean = re.sub(r'&[a-zA-Z]+;', ' ', clean)
+            clean = re.sub(r'&#?\w+;', ' ', clean)  # numeric entities too
+            # Resolve cloze markers: {{c1::answer}} → answer, {{c1::answer::hint}} → answer
+            clean = re.sub(r'\{\{c\d+::(.*?)(?:::[^}]*)?\}\}', r'\1', clean)
+            # Remove URLs (not semantic content)
+            clean = re.sub(r'https?://\S+', '', clean)
+            # Normalize whitespace
+            clean = re.sub(r'\s+', ' ', clean).strip()
+            return clean
+
+        # Prefer answer fields first (they contain the actual knowledge)
+        answer = _clean(card_data.get('answer', ''))
+        question = _clean(card_data.get('question', ''))
+
+        # Extra fields — supports both array (get_all_cards) and dict (card_tracker)
+        extra_fields = card_data.get('extra_fields', [])
+        fields_dict = card_data.get('fields', {})
+        if isinstance(fields_dict, dict) and not extra_fields:
+            # card_tracker format: dict of field_name → value
+            # Skip question/answer equivalents, keep the rest
+            skip_names = {'Front', 'Vorderseite', 'Question', 'Frage', 'Back', 'Rückseite', 'Answer', 'Antwort'}
+            extra_fields = [v for k, v in fields_dict.items() if k not in skip_names and v]
+
+        extras = ' '.join(_clean(f) for f in extra_fields if f)
+
+        # Build embedding: answer first (weighted), then question, then extras
         parts = []
-        for field in ['question', 'answer', 'frontField']:
-            val = card_data.get(field, '')
-            if val:
-                clean = re.sub(r'<[^>]+>', '', val)
-                clean = re.sub(r'&[a-zA-Z]+;', ' ', clean)
-                clean = re.sub(r'\s+', ' ', clean).strip()
-                if clean:
-                    parts.append(clean)
-        tags = card_data.get('tags', [])
-        if tags:
-            parts.append(' '.join(tags) if isinstance(tags, list) else str(tags))
-        return ' '.join(parts)[:2000]
+        if answer:
+            parts.append(answer)
+        if question:
+            parts.append(question)
+        if extras:
+            parts.append(extras)
+
+        text = ' '.join(parts)[:2000]
+
+        # Skip cards with too little content (e.g., image-only cards)
+        if len(text) < 10:
+            return ''
+
+        return text
 
     def _content_hash(self, text):
         return hashlib.sha256(text.encode('utf-8')).hexdigest()[:16]
@@ -147,6 +191,9 @@ class EmbeddingManager:
     # ── In-Memory Index ──
 
     def load_index(self):
+        """Load all embeddings from DB into memory. Safe to call multiple times."""
+        if self._index_loaded:
+            return
         try:
             from storage.card_sessions import load_all_embeddings
         except ImportError:
@@ -157,22 +204,27 @@ class EmbeddingManager:
             if not rows:
                 self._index = []
                 self._card_ids = []
-                return
-
-            card_ids = []
-            vectors = []
-            for card_id, emb_bytes, _ in rows:
-                vec = _unpack_floats(emb_bytes, self.EMBEDDING_DIM)
-                if len(vec) == self.EMBEDDING_DIM:
-                    vectors.append(_normalize(vec))
-                    card_ids.append(card_id)
-
-            self._card_ids = card_ids
-            self._index = vectors
+            else:
+                card_ids = []
+                vectors = []
+                for card_id, emb_bytes, _ in rows:
+                    vec = _unpack_floats(emb_bytes, self.EMBEDDING_DIM)
+                    if len(vec) == self.EMBEDDING_DIM:
+                        vectors.append(_normalize(vec))
+                        card_ids.append(card_id)
+                self._card_ids = card_ids
+                self._index = vectors
+            self._index_loaded = True
 
         logger.info("EmbeddingManager: Loaded %d embeddings into index", len(self._card_ids))
 
+    def _ensure_index(self):
+        """Lazy-load the index on first use."""
+        if not self._index_loaded:
+            self.load_index()
+
     def search(self, query_embedding, top_k=10, exclude_card_ids=None):
+        self._ensure_index()
         with self._lock:
             if not self._index:
                 return []
@@ -191,6 +243,85 @@ class EmbeddingManager:
 
             scored.sort(key=lambda x: x[1], reverse=True)
             return scored[:top_k]
+
+    def load_kg_term_index(self):
+        """Load pre-computed KG term embeddings into memory for fuzzy matching.
+
+        Cached after first load — subsequent calls return the cached index.
+        Call invalidate_kg_term_index() after re-embedding terms.
+
+        Returns:
+            Dict of {term: normalized_vector (list of float)} or empty dict.
+        """
+        if self._kg_term_index is not None:
+            return self._kg_term_index
+
+        import struct
+        import math
+
+        try:
+            try:
+                from ..storage.kg_store import load_term_embeddings
+            except ImportError:
+                from storage.kg_store import load_term_embeddings
+
+            raw = load_term_embeddings()
+            if not raw:
+                self._kg_term_index = {}
+                return self._kg_term_index
+
+            index = {}
+            for term, emb_bytes in raw.items():
+                dim = len(emb_bytes) // 4
+                if dim == 0:
+                    continue
+                vec = list(struct.unpack('%df' % dim, emb_bytes))
+                norm = math.sqrt(sum(v * v for v in vec))
+                if norm > 0:
+                    vec = [v / norm for v in vec]
+                index[term] = vec
+
+            self._kg_term_index = index
+            logger.info("Loaded %d KG term embeddings for fuzzy matching", len(index))
+            return index
+        except Exception as e:
+            logger.warning("Failed to load KG term index: %s", e)
+            return {}
+
+    def invalidate_kg_term_index(self):
+        """Clear cached KG term index so next load_kg_term_index() reloads from DB."""
+        self._kg_term_index = None
+
+    def fuzzy_term_search(self, term_embedding, kg_term_index, top_k=3, min_similarity=0.60):
+        """Find nearest KG terms by cosine similarity.
+
+        Args:
+            term_embedding: Embedding vector for the query term.
+            kg_term_index: Dict of {term: normalized_vector} from load_kg_term_index().
+            top_k: Max number of matches to return.
+            min_similarity: Minimum cosine similarity threshold.
+
+        Returns:
+            List of (term, score) tuples sorted by similarity descending.
+        """
+        if not kg_term_index or not term_embedding:
+            return []
+
+        import math
+        norm = math.sqrt(sum(v * v for v in term_embedding))
+        if norm > 0:
+            normed = [v / norm for v in term_embedding]
+        else:
+            return []
+
+        scored = []
+        for kg_term, kg_vec in kg_term_index.items():
+            score = sum(a * b for a, b in zip(normed, kg_vec))
+            if score >= min_similarity:
+                scored.append((kg_term, score))
+
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return scored[:top_k]
 
     def add_to_index(self, card_id, embedding):
         with self._lock:
@@ -244,9 +375,13 @@ class EmbeddingManager:
         self._background_thread.progress_signal.connect(
             lambda cur, tot: logger.debug("Embedding progress: %d/%d", cur, tot)
         )
-        self._background_thread.finished_signal.connect(
-            lambda n: logger.info("Background embedding complete: %d cards embedded", n)
-        )
+        def _on_bg_done(n):
+            logger.info("Background embedding complete: %d cards embedded", n)
+            # Pre-warm both indices so first request is fast
+            self.invalidate_kg_term_index()
+            self.load_kg_term_index()
+            self.load_index()
+        self._background_thread.finished_signal.connect(_on_bg_done)
         self._background_thread.start()
 
     def stop_background_embedding(self):
@@ -276,6 +411,14 @@ class BackgroundEmbeddingThread(QThread):
             from ..storage.card_sessions import load_all_embeddings, save_embedding
 
         try:
+            from storage.kg_store import save_card_content
+        except ImportError:
+            try:
+                from ..storage.kg_store import save_card_content
+            except ImportError:
+                save_card_content = None
+
+        try:
             all_cards = self.get_all_cards_fn()
         except Exception as e:
             logger.error("BackgroundEmbedding: Failed to get cards: %s", e)
@@ -285,6 +428,25 @@ class BackgroundEmbeddingThread(QThread):
         if not all_cards:
             self.finished_signal.emit(0)
             return
+
+        # Cache card content (question/answer/deck) for benchmark and offline search
+        if save_card_content:
+            cached_count = 0
+            for card in all_cards:
+                cid = card.get('card_id') or card.get('cardId')
+                if not cid:
+                    continue
+                question = card.get('question', '') or ''
+                answer = card.get('answer', '') or ''
+                deck_name = card.get('deckName', '') or card.get('deck_name', '') or ''
+                if question or answer:
+                    try:
+                        save_card_content(cid, question, answer, deck_name)
+                        cached_count += 1
+                    except Exception as e:
+                        logger.debug("BackgroundEmbedding: save_card_content failed for %s: %s", cid, e)
+            if cached_count > 0:
+                logger.info("BackgroundEmbedding: Cached content for %d cards", cached_count)
 
         existing = {}
         try:
@@ -331,5 +493,165 @@ class BackgroundEmbeddingThread(QThread):
                 break  # Stop on error instead of continuing to spam API
 
             time.sleep(0.5)
+
+        # --- LLM-based batch term extraction (rate-limited: max 1 full run per 24h) ---
+        if all_cards and not self._cancelled:
+            try:
+                try:
+                    from ..ai.gemini import extract_terms_batch
+                except ImportError:
+                    from ai.gemini import extract_terms_batch
+                try:
+                    from ..storage.kg_store import save_card_terms, get_card_terms
+                except ImportError:
+                    from storage.kg_store import save_card_terms, get_card_terms
+
+                # Rate limit: prevent quota exploit by limiting full extractions
+                import os
+                _ts_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                        '..', 'storage', '.kg_extraction_ts')
+                _ts_path = os.path.normpath(_ts_path)
+                MIN_EXTRACTION_INTERVAL = 3600  # 1 hour minimum between full extractions
+                try:
+                    if os.path.exists(_ts_path):
+                        last_ts = float(open(_ts_path).read().strip())
+                        if time.time() - last_ts < MIN_EXTRACTION_INTERVAL:
+                            logger.info("KG extraction skipped: last run was %d min ago (min interval: %d min)",
+                                        int((time.time() - last_ts) / 60), MIN_EXTRACTION_INTERVAL // 60)
+                            raise StopIteration("rate limited")
+                except (ValueError, OSError):
+                    pass
+                except StopIteration:
+                    raise  # Re-raise to skip extraction
+
+
+                BATCH_SIZE_LLM = 15
+                extracted_count = 0
+                skipped_count = 0
+
+                # Only extract terms for cards that don't have terms yet
+                kg_cards_to_extract = []
+                for card in all_cards:
+                    cid = card.get('card_id') or card.get('cardId')
+                    if not cid:
+                        continue
+                    existing_terms = get_card_terms(cid)
+                    if existing_terms:
+                        continue  # Already extracted
+                    kg_text = ' '.join(filter(None, [card.get('question', ''), card.get('answer', '')]))
+                    if kg_text.strip():
+                        kg_cards_to_extract.append({
+                            'card_id': cid,
+                            'question': card.get('question', ''),
+                            'answer': card.get('answer', ''),
+                            'deck_id': card.get('deck_id', 0),
+                        })
+
+                logger.info("KG term extraction: %d cards need extraction (of %d total)",
+                            len(kg_cards_to_extract), len(all_cards))
+
+                for i in range(0, len(kg_cards_to_extract), BATCH_SIZE_LLM):
+                    if self._cancelled:
+                        break
+                    batch = kg_cards_to_extract[i:i + BATCH_SIZE_LLM]
+
+                    # LLM-only extraction — NO heuristic fallback
+                    try:
+                        llm_result = extract_terms_batch(batch)
+                    except Exception as e:
+                        err_str = str(e)
+                        if '403' in err_str or '429' in err_str or 'quota' in err_str.lower():
+                            logger.warning("KG extraction stopped: quota/auth error. %d cards extracted, %d remaining.",
+                                           extracted_count, len(kg_cards_to_extract) - i)
+                            break  # Stop entirely — retry on next startup
+                        logger.warning("KG batch extraction failed, skipping batch: %s", e)
+                        skipped_count += len(batch)
+                        continue
+
+                    if not llm_result:
+                        skipped_count += len(batch)
+                        continue
+
+                    for card in batch:
+                        cid = card['card_id']
+                        terms = llm_result.get(cid)
+
+                        # No fallback — if LLM didn't return terms, skip this card
+                        if not terms:
+                            skipped_count += 1
+                            continue
+
+                        save_card_terms(cid, terms, deck_id=card.get('deck_id', 0))
+                        extracted_count += 1
+
+                    time.sleep(0.3)
+
+                logger.info("KG term extraction: %d cards extracted, %d skipped (LLM-only, no fallback)",
+                            extracted_count, skipped_count)
+
+                # Save timestamp to prevent re-extraction within rate limit window
+                if extracted_count > 0:
+                    try:
+                        with open(_ts_path, 'w') as f:
+                            f.write(str(time.time()))
+                    except OSError:
+                        pass
+            except StopIteration:
+                pass  # Rate limited — skip silently
+            except Exception as e:
+                logger.warning("Batch KG term extraction failed: %s", e)
+
+        # KG graph build (runs after all cards are processed)
+        try:
+            try:
+                from .term_extractor import compute_collocations
+            except ImportError:
+                from ai.term_extractor import compute_collocations
+            try:
+                from .kg_builder import GraphIndexBuilder
+            except ImportError:
+                from ai.kg_builder import GraphIndexBuilder
+
+            all_texts = [self.manager._card_to_text(c) for c in all_cards]
+            collocations = compute_collocations(all_texts)
+            if hasattr(self, '_term_extractor') and collocations:
+                self._term_extractor.set_collocations(collocations)
+
+            builder = GraphIndexBuilder()
+            builder.build()
+            logger.info("Knowledge Graph built successfully")
+
+            try:
+                try:
+                    from ..storage.kg_store import compute_deck_links
+                except ImportError:
+                    from storage.kg_store import compute_deck_links
+                link_count = compute_deck_links()
+                logger.info("Computed %d deck cross-links", link_count)
+            except Exception as e:
+                logger.warning("Deck cross-link computation failed: %s", e)
+        except Exception as e:
+            logger.warning("KG graph build failed: %s", e)
+
+        # Embed unembedded KG terms
+        try:
+            try:
+                from ..storage.kg_store import get_unembedded_terms, save_term_embedding
+            except ImportError:
+                from storage.kg_store import get_unembedded_terms, save_term_embedding
+            unembedded = get_unembedded_terms()
+            if unembedded and self.manager:
+                BATCH = 50
+                for i in range(0, len(unembedded), BATCH):
+                    batch = unembedded[i:i + BATCH]
+                    embeddings = self.manager.embed_texts(batch)
+                    if embeddings:
+                        for term, emb in zip(batch, embeddings):
+                            if emb is not None:
+                                emb_bytes = struct.pack(f'{len(emb)}f', *emb)
+                                save_term_embedding(term, emb_bytes)
+                logger.info("Embedded %d KG terms", len(unembedded))
+        except Exception as e:
+            logger.warning("KG term embedding failed: %s", e)
 
         self.finished_signal.emit(embedded)

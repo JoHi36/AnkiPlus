@@ -26,6 +26,9 @@ export default defineConfig(({ mode }) => ({
     emptyOutDir: true, // Lösche dist-Ordner vor Build
     minify: false, // DEVELOPMENT BUILD - Keine Minification für bessere Fehler!
     sourcemap: true, // Enable source maps for better debugging
+    esbuild: {
+      drop: ['console', 'debugger'], // Strip console.* and debugger in production builds
+    },
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, 'index.html'),
@@ -35,6 +38,10 @@ export default defineConfig(({ mode }) => ({
         assetFileNames: 'assets/[name]-[hash].[ext]',
         entryFileNames: 'assets/[name]-[hash].js',
         chunkFileNames: 'assets/[name]-[hash].js',
+        manualChunks: {
+          'three-vendor': ['three'],
+          '3d-force-graph': ['3d-force-graph'],
+        },
       },
       external: ['d3-sankey'], // Externalize d3-sankey to avoid build issues
     },

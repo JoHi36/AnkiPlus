@@ -55,10 +55,12 @@ def _handle_sidebar_message(msg_type, data):
     """Route sidebar messages from the React frontend."""
     handlers = {
         'sidebarGetStatus': _msg_get_status,
+        'sidebarGetIndexingStatus': _msg_get_indexing_status,
         'sidebarSetTheme': _msg_set_theme,
         'sidebarOpenNativeSettings': _msg_open_native_settings,
         'sidebarCopyLogs': _msg_copy_logs,
         'sidebarOpenUpgrade': _msg_open_upgrade,
+        'sidebarConnect': _msg_connect,
         'sidebarLogout': _msg_logout,
         'sidebarGetRemoteQR': _msg_get_remote_qr,
         'sidebarGetRemoteStatus': _msg_get_remote_status,
@@ -93,14 +95,48 @@ def _msg_get_status(_data):
         auth_token = config.get("auth_token", "")
         auth_validated = config.get("auth_validated", False)
         is_authenticated = bool(auth_token and auth_validated)
-        tier = config.get("tier", "free") if is_authenticated else "free"
+        tier = "free"
+        token_used = 0
+        token_limit = 0
+
+        # Fetch quota from backend if authenticated
+        if is_authenticated:
+            try:
+                from ..config import get_backend_url
+            except ImportError:
+                from config import get_backend_url
+            backend_url = get_backend_url()
+            if backend_url and auth_token:
+                import requests as _requests
+                try:
+                    resp = _requests.get(
+                        '%s/user/quota' % backend_url.rstrip('/'),
+                        headers={'Authorization': 'Bearer %s' % auth_token.strip()},
+                        timeout=5,
+                    )
+                    if resp.status_code == 200:
+                        quota_data = resp.json()
+                        tier = quota_data.get('tier', 'free')
+                        # Backend format: { tier, tokens: { daily: { used, limit } } }
+                        tokens = quota_data.get('tokens', {})
+                        daily = tokens.get('daily', {})
+                        token_used = daily.get('used', 0)
+                        token_limit = daily.get('limit', 0)
+                        # Cache tier in config for other handlers
+                        try:
+                            from ..config import update_config
+                        except ImportError:
+                            from config import update_config
+                        update_config(tier=tier)
+                except Exception as e:
+                    logger.warning("_msg_get_status: quota fetch failed: %s", e)
 
         _send_to_sidebar("sidebarStatus", {
             "tier": tier,
             "theme": theme,
             "isAuthenticated": is_authenticated,
-            "tokenUsed": config.get("token_used", 0),
-            "tokenLimit": config.get("token_limit", 0),
+            "tokenUsed": token_used,
+            "tokenLimit": token_limit,
         })
     except Exception:
         logger.exception("_msg_get_status failed")
@@ -180,8 +216,35 @@ def _msg_open_native_settings(_data):
 
 
 def _msg_open_upgrade(_data):
-    """Open the landing page pricing section in the default browser."""
-    webbrowser.open('https://anki-plus.vercel.app/#pricing')
+    """Open pricing or account management page."""
+    config = get_config()
+    auth_token = config.get("auth_token", "")
+    is_authenticated = bool(auth_token and config.get("auth_validated", False))
+    tier = config.get("tier", "free")
+
+    if is_authenticated and tier != "free":
+        # Paid user → account management
+        webbrowser.open('https://anki-plus.vercel.app/account')
+    else:
+        # Free user → pricing page
+        webbrowser.open('https://anki-plus.vercel.app/#pricing')
+
+
+def _msg_connect(_data):
+    """Start Link-Code auth flow — opens login page and polls for tokens."""
+    try:
+        from ..ui.bridge import WebBridge
+    except ImportError:
+        from ui.bridge import WebBridge
+
+    # Find the active WebBridge instance and call startLinkAuth
+    if mw and hasattr(mw, '_chatbot_widget') and mw._chatbot_widget:
+        bridge = mw._chatbot_widget.bridge
+        if bridge and hasattr(bridge, 'startLinkAuth'):
+            bridge.startLinkAuth()
+            return
+    # Fallback: just open login page directly
+    webbrowser.open('https://anki-plus.vercel.app/login')
 
 
 def _msg_copy_logs(_data):
@@ -258,6 +321,73 @@ def _msg_get_remote_status(_data):
     except Exception:
         logger.exception("_msg_get_remote_status failed")
         _send_to_sidebar("sidebarRemoteStatus", {"connected": False, "peer_connected": False})
+
+
+def _msg_get_indexing_status(_data):
+    """Return embedding + KG term extraction status."""
+    try:
+        # KG terms status
+        try:
+            from ..storage.kg_store import get_graph_status
+        except ImportError:
+            from storage.kg_store import get_graph_status
+        kg_status = get_graph_status()
+
+        # Embedding status — count from card_sessions
+        try:
+            from ..storage.card_sessions import load_all_embeddings
+        except ImportError:
+            from storage.card_sessions import load_all_embeddings
+        embedded_count = 0
+        try:
+            for _ in load_all_embeddings():
+                embedded_count += 1
+        except Exception:
+            pass
+
+        # Total cards from Anki
+        total_cards = 0
+        try:
+            if mw and mw.col:
+                total_cards = mw.col.card_count()
+        except Exception:
+            pass
+
+        # KG term embeddings count (for fuzzy matching indicator)
+        kg_total_terms = kg_status.get('totalTerms', 0)
+        kg_embedded_terms = 0
+        try:
+            try:
+                from ..storage.kg_store import get_unembedded_terms
+            except ImportError:
+                from storage.kg_store import get_unembedded_terms
+            unembedded = len(get_unembedded_terms())
+            kg_embedded_terms = max(0, kg_total_terms - unembedded)
+        except Exception:
+            pass
+
+        _send_to_sidebar('indexingStatus', {
+            'embeddings': {
+                'total': total_cards,
+                'done': embedded_count,
+            },
+            'kgTerms': {
+                'total': total_cards,
+                'done': kg_status.get('totalCards', 0),
+                'totalTerms': kg_total_terms,
+            },
+            'kgTermEmbeddings': {
+                'total': kg_total_terms,
+                'done': kg_embedded_terms,
+            },
+        })
+    except Exception:
+        logger.exception("_msg_get_indexing_status failed")
+        _send_to_sidebar('indexingStatus', {
+            'embeddings': {'total': 0, 'done': 0},
+            'kgTerms': {'total': 0, 'done': 0, 'totalTerms': 0},
+            'kgTermEmbeddings': {'total': 0, 'done': 0},
+        })
 
 
 def _msg_js_error(data):

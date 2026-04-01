@@ -77,6 +77,11 @@ export function buildSystemPrompt(params: BuildSystemPromptParams): string {
 function buildTutorPrompt(params: BuildSystemPromptParams): string {
   let prompt = TUTOR_PROMPT;
 
+  // Inject current card context (question, answer, deck, tags, stats)
+  if (params.cardContext) {
+    prompt += `\n\nAKTUELLE KARTE:\n${params.cardContext}`;
+  }
+
   // Inject per-card insights (mirrors get_system_prompt() in ai/system_prompt.py)
   if (params.insights && params.insights.length > 0) {
     const insightsText = params.insights

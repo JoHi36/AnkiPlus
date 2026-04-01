@@ -1,6 +1,5 @@
 import { Request, Response } from 'express';
 import axios from 'axios';
-import * as functions from 'firebase-functions';
 import { AuthRefreshRequest, AuthRefreshResponse } from '../types';
 import { createErrorResponse, ErrorCode } from '../utils/errors';
 import { createLogger } from '../utils/logging';
@@ -41,9 +40,8 @@ export async function authHandler(
 
     logger.info('Refreshing token via Firebase Auth REST API');
 
-    // Get Firebase Web API Key from config
-    const config = functions.config();
-    const firebaseApiKey = config.app?.firebase_web_api_key || process.env.FIREBASE_WEB_API_KEY;
+    // Get Firebase Web API Key from environment
+    const firebaseApiKey = process.env.APP_WEB_API_KEY;
 
     if (!firebaseApiKey) {
       logger.error('FIREBASE_WEB_API_KEY not configured');

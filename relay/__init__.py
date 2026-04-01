@@ -94,13 +94,39 @@ def _on_peer_change(connected):
     if _state_reporter:
         _state_reporter.notify_desktop(connected)
 
-    # When PWA connects, send the current card state immediately
+    # When PWA connects, send the current card state immediately.
+    # We're already on the main thread (via QTimer.singleShot), so call
+    # the inner function directly — _run_on_main would deadlock here.
     if connected and _client:
         try:
-            from .actions import build_card_state_from_reviewer
-            state = build_card_state_from_reviewer(phase="question")
-            if state:
+            from aqt import mw
+            if mw and mw.reviewer and mw.reviewer.card:
+                from .actions import build_card_state, build_card_state_from_reviewer
+                # Call the inner fn directly since we ARE on main thread
+                card = mw.reviewer.card
+                front_html = card.question()
+                back_html = card.answer()
+                deck_name = "Unknown"
+                try:
+                    deck_obj = mw.col.decks.get(card.did)
+                    if deck_obj:
+                        deck_name = deck_obj.get("name", "Unknown")
+                except Exception:
+                    pass
+                counts = mw.col.sched.counts()
+                total = sum(counts)
+                current = 0
+                try:
+                    current = mw.col.db.scalar(
+                        "SELECT count() FROM revlog WHERE id > ?",
+                        (mw.col.sched.day_cutoff - 86400) * 1000) or 0
+                except Exception:
+                    pass
+                state = build_card_state(
+                    phase="question", front_html=front_html, back_html=back_html,
+                    deck=deck_name, current=current, total=total, card_id=card.id)
                 _client.send(state)
+                logger.info("relay: sent initial card_state to PWA")
         except Exception as exc:
             logger.debug("relay: failed to send initial card_state: %s", exc)
 

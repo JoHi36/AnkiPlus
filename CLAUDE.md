@@ -8,6 +8,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **The user is a designer/product person, not a Qt/Python expert.** Explain architectural constraints in plain terms. When Anki/Qt limitations affect what's possible in React, explain WHY before proposing solutions. Never let the user discover architectural mismatches through broken builds.
 
+## Agentisches System — Architektonisches Grundprinzip
+
+**AnkiPlus ist eine agentische Lernplattform.** Jeder Agent hat einen eigenen Kanal (UI-Bereich). Der Kanal bestimmt den Agenten — kein Router, kein @mention, kein Agent-Wechsel im Gespräch.
+
+| Agent | Kanal | Modus |
+|-------|-------|-------|
+| Research | Stapel (Suchleiste → Canvas + Sidebar) | State-basiert |
+| Tutor | Session (Seitenfenster-Chat) | Chat-basiert, kartengebunden |
+| Plusi/Help | Plusi-Sprechblase | Kompakt, Personality + App-Hilfe |
+| Prüfungs-Agent | Reviewer-Input (künftig) | Inline-Bewertung |
+
+**Drei kognitive Modi:** Stapel = Finden (state-basiert), Session = Lernen (verlaufsbasiert), Statistik = Planen. Vollständiges Konzeptdokument: `docs/vision/product-concept.md`.
+
+**Canvas + State-Modell:** Der Stapel-Tab ist ein Canvas auf dem der Research Agent visuelle Ergebnisse darstellt. Daneben ein State-basierter Bereich (kein Chat-Verlauf). Ein Zustand = die gesamte Ansicht. Neuer Zustand nur durch bewusste Vertiefung/neue Anfrage.
+
+**Ein-Glas-Regel:** Zu jedem Zeitpunkt gibt es maximal ein primäres Glas-Eingabeelement auf dem Screen. Ausnahme in der Stapelansicht: Suchleiste (oben, Eingabe) + Action-Dock (unten, Aktion) koexistieren als zwei Phasen eines Flows (Fragen → Handeln).
+
+**RAG-Analyse:** Agenten die RAG nutzen (Tutor, Research) rufen `analyze_query()` (`ai/rag_analyzer.py`) auf — extrahiert aus dem alten Router. Liefert `search_needed`, `resolved_intent`, `retrieval_mode`, `search_scope`. Der Backend-`/router`-Endpoint bleibt, das `agent`-Feld wird ignoriert.
+
+**Agenten-Fusion:** Tutor und Research teilen dieselbe RAG-Pipeline und Web-Search-Tools. Unterschied: Tutor erklärt kartenbasiert (Web-Search als Fallback bei cos < 0.60), Research recherchiert web-first mit mehr Kartenreferenzen. Gleiche Tools, verschiedene Orchestrierung.
+
 ## Overview
 
 This is an Anki addon that provides AI-powered learning assistance through a chat interface. The addon integrates a modern React frontend (built with Vite) into Anki using PyQt6's QWebEngineView. **The goal is a fullscreen React app that replaces Anki's native UI entirely** — no native Anki views visible. Currently the React app's QWebEngineView covers the full window via setCentralWidget, hiding Anki's native web view.
@@ -498,7 +519,7 @@ Rules:
 ### Constants
 
 - No magic numbers — define named constants at module level
-- Example: `MAX_MESSAGES_PER_CARD = 200`, `DOCK_DEFAULT_WIDTH = 450`
+- Example: `MAX_MESSAGES_PER_CARD = 200`, `POLL_INTERVAL_MS = 200`
 
 ### Imports
 
@@ -510,6 +531,36 @@ try:
 except ImportError:
     from config import get_config      # Standalone / testing
 ```
+
+### React Code Standards
+
+**Console statements:** NEVER add `console.log/error/warn` to production code. Vite's `esbuild.drop` strips them from builds, but they clutter source. If you need debugging, use it temporarily and remove before committing.
+
+**React.memo:** Components rendered inside `.map()` loops MUST be wrapped in `React.memo`. Extract inline JSX to named components first, then wrap.
+
+**Inline styles:** Static `style={{}}` objects MUST be extracted to module-level constants (UPPER_SNAKE_CASE). Dynamic styles (depending on props/state) may remain inline.
+```jsx
+// Wrong (new object every render):
+<div style={{ padding: 8, display: 'flex' }}>
+
+// Right (stable reference):
+const ROW_STYLE = { padding: 8, display: 'flex' };
+<div style={ROW_STYLE}>
+```
+
+**Error Boundaries:** Risky renderers (Mermaid, Molecule, Tool Widgets) MUST be wrapped in `<ComponentErrorBoundary>`. Major views in App.jsx MUST be wrapped.
+
+**Callback registration:** Use `callbackRegistry.ts` (`registerCallback`, `invokeAndRemove`) for bridge response callbacks. NEVER use `window._*` globals for callbacks. Caches (`window._cachedConfig`, `window._cachedModels`) are the only acceptable window globals.
+
+**TypeScript:** New files MUST be `.tsx`/`.ts`. Existing `.jsx` files stay as-is until touched for significant changes.
+
+### Testing Requirements
+
+**Python:** Run `python3 run_tests.py` before committing. All tests must pass (currently 481+). When adding new pure-logic functions, add corresponding tests.
+
+**Frontend:** Run `cd frontend && npm test` before committing. All tests must pass (currently 107+). When adding new hooks or utility functions, add corresponding tests in `__tests__/` directories.
+
+**Test isolation:** If a test file stubs `sys.modules`, restore originals IMMEDIATELY after import (see `test_gemini.py` pattern). Never leave stubs for subsequent test files.
 
 ## References
 

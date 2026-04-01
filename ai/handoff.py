@@ -1,4 +1,8 @@
-"""Handoff protocol — agents signal continuation to other agents."""
+"""Agent Handoff — DEPRECATED (agent-kanal-paradigma).
+
+Cross-agent handoff is no longer used. Each agent has a dedicated channel.
+This file is kept for reference only.
+"""
 
 import re
 from dataclasses import dataclass

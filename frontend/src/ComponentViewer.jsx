@@ -12,6 +12,14 @@ import StatsWidget from './components/StatsWidget';
 import CompactWidget from './components/CompactWidget';
 import ImageWidget from './components/ImageWidget';
 import MascotCharacter from './components/MascotCharacter';
+import ReviewFeedback from './components/ReviewFeedback';
+import { DockEvalResult, DockTimer, DockStars, DockLoading } from './components/ReviewerDock';
+import SourceCard from './components/SourceCard';
+import CitationBadge from './components/CitationBadge';
+import CitationRef from '../../shared/components/CitationRef';
+import AgenticCell from './components/AgenticCell';
+import ThinkingIndicator from './components/ThinkingIndicator';
+import { setRegistry } from '../../shared/config/subagentRegistry';
 
 /**
  * ComponentViewer — Premium Design System Reference
@@ -41,6 +49,61 @@ const MOCK_BRIDGE = {
   goToCard: () => {}, openPreview: () => {},
 };
 
+/* ── Demo data for new showcases ── */
+
+const DEMO_SOURCE_KEYWORD = {
+  noteId: 1001,
+  deckName: 'Medizin::Anatomie',
+  front: 'Was ist der <b>Tractus iliotibialis</b>?',
+  sources: ['keyword'],
+};
+const DEMO_SOURCE_SEMANTIC = {
+  noteId: 1002,
+  deckName: 'Medizin::Physiologie',
+  front: 'Welche Muskeln stabilisieren das Kniegelenk lateral?',
+  sources: ['semantic'],
+};
+const DEMO_SOURCE_DUAL = {
+  noteId: 1003,
+  deckName: 'Medizin::Anatomie',
+  front: '{{c1::M. tensor fasciae latae}} inseriert am Tractus iliotibialis.',
+  sources: ['keyword', 'semantic'],
+};
+
+const DEMO_CITATION = {
+  noteId: 42,
+  deckName: 'Medizin::Anatomie',
+  front: 'Welche Funktion hat der <b>M. quadriceps femoris</b>?',
+  sources: ['keyword'],
+};
+
+// Seed registry for AgenticCell demos
+setRegistry([
+  {
+    name: 'tutor',
+    label: '@Tutor',
+    color: '#30D158',
+    enabled: true,
+    pipelineLabel: 'Tutor arbeitet...',
+    iconType: 'letter',
+    loadingHintTemplate: '@Tutor analysiert die Karte...',
+  },
+  {
+    name: 'research',
+    label: '@Research',
+    color: '#0A84FF',
+    enabled: true,
+    pipelineLabel: 'Research arbeitet...',
+    iconType: 'letter',
+    loadingHintTemplate: '@Research durchsucht Quellen...',
+  },
+]);
+
+const DOCK_LOADING_STEPS = [{ label: 'KI bewertet...' }];
+
+const SOURCE_CARD_STYLE = { width: 192, height: 110 };
+const SOURCE_CARDS_ROW_STYLE = { display: 'flex', gap: 'var(--ds-space-md)', flexWrap: 'wrap', alignItems: 'flex-start' };
+
 /* ── Navigation structure ── */
 const NAV = [
   { id: 'philosophy', label: 'Philosophy' },
@@ -59,6 +122,12 @@ const NAV = [
     { id: 'topbar', label: 'TopBar' },
     { id: 'thoughtstream', label: 'ThoughtStream' },
     { id: 'chatmessage', label: 'ChatMessage' },
+    { id: 'reviewfeedback', label: 'ReviewFeedback' },
+    { id: 'dockwidgets', label: 'Dock Widgets' },
+    { id: 'sourcecard', label: 'SourceCard' },
+    { id: 'citationref', label: 'CitationRef' },
+    { id: 'citationbadge', label: 'CitationBadge (legacy)' },
+    { id: 'agenticcell', label: 'AgenticCell' },
     { id: 'multiplechoice', label: 'MultipleChoiceCard' },
   ]},
   { id: 'blocks', label: 'Blocks', children: [
@@ -317,6 +386,7 @@ export default function ComponentViewer() {
   /* ── Plusi widget controls ── */
   const [plusiMood, setPlusiMood] = useState('neutral');
   const [plusiSize, setPlusiSize] = useState(52);
+  const [bubbleProto, setBubbleProto] = useState({ a: 'response', b: 'response', c: 'response' });
 
   const toggleTheme = useCallback(() => {
     const next = theme === 'dark' ? 'light' : 'dark';
@@ -1287,15 +1357,8 @@ export default function ComponentViewer() {
 
           {/* Buttons */}
           <SubHeader id="buttons" label="Buttons" refs={sectionRefs} />
-          <Showcase label="Button Variants">
+          <Showcase label="Primary Button">
             <div style={{ display: 'flex', gap: 'var(--ds-space-md)', flexWrap: 'wrap', alignItems: 'center' }}>
-              <Button variant="primary">Primary</Button>
-              <Button variant="secondary">Secondary</Button>
-              <Button variant="ghost">Ghost</Button>
-              <Button variant="outline">Outline</Button>
-            </div>
-            <VariantLabel>Sizes</VariantLabel>
-            <div style={{ display: 'flex', gap: 'var(--ds-space-md)', alignItems: 'center' }}>
               <Button variant="primary" size="sm">Small</Button>
               <Button variant="primary" size="md">Medium</Button>
               <Button variant="primary" size="lg">Large</Button>
@@ -1304,8 +1367,11 @@ export default function ComponentViewer() {
             <div style={{ display: 'flex', gap: 'var(--ds-space-md)', alignItems: 'center' }}>
               <Button variant="primary">Default</Button>
               <Button variant="primary" disabled>Disabled</Button>
-              <Button variant="secondary">Default</Button>
-              <Button variant="secondary" disabled>Disabled</Button>
+            </div>
+            <VariantLabel>CSS class (non-React)</VariantLabel>
+            <div style={{ display: 'flex', gap: 'var(--ds-space-md)', alignItems: 'center' }}>
+              <button className="ds-btn-primary">ds-btn-primary</button>
+              <button className="ds-btn-primary" disabled>Disabled</button>
             </div>
           </Showcase>
           <Showcase label="Multiple Choice Options">
@@ -1592,6 +1658,137 @@ export default function ComponentViewer() {
               steps={[]} citations={{}} pipelineSteps={[]}
               bridge={MOCK_BRIDGE}
             />
+          </Showcase>
+
+          {/* ReviewFeedback */}
+          <SubHeader id="reviewfeedback" label="Review Feedback" refs={sectionRefs} />
+          <Showcase label="Score states">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ds-space-md)', maxWidth: 400 }}>
+              <ReviewFeedback score={30} />
+              <ReviewFeedback score={70} />
+              <ReviewFeedback score={100} />
+            </div>
+          </Showcase>
+
+          {/* Dock Widgets */}
+          <SubHeader id="dockwidgets" label="Dock Widgets" refs={sectionRefs} />
+          <Showcase label="DockLoading — AI evaluating">
+            <DockLoading steps={DOCK_LOADING_STEPS} />
+          </Showcase>
+          <VariantLabel>DockEvalResult — score display</VariantLabel>
+          <Showcase>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ds-space-sm)' }}>
+              <DockEvalResult result={{ score: 20, feedback: 'Teilweise richtig, wichtige Details fehlen.' }} />
+              <DockEvalResult result={{ score: 65, feedback: 'Gut! Kleiner Fehler bei der Innervation.' }} />
+              <DockEvalResult result={{ score: 95, feedback: 'Ausgezeichnet!' }} />
+            </div>
+          </Showcase>
+          <VariantLabel>DockTimer — elapsed + rating</VariantLabel>
+          <Showcase>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ds-space-sm)' }}>
+              <DockTimer frozenElapsed={4200} rating={1} onCycleRating={() => {}} />
+              <DockTimer frozenElapsed={8900} rating={3} onCycleRating={() => {}} />
+              <DockTimer frozenElapsed={12400} rating={4} onCycleRating={() => {}} />
+            </div>
+          </Showcase>
+          <VariantLabel>DockStars — star count</VariantLabel>
+          <Showcase>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ds-space-sm)' }}>
+              <DockStars stars={1} rating={1} isResult={false} />
+              <DockStars stars={2} rating={2} isResult={false} />
+              <DockStars stars={3} rating={4} isResult={true} />
+            </div>
+          </Showcase>
+
+          {/* SourceCard */}
+          <SubHeader id="sourcecard" label="Source Card" refs={sectionRefs} />
+          <Showcase label="Match types">
+            <div style={SOURCE_CARDS_ROW_STYLE}>
+              <div style={SOURCE_CARD_STYLE}>
+                <SourceCard citation={DEMO_SOURCE_KEYWORD} index={1} />
+              </div>
+              <div style={SOURCE_CARD_STYLE}>
+                <SourceCard citation={DEMO_SOURCE_SEMANTIC} index={2} />
+              </div>
+              <div style={SOURCE_CARD_STYLE}>
+                <SourceCard citation={DEMO_SOURCE_DUAL} index={3} />
+              </div>
+            </div>
+          </Showcase>
+
+          {/* CitationRef — Design System */}
+          <SubHeader id="citationref" label="CitationRef" refs={sectionRefs} />
+          <Showcase label="Card citations (blue) — references Anki cards">
+            <div style={{ fontSize: 'var(--ds-text-lg)', color: 'var(--ds-text-secondary)', lineHeight: 1.8 }}>
+              Die <strong style={{ color: 'var(--ds-text-primary)' }}>Atmungskette</strong> findet in der inneren
+              Mitochondrienmembran statt{' '}
+              <CitationRef index={1} variant="card" onClick={() => {}} title="Karte: Atmungskette Lokalisation" />{' '}
+              <CitationRef index={2} variant="card" onClick={() => {}} title="Karte: Komplex I-IV Übersicht" />.
+              Dabei werden Elektronen über Enzymkomplexe{' '}
+              <CitationRef index={3} variant="card" onClick={() => {}} title="Karte: Elektronentransportkette" />{' '}
+              auf Sauerstoff übertragen.
+            </div>
+          </Showcase>
+          <VariantLabel>Web citations (green) — references external sources</VariantLabel>
+          <Showcase>
+            <div style={{ fontSize: 'var(--ds-text-lg)', color: 'var(--ds-text-secondary)', lineHeight: 1.8 }}>
+              Laut aktueller Forschung spielt die ATP-Synthase eine zentrale Rolle{' '}
+              <CitationRef index={1} variant="web" onClick={() => {}} title="https://pubmed.ncbi.nlm.nih.gov/..." />{' '}
+              <CitationRef index={2} variant="web" onClick={() => {}} title="https://nature.com/articles/..." />.
+              Die rotatorische Katalyse wurde erstmals 1997 nachgewiesen{' '}
+              <CitationRef index={3} variant="web" onClick={() => {}} title="Nobel Prize 1997" />.
+            </div>
+          </Showcase>
+          <VariantLabel>Size variants</VariantLabel>
+          <Showcase>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 11, color: 'var(--ds-text-muted)' }}>sm (inline):</span>
+              <CitationRef index={1} variant="card" size="sm" />
+              <CitationRef index={2} variant="web" size="sm" />
+              <span style={{ fontSize: 11, color: 'var(--ds-text-muted)', marginLeft: 12 }}>md (standalone):</span>
+              <CitationRef index={1} variant="card" size="md" />
+              <CitationRef index={2} variant="web" size="md" />
+            </div>
+          </Showcase>
+
+          {/* CitationBadge (legacy) */}
+          <SubHeader id="citationbadge" label="Citation Badge (legacy)" refs={sectionRefs} />
+          <Showcase label="Inline citation pills">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--ds-space-xs)', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 'var(--ds-text-lg)', color: 'var(--ds-text-primary)' }}>
+                Der Tractus iliotibialis
+              </span>
+              <CitationBadge cardId={42} citation={DEMO_CITATION} index={1} />
+              <span style={{ fontSize: 'var(--ds-text-lg)', color: 'var(--ds-text-primary)' }}>
+                stabilisiert das Kniegelenk
+              </span>
+              <CitationBadge cardId={43} citation={DEMO_SOURCE_SEMANTIC} index={2} />
+              <CitationBadge cardId={44} citation={DEMO_SOURCE_KEYWORD} index={3} />
+            </div>
+          </Showcase>
+
+          {/* AgenticCell */}
+          <SubHeader id="agenticcell" label="Agentic Cell" refs={sectionRefs} />
+          <Showcase label="Loading state">
+            <AgenticCell agentName="tutor" isLoading={true} loadingHint="@Tutor analysiert die Karte..." />
+          </Showcase>
+          <VariantLabel>Loaded — with content</VariantLabel>
+          <Showcase>
+            <AgenticCell agentName="tutor" isLoading={false}>
+              <div style={{ fontSize: 'var(--ds-text-base)', color: 'var(--ds-text-secondary)', lineHeight: 1.6 }}>
+                Der <strong style={{ color: 'var(--ds-text-primary)' }}>M. quadriceps femoris</strong> besteht aus
+                vier Köpfen und wird vom N. femoralis (L2–L4) innerviert.
+              </div>
+            </AgenticCell>
+          </Showcase>
+          <VariantLabel>Research agent</VariantLabel>
+          <Showcase>
+            <AgenticCell agentName="research" isLoading={false}>
+              <div style={{ fontSize: 'var(--ds-text-base)', color: 'var(--ds-text-secondary)', lineHeight: 1.6 }}>
+                Aktuelle Studien bestätigen den klinischen Zusammenhang zwischen
+                IT-Band-Syndrom und lateralem Knieschmerz bei Läufern.
+              </div>
+            </AgenticCell>
           </Showcase>
 
           {/* MultipleChoiceCard */}
@@ -2089,6 +2286,111 @@ export default function ComponentViewer() {
             </div>
           </Showcase>
 
+          {/* ── Plusi Bubble — 4 States with SVG Snake Border ── */}
+          <VariantLabel>Chat Bubble — 4 Zustände</VariantLabel>
+          <style>{`
+            @keyframes plusi-snake { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -1; } }
+            @keyframes plusi-snake-reverse { from { stroke-dashoffset: 0; } to { stroke-dashoffset: 1; } }
+            @keyframes plusi-cursor-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+            .plusi-bubble-scroll { overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+            .plusi-bubble-scroll::-webkit-scrollbar { display: none; }
+            .plusi-md { font-size: 12.5px; line-height: 1.65; font-family: 'SF Mono', 'SFMono-Regular', 'Menlo', monospace; color: var(--ds-text-primary); letter-spacing: -0.02em; }
+            .plusi-md strong { color: var(--ds-accent); font-weight: 600; }
+            .plusi-md em { color: var(--ds-text-secondary); font-style: normal; opacity: 0.7; }
+            .plusi-md code { font-size: 11.5px; padding: 1px 5px; border-radius: 4px; background: var(--ds-hover-tint); color: var(--ds-accent); }
+            .plusi-md p { margin: 0 0 8px 0; }
+            .plusi-md p:last-child { margin-bottom: 0; }
+            .plusi-md ul, .plusi-md ol { margin: 4px 0; padding-left: 16px; }
+            .plusi-md li { margin: 2px 0; }
+            .plusi-md li::marker { color: var(--ds-text-muted); }
+            .plusi-md a { color: var(--ds-accent); text-decoration: none; border-bottom: 1px solid var(--ds-accent-20); }
+            .plusi-md blockquote { margin: 6px 0; padding: 4px 10px; border-left: 2px solid var(--ds-accent-30); color: var(--ds-text-secondary); font-style: italic; }
+            .plusi-md hr { border: none; border-top: 1px solid var(--ds-border-subtle); margin: 8px 0; }
+          `}</style>
+
+          {/* State 1: Leer + Kein Fokus — WhatsApp tail RIGHT (user input) */}
+          <Showcase>
+            <div style={{ fontSize: 'var(--ds-text-xs)', fontWeight: 600, color: 'var(--ds-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 'var(--ds-space-md)' }}>Leer — kein Fokus (Tail rechts)</div>
+            <div style={{ position: 'relative', width: '100%', minHeight: 140, background: 'var(--ds-bg-deep)', borderRadius: 'var(--ds-radius-lg)', padding: 'var(--ds-space-xl)', display: 'flex', alignItems: 'flex-end' }}>
+              <div style={{ flexShrink: 0, marginRight: 12, zIndex: 2, marginBottom: 6 }}><MascotCharacter mood="neutral" size={48} /></div>
+              <div style={{ position: 'relative' }}>
+                <svg width={308} height={48} style={{ display: 'block' }}>
+                  <path d="M 8 0 H 292 A 8 8 0 0 1 300 8 V 38 C 300 44 304 46 308 48 C 304 48 294 46 288 46 H 8 A 8 8 0 0 1 0 38 V 8 A 8 8 0 0 1 8 0 Z" fill="var(--ds-bg-frosted)" />
+                  <path d="M 8 0 H 292 A 8 8 0 0 1 300 8 V 38 C 300 44 304 46 308 48 C 304 48 294 46 288 46 H 8 A 8 8 0 0 1 0 38 V 8 A 8 8 0 0 1 8 0 Z" fill="none" stroke="var(--ds-border-subtle)" strokeWidth="1" />
+                </svg>
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 8, bottom: 2, display: 'flex', alignItems: 'center', padding: '0 14px' }}>
+                  <span className="plusi-md" style={{ color: 'var(--ds-text-muted)' }}>Schreib Plusi...</span>
+                </div>
+              </div>
+            </div>
+          </Showcase>
+
+          {/* State 2: Leer + Fokus — WhatsApp tail RIGHT, dual snakes */}
+          <Showcase>
+            <div style={{ fontSize: 'var(--ds-text-xs)', fontWeight: 600, color: 'var(--ds-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 'var(--ds-space-md)' }}>Leer — Fokus (Dual Snake, Tail rechts)</div>
+            <div style={{ position: 'relative', width: '100%', minHeight: 140, background: 'var(--ds-bg-deep)', borderRadius: 'var(--ds-radius-lg)', padding: 'var(--ds-space-xl)', display: 'flex', alignItems: 'flex-end' }}>
+              <div style={{ flexShrink: 0, marginRight: 12, zIndex: 2, marginBottom: 6 }}><MascotCharacter mood="curious" size={48} /></div>
+              <div style={{ position: 'relative' }}>
+                <svg width={308} height={48} style={{ display: 'block' }}>
+                  <path d="M 8 0 H 292 A 8 8 0 0 1 300 8 V 38 C 300 44 304 46 308 48 C 304 48 294 46 288 46 H 8 A 8 8 0 0 1 0 38 V 8 A 8 8 0 0 1 8 0 Z" fill="var(--ds-bg-frosted)" />
+                  <path d="M 8 0 H 292 A 8 8 0 0 1 300 8 V 38 C 300 44 304 46 308 48 C 304 48 294 46 288 46 H 8 A 8 8 0 0 1 0 38 V 8 A 8 8 0 0 1 8 0 Z" fill="none" stroke="var(--ds-border-subtle)" strokeWidth="1" />
+                  {/* Snake 1 — clockwise */}
+                  <path d="M 8 0 H 292 A 8 8 0 0 1 300 8 V 38 C 300 44 304 46 308 48 C 304 48 294 46 288 46 H 8 A 8 8 0 0 1 0 38 V 8 A 8 8 0 0 1 8 0 Z" fill="none" stroke="var(--ds-accent)" strokeWidth="1" pathLength="1" strokeDasharray="0.08 0.92" strokeLinecap="round" opacity="0.45" style={{ animation: 'plusi-snake 4s linear infinite' }} />
+                  {/* Snake 2 — counter-clockwise (opposite side) */}
+                  <path d="M 8 0 H 292 A 8 8 0 0 1 300 8 V 38 C 300 44 304 46 308 48 C 304 48 294 46 288 46 H 8 A 8 8 0 0 1 0 38 V 8 A 8 8 0 0 1 8 0 Z" fill="none" stroke="var(--ds-accent)" strokeWidth="1" pathLength="1" strokeDasharray="0.08 0.92" strokeDashoffset="0.5" strokeLinecap="round" opacity="0.45" style={{ animation: 'plusi-snake 4s linear infinite' }} />
+                </svg>
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 8, bottom: 2, display: 'flex', alignItems: 'center', padding: '0 14px' }}>
+                  <span className="plusi-md" style={{ color: 'var(--ds-text-placeholder)', animation: 'plusi-cursor-blink 1s step-end infinite' }}>|</span>
+                </div>
+              </div>
+            </div>
+          </Showcase>
+
+          {/* State 3: Antwort — Tail links auf Mundhöhe (Plusi spricht), keine Snake */}
+          <Showcase>
+            <div style={{ fontSize: 'var(--ds-text-xs)', fontWeight: 600, color: 'var(--ds-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 'var(--ds-space-md)' }}>Antwort — Tail links (Plusi spricht)</div>
+            <div style={{ position: 'relative', width: '100%', minHeight: 220, background: 'var(--ds-bg-deep)', borderRadius: 'var(--ds-radius-lg)', padding: 'var(--ds-space-xl)', display: 'flex', alignItems: 'flex-end' }}>
+              <div style={{ flexShrink: 0, marginRight: 12, zIndex: 2, marginBottom: 6 }}><MascotCharacter mood={plusiMood} size={48} /></div>
+              <div style={{ position: 'relative' }}>
+                {/* Tail emerges from left side at y≈127 — aligned with Plusi's mouth (~25px from bottom) */}
+                <svg width={312} height={152} style={{ display: 'block' }}>
+                  <path d="M 20 0 H 304 A 8 8 0 0 1 312 8 V 142 A 8 8 0 0 1 304 150 H 20 A 8 8 0 0 1 12 142 V 135 C 12 132 6 129 2 127 C 6 125 12 122 12 119 V 8 A 8 8 0 0 1 20 0 Z" fill="var(--ds-bg-frosted)" />
+                  <path d="M 20 0 H 304 A 8 8 0 0 1 312 8 V 142 A 8 8 0 0 1 304 150 H 20 A 8 8 0 0 1 12 142 V 135 C 12 132 6 129 2 127 C 6 125 12 122 12 119 V 8 A 8 8 0 0 1 20 0 Z" fill="none" stroke="var(--ds-border-subtle)" strokeWidth="1" />
+                </svg>
+                <div className="plusi-bubble-scroll" style={{ position: 'absolute', top: 0, left: 16, right: 0, bottom: 8, maxHeight: 150, padding: '12px 14px' }}>
+                  <div className="plusi-md">
+                    <p>Talgdrüsen produzieren Talg durch <strong>holokrine Sekretion</strong>. Bei dieser Art zerfällt die gesamte Drüsenzelle — ziemlich brutal eigentlich.</p>
+                    <p>Die Endstücke bestehen aus <strong>ballenförmigen Epithelzellen</strong> mit Lipidtröpfchen. Basalzellen am Drüsenboden sorgen für den <code>Zellnachschub</code>.</p>
+                    <p><em>Aber hey — dafür hast du geschmeidige Haut.</em></p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Showcase>
+
+          {/* ── Plusi Markdown Showcase ── */}
+          <VariantLabel>Plusi Markdown — Compact Format</VariantLabel>
+          <Showcase>
+            <div style={{ fontSize: 'var(--ds-text-xs)', fontWeight: 600, color: 'var(--ds-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 'var(--ds-space-md)' }}>Alle Elemente</div>
+            <div style={{ maxWidth: 320, padding: '14px 16px', background: 'var(--ds-bg-frosted)', borderRadius: 8, border: '1px solid var(--ds-border-subtle)' }}>
+              <div className="plusi-md">
+                <p>Normaler Text in <strong>SF Mono</strong>. Keywords leuchten in <strong>Accent-Blau</strong>.</p>
+                <p>Inline <code>code</code> für Fachbegriffe. <em>Kursiv für Nebenbemerkungen.</em></p>
+                <blockquote>Blockquote — Plusi zitiert sich selbst</blockquote>
+                <ul>
+                  <li>Listen sind kompakt</li>
+                  <li>Kein Abstand verschwendet</li>
+                </ul>
+                <hr />
+                <p>Trenner für Gedankensprünge. <a href="#">Links</a> in Accent.</p>
+              </div>
+            </div>
+            <div style={{ marginTop: 'var(--ds-space-lg)', fontSize: 'var(--ds-text-xs)', color: 'var(--ds-text-tertiary)', lineHeight: 1.6 }}>
+              <strong style={{ color: 'var(--ds-text-secondary)' }}>Nicht unterstützt:</strong> Tabellen, H1-H6, Code-Blöcke, Bilder.
+              Plusi redet in kompakten Absätzen — keine Strukturdokumente.
+            </div>
+          </Showcase>
+
           {/* @Help */}
           <SubHeader id="agent-help" label="@Help" refs={sectionRefs} />
           <Showcase>
@@ -2110,6 +2412,140 @@ export default function ComponentViewer() {
               Uses the neutral secondary color — no strong personality, just utility.
             </div>
           </Showcase>
+
+          {/* ═══════════════════════════════════════════════════════════ */}
+          {/* ThinkingIndicator — Unified Reasoning Display Prototype     */}
+          {/* ═══════════════════════════════════════════════════════════ */}
+
+          <SubHeader id="thinking-indicator" label="Thinking Indicator (Bar)" refs={sectionRefs} />
+
+          {/* --- Bar-style ThinkingIndicator using real component --- */}
+
+          <VariantLabel>Tutor — Kontextanalyse (loading + skeleton)</VariantLabel>
+          <Showcase>
+            <div style={{ maxWidth: 560 }}>
+              <ThinkingIndicator
+                phases={[{ name: 'Kontextanalyse', status: 'active', color: 'var(--ds-accent)' }]}
+                agentLabel="Tutor"
+                showSkeleton
+              />
+            </div>
+          </Showcase>
+
+          <VariantLabel>Tutor — Wissensabgleich (active, Kontextanalyse done)</VariantLabel>
+          <Showcase>
+            <div style={{ maxWidth: 560 }}>
+              <ThinkingIndicator
+                phases={[
+                  { name: 'Kontextanalyse', status: 'done', data: '23 Begriffe' },
+                  { name: 'Wissensabgleich', status: 'active', color: 'var(--ds-accent)' },
+                ]}
+                agentLabel="Tutor"
+                showSkeleton
+              />
+            </div>
+          </Showcase>
+
+          <VariantLabel>Tutor — Synthese (active, RAG done)</VariantLabel>
+          <Showcase>
+            <div style={{ maxWidth: 560 }}>
+              <ThinkingIndicator
+                phases={[
+                  { name: 'Kontextanalyse', status: 'done', data: '23 Begriffe' },
+                  { name: 'Wissensabgleich', status: 'done', data: '14 Karten' },
+                  { name: 'Synthese', status: 'active', color: 'var(--ds-accent)' },
+                ]}
+                agentLabel="Tutor"
+                showSkeleton
+              />
+            </div>
+          </Showcase>
+
+          <VariantLabel>Tutor — fertig (doneLabel: "6 Quellen")</VariantLabel>
+          <Showcase>
+            <div style={{ maxWidth: 560 }}>
+              <ThinkingIndicator
+                phases={[
+                  { name: 'Kontextanalyse', status: 'done', data: '23 Begriffe' },
+                  { name: 'Wissensabgleich', status: 'done', data: '14 Karten' },
+                  { name: 'Synthese', status: 'done' },
+                ]}
+                agentLabel="Tutor"
+                doneLabel="6 Quellen"
+              />
+              <div style={{ marginTop: 14, fontSize: 15, color: 'var(--ds-text-primary)', lineHeight: 1.65 }}>
+                Die Zellschichten der Haut bestehen aus drei Hauptschichten:
+                <strong> Epidermis</strong>, <strong>Dermis</strong> und <strong>Subkutis</strong>...
+              </div>
+            </div>
+          </Showcase>
+
+          <VariantLabel>Tutor — mit Web-Recherche</VariantLabel>
+          <Showcase>
+            <div style={{ maxWidth: 560 }}>
+              <ThinkingIndicator
+                phases={[
+                  { name: 'Kontextanalyse', status: 'done', data: '12 Begriffe' },
+                  { name: 'Wissensabgleich', status: 'done', data: '3 Karten' },
+                  { name: 'Web-Recherche', status: 'done', data: '4 Quellen' },
+                  { name: 'Synthese', status: 'active', color: 'var(--ds-accent)' },
+                ]}
+                agentLabel="Tutor"
+                showSkeleton
+              />
+            </div>
+          </Showcase>
+
+          <VariantLabel>Research — Stapel</VariantLabel>
+          <Showcase>
+            <div style={{ maxWidth: 560 }}>
+              <ThinkingIndicator
+                phases={[
+                  { name: 'Kontextanalyse', status: 'done', data: '38 Begriffe' },
+                  { name: 'Wissensabgleich', status: 'done', data: '42 Karten' },
+                  { name: 'Strukturanalyse', status: 'active', data: '5 Cluster', color: '#00D084' },
+                ]}
+                agentLabel="Research"
+                showSkeleton
+              />
+            </div>
+          </Showcase>
+
+          <VariantLabel>Prüfer — Evaluation</VariantLabel>
+          <Showcase>
+            <div style={{ maxWidth: 560 }}>
+              <ThinkingIndicator
+                phases={[
+                  { name: 'Kontextanalyse', status: 'done', data: '11 Begriffe' },
+                  { name: 'Wissensabgleich', status: 'done', data: '8 Karten' },
+                  { name: 'Evaluation', status: 'active', color: '#AF52DE' },
+                ]}
+                agentLabel="Prüfer"
+              />
+            </div>
+          </Showcase>
+
+          <VariantLabel>Plusi — Reflexion (kein RAG)</VariantLabel>
+          <Showcase>
+            <div style={{ maxWidth: 560 }}>
+              <ThinkingIndicator
+                phases={[{ name: 'Reflexion', status: 'active', color: 'var(--ds-accent)' }]}
+                agentLabel="Plusi"
+              />
+            </div>
+          </Showcase>
+
+          {/* Compare all channels */}
+          <VariantLabel>Vergleich — alle Kanäle</VariantLabel>
+          <Showcase>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, maxWidth: 720 }}>
+              <ThinkingIndicator phases={[{ name: 'Kontextanalyse', status: 'done', data: '23 Begriffe' }, { name: 'Wissensabgleich', status: 'done', data: '14 Karten' }, { name: 'Synthese', status: 'active', color: 'var(--ds-accent)' }]} agentLabel="Tutor" />
+              <ThinkingIndicator phases={[{ name: 'Kontextanalyse', status: 'done', data: '38 Begriffe' }, { name: 'Wissensabgleich', status: 'done', data: '42 Karten' }, { name: 'Strukturanalyse', status: 'active', color: '#00D084' }]} agentLabel="Research" />
+              <ThinkingIndicator phases={[{ name: 'Kontextanalyse', status: 'done', data: '11 Begriffe' }, { name: 'Evaluation', status: 'active', color: '#AF52DE' }]} agentLabel="Prüfer" />
+              <ThinkingIndicator phases={[{ name: 'Reflexion', status: 'active', color: 'var(--ds-accent)' }]} agentLabel="Plusi" />
+            </div>
+          </Showcase>
+
 
           {/* Footer */}
           <div style={{

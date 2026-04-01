@@ -1,34 +1,41 @@
 import Stripe from 'stripe';
-import * as functions from 'firebase-functions';
 
-// Get Stripe secret key from Firebase Functions config
-const getStripeSecretKey = (): string => {
-  const config = functions.config();
-  const secretKey = config.stripe?.secret_key || process.env.STRIPE_SECRET_KEY;
-  
-  if (!secretKey) {
-    throw new Error('STRIPE_SECRET_KEY is not set. Please configure it in Firebase Functions config.');
+// Lazy-initialized Stripe client — avoids crashing at module load when
+// env vars aren't available yet (e.g., Firebase CLI analysis phase).
+let _stripe: Stripe | null = null;
+
+export function getStripe(): Stripe {
+  if (!_stripe) {
+    const secretKey = process.env.STRIPE_SECRET_KEY;
+    if (!secretKey) {
+      throw new Error('STRIPE_SECRET_KEY is not set. Please configure it as an environment variable.');
+    }
+    _stripe = new Stripe(secretKey, { apiVersion: '2023-10-16' });
   }
-  
-  return secretKey;
-};
+  return _stripe;
+}
 
-// Initialize Stripe client
-export const stripe = new Stripe(getStripeSecretKey(), {
-  apiVersion: '2023-10-16',
+// Backward-compat: existing code imports `stripe` directly
+export const stripe = new Proxy({} as Stripe, {
+  get(_target, prop) {
+    return (getStripe() as any)[prop];
+  },
 });
 
-// Get Price IDs from Firebase Functions config
-const getPriceIds = () => {
-  const config = functions.config();
+// Price IDs — read lazily from env
+export function getStripePriceIds() {
   return {
-    tier1: config.stripe?.price_tier1 || process.env.STRIPE_PRICE_TIER1 || '',
-    tier2: config.stripe?.price_tier2 || process.env.STRIPE_PRICE_TIER2 || '',
+    tier1: process.env.STRIPE_PRICE_TIER1 || '',
+    tier2: process.env.STRIPE_PRICE_TIER2 || '',
   };
-};
+}
 
-// Price IDs from Stripe Dashboard
-export const STRIPE_PRICE_IDS = getPriceIds();
+// Backward-compat export
+export const STRIPE_PRICE_IDS = new Proxy({} as { tier1: string; tier2: string }, {
+  get(_target, prop: string) {
+    return getStripePriceIds()[prop as 'tier1' | 'tier2'];
+  },
+});
 
 // Helper: Map Stripe subscription status to tier
 export function getTierFromPriceId(priceId: string): 'tier1' | 'tier2' | null {
@@ -54,9 +61,8 @@ export function getPriceIdFromTier(tier: 'tier1' | 'tier2'): string {
   throw new Error(`Invalid tier: ${tier}`);
 }
 
-// Get frontend URL from config
+// Get frontend URL from environment
 export function getFrontendUrl(): string {
-  const config = functions.config();
-  return config.frontend?.url || process.env.FRONTEND_URL || 'https://anki-plus.vercel.app';
+  return process.env.FRONTEND_URL || 'https://anki-plus.vercel.app';
 }
 

@@ -105,12 +105,9 @@ def _summarize_pubmed_de(snippets: list, query: str) -> str:
             from config import get_config, is_backend_mode, get_backend_url, get_auth_token
             from ai.auth import get_auth_headers
 
-        config = get_config() or {}
-        use_backend = is_backend_mode() and get_auth_token()
-        api_key_cfg = config.get("api_key", "").strip()
-
-        if not use_backend and not api_key_cfg:
-            logger.warning("_summarize_pubmed_de: no API key, using raw snippets")
+        backend_url = get_backend_url()
+        if not backend_url:
+            logger.warning("_summarize_pubmed_de: no backend URL, using raw snippets")
             combined = '\n\n'.join(f'[{i+1}] {s}' for i, s in enumerate(snippets))
             return _convert_citations(combined)
 
@@ -122,44 +119,22 @@ def _summarize_pubmed_de(snippets: list, query: str) -> str:
             'Zitiere mit [1], [2] etc. Antworte direkt ohne Einleitung.'
         )
 
-        if use_backend:
-            url = f"{get_backend_url()}/chat"
-            payload = {
-                "message": prompt,
-                "model": "gemini-2.5-flash",
-                "mode": "compact",
-                "history": [],
-                "stream": False,
-            }
-            headers = get_auth_headers()
-            response = requests.post(url, json=payload, headers=headers, timeout=20)
-        else:
-            model = "gemini-2.5-flash"
-            url = (
-                f"https://generativelanguage.googleapis.com/v1beta/models/"
-                f"{model}:generateContent?key={api_key_cfg}"
-            )
-            payload = {
-                "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                "generationConfig": {"temperature": 0.3, "maxOutputTokens": 400},
-            }
-            headers = {"Content-Type": "application/json"}
-            response = requests.post(url, json=payload, headers=headers, timeout=20)
+        url = f"{backend_url}/chat"
+        payload = {
+            "message": prompt,
+            "model": "gemini-2.5-flash",
+            "agent": "research",
+            "mode": "compact",
+            "history": [],
+            "stream": False,
+        }
+        headers = get_auth_headers()
+        response = requests.post(url, json=payload, headers=headers, timeout=20)
 
         if response.status_code == 200:
             data = response.json()
             # Backend format: {"response": "..."} or {"text": "..."}
-            # Direct Gemini format: candidates[0].content.parts[0].text
-            text = (
-                data.get('response')
-                or data.get('text')
-                or (
-                    data.get('candidates', [{}])[0]
-                    .get('content', {})
-                    .get('parts', [{}])[0]
-                    .get('text', '')
-                )
-            )
+            text = data.get('response', '') or data.get('text', '')
             if text:
                 return _convert_citations(text)
             logger.warning("_summarize_pubmed_de: empty text in response")
@@ -219,12 +194,7 @@ def search(query: str, api_key: str = '', enabled_sources: dict = None) -> Resea
         except (ImportError, KeyError, ValueError) as e:
             logger.warning("Wikipedia search failed, falling back: %s", e)
 
-    # Default: Perplexity Sonar via OpenRouter
-    if not api_key:
-        return ResearchResult(query=query,
-                              error='Kein OpenRouter API-Key konfiguriert. '
-                                    'Gehe zu openrouter.ai um einen zu erstellen.')
-
+    # Default: Perplexity Sonar via backend
     try:
         from .openrouter import search_via_openrouter
         result = search_via_openrouter(query, api_key, model='perplexity/sonar')

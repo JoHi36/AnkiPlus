@@ -3,6 +3,25 @@
  * Populated on app init via bridge.getSubagentRegistry().
  */
 
+export interface Slot {
+  ref: string;
+  mode: 'locked' | 'on' | 'off';
+  label?: string;
+  description?: string;
+}
+
+export interface WorkflowDefinition {
+  name: string;
+  label: string;
+  description: string;
+  triggers: Slot[];
+  tools: Slot[];
+  outputs: Slot[];
+  mode: 'locked' | 'on' | 'off';
+  status: 'active' | 'soon';
+  contextPrompt?: string;
+}
+
 export interface SubagentConfig {
   name: string;
   label: string;
@@ -15,13 +34,14 @@ export interface SubagentConfig {
   isDefault?: boolean;
   description?: string;
   tools?: string[];
-  canHandoffTo?: string[];
+  channel?: string;  // 'stapel', 'session', 'plusi', 'reviewer-inline'
   // Agent Studio UI fields
   widgetType?: string;
   submenuLabel?: string;
   submenuComponent?: string;
   toolsConfigurable?: boolean;
   reasoningSteps?: Array<{ id: string; label: string; activeTitle?: string }>;
+  workflows?: WorkflowDefinition[];
 }
 
 export interface ToolConfig {
@@ -56,18 +76,6 @@ export function setToolRegistry(tools: ToolConfig[]): void {
   toolRegistry = new Map(tools.map(t => [t.name, t]));
 }
 
-/**
- * Build regex for @Name or @Label detection from enabled agents.
- * Returns null if no agents are enabled.
- */
-export function getDirectCallPattern(): RegExp | null {
-  const agents = [...registry.values()].filter(a => a.enabled);
-  if (agents.length === 0) return null;
-  const names = agents.map(a => a.name);
-  const labels = agents.map(a => a.label);
-  const allPatterns = [...new Set([...names, ...labels])];
-  return new RegExp('^@(' + allPatterns.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')\\b', 'i');
-}
 
 /**
  * Look up agent by name (case-insensitive).
@@ -86,9 +94,3 @@ export function getDefaultAgent(): SubagentConfig | undefined {
   return undefined;
 }
 
-/**
- * Return all enabled non-default agents (the ones that show badges).
- */
-export function getNonDefaultAgents(): SubagentConfig[] {
-  return [...registry.values()].filter(a => a.enabled && !(a as any).isDefault);
-}

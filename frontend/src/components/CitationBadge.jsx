@@ -1,71 +1,106 @@
 import React, { useState } from 'react';
 import SourceCard from './SourceCard';
+import { useHoldToPeek } from '../hooks/useHoldToPeek';
 
-/**
- * CitationBadge Component
- * Clickable pill badge for card citations with hover tooltip
- * 
- * Style: bg-base-300/50 hover:bg-primary/20
- * Interaction: Click triggers bridge.previewCard(id)
- */
-export default function CitationBadge({ cardId, citation, onClick, index }) {
+const BADGE_BASE = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  minWidth: '1.25rem',
+  height: '1rem',
+  padding: '0 4px',
+  borderRadius: 4,
+  fontSize: 9,
+  fontWeight: 700,
+  verticalAlign: 'super',
+  cursor: 'pointer',
+  margin: '0 1px',
+  transition: 'all 0.15s',
+  border: 'none',
+  lineHeight: 1,
+  transform: 'translateY(-1px)',
+};
+
+const CARD_STYLE = {
+  ...BADGE_BASE,
+  background: 'color-mix(in srgb, var(--ds-accent) 15%, transparent)',
+  color: 'var(--ds-accent)',
+};
+
+const WEB_STYLE = {
+  ...BADGE_BASE,
+  background: 'color-mix(in srgb, var(--ds-green) 15%, transparent)',
+  color: 'var(--ds-green)',
+};
+
+const CARD_HOVER = { background: 'color-mix(in srgb, var(--ds-accent) 30%, transparent)' };
+const WEB_HOVER = { background: 'color-mix(in srgb, var(--ds-green) 30%, transparent)' };
+
+const TOOLTIP_CONTAINER = { width: 192 };
+
+export default function CitationBadge({ cardId, citation, onClick, index, bridge }) {
   const [showTooltip, setShowTooltip] = useState(false);
+  const [hovered, setHovered] = useState(false);
+
+  const isWeb = citation && (citation.url || citation.web_url);
+
+  const { handlers: holdHandlers } = useHoldToPeek({
+    onPeekStart: () => {
+      if (!isWeb && cardId && bridge) {
+        bridge.previewCard(cardId);
+      }
+    },
+    onPeekEnd: () => {
+      if (!isWeb && bridge) {
+        bridge.dismissPreview();
+      }
+    },
+    threshold: 300,
+  });
+  const baseStyle = isWeb ? WEB_STYLE : CARD_STYLE;
+  const hoverStyle = isWeb ? WEB_HOVER : CARD_HOVER;
+
   const handleClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (onClick) {
-      onClick(cardId, citation);
-    }
+    if (onClick) onClick(cardId, citation);
   };
-  
-  // Determine display text: [1] if index provided, else [cardId]
-  const displayText = index !== undefined ? `[${index}]` : `[${cardId}]`;
+
   return (
-    <span className="relative inline-block">
+    <span style={{ position: 'relative', display: 'inline-block' }}>
       <button
         onClick={handleClick}
-        onMouseEnter={() => setShowTooltip(true)}
-        onMouseLeave={() => setShowTooltip(false)}
-        className="inline-flex items-center justify-center min-w-[1.5rem] h-5 px-1.5 rounded 
-                   bg-base-300/80 hover:bg-base-300 border border-base-content/20 
-                   hover:border-primary/50 cursor-pointer 
-                   transition-all duration-150 shadow-sm hover:shadow-md
-                   active:scale-95 mx-0.5 align-middle translate-y-[-1px]
-                   hover:bg-primary/10"
-        style={{ display: 'inline-flex' }}
+        onMouseEnter={() => { setShowTooltip(true); setHovered(true); }}
+        onMouseLeave={() => { setShowTooltip(false); setHovered(false); }}
+        onPointerDown={holdHandlers.onPointerDown}
+        onPointerUp={holdHandlers.onPointerUp}
+        onPointerCancel={holdHandlers.onPointerCancel}
+        style={hovered ? { ...baseStyle, ...hoverStyle } : baseStyle}
       >
-        <span className="font-sans font-semibold text-sm text-base-content/90 
-                        hover:text-primary leading-none select-none">
-          {index !== undefined ? index : cardId}
-        </span>
+        {index !== undefined ? index : cardId}
       </button>
-      
-      {/* Tooltip with SourceCard */}
-      {showTooltip && citation && (
-        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 z-50"
-             style={{ width: '192px' }}
-             onMouseEnter={() => setShowTooltip(true)}
-             onMouseLeave={() => setShowTooltip(false)}>
-          {/* SourceCard Container */}
-          <div className="relative">
-            <SourceCard 
-              citation={citation}
-              index={index}
 
-              onClick={onClick ? () => onClick(cardId, citation) : null} // Enable click in tooltip
-            />
-            
-            {/* Arrow pointing down to the badge - positioned at bottom center */}
-            <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-full pointer-events-none">
-              {/* Outer arrow (matches card border) */}
-              <div className="w-0 h-0 border-l-[7px] border-r-[7px] border-t-[7px] border-transparent border-t-base-300"></div>
-              {/* Inner arrow (matches card background) */}
-              <div className="absolute top-[-1px] left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-transparent border-t-base-200"></div>
-            </div>
-          </div>
+      {showTooltip && citation && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '100%',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            marginBottom: 12,
+            zIndex: 50,
+            ...TOOLTIP_CONTAINER,
+          }}
+          onMouseEnter={() => setShowTooltip(true)}
+          onMouseLeave={() => setShowTooltip(false)}
+        >
+          <SourceCard
+            citation={citation}
+            index={index}
+            onClick={onClick ? () => onClick(cardId, citation) : null}
+          />
         </div>
       )}
     </span>
   );
 }
-

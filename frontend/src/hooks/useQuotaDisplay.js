@@ -36,14 +36,15 @@ export function useQuotaDisplay(bridge, authStatus, currentAuthToken, isDetailed
 
           if (response.ok) {
             const data = await response.json();
-            const mode = isDetailedMode ? 'deep' : 'flash';
-            const quota = mode === 'deep' ? data.deep : data.flash;
-            
+            // Backend format: { tier, tokens: { daily: { used, limit, remaining } } }
+            const daily = data.tokens?.daily || {};
+
             setQuotaDisplay({
-              used: quota.used || 0,
-              limit: quota.limit === -1 ? '∞' : quota.limit,
-              isUnlimited: quota.limit === -1,
+              used: daily.used || 0,
+              limit: daily.limit === -1 ? '∞' : (daily.limit || 0),
+              isUnlimited: daily.limit === -1,
               isAuthenticated: true,
+              tier: data.tier || 'free',
             });
           } else {
             // Fallback: Verwende lokale Quota auch für authentifizierte User
@@ -102,7 +103,6 @@ export function useQuotaDisplay(bridge, authStatus, currentAuthToken, isDetailed
               }
               return;
             } catch (e) {
-              console.error('Error creating Device-ID:', e);
               setQuotaDisplay(null);
               return;
             }
@@ -135,7 +135,6 @@ export function useQuotaDisplay(bridge, authStatus, currentAuthToken, isDetailed
           }
         }
       } catch (error) {
-        console.error('Error fetching quota:', error);
         // Fallback: Versuche lokale Quota auch bei Fehler
         const deviceId = getDeviceId();
         if (deviceId) {

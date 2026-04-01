@@ -13,8 +13,11 @@ import MultipleChoiceCard from './MultipleChoiceCard';
 import CitationBadge from './CitationBadge';
 import WebCitationBadge from './WebCitationBadge';
 import ThoughtStream from './ThoughtStream';
-import ReasoningStream from '../reasoning/ReasoningStream';
+import SourceCountBadge from '../reasoning/SourceCountBadge';
+import ThinkingIndicator from './ThinkingIndicator';
+import { useThinkingPhases } from '../hooks/useThinkingPhases';
 import ToolWidgetRenderer from './ToolWidgetRenderer';
+import { ComponentErrorBoundary } from './ErrorBoundary';
 import AgenticCell from './AgenticCell';
 import ResearchContent from './ResearchContent';
 import mermaid from 'mermaid';
@@ -132,7 +135,6 @@ if (!window._imageLoadCallbacks) {
         try {
           callback(event.detail);
         } catch (err) {
-          console.error('Error in image callback:', err);
         }
       });
       window._imageLoadCallbacks.delete(normalizedUrl);
@@ -317,7 +319,6 @@ const ProxyImage = React.memo(({ src, alt }) => {
               try {
                 callback(errorDetail);
               } catch (err) {
-                console.error('Error in timeout callback:', err);
               }
             });
             window._imageLoadCallbacks.delete(urlKey);
@@ -556,14 +557,10 @@ const loadSmilesDrawer = () => {
   smilesDrawerPromise = new Promise((resolve, reject) => {
     // Prüfe ob bereits geladen (wird im HTML eingebunden)
     if (window.SmilesDrawer) {
-      console.log('✅ SmilesDrawer bereits verfügbar (lokal eingebunden)');
       resolve(window.SmilesDrawer);
       return;
     }
     
-    console.log('🧪 Warte auf SmilesDrawer (wird im HTML geladen)...');
-    console.log('   window.SmilesDrawer:', typeof window.SmilesDrawer);
-    console.log('   Verfügbare Scripts:', Array.from(document.scripts).map(s => s.src).filter(s => s.includes('smiles')));
     
     // Warte länger, falls das Script noch lädt (wird im HTML eingebunden)
     let attempts = 0;
@@ -571,14 +568,10 @@ const loadSmilesDrawer = () => {
       attempts++;
       if (window.SmilesDrawer) {
         clearInterval(checkInterval);
-        console.log('✅ SmilesDrawer erfolgreich geladen (lokal eingebunden) nach', attempts * 100, 'ms');
         resolve(window.SmilesDrawer);
       } else if (attempts > 50) {
         // 5 Sekunden gewartet (50 * 100ms)
         clearInterval(checkInterval);
-        console.error('❌ SmilesDrawer konnte nicht geladen werden (Timeout nach 5s)');
-        console.error('   window.SmilesDrawer:', typeof window.SmilesDrawer);
-        console.error('   Verfügbare Scripts:', Array.from(document.scripts).map(s => s.src));
         reject(new Error('SmilesDrawer konnte nicht geladen werden. Bitte prüfe, ob smiles-drawer.min.js im assets-Ordner vorhanden ist und im HTML eingebunden ist.'));
       }
     }, 100);
@@ -641,7 +634,6 @@ const MermaidDiagram = React.memo(({ code, isStreaming = false }) => {
     
     // CRITICAL: Set rendered flag IMMEDIATELY to prevent parallel renders
     if (renderedRef.current) {
-      console.error('📊 MermaidDiagram: Skipping re-render (already rendered)');
       return;
     }
     renderedRef.current = true; // ← SET IMMEDIATELY, not after async!
@@ -738,7 +730,6 @@ const MermaidDiagram = React.memo(({ code, isStreaming = false }) => {
       }
       
       try {
-        console.error('📊 MermaidDiagram: Starting render...', { codeLength: cleanCode.length });
         setIsRendering(true);
         setError(null);
         
@@ -746,7 +737,6 @@ const MermaidDiagram = React.memo(({ code, isStreaming = false }) => {
         const { svg } = await mermaid.render(id, cleanCode);
         
         if (typeof svg === 'string') {
-          console.error('✅ MermaidDiagram: Render successful');
           // Entferne explizite Farben aus dem SVG (überschreibe mit konsistenten Farben)
           // Das CSS mit !important überschreibt bereits alles, aber wir bereinigen trotzdem
           let cleanedSvg = svg;
@@ -794,19 +784,16 @@ const MermaidDiagram = React.memo(({ code, isStreaming = false }) => {
           setSvgContent(cleanedSvg);
         } else {
           const errorMsg = 'Diagramm konnte nicht gerendert werden';
-          console.error('❌ MermaidDiagram: Render failed - invalid SVG');
           mermaidCache.set(cacheKey, { error: errorMsg });
           setError(errorMsg);
         }
       } catch (err) {
-        console.error('❌ MermaidDiagram rendering error:', err);
         const errorMsg = err instanceof Error ? err.message : String(err || 'Unbekannter Fehler');
         const truncatedError = errorMsg.length > 150 ? errorMsg.substring(0, 150) + '...' : errorMsg;
         mermaidCache.set(cacheKey, { error: truncatedError });
         setError(truncatedError);
       } finally {
         setIsRendering(false);
-        console.error('📊 MermaidDiagram: Render complete');
       }
     };
     
@@ -922,17 +909,14 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
     let cancelled = false;
     
     
-    console.log('🧪 MoleculeRenderer: Starte SmilesDrawer-Laden...');
     loadSmilesDrawer()
       .then((SmilesDrawer) => {
         if (!cancelled) {
-          console.log('✅ MoleculeRenderer: SmilesDrawer erfolgreich geladen');
           setSmilesDrawerLoaded(true);
         }
       })
       .catch((err) => {
         if (!cancelled) {
-          console.error('❌ MoleculeRenderer: Failed to load SmilesDrawer:', err);
           setError(`SmilesDrawer-Bibliothek konnte nicht geladen werden: ${err.message}`);
           setIsRendering(false);
         }
@@ -954,7 +938,6 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
     
     // Warte bis Canvas im DOM ist - CRITICAL: Canvas muss im DOM sein, bevor draw() aufgerufen wird
     if (!canvasRef.current) {
-      console.log('🧪 MoleculeRenderer: Warte auf Canvas-Element...');
       setIsRendering(false);
       return;
     }
@@ -976,7 +959,6 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
 
     // CRITICAL: Set rendered flag IMMEDIATELY to prevent parallel renders
     if (renderedRef.current) {
-      console.log('🧪 MoleculeRenderer: Skipping re-render (already rendered)');
       return;
     }
     renderedRef.current = true;
@@ -1059,7 +1041,6 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
                 }
                 setIsRendering(false);
               } catch (drawError) {
-                console.error('❌ MoleculeRenderer: draw() error (cache):', drawError);
                 setError(drawError?.message || 'Fehler beim Zeichnen');
                 setIsRendering(false);
               }
@@ -1078,7 +1059,6 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
       }
 
       try {
-        console.log('🧪 MoleculeRenderer: Starting render...', { smiles: cleanSmiles.substring(0, 50) });
         setIsRendering(true);
         setError(null);
 
@@ -1104,7 +1084,6 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
           
           // CRITICAL: Stelle sicher, dass Canvas-Element vorhanden und initialisiert ist
           if (!canvasRef.current) {
-            console.error('❌ MoleculeRenderer: Canvas-Element nicht gefunden');
             setError('Canvas-Element nicht verfügbar');
             setIsRendering(false);
             return;
@@ -1153,22 +1132,18 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
               }
             } catch (workaroundError) {
               // Fallback: Versuche normalen drawer.draw() Aufruf
-              console.error('❌ MoleculeRenderer: Workaround failed, trying normal draw()', workaroundError);
               drawer.draw(tree, canvasIdRef.current, 'dark', false);
             }
             
-            console.log('✅ MoleculeRenderer: Render successful');
             moleculeCache.set(cacheKey, { rendered: true });
             setIsRendering(false);
           } catch (drawError) {
-            console.error('❌ MoleculeRenderer: draw() error:', drawError);
             const errorMsg = drawError?.message || 'Fehler beim Zeichnen des Moleküls';
             moleculeCache.set(cacheKey, { error: errorMsg });
             setError(errorMsg);
             setIsRendering(false);
           }
         }, (err) => {
-          console.error('❌ MoleculeRenderer parsing error:', err);
           const errorMsg = err?.message || 'Ungültiger SMILES-String';
           const truncatedError = errorMsg.length > 150 ? errorMsg.substring(0, 150) + '...' : errorMsg;
           moleculeCache.set(cacheKey, { error: truncatedError });
@@ -1176,7 +1151,6 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
           setIsRendering(false);
         });
       } catch (err) {
-        console.error('❌ MoleculeRenderer error:', err);
         const errorMsg = err instanceof Error ? err.message : String(err || 'Unbekannter Fehler');
         const truncatedError = errorMsg.length > 150 ? errorMsg.substring(0, 150) + '...' : errorMsg;
         moleculeCache.set(cacheKey, { error: truncatedError });
@@ -1242,11 +1216,18 @@ const MoleculeRenderer = React.memo(({ smiles }) => {
   return prevSmiles === nextSmiles;
 });
 
+/** Live ThinkingIndicator that subscribes to ReasoningStore */
+function TutorThinkingLive({ requestId, agentName, agentLabel, showSkeleton, doneLabel }) {
+  const streamId = requestId ? `${agentName}-${requestId}` : undefined;
+  const phases = useThinkingPhases(streamId, agentName);
+  return <ThinkingIndicator phases={phases} agentLabel={agentLabel || 'Tutor'} showSkeleton={showSkeleton} doneLabel={doneLabel} />;
+}
+
 /**
  * ChatMessage Komponente - INTENT BASED RENDERING
  * Analysiert JSON-Daten oder Intents und rendert die entsprechende High-End Card.
  */
-function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, isStreaming = false, isLastMessage = false, steps = [], citations = {}, pipelineSteps = [], bridge = null, onPreviewCard, onPerformanceCapture, webSources: webSourcesProp = null, agentCells, orchestration, status: msgStatus, pipelineGeneration: msgPipelineGeneration }) {
+function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, isStreaming = false, isLastMessage = false, steps = [], citations = {}, pipelineSteps = [], bridge = null, onPreviewCard, onPerformanceCapture, webSources: webSourcesProp = null, agentCells, orchestration, status: msgStatus, pipelineGeneration: msgPipelineGeneration, requestId }) {
   // v2: Structured message detection
   const message_prop = {
     agentCells: agentCells || null,
@@ -1303,13 +1284,10 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
         try {
           const data = JSON.parse(result);
           if (data.success) {
-            console.log('MC-Daten erfolgreich in Card gespeichert');
             sessionStorage.setItem(saveKey, 'true');
           } else {
-            console.error('Fehler beim Speichern von MC-Daten:', data.error);
           }
         } catch (e) {
-          console.error('Fehler beim Parsen von saveMultipleChoice:', e);
         }
       });
     }
@@ -1366,7 +1344,6 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
     
     // Wenn ungerade Anzahl von $, füge ein schließendes $ am Ende hinzu
     if (dollarCount % 2 !== 0) {
-      console.log('ChatMessage: Repariere unvollständigen LaTeX-Block');
       result = result + '$';
     }
     
@@ -1403,10 +1380,8 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                     // Force Intent to REVIEW if data is present
                     setIntent('REVIEW');
                 } else {
-                    console.warn("Invalid Evaluation Data structure", data);
                 }
             } catch (e) {
-                console.error("Failed to parse Evaluation Data", e);
             }
         }
 
@@ -1428,7 +1403,6 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                     setIntent('MC');
                 }
             } catch (e) {
-                console.error("Failed to parse Quiz Data", e);
             }
         }
 
@@ -1459,7 +1433,6 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                             setWebSources(toolData.result.sources);
                         }
                     } catch (e) {
-                        console.warn('Failed to parse TOOL marker:', e);
                     }
                 }
                 return updated;
@@ -1489,10 +1462,15 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
       : fixedMessage;
 
     return (
-      <div className="pt-4">
+      <div style={{ paddingTop: 16 }}>
         <div
-          className="text-[14.5px] font-medium leading-[1.45]"
-          style={{ color: 'var(--ds-text-primary)' }}
+          style={{
+            fontSize: 21,
+            fontWeight: 700,
+            letterSpacing: '-0.3px',
+            lineHeight: 1.3,
+            color: 'var(--ds-text-primary)',
+          }}
         >
           {displayText}
         </div>
@@ -1566,44 +1544,48 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
     if (!citations || Object.keys(citations).length === 0) {
       return indices;
     }
-    
-    let counter = 1;
-    
-    // 1. Priority: Order of appearance in text
-    // Matches [[CardID: 123]], [[ CardID: 123 ]], [[123]], [[ 123 ]]
-    const pattern = /\[\[\s*(?:CardID:\s*)?(\d+)\s*\]\]/gi;
-    const matches = [...processedMessage.matchAll(pattern)];
-    
-    matches.forEach(match => {
-        const citationId = match[1]; // ID from text (String)
-        const citation = citations[citationId];
-        
-        if (citation) {
-            // Use same logic as in text renderer: noteId || cardId || citationId
-            // This ensures consistency between index calculation and rendering
-            const id = citation.noteId || citation.cardId || citationId;
-            const idKey = String(id); // Always use string key for consistency
-            
-            // Only assign if not already assigned
-            if (!indices[idKey]) {
-                indices[idKey] = counter++;
-            }
-        }
+
+    let maxIndex = 0;
+
+    // 1. Use stable index from backend (set by RAG pipeline)
+    Object.entries(citations).forEach(([citationId, citation]) => {
+      if (citation && citation.index) {
+        const id = citation.noteId || citation.cardId || citationId;
+        const idKey = String(id);
+        indices[idKey] = citation.index;
+        if (citation.index > maxIndex) maxIndex = citation.index;
+      }
     });
-    
-    // 2. Remaining citations (found but not referenced in text)
-    // Sort keys to be deterministic
-    Object.keys(citations).sort().forEach(citationId => {
-        const citation = citations[citationId];
-        if (citation) {
-            // Use same logic as in text renderer: noteId || cardId || citationId
-            const id = citation.noteId || citation.cardId || citationId;
-            const idKey = String(id); // Always use string key for consistency
-            
-            if (!indices[idKey]) {
-                indices[idKey] = counter++;
-            }
+
+    // 2. Fallback: assign indices to citations without backend index
+    //    (e.g. current card, legacy saved messages)
+    let nextCounter = maxIndex + 1;
+
+    // Legacy text-based detection for old [[CardID: N]] messages
+    const legacyPattern = /\[\[\s*(?:CardID:\s*)?(\d+)\s*\]\]/gi;
+    const legacyMatches = [...processedMessage.matchAll(legacyPattern)];
+    legacyMatches.forEach(match => {
+      const citationId = match[1];
+      const citation = citations[citationId];
+      if (citation) {
+        const id = citation.noteId || citation.cardId || citationId;
+        const idKey = String(id);
+        if (!indices[idKey]) {
+          indices[idKey] = nextCounter++;
         }
+      }
+    });
+
+    // Remaining citations not yet indexed
+    Object.keys(citations).sort().forEach(citationId => {
+      const citation = citations[citationId];
+      if (citation) {
+        const id = citation.noteId || citation.cardId || citationId;
+        const idKey = String(id);
+        if (!indices[idKey]) {
+          indices[idKey] = nextCounter++;
+        }
+      }
     });
     return indices;
   }, [processedMessage, citations]);
@@ -1617,8 +1599,8 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
     let message = processedMessage.replace(/\n?HANDOFF:?\s*\w+\s+REASON:?\s*.+?\s+QUERY:?\s*.+$/s, '').trim();
     if (!message) message = processedMessage; // Fallback if regex removes everything
     if (citations && Object.keys(citations).length > 0) {
+      // 1. Legacy: Replace [[CardID: N]] / [[N]] patterns (old format)
       const citationPattern = /\[\[\s*(?:CardID:\s*)?(\d+)\s*\]\]/gi;
-      let replacementCount = 0;
       message = message.replace(citationPattern, (match, citationId) => {
         const citation = citations[citationId];
         if (citation) {
@@ -1626,13 +1608,25 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
           const idKey = String(id);
           const index = citationIndices[idKey];
           if (index !== undefined) {
-            replacementCount++;
-            const replacement = `[${index}](citation:${idKey})`;
-            // Replace with a special markdown link that we can catch in the link renderer
-            return replacement;
+            return `[${index}](citation:${idKey})`;
           }
         }
-        return match; // Keep original if citation not found or no index
+        return match;
+      });
+
+      // 2. New: Replace [N] inline references (from Tutor prompt)
+      //    Match [N] NOT followed by ( — to avoid breaking existing markdown links
+      const indexToCitationId = {};
+      Object.entries(citationIndices).forEach(([id, idx]) => {
+        indexToCitationId[idx] = id;
+      });
+      message = message.replace(/\[(\d+)\](?!\()/g, (match, numStr) => {
+        const num = parseInt(numStr, 10);
+        const citId = indexToCitationId[num];
+        if (citId) {
+          return `[${num}](citation:${citId})`;
+        }
+        return match;
       });
     }
     // Replace [[WEB:N]] markers with clickable citation badges
@@ -1800,12 +1794,14 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
 
             {/* Tool Widgets (Plusi, Cards, Stats, etc.) — excludes agent_handoff which renders after text */}
             {toolWidgets.filter(tw => tw.name !== 'agent_handoff').length > 0 && (
-                <ToolWidgetRenderer
-                    toolWidgets={toolWidgets.filter(tw => tw.name !== 'agent_handoff')}
-                    bridge={bridge}
-                    isStreaming={isStreaming}
-                    isLastMessage={isLastMessage}
-                />
+                <ComponentErrorBoundary fallback={<div style={{ color: 'var(--ds-text-tertiary)', fontSize: 'var(--ds-text-sm)', padding: '8px 12px' }}>Widget render failed</div>}>
+                    <ToolWidgetRenderer
+                        toolWidgets={toolWidgets.filter(tw => tw.name !== 'agent_handoff')}
+                        bridge={bridge}
+                        isStreaming={isStreaming}
+                        isLastMessage={isLastMessage}
+                    />
+                </ComponentErrorBoundary>
             )}
 
             {/* Fallback Progress Bar */}
@@ -1828,12 +1824,15 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                 const match = processedMessageWithCitations.match(/^@(\w+)/i);
                 if (!match) return null;
                 const agentName = match[1].toLowerCase();
-                // Try registry first, fallback to hardcoded colors for known agents
+                // Try registry first, fallback to design tokens for known agents
                 const agent = findSubagent(agentName);
-                const FALLBACK_COLORS = { plusi: '#0A84FF', research: '#00D084' };
+                const FALLBACK_COLORS = { plusi: 'var(--ds-accent)', research: 'var(--ds-green)' };
                 const color = agent?.color || FALLBACK_COLORS[agentName];
                 if (!color) return null;
                 const label = agent?.label || (agentName.charAt(0).toUpperCase() + agentName.slice(1));
+                const isVar = color.startsWith('var(');
+                const bgTint = isVar ? `color-mix(in srgb, ${color} 10%, transparent)` : `${color}18`;
+                const borderTint = isVar ? `color-mix(in srgb, ${color} 20%, transparent)` : `${color}30`;
                 return (
                     <span style={{
                         display: 'inline-block',
@@ -1841,9 +1840,9 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                         fontWeight: 600,
                         padding: '2px 8px',
                         borderRadius: 4,
-                        background: `${color}18`,
+                        background: bgTint,
                         color: color,
-                        border: `1px solid ${color}30`,
+                        border: `1px solid ${borderTint}`,
                         marginBottom: 6,
                         letterSpacing: '0.3px',
                     }}>
@@ -1851,62 +1850,182 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                     </span>
                 );
             })()}
-            {/* Router ThoughtStream — BEFORE AgenticCell (routing decision) */}
-            {showRouterThoughtStream && (
-                <ThoughtStream
-                    pipelineSteps={routerSteps}
-                    steps={[]}
-                    citations={{}}
-                    message=""
-                    variant="router"
-                />
-            )}
+            {/* Router ThoughtStream removed — orchestration hidden */}
             {/* ── v2: Structured Agent Cells ── */}
             {hasV2Data && !isUser && (
               <>
-                {/* Router Orchestration */}
-                {orchestrationSteps.length > 0 && (
-                  <ReasoningStream
-                    variant="router"
-                    steps={orchestrationSteps}
-                    isStreaming={message_prop.status !== 'done'}
-                    agentColor={'var(--ds-text-muted)'}
-                    citations={{}}
-                    message=""
-                  />
-                )}
+                {/* Router Orchestration — hidden (user doesn't need to see routing) */}
                 {/* Agent Cells — ordered blocks */}
-                {(message_prop.agentCells || []).map((cell, i) => (
+                {(message_prop.agentCells || []).map((cell, i) => {
+                  const hasReasoningData = (isStreaming && requestId) || cell.pipelineSteps?.length > 0 || agentSteps.length > 0;
+                  const cellIsStreaming = isStreaming && cell.status !== 'done' && cell.status !== 'error';
+                  const cellCitations = cell.citations || citations;
+
+                  // Build citationIndices: map backend [N] references to citation IDs.
+                  // Auto-assign sequential indices if backend didn't set them (dict order = LERNMATERIAL order).
+                  const cellCitationIndices = {};
+                  const backendIndexToCitId = {};
+                  if (cellCitations && Object.keys(cellCitations).length > 0) {
+                    let autoIdx = 1;
+                    Object.entries(cellCitations).forEach(([citId, cit]) => {
+                      if (cit) {
+                        const id = cit.noteId || cit.cardId || citId;
+                        const idKey = String(id);
+                        const backendIdx = cit.index || autoIdx;
+                        backendIndexToCitId[backendIdx] = idKey;
+                      }
+                      autoIdx++;
+                    });
+                  }
+
+                  // Remap: find [N] in text order, assign sequential 1,2,3...
+                  const remapOldToNew = {}; // backend index → new sequential index
+                  let citedCount = 0;
+                  let cardSourceCount = 0;
+                  if (cell.text && Object.keys(backendIndexToCitId).length > 0) {
+                    const refMatches = [...(cell.text.matchAll(/\[(\d+)\]/g))];
+                    let nextNew = 1;
+                    for (const m of refMatches) {
+                      const oldIdx = parseInt(m[1], 10);
+                      if (backendIndexToCitId[oldIdx] && !(oldIdx in remapOldToNew)) {
+                        remapOldToNew[oldIdx] = nextNew++;
+                      }
+                    }
+                    // Build cellCitationIndices with new sequential numbers
+                    Object.entries(remapOldToNew).forEach(([oldIdx, newIdx]) => {
+                      const citIdKey = backendIndexToCitId[parseInt(oldIdx, 10)];
+                      if (citIdKey) {
+                        cellCitationIndices[citIdKey] = newIdx;
+                        citedCount++;
+                        const cit = cellCitations[citIdKey] || Object.values(cellCitations).find(c => String(c?.noteId || c?.cardId) === citIdKey);
+                        if (cit && !cit.url && !cit.web_url) cardSourceCount++;
+                      }
+                    });
+                  }
+                  // Fallback 1: count from citations dict
+                  if (citedCount === 0 && cellCitations && Object.keys(cellCitations).length > 0) {
+                    citedCount = Object.keys(cellCitations).length;
+                    cardSourceCount = Object.values(cellCitations).filter((c) => c && !c.url && !c.web_url).length;
+                  }
+                  // Fallback 2: count unique [N] refs directly from text
+                  if (citedCount === 0 && cell.text) {
+                    const textRefs = new Set((cell.text.match(/\[(\d+)\]/g) || []).map(m => m));
+                    if (textRefs.size > 0) citedCount = textRefs.size;
+                  }
+
+                  // Header shows SourceCountBadge when done, nothing during loading
+                  // (phase label is in the body via loadingHint)
+                  let headerMeta = null;
+                  if (!cellIsStreaming && citedCount > 0) {
+                    headerMeta = (
+                      <SourceCountBadge count={citedCount} cardCount={cardSourceCount} />
+                    );
+                  }
+
+                  // ── Debug logging (survives esbuild strip) ──
+                  if (typeof window !== 'undefined' && window.__REASONING_DEBUG__) {
+                    const _rlog = Function.prototype.bind.call(globalThis.console.log, globalThis.console);
+                    _rlog('[REASONING]', new Date().toISOString().slice(11,23), `ChatMsg: agent=${cell.agent} streaming=${cellIsStreaming} reasoning=${hasReasoningData} cited=${citedCount} meta=${headerMeta ? 'SET' : 'NULL'} status=${cell.status}`);
+                  }
+
+                  // Show loading state until text arrives (covers 'loading' AND 'thinking' phases)
+                  const showLoading = (cell.status === 'loading' || cell.status === 'thinking') && !cell.text;
+
+                  // Tutor: render without AgenticCell wrapper
+                  if (cell.agent === 'tutor') {
+                    return (
+                      <div key={`${cell.agent}-${i}`}>
+                        {/* Agent status bar — always visible */}
+                        <div style={{ marginTop: 2, marginBottom: cell.text ? 8 : 0 }}>
+                          <TutorThinkingLive
+                            requestId={requestId}
+                            agentName={cell.agent || 'tutor'}
+                            agentLabel="Tutor"
+                            showSkeleton={!cell.text && (cellIsStreaming || showLoading)}
+                            doneLabel={!cellIsStreaming && citedCount > 0 ? `${citedCount} Quellen` : undefined}
+                          />
+                        </div>
+
+                        {/* Text content */}
+                        {cell.text && cell.status !== 'loading' && !cell.sources?.length && (() => {
+                          let cleanText = cell.text.replace(/\n?HANDOFF:?\s*\w+\s+REASON:?\s*.+?\s+QUERY:?\s*.+$/s, '').trim();
+                          if (!cleanText) return null;
+                          if (Object.keys(remapOldToNew).length > 0) {
+                            cleanText = cleanText.replace(/\[(\d+)\](?!\()/g, (match, numStr) => {
+                              const oldIdx = parseInt(numStr, 10);
+                              const newIdx = remapOldToNew[oldIdx];
+                              const citIdKey = backendIndexToCitId[oldIdx];
+                              if (newIdx && citIdKey) return `[${newIdx}](citation:${citIdKey})`;
+                              return match;
+                            });
+                          }
+                          return (
+                            <SafeMarkdownRenderer
+                              content={cleanText}
+                              MermaidDiagram={MermaidDiagram}
+                              isStreaming={cell.status === 'streaming'}
+                              citations={cellCitations || {}}
+                              citationIndices={cellCitationIndices}
+                              bridge={bridge}
+                              onPreviewCard={onPreviewCard}
+                            />
+                          );
+                        })()}
+
+                        {/* Research sources */}
+                        {cell.sources && cell.sources.length > 0 && (
+                          <ResearchContent
+                            sources={cell.sources}
+                            answer={cell.text || ''}
+                          />
+                        )}
+                        {/* Tool widgets */}
+                        {cell.toolWidgets && cell.toolWidgets.length > 0 && (
+                          <ComponentErrorBoundary fallback={<div style={{ color: 'var(--ds-text-tertiary)', fontSize: 'var(--ds-text-sm)', padding: '8px 12px' }}>Widget render failed</div>}>
+                            <ToolWidgetRenderer
+                              toolWidgets={cell.toolWidgets}
+                              bridge={bridge}
+                              isStreaming={cell.status === 'streaming'}
+                              isLastMessage={isLastMessage}
+                            />
+                          </ComponentErrorBoundary>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // Other agents: keep existing AgenticCell wrapper below
+                  return (
                   <AgenticCell
                     key={`${cell.agent}-${i}`}
                     agentName={cell.agent}
-                    isLoading={cell.status === 'loading'}
+                    isLoading={showLoading}
                     loadingHint={cell.loadingHint || ''}
+                    headerMeta={headerMeta}
                   >
-                    {/* Tutor-style ThoughtStream */}
-                    {cell.pipelineSteps && cell.pipelineSteps.length > 0 && (
-                      <ReasoningStream
-                        steps={cell.pipelineSteps}
-                        pipelineGeneration={message_prop.pipelineGeneration}
-                        citations={cell.citations || {}}
-                        isStreaming={cell.status === 'streaming' || cell.status === 'thinking'}
-                        message={cell.text || ''}
-                        bridge={bridge}
-                        onPreviewCard={onPreviewCard}
-                      />
-                    )}
+                    {/* Step label moved to header — no duplicate in body */}
                     {/* Text content */}
                     {cell.text && cell.status !== 'loading' && !cell.sources?.length && (() => {
                       // Strip HANDOFF signal from display text
-                      const cleanText = cell.text.replace(/\n?HANDOFF:?\s*\w+\s+REASON:?\s*.+?\s+QUERY:?\s*.+$/s, '').trim();
+                      let cleanText = cell.text.replace(/\n?HANDOFF:?\s*\w+\s+REASON:?\s*.+?\s+QUERY:?\s*.+$/s, '').trim();
                       if (!cleanText) return null;
+                      // Replace [N] inline refs with remapped sequential numbers
+                      if (Object.keys(remapOldToNew).length > 0) {
+                        cleanText = cleanText.replace(/\[(\d+)\](?!\()/g, (match, numStr) => {
+                          const oldIdx = parseInt(numStr, 10);
+                          const newIdx = remapOldToNew[oldIdx];
+                          const citIdKey = backendIndexToCitId[oldIdx];
+                          if (newIdx && citIdKey) return `[${newIdx}](citation:${citIdKey})`;
+                          return match;
+                        });
+                      }
                       return (
                         <SafeMarkdownRenderer
                           content={cleanText}
                           MermaidDiagram={MermaidDiagram}
                           isStreaming={cell.status === 'streaming'}
-                          citations={cell.citations || {}}
-                          citationIndices={{}}
+                          citations={cellCitations || {}}
+                          citationIndices={cellCitationIndices}
                           bridge={bridge}
                           onPreviewCard={onPreviewCard}
                         />
@@ -1921,16 +2040,19 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                     )}
                     {/* Tool widgets (Plusi, Cards, Stats) */}
                     {cell.toolWidgets && cell.toolWidgets.length > 0 && (
-                      <ToolWidgetRenderer
-                        toolWidgets={cell.toolWidgets}
-                        bridge={bridge}
-                        isStreaming={cell.status === 'streaming'}
-                        isLastMessage={isLastMessage}
-                      />
+                      <ComponentErrorBoundary fallback={<div style={{ color: 'var(--ds-text-tertiary)', fontSize: 'var(--ds-text-sm)', padding: '8px 12px' }}>Widget render failed</div>}>
+                        <ToolWidgetRenderer
+                          toolWidgets={cell.toolWidgets}
+                          bridge={bridge}
+                          isStreaming={cell.status === 'streaming'}
+                          isLastMessage={isLastMessage}
+                        />
+                      </ComponentErrorBoundary>
                     )}
                     {/* Text skeleton — managed by ThoughtStream's onAllDone callback */}
                   </AgenticCell>
-                ))}
+                  );
+                })}
               </>
             )}
             {!hasV2Data && processedMessageWithCitations && !isUser && (
@@ -1963,12 +2085,14 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
             {/* Agent Handoff Widget — renders AFTER the agent's text, flush against it */}
             {!hasV2Data && toolWidgets.filter(tw => tw.name === 'agent_handoff').length > 0 && (
                 <div style={{ marginTop: -8 }}>
-                  <ToolWidgetRenderer
-                      toolWidgets={toolWidgets.filter(tw => tw.name === 'agent_handoff')}
-                      bridge={bridge}
-                      isStreaming={isStreaming}
-                      isLastMessage={isLastMessage}
-                  />
+                  <ComponentErrorBoundary fallback={<div style={{ color: 'var(--ds-text-tertiary)', fontSize: 'var(--ds-text-sm)', padding: '8px 12px' }}>Widget render failed</div>}>
+                    <ToolWidgetRenderer
+                        toolWidgets={toolWidgets.filter(tw => tw.name === 'agent_handoff')}
+                        bridge={bridge}
+                        isStreaming={isStreaming}
+                        isLastMessage={isLastMessage}
+                    />
+                  </ComponentErrorBoundary>
                 </div>
             )}
             {processedMessageWithCitations && isUser && (
@@ -2002,7 +2126,8 @@ const MemoizedChatMessage = React.memo(ChatMessage, (prevProps, nextProps) => {
          prevProps.agentCells === nextProps.agentCells &&
          prevProps.orchestration === nextProps.orchestration &&
          prevProps.status === nextProps.status &&
-         prevProps.pipelineGeneration === nextProps.pipelineGeneration;
+         prevProps.pipelineGeneration === nextProps.pipelineGeneration &&
+         prevProps.requestId === nextProps.requestId;
 });
 
 MemoizedChatMessage.displayName = 'ChatMessage';
@@ -2010,7 +2135,7 @@ MemoizedChatMessage.displayName = 'ChatMessage';
 export default MemoizedChatMessage;
 
 // Separate Komponente für sicheres Markdown-Rendering mit Error Boundary
-function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, citations = {}, citationIndices = {}, bridge = null, onPreviewCard }) {
+export function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, citations = {}, citationIndices = {}, bridge = null, onPreviewCard }) {
   const [hasError, setHasError] = React.useState(false);
   const [errorMsg, setErrorMsg] = React.useState('');
   
@@ -2020,7 +2145,6 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
     if (typeof content === 'string') return content;
     // Wenn content ein Objekt ist, konvertiere zu String
     if (typeof content === 'object') {
-      console.warn('SafeMarkdownRenderer: Content ist ein Objekt, konvertiere zu String:', content);
       try {
         return JSON.stringify(content, null, 2);
       } catch {
@@ -2095,7 +2219,6 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                                 if (child === null || child === undefined) return '';
                                 if (React.isValidElement(child)) return child;
                                 // Objekt → String konvertieren
-                                console.warn('SafeMarkdownRenderer: Ungültiges Kind in <p>, konvertiere:', child);
                                 return String(child);
                               });
                               return <p className="mb-5 text-[15px] leading-[1.8] text-base-content/85" {...props}>{safeChildren}</p>;
@@ -2128,7 +2251,6 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                                           if (onPreviewCard) {
                                             onPreviewCard(citation);
                                           } else {
-                                            console.warn('onPreviewCard not available, citation click may not work properly');
                                           }
                                         }}
                                       />
@@ -2292,13 +2414,20 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                                 // WICHTIG: Rendere Mermaid-Diagramme NICHT während des Streamings
                                 // Das blockiert das Streaming und verursacht Fehler bei unvollständigem Code
                                 if (!inline && language === 'mermaid') {
-                                    return <MermaidDiagram code={codeString} isStreaming={isStreaming} />;
+                                    return (
+                                        <ComponentErrorBoundary fallback={<div style={{ color: 'var(--ds-text-tertiary)', fontSize: 'var(--ds-text-sm)', padding: '8px 12px' }}>Diagram render failed</div>}>
+                                            <MermaidDiagram code={codeString} isStreaming={isStreaming} />
+                                        </ComponentErrorBoundary>
+                                    );
                                 }
-                                
+
                                 // SMILES Molecule Rendering - lädt über CDN
                                 if (!inline && (language === 'smiles' || language === 'molecule')) {
-                                    console.log('🧪 SMILES Code-Block erkannt:', { language, codeString: codeString.substring(0, 50) });
-                                    return <MoleculeRenderer smiles={codeString} />;
+                                    return (
+                                        <ComponentErrorBoundary fallback={<div style={{ color: 'var(--ds-text-tertiary)', fontSize: 'var(--ds-text-sm)', padding: '8px 12px' }}>Molecule render failed</div>}>
+                                            <MoleculeRenderer smiles={codeString} />
+                                        </ComponentErrorBoundary>
+                                    );
                                 }
                                 
                                 // Block Code - Simple rendering without SyntaxHighlighter to avoid React conflicts
@@ -2352,7 +2481,6 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                                           if (onPreviewCard) {
                                             onPreviewCard(citation);
                                           } else {
-                                            console.warn('onPreviewCard not available, citation click may not work properly');
                                           }
                                         }}
                                       />
@@ -2390,7 +2518,6 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                                         } else {
                                           // Fallback: try to construct citation object and use bridge.getCardDetails
                                           // This should not close the session
-                                          console.warn('onPreviewCard not available, citation click may not work properly');
                                         }
                                       }}
                                     />
@@ -2437,7 +2564,6 @@ function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, ci
                 </div>
     );
   } catch (err) {
-    console.error('SafeMarkdownRenderer: Rendering error', err);
     // Zeige Fehler an und aktiviere Fallback
     setTimeout(() => {
       setHasError(true);

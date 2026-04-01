@@ -59,10 +59,8 @@ export function SessionContextProvider({ children, bridge, isReady }) {
    * 3. If NO: Create temp session, set currentSession = tempSession, isTemporary = true
    */
   const handleDeckSelected = useCallback((deckData) => {
-    console.log('🔄 SessionContext: handleDeckSelected:', deckData);
     
     if (!deckData || !deckData.deckId) {
-      console.warn('SessionContext: handleDeckSelected ohne deckId');
       return;
     }
     
@@ -73,12 +71,10 @@ export function SessionContextProvider({ children, bridge, isReady }) {
     
     if (existingSession) {
       // Session exists - use it
-      console.log('📖 SessionContext: Session gefunden:', existingSession.id);
       setCurrentSession(existingSession);
       setIsTemporary(false);
     } else {
       // No session - create temporary one
-      console.log('⏳ SessionContext: Erstelle temporäre Session für Deck:', deckName);
       
       // Create temp session object (not saved to disk yet)
       const tempSession = {
@@ -103,14 +99,11 @@ export function SessionContextProvider({ children, bridge, isReady }) {
    * Clears current session and redirects to overview
    */
   const handleDeckExited = useCallback(() => {
-    console.log('🚪 SessionContext: handleDeckExited');
     
     // If temporary session exists and has no messages, discard it
     if (isTemporary && currentSession && (!currentSession.messages || currentSession.messages.length === 0)) {
-      console.log('🗑️ SessionContext: Verwerfe temporäre Session (keine Nachrichten)');
     } else if (isTemporary && currentSession) {
       // Temporary session with messages - should have been persisted by handleFirstMessage
-      console.warn('⚠️ SessionContext: Temporäre Session mit Nachrichten sollte bereits persistiert sein');
     }
     
     setCurrentSession(null);
@@ -125,7 +118,6 @@ export function SessionContextProvider({ children, bridge, isReady }) {
       return; // Not a temporary session or no session
     }
     
-    console.log('💬 SessionContext: Erste Nachricht - persistiere Session');
     
     // Create persisted session from temp session
     const persistedSession = {
@@ -162,7 +154,6 @@ export function SessionContextProvider({ children, bridge, isReady }) {
     seenCardIdsSet.add(cardId);
     const updatedSeenCardIds = Array.from(seenCardIdsSet);
     
-    console.log(`👁️ SessionContext: Karte gesehen: ${cardId} (Total: ${updatedSeenCardIds.length})`);
     
     // Update current session
     const updatedSession = {
@@ -189,7 +180,6 @@ export function SessionContextProvider({ children, bridge, isReady }) {
    */
   const updateSessionData = useCallback((sessionId, messages, sections = null) => {
     if (!sessionId) {
-      console.warn('SessionContext: updateSessionData ohne sessionId');
       return;
     }
     

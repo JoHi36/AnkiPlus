@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import MascotCharacter from './MascotCharacter';
+import PlusiChatBubble from './PlusiChatBubble';
 
 const EVENT_REACTIONS = {
   card_correct:  { text: 'Richtig! ✨', mood: 'happy' },
@@ -20,11 +21,33 @@ const SPRING_CURVE = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
 const SHAKE_THRESHOLD = 6;
 /** Shake detection window (ms) */
 const SHAKE_WINDOW = 1000;
+/** Gravity acceleration in px/s² */
+const GRAVITY = 1800;
+/** Walking speed in px/s */
+const WALK_SPEED = 80;
+/** Step frequency — full cycles per second (lower = smoother) */
+const STEP_FREQ = 1.25;
+/** Step bounce height in px */
+const STEP_BOUNCE = 8;
+/** Shoulder sway angle in degrees */
+const SHOULDER_SWAY = 20;
+/** Body tilt angle in degrees */
+const BODY_TILT = 3.5;
+/** Jump initial velocity in px/s */
+const JUMP_VELOCITY = 380;
 
-export default function MascotShell({ mood = 'neutral', onEvent, enabled = true }) {
+// Voice state → Plusi mood mapping (uses existing MascotCharacter animations)
+const VOICE_STATE_MOOD = {
+  recording: 'curious',    // Plusi is listening — attentive, curious
+  processing: 'thinking',  // Plusi is thinking — existing thinking animation
+  speaking: 'happy',       // Plusi is talking — lively, engaged
+};
+
+export default function MascotShell({ mood = 'neutral', onEvent, enabled = true, voiceState, plusiText, voiceAudio, voiceTranscript }) {
   const [eventBubble, setEventBubble] = useState(null);
   const [tapKey, setTapKey] = useState(0);
   const [overrideMood, setOverrideMood] = useState(null);
+  const [bubbleOpen, setBubbleOpen] = useState(false);
 
   const eventTimerRef = useRef(null);
   const dockRef = useRef(null);
@@ -57,6 +80,22 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true 
   });
   const rafRef = useRef(null);
 
+  // Physics state machine (ref-based — no re-renders during animation)
+  const physicsRef = useRef({
+    phase: 'idle',  // idle | falling | impact | turning | walking | stopping | crouching | jumping | snapping | home
+    x: 0,           // absolute screen position (left)
+    y: 0,           // distance above ground (0 = on screen bottom edge)
+    vy: 0,          // vertical velocity
+    t: 0,           // time in current phase
+    stepPhase: 0,   // walk cycle phase
+    homeX: 0,       // home position left (computed from dock)
+    homeY: 0,       // home position bottom offset (28px)
+    facing: 'front', // 'front' | 'side'
+    walkDirection: -1, // -1 = walking left, +1 = walking right
+  });
+  const physicsRAFRef = useRef(null);
+  const lastFrameRef = useRef(0);
+
   // Proximity tracking
   const isNearRef = useRef(false);
 
@@ -83,8 +122,27 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true 
     return () => {
       if (moodTimerRef.current) clearTimeout(moodTimerRef.current);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (physicsRAFRef.current) cancelAnimationFrame(physicsRAFRef.current);
     };
   }, []);
+
+  // Close bubble on click outside
+  useEffect(() => {
+    if (!bubbleOpen) return;
+    const handleClickOutside = (e) => {
+      const dock = dockRef.current;
+      if (dock && !dock.contains(e.target)) {
+        setBubbleOpen(false);
+      }
+    };
+    const timer = setTimeout(() => {
+      document.addEventListener('pointerdown', handleClickOutside);
+    }, 100);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('pointerdown', handleClickOutside);
+    };
+  }, [bubbleOpen]);
 
   // ─── Eye tracking + proximity awareness ───────────────────────────
   useEffect(() => {
@@ -133,32 +191,264 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true 
     }, durationMs);
   }, []);
 
+  // Physics tick function — stored in ref to avoid stale closure in RAF loop
+  const physicsTickRef = useRef(null);
+
+  // Define the tick function (accesses all other refs directly)
+  physicsTickRef.current = (now) => {
+    const dt = Math.min((now - lastFrameRef.current) / 1000, 0.05);
+    lastFrameRef.current = now;
+
+    const ph = physicsRef.current;
+    const dock = dockRef.current;
+    const char = charRef.current;
+    if (!dock) return;
+
+    ph.t += dt;
+
+    switch (ph.phase) {
+
+      case 'falling': {
+        ph.vy -= GRAVITY * dt;
+        ph.y += ph.vy * dt;
+        dock.style.transform = 'rotate(' + (ph.vy * 0.008) + 'deg)';
+        if (ph.y <= 0) {
+          ph.y = 0;
+          ph.vy = 0;
+          ph.phase = 'impact';
+          ph.t = 0;
+          dock.style.transition = 'transform 0.08s ease-out';
+          dock.style.transform = 'scaleY(0.75) scaleX(1.15)';
+          char?.setMoodInstant?.('annoyed');
+        }
+        break;
+      }
+
+      case 'impact': {
+        if (ph.t > 0.12 && ph.t < 0.15) {
+          dock.style.transition = 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)';
+          dock.style.transform = 'scaleY(1) scaleX(1)';
+        }
+        if (ph.t > 0.45) {
+          ph.phase = 'turning';
+          ph.t = 0;
+          dock.style.transition = 'transform 0.3s ease-in-out';
+          dock.style.transform = 'rotateY(90deg)';
+        }
+        break;
+      }
+
+      case 'turning': {
+        if (ph.t > 0.15 && ph.facing !== 'side') {
+          ph.facing = 'side';
+          const flip = ph.walkDirection < 0; // flip when walking left
+          char?.setSideView?.(flip);
+          // No mood change needed — side view has no mood expression
+        }
+        if (ph.t > 0.3) {
+          dock.style.transition = 'none';
+          dock.style.transform = 'none';
+          ph.phase = 'walking';
+          ph.t = 0;
+          ph.stepPhase = 0;
+        }
+        break;
+      }
+
+      case 'walking': {
+        ph.stepPhase += dt * STEP_FREQ * Math.PI * 2;
+
+        // Horizontal movement toward home
+        ph.x += ph.walkDirection * WALK_SPEED * dt;
+
+        // Step bounce
+        var bounce = Math.abs(Math.sin(ph.stepPhase)) * STEP_BOUNCE;
+        ph.y = bounce;
+
+        // Shoulder sway + body tilt
+        var sway = Math.sin(ph.stepPhase) * SHOULDER_SWAY;
+        var tilt = Math.sin(ph.stepPhase) * BODY_TILT;
+        dock.style.transform = 'rotateY(' + sway + 'deg) rotate(' + tilt + 'deg)';
+
+        // Update nub opacities for depth effect
+        var nubs = char?.getSideNubs?.();
+        if (nubs && nubs.front && nubs.back) {
+          var fop = 0.5 + 0.5 * Math.sin(ph.stepPhase);
+          var bop = 0.5 - 0.4 * Math.sin(ph.stepPhase);
+          nubs.back.setAttribute('opacity', bop.toFixed(2));
+          nubs.front.setAttribute('opacity', fop.toFixed(2));
+        }
+
+        // Check if arrived under home
+        var distToHome = Math.abs(ph.x - ph.homeX);
+        if (distToHome < 10) {
+          ph.x = ph.homeX;
+          ph.phase = 'stopping';
+          ph.t = 0;
+          ph.y = 0;
+        }
+        break;
+      }
+
+      case 'stopping': {
+        dock.style.transform = 'rotateY(0) rotate(0)';
+        if (ph.t > 0.3) {
+          ph.phase = 'crouching';
+          ph.t = 0;
+        }
+        break;
+      }
+
+      case 'crouching': {
+        var cp = Math.min(ph.t / 0.2, 1);
+        var sqY = 1 - cp * 0.2;
+        var sqX = 1 + cp * 0.12;
+        dock.style.transform = 'scaleY(' + sqY + ') scaleX(' + sqX + ')';
+        if (ph.t > 0.25) {
+          ph.phase = 'jumping';
+          ph.t = 0;
+          ph.vy = JUMP_VELOCITY;
+          ph.facing = 'front';
+          char?.setFrontView?.();
+          dock.style.transform = 'scaleY(1.08) scaleX(0.94)';
+          char?.setMoodInstant?.('happy');
+        }
+        break;
+      }
+
+      case 'jumping': {
+        ph.vy -= GRAVITY * dt;
+        ph.y += ph.vy * dt;
+
+        var vn = ph.vy / JUMP_VELOCITY;
+        dock.style.transform = 'scaleY(' + (1 + vn * 0.08) + ') scaleX(' + (1 - vn * 0.05) + ')';
+
+        if (ph.vy < 0 && ph.y <= ph.homeY) {
+          ph.y = ph.homeY;
+          ph.phase = 'snapping';
+          ph.t = 0;
+          dock.style.transition = 'transform 0.1s ease-out';
+          dock.style.transform = 'scaleY(0.88) scaleX(1.08)';
+        }
+        break;
+      }
+
+      case 'snapping': {
+        if (ph.t > 0.1 && ph.t < 0.14) {
+          dock.style.transition = 'transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)';
+          dock.style.transform = 'scaleY(1) scaleX(1)';
+        }
+        if (ph.t > 0.5) {
+          ph.phase = 'idle';
+          // Restore dock to its normal CSS-controlled state
+          dock.style.position = '';
+          dock.style.left = '';
+          dock.style.bottom = '';
+          dock.style.transform = '';
+          dock.style.transition = '';
+          dock.style.animation = '';
+          // Clear drag placed state
+          var ds = dragStateRef.current;
+          ds.placed = false;
+          ds.placedX = 0;
+          ds.placedY = 0;
+          // Happy mood will auto-revert via setTempMood
+          setTempMood('happy', 2000);
+          return; // stop the RAF loop
+        }
+        break;
+      }
+    }
+
+    // Update position
+    if (ph.phase !== 'idle') {
+      dock.style.left = ph.x + 'px';
+      dock.style.bottom = ph.y + 'px';
+      physicsRAFRef.current = requestAnimationFrame(physicsTickRef.current);
+    }
+  };
+
+  // Stop any running physics and restore to grabbable state
+  const stopPhysics = () => {
+    if (physicsRAFRef.current) {
+      cancelAnimationFrame(physicsRAFRef.current);
+      physicsRAFRef.current = null;
+    }
+    const ph = physicsRef.current;
+    if (ph.phase === 'idle') return false; // wasn't running
+
+    // If in side view, swap back to front
+    if (ph.facing === 'side') {
+      ph.facing = 'front';
+      charRef.current?.setFrontView?.();
+    }
+    ph.phase = 'idle';
+
+    // Restore dock to fixed positioning at current visual position
+    const dock = dockRef.current;
+    if (dock) {
+      dock.style.transition = 'none';
+      dock.style.transform = 'none';
+    }
+    return true; // was running
+  };
+
+  // Start physics fall + walk-back sequence from a screen position
+  const startPhysicsSequence = (dropScreenX, dropScreenY) => {
+    const dock = dockRef.current;
+    if (!dock) return;
+
+    // Cancel any running physics
+    if (physicsRAFRef.current) cancelAnimationFrame(physicsRAFRef.current);
+
+    const ph = physicsRef.current;
+
+    // Home position: dock's natural CSS-defined position
+    // bottom: var(--ds-space-2xl) = 28px, left: var(--ds-space-2xl) = 28px
+    ph.homeX = 28; // matches CSS left: var(--ds-space-2xl)
+    ph.homeY = 28; // matches CSS bottom: var(--ds-space-2xl)
+
+    // Current position from the drop point
+    ph.x = dropScreenX;
+    ph.y = window.innerHeight - dropScreenY - 48; // 48 = plusi size
+    ph.vy = 0;
+    ph.t = 0;
+    ph.stepPhase = 0;
+    ph.facing = 'front';
+    ph.phase = 'falling';
+    ph.walkDirection = dropScreenX > ph.homeX ? -1 : 1;
+
+    // Switch dock to absolute positioning — physics controls everything now
+    dock.style.animation = 'none';
+    dock.style.transition = 'none';
+    dock.style.position = 'fixed';
+    dock.style.left = ph.x + 'px';
+    dock.style.bottom = ph.y + 'px';
+    dock.style.transform = 'none';
+
+    // Set surprised mood for falling — instant, no fade
+    charRef.current?.setMoodInstant?.('surprised');
+
+    lastFrameRef.current = performance.now();
+    physicsRAFRef.current = requestAnimationFrame(physicsTickRef.current);
+  };
+
   const handleTap = useCallback(() => {
     const ds = dragStateRef.current;
 
-    // If Plusi is placed elsewhere, tap returns it home
+    // If Plusi is placed elsewhere, trigger walk-back
     if (ds.placed) {
-      ds.placed = false;
-      ds.placedX = 0;
-      ds.placedY = 0;
       const dock = dockRef.current;
       if (dock) {
-        dock.style.transition = `transform 0.6s ${SPRING_CURVE}`;
-        dock.style.transform = 'translate(0, 0)';
-        const cleanup = () => {
-          dock.style.transition = '';
-          dock.style.transform = '';
-          dock.style.animationName = '';  // restore CSS animation
-        };
-        dock.addEventListener('transitionend', cleanup, { once: true });
-        setTimeout(cleanup, 700);
+        const dockRect = dock.getBoundingClientRect();
+        startPhysicsSequence(dockRect.left, dockRect.top);
       }
-      setTempMood('happy', 2000);
       return;
     }
 
     setTapKey((k) => k + 1);
     setEventBubble(null);
+    setBubbleOpen((prev) => !prev);
 
     const now = Date.now();
     tapTimesRef.current.push(now);
@@ -178,6 +468,9 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true 
   const handlePointerDown = useCallback((e) => {
     if (e.button !== 0) return;
     e.preventDefault();
+
+    // If physics is running (walking, falling, etc.), interrupt it
+    stopPhysics();
 
     const ds = dragStateRef.current;
     ds.pending = true;
@@ -275,46 +568,47 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true 
         return;
       }
 
-      // Check if shaken → dizzy mood
-      const shaken = ds.dirChanges.length >= SHAKE_THRESHOLD;
-
-      // Place Plusi at the drop position (use lerped pos for smoothness)
       const finalX = ds.lerpX;
       const finalY = ds.lerpY;
       const isNearHome = Math.sqrt(finalX * finalX + finalY * finalY) < 30;
 
+      // Check if shaken → dizzy mood (preserve existing behavior)
+      const shaken = ds.dirChanges.length >= SHAKE_THRESHOLD;
+
       if (isNearHome) {
-        // Snap back to home
+        // Snap back to home (existing behavior)
         dock.style.transition = `transform 0.5s ${SPRING_CURVE}`;
         dock.style.transform = 'translate(0, 0)';
         ds.placed = false;
         ds.placedX = 0;
         ds.placedY = 0;
-      } else {
-        // Stay at drop position
-        dock.style.transition = `transform 0.3s ${SPRING_CURVE}`;
-        dock.style.transform = `translate(${finalX}px, ${finalY}px)`;
-        ds.placed = true;
-        ds.placedX = finalX;
-        ds.placedY = finalY;
-      }
-
-      const cleanup = () => {
-        dock.style.transition = '';
-        if (!ds.placed) {
+        const cleanup = () => {
+          dock.style.transition = '';
           dock.style.transform = '';
-          dock.style.animationName = '';  // restore CSS animation
-        }
-      };
-      dock.addEventListener('transitionend', cleanup, { once: true });
-      setTimeout(cleanup, 600);
+          dock.style.animationName = '';
+        };
+        dock.addEventListener('transitionend', cleanup, { once: true });
+        setTimeout(cleanup, 600);
 
-      // Mood reaction — now safe to update React state (drag is over)
-      overrideMoodRef.current = null;
-      if (shaken) {
-        setTempMood('worried', 5000);
+        // Mood reaction
+        overrideMoodRef.current = null;
+        if (shaken) {
+          setTempMood('worried', 5000);
+        } else {
+          setOverrideMood(null);
+        }
       } else {
-        setOverrideMood(null);
+        // Far from home → physics fall + walk-back sequence
+        const dockRect = dock.getBoundingClientRect();
+        ds.placed = true; // will be cleared when physics completes
+
+        overrideMoodRef.current = null;
+        if (shaken) {
+          setTempMood('worried', 5000);
+          // Still start physics after worried mood is set
+        }
+
+        startPhysicsSequence(dockRect.left, dockRect.top);
       }
     };
 
@@ -326,7 +620,10 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true 
 
   // During drag, overrideMoodRef is set but state isn't updated (avoids re-render flicker).
   // After drag, state is updated normally.
-  const effectiveMood = overrideMood || (eventBubble ? eventBubble.mood : mood);
+  // Voice state overrides mood (recording=curious, processing=thinking, speaking=happy)
+  const voiceMood = voiceState && voiceState !== 'idle' ? VOICE_STATE_MOOD[voiceState] : null;
+  const bubbleMood = bubbleOpen ? 'curious' : null;
+  const effectiveMood = voiceMood || bubbleMood || overrideMood || (eventBubble ? eventBubble.mood : mood);
   // Animation class — always set. During drag, animationName is killed via DOM.
   const animClass = mood === 'happy' || mood === 'excited'
     ? 'plusi-dock-bounce'
@@ -345,7 +642,7 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true 
           className="plusi-dock-char"
           onPointerDown={handlePointerDown}
           title="Plusi"
-          style={{ touchAction: 'none' }}
+          style={{ touchAction: 'none', position: 'relative' }}
         >
           <MascotCharacter
             ref={charRef}
@@ -360,6 +657,15 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true 
             {eventBubble.text}
           </div>
         )}
+
+        <PlusiChatBubble
+          open={bubbleOpen}
+          onClose={() => setBubbleOpen(false)}
+          plusiText={plusiText}
+          voiceAudio={voiceAudio}
+          voiceTranscript={voiceTranscript}
+          voiceState={voiceState}
+        />
       </div>
     </>
   );
@@ -377,6 +683,7 @@ const DOCK_CSS = `
     align-items: flex-end;
     gap: 12px;
     will-change: transform;
+    perspective: 200px;
   }
 
   .plusi-dock-float  { animation: pd-float 3.5s ease-in-out infinite; }
@@ -387,12 +694,18 @@ const DOCK_CSS = `
   @keyframes pd-bounce { 0%{transform:translateY(0)} 100%{transform:translateY(-6px)} }
   @keyframes pd-droop  { 0%,100%{transform:translateY(0)} 50%{transform:translateY(2px)} }
 
+  @keyframes plusi-voice-pulse {
+    0%, 100% { opacity: 0.4; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.1); }
+  }
+
   .plusi-dock-char {
     cursor: grab;
     flex-shrink: 0;
     width: 48px;
     user-select: none;
     -webkit-user-select: none;
+    transform-style: preserve-3d;
   }
   .plusi-dock-char:active {
     cursor: grabbing;
@@ -419,4 +732,15 @@ const DOCK_CSS = `
     0% { opacity: 0; transform: translateX(-4px) scale(0.96); }
     100% { opacity: 1; transform: translateX(0) scale(1); }
   }
+
+  @keyframes plusi-bubble-in {
+    from { opacity: 0; transform: translateX(-8px) scale(0.95); }
+    to { opacity: 1; transform: translateX(0) scale(1); }
+  }
+
+  .plusi-bubble-scroll {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .plusi-bubble-scroll::-webkit-scrollbar { display: none; }
 `;

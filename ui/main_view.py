@@ -136,12 +136,10 @@ class MainViewWidget(QWidget):
         # Build payload
         if state == 'deckBrowser':
             data = self._get_deck_browser_data()
-            freechat_was_open = getattr(self._chatbot, '_freechat_was_open', False)
             payload = {
                 "type": "app.stateChanged",
                 "state": "deckBrowser",
                 "data": data,
-                "freeChatWasOpen": freechat_was_open,
             }
         elif state == 'overview':
             data = self._get_overview_data()

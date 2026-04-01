@@ -798,6 +798,50 @@
   }
 
   // ────────────────────────────────────────────────────────────
+  //  buildSideSVG — side-view (walk-back animation)
+  // ────────────────────────────────────────────────────────────
+
+  /**
+   * Build a side-view Plusi SVG string (Hybrid A+D: capsule + shoulder nubs).
+   * Used during walk-back animation. Single eye, profile mouth, no accessories.
+   *
+   * @param {number} size - pixel width/height
+   * @param {number} integrity - 0..1 color saturation scale
+   * @param {boolean} flip - if true, mirrors horizontally (facing left)
+   * @returns {string} SVG markup
+   */
+  function buildSideSVG(size, integrity, flip) {
+    var integrityVal = integrity != null ? integrity : 1;
+    var auraColor = applyColorIntegrity(MOODS.neutral.color, integrityVal);
+    var bodyColor = applyColorIntegrity(BODY_COLOR, integrityVal);
+    var fid = 'pgs' + (++_filterId);
+
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"'
+      + ' width="' + size + '" height="' + size + '" overflow="visible"'
+      + (flip ? ' style="transform: scaleX(-1);"' : '') + '>'
+      + '<defs><filter id="' + fid + '" x="-60%" y="-60%" width="220%" height="220%">'
+      + '<feGaussianBlur stdDeviation="8"/>'
+      + '</filter></defs>'
+      // Aura glow: capsule shape only
+      + '<rect x="38" y="5" width="44" height="110" rx="12" fill="' + auraColor + '" opacity="0.4" filter="url(#' + fid + ')"/>'
+      // Shoulder nub BACK (behind body, subtle)
+      + '<rect class="plusi-nub-back" x="27" y="38" width="16" height="32" rx="8" fill="' + bodyColor + '" opacity="0.35"/>'
+      // Body: tall capsule
+      + '<rect x="38" y="5" width="44" height="110" rx="12" fill="' + bodyColor + '"/>'
+      // Shoulder nub FRONT
+      + '<rect class="plusi-nub-front" x="77" y="38" width="16" height="32" rx="8" fill="' + bodyColor + '"/>'
+      // Face: single eye + profile mouth
+      + '<g class="plusi-face">'
+      + '<ellipse cx="67" cy="49" rx="7" ry="8" fill="white"/>'
+      + '<ellipse cx="69" cy="50" rx="4" ry="4" fill="#1a1a1a"/>'
+      + '<path d="M 65 68 Q 72 72 78 68" stroke="#1a1a1a" stroke-width="2.5" fill="none" stroke-linecap="round"/>'
+      + '</g>'
+      + '</svg>';
+
+    return svg;
+  }
+
+  // ────────────────────────────────────────────────────────────
   //  getPlusiColor utility
   // ────────────────────────────────────────────────────────────
 
@@ -885,17 +929,37 @@
           clearTimeout(transitionTimer);
           transitionTimer = null;
         }
-        // Opacity crossfade
-        wrapper.style.transition = 'opacity 0.25s ease';
-        wrapper.style.opacity = '0';
+        // Smooth morph: scale down slightly + blur, swap, scale back
+        wrapper.style.transition = 'transform 0.15s ease-in, filter 0.15s ease-in, opacity 0.15s ease-in';
+        wrapper.style.transform = 'scale(0.92)';
+        wrapper.style.filter = 'blur(2px)';
+        wrapper.style.opacity = '0.7';
         stopEngine();
         transitionTimer = setTimeout(function () {
           transitionTimer = null;
           currentMood = newMood;
           render();
+          wrapper.style.transition = 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.2s ease-out, opacity 0.2s ease-out';
+          wrapper.style.transform = 'scale(1)';
+          wrapper.style.filter = 'blur(0)';
           wrapper.style.opacity = '1';
           startEngine();
-        }, 250);
+        }, 150);
+      },
+
+      /** Swap mood instantly — no crossfade. Used during physics animations. */
+      setMoodInstant: function (newMood) {
+        if (newMood === currentMood) return;
+        if (transitionTimer) {
+          clearTimeout(transitionTimer);
+          transitionTimer = null;
+        }
+        stopEngine();
+        currentMood = newMood;
+        wrapper.style.transition = 'none';
+        wrapper.style.opacity = '1';
+        render();
+        startEngine();
       },
 
       setIntegrity: function (value) {
@@ -941,10 +1005,44 @@
   }
 
   // ────────────────────────────────────────────────────────────
+  //  createPlusiSide — static side-view API
+  // ────────────────────────────────────────────────────────────
+
+  /**
+   * Render a static side-view Plusi into a container.
+   * Returns an object with getNubs() for walk animation opacity updates.
+   */
+  function createPlusiSide(container, options) {
+    var opts = options || {};
+    var size = opts.size || 52;
+    var integrity = opts.integrity != null ? opts.integrity : 1;
+    var flip = opts.flip || false;
+
+    var svgStr = buildSideSVG(size, integrity, flip);
+    var doc = new DOMParser().parseFromString(svgStr, 'image/svg+xml');
+    var svgNode = doc.documentElement;
+    while (container.firstChild) container.removeChild(container.firstChild);
+    container.appendChild(document.importNode(svgNode, true));
+
+    return {
+      getNubs: function () {
+        return {
+          front: container.querySelector('.plusi-nub-front'),
+          back: container.querySelector('.plusi-nub-back'),
+        };
+      },
+      destroy: function () {
+        while (container.firstChild) container.removeChild(container.firstChild);
+      }
+    };
+  }
+
+  // ────────────────────────────────────────────────────────────
   //  Expose globals
   // ────────────────────────────────────────────────────────────
 
   window.createPlusi = createPlusi;
+  window.createPlusiSide = createPlusiSide;
   window.getPlusiColor = getPlusiColor;
 
 }());

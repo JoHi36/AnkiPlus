@@ -1,0 +1,635 @@
+import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
+import ForceGraph3D from '3d-force-graph';
+import SpriteText from 'three-spritetext';
+import { executeAction } from '../actions';
+import ChatInput from './ChatInput';
+// SearchSidebar rendered in App.jsx for header-pushing layout
+import DeckSearchBar from './DeckSearchBar';
+import { DeckNode } from './DeckNode';
+import { useDeckTree } from '../hooks/useDeckTree';
+import PlusLoader from './PlusLoader';
+import ImageCanvas from './ImageCanvas';
+
+const MAX_W = 'var(--ds-content-width)';
+
+// Muted, darker color palette — brightens on cluster selection
+const CLUSTER_COLORS = [
+  '#3B6EA5', // steel blue
+  '#4A8C5C', // forest green
+  '#B07D3A', // amber
+  '#7B5EA7', // muted purple
+  '#A0524B', // terracotta
+  '#4A9BAE', // teal
+  '#A69550', // olive gold
+  '#7A6B5D', // warm grey
+];
+
+// Brighter variants for selection highlight
+const CLUSTER_BRIGHT = [
+  '#5A9FD4', // bright steel
+  '#5CB878', // bright green
+  '#D4A04A', // bright amber
+  '#A07DD4', // bright purple
+  '#D06B62', // bright terracotta
+  '#5CC4DA', // bright teal
+  '#CDB860', // bright gold
+  '#A0907E', // bright grey
+];
+
+function deckColor(deckName) {
+  let hash = 0;
+  for (let i = 0; i < deckName.length; i++) hash = ((hash << 5) - hash + deckName.charCodeAt(i)) | 0;
+  return CLUSTER_COLORS[Math.abs(hash) % CLUSTER_COLORS.length];
+}
+
+export default function GraphView({ onToggleView, isPremium, deckData, smartSearch, bridge }) {
+  const containerRef = useRef(null);
+  const graphRef = useRef(null);
+  const animatedQueryRef = useRef(null); // tracks which query has been animated
+  const { isExpanded, toggleExpanded } = useDeckTree();
+
+  // Destructure smartSearch
+  const {
+    query, searchResult, isSearching, hasResults,
+    answerText, clusterLabels, clusterSummaries, cardRefs,
+    selectedClusterId, setSelectedClusterId,
+    selectedCluster, selectedClusterLabel, selectedClusterSummary,
+    subClusters, kgSubgraph, graphMode,
+    search, reset, selectTerm,
+    imageSelectedCardIds, setImageSelectedCardIds,  // NEW
+  } = smartSearch;
+
+  const [activeDeckFilter, setActiveDeckFilter] = useState(null);
+
+  // Compute deck groups for filter chips from KG subgraph
+  const deckGroups = useMemo(() => {
+    if (!kgSubgraph?.nodes?.length) return [];
+    const groups = {};
+    kgSubgraph.nodes.forEach(n => {
+      const key = n.deckId || 0;
+      if (!groups[key]) {
+        groups[key] = { deckId: n.deckId, deckName: n.deckName || '', color: n.color, terms: [] };
+      }
+      groups[key].terms.push(n);
+    });
+    return Object.values(groups)
+      .sort((a, b) => b.terms.length - a.terms.length)
+      .slice(0, 5)
+      .map(g => {
+        const topTerm = [...g.terms].sort((a, b) => (b.subsetCount || 0) - (a.subsetCount || 0))[0];
+        return {
+          deckId: g.deckId,
+          label: topTerm?.label || g.deckName,
+          color: g.color,
+          count: g.terms.length,
+        };
+      });
+  }, [kgSubgraph]);
+
+  // Build / rebuild graph when search results arrive
+  // Build cluster graph (default mode)
+  useEffect(() => {
+    if (graphMode !== 'clusters') return;
+    if (!containerRef.current || !searchResult?.cards?.length) {
+      if (graphRef.current) graphRef.current.graphData({ nodes: [], links: [] });
+      return;
+    }
+
+    const clusters = searchResult.clusters || [];
+    const nodes = [];
+    const links = [];
+
+    nodes.push({
+      id: '__query__',
+      label: searchResult.query,
+      color: '#ffffff',  // WebGL node — CSS vars not supported by 3d-force-graph
+      isQuery: true,
+      isCluster: false,
+      val: 5,
+    });
+
+    if (clusters.length > 1) {
+      clusters.forEach((cluster, ci) => {
+        const darkColor = CLUSTER_COLORS[ci % CLUSTER_COLORS.length];
+        const brightColor = CLUSTER_BRIGHT[ci % CLUSTER_BRIGHT.length];
+        const clusterCardIds = [];
+        let bestCardId = null;
+        let bestScore = -1;
+
+        cluster.cards.forEach(card => {
+          nodes.push({
+            id: card.id,
+            label: card.question,
+            deck: card.deck,
+            deckFull: card.deckFull,
+            score: card.score,
+            color: darkColor,
+            brightColor: brightColor,
+            clusterLabel: cluster.label,
+            clusterIndex: ci,
+            isQuery: false,
+            isCluster: false,
+            val: 1.0 + (card.score || 0.5),
+          });
+          clusterCardIds.push(card.id);
+          if ((card.score || 0) > bestScore) {
+            bestScore = card.score || 0;
+            bestCardId = card.id;
+          }
+        });
+
+        if (bestCardId) {
+          // Average score of cluster cards — higher score = shorter balloon string = closer to query
+          const avgScore = cluster.cards.reduce((s, c) => s + (c.score || 0), 0) / Math.max(1, cluster.cards.length);
+          links.push({ source: '__query__', target: bestCardId, value: avgScore, isBalloonString: true });
+        }
+
+        for (let i = 0; i < clusterCardIds.length; i++) {
+          for (let j = i + 1; j < clusterCardIds.length; j++) {
+            links.push({
+              source: clusterCardIds[i],
+              target: clusterCardIds[j],
+              value: 0.15,
+              isIntraCluster: true,
+            });
+          }
+        }
+      });
+
+      // Inter-cluster links — similar clusters attract each other for spatial proximity
+      const clusterLinks = searchResult.clusterLinks || [];
+      const bestCards = {}; // cluster_id → best card id
+      clusters.forEach((cluster, ci) => {
+        let best = null;
+        let bestScore = -1;
+        cluster.cards.forEach(c => {
+          if ((c.score || 0) > bestScore) { bestScore = c.score || 0; best = c.id; }
+        });
+        if (best) bestCards[`cluster_${ci}`] = best;
+      });
+      clusterLinks.forEach(cl => {
+        const srcCard = bestCards[cl.source];
+        const tgtCard = bestCards[cl.target];
+        if (srcCard && tgtCard) {
+          links.push({
+            source: srcCard,
+            target: tgtCard,
+            value: cl.value || 0.3,
+            isInterCluster: true,
+          });
+        }
+      });
+    } else {
+      searchResult.cards.forEach(card => {
+        nodes.push({
+          id: card.id,
+          label: card.question,
+          deck: card.deck,
+          deckFull: card.deckFull,
+          score: card.score,
+          color: deckColor(card.deck),
+          isQuery: false,
+          isCluster: false,
+          val: 1.0 + (card.score || 0.5),
+        });
+        links.push({ source: '__query__', target: card.id, value: card.score || 0.5 });
+      });
+    }
+
+    if (graphRef.current?._destructor) graphRef.current._destructor();
+
+    const graph = ForceGraph3D()(containerRef.current);
+    graphRef.current = graph;
+
+    graph
+      .graphData({ nodes, links })
+      .backgroundColor('rgba(0,0,0,0)')
+      .nodeColor(n => n.color)
+      .nodeVal(n => n.val)
+      .nodeLabel(n => {
+        if (n.isQuery) return n.label;
+        const cluster = n.clusterLabel ? `[${n.clusterLabel}] ` : '';
+        return `${cluster}${n.label}\n${n.deck}`;
+      })
+      .nodeOpacity(1.0)
+      .linkWidth(l => l.isInterCluster ? 0.1 : l.isIntraCluster ? 0.15 : l.isBalloonString ? 0.3 : 0.15)
+      .linkOpacity(l => l.isInterCluster ? 0.03 : l.isIntraCluster ? 0.04 : l.isBalloonString ? 0.06 : 0.02)
+      .linkColor(() => '#3A3A3C')  // WebGL link — CSS vars not supported by 3d-force-graph
+      .onNodeClick(node => {
+        if (!node || node.isQuery) return;
+        if (node.clusterIndex !== undefined) {
+          setSelectedClusterId(`cluster_${node.clusterIndex}`);
+        }
+        const dist = 40;
+        const ratio = 1 + dist / Math.hypot(node.x || 1, node.y || 1, node.z || 1);
+        graph.cameraPosition(
+          { x: node.x * ratio, y: node.y * ratio, z: node.z * ratio },
+          node, 800
+        );
+      })
+      .enableNodeDrag(false)
+      .warmupTicks(0)
+      .cooldownTicks(300)
+      .d3AlphaDecay(0.015)
+      .d3VelocityDecay(0.25)
+      .showNavInfo(false)
+      .onEngineStop(() => {
+        if (graphRef.current) graphRef.current.zoomToFit(800, 60);
+      });
+
+    graph.d3Force('link').distance(link => {
+      if (link.isIntraCluster) return 12;
+      // Inter-cluster: closer = more similar (high value → shorter distance)
+      if (link.isInterCluster) return 40 + (1 - (link.value || 0.3)) * 80;
+      // Balloon string: higher score = much closer to query center
+      const score = link.value || 0.5;
+      return 15 + (1 - score) * 150;
+    });
+
+    graph.d3Force('center', null);
+    graph.d3Force('charge').strength(-40);
+
+    // Staggered node appearance — only on initial search, not on tab revisit
+    const currentQuery = searchResult?.query || '';
+    if (animatedQueryRef.current !== currentQuery) {
+      animatedQueryRef.current = currentQuery;
+      const realVals = {};
+      nodes.forEach(n => { realVals[n.id] = n.val; n.val = 0.01; });
+      graph.nodeVal(n => n.val);
+      const sortedNodes = [...nodes].sort((a, b) => {
+        if (a.isQuery) return -1;
+        if (b.isQuery) return 1;
+        return (b.score || 0) - (a.score || 0);
+      });
+      sortedNodes.forEach((n, i) => {
+        setTimeout(() => {
+          n.val = realVals[n.id];
+          if (graphRef.current) graphRef.current.nodeVal(nd => nd.val);
+        }, i * 30);
+      });
+    }
+
+    if (graph.controls()) {
+      graph.controls().autoRotate = true;
+      graph.controls().autoRotateSpeed = 0.4;
+      graph.controls().enablePan = false;
+      // Query node (0,0,0) as rotation center
+      graph.controls().target.set(0, 0, 0);
+    }
+
+    const ro = new ResizeObserver(() => {
+      if (containerRef.current && graphRef.current) {
+        const { clientWidth, clientHeight } = containerRef.current;
+        graphRef.current.width(clientWidth).height(clientHeight);
+      }
+    });
+    ro.observe(containerRef.current);
+
+    return () => {
+      ro.disconnect();
+      if (graph._destructor) graph._destructor();
+    };
+  }, [searchResult, graphMode]);
+
+  // Build Knowledge Graph subgraph when mode switches or data arrives
+  useEffect(() => {
+    if (graphMode !== 'knowledge' || !containerRef.current || !kgSubgraph?.nodes?.length) {
+      return;
+    }
+
+    setActiveDeckFilter(null);
+
+    const kgNodes = kgSubgraph.nodes.map(n => ({
+      id: n.id,
+      label: n.label,
+      color: n.color || '#5AC8FA',
+      val: Math.max(1.5, Math.log2(n.subsetCount || 1) * 2.5),
+      isKg: true,
+      cardIds: n.cardIds || [],
+      subsetCount: n.subsetCount || 0,
+      deckId: n.deckId,
+      deckName: n.deckName || '',
+    }));
+
+    const kgLinks = kgSubgraph.edges.map(e => ({
+      source: e.source,
+      target: e.target,
+      value: e.weight || 1,
+    }));
+
+    // Destroy old graph if exists
+    if (graphRef.current?._destructor) graphRef.current._destructor();
+
+    const graph = ForceGraph3D()(containerRef.current);
+    graphRef.current = graph;
+
+    graph
+      .graphData({ nodes: kgNodes, links: kgLinks })
+      .backgroundColor('rgba(0,0,0,0)')
+      .numDimensions(3)
+      .nodeColor(n => n.color)
+      .nodeVal(n => n.val)
+      .nodeLabel(n => `${n.label}\n${n.subsetCount} Karten`)
+      .nodeOpacity(0.95)
+      // Render labels as floating text sprites
+      .nodeThreeObject(node => {
+        if (node.val < 1.8) return undefined;
+        const sprite = new SpriteText(node.label);
+        sprite.color = 'rgba(255,255,255,0.85)';
+        sprite.textHeight = Math.max(2.5, node.val * 0.9);
+        sprite.backgroundColor = false;
+        sprite.padding = 0;
+        sprite.position.set(0, node.val * 1.8, 0);
+        return sprite;
+      })
+      .nodeThreeObjectExtend(true)
+      .linkWidth(l => Math.max(0.3, Math.min(1.2, (l.value || 1) * 0.25)))
+      .linkOpacity(0.2)
+      .linkColor(() => 'rgba(255,255,255,0.6)')
+      .onNodeClick(node => {
+        if (!node) return;
+        // Select term in sidebar + trigger definition
+        if (node.isKg && selectTerm) {
+          selectTerm(node);
+        }
+        // Zoom camera to clicked node
+        const dist = 60;
+        const r = Math.hypot(node.x || 1, node.y || 1, node.z || 1) || 1;
+        const ratio = 1 + dist / r;
+        graph.cameraPosition(
+          { x: node.x * ratio, y: node.y * ratio, z: node.z * ratio },
+          node, 800
+        );
+      })
+      .enableNodeDrag(false)
+      .warmupTicks(0)
+      .cooldownTicks(250)
+      .d3AlphaDecay(0.018)
+      .d3VelocityDecay(0.3)
+      .showNavInfo(false)
+      .onEngineStop(() => {
+        if (graphRef.current) graphRef.current.zoomToFit(800, 60);
+      });
+
+    // Spread nodes out more for 2D readability
+    graph.d3Force('link').distance(link => {
+      return 35 + (1 / Math.max(1, link.value)) * 50;
+    });
+    graph.d3Force('charge').strength(-100);
+
+    if (graph.controls()) {
+      graph.controls().autoRotate = true;
+      graph.controls().autoRotateSpeed = 0.3;
+      graph.controls().enablePan = false;
+    }
+
+    const ro = new ResizeObserver(() => {
+      if (containerRef.current && graphRef.current) {
+        const { clientWidth, clientHeight } = containerRef.current;
+        graphRef.current.width(clientWidth).height(clientHeight);
+      }
+    });
+    ro.observe(containerRef.current);
+
+    return () => {
+      ro.disconnect();
+      if (graph._destructor) graph._destructor();
+    };
+  }, [kgSubgraph, graphMode]);
+
+  // Cleanup 3D graph when switching to image mode
+  useEffect(() => {
+    if (graphMode === 'images' && graphRef.current?._destructor) {
+      graphRef.current._destructor();
+      graphRef.current = null;
+    }
+  }, [graphMode]);
+
+  // Deck filter highlighting
+  useEffect(() => {
+    if (!graphRef.current || graphMode !== 'knowledge') return;
+    const graph = graphRef.current;
+
+    if (activeDeckFilter === null) {
+      graph.nodeColor(n => n.isKg ? n.color : (n.isQuery ? '#FFFFFF' : n.color));
+      graph.linkColor(() => 'rgba(255,255,255,0.6)');
+      graph.linkOpacity(0.2);
+    } else {
+      graph.nodeColor(n => {
+        if (!n.isKg) return n.color;
+        return n.deckId === activeDeckFilter ? n.color : '#2A2A2C';
+      });
+      graph.linkColor(l => {
+        const src = typeof l.source === 'object' ? l.source : {};
+        const tgt = typeof l.target === 'object' ? l.target : {};
+        if (src.deckId === activeDeckFilter || tgt.deckId === activeDeckFilter) {
+          return 'rgba(255,255,255,0.6)';
+        }
+        return 'rgba(255,255,255,0.05)';
+      });
+      graph.linkOpacity(0.25);
+    }
+  }, [activeDeckFilter, graphMode]);
+
+  // Update graph node labels when LLM cluster labels arrive
+  useEffect(() => {
+    if (!clusterLabels || !graphRef.current || !searchResult?.clusters?.length) return;
+    const graph = graphRef.current;
+    const { nodes } = graph.graphData();
+    nodes.forEach(n => {
+      if (n.isQuery || n.clusterIndex === undefined) return;
+      const clusterId = `cluster_${n.clusterIndex}`;
+      if (clusterLabels[clusterId]) {
+        n.clusterLabel = clusterLabels[clusterId];
+      }
+    });
+    graph.nodeLabel(n => {
+      if (n.isQuery) return n.label;
+      const cluster = n.clusterLabel ? `[${n.clusterLabel}] ` : '';
+      return `${cluster}${n.label}\n${n.deck}`;
+    });
+  }, [clusterLabels, searchResult]);
+
+  // Cluster selection → camera rotation + node highlighting
+  useEffect(() => {
+    if (!graphRef.current) return;
+
+    if (!selectedClusterId) {
+      // Reset all nodes to default color + zoom out to full view
+      graphRef.current.nodeColor(n => n.isQuery ? '#FFFFFF' : n.color);
+      graphRef.current.zoomToFit(800, 60);
+      return;
+    }
+
+    const graph = graphRef.current;
+    const idx = parseInt(selectedClusterId.replace('cluster_', ''), 10);
+
+    // Brighten selected cluster, dim others
+    graph.nodeColor(n => {
+      if (n.isQuery) return '#FFFFFF';
+      if (n.clusterIndex === idx) return n.brightColor || n.color;
+      return n.color;
+    });
+
+    // Zoom into cluster centroid — close enough to feel immersive
+    const { nodes } = graph.graphData();
+    const clusterNodes = nodes.filter(n => n.clusterIndex === idx);
+    if (clusterNodes.length > 0) {
+      const cx = clusterNodes.reduce((s, n) => s + (n.x || 0), 0) / clusterNodes.length;
+      const cy = clusterNodes.reduce((s, n) => s + (n.y || 0), 0) / clusterNodes.length;
+      const cz = clusterNodes.reduce((s, n) => s + (n.z || 0), 0) / clusterNodes.length;
+      const dist = 30;
+      const r = Math.hypot(cx, cy, cz) || 1;
+      const ratio = 1 + dist / r;
+      graph.cameraPosition(
+        { x: cx * ratio, y: cy * ratio, z: cz * ratio },
+        { x: 0, y: 0, z: 0 },
+        800
+      );
+    }
+  }, [selectedClusterId]);
+
+  // Start stack — uses selected cluster cards or full result
+  const startStack = useCallback(() => {
+    const cards = selectedCluster?.cards || searchResult?.cards;
+    if (!cards?.length) return;
+    window.ankiBridge?.addMessage('startTermStack', {
+      term: query,
+      cardIds: JSON.stringify(cards.map(c => Number(c.id))),
+    });
+  }, [selectedCluster, searchResult, query]);
+
+  // Keyboard handlers
+  useEffect(() => {
+    const onKey = (e) => {
+      if (hasResults) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          if (selectedClusterId) {
+            setSelectedClusterId(null);
+          } else {
+            reset();
+            if (graphRef.current?._destructor) graphRef.current._destructor();
+            graphRef.current = null;
+          }
+          return;
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          startStack();
+          return;
+        }
+        const clusters = searchResult?.clusters;
+        if (clusters?.length > 1) {
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            const currentIdx = selectedClusterId
+              ? parseInt(selectedClusterId.replace('cluster_', ''), 10)
+              : -1;
+            const next = e.key === 'ArrowDown'
+              ? Math.min(currentIdx + 1, clusters.length - 1)
+              : Math.max(currentIdx - 1, 0);
+            setSelectedClusterId(`cluster_${next}`);
+          }
+          if (e.key >= '1' && e.key <= '6') {
+            const idx = parseInt(e.key, 10) - 1;
+            if (idx < clusters.length) {
+              setSelectedClusterId(`cluster_${idx}`);
+            }
+          }
+        }
+        return;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [hasResults, selectedClusterId, searchResult, reset, setSelectedClusterId, startStack]);
+
+  const clusterCards = selectedCluster?.cards;
+  const totalCards = searchResult?.totalFound || 0;
+
+  // topSlot content
+  const topSlotContent = (() => {
+    if (hasResults) {
+      return (
+        <div style={{
+          padding: '8px 14px', fontSize: 13,
+          color: 'var(--ds-text-primary)',
+          borderBottom: '1px solid var(--ds-border-subtle)',
+        }}>
+          {selectedClusterId
+            ? `${selectedClusterLabel} \u00B7 ${clusterCards?.length || 0} Karten`
+            : `${query} \u00B7 ${searchResult?.clusters?.length || 0} Cluster \u00B7 ${totalCards} Karten`
+          }
+        </div>
+      );
+    }
+    return null;
+  })();
+
+  return (
+    <div style={{ position: 'relative', flex: 1, display: 'flex', overflow: 'hidden' }}>
+      {/* Canvas area */}
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        {/* Canvas content — switches based on graphMode */}
+        {hasResults && graphMode === 'images' && (
+          <ImageCanvas
+            searchResult={searchResult}
+            clusterLabels={clusterLabels}
+            kgSubgraph={kgSubgraph}
+            onSelectionChange={setImageSelectedCardIds}
+          />
+        )}
+        {hasResults && graphMode !== 'images' && (
+          <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
+        )}
+
+        {/* ═══ Center state: Loading OR empty hint (never both) ═══ */}
+        {!hasResults && (
+          <div style={{
+            position: 'absolute',
+            top: 50, left: 0, right: 0, bottom: 80,
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            zIndex: 5, userSelect: 'none', pointerEvents: 'none',
+          }}>
+            {isSearching ? (
+              <PlusLoader size={200} speed={6} />
+            ) : (
+              <>
+                <span style={{
+                  fontSize: 15, fontWeight: 600,
+                  letterSpacing: '0.5px',
+                  color: 'var(--ds-text-muted)',
+                  marginBottom: 10,
+                }}>
+                  Agent Canvas
+                </span>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  color: 'var(--ds-text-placeholder)',
+                  fontSize: 11, fontWeight: 500,
+                }}>
+                  <kbd style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    padding: '2px 6px', borderRadius: 5,
+                    background: 'var(--ds-hover-tint)',
+                    border: '1px solid var(--ds-border)',
+                    fontSize: 10, fontWeight: 600,
+                    fontFamily: 'inherit', lineHeight: 1,
+                    color: 'var(--ds-text-tertiary)',
+                  }}>ESC</kbd>
+                  <span>zum Verlassen</span>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ChatInput removed from canvas — lives in SearchSidebar now */}
+      </div>
+
+      {/* SearchSidebar moved to App.jsx for proper header-pushing layout */}
+    </div>
+  );
+}

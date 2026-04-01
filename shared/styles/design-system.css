@@ -452,6 +452,44 @@
 }
 
 
+/* ── Primary Button ──
+   Solid accent-blue pill button with white text.
+   The ONE standardized action button across the entire product.
+   React: <Button variant="primary">, HTML: class="ds-btn-primary". */
+.ds-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 20px;
+  background: var(--ds-accent);
+  color: #fff;
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-sm);
+  font-weight: 500;
+  border: none;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: filter var(--ds-duration) var(--ds-ease),
+              transform var(--ds-duration) var(--ds-ease);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.ds-btn-primary:hover {
+  filter: brightness(1.1);
+}
+.ds-btn-primary:active {
+  transform: scale(0.98);
+}
+.ds-btn-primary:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: none;
+  transform: none;
+}
+
+
 /* ── AI Thought Step ── */
 .ds-thought-step {
   display: flex;

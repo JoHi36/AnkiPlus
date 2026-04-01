@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 
 const STORAGE_KEY = 'ap_expand';
 
@@ -13,6 +13,22 @@ export function useDeckTree() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(expanded));
   }, [expanded]);
 
+  /* Auto-expand top-level roots that have never been explicitly toggled */
+  const seededRef = useRef(new Set());
+  const ensureRootsExpanded = useCallback((roots) => {
+    if (!roots || roots.length === 0) return;
+    const toExpand = {};
+    for (const r of roots) {
+      if (r.id && !(r.id in expanded) && !seededRef.current.has(r.id)) {
+        toExpand[r.id] = true;
+        seededRef.current.add(r.id);
+      }
+    }
+    if (Object.keys(toExpand).length > 0) {
+      setExpanded(prev => ({ ...toExpand, ...prev }));
+    }
+  }, [expanded]);
+
   const toggleExpanded = useCallback((deckId) => {
     setExpanded(prev => ({ ...prev, [deckId]: !prev[deckId] }));
   }, []);
@@ -21,5 +37,5 @@ export function useDeckTree() {
     return !!expanded[deckId];
   }, [expanded]);
 
-  return { isExpanded, toggleExpanded };
+  return { isExpanded, toggleExpanded, ensureRootsExpanded };
 }

@@ -127,7 +127,6 @@ export default function SessionList({ bridge = null, onSelectSession = null }) {
                     if (onSelectSession) {
                       onSelectSession(session.id);
                     } else {
-                      console.warn('SessionList: onSelectSession not provided');
                     }
                   }}
                   className="w-full text-left p-4 rounded-xl transition-all duration-200 hover:bg-base-200/40 relative border border-transparent hover:border-base-content/5"

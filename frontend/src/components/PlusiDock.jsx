@@ -9,7 +9,6 @@ export default function PlusiDock({ onClick }) {
       try {
         window.renderPlusiSVG(containerRef.current, { mood: 'neutral', size: 48 });
       } catch (e) {
-        console.warn('[PlusiDock] SVG render failed:', e);
       }
     }
   }, []);

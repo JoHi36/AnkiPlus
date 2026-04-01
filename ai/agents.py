@@ -7,6 +7,11 @@ from dataclasses import dataclass, field
 from typing import Optional, Callable, List
 
 try:
+    from .workflows import Workflow, Slot
+except ImportError:
+    from ai.workflows import Workflow, Slot
+
+try:
     from ..utils.logging import get_logger
 except ImportError:
     from utils.logging import get_logger
@@ -37,6 +42,10 @@ class AgentDefinition:
     enabled_key: str = ''              # Config key: 'tutor_enabled'
     is_default: bool = False           # True only for Tutor
 
+    # Channel binding (agent-kanal-paradigma)
+    channel: str = ''                  # 'stapel', 'session', 'plusi', 'reviewer-inline'
+    uses_rag: bool = False             # Whether this agent calls analyze_query()
+
     # Execution
     run_module: str = ''               # 'ai.tutor', 'research', 'plusi.agent'
     run_function: str = ''             # 'run_tutor', 'run_research'
@@ -51,7 +60,6 @@ class AgentDefinition:
 
     # Routing
     router_hint: str = ''
-    can_handoff_to: List[str] = field(default_factory=list)
 
     # Agent Studio UI
     widget_type: str = ''           # 'embeddings', 'budget', '' (empty = no widget)
@@ -76,6 +84,22 @@ class AgentDefinition:
     premium_model: str = ''
     fast_model: str = ''
     fallback_model: str = ''
+
+    # Workflows (new — parallel to tools, replaces tools as source of truth later)
+    workflows: list = field(default_factory=list)
+
+    @property
+    def active_tools(self) -> list:
+        """Collects unique non-off tool refs from active (non-off) workflows."""
+        seen = set()
+        result = []
+        for wf in self.workflows:
+            if wf.mode != 'off':
+                for slot in wf.tools:
+                    if slot.mode != 'off' and slot.ref not in seen:
+                        seen.add(slot.ref)
+                        result.append(slot.ref)
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +142,10 @@ def get_non_default_agents(config: dict) -> List[AgentDefinition]:
 
 def get_registry_for_frontend(config: dict) -> List[dict]:
     """Return ALL registered agents as dicts for JSON serialization to frontend."""
+    try:
+        from .capabilities import capability_registry as cap_reg
+    except ImportError:
+        from ai.capabilities import capability_registry as cap_reg
     result = []
     for a in AGENT_REGISTRY.values():
         is_enabled = a.is_default or config.get(a.enabled_key, False)
@@ -136,7 +164,7 @@ def get_registry_for_frontend(config: dict) -> List[dict]:
             'badgeLogo': a.badge_logo,
             'loadingHintTemplate': a.loading_hint_template,
             'tools': a.tools,
-            'canHandoffTo': a.can_handoff_to,
+            'channel': a.channel,
             # New fields
             'widgetType': a.widget_type,
             'submenuLabel': submenu_label,
@@ -146,6 +174,8 @@ def get_registry_for_frontend(config: dict) -> List[dict]:
             'premiumModel': a.premium_model,
             'fastModel': a.fast_model,
             'fallbackModel': a.fallback_model,
+            # Workflows
+            'workflows': [wf.to_dict(cap_reg) for wf in a.workflows],
         })
     return result
 
@@ -318,6 +348,9 @@ register_agent(AgentDefinition(
     # Configuration
     enabled_key='tutor_enabled',
     is_default=True,
+    # Channel
+    channel='session',
+    uses_rag=True,
     # Execution
     run_module='ai.tutor',
     run_function='run_tutor',
@@ -329,21 +362,19 @@ register_agent(AgentDefinition(
         'search_image',
         'create_mermaid_diagram',
         'get_learning_stats',
-        'compact',
     ],
     # Context
     context_sources=[
         'card', 'card_review', 'insights', 'rag',
         'session', 'deck_info', 'memory',
     ],
-    # Routing
-    can_handoff_to=['research'],
     # Labels
     pipeline_label='Tutor',
     reasoning_steps=[
         {'id': 'sql_search', 'label': 'Keyword-Suche'},
         {'id': 'semantic_search', 'label': 'Semantische Suche'},
         {'id': 'merge', 'label': 'Zusammenführung'},
+        {'id': 'web_search', 'label': 'Web-Recherche'},
     ],
     loading_hint_template='Suche in deinen Karten...',
     # Agent Studio UI
@@ -355,6 +386,31 @@ register_agent(AgentDefinition(
     premium_model='gemini-3-flash-preview',
     fast_model='gemini-2.5-flash',
     fallback_model='gemini-2.5-flash',
+    # Workflows (quiz moved to Prüfer agent)
+    workflows=[
+        Workflow(
+            name='explain',
+            label='Erklären & Vertiefen',
+            description='Erklärt Konzepte, zeigt Zusammenhänge und vertieft nach dem Aufdecken der Karte',
+            mode='on',
+            triggers=[Slot(ref='card_answer_shown', mode='locked'), Slot(ref='chat', mode='on')],
+            tools=[
+                Slot(ref='search_deck', mode='locked'),
+                Slot(ref='search_image', mode='on'),
+                Slot(ref='create_mermaid_diagram', mode='on'),
+                Slot(ref='get_learning_stats', mode='on'),
+            ],
+            outputs=[Slot(ref='chat_response', mode='locked'), Slot(ref='widget', mode='on')],
+        ),
+        Workflow(
+            name='exam',
+            label='Prüfungsmodus',
+            description='Simuliert Prüfungsbedingungen mit Zeitlimit und Auswertung',
+            status='soon',
+            mode='off',
+            triggers=[], tools=[], outputs=[],
+        ),
+    ],
 ))
 
 
@@ -372,7 +428,12 @@ register_agent(AgentDefinition(
     badge_logo='',
     # Configuration
     enabled_key='research_enabled',
+    # Channel
+    channel='stapel',
+    uses_rag=False,  # Stapel pipeline (SearchCardsThread) has its own search, doesn't use analyze_query()
     # Execution
+    # Note: run_research() is the legacy chat path. The primary Research
+    # pipeline is SearchCardsThread in ui/widget.py (agent-kanal-paradigma).
     run_module='research',
     run_function='run_research',
     # Tools
@@ -380,21 +441,7 @@ register_agent(AgentDefinition(
     # Context
     context_sources=['session', 'deck_info', 'memory'],
     # Routing
-    router_hint=(
-        'Delegate ONLY when: (1) user explicitly asks for internet sources/research, OR '
-        '(2) question clearly requires current/external information that cannot exist in flashcards '
-        '(e.g. latest guidelines, recent news, specific URLs). '
-        'Do NOT delegate when: question can be answered from flashcards, is about the user\'s '
-        'learning material, is casual conversation, or is a general knowledge question the AI knows.'
-    ),
-    main_model_hint=(
-        'Use search_web tool ONLY when: (1) user explicitly asks for sources/citations from the internet, '
-        '(2) your own knowledge is clearly insufficient AND the user\'s cards don\'t cover the topic, '
-        '(3) user asks about very recent or time-sensitive information. '
-        'Do NOT use when: LERNMATERIAL contains relevant cards, your knowledge is sufficient, '
-        'or the question is about the user\'s own cards/deck.'
-    ),
-    can_handoff_to=['tutor'],
+    main_model_hint='',
     # Labels
     pipeline_label='Research',
     reasoning_steps=[
@@ -407,6 +454,30 @@ register_agent(AgentDefinition(
     submenu_label='Quellen konfigurieren',
     submenu_component='researchMenu',
     tools_configurable=True,
+    # Workflows
+    workflows=[
+        Workflow(
+            name='web_research',
+            label='Web-Recherche',
+            description='Recherchiert über Perplexity, PubMed und Wikipedia',
+            mode='locked',
+            triggers=[Slot(ref='router', mode='locked')],
+            tools=[
+                Slot(ref='search_perplexity', mode='locked'),
+                Slot(ref='search_pubmed', mode='on'),
+                Slot(ref='search_wikipedia', mode='on'),
+            ],
+            outputs=[Slot(ref='chat_response', mode='locked'), Slot(ref='widget', mode='on')],
+        ),
+        Workflow(
+            name='vocab_definition',
+            label='Wort-Definition',
+            description='Definiert Fachbegriffe bei Klick auf ein Wort',
+            status='soon',
+            mode='off',
+            triggers=[], tools=[], outputs=[],
+        ),
+    ],
 ))
 
 
@@ -424,6 +495,9 @@ register_agent(AgentDefinition(
     badge_logo='',
     # Configuration
     enabled_key='help_enabled',
+    # Channel
+    channel='plusi',
+    uses_rag=False,
     # Execution
     run_module='ai.help_agent',
     run_function='run_help',
@@ -431,12 +505,6 @@ register_agent(AgentDefinition(
     tools=['change_theme', 'change_setting', 'navigate_to', 'explain_feature'],
     # Context
     context_sources=['memory'],
-    # Routing
-    router_hint=(
-        'Wenn der User nach App-Funktionen fragt, Einstellungen ändern möchte, '
-        'oder Hilfe zur Bedienung braucht. Nicht für Lernfragen.'
-    ),
-    can_handoff_to=['tutor'],
     # Labels
     pipeline_label='Help',
     loading_hint_template='Schaue nach...',
@@ -449,6 +517,64 @@ register_agent(AgentDefinition(
     premium_model='gemini-2.5-flash',
     fast_model='gemini-2.5-flash',
     fallback_model='gemini-2.5-flash',
+    # Workflows
+    workflows=[
+        Workflow(
+            name='app_help',
+            label='App-Hilfe',
+            description='Beantwortet Fragen zur App und hilft bei Einstellungen',
+            mode='locked',
+            triggers=[Slot(ref='chat', mode='locked')],
+            tools=[
+                Slot(ref='change_theme', mode='locked'),
+                Slot(ref='change_setting', mode='locked'),
+                Slot(ref='navigate_to', mode='locked'),
+                Slot(ref='explain_feature', mode='locked'),
+            ],
+            outputs=[Slot(ref='chat_response', mode='locked')],
+        ),
+    ],
+))
+
+
+# ---------------------------------------------------------------------------
+# Prufer -- Reviewer Inline Channel
+# ---------------------------------------------------------------------------
+
+_PRUFER_ICON = ''.join([
+    '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" ',
+    'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">',
+    '<path d="M9 11l3 3L22 4"/>',
+    '<path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+    '</svg>',
+])
+
+register_agent(AgentDefinition(
+    name='prufer',
+    label='Prufer',
+    description='Bewertet Antworten und generiert Multiple-Choice-Fragen',
+    # Visual
+    color='#AF52DE',
+    icon_type='svg',
+    icon_svg=_PRUFER_ICON,
+    # Channel binding
+    channel='reviewer-inline',
+    uses_rag=False,
+    # Configuration
+    enabled_key='prufer_enabled',
+    is_default=False,
+    # Execution
+    run_module='ai.prufer',
+    run_function='run_prufer',
+    # Tools (future -- for now evaluation is prompt-based)
+    tools=[],
+    context_sources=[],
+    # UI
+    pipeline_label='Prufer',
+    loading_hint_template='Prufer bewertet...',
+    # Model -- uses default model from handler
+    premium_model='',
+    fast_model='',
 ))
 
 
@@ -466,6 +592,9 @@ register_agent(AgentDefinition(
     badge_logo='',
     # Configuration
     enabled_key='mascot_enabled',
+    # Channel
+    channel='plusi',
+    uses_rag=False,
     # Execution
     run_module='plusi.agent',
     run_function='run_plusi',
@@ -474,14 +603,6 @@ register_agent(AgentDefinition(
     # Context
     context_sources=['memory', 'agent_state'],
     # Routing
-    router_hint=(
-        'Delegate ONLY when: (1) user explicitly says "Plusi" or "@Plusi", OR '
-        '(2) message is PURELY casual/emotional with NO factual question component '
-        '(e.g. "ich bin müde", "das nervt", "hey"). '
-        'Do NOT delegate when: user asks ANY factual question (even if frustrated), '
-        'wants card explanations, wants a quiz, or combines emotion with a learning question. '
-        'If unsure, do NOT delegate — the main model can spawn Plusi via tool if needed.'
-    ),
     main_model_hint=(
         'Use spawn_plusi tool ONLY when: (1) user explicitly mentions Plusi by name, '
         '(2) the interaction is purely emotional/personal with no factual question, '
@@ -490,7 +611,6 @@ register_agent(AgentDefinition(
         'or any question that needs RAG/card context. A frustrated user asking "I don\'t understand enzymes" '
         'needs an explanation, not Plusi.'
     ),
-    can_handoff_to=['tutor'],
     on_finished=_plusi_on_finished,
     # Labels
     pipeline_label='Plusi',
@@ -504,4 +624,35 @@ register_agent(AgentDefinition(
     premium_model='claude-sonnet',
     fast_model='gemini-2.5-flash',
     fallback_model='gemini-2.5-flash',
+    # Workflows
+    workflows=[
+        Workflow(
+            name='autonomous',
+            label='Autonomes Denken',
+            description='Plusi denkt eigenständig nach, reflektiert und entwickelt sich weiter',
+            mode='locked',
+            triggers=[Slot(ref='timer', mode='locked'), Slot(ref='mood_event', mode='on')],
+            tools=[
+                Slot(ref='reflect', mode='locked'),
+                Slot(ref='research', mode='on'),
+                Slot(ref='sleep', mode='on'),
+                Slot(ref='do_nothing', mode='on'),
+            ],
+            outputs=[
+                Slot(ref='emotion', mode='locked'),
+                Slot(ref='memory', mode='locked'),
+                Slot(ref='diary_write', mode='on'),
+                Slot(ref='set_timer', mode='on'),
+            ],
+        ),
+        Workflow(
+            name='chat_companion',
+            label='Chat-Begleitung',
+            description='Reagiert auf Chat-Nachrichten mit Persönlichkeit und Humor',
+            mode='locked',
+            triggers=[Slot(ref='chat', mode='on')],
+            tools=[Slot(ref='respond', mode='locked'), Slot(ref='humor', mode='on')],
+            outputs=[Slot(ref='chat_response', mode='locked'), Slot(ref='emotion', mode='on')],
+        ),
+    ],
 ))

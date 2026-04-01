@@ -5,6 +5,7 @@ import PlusiMenu from './PlusiMenu';
 import ResearchMenu from './ResearchMenu';
 import StandardSubMenu from './StandardSubMenu';
 import AgentHeader from './AgentHeader';
+import WorkflowList from './WorkflowList';
 import { getRegistry } from '@shared/config/subagentRegistry';
 
 /* ── Content animation keyframes injected once ───────────────────────────── */
@@ -36,7 +37,8 @@ function getSidebarAgents() {
     if (
       agent.submenuComponent ||
       agent.toolsConfigurable ||
-      agent.name === 'plusi'
+      agent.name === 'plusi' ||
+      (agent.workflows && agent.workflows.length > 0)
     ) {
       eligible.push(agent);
     }
@@ -59,38 +61,110 @@ function getSidebarAgents() {
 
 /* ── Content router ──────────────────────────────────────────────────────── */
 function ContentPanel({ activeTab, agents, bridge, enabled }) {
+  const [innerTab, setInnerTab] = useState('insights');
+
+  // Reset inner tab when outer tab changes
+  useEffect(() => {
+    setInnerTab('insights');
+  }, [activeTab]);
+
   if (activeTab === '__settings__') {
     return <SettingsSidebar bridge={bridge} />;
   }
 
   const agent = agents.find(a => a.name === activeTab);
+  if (!agent) return null;
 
-  if (!agent) {
+  // Determine if this agent has a "Speziell" (special) tab
+  const hasSpecialTab = agent.name === 'plusi' || agent.submenuComponent === 'researchMenu';
+  const hasWorkflows = agent.workflows && agent.workflows.length > 0;
+
+  // Speziell tab labels
+  const specialLabel = agent.name === 'plusi' ? 'Persönlichkeit' : 'Quellen';
+
+  // Render special content
+  const getSpecialContent = () => {
+    if (agent.name === 'plusi') return <PlusiMenu bridge={bridge} agent={agent} />;
+    if (agent.submenuComponent === 'researchMenu') return <ResearchMenu bridge={bridge} agent={agent} />;
     return null;
-  }
+  };
 
-  let content;
-  if (agent.name === 'plusi') {
-    content = <PlusiMenu bridge={bridge} agent={agent} />;
-  } else if (agent.submenuComponent === 'researchMenu') {
-    content = <ResearchMenu bridge={bridge} agent={agent} />;
-  } else {
-    content = <StandardSubMenu bridge={bridge} agent={agent} />;
-  }
-
-  return (
-    <div
-      style={{
-        flex: 1,
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        opacity: enabled ? 1 : 0.25,
-        pointerEvents: enabled ? 'auto' : 'none',
+  // If agent has BOTH special tab AND workflows → show inner tab bar
+  if (hasSpecialTab && hasWorkflows) {
+    return (
+      <div style={{
+        flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column',
+        opacity: enabled ? 1 : 0.25, pointerEvents: enabled ? 'auto' : 'none',
         transition: 'opacity 0.3s ease',
-      }}
-    >
-      {content}
+      }}>
+        {/* Inner segmented control */}
+        <div style={{
+          display: 'flex', gap: 0, margin: '0 12px 12px',
+          background: 'var(--ds-hover-tint)', borderRadius: '10px',
+          padding: '3px', border: '1px solid var(--ds-border-subtle)',
+        }}>
+          <button
+            onClick={() => setInnerTab('special')}
+            style={{
+              flex: 1, textAlign: 'center', padding: '7px 0', fontSize: '12px',
+              borderRadius: '8px', border: 'none', cursor: 'pointer',
+              background: innerTab === 'special' ? `${agent.color}18` : 'transparent',
+              color: innerTab === 'special' ? agent.color : 'var(--ds-text-muted)',
+              fontWeight: innerTab === 'special' ? 600 : 400,
+              transition: 'all 0.2s ease',
+            }}
+          >
+            {specialLabel}
+          </button>
+          <button
+            onClick={() => setInnerTab('insights')}
+            style={{
+              flex: 1, textAlign: 'center', padding: '7px 0', fontSize: '12px',
+              borderRadius: '8px', border: 'none', cursor: 'pointer',
+              background: innerTab === 'insights' ? `${agent.color}18` : 'transparent',
+              color: innerTab === 'insights' ? agent.color : 'var(--ds-text-muted)',
+              fontWeight: innerTab === 'insights' ? 600 : 400,
+              transition: 'all 0.2s ease',
+            }}
+          >
+            Deep Insights
+          </button>
+        </div>
+
+        {/* Content */}
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          {innerTab === 'special' ? getSpecialContent() : (
+            <div style={{ padding: '0 12px' }}>
+              <WorkflowList agent={agent} bridge={bridge} />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Agents with workflows but NO special tab → show WorkflowList directly
+  if (hasWorkflows) {
+    return (
+      <div style={{
+        flex: 1, overflow: 'auto',
+        opacity: enabled ? 1 : 0.25, pointerEvents: enabled ? 'auto' : 'none',
+        transition: 'opacity 0.3s ease',
+        padding: '0 12px',
+      }}>
+        <WorkflowList agent={agent} bridge={bridge} />
+      </div>
+    );
+  }
+
+  // Fallback: legacy StandardSubMenu (for agents without workflows yet)
+  return (
+    <div style={{
+      flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column',
+      opacity: enabled ? 1 : 0.25, pointerEvents: enabled ? 'auto' : 'none',
+      transition: 'opacity 0.3s ease',
+    }}>
+      <StandardSubMenu bridge={bridge} agent={agent} />
     </div>
   );
 }

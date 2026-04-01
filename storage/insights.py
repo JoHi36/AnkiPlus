@@ -1,13 +1,11 @@
 """
 Insight extraction from card chats.
 Extracts learning insights incrementally using AI, merges with existing insights.
-Uses OpenRouter API for fast, cheap extraction calls.
+Uses backend /insights/extract endpoint for extraction calls.
 """
 import hashlib
 import json
 import re
-import urllib.request
-import urllib.error
 
 try:
     from ..utils.logging import get_logger
@@ -16,8 +14,6 @@ except ImportError:
 logger = get_logger(__name__)
 
 
-OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
-EXTRACTION_MODEL = 'google/gemini-2.0-flash-001'
 
 
 def insight_hash(text):
@@ -146,54 +142,41 @@ def build_extraction_prompt(card_context, messages, existing_insights, performan
     )
 
 
-def extract_insights_via_openrouter(prompt, api_key):
-    """Call OpenRouter API directly for insight extraction.
+def extract_insights_via_openrouter(prompt, api_key=''):
+    """Extract insights via backend /insights/extract endpoint.
 
-    Uses a fast, cheap model (Gemini 2.0 Flash) for structured JSON output.
-    Returns the raw response text or raises on error.
+    Args:
+        prompt: The extraction prompt (contains card context + chat messages).
+        api_key: Unused (kept for backward compat).
+
+    Returns the raw response text (JSON string) or raises on error.
     """
-    if not api_key:
-        raise ValueError("Kein OpenRouter API-Key konfiguriert")
-
-    payload = json.dumps({
-        'model': EXTRACTION_MODEL,
-        'messages': [
-            {'role': 'user', 'content': prompt},
-        ],
-        'temperature': 0.3,
-        'max_tokens': 1000,
-    }).encode('utf-8')
-
-    req = urllib.request.Request(
-        OPENROUTER_URL,
-        data=payload,
-        headers={
-            'Authorization': f'Bearer {api_key}',
-            'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://ankiplus.app',
-            'X-Title': 'AnkiPlus Insight Extraction',
-        },
-    )
-
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        raw = resp.read().decode('utf-8')
     try:
-        data = json.loads(raw)
-    except (json.JSONDecodeError, TypeError) as e:
-        logger.warning("Failed to parse OpenRouter response: %s", e)
-        raise ValueError("Invalid JSON in OpenRouter response") from e
+        from ..config import get_backend_url, get_auth_token
+    except ImportError:
+        from config import get_backend_url, get_auth_token
 
-    answer = data.get('choices', [{}])[0].get('message', {}).get('content', '')
-    if not answer:
-        raise ValueError("Empty response from OpenRouter")
+    backend_url = get_backend_url()
+    auth_token = get_auth_token()
 
-    usage = data.get('usage', {})
-    logger.info("Insight extraction via OpenRouter [%s]: %s prompt + %s completion tokens",
-                EXTRACTION_MODEL,
-                usage.get('prompt_tokens', '?'),
-                usage.get('completion_tokens', '?'))
+    if not backend_url or not auth_token:
+        raise ValueError("Nicht authentifiziert")
 
-    return answer
+    import requests
+    headers = {
+        'Authorization': 'Bearer %s' % auth_token,
+        'Content-Type': 'application/json',
+    }
+    resp = requests.post('%s/insights/extract' % backend_url.rstrip('/'),
+                         json={'messages': [{'role': 'user', 'content': prompt}]},
+                         headers=headers, timeout=20)
+    resp.raise_for_status()
+    data = resp.json()
+
+    logger.info("Insight extraction via backend completed")
+
+    # Caller expects raw text for parse_extraction_response() to parse
+    return json.dumps(data)
 
 
 def parse_extraction_response(response_text):
