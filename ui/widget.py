@@ -3061,6 +3061,7 @@ class ChatbotWidget(QWidget):
     def _msg_get_remote_qr(self, data=None):
         """Create pairing session and send QR data to frontend."""
         from PyQt6.QtCore import QTimer
+        logger.info("_msg_get_remote_qr: called")
 
         def _do():
             try:
@@ -3069,12 +3070,16 @@ class ChatbotWidget(QWidget):
                 except ImportError:
                     from relay import create_pair
 
+                logger.info("_msg_get_remote_qr: calling create_pair()")
                 result = create_pair()
+                logger.info("_msg_get_remote_qr: result=%s", result)
+
                 if "error" in result:
                     QTimer.singleShot(0, lambda r=result: self._send_to_frontend("sidebarRemoteQR", r))
                     return
 
                 payload = {"pair_code": result["pair_code"], "pair_url": result["pair_url"]}
+                logger.info("_msg_get_remote_qr: sending payload to frontend: %s", payload)
                 QTimer.singleShot(0, lambda p=payload: self._send_to_frontend("sidebarRemoteQR", p))
             except Exception:
                 logger.exception("_msg_get_remote_qr failed")
@@ -3120,11 +3125,6 @@ class ChatbotWidget(QWidget):
             logger.exception("_msg_get_remote_status failed")
             self._send_to_frontend("sidebarRemoteStatus", {"connected": False, "peer_connected": False})
 
-    def _send_to_frontend(self, event_type, data):
-        """Send event to frontend via CustomEvent (works in both main app and sidebar)."""
-        payload = json.dumps({"type": event_type, "data": data})
-        js = f"window.dispatchEvent(new CustomEvent('ankiReceive', {{detail: {payload}}}));"
-        self.web_view.page().runJavaScript(js)
 
     def _msg_request_current_card(self, data=None):
         """Send current card data to React (called when entering review from tab)."""
