@@ -5,7 +5,9 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import ChatInput from './ChatInput';
 import ResizeHandle from './ResizeHandle';
-import CitationBadge from './CitationBadge';
+import { parseCitations } from '../utils/parseCitations';
+import CitationRef from '@shared/components/CitationRef';
+import CitationPreview from './CitationPreview';
 import ThinkingIndicator from './ThinkingIndicator';
 import { useThinkingPhases } from '../hooks/useThinkingPhases';
 
@@ -17,93 +19,94 @@ const SKELETON_STYLE = { borderRadius: 4, background: 'var(--ds-hover-tint)' };
 /**
  * ResearchMarkdown — Markdown renderer with [N] citation badge support.
  * Uses the same styling as Tutor (remarkGfm, remarkMath, rehypeKatex)
- * but handles [1], [2, 3] references directly via cardRefs.
+ * but handles [1], [2, 3] references via parseCitations + CitationRef.
  */
-const CITE_MARKER = '%%CITE:';
-const CITE_RE = /%%CITE:(\d+)%%/g;
-
 function ResearchMarkdown({ content, cardRefs, bridge }) {
-  const refs = cardRefs || {};
+  const citationsArray = useMemo(() => {
+    if (!cardRefs) return [];
+    return Object.entries(cardRefs).map(([key, ref]) => ({
+      type: 'card',
+      index: parseInt(key, 10),
+      cardId: parseInt(ref.id || ref.noteId || key, 10),
+      noteId: parseInt(ref.noteId || ref.id || key, 10),
+      deckName: ref.deckName || '',
+      front: ref.question || '',
+    }));
+  }, [cardRefs]);
 
-  // Pre-process: escape [N] citations BEFORE markdown parser sees them
-  // [2, 3] → %%CITE:2%%%%CITE:3%%    [1] → %%CITE:1%%
-  const processed = (content || '')
-    .replace(/\[(\d+(?:\s*,\s*\d+)+)\]/g, (_, inner) =>
-      inner.split(',').map(n => `${CITE_MARKER}${n.trim()}%%`).join('')
-    )
-    .replace(/\[(\d+)\]/g, (_, n) => `${CITE_MARKER}${n}%%`);
+  const [previewCardId, setPreviewCardId] = useState(null);
 
-  // Render citation markers inside any text node
+  const renderTextWithCitations = (text) => {
+    const segments = parseCitations(text, citationsArray);
+    return segments.map((seg, i) => {
+      if (seg.type === 'text') return seg.content;
+      const { citation, index } = seg;
+      return (
+        <CitationRef
+          key={`cite-${index}-${i}`}
+          index={index}
+          variant="card"
+          title={citation.front || ''}
+          onClick={() => setPreviewCardId(citation.cardId)}
+        />
+      );
+    });
+  };
+
   const renderWithCites = (children) => {
     const result = [];
     React.Children.forEach(children, child => {
       if (typeof child !== 'string') { result.push(child); return; }
-      if (!child.includes(CITE_MARKER)) { result.push(child); return; }
-      const parts = child.split(CITE_RE);
-      // parts alternates: [text, num, text, num, ...]
-      for (let i = 0; i < parts.length; i++) {
-        if (i % 2 === 0) {
-          if (parts[i]) result.push(parts[i]);
-        } else {
-          const num = parts[i];
-          const ref = refs[num];
-          if (ref) {
-            const cardId = String(ref.id || ref.noteId || num);
-            result.push(
-              <CitationBadge
-                key={`cite-${num}-${i}`}
-                cardId={cardId}
-                citation={{ noteId: cardId, question: ref.question || '' }}
-                index={parseInt(num, 10)}
-                bridge={bridge}
-                onClick={() => bridge?.openPreview?.(cardId)}
-              />
-            );
-          } else {
-            result.push(`[${num}]`);
-          }
-        }
-      }
+      result.push(...renderTextWithCitations(child));
     });
     return result.length === 1 ? result[0] : <>{result}</>;
   };
 
   return (
-    <div className="markdown-content">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeKatex]}
-        components={{
-          p: ({ children }) => <p className="mb-4 text-[15px] leading-[1.8]" style={{ color: 'var(--ds-text-secondary)' }}>{renderWithCites(children)}</p>,
-          strong: ({ children }) => (
-            <span className="font-semibold px-1 rounded-sm" style={{ color: 'var(--ds-text-primary)', background: 'color-mix(in srgb, var(--ds-accent) 15%, transparent)' }}>{children}</span>
-          ),
-          em: ({ children }) => <em style={{ color: 'var(--ds-text-secondary)' }}>{children}</em>,
-          ul: (props) => <ul className="mb-5 ml-5 list-disc space-y-2" style={{ color: 'var(--ds-text-secondary)' }} {...props} />,
-          ol: (props) => <ol className="mb-5 ml-5 list-decimal space-y-2" style={{ color: 'var(--ds-text-secondary)' }} {...props} />,
-          li: ({ children }) => <li className="pl-1 leading-[1.8]">{renderWithCites(children)}</li>,
-          h1: ({ children }) => <h1 className="text-xl font-bold mt-6 mb-3" style={{ color: 'var(--ds-text-primary)' }}>{children}</h1>,
-          h2: ({ children }) => <h2 className="text-lg font-bold mt-5 mb-3" style={{ color: 'var(--ds-text-primary)' }}>{children}</h2>,
-          h3: ({ children }) => <h3 className="text-base font-semibold mt-4 mb-2" style={{ color: 'var(--ds-text-primary)' }}>{children}</h3>,
-          table: (props) => (
-            <div className="my-4 overflow-hidden rounded-xl border" style={{ borderColor: 'var(--ds-border-subtle)' }}>
-              <table className="min-w-full" {...props} />
-            </div>
-          ),
-          thead: (props) => <thead style={{ background: 'var(--ds-hover-tint)' }} {...props} />,
-          th: (props) => <th className="px-4 py-2 text-left text-xs font-semibold uppercase" style={{ color: 'var(--ds-text-secondary)', borderBottom: '1px solid var(--ds-border-subtle)' }} {...props} />,
-          td: (props) => <td className="px-4 py-2 text-sm" style={{ color: 'var(--ds-text-primary)', borderBottom: '1px solid var(--ds-border-subtle)' }} {...props} />,
-          hr: () => <hr className="my-5 border-0 h-px" style={{ background: 'linear-gradient(to right, transparent, var(--ds-border-medium), transparent)' }} />,
-          blockquote: ({ children }) => (
-            <blockquote className="border-l-2 pl-4 py-2 my-4" style={{ borderColor: 'color-mix(in srgb, var(--ds-accent) 40%, transparent)', color: 'var(--ds-text-primary)' }}>
-              {children}
-            </blockquote>
-          ),
-        }}
-      >
-        {processed}
-      </ReactMarkdown>
-    </div>
+    <>
+      <div className="markdown-content">
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm, remarkMath]}
+          rehypePlugins={[rehypeKatex]}
+          components={{
+            p: ({ children }) => <p className="mb-4 text-[15px] leading-[1.8]" style={{ color: 'var(--ds-text-secondary)' }}>{renderWithCites(children)}</p>,
+            strong: ({ children }) => (
+              <span className="font-semibold px-1 rounded-sm" style={{ color: 'var(--ds-text-primary)', background: 'color-mix(in srgb, var(--ds-accent) 15%, transparent)' }}>{children}</span>
+            ),
+            em: ({ children }) => <em style={{ color: 'var(--ds-text-secondary)' }}>{children}</em>,
+            ul: (props) => <ul className="mb-5 ml-5 list-disc space-y-2" style={{ color: 'var(--ds-text-secondary)' }} {...props} />,
+            ol: (props) => <ol className="mb-5 ml-5 list-decimal space-y-2" style={{ color: 'var(--ds-text-secondary)' }} {...props} />,
+            li: ({ children }) => <li className="pl-1 leading-[1.8]">{renderWithCites(children)}</li>,
+            h1: ({ children }) => <h1 className="text-xl font-bold mt-6 mb-3" style={{ color: 'var(--ds-text-primary)' }}>{children}</h1>,
+            h2: ({ children }) => <h2 className="text-lg font-bold mt-5 mb-3" style={{ color: 'var(--ds-text-primary)' }}>{children}</h2>,
+            h3: ({ children }) => <h3 className="text-base font-semibold mt-4 mb-2" style={{ color: 'var(--ds-text-primary)' }}>{children}</h3>,
+            table: (props) => (
+              <div className="my-4 overflow-hidden rounded-xl border" style={{ borderColor: 'var(--ds-border-subtle)' }}>
+                <table className="min-w-full" {...props} />
+              </div>
+            ),
+            thead: (props) => <thead style={{ background: 'var(--ds-hover-tint)' }} {...props} />,
+            th: (props) => <th className="px-4 py-2 text-left text-xs font-semibold uppercase" style={{ color: 'var(--ds-text-secondary)', borderBottom: '1px solid var(--ds-border-subtle)' }} {...props} />,
+            td: (props) => <td className="px-4 py-2 text-sm" style={{ color: 'var(--ds-text-primary)', borderBottom: '1px solid var(--ds-border-subtle)' }} {...props} />,
+            hr: () => <hr className="my-5 border-0 h-px" style={{ background: 'linear-gradient(to right, transparent, var(--ds-border-medium), transparent)' }} />,
+            blockquote: ({ children }) => (
+              <blockquote className="border-l-2 pl-4 py-2 my-4" style={{ borderColor: 'color-mix(in srgb, var(--ds-accent) 40%, transparent)', color: 'var(--ds-text-primary)' }}>
+                {children}
+              </blockquote>
+            ),
+          }}
+        >
+          {content || ''}
+        </ReactMarkdown>
+      </div>
+      {previewCardId != null && (
+        <CitationPreview
+          cardId={previewCardId}
+          bridge={bridge}
+          onClose={() => setPreviewCardId(null)}
+        />
+      )}
+    </>
   );
 }
 
