@@ -620,7 +620,8 @@ def on_profile_loaded():
         logger.error("Telegram bot start failed: %s", e)
 
     # Start remote relay if configured
-    _start_remote_relay()
+    # Remote relay is started on-demand when user clicks "Remote verbinden" in Settings
+    # _start_remote_relay()
 
 def _emit_deck_selected(widget, deck_id, deck_name):
     """Helper: Emittiert deckSelected Event mit totalCards"""
