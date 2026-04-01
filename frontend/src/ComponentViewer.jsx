@@ -15,7 +15,6 @@ import MascotCharacter from './components/MascotCharacter';
 import ReviewFeedback from './components/ReviewFeedback';
 import { DockEvalResult, DockTimer, DockStars, DockLoading } from './components/ReviewerDock';
 import SourceCard from './components/SourceCard';
-import CitationBadge from './components/CitationBadge';
 import CitationRef from '../../shared/components/CitationRef';
 import AgenticCell from './components/AgenticCell';
 import ThinkingIndicator from './components/ThinkingIndicator';
@@ -126,7 +125,6 @@ const NAV = [
     { id: 'dockwidgets', label: 'Dock Widgets' },
     { id: 'sourcecard', label: 'SourceCard' },
     { id: 'citationref', label: 'CitationRef' },
-    { id: 'citationbadge', label: 'CitationBadge (legacy)' },
     { id: 'agenticcell', label: 'AgenticCell' },
     { id: 'multiplechoice', label: 'MultipleChoiceCard' },
   ]},
@@ -1748,22 +1746,6 @@ export default function ComponentViewer() {
               <span style={{ fontSize: 11, color: 'var(--ds-text-muted)', marginLeft: 12 }}>md (standalone):</span>
               <CitationRef index={1} variant="card" size="md" />
               <CitationRef index={2} variant="web" size="md" />
-            </div>
-          </Showcase>
-
-          {/* CitationBadge (legacy) */}
-          <SubHeader id="citationbadge" label="Citation Badge (legacy)" refs={sectionRefs} />
-          <Showcase label="Inline citation pills">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--ds-space-xs)', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 'var(--ds-text-lg)', color: 'var(--ds-text-primary)' }}>
-                Der Tractus iliotibialis
-              </span>
-              <CitationBadge cardId={42} citation={DEMO_CITATION} index={1} />
-              <span style={{ fontSize: 'var(--ds-text-lg)', color: 'var(--ds-text-primary)' }}>
-                stabilisiert das Kniegelenk
-              </span>
-              <CitationBadge cardId={43} citation={DEMO_SOURCE_SEMANTIC} index={2} />
-              <CitationBadge cardId={44} citation={DEMO_SOURCE_KEYWORD} index={3} />
             </div>
           </Showcase>
 

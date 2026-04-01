@@ -13,7 +13,6 @@ import MultipleChoiceCard from './MultipleChoiceCard';
 import { parseCitations } from '../utils/parseCitations';
 import CitationRef from '@shared/components/CitationRef';
 import CitationPreview from './CitationPreview';
-import WebCitationBadge from './WebCitationBadge';
 import ThoughtStream from './ThoughtStream';
 import SourceCountBadge from '../reasoning/SourceCountBadge';
 import ThinkingIndicator from './ThinkingIndicator';
@@ -2428,9 +2427,17 @@ export function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = fa
                                 const webIndex = parseInt(parts[1], 10);
                                 const webUrl = decodeURIComponent(parts.slice(2).join(':'));
                                 return (
-                                  <WebCitationBadge
+                                  <CitationRef
                                     index={webIndex}
-                                    url={webUrl}
+                                    variant="web"
+                                    title={webUrl}
+                                    onClick={() => {
+                                      if (window.ankiBridge) {
+                                        window.ankiBridge.addMessage('openUrl', { url: webUrl });
+                                      } else {
+                                        window.open(webUrl, '_blank');
+                                      }
+                                    }}
                                   />
                                 );
                               }
