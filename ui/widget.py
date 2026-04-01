@@ -747,6 +747,7 @@ class SearchCardsThread(QThread):
                 "cards": [], "edges": [], "error": str(e)}}))
 
 
+# DEPRECATED: Replaced by Definition agent dispatch. Kept for reference.
 class KGDefinitionThread(QThread):
     """Background thread for generating Knowledge Graph term definitions via LLM."""
     result_signal = pyqtSignal(str)  # JSON result string
@@ -3756,10 +3757,50 @@ class ChatbotWidget(QWidget):
             logger.exception("startTermStack handler failed")
 
     def _start_kg_definition(self, term, search_query=None):
-        """Launch background thread for definition generation."""
-        self._kg_def_thread = KGDefinitionThread(term, self, search_query=search_query)
-        self._kg_def_thread.result_signal.connect(self._on_kg_result)
-        self._kg_def_thread.start()
+        """Launch definition agent via standard dispatch."""
+        if not self._handler:
+            logger.warning("No AI handler for definition agent")
+            return
+
+        try:
+            from .agents import get_agent
+        except ImportError:
+            from agents import get_agent
+
+        agent_def = get_agent('definition')
+        if not agent_def:
+            logger.warning("Definition agent not registered")
+            return
+
+        import importlib
+        mod = importlib.import_module(agent_def.run_module, package='AnkiPlus_main')
+        run_fn = getattr(mod, agent_def.run_function)
+
+        def _on_finished(widget, agent_name, result):
+            try:
+                data = {
+                    'term': term,
+                    'definition': result.get('text', ''),
+                    'sourceCount': result.get('sourceCount', 0),
+                    'generatedBy': result.get('generatedBy', 'llm'),
+                    'connectedTerms': result.get('connectedTerms', []),
+                    'citations': result.get('citations', []),
+                }
+                if result.get('error'):
+                    data['error'] = result['error']
+                widget._send_to_js({'type': 'graph.termDefinition', 'data': data})
+            except Exception:
+                logger.exception("Failed to send definition result")
+
+        self._handler._dispatch_agent(
+            agent_name='definition',
+            run_fn=run_fn,
+            situation=term,
+            request_id='definition_%s' % id(self),
+            on_finished=_on_finished,
+            extra_kwargs={'search_query': search_query},
+            agent_def=agent_def,
+        )
 
     def _on_kg_result(self, result_json):
         """Handle KG thread result — push to frontend."""

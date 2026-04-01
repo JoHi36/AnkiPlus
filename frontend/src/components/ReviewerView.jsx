@@ -344,7 +344,7 @@ export default function ReviewerView({ cardData, reviewer }) {
           sourceCount={kgDefinition?.sourceCount || 0}
           generatedBy={kgDefinition?.generatedBy || 'llm'}
           connectedTerms={kgDefinition?.connectedTerms || []}
-          cardRefs={kgDefinition?.cardRefs || null}
+          cardRefs={kgDefinition?.citations || kgDefinition?.cardRefs || null}
           cardCount={kgDefinition?.sourceCount || 0}
           loading={!kgDefinition}
           error={kgDefinition?.error || null}
