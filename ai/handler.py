@@ -55,6 +55,11 @@ except ImportError:
     from rag import PHASE_SEARCH, PHASE_RETRIEVAL
 
 try:
+    from .citation_builder import CitationBuilder
+except ImportError:
+    from citation_builder import CitationBuilder
+
+try:
     from .models import (
         get_section_title as _get_section_title,
         fetch_available_models as _fetch_available_models,
@@ -492,6 +497,9 @@ class AIHandler:
             if fallback:
                 agent_kwargs['fallback_model'] = fallback
 
+        # Inject CitationBuilder — every agent gets one
+        agent_kwargs['citation_builder'] = CitationBuilder()
+
         # Build streaming callback
         _used_streaming = []
         _chunk_count = [0]
@@ -521,7 +529,12 @@ class AIHandler:
 
         # Extract text and citations from result
         text = result.get('text', '') if isinstance(result, dict) else str(result)
-        citations = result.get('citations', {}) if isinstance(result, dict) else {}
+        # Support both new array format and legacy dict format
+        raw_citations = result.get('citations', []) if isinstance(result, dict) else []
+        if isinstance(raw_citations, dict):
+            citations = list(raw_citations.values()) if raw_citations else []
+        else:
+            citations = raw_citations
         logger.info("[DEBUG] _dispatch_agent done: agent=%s, textLen=%d, chunks=%d, usedStreaming=%s",
                     agent_name, len(text), _chunk_count[0], bool(_used_streaming))
 
