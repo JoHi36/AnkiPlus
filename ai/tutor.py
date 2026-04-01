@@ -155,6 +155,12 @@ def run_tutor(situation, emit_step=None, memory=None,
         # Normal path: RAG retrieval from routing result
         try:
             if rag_analysis is not None:
+                # Force search_needed=True when card context exists
+                # Router often says False for follow-up questions ("erkläre mehr")
+                # but we still want card-based citations
+                if context and context.get('cardId'):
+                    rag_analysis.search_needed = True
+
                 _rag_fn = rag_retrieve_fn
                 if _rag_fn is None:
                     _rag_fn = _make_default_rag_retrieve_fn()

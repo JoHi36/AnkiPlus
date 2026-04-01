@@ -535,8 +535,10 @@ class AIHandler:
             citations = list(raw_citations.values()) if raw_citations else []
         else:
             citations = raw_citations
-        logger.info("[DEBUG] _dispatch_agent done: agent=%s, textLen=%d, chunks=%d, usedStreaming=%s",
-                    agent_name, len(text), _chunk_count[0], bool(_used_streaming))
+        logger.info("[DEBUG] _dispatch_agent done: agent=%s, textLen=%d, chunks=%d, usedStreaming=%s, citations=%d (type=%s)",
+                    agent_name, len(text), _chunk_count[0], bool(_used_streaming),
+                    len(citations) if citations else 0,
+                    type(citations).__name__)
 
         # Only emit full text if agent didn't stream
         used_streaming = result.get('_used_streaming', False) if isinstance(result, dict) else False
