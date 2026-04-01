@@ -17,10 +17,10 @@ export type Segment =
   | { type: 'citation'; index: number; citation: Citation };
 
 function normalizeLegacyMarkers(text: string, citations: Citation[]): string {
-  // [[WEB:N]] or [WEB:N] → find matching web citation by web-index, replace with [citation.index]
-  text = text.replace(/\[?\[WEB:(\d+)\]\]?/gi, (_, n) => {
+  // All WEB marker variants → find matching web citation, replace with [citation.index]
+  // Handles: [[WEB:N]], [WEB:N], [WEBN]
+  text = text.replace(/\[?\[WEB:?(\d+)\]?\]?/gi, (_, n) => {
     const webIdx = parseInt(n, 10);
-    // Find the Nth web citation (1-based)
     const webCitations = citations.filter(c => c.type === 'web');
     const match = webCitations[webIdx - 1];
     if (match) return `[${match.index}]`;

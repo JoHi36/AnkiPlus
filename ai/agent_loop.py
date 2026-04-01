@@ -107,14 +107,14 @@ def _handle_tool_response(function_name, tool_response, callback):
             for i, src in enumerate(sources, 1):
                 title = src.get('title', '')
                 url = src.get('url', '')
-                source_lines.append(f"[[WEB:{i}]] {title} ({url})")
+                source_lines.append(f"[WEB{i}] {title} ({url})")
             sources_text = '\n'.join(source_lines)
             return (
                 f"WEB-RECHERCHE-ERGEBNIS:\n{answer}\n\n"
                 f"QUELLEN:\n{sources_text}\n\n"
-                f"WICHTIG: Verwende [[WEB:N]] als Inline-Referenzen in deiner Antwort. "
-                f"Beispiel: 'Die Banane ist krumm wegen negativem Geotropismus [[WEB:1]].' "
-                f"Schreibe NICHT [1] oder (Quelle 1), sondern exakt [[WEB:1]], [[WEB:2]] etc."
+                f"WICHTIG: Verwende [WEBN] als Inline-Referenzen für Web-Quellen in deiner Antwort. "
+                f"Beispiel: 'Die Banane ist krumm wegen negativem Geotropismus [WEB1].' "
+                f"Verwende [WEB1], [WEB2] etc. für Web-Quellen."
             )
 
         # Tell Gemini the widget was displayed, don't echo full result
