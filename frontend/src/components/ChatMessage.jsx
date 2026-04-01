@@ -10,7 +10,9 @@ import { findAgent as findSubagent } from '@shared/config/subagentRegistry';
 import ReviewFeedback from './ReviewFeedback';
 import ReviewResult from './ReviewResult';
 import MultipleChoiceCard from './MultipleChoiceCard';
-import CitationBadge from './CitationBadge';
+import { parseCitations } from '../utils/parseCitations';
+import CitationRef from '@shared/components/CitationRef';
+import CitationPreview from './CitationPreview';
 import WebCitationBadge from './WebCitationBadge';
 import ThoughtStream from './ThoughtStream';
 import SourceCountBadge from '../reasoning/SourceCountBadge';
@@ -1249,8 +1251,28 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
   const [webSources, setWebSources] = useState(webSourcesProp || []); // Sources from search_web tool for [[WEB:N]] citation resolution
   const [intent, setIntent] = useState(null); // 'REVIEW', 'MC', 'HINT', 'EXPLANATION', 'MNEMONIC', 'CHAT'
   const [routerIntent, setRouterIntent] = useState(null); // Router intent: 'EXPLANATION', 'FACT_CHECK', 'MNEMONIC', 'QUIZ', 'CHAT'
-  
+  const [previewCardId, setPreviewCardId] = useState(null);
+
   const messageRef = useRef(null);
+
+  // Normalize citations dict → array for parseCitations
+  const citationsArray = React.useMemo(() => {
+    if (!citations) return [];
+    if (Array.isArray(citations)) return citations;
+    return Object.entries(citations).map(([key, val], i) => ({
+      type: val.url ? 'web' : 'card',
+      index: val.index || (i + 1),
+      cardId: val.cardId || val.noteId || parseInt(key, 10),
+      noteId: val.noteId || parseInt(key, 10),
+      deckName: val.deckName || '',
+      front: val.question || val.front || '',
+      back: val.answer || val.back || '',
+      url: val.url || '',
+      title: val.title || '',
+      domain: val.domain || '',
+      sources: val.sources || [],
+    }));
+  }, [citations]);
   
   
   // Extract router intent from steps
@@ -1537,127 +1559,38 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
   // Remove duplicate newlines
   processedMessage = processedMessage.replace(/(---\s*\n\s*){2,}/g, '---\n\n').trim();
 
-  // === CITATION NUMBERING LOGIC (1, 2, 3...) ===
-  // Calculate indices once, consistent for Text and Carousel
-  const citationIndices = React.useMemo(() => {
-    const indices = {};
-    if (!citations || Object.keys(citations).length === 0) {
-      return indices;
-    }
-
-    let maxIndex = 0;
-
-    // 1. Use stable index from backend (set by RAG pipeline)
-    Object.entries(citations).forEach(([citationId, citation]) => {
-      if (citation && citation.index) {
-        const id = citation.noteId || citation.cardId || citationId;
-        const idKey = String(id);
-        indices[idKey] = citation.index;
-        if (citation.index > maxIndex) maxIndex = citation.index;
-      }
-    });
-
-    // 2. Fallback: assign indices to citations without backend index
-    //    (e.g. current card, legacy saved messages)
-    let nextCounter = maxIndex + 1;
-
-    // Legacy text-based detection for old [[CardID: N]] messages
-    const legacyPattern = /\[\[\s*(?:CardID:\s*)?(\d+)\s*\]\]/gi;
-    const legacyMatches = [...processedMessage.matchAll(legacyPattern)];
-    legacyMatches.forEach(match => {
-      const citationId = match[1];
-      const citation = citations[citationId];
-      if (citation) {
-        const id = citation.noteId || citation.cardId || citationId;
-        const idKey = String(id);
-        if (!indices[idKey]) {
-          indices[idKey] = nextCounter++;
-        }
-      }
-    });
-
-    // Remaining citations not yet indexed
-    Object.keys(citations).sort().forEach(citationId => {
-      const citation = citations[citationId];
-      if (citation) {
-        const id = citation.noteId || citation.cardId || citationId;
-        const idKey = String(id);
-        if (!indices[idKey]) {
-          indices[idKey] = nextCounter++;
-        }
-      }
-    });
-    return indices;
-  }, [processedMessage, citations]);
-  
-  // === CITATION REPLACEMENT (BEFORE MARKDOWN RENDERING) ===
-  // Replace citation patterns with special markdown links that will be rendered as CitationBadges
-  // This must happen AFTER citationIndices is calculated, so we have the correct index numbers
-  // Use a ref to store the processed message with citations replaced
+  // === PROCESSED MESSAGE (strip control markers, HANDOFF) ===
   const processedMessageWithCitations = React.useMemo(() => {
-    // Strip HANDOFF signals from displayed text (handoff is processed server-side)
+    if (!processedMessage) return '';
     let message = processedMessage.replace(/\n?HANDOFF:?\s*\w+\s+REASON:?\s*.+?\s+QUERY:?\s*.+$/s, '').trim();
     if (!message) message = processedMessage; // Fallback if regex removes everything
-    if (citations && Object.keys(citations).length > 0) {
-      // 1. Legacy: Replace [[CardID: N]] / [[N]] patterns (old format)
-      const citationPattern = /\[\[\s*(?:CardID:\s*)?(\d+)\s*\]\]/gi;
-      message = message.replace(citationPattern, (match, citationId) => {
-        const citation = citations[citationId];
-        if (citation) {
-          const id = citation.noteId || citation.cardId || citationId;
-          const idKey = String(id);
-          const index = citationIndices[idKey];
-          if (index !== undefined) {
-            return `[${index}](citation:${idKey})`;
-          }
-        }
-        return match;
-      });
-
-      // 2. New: Replace [N] inline references (from Tutor prompt)
-      //    Match [N] NOT followed by ( — to avoid breaking existing markdown links
-      const indexToCitationId = {};
-      Object.entries(citationIndices).forEach(([id, idx]) => {
-        indexToCitationId[idx] = id;
-      });
-      message = message.replace(/\[(\d+)\](?!\()/g, (match, numStr) => {
-        const num = parseInt(numStr, 10);
-        const citId = indexToCitationId[num];
-        if (citId) {
-          return `[${num}](citation:${citId})`;
-        }
-        return match;
-      });
-    }
-    // Replace [[WEB:N]] markers with clickable citation badges
-    // Extract sources from tool markers in the raw message (sync, no state dependency)
-    let resolvedWebSources = webSources || [];
-    if (resolvedWebSources.length === 0 && fixedMessage) {
-      const toolMatches = [...fixedMessage.matchAll(/\[\[TOOL:(\{.*?\})\]\]/g)];
-      for (const m of toolMatches) {
-        try {
-          const td = JSON.parse(m[1]);
-          if (td.name === 'search_web' && td.result?.sources) {
-            resolvedWebSources = td.result.sources;
-            break;
-          }
-        } catch {}
-      }
-    }
-    if (resolvedWebSources.length > 0) {
-      const webCiteRegex = /\[\[WEB:(\d+)\]\]/g;
-      message = message.replace(webCiteRegex, (match, indexStr) => {
-        const idx = parseInt(indexStr, 10);
-        const source = resolvedWebSources[idx - 1]; // WEB:1 → sources[0]
-        if (source) {
-          const url = source.url || '';
-          return `[${idx}](webcite:${idx}:${encodeURIComponent(url)})`;
-        }
-        return match;
-      });
-    }
     return message;
-  }, [processedMessage, citations, citationIndices, webSources, fixedMessage]);
+  }, [processedMessage]);
+
+  // === renderTextWithCitations — used by SafeMarkdownRenderer text handler ===
+  const renderTextWithCitations = React.useCallback((textContent) => {
+    const segments = parseCitations(textContent, citationsArray);
+    return segments.map((seg, i) => {
+      if (seg.type === 'citation') {
+        return (
+          <CitationRef
+            key={i}
+            index={seg.citation.index}
+            variant={seg.citation.type}
+            onClick={() => {
+              if (seg.citation.type === 'web' && seg.citation.url) {
+                window.ankiBridge?.addMessage('openUrl', { url: seg.citation.url });
+              } else if (seg.citation.cardId) {
+                setPreviewCardId(seg.citation.cardId);
+              }
+            }}
+            title={seg.citation.front || seg.citation.title || ''}
+          />
+        );
+      }
+      return <span key={i}>{seg.content}</span>;
+    });
+  }, [citationsArray]);
     
   // Handler für MC Klick
   const handleAnswerClick = (option) => {
@@ -1783,6 +1716,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
 
   // === RENDER RETURN ===
   return (
+    <>
     <div className="flex flex-col mb-10 animate-in slide-in-from-left-4 duration-500" ref={messageRef}
          style={isUser ? { maxWidth: 'var(--ds-content-width)', margin: '0 auto' } : undefined}>
         {/* Content area - Full width for bot messages (agent-cell bg bleeds), constrained for user */}
@@ -2076,7 +2010,8 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                         MermaidDiagram={MermaidDiagram}
                         isStreaming={isStreaming}
                         citations={citations}
-                        citationIndices={citationIndices}
+                        citationIndices={{}}
+                        renderTextWithCitations={renderTextWithCitations}
                         bridge={bridge}
                         onPreviewCard={onPreviewCard}
                     />
@@ -2101,13 +2036,21 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                     MermaidDiagram={MermaidDiagram}
                     isStreaming={isStreaming}
                     citations={citations}
-                    citationIndices={citationIndices} // PASS INDICES
+                    citationIndices={{}}
+                    renderTextWithCitations={renderTextWithCitations}
                     bridge={bridge}
                     onPreviewCard={onPreviewCard}
                 />
             )}
         </div>
     </div>
+    {previewCardId && (
+      <CitationPreview
+        cardId={previewCardId}
+        onClose={() => setPreviewCardId(null)}
+      />
+    )}
+    </>
   );
 }
 
@@ -2135,7 +2078,7 @@ MemoizedChatMessage.displayName = 'ChatMessage';
 export default MemoizedChatMessage;
 
 // Separate Komponente für sicheres Markdown-Rendering mit Error Boundary
-export function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, citations = {}, citationIndices = {}, bridge = null, onPreviewCard }) {
+export function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = false, citations = {}, citationIndices = {}, renderTextWithCitations = null, bridge = null, onPreviewCard }) {
   const [hasError, setHasError] = React.useState(false);
   const [errorMsg, setErrorMsg] = React.useState('');
   
@@ -2224,16 +2167,23 @@ export function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = fa
                               return <p className="mb-5 text-[15px] leading-[1.8] text-base-content/85" {...props}>{safeChildren}</p>;
                             },
                             
-                            // Custom Text Renderer für Citations ([[CardID]] oder [CardID] Pattern)
-                            // FALLBACK: Auch einzelne Zahlen (1, 2, 3) als Citations erkennen, wenn sie am Anfang/Ende stehen
+                            // Custom Text Renderer — uses parseCitations when renderTextWithCitations
+                            // is provided; falls back to legacy citationIndices-based rendering.
                             text: ({node, children, ...props}) => {
                               const textContent = String(children || '');
-                              
-                              // FALLBACK: Wenn nur eine Zahl (1, 2, 3) und Citations vorhanden, versuche als Citation zu rendern
-                              // CRITICAL: This must run BEFORE the [[CardID]] pattern check to catch plain numbers
+
+                              // New path: use parseCitations via renderTextWithCitations callback
+                              if (renderTextWithCitations) {
+                                const segments = renderTextWithCitations(textContent);
+                                if (segments.length === 1 && segments[0].type !== 'citation') {
+                                  return <span {...props}>{children}</span>;
+                                }
+                                return <>{segments}</>;
+                              }
+
+                              // Legacy path: citationIndices-based rendering (used by AgenticCell callers)
                               if (citations && Object.keys(citations).length > 0 && textContent.match(/^\d+$/)) {
                                 const indexNum = parseInt(textContent, 10);
-                                // Suche Citation mit diesem Index
                                 const citationEntry = Object.entries(citationIndices).find(([id, idx]) => idx === indexNum);
                                 if (citationEntry) {
                                   const [idKey, idx] = citationEntry;
@@ -2243,90 +2193,56 @@ export function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = fa
                                   });
                                   if (citation) {
                                     return (
-                                      <CitationBadge
-                                        cardId={idKey}
-                                        citation={citation}
+                                      <CitationRef
                                         index={idx}
-                                        onClick={(cardId, citation) => {
-                                          if (onPreviewCard) {
-                                            onPreviewCard(citation);
-                                          } else {
-                                          }
-                                        }}
+                                        variant={citation.url ? 'web' : 'card'}
+                                        onClick={() => onPreviewCard && onPreviewCard(citation)}
+                                        title={citation.question || citation.front || ''}
                                       />
                                     );
                                   }
                                 }
                               }
-                              
-                              // Prüfe ob Citations vorhanden und Pattern im Text
+
                               if (citations && Object.keys(citations).length > 0 && textContent.includes('[[')) {
-                                // Parse [[CardID: 123]], [[ 123 ]], [[123]], etc.
                                 const citationPattern = /\[\[\s*(?:CardID:\s*)?(\d+)\s*\]\]/gi;
                                 const parts = [];
                                 let lastIndex = 0;
                                 let match;
-                                
                                 while ((match = citationPattern.exec(textContent)) !== null) {
-                                  // Text vor Citation
                                   if (match.index > lastIndex) {
                                     parts.push({ type: 'text', content: textContent.slice(lastIndex, match.index) });
                                   }
-                                  
-                                  // Citation - support both noteId and cardId
-                                  const citationId = match[1]; // ID from text (String)
-                                  // Try noteId first (new format), then cardId (old format)
-                                  let citation = citations[citationId];
-                                  if (!citation) {
-                                    // Try as cardId for backward compatibility
-                                    citation = citations.get ? citations.get(citationId) : null;
-                                  }
+                                  const citationId = match[1];
+                                  const citation = citations[citationId];
                                   if (citation) {
-                                    // Use same logic as in citationIndices: noteId || cardId || citationId
-                                    // This ensures consistency between index calculation and rendering
                                     const id = citation.noteId || citation.cardId || citationId;
-                                    const idKey = String(id); // Always use string key for consistency
-                                    // Get index from citationIndices using the same key format
+                                    const idKey = String(id);
                                     const index = citationIndices[idKey];
-                                    
-                                    parts.push({ 
-                                      type: 'citation', 
-                                      cardId: idKey,  // Use consistent string key (same as used for index lookup)
-                                      citation,
-                                      index // Pass index (from citationIndices lookup)
-                                    });
+                                    parts.push({ type: 'citation', cardId: idKey, citation, index });
                                   } else {
-                                    // Fallback: Plain text if citation not found
                                     parts.push({ type: 'text', content: match[0] });
                                   }
-                                  
                                   lastIndex = match.index + match[0].length;
                                 }
-                                
-                                // Restlicher Text
                                 if (lastIndex < textContent.length) {
                                   parts.push({ type: 'text', content: textContent.slice(lastIndex) });
                                 }
-                                
-                                // Render parts
                                 if (parts.length > 0) {
                                   return (
                                     <>
                                       {parts.map((part, idx) => {
                                         if (part.type === 'citation') {
                                           return (
-                                            <CitationBadge
+                                            <CitationRef
                                               key={idx}
-                                              cardId={part.cardId}
-                                              citation={part.citation}
-                                              index={part.index} // Pass index prop
-                                              onClick={(cardId, citation) => {
-                                                if (onPreviewCard) {
-                                                  onPreviewCard(citation);
-                                                } else if (bridge && bridge.openPreview) {
-                                                  bridge.openPreview(String(cardId));
-                                                }
+                                              index={part.index}
+                                              variant={part.citation.url ? 'web' : 'card'}
+                                              onClick={() => {
+                                                if (onPreviewCard) onPreviewCard(part.citation);
+                                                else if (bridge?.openPreview) bridge.openPreview(String(part.cardId));
                                               }}
+                                              title={part.citation.question || part.citation.front || ''}
                                             />
                                           );
                                         }
@@ -2336,8 +2252,8 @@ export function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = fa
                                   );
                                 }
                               }
-                              
-                              // Fallback: Normaler Text
+
+                              // Fallback: plain text
                               return <span {...props}>{children}</span>;
                             },
                             
@@ -2459,11 +2375,10 @@ export function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = fa
                             a: ({node, href, children, ...props}) => {
                               const childrenText = typeof children === 'string' ? children : Array.isArray(children) ? children.join('') : String(children || '');
 
-                              // FALLBACK: If link contains only a number (1, 2, 3) and citations exist, try to render as CitationBadge
-                              // This handles cases where AI outputs [1] instead of [[CardID: 123]]
+                              // FALLBACK: If link contains only a number (1, 2, 3) and citations exist, try to render as CitationRef
+                              // This handles cases where AI outputs [1] instead of [[CardID: 123]] (legacy AgenticCell path)
                               if (citations && Object.keys(citations).length > 0 && childrenText.match(/^\d+$/)) {
                                 const indexNum = parseInt(childrenText, 10);
-                                // Find citation with this index
                                 const citationEntry = Object.entries(citationIndices).find(([id, idx]) => idx === indexNum);
                                 if (citationEntry) {
                                   const [idKey, idx] = citationEntry;
@@ -2473,57 +2388,38 @@ export function SafeMarkdownRenderer({ content, MermaidDiagram, isStreaming = fa
                                   });
                                   if (citation) {
                                     return (
-                                      <CitationBadge
-                                        cardId={idKey}
-                                        citation={citation}
+                                      <CitationRef
                                         index={idx}
-                                        onClick={(cardId, citation) => {
-                                          if (onPreviewCard) {
-                                            onPreviewCard(citation);
-                                          } else {
-                                          }
-                                        }}
+                                        variant={citation.url ? 'web' : 'card'}
+                                        onClick={() => onPreviewCard && onPreviewCard(citation)}
+                                        title={citation.question || citation.front || ''}
                                       />
                                     );
                                   }
                                 }
                               }
-                              
-                              // Check if this is a citation link (format: citation:ID)
+
+                              // Check if this is a citation link (format: citation:ID) — generated by AgenticCell remapOldToNew
                               if (href && href.startsWith('citation:')) {
                                 const cardId = href.replace('citation:', '');
-                                
-                                // Try to find citation: first by key (most efficient), then by searching values
                                 let citation = citations[cardId];
                                 if (!citation) {
-                                  // Fallback: search in values (for cases where key doesn't match)
                                   citation = Object.values(citations).find(c => {
                                     const id = c?.noteId || c?.cardId;
                                     return String(id) === cardId;
                                   });
                                 }
-                                
                                 const index = citationIndices[cardId];
-                                
                                 if (citation) {
                                   return (
-                                    <CitationBadge
-                                      cardId={cardId}
-                                      citation={citation}
+                                    <CitationRef
                                       index={index}
-                                      onClick={(cardId, citation) => {
-                                        // Always prefer onPreviewCard to open the modal
-                                        if (onPreviewCard) {
-                                          onPreviewCard(citation);
-                                        } else {
-                                          // Fallback: try to construct citation object and use bridge.getCardDetails
-                                          // This should not close the session
-                                        }
-                                      }}
+                                      variant={citation.url ? 'web' : 'card'}
+                                      onClick={() => onPreviewCard && onPreviewCard(citation)}
+                                      title={citation.question || citation.front || ''}
                                     />
                                   );
                                 }
-                                // If citation not found, render as normal link (fallback)
                                 return <a href={href} {...props}>{children}</a>;
                               }
                               // Check if this is a web citation link (format: webcite:INDEX:ENCODED_URL)
