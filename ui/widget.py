@@ -547,6 +547,8 @@ class ChatbotWidget(QWidget):
             'sidebarOpenNativeSettings': lambda d: __import__('aqt', fromlist=['mw']).mw.onPrefs(),
             'sidebarOpenUpgrade': lambda d: __import__('webbrowser').open('https://anki-plus.vercel.app/#pricing'),
             'sidebarLogout': self._msg_sidebar_logout,
+            'sidebarGetRemoteQR': self._msg_get_remote_qr,
+            'sidebarGetRemoteStatus': self._msg_get_remote_status,
         }
         return handlers.get(msg_type)
 
@@ -2139,6 +2141,53 @@ class ChatbotWidget(QWidget):
                 self._send_to_frontend('sidebarLogsCopied', {})
         except Exception:
             logger.exception("_msg_copy_logs failed")
+
+    def _msg_get_remote_qr(self, data=None):
+        """Create pairing session and send QR data to frontend."""
+        def _do():
+            try:
+                try:
+                    from ..relay import create_pair
+                except ImportError:
+                    from relay import create_pair
+
+                result = create_pair()
+                if "error" in result:
+                    self._send_to_frontend("sidebarRemoteQR", result)
+                    return
+
+                self._send_to_frontend("sidebarRemoteQR", {
+                    "pair_code": result["pair_code"],
+                    "pair_url": result["pair_url"],
+                })
+            except Exception:
+                logger.exception("_msg_get_remote_qr failed")
+                self._send_to_frontend("sidebarRemoteQR", {"error": "Unbekannter Fehler"})
+
+        threading.Thread(target=_do, daemon=True).start()
+
+    def _msg_get_remote_status(self, data=None):
+        """Get current remote connection status."""
+        try:
+            try:
+                from ..relay import get_client
+            except ImportError:
+                from relay import get_client
+
+            client = get_client()
+            if not client:
+                self._send_to_frontend("sidebarRemoteStatus", {"connected": False, "peer_connected": False})
+                return
+
+            self._send_to_frontend("sidebarRemoteStatus", {
+                "connected": client.is_connected,
+                "peer_connected": client.is_peer_connected,
+                "pair_code": client.pair_code,
+                "mode": client.mode,
+            })
+        except Exception:
+            logger.exception("_msg_get_remote_status failed")
+            self._send_to_frontend("sidebarRemoteStatus", {"connected": False, "peer_connected": False})
 
     def _send_to_frontend(self, event_type, data):
         """Send event to frontend via CustomEvent (works in both main app and sidebar)."""
