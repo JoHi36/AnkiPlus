@@ -1566,6 +1566,14 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
     return message;
   }, [processedMessage]);
 
+  // === handleCitationPreview — opens CitationPreview popup for card citations ===
+  const handleCitationPreview = React.useCallback((citation) => {
+    const cardId = citation?.cardId || citation?.noteId || citation?.id;
+    if (cardId) {
+      setPreviewCardId(cardId);
+    }
+  }, []);
+
   // === renderTextWithCitations — used by SafeMarkdownRenderer text handler ===
   const renderTextWithCitations = React.useCallback((textContent) => {
     const segments = parseCitations(textContent, citationsArray);
@@ -2013,7 +2021,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                         citationsArray={citationsArray}
                         renderTextWithCitations={renderTextWithCitations}
                         bridge={bridge}
-                        onPreviewCard={onPreviewCard}
+                        onPreviewCard={handleCitationPreview}
                     />
                 </AgenticCell>
             )}
@@ -2040,7 +2048,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                     citationsArray={citationsArray}
                     renderTextWithCitations={renderTextWithCitations}
                     bridge={bridge}
-                    onPreviewCard={onPreviewCard}
+                    onPreviewCard={handleCitationPreview}
                 />
             )}
         </div>
