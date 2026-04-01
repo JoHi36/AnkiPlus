@@ -45,7 +45,9 @@ def _get_remote_config():
         from config import get_config, save_config
 
     config = get_config()
-    if "remote" not in config:
+    remote = config.get("remote", {})
+    # Migrate from telegram.* if remote.relay_url is empty but telegram has one
+    if not remote.get("relay_url"):
         tg = config.get("telegram", {})
         if tg.get("relay_url"):
             config["remote"] = {
