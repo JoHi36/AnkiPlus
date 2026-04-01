@@ -59,6 +59,7 @@ const STATUS_DOT_STYLE = {
 function RemoteSection() {
   const [pairUrl, setPairUrl] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [connected, setConnected] = useState(false);
   const [peerConnected, setPeerConnected] = useState(false);
 
   // Listen for QR data and status via CustomEvent dispatched by App.jsx
@@ -78,11 +79,13 @@ function RemoteSection() {
       }
       if (payload.type === 'sidebarRemoteStatus') {
         const d = payload.data || {};
+        if (d.connected) setConnected(true);
         if (d.peer_connected) setPeerConnected(true);
-        if (d.pair_url) setPairUrl(d.pair_url);
       }
     };
     window.addEventListener('ankiReceive', handler);
+    // Check status on mount — relay may already be connected from auto-reconnect
+    bridgeAction('sidebarGetRemoteStatus');
     return () => window.removeEventListener('ankiReceive', handler);
   }, []);
 
@@ -99,7 +102,33 @@ function RemoteSection() {
         Remote
       </h3>
 
-      {!pairUrl ? (
+      {peerConnected ? (
+        <div style={QR_CONTAINER_STYLE}>
+          <div style={{ textAlign: 'center' }}>
+            <span style={{ ...STATUS_DOT_STYLE, background: 'var(--ds-green)' }} />
+            <span style={{ fontSize: 'var(--ds-text-md)', color: 'var(--ds-green)' }}>Verbunden</span>
+          </div>
+        </div>
+      ) : connected ? (
+        <div style={QR_CONTAINER_STYLE}>
+          <p style={{ fontSize: 'var(--ds-text-sm)', color: 'var(--ds-text-secondary)', textAlign: 'center' }}>
+            Relay verbunden — öffne die PWA auf deinem Handy
+          </p>
+        </div>
+      ) : pairUrl ? (
+        <div style={QR_CONTAINER_STYLE}>
+          <QRCodeSVG
+            value={pairUrl}
+            size={180}
+            bgColor="transparent"
+            fgColor="currentColor"
+            level="M"
+          />
+          <p style={{ fontSize: 'var(--ds-text-sm)', color: 'var(--ds-text-tertiary)', textAlign: 'center' }}>
+            Scanne mit deinem Handy
+          </p>
+        </div>
+      ) : (
         <button
           onClick={generateQR}
           disabled={loading}
@@ -117,28 +146,6 @@ function RemoteSection() {
         >
           {loading ? 'Verbindung wird hergestellt...' : 'Remote verbinden'}
         </button>
-      ) : (
-        <div style={QR_CONTAINER_STYLE}>
-          {peerConnected ? (
-            <div style={{ textAlign: 'center' }}>
-              <span style={{ ...STATUS_DOT_STYLE, background: 'var(--ds-green)' }} />
-              <span style={{ fontSize: 'var(--ds-text-md)', color: 'var(--ds-green)' }}>Verbunden</span>
-            </div>
-          ) : (
-            <>
-              <QRCodeSVG
-                value={pairUrl}
-                size={180}
-                bgColor="transparent"
-                fgColor="currentColor"
-                level="M"
-              />
-              <p style={{ fontSize: 'var(--ds-text-sm)', color: 'var(--ds-text-tertiary)', textAlign: 'center' }}>
-                Scanne mit deinem Handy
-              </p>
-            </>
-          )}
-        </div>
       )}
     </div>
   );
