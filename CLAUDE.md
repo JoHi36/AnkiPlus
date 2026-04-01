@@ -12,22 +12,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **AnkiPlus ist eine agentische Lernplattform.** Jeder Agent hat einen eigenen Kanal (UI-Bereich). Der Kanal bestimmt den Agenten — kein Router, kein @mention, kein Agent-Wechsel im Gespräch.
 
-| Agent | Kanal | Modus |
-|-------|-------|-------|
-| Research | Stapel (Suchleiste → Canvas + Sidebar) | State-basiert |
-| Tutor | Session (Seitenfenster-Chat) | Chat-basiert, kartengebunden |
-| Plusi/Help | Plusi-Sprechblase | Kompakt, Personality + App-Hilfe |
-| Prüfungs-Agent | Reviewer-Input (künftig) | Inline-Bewertung |
+| Agent | Kanal | Modus | RAG-Pipeline | Citations |
+|-------|-------|-------|-------------|-----------|
+| Tutor | `session` (Chat-Sidebar) | Verlaufsbasiert, kartengebunden | `ai/retrieval_agents/tutor_retrieval.py` | Card + Web |
+| Research | `stapel` (Suchleiste → Canvas) | State-basiert | `ai/retrieval_agents/research_retrieval.py` | Card + Web |
+| Definition | `reviewer-term` (Klick auf Term) | Popup, KG-basiert | `ai/retrieval_agents/definition_retrieval.py` | Card |
+| Prüfer | `reviewer-inline` (MC + Bewertung) | Inline-Bewertung | `ai/retrieval_agents/prufer_retrieval.py` | Card (geplant) |
+| Plusi | `plusi` (Sprechblase) | Persönlichkeit + App-Hilfe | `ai/retrieval_agents/plusi_retrieval.py` | Optional |
 
 **Drei kognitive Modi:** Stapel = Finden (state-basiert), Session = Lernen (verlaufsbasiert), Statistik = Planen. Vollständiges Konzeptdokument: `docs/vision/product-concept.md`.
+
+**Agent-spezifische RAG-Pipelines:** Jeder Agent hat eine eigene Kopie der RAG-Pipeline in `ai/retrieval_agents/`. Alle geforkt aus `ai/rag_pipeline.py` (2026-04-01), divergieren unabhängig. Shared: `ai/rag_analyzer.py` (Router/Intent).
+
+**CitationBuilder:** Einziger Mechanismus für Citations (`ai/citation_builder.py`). Jeder Agent bekommt eine Instanz via `handler._dispatch_agent()`. `add_card()` / `add_web()` vergibt `[N]` Indices automatisch. Frontend: `parseCitations()` + `CitationRef` (blau=Karte, grün=Web).
 
 **Canvas + State-Modell:** Der Stapel-Tab ist ein Canvas auf dem der Research Agent visuelle Ergebnisse darstellt. Daneben ein State-basierter Bereich (kein Chat-Verlauf). Ein Zustand = die gesamte Ansicht. Neuer Zustand nur durch bewusste Vertiefung/neue Anfrage.
 
 **Ein-Glas-Regel:** Zu jedem Zeitpunkt gibt es maximal ein primäres Glas-Eingabeelement auf dem Screen. Ausnahme in der Stapelansicht: Suchleiste (oben, Eingabe) + Action-Dock (unten, Aktion) koexistieren als zwei Phasen eines Flows (Fragen → Handeln).
 
-**RAG-Analyse:** Agenten die RAG nutzen (Tutor, Research) rufen `analyze_query()` (`ai/rag_analyzer.py`) auf — extrahiert aus dem alten Router. Liefert `search_needed`, `resolved_intent`, `retrieval_mode`, `search_scope`. Der Backend-`/router`-Endpoint bleibt, das `agent`-Feld wird ignoriert.
-
-**Agenten-Fusion:** Tutor und Research teilen dieselbe RAG-Pipeline und Web-Search-Tools. Unterschied: Tutor erklärt kartenbasiert (Web-Search als Fallback bei cos < 0.60), Research recherchiert web-first mit mehr Kartenreferenzen. Gleiche Tools, verschiedene Orchestrierung.
+**Dev-Dokumentation:** Detaillierte Agent-Doku in `docs/agents/` (overview.md + je Agent eine Datei). Dev-Dashboard: `python3 scripts/benchmark_serve.py` → `http://localhost:8080`. Zeigt Agent-Übersicht, Pipeline-Docs und Benchmarks pro Agent.
 
 ## Overview
 

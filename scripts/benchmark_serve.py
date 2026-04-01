@@ -623,6 +623,45 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     font-weight: 500;
   }
 
+  /* Expandable agent groups */
+  .sidebar-group {}
+  .sidebar-group-header {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    text-align: left;
+    padding: 7px 20px;
+    font-size: 13px;
+    font-family: var(--sans);
+    color: var(--text-muted);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .sidebar-group-header:hover { color: var(--text); background: var(--bg-hover); }
+  .sidebar-group-header.active { color: var(--blue); font-weight: 500; }
+  .sidebar-group-header .chevron {
+    margin-left: auto;
+    font-size: 9px;
+    transition: transform 0.15s;
+    opacity: 0.4;
+  }
+  .sidebar-group.open .chevron { transform: rotate(90deg); }
+  .sidebar-group-children {
+    display: none;
+    padding-left: 12px;
+  }
+  .sidebar-group.open .sidebar-group-children { display: block; }
+  .sidebar-group-children .sidebar-item {
+    font-size: 12px;
+    padding: 5px 20px;
+    color: var(--text-muted);
+    opacity: 0.8;
+  }
+  .sidebar-group-children .sidebar-item:hover { opacity: 1; }
+  .sidebar-group-children .sidebar-item.active { opacity: 1; color: var(--blue); }
+
   .main-content {
     flex: 1;
     padding: 32px 40px;
@@ -646,20 +685,58 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       <span class="sidebar-subtitle">Dev Hub</span>
     </div>
     <div class="sidebar-section">
-      <div class="sidebar-label">Agents</div>
       <button class="sidebar-item active" data-nav="agent-overview" onclick="loadAgent('overview')">Übersicht</button>
-      <button class="sidebar-item" data-nav="agent-tutor" onclick="loadAgent('tutor')">Tutor</button>
-      <button class="sidebar-item" data-nav="agent-research" onclick="loadAgent('research')">Research</button>
-      <button class="sidebar-item" data-nav="agent-definition" onclick="loadAgent('definition')">Definition</button>
-      <button class="sidebar-item" data-nav="agent-prufer" onclick="loadAgent('prufer')">Prüfer</button>
-      <button class="sidebar-item" data-nav="agent-plusi" onclick="loadAgent('plusi')">Plusi</button>
     </div>
     <div class="sidebar-section">
+      <div class="sidebar-label">Agenten</div>
+
+      <!-- Tutor (expandable with benchmarks) -->
+      <div class="sidebar-group" id="group-tutor">
+        <button class="sidebar-group-header" data-nav="agent-tutor" onclick="toggleAgentGroup('tutor')">Tutor <span class="chevron">&#9654;</span></button>
+        <div class="sidebar-group-children">
+          <button class="sidebar-item" data-nav="agent-tutor-docs" onclick="loadAgent('tutor')">Docs</button>
+          <button class="sidebar-item" data-nav="tool-retrieval" onclick="showAgentBenchmark('tutor','retrieval')">Retrieval Benchmark</button>
+          <button class="sidebar-item" data-nav="tool-router" onclick="showAgentBenchmark('tutor','router')">Router Benchmark</button>
+          <button class="sidebar-item" data-nav="tool-generation" onclick="showAgentBenchmark('tutor','generation')">Generation Benchmark</button>
+          <button class="sidebar-item" data-nav="tool-livetest" onclick="showAgentBenchmark('tutor','livetest')">Live Test</button>
+        </div>
+      </div>
+
+      <!-- Research -->
+      <div class="sidebar-group" id="group-research">
+        <button class="sidebar-group-header" data-nav="agent-research" onclick="toggleAgentGroup('research')">Research <span class="chevron">&#9654;</span></button>
+        <div class="sidebar-group-children">
+          <button class="sidebar-item" data-nav="agent-research-docs" onclick="loadAgent('research')">Docs</button>
+        </div>
+      </div>
+
+      <!-- Definition -->
+      <div class="sidebar-group" id="group-definition">
+        <button class="sidebar-group-header" data-nav="agent-definition" onclick="toggleAgentGroup('definition')">Definition <span class="chevron">&#9654;</span></button>
+        <div class="sidebar-group-children">
+          <button class="sidebar-item" data-nav="agent-definition-docs" onclick="loadAgent('definition')">Docs</button>
+        </div>
+      </div>
+
+      <!-- Prüfer -->
+      <div class="sidebar-group" id="group-prufer">
+        <button class="sidebar-group-header" data-nav="agent-prufer" onclick="toggleAgentGroup('prufer')">Prüfer <span class="chevron">&#9654;</span></button>
+        <div class="sidebar-group-children">
+          <button class="sidebar-item" data-nav="agent-prufer-docs" onclick="loadAgent('prufer')">Docs</button>
+        </div>
+      </div>
+
+      <!-- Plusi -->
+      <div class="sidebar-group" id="group-plusi">
+        <button class="sidebar-group-header" data-nav="agent-plusi" onclick="toggleAgentGroup('plusi')">Plusi <span class="chevron">&#9654;</span></button>
+        <div class="sidebar-group-children">
+          <button class="sidebar-item" data-nav="agent-plusi-docs" onclick="loadAgent('plusi')">Docs</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
       <div class="sidebar-label">Tools</div>
-      <button class="sidebar-item" data-nav="tool-retrieval" onclick="showBenchmarkTool('retrieval')">Retrieval Benchmark</button>
-      <button class="sidebar-item" data-nav="tool-router" onclick="showBenchmarkTool('router')">Router Benchmark</button>
-      <button class="sidebar-item" data-nav="tool-generation" onclick="showBenchmarkTool('generation')">Generation Benchmark</button>
-      <button class="sidebar-item" data-nav="tool-livetest" onclick="showBenchmarkTool('livetest')">Live Test</button>
       <button class="sidebar-item" data-nav="tool-design" onclick="showDesignSystem()">Design System</button>
     </div>
   </nav>
@@ -1860,14 +1937,38 @@ async function runLiveTest() {
 var _currentAgent = null;
 
 function _setActiveSidebar(el) {
-  document.querySelectorAll('.sidebar-item').forEach(function(s) { s.classList.remove('active'); });
+  document.querySelectorAll('.sidebar-item, .sidebar-group-header').forEach(function(s) { s.classList.remove('active'); });
   if (el) el.classList.add('active');
+}
+
+function toggleAgentGroup(name) {
+  var group = document.getElementById('group-' + name);
+  if (!group) return;
+  var wasOpen = group.classList.contains('open');
+  // Close all groups first
+  document.querySelectorAll('.sidebar-group').forEach(function(g) { g.classList.remove('open'); });
+  // Toggle this one
+  if (!wasOpen) {
+    group.classList.add('open');
+    // Auto-load docs when expanding
+    loadAgent(name);
+  }
 }
 
 async function loadAgent(name) {
   // Update sidebar active state
-  var btn = document.querySelector('.sidebar-item[data-nav="agent-' + name + '"]');
+  var btn = document.querySelector('.sidebar-item[data-nav="agent-' + name + '-docs"]')
+         || document.querySelector('.sidebar-item[data-nav="agent-' + name + '"]');
   _setActiveSidebar(btn);
+  // Also mark group header active
+  var header = document.querySelector('.sidebar-group-header[data-nav="agent-' + name + '"]');
+  if (header) header.classList.add('active');
+  // Open the group
+  var group = document.getElementById('group-' + name);
+  if (group) {
+    document.querySelectorAll('.sidebar-group').forEach(function(g) { g.classList.remove('open'); });
+    group.classList.add('open');
+  }
 
   // Show docs container, hide benchmark
   document.getElementById('agent-docs').style.display = 'block';
@@ -1881,9 +1982,7 @@ async function loadAgent(name) {
       document.getElementById('agent-docs').textContent = 'Error: ' + data.error;
       return;
     }
-    // Server-rendered HTML from our own documentation files (trusted internal input,
-    // generated by _render_markdown on the local server — not user-supplied content)
-    document.getElementById('agent-docs').innerHTML = data.html;  // nosec: trusted server-rendered docs
+    document.getElementById('agent-docs').innerHTML = data.html;
     _currentAgent = name;
 
     // Render any Mermaid diagrams
@@ -1891,24 +1990,19 @@ async function loadAgent(name) {
       if (typeof mermaid !== 'undefined') {
         await mermaid.run({nodes: document.querySelectorAll('#agent-docs .mermaid')});
       }
-    } catch(e) { /* mermaid may not find nodes */ }
-
-    // For Tutor: also show benchmark section below docs
-    if (name === 'tutor') {
-      document.getElementById('benchmark-wrapper').style.display = 'block';
-      document.getElementById('subnav-benchmarks').style.display = 'flex';
-      switchSubTab('retrieval');
-      loadResults();
-    }
+    } catch(e) {}
   } catch(err) {
     document.getElementById('agent-docs').textContent = 'Failed to load: ' + err.message;
   }
 }
 
-function showBenchmarkTool(type) {
+function showAgentBenchmark(agent, type) {
   // Update sidebar
   var btn = document.querySelector('.sidebar-item[data-nav="tool-' + type + '"]');
   _setActiveSidebar(btn);
+  // Keep group header active too
+  var header = document.querySelector('.sidebar-group-header[data-nav="agent-' + agent + '"]');
+  if (header) header.classList.add('active');
 
   // Hide docs, show benchmark
   document.getElementById('agent-docs').style.display = 'none';
