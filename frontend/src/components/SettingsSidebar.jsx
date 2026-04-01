@@ -61,38 +61,30 @@ function RemoteSection() {
   const [loading, setLoading] = useState(false);
   const [peerConnected, setPeerConnected] = useState(false);
 
-  // Poll for QR data and status via message queue responses
+  // Listen for QR data and status via CustomEvent dispatched by App.jsx
   useEffect(() => {
     const handler = (e) => {
-      const payload = e?.detail || (typeof e === 'object' ? e : null);
+      const payload = e?.detail;
       if (!payload || !payload.type) return;
 
       if (payload.type === 'sidebarRemoteQR') {
         setLoading(false);
         const d = payload.data || {};
+        if (d.error) {
+          console.error('Remote QR error:', d.error);
+          return;
+        }
         if (d.pair_url) setPairUrl(d.pair_url);
       }
       if (payload.type === 'sidebarRemoteStatus') {
         const d = payload.data || {};
         if (d.peer_connected) setPeerConnected(true);
-        if (d.pair_code && !pairUrl) {
-          // Build URL from status if we don't have it yet
-          setPairUrl(prev => prev || `https://remote-beryl-five.vercel.app?pair=${d.pair_code}`);
-        }
+        if (d.pair_url) setPairUrl(d.pair_url);
       }
     };
-    // Listen both ways — CustomEvent and direct function call
     window.addEventListener('ankiReceive', handler);
-    const origReceive = window.ankiReceive;
-    window.ankiReceive = (payload) => {
-      if (origReceive) origReceive(payload);
-      handler(payload);
-    };
-    return () => {
-      window.removeEventListener('ankiReceive', handler);
-      window.ankiReceive = origReceive;
-    };
-  }, [pairUrl]);
+    return () => window.removeEventListener('ankiReceive', handler);
+  }, []);
 
   const generateQR = useCallback(() => {
     setLoading(true);
@@ -138,7 +130,7 @@ function RemoteSection() {
                 value={pairUrl}
                 size={180}
                 bgColor="transparent"
-                fgColor="#e5e5e5"
+                fgColor="currentColor"
                 level="M"
               />
               <p style={{ fontSize: 'var(--ds-text-sm)', color: 'var(--ds-text-tertiary)', textAlign: 'center' }}>
