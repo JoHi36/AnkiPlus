@@ -86,16 +86,15 @@ function RemoteSection() {
       }
     };
     window.addEventListener('ankiReceive', handler);
-    // Check status on mount — relay may already be connected from auto-reconnect
+    // Check status on mount + generate QR if already connected
     bridgeAction('sidebarGetRemoteStatus');
+    bridgeAction('sidebarGetRemoteQR');
     return () => window.removeEventListener('ankiReceive', handler);
   }, []);
 
   const generateQR = useCallback(() => {
     setLoading(true);
     bridgeAction('sidebarGetRemoteQR');
-    // Also poll status immediately — pair_code may already exist from startup
-    bridgeAction('sidebarGetRemoteStatus');
   }, []);
 
   return (
@@ -104,38 +103,22 @@ function RemoteSection() {
         Remote
       </h3>
 
-      {(peerConnected || connected) ? (
+      {pairUrl ? (
         <div style={QR_CONTAINER_STYLE}>
-          <div style={{ textAlign: 'center' }}>
-            <span style={{ ...STATUS_DOT_STYLE, background: peerConnected ? 'var(--ds-green)' : 'var(--ds-accent)' }} />
-            <span style={{ fontSize: 'var(--ds-text-md)', color: peerConnected ? 'var(--ds-green)' : 'var(--ds-accent)' }}>
-              {peerConnected ? 'Verbunden' : 'Warte auf Handy'}
-            </span>
-          </div>
-          {appUrl && (
-            <button
-              onClick={() => bridgeAction('openUrl', appUrl)}
-              style={{
-                fontSize: 'var(--ds-text-xs)', color: 'var(--ds-accent)',
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontFamily: 'inherit', textDecoration: 'underline',
-                marginTop: 'var(--ds-space-xs)',
-              }}
-            >
-              Remote öffnen ↗
-            </button>
+          {peerConnected && (
+            <div style={{ textAlign: 'center', marginBottom: 'var(--ds-space-sm)' }}>
+              <span style={{ ...STATUS_DOT_STYLE, background: 'var(--ds-green)' }} />
+              <span style={{ fontSize: 'var(--ds-text-sm)', color: 'var(--ds-green)' }}>Verbunden</span>
+            </div>
           )}
-        </div>
-      ) : pairUrl ? (
-        <div style={QR_CONTAINER_STYLE}>
           <QRCodeSVG
             value={pairUrl}
-            size={180}
+            size={160}
             bgColor="transparent"
             fgColor="currentColor"
             level="M"
           />
-          <p style={{ fontSize: 'var(--ds-text-sm)', color: 'var(--ds-text-tertiary)', textAlign: 'center' }}>
+          <p style={{ fontSize: 'var(--ds-text-xs)', color: 'var(--ds-text-tertiary)', textAlign: 'center', marginTop: 'var(--ds-space-xs)' }}>
             Scanne mit deinem Handy
           </p>
         </div>
