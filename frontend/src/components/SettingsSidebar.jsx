@@ -57,48 +57,48 @@ const STATUS_DOT_STYLE = {
 // ---------------------------------------------------------------------------
 
 function RemoteSection() {
-  const [qrData, setQrData] = useState(null);
+  const [pairUrl, setPairUrl] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [remoteStatus, setRemoteStatus] = useState({ connected: false, peer_connected: false });
+  const [peerConnected, setPeerConnected] = useState(false);
 
-  // Listen for responses from Python
+  // Poll for QR data and status via message queue responses
   useEffect(() => {
     const handler = (e) => {
-      const payload = e.detail;
-      if (!payload || typeof payload !== 'object') return;
+      const payload = e?.detail || (typeof e === 'object' ? e : null);
+      if (!payload || !payload.type) return;
 
       if (payload.type === 'sidebarRemoteQR') {
-        const d = payload.data || {};
         setLoading(false);
-        if (d.error) {
-          setError(d.error);
-        } else {
-          setQrData(d);
-        }
+        const d = payload.data || {};
+        if (d.pair_url) setPairUrl(d.pair_url);
       }
       if (payload.type === 'sidebarRemoteStatus') {
         const d = payload.data || {};
-        setRemoteStatus(d);
+        if (d.peer_connected) setPeerConnected(true);
+        if (d.pair_code && !pairUrl) {
+          // Build URL from status if we don't have it yet
+          setPairUrl(prev => prev || `https://remote-beryl-five.vercel.app?pair=${d.pair_code}`);
+        }
       }
     };
+    // Listen both ways — CustomEvent and direct function call
     window.addEventListener('ankiReceive', handler);
-    return () => window.removeEventListener('ankiReceive', handler);
-  }, []);
-
-  // Poll status every 2 seconds when QR is shown
-  useEffect(() => {
-    if (!qrData) return;
-    const interval = setInterval(() => {
-      bridgeAction('sidebarGetRemoteStatus');
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [qrData]);
+    const origReceive = window.ankiReceive;
+    window.ankiReceive = (payload) => {
+      if (origReceive) origReceive(payload);
+      handler(payload);
+    };
+    return () => {
+      window.removeEventListener('ankiReceive', handler);
+      window.ankiReceive = origReceive;
+    };
+  }, [pairUrl]);
 
   const generateQR = useCallback(() => {
     setLoading(true);
-    setError(null);
     bridgeAction('sidebarGetRemoteQR');
+    // Also poll status immediately — pair_code may already exist from startup
+    bridgeAction('sidebarGetRemoteStatus');
   }, []);
 
   return (
@@ -107,7 +107,7 @@ function RemoteSection() {
         Remote
       </h3>
 
-      {!qrData ? (
+      {!pairUrl ? (
         <button
           onClick={generateQR}
           disabled={loading}
@@ -127,34 +127,26 @@ function RemoteSection() {
         </button>
       ) : (
         <div style={QR_CONTAINER_STYLE}>
-          {remoteStatus.peer_connected ? (
+          {peerConnected ? (
             <div style={{ textAlign: 'center' }}>
               <span style={{ ...STATUS_DOT_STYLE, background: 'var(--ds-green)' }} />
               <span style={{ fontSize: 'var(--ds-text-md)', color: 'var(--ds-green)' }}>Verbunden</span>
             </div>
           ) : (
             <>
-              {qrData.pair_url && (
-                <QRCodeSVG
-                  value={qrData.pair_url}
-                  size={180}
-                  bgColor="transparent"
-                  fgColor="var(--ds-text-primary, #e5e5e5)"
-                  level="M"
-                />
-              )}
+              <QRCodeSVG
+                value={pairUrl}
+                size={180}
+                bgColor="transparent"
+                fgColor="#e5e5e5"
+                level="M"
+              />
               <p style={{ fontSize: 'var(--ds-text-sm)', color: 'var(--ds-text-tertiary)', textAlign: 'center' }}>
                 Scanne mit deinem Handy
               </p>
             </>
           )}
         </div>
-      )}
-
-      {error && (
-        <p style={{ fontSize: 'var(--ds-text-sm)', color: 'var(--ds-red)', marginTop: 'var(--ds-space-xs)' }}>
-          {error}
-        </p>
       )}
     </div>
   );
