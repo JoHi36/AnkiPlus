@@ -203,12 +203,26 @@ def run_tutor(situation, emit_step=None, memory=None,
                     )
 
     # ------------------------------------------------------------------
-    # 5. Build system prompt
+    # 5. Build system prompt — citation instructions
     # ------------------------------------------------------------------
     ai_tools = config.get('ai_tools', {
         'images': True, 'diagrams': True, 'molecules': False
     })
-    system_prompt = None  # Backend builds the system prompt
+
+    # Build citation instruction if RAG provided numbered cards
+    num_citations = len(citation_builder.build())
+    if num_citations > 0:
+        system_prompt = (
+            "QUELLENREFERENZEN: Dir werden nummerierte Karteninhalte [1], [2], [3] etc. als Kontext bereitgestellt. "
+            "Verwende diese Nummern als Inline-Referenzen in deiner Antwort, um deine Aussagen zu belegen. "
+            "WICHTIG: Verwende VERSCHIEDENE Nummern für verschiedene Quellen — nicht überall dieselbe. "
+            "Jede Karte hat eine eigene Nummer. Wenn du Informationen aus Karte [3] verwendest, schreibe [3], "
+            "nicht [1]. Verteile die Referenzen über deine gesamte Antwort, sodass der Nutzer nachvollziehen kann, "
+            "woher jede Information stammt. Format: [N] direkt nach der Aussage, z.B. 'Die Epidermis besteht aus fünf Schichten [2].' "
+            "Verwende nur Nummern die im Kontext existieren (1 bis %d)."
+        ) % num_citations
+    else:
+        system_prompt = None  # Backend builds the system prompt
 
     generation_situation = situation
 
