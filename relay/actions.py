@@ -34,6 +34,11 @@ _KNOWN_ACTIONS = {
 # ---------------------------------------------------------------------------
 
 
+def _is_main_thread():
+    """Check if current thread is the Qt main thread."""
+    return threading.current_thread() is threading.main_thread()
+
+
 def _run_on_main(fn, timeout=_MAIN_THREAD_TIMEOUT):
     """Execute *fn* on Anki's main thread, blocking until done.
 
@@ -189,6 +194,8 @@ def build_card_state_from_reviewer(phase="question"):
             card_id=card.id,
         )
 
+    if _is_main_thread():
+        return _fn()
     return _run_on_main(_fn)
 
 
