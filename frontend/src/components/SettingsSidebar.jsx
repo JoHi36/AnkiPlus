@@ -61,6 +61,7 @@ function RemoteSection() {
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
   const [peerConnected, setPeerConnected] = useState(false);
+  const [appUrl, setAppUrl] = useState(null);
 
   // Listen for QR data and status via CustomEvent dispatched by App.jsx
   useEffect(() => {
@@ -81,6 +82,7 @@ function RemoteSection() {
         const d = payload.data || {};
         if (d.connected) setConnected(true);
         if (d.peer_connected) setPeerConnected(true);
+        if (d.app_url) setAppUrl(d.app_url);
       }
     };
     window.addEventListener('ankiReceive', handler);
@@ -102,18 +104,27 @@ function RemoteSection() {
         Remote
       </h3>
 
-      {peerConnected ? (
+      {(peerConnected || connected) ? (
         <div style={QR_CONTAINER_STYLE}>
           <div style={{ textAlign: 'center' }}>
-            <span style={{ ...STATUS_DOT_STYLE, background: 'var(--ds-green)' }} />
-            <span style={{ fontSize: 'var(--ds-text-md)', color: 'var(--ds-green)' }}>Verbunden</span>
+            <span style={{ ...STATUS_DOT_STYLE, background: peerConnected ? 'var(--ds-green)' : 'var(--ds-accent)' }} />
+            <span style={{ fontSize: 'var(--ds-text-md)', color: peerConnected ? 'var(--ds-green)' : 'var(--ds-accent)' }}>
+              {peerConnected ? 'Verbunden' : 'Warte auf Handy'}
+            </span>
           </div>
-        </div>
-      ) : connected ? (
-        <div style={QR_CONTAINER_STYLE}>
-          <p style={{ fontSize: 'var(--ds-text-sm)', color: 'var(--ds-text-secondary)', textAlign: 'center' }}>
-            Relay verbunden — öffne die PWA auf deinem Handy
-          </p>
+          {appUrl && (
+            <button
+              onClick={() => bridgeAction('openUrl', appUrl)}
+              style={{
+                fontSize: 'var(--ds-text-xs)', color: 'var(--ds-accent)',
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontFamily: 'inherit', textDecoration: 'underline',
+                marginTop: 'var(--ds-space-xs)',
+              }}
+            >
+              Remote öffnen ↗
+            </button>
+          )}
         </div>
       ) : pairUrl ? (
         <div style={QR_CONTAINER_STYLE}>

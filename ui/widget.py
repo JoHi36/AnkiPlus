@@ -3095,11 +3095,18 @@ class ChatbotWidget(QWidget):
                 self._send_to_frontend("sidebarRemoteStatus", {"connected": False, "peer_connected": False})
                 return
 
+            try:
+                from ..relay import _get_remote_config, DEFAULTS
+            except ImportError:
+                from relay import _get_remote_config, DEFAULTS
+            app_url = _get_remote_config().get("app_url", DEFAULTS["app_url"])
+
             self._send_to_frontend("sidebarRemoteStatus", {
                 "connected": client.is_connected,
                 "peer_connected": client.is_peer_connected,
                 "pair_code": client.pair_code,
                 "mode": client.mode,
+                "app_url": app_url,
             })
         except Exception:
             logger.exception("_msg_get_remote_status failed")
