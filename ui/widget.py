@@ -6,6 +6,7 @@ Verwaltet das Web-basierte Chat-UI über QWebEngineView
 import os
 import json
 import uuid
+import threading
 import weakref
 from aqt.qt import *
 from aqt.utils import showInfo
