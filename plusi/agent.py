@@ -38,6 +38,11 @@ try:
 except ImportError:
     from plusi.event_bus import EventBus
 
+try:
+    from ..ai.citation_builder import CitationBuilder
+except ImportError:
+    from ai.citation_builder import CitationBuilder
+
 logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -148,7 +153,7 @@ def _ensure_init() -> None:
 # Main entry points
 # ---------------------------------------------------------------------------
 
-def run_plusi(situation: str, emit_step=None, **kwargs) -> dict:
+def run_plusi(situation: str, emit_step=None, citation_builder=None, memory=None, stream_callback=None, **kwargs) -> dict:
     """Run Plusi for a given situation string.
 
     Parameters
@@ -164,6 +169,9 @@ def run_plusi(situation: str, emit_step=None, **kwargs) -> dict:
     """
     _ensure_init()
 
+    if citation_builder is None:
+        citation_builder = CitationBuilder()
+
     # Resolve API key
     api_key = _get_api_key()
     if not api_key:
@@ -173,6 +181,7 @@ def run_plusi(situation: str, emit_step=None, **kwargs) -> dict:
             "text": "",
             "tool_results": [],
             "proactive_messages": [],
+            "citations": [],
             "error": "No API key configured (set anthropic_api_key or dev_openrouter_key)",
         }
 
@@ -236,6 +245,7 @@ def run_plusi(situation: str, emit_step=None, **kwargs) -> dict:
         "text": text,
         "tool_results": tool_results,
         "proactive_messages": proactive_messages,
+        "citations": citation_builder.build(),
     }
 
 
