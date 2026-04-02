@@ -623,44 +623,37 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     font-weight: 500;
   }
 
-  /* Expandable agent groups */
-  .sidebar-group {}
-  .sidebar-group-header {
+  /* Agent page header + tab bar */
+  .agent-page-title {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .agent-tabbar {
     display: flex;
-    align-items: center;
-    width: 100%;
-    text-align: left;
-    padding: 7px 20px;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  .agent-tab {
+    padding: 8px 16px;
     font-size: 13px;
     font-family: var(--sans);
     color: var(--text-muted);
     background: transparent;
     border: none;
+    border-bottom: 2px solid transparent;
     cursor: pointer;
     transition: all 0.12s;
   }
-  .sidebar-group-header:hover { color: var(--text); background: var(--bg-hover); }
-  .sidebar-group-header.active { color: var(--blue); font-weight: 500; }
-  .sidebar-group-header .chevron {
-    margin-left: auto;
-    font-size: 9px;
-    transition: transform 0.15s;
-    opacity: 0.4;
+  .agent-tab:hover { color: var(--text); }
+  .agent-tab.active {
+    color: var(--text);
+    border-bottom-color: var(--blue);
+    font-weight: 500;
   }
-  .sidebar-group.open .chevron { transform: rotate(90deg); }
-  .sidebar-group-children {
-    display: none;
-    padding-left: 12px;
-  }
-  .sidebar-group.open .sidebar-group-children { display: block; }
-  .sidebar-group-children .sidebar-item {
-    font-size: 12px;
-    padding: 5px 20px;
-    color: var(--text-muted);
-    opacity: 0.8;
-  }
-  .sidebar-group-children .sidebar-item:hover { opacity: 1; }
-  .sidebar-group-children .sidebar-item.active { opacity: 1; color: var(--blue); }
 
   .main-content {
     flex: 1;
@@ -685,56 +678,16 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       <span class="sidebar-subtitle">Dev Hub</span>
     </div>
     <div class="sidebar-section">
-      <button class="sidebar-item active" data-nav="agent-overview" onclick="loadAgent('overview')">Übersicht</button>
+      <button class="sidebar-item active" data-nav="overview" onclick="loadOverview()">Übersicht</button>
     </div>
     <div class="sidebar-section">
-      <div class="sidebar-label">Agenten</div>
-
-      <!-- Tutor (expandable with benchmarks) -->
-      <div class="sidebar-group" id="group-tutor">
-        <button class="sidebar-group-header" data-nav="agent-tutor" onclick="toggleAgentGroup('tutor')">Tutor <span class="chevron">&#9654;</span></button>
-        <div class="sidebar-group-children">
-          <button class="sidebar-item" data-nav="agent-tutor-docs" onclick="loadAgent('tutor')">Docs</button>
-          <button class="sidebar-item" data-nav="tool-retrieval" onclick="showAgentBenchmark('tutor','retrieval')">Retrieval Benchmark</button>
-          <button class="sidebar-item" data-nav="tool-router" onclick="showAgentBenchmark('tutor','router')">Router Benchmark</button>
-          <button class="sidebar-item" data-nav="tool-generation" onclick="showAgentBenchmark('tutor','generation')">Generation Benchmark</button>
-          <button class="sidebar-item" data-nav="tool-livetest" onclick="showAgentBenchmark('tutor','livetest')">Live Test</button>
-        </div>
-      </div>
-
-      <!-- Research -->
-      <div class="sidebar-group" id="group-research">
-        <button class="sidebar-group-header" data-nav="agent-research" onclick="toggleAgentGroup('research')">Research <span class="chevron">&#9654;</span></button>
-        <div class="sidebar-group-children">
-          <button class="sidebar-item" data-nav="agent-research-docs" onclick="loadAgent('research')">Docs</button>
-        </div>
-      </div>
-
-      <!-- Definition -->
-      <div class="sidebar-group" id="group-definition">
-        <button class="sidebar-group-header" data-nav="agent-definition" onclick="toggleAgentGroup('definition')">Definition <span class="chevron">&#9654;</span></button>
-        <div class="sidebar-group-children">
-          <button class="sidebar-item" data-nav="agent-definition-docs" onclick="loadAgent('definition')">Docs</button>
-        </div>
-      </div>
-
-      <!-- Prüfer -->
-      <div class="sidebar-group" id="group-prufer">
-        <button class="sidebar-group-header" data-nav="agent-prufer" onclick="toggleAgentGroup('prufer')">Prüfer <span class="chevron">&#9654;</span></button>
-        <div class="sidebar-group-children">
-          <button class="sidebar-item" data-nav="agent-prufer-docs" onclick="loadAgent('prufer')">Docs</button>
-        </div>
-      </div>
-
-      <!-- Plusi -->
-      <div class="sidebar-group" id="group-plusi">
-        <button class="sidebar-group-header" data-nav="agent-plusi" onclick="toggleAgentGroup('plusi')">Plusi <span class="chevron">&#9654;</span></button>
-        <div class="sidebar-group-children">
-          <button class="sidebar-item" data-nav="agent-plusi-docs" onclick="loadAgent('plusi')">Docs</button>
-        </div>
-      </div>
+      <button class="sidebar-item" data-nav="agents" onclick="loadAgentsOverview()" style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;padding:8px 20px 4px;cursor:pointer;">Agenten</button>
+      <button class="sidebar-item" data-nav="agent-tutor" onclick="openAgent('tutor')">Tutor</button>
+      <button class="sidebar-item" data-nav="agent-research" onclick="openAgent('research')">Research</button>
+      <button class="sidebar-item" data-nav="agent-definition" onclick="openAgent('definition')">Definition</button>
+      <button class="sidebar-item" data-nav="agent-prufer" onclick="openAgent('prufer')">Prüfer</button>
+      <button class="sidebar-item" data-nav="agent-plusi" onclick="openAgent('plusi')">Plusi</button>
     </div>
-
     <div class="sidebar-section">
       <div class="sidebar-label">Tools</div>
       <button class="sidebar-item" data-nav="tool-design" onclick="showDesignSystem()">Design System</button>
@@ -743,6 +696,12 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
   <!-- Main content -->
   <main class="main-content">
+
+  <!-- Agent page header (title + tab bar) -->
+  <div id="agent-header" style="display:none">
+    <div class="agent-page-title" id="agent-title"></div>
+    <div class="agent-tabbar" id="agent-tabbar"></div>
+  </div>
 
   <div id="agent-docs" class="agent-docs-container">
     <!-- Markdown docs rendered here -->
@@ -1221,13 +1180,13 @@ function renderSummary(agg) {
 
   const overall = agg.overall;
 
-  // ── Recall card ──
+  // ── Recall card (Finden wir die Quelle?) ──
   const recallCard = el('div', 'recall-card');
   const rl = el('div', 'recall-label');
-  rl.appendChild(safeText('Recall@10'));
+  rl.appendChild(safeText('Recall@30'));
   const rlTip = el('span', 'tip');
   rlTip.appendChild(safeText('?'));
-  rlTip.setAttribute('data-tooltip', 'Prozentsatz der Fragen, bei denen die richtige Karte in den Top-10 Ergebnissen landet. Höher = besser.');
+  rlTip.setAttribute('data-tooltip', 'Finden wir die Quelle? Prozentsatz der Fragen, bei denen die richtige Karte in den Top-30 Ergebnissen landet.');
   rl.appendChild(rlTip);
   recallCard.appendChild(rl);
 
@@ -1236,19 +1195,41 @@ function renderSummary(agg) {
   recallCard.appendChild(rv);
 
   const rs = el('div', 'recall-sub');
-  rs.appendChild(safeText(overall.passed + ' / ' + overall.total_cases + ' passed  ·  MRR ' + overall.mrr.toFixed(3)));
+  rs.appendChild(safeText(overall.passed + ' / ' + overall.total_cases + ' gefunden'));
   recallCard.appendChild(rs);
 
-  // Top-3 quality reference line
+  row.appendChild(recallCard);
+
+  // ── Precision card (Wie präzise?) ──
+  const precCard = el('div', 'recall-card');
+  const pl = el('div', 'recall-label');
+  pl.appendChild(safeText('Precision'));
+  const plTip = el('span', 'tip');
+  plTip.appendChild(safeText('?'));
+  plTip.setAttribute('data-tooltip', 'Wie präzise finden wir die Quelle? Recall@5 = Zielkarte in Top 5. MRR = durchschnittliche Position (1.0 = immer Platz 1).');
+  pl.appendChild(plTip);
+  precCard.appendChild(pl);
+
+  const recall5 = overall.recall_at_5 != null ? overall.recall_at_5 : 0;
+  const top5Count = overall.top5_passed != null ? overall.top5_passed : 0;
+  const pv = el('div', 'recall-value ' + recallClass(recall5));
+  pv.appendChild(safeText(pct(recall5)));
+  precCard.appendChild(pv);
+
+  const ps = el('div', 'recall-sub');
+  ps.appendChild(safeText('Recall@5: ' + top5Count + '/' + overall.total_cases + '  ·  MRR ' + overall.mrr.toFixed(3)));
+  precCard.appendChild(ps);
+
+  // Top-3 line
   const top3 = overall.recall_at_3 != null ? overall.recall_at_3 : 0;
   const top3Count = overall.top3_passed != null ? overall.top3_passed : 0;
   const top3Line = el('div', 'recall-sub');
   top3Line.style.marginTop = '4px';
   top3Line.style.color = scoreColor(top3);
-  top3Line.appendChild(safeText('Top-3: ' + pct(top3) + ' (' + top3Count + '/' + overall.total_cases + ')'));
-  recallCard.appendChild(top3Line);
+  top3Line.appendChild(safeText('Recall@3: ' + pct(top3) + ' (' + top3Count + '/' + overall.total_cases + ')'));
+  precCard.appendChild(top3Line);
 
-  row.appendChild(recallCard);
+  row.appendChild(precCard);
 
   // ── Pipeline Indicators card (simplified 4 indicators) ──
   const stepCard = el('div', 'metric-card');
@@ -1936,45 +1917,110 @@ async function runLiveTest() {
 
 var _currentAgent = null;
 
+// Agent tab configurations — defines which tabs each agent has
+var AGENT_TABS = {
+  tutor:      [{id:'docs',label:'Docs'},{id:'retrieval',label:'Retrieval'},{id:'router',label:'Router'},{id:'generation',label:'Generation'},{id:'livetest',label:'Live Test'}],
+  research:   [{id:'docs',label:'Docs'}],
+  definition: [{id:'docs',label:'Docs'}],
+  prufer:     [{id:'docs',label:'Docs'}],
+  plusi:      [{id:'docs',label:'Docs'}],
+};
+
+var AGENT_LABELS = {tutor:'Tutor',research:'Research',definition:'Definition',prufer:'Prüfer',plusi:'Plusi'};
+
 function _setActiveSidebar(el) {
-  document.querySelectorAll('.sidebar-item, .sidebar-group-header').forEach(function(s) { s.classList.remove('active'); });
+  document.querySelectorAll('.sidebar-item').forEach(function(s) { s.classList.remove('active'); });
   if (el) el.classList.add('active');
 }
 
-function toggleAgentGroup(name) {
-  var group = document.getElementById('group-' + name);
-  if (!group) return;
-  var wasOpen = group.classList.contains('open');
-  // Close all groups first
-  document.querySelectorAll('.sidebar-group').forEach(function(g) { g.classList.remove('open'); });
-  // Toggle this one
-  if (!wasOpen) {
-    group.classList.add('open');
-    // Auto-load docs when expanding
-    loadAgent(name);
+function _hideAll() {
+  document.getElementById('agent-header').style.display = 'none';
+  document.getElementById('agent-docs').style.display = 'none';
+  document.getElementById('benchmark-wrapper').style.display = 'none';
+  document.getElementById('components-panel').style.display = 'none';
+  var sn = document.getElementById('subnav-benchmarks');
+  if (sn) sn.style.display = 'none';
+}
+
+// ── Overview (landing page) ──
+
+function loadOverview() {
+  _setActiveSidebar(document.querySelector('[data-nav="overview"]'));
+  _hideAll();
+  document.getElementById('agent-header').style.display = 'none';
+  document.getElementById('agent-docs').style.display = 'block';
+  _loadMarkdown('overview');
+}
+
+// ── Agents overview (click on "Agenten" label) ──
+
+function loadAgentsOverview() {
+  _setActiveSidebar(document.querySelector('[data-nav="agents"]'));
+  _hideAll();
+  document.getElementById('agent-header').style.display = 'none';
+  document.getElementById('agent-docs').style.display = 'block';
+  _loadMarkdown('overview');
+}
+
+// ── Open specific agent → show title + tab bar + docs ──
+
+function openAgent(name) {
+  _currentAgent = name;
+  _setActiveSidebar(document.querySelector('[data-nav="agent-' + name + '"]'));
+  _hideAll();
+
+  // Show agent header with title + tab bar
+  var header = document.getElementById('agent-header');
+  header.style.display = 'block';
+  document.getElementById('agent-title').textContent = AGENT_LABELS[name] || name;
+
+  // Build tab bar
+  var tabs = AGENT_TABS[name] || [{id:'docs',label:'Docs'}];
+  var tabbar = document.getElementById('agent-tabbar');
+  tabbar.innerHTML = '';
+  tabs.forEach(function(tab, i) {
+    var btn = document.createElement('button');
+    btn.className = 'agent-tab' + (i === 0 ? ' active' : '');
+    btn.textContent = tab.label;
+    btn.setAttribute('data-tab', tab.id);
+    btn.onclick = function() { switchAgentTab(name, tab.id); };
+    tabbar.appendChild(btn);
+  });
+
+  // Load docs by default
+  document.getElementById('agent-docs').style.display = 'block';
+  _loadMarkdown(name);
+}
+
+// ── Switch tab within agent page ──
+
+function switchAgentTab(agent, tabId) {
+  // Update tab bar active state
+  document.querySelectorAll('.agent-tab').forEach(function(t) { t.classList.remove('active'); });
+  var activeTab = document.querySelector('.agent-tab[data-tab="' + tabId + '"]');
+  if (activeTab) activeTab.classList.add('active');
+
+  if (tabId === 'docs') {
+    document.getElementById('agent-docs').style.display = 'block';
+    document.getElementById('benchmark-wrapper').style.display = 'none';
+    _loadMarkdown(agent);
+  } else {
+    // Benchmark tabs
+    document.getElementById('agent-docs').style.display = 'none';
+    document.getElementById('benchmark-wrapper').style.display = 'block';
+    var sn = document.getElementById('subnav-benchmarks');
+    if (sn) sn.style.display = 'none'; // Hide old subnav — we use agent-tabbar now
+
+    if (tabId === 'retrieval') { switchSubTab('retrieval'); loadResults(); }
+    else if (tabId === 'router') { switchSubTab('router'); loadRouterResults(); }
+    else if (tabId === 'generation') { switchSubTab('generation'); loadGeneration(); }
+    else if (tabId === 'livetest') { switchSubTab('livetest'); }
   }
 }
 
-async function loadAgent(name) {
-  // Update sidebar active state
-  var btn = document.querySelector('.sidebar-item[data-nav="agent-' + name + '-docs"]')
-         || document.querySelector('.sidebar-item[data-nav="agent-' + name + '"]');
-  _setActiveSidebar(btn);
-  // Also mark group header active
-  var header = document.querySelector('.sidebar-group-header[data-nav="agent-' + name + '"]');
-  if (header) header.classList.add('active');
-  // Open the group
-  var group = document.getElementById('group-' + name);
-  if (group) {
-    document.querySelectorAll('.sidebar-group').forEach(function(g) { g.classList.remove('open'); });
-    group.classList.add('open');
-  }
+// ── Load markdown docs ──
 
-  // Show docs container, hide benchmark
-  document.getElementById('agent-docs').style.display = 'block';
-  document.getElementById('benchmark-wrapper').style.display = 'none';
-  document.getElementById('components-panel').style.display = 'none';
-
+async function _loadMarkdown(name) {
   try {
     var resp = await fetch('/api/agent_docs/' + name);
     var data = await resp.json();
@@ -1983,9 +2029,6 @@ async function loadAgent(name) {
       return;
     }
     document.getElementById('agent-docs').innerHTML = data.html;
-    _currentAgent = name;
-
-    // Render any Mermaid diagrams
     try {
       if (typeof mermaid !== 'undefined') {
         await mermaid.run({nodes: document.querySelectorAll('#agent-docs .mermaid')});
@@ -1996,51 +2039,19 @@ async function loadAgent(name) {
   }
 }
 
-function showAgentBenchmark(agent, type) {
-  // Update sidebar
-  var btn = document.querySelector('.sidebar-item[data-nav="tool-' + type + '"]');
-  _setActiveSidebar(btn);
-  // Keep group header active too
-  var header = document.querySelector('.sidebar-group-header[data-nav="agent-' + agent + '"]');
-  if (header) header.classList.add('active');
-
-  // Hide docs, show benchmark
-  document.getElementById('agent-docs').style.display = 'none';
-  document.getElementById('benchmark-wrapper').style.display = 'block';
-  document.getElementById('subnav-benchmarks').style.display = 'flex';
-  document.getElementById('components-panel').style.display = 'none';
-
-  // Switch to correct benchmark tab
-  if (type === 'retrieval') {
-    switchSubTab('retrieval');
-    loadResults();
-  } else if (type === 'router') {
-    loadRouterResults();
-    switchSubTab('router');
-  } else if (type === 'generation') {
-    loadGeneration();
-    switchSubTab('generation');
-  } else if (type === 'livetest') {
-    switchSubTab('livetest');
-  }
-}
+// ── Design System ──
 
 function showDesignSystem() {
-  var btn = document.querySelector('.sidebar-item[data-nav="tool-design"]');
-  _setActiveSidebar(btn);
-
-  document.getElementById('agent-docs').style.display = 'none';
-  document.getElementById('benchmark-wrapper').style.display = 'none';
+  _setActiveSidebar(document.querySelector('[data-nav="tool-design"]'));
+  _hideAll();
   document.getElementById('components-panel').style.display = 'block';
-  document.getElementById('subnav-benchmarks').style.display = 'none';
   loadComponents();
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────
 
-// Load agent overview as default
 document.getElementById('benchmark-wrapper').style.display = 'none';
-loadAgent('overview');
+loadOverview();
 </script>
 
   </main>
