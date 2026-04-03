@@ -188,6 +188,12 @@ def _build_chat_payload(user_message, model, context=None, history=None,
     insights = []
     if rag_context and rag_context.get("cards"):
         insights = rag_context["cards"]
+        # ── DEBUG: Log what the model actually sees as LERNMATERIAL ──
+        _preview_lines = [line for line in insights if line.strip().startswith('[')]
+        logger.info("=== LERNMATERIAL DEBUG: %d total lines, %d numbered cards ===",
+                    len(insights), len(_preview_lines))
+        for _pl in _preview_lines[:10]:
+            logger.info("  LERNMATERIAL: %s", _pl[:120])
 
     # Map mode to responseStyle
     response_style = mode if mode in ('compact', 'detailed') else 'compact'

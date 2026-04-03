@@ -658,7 +658,6 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   .main-content {
     flex: 1;
     padding: 32px 40px;
-    max-width: 960px;
     overflow-y: auto;
   }
 

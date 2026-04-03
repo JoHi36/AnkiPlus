@@ -647,8 +647,8 @@ def rag_retrieve_cards(precise_queries=None, broad_queries=None, search_scope="c
         unique_notes = len(note_results)
         logger.debug("RAG Retrieval: Präzise Suche abgeschlossen: %s eindeutige Notizen gefunden", unique_notes)
 
-        # Check if we have enough results (>= 5)
-        if unique_notes >= 5:
+        # Check if we have enough results (>= 3, was 5 — OR queries add too much noise)
+        if unique_notes >= 3:
             if emit_state:
                 emit_state(f"Präzise Suche: {unique_notes} Treffer (ausreichend)", phase=PHASE_SEARCH)
             logger.info("RAG Retrieval: Genug Ergebnisse (%s), stoppe Suche", unique_notes)

@@ -75,15 +75,22 @@ def _call_perplexity(query: str, auth_token: Optional[str] = None, backend_url: 
 
         response = requests.post(
             f"{url}/research",
-            json={"message": query[:PERPLEXITY_QUERY_MAX_LEN]},
+            json={"query": query[:PERPLEXITY_QUERY_MAX_LEN]},
             headers=headers,
             timeout=PERPLEXITY_TIMEOUT_S,
         )
         response.raise_for_status()
         data = response.json()
+        # Backend returns 'answer' + 'citations', map to our format
+        sources = []
+        for cit in data.get("citations", []):
+            if isinstance(cit, dict):
+                sources.append({"title": cit.get("title", ""), "url": cit.get("url", "")})
+            elif isinstance(cit, str):
+                sources.append({"title": "", "url": cit})
         return {
-            "text": data.get("text", ""),
-            "sources": data.get("sources", []),
+            "text": data.get("answer", data.get("text", "")),
+            "sources": sources,
             "tokens": data.get("tokens", {}),
         }
     except Exception as e:
@@ -245,23 +252,81 @@ def retrieve_rag_context(
     context_string = retrieval_result["context_string"]
     citations = retrieval_result.get("citations", {})
 
-    # Auto web search: if confidence is low, augment with Perplexity results
-    web_context = None
+    # ── LLM Reranker: filter irrelevant sources + decide web search ──
     confidence = retrieval_result.get("confidence", "medium")
+    try:
+        try:
+            from ..reranker import rerank_sources
+        except ImportError:
+            from reranker import rerank_sources
+
+        # Build preliminary context lines for reranker evaluation
+        _prelim_lines = context_string.split('\n') if context_string else []
+        _numbered = [l for l in _prelim_lines if l.strip().startswith('[')]
+
+        if _numbered and confidence != "low":
+            _emit("reranker", "running", {"sources": len(_numbered)})
+            rerank_result = rerank_sources(
+                question=user_message,
+                context_lines=_numbered,
+                min_confidence=confidence,
+                emit_step=_emit,
+            )
+
+            if rerank_result.get("reranked"):
+                relevant_indices = set(rerank_result.get("relevant_indices", []))
+                # Filter citations + rebuild context with only relevant sources
+                for note_id, cdata in list(citations.items()):
+                    idx = cdata.get('index')
+                    if idx and idx not in relevant_indices:
+                        cdata.pop('index', None)
+                relevant_lines = [l for l in _numbered
+                                  if any(l.startswith(f'[{i}]') for i in relevant_indices)]
+                context_string = '\n'.join(relevant_lines)
+                logger.info("Reranker: kept %d/%d sources", len(relevant_indices), len(_numbered))
+
+                if rerank_result.get("web_search"):
+                    confidence = "low"
+                    logger.info("Reranker recommends web search")
+                elif not relevant_indices:
+                    confidence = "low"
+                    logger.info("Reranker: 0 relevant sources → forcing web search")
+    except Exception as e:
+        logger.warning("Reranker failed, continuing without: %s", e)
+
+    # Auto web search: trigger if confidence is low OR too few relevant sources
+    web_context = None
+    indexed_count = sum(1 for c in citations.values() if c.get('index'))
+    if indexed_count < 3 and confidence != "low":
+        confidence = "low"
+        logger.info("RAG: only %d indexed sources — forcing web search", indexed_count)
     if confidence == "low":
         logger.info("RAG confidence is low, calling Perplexity for query: %s", user_message[:80])
         _emit("web_search", "running", {"query": user_message[:200]})
         web_context = _call_perplexity(user_message)
         if web_context and web_context.get("text"):
             sources = web_context.get("sources", [])
-            source_lines = "\n".join(
-                f"[[WEB:{i + 1}]] {s.get('title', 'Quelle')} ({s.get('url', '')})"
-                for i, s in enumerate(sources)
-            )
+            # Assign [N] indices continuing from card citations (unified format)
+            _max_idx = max((c.get('index', 0) for c in citations.values()), default=0)
+            web_source_lines = []
+            for i, s in enumerate(sources):
+                _web_idx = _max_idx + i + 1
+                _title = s.get('title', 'Quelle')
+                _url = s.get('url', '')
+                web_source_lines.append(f"[{_web_idx}] (Web) {_title}")
+                # Add to citations dict so CitationBuilder picks them up
+                _web_key = f"web_{i}"
+                citations[_web_key] = {
+                    'type': 'web',
+                    'index': _web_idx,
+                    'url': _url,
+                    'title': _title,
+                    'domain': _url.split('/')[2] if _url.count('/') >= 2 else '',
+                }
             context_string = (
                 context_string
-                + f"\n\n--- WEB-RECHERCHE (Perplexity) ---\n{web_context['text']}"
-                + (f"\n\nWeb-Quellen:\n{source_lines}" if source_lines else "")
+                + f"\n\n--- WEB-RECHERCHE ---\n{web_context['text']}"
+                + ("\n\nWeb-Quellen:\n" + "\n".join(web_source_lines) if web_source_lines else "")
             )
             _emit("web_search", "done", {"sources_count": len(sources)})
             logger.info("Perplexity returned %d web sources", len(sources))
@@ -277,7 +342,9 @@ def retrieve_rag_context(
             _a = context.get('answer') or ''
             _q_clean = re.sub(r'<[^>]+>', ' ', _q).strip()[:200]
             _a_clean = re.sub(r'<[^>]+>', ' ', _a).strip()[:200]
-            # Index: use next position after all retrieved cards
+            # Index: use next position after all numbered cards
+            _max_idx = max((c.get('index', 0) for c in citations.values()), default=0)
+            _current_idx = _max_idx + 1
             citations[current_note_id] = {
                 'noteId': context.get('noteId', context['cardId']),
                 'cardId': context['cardId'],
@@ -287,11 +354,11 @@ def retrieve_rag_context(
                 'deckName': context.get('deckName', ''),
                 'isCurrentCard': True,
                 'sources': ['current'],
-                'index': len(citations) + 1,  # Stable index for [N] inline references
+                'index': _current_idx,
             }
             context_string = (
-                f"Note {current_note_id} (aktuelle Karte):\n"
-                f"  Frage: {_q_clean}\n  Antwort: {_a_clean}\n"
+                f"[{_current_idx}] (aktuelle Karte):\n"
+                f"  Frage: {_q_clean}\n  Antwort: {_a_clean}\n\n"
                 f"{context_string}"
             )
 

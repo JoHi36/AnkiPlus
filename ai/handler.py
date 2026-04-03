@@ -583,6 +583,42 @@ class AIHandler:
             msg_done_data['webSources'] = web_sources
         self._emit_msg_event("msg_done", msg_done_data)
 
+        # Background citation validation (negative selection)
+        if citations and text:
+            _req_id = request_id or ''
+            _text = text
+            _citations = citations
+            _rag_ctx = result.get('_rag_context') if isinstance(result, dict) else None
+            _widget = self.widget
+            import threading
+            def _validate():
+                try:
+                    try:
+                        from .citation_validator import validate_citations
+                    except ImportError:
+                        from citation_validator import validate_citations
+                    context_lines = None
+                    if _rag_ctx and _rag_ctx.get('cards'):
+                        context_lines = _rag_ctx['cards']
+                    invalid = validate_citations(_text, _citations, context_lines)
+                    if invalid and _widget and _widget.web_view:
+                        payload = json.dumps({
+                            "type": "citation_validated",
+                            "messageId": _req_id,
+                            "invalidIndices": invalid,
+                        })
+                        # Must emit on main thread (Qt requirement)
+                        if mw and mw.taskman:
+                            mw.taskman.run_on_main(
+                                lambda: _widget.web_view.page().runJavaScript(
+                                    "window.ankiReceive(%s);" % payload
+                                )
+                            )
+                        logger.info("Citation validation: %d invalid citations removed", len(invalid))
+                except Exception as e:
+                    logger.warning("Citation validation failed: %s", e)
+            threading.Thread(target=_validate, daemon=True).start()
+
         # Lifecycle: on_finished (main thread)
         if on_finished and self.widget:
             _widget = self.widget

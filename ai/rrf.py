@@ -19,18 +19,18 @@ logger = get_logger(__name__)
 
 # k-values: lower = more weight (steeper contribution curve)
 # k-values: lower = more weight (steeper contribution curve)
-K_PRECISE_PRIMARY = 50    # AND queries from user's direct terms
-K_BROAD_PRIMARY = 70      # OR queries from user's direct terms
+K_PRECISE_PRIMARY = 40    # AND queries from user's direct terms (was 50)
+K_BROAD_PRIMARY = 80      # OR queries from user's direct terms (was 70 — OR is noisy, demote)
 K_SEMANTIC_PRIMARY = 60   # Embedding search from user's query
-K_PRECISE_SECONDARY = 90  # AND queries from Router intent
-K_BROAD_SECONDARY = 110   # OR queries from Router intent
+K_PRECISE_SECONDARY = 120 # AND queries from Router intent (was 90 — trust user query more)
+K_BROAD_SECONDARY = 180   # OR queries from Router intent (was 110 — strong demotion)
 K_SEMANTIC_SECONDARY = 120  # Embedding search from Router intent
-K_LLM_SQL = 65              # Router associated_terms SQL hits (own lane)
-K_LLM_SEMANTIC = 65         # Router associated_terms embedding boost
+K_LLM_SQL = 80              # Router associated_terms SQL hits (was 65 — weaker signal than user query)
+K_LLM_SEMANTIC = 80         # Router associated_terms embedding boost (was 65)
 
 # Confidence thresholds -- tune with real data after deployment
 CONFIDENCE_HIGH = 0.025
-CONFIDENCE_LOW = 0.012
+CONFIDENCE_LOW = 0.018  # Raised from 0.012 — triggers web search more readily
 
 
 def _get_k(query_type, tier):

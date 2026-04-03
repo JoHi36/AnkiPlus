@@ -46,8 +46,8 @@ _KEEP_ABBREVIATIONS = frozenset({
 })
 
 # Embedding similarity thresholds
-EMB_SIMILARITY_MIN = 0.55   # Minimum to consider a KG term related
-EMB_EXPANSION_TOP_K = 5     # Max embedding-similar terms per input term (reduced from 8)
+EMB_SIMILARITY_MIN = 0.75   # Minimum to consider a KG term related (was 0.55 — too noisy)
+EMB_EXPANSION_TOP_K = 8     # Max embedding-similar terms per input term (raised back: threshold 0.75 filters noise)
 STEM_OVERLAP_MIN = 4         # Min shared prefix to consider a morphological variant
 MAX_PRECISE_QUERIES = 5      # Max individual SQL queries (was 8 — too noisy)
 
@@ -386,7 +386,7 @@ def _build_queries(terms, expansions, original_terms=None):
         for expanded, weight in expansions.get(term, []):
             # Edge expansions have weight > 1 (scaled by 0.1 from raw weight)
             # Sentence expansions have weight < 1 (cosine similarity)
-            if weight >= 1.0:  # Edge expansion (raw weight * 0.1 >= 1.0 means raw >= 10)
+            if weight >= 2.0:  # Edge expansion (raw weight * 0.1 >= 2.0 means raw >= 20, was 1.0)
                 _add(expanded, 2)
 
     # Priority 3: Sentence-embedding expansion terms (from _sentence key)
@@ -431,10 +431,11 @@ def _build_queries(terms, expansions, original_terms=None):
 
 
 def _build_embedding_query(original_text, all_expansion_terms):
-    """Build enriched embedding query by appending expansion terms to original text."""
-    new_terms = [t for t in all_expansion_terms if t.lower() not in original_text.lower()]
-    if new_terms:
-        return original_text + ' ' + ' '.join(new_terms[:8])
+    """Build embedding query — use ONLY the original text, no expansion noise.
+
+    Expansion terms are useful for SQL keyword search but pollute the embedding
+    vector, causing semantic search to drift away from the user's actual intent.
+    """
     return original_text
 
 

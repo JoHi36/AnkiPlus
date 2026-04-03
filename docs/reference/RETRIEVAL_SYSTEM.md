@@ -14,14 +14,23 @@ Die Tutor-Pipeline hat drei Phasen:
 
 | Metric | Value | Notes |
 |--------|-------|-------|
-| **Recall@30** | **81%** | Target card in top-30 results (Tutor receives 30 cards) |
+| **Recall@30** | **85%** | Target card in top-30 results (Tutor receives 30 cards) |
+| **Recall@5** | **55%** | Target card in top-5 results (precision metric, was 46%) |
 | **Context** | **100%** | card_context terms + embedding fallback |
 | **Cross-Deck** | **100%** | Was 66% → solved by wider retrieval window |
-| Direct | 88% | Was 75% |
-| Typo | 88% | Was 75% |
-| Synonym | 38% | Was 6% → Router associated_terms own lane + wider window |
-| Top-3 | 36% | Target card in top-3 results |
-| MRR | 0.304 | Mean Reciprocal Rank |
+| Direct | 93% | Was 88% |
+| Typo | 75% | Dropped from 87% — semantic threshold filters weak fuzzy matches |
+| Synonym | 50% | Was 38% → cleaned embedding queries + tighter KG expansion |
+| Top-3 | 42% | Target card in top-3 results (was 36%) |
+| MRR | 0.347 | Mean Reciprocal Rank (was 0.304) |
+
+**Session progress (2026-04-02):** 81% → 85% Recall@30, 46% → 51% Recall@5 through:
+1. **KG embedding threshold raised from 0.55 → 0.75** — eliminates weak semantic neighbors (e.g. "Glykocholat" for "Glycin"). Less noise in SQL queries.
+2. **Clean embedding queries** — expansion terms no longer appended to semantic search vector. Semantic search uses pure user query, finds actual matches instead of drifting towards noise terms.
+3. **Edge weight threshold raised from 1.0 → 2.0** — only high-confidence graph edges pass to SQL expansion. Reduces cascading noise from weak KG connections.
+4. **Context format cleanup** — LLM now receives only answer/back fields (one line per source), with clean text (cloze/HTML/LaTeX stripped). Improves citation accuracy.
+
+**What each change contributed:** All three KG changes work synergistically — they reduce noise in the candidate pool, allowing truly relevant cards to rank higher. Synonym category jumped from 38% → 50% because the clean embedding vector now finds actual synonyms instead of domain-adjacent terms.
 
 **Session progress (2026-03-29):** 63% → 81% Recall@30 through:
 1. **Retrieval window widened from 10 → 30** — main driver of improvement. Cards were found by the pipeline but ranked 11-30, now included. Production max_notes also raised to 30 (model filters relevance).
@@ -32,6 +41,14 @@ Die Tutor-Pipeline hat drei Phasen:
 - TOP_K 10→30: dominant effect (+18% overall). Cross-Deck 66%→100%, Synonym 6%→38%.
 - LLM own lane (k=65): at Recall@10, slightly negative (-2%). At Recall@30, contribution not isolated.
 - Caveat: only 32/80 benchmark cases have Router associated_terms. Running Router on all 80 cases would likely boost Synonym further.
+
+**Session progress (2026-04-02 morning):** 51% → 55% Recall@5 through:
+1. **RRF k-values retuned** — wider tier separation: Precise=40 (was 50), Broad=80 (was 70), Secondary=120/180 (was 90/110). User query gets clear priority over router inference.
+2. **Semantic score threshold ≥0.65** — filters weak embedding matches from RRF input. Reduces noise candidates.
+3. **EMB_EXPANSION_TOP_K 5→8** — with 0.75 threshold, safe to expand more. Catches broader synonymy.
+4. **Deck-name prefix in context** — `[N] (Biochemie > Aminosäuren) answer_text` helps model judge source relevance.
+5. **Broad-query trigger ≥5→≥3** — OR queries activate less often, reducing noise flood.
+Note: Typo category dropped 87%→75% due to semantic threshold filtering weak fuzzy matches. Trade-off accepted for precision gains.
 
 **Previous session (2026-03-28):** 46% → 63% Recall@10 through:
 1. `resolved_intent` from card_context.terms for context cases (+9%)
@@ -695,6 +712,22 @@ python3 run_tests.py -k test_kg_builder -v     # KG builder tests
 5. **Card Content Cache für Benchmark nutzen** — Realistischere SQL-Simulation im Offline-Benchmark.
 
 ## Changelog
+
+### v3.2 (2026-04-02) — 85% Recall@30, 55% Recall@5
+- RRF k-values retuned: Precise=40, Broad=80, Secondary=120/180, LLM=80
+- Semantic score threshold: primary ≥0.65, secondary ≥0.55
+- EMB_EXPANSION_TOP_K: 5→8 (safe with 0.75 threshold)
+- Deck-name prefix in context format for topic disambiguation
+- Broad-query trigger: ≥5→≥3 (less noise from OR queries)
+- Direct: 90%→93%, Typo: 87%→75% (trade-off for precision)
+
+### v3.1 (2026-04-02) — 85% Recall@30, 51% Recall@5 (NEW HIGHSCORE)
+- KG embedding threshold 0.55 → 0.75 (less noise from weak semantic neighbors)
+- Clean embedding queries (no expansion terms appended to semantic search)
+- Edge weight threshold 1.0 → 2.0 (only strong graph connections)
+- Context format: answer-only, one line per source, clean text (cloze/HTML/LaTeX stripped)
+- Added Recall@5 + Precision metrics to benchmark dashboard
+- Synonym category: 38% → 50%
 
 ### v3.0 (2026-03-29) — 81% Recall@30
 

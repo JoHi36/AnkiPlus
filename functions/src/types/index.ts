@@ -50,6 +50,7 @@ export interface ChatRequest {
   maxOutputTokens?: number; // Optional: override max output tokens
   disableThinking?: boolean; // Optional: disable thinking for faster responses
   purpose?: 'extraction' | ''; // Optional: 'extraction' = background KG indexing (weekly quota only)
+  systemPromptOverride?: string; // Optional: bypass agent system prompt (used by reranker)
 }
 
 /**

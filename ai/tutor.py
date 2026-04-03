@@ -136,6 +136,17 @@ def run_tutor(situation, emit_step=None, memory=None,
             rag_lines.append("[%d] %s | %s" % (i + 1, q, a))
         if rag_lines:
             rag_context = {"context_string": "\n".join(rag_lines)}
+
+            # ── DEBUG: Log what cards the model will see as [N] (smart search path) ──
+            logger.info("=== CITATION DEBUG (smart_search): query='%s', %d cards ===",
+                        situation[:80], len(cards[:50]))
+            for i, card in enumerate(cards[:50]):
+                _q = (card.get('question') or '')[:100]
+                _cid = card.get('id') or card.get('card_id') or '?'
+                _deck = card.get('deck', '')
+                logger.info("  [%s] cardId=%s deck='%s' front='%s'",
+                            i + 1, _cid, _deck, _q)
+
             # Register citations via CitationBuilder
             for card in cards[:50]:
                 card_id = card.get('id') or card.get('card_id') or 0
@@ -184,15 +195,44 @@ def run_tutor(situation, emit_step=None, memory=None,
                         old_citations.values(),
                         key=lambda c: c.get('index', 999)
                     )
+
+                    # ── DEBUG: Log what cards the model will see as [N] ──
+                    logger.info("=== CITATION DEBUG: query='%s', %d sources ===",
+                                situation[:80], len(sorted_citations))
                     for cdata in sorted_citations:
-                        citation_builder.add_card(
-                            card_id=int(cdata.get('cardId', cdata.get('noteId', 0))),
-                            note_id=int(cdata.get('noteId', 0)),
-                            deck_name=cdata.get('deckName', ''),
-                            front=cdata.get('question', cdata.get('front', '')),
-                            back=cdata.get('answer', cdata.get('back', '')),
-                            sources=cdata.get('sources', []),
-                        )
+                        _idx = cdata.get('index', '?')
+                        _cid = cdata.get('cardId', cdata.get('noteId', '?'))
+                        _deck = cdata.get('deckName', '')
+                        # Get preview from fields dict — field names vary per note type
+                        _fields = cdata.get('fields', {})
+                        _front = ''
+                        if _fields:
+                            # Take first non-empty field value as preview
+                            for _fval in _fields.values():
+                                if _fval and _fval.strip():
+                                    _front = _fval.strip()
+                                    break
+                        if not _front:
+                            _front = cdata.get('question', cdata.get('front', ''))
+                        logger.info("  [%s] cardId=%s deck='%s' front='%s'",
+                                    _idx, _cid, _deck, str(_front)[:100])
+
+                    for cdata in sorted_citations:
+                        if cdata.get('type') == 'web':
+                            citation_builder.add_web(
+                                url=cdata.get('url', ''),
+                                title=cdata.get('title', ''),
+                                domain=cdata.get('domain', ''),
+                            )
+                        else:
+                            citation_builder.add_card(
+                                card_id=int(cdata.get('cardId', cdata.get('noteId', 0))),
+                                note_id=int(cdata.get('noteId', 0)),
+                                deck_name=cdata.get('deckName', ''),
+                                front=cdata.get('question', cdata.get('front', '')),
+                                back=cdata.get('answer', cdata.get('back', '')),
+                                sources=cdata.get('sources', []),
+                            )
                     logger.debug("Tutor RAG: %s citations", len(old_citations))
                     if emit_step and old_citations:
                         emit_step("sources_ready", "done", {"citations": citation_builder.build()})
@@ -351,6 +391,7 @@ def run_tutor(situation, emit_step=None, memory=None,
         'citations': citation_builder.build(),
         '_used_streaming': stream_callback is not None,
         '_handoff_marker': handoff_marker,
+        '_rag_context': rag_context,  # For background citation validation
     }
     if rag_result and hasattr(rag_result, 'web_sources') and rag_result.web_sources:
         result['webSources'] = rag_result.web_sources

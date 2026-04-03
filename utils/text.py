@@ -7,13 +7,29 @@ import re
 
 
 def clean_html(text, max_len=1500):
-    """Bereinigt HTML-Tags, Entities und begrenzt die Textlänge."""
+    """Bereinigt HTML-Tags, Entities, Cloze-Markup, LaTeX und begrenzt die Textlänge."""
     if not text:
         return ""
-    clean = re.sub(r'<[^>]+>', ' ', text)
-    clean = re.sub(r'\s+', ' ', clean)
+    clean = text
+    # Sound and image references
+    clean = re.sub(r'\[sound:[^\]]+\]', '', clean)
+    clean = re.sub(r'\[image:[^\]]+\]', '', clean)
+    # LaTeX: keep content inside \(...\) and \[...\]
+    clean = re.sub(r'\\\((.+?)\\\)', r'\1', clean)
+    clean = re.sub(r'\\\[(.+?)\\\]', r'\1', clean)
+    clean = re.sub(r'\\(?:text|mathrm|textbf|textit)\{([^}]*)\}', r'\1', clean)
+    clean = re.sub(r'\\[a-zA-Z]+', ' ', clean)
+    clean = re.sub(r'[{}]', '', clean)
+    # HTML tags and entities
+    clean = re.sub(r'<[^>]+>', ' ', clean)
     clean = re.sub(r'&[a-zA-Z]+;', ' ', clean)
-    clean = clean.strip()
+    clean = re.sub(r'&#?\w+;', ' ', clean)
+    # Cloze markers: {{c1::answer}} → answer, {{c1::answer::hint}} → answer
+    clean = re.sub(r'\{\{c\d+::(.*?)(?:::[^}]*)?\}\}', r'\1', clean)
+    # URLs
+    clean = re.sub(r'https?://\S+', '', clean)
+    # Normalize whitespace
+    clean = re.sub(r'\s+', ' ', clean).strip()
     if len(clean) > max_len:
         clean = clean[:max_len] + "..."
     return clean

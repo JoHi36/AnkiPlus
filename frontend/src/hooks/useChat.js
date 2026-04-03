@@ -557,6 +557,26 @@ export function useChat(bridge, currentSessionId, setSessions, currentSectionId,
         // v2: Forward citations to structured message hook
         agenticMsg.handleCitations({ data: payload.data });
       }
+    } else if (payload.type === 'citation_validated') {
+      // Background citation validation — remove invalid citations
+      const invalidIndices = payload.invalidIndices || payload.data?.invalidIndices || [];
+      if (invalidIndices.length > 0) {
+        setMessages((prev) => {
+          if (prev.length === 0) return prev;
+          const lastIdx = prev.length - 1;
+          const lastMsg = prev[lastIdx];
+          if (lastMsg.from !== 'bot' || !lastMsg.citations) return prev;
+          // Filter out invalid citations
+          const filtered = Array.isArray(lastMsg.citations)
+            ? lastMsg.citations.filter(c => !invalidIndices.includes(c.index))
+            : Object.fromEntries(
+                Object.entries(lastMsg.citations).filter(([, v]) => !invalidIndices.includes(v.index))
+              );
+          const updated = [...prev];
+          updated[lastIdx] = { ...lastMsg, citations: filtered };
+          return updated;
+        });
+      }
     } else if (payload.type === 'metadata') {
       // Metadata payloads — steps/citations now handled by reasoning store.
       // Keep handler for any future metadata fields.

@@ -131,7 +131,8 @@ export async function chatHandler(
       ? extractToolNames(body.tools_definitions)
       : undefined;
 
-    const systemPrompt = buildSystemPrompt({
+    // Allow systemPromptOverride to bypass agent-specific prompt (used by reranker)
+    const systemPrompt = body.systemPromptOverride || buildSystemPrompt({
       agent,
       cardContext: cardContextStr,
       insights: insightObjects.length > 0 ? insightObjects : undefined,

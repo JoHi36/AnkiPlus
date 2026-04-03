@@ -1121,6 +1121,12 @@ def compute_aggregate(results):
         if r.get('target_rank') is not None and r['target_rank'] <= 3
     )
 
+    # Top-5 recall (precision proxy — "ist die Zielkarte in den Top 5?")
+    top5_passed = sum(
+        1 for r in results
+        if r.get('target_rank') is not None and r['target_rank'] <= 5
+    )
+
     # MRR
     reciprocal_ranks = []
     for r in results:
@@ -1136,16 +1142,19 @@ def compute_aggregate(results):
     for r in results:
         cat = r.get('category', 'unknown')
         if cat not in by_category:
-            by_category[cat] = {'cases': 0, 'passed': 0, 'lenient_passed': 0}
+            by_category[cat] = {'cases': 0, 'passed': 0, 'lenient_passed': 0, 'top5_passed': 0}
         by_category[cat]['cases'] += 1
         if r.get('overall_pass', False):
             by_category[cat]['passed'] += 1
         if r.get('lenient_pass', False):
             by_category[cat]['lenient_passed'] += 1
+        if r.get('target_rank') is not None and r['target_rank'] <= 5:
+            by_category[cat]['top5_passed'] += 1
     for cat in by_category:
         c = by_category[cat]
         c['recall'] = round(c['passed'] / c['cases'], 4) if c['cases'] > 0 else 0.0
         c['lenient_recall'] = round(c['lenient_passed'] / c['cases'], 4) if c['cases'] > 0 else 0.0
+        c['recall_at_5'] = round(c['top5_passed'] / c['cases'], 4) if c['cases'] > 0 else 0.0
 
     # By step (legacy 6 steps)
     step_names = ['term_extraction', 'kg_expansion', 'sql_search',
@@ -1223,7 +1232,9 @@ def compute_aggregate(results):
             'recall_at_k': round(passed / total, 4) if total > 0 else 0.0,
             'lenient_recall_at_k': round(lenient_passed / total, 4) if total > 0 else 0.0,
             'recall_at_3': round(top3_passed / total, 4) if total > 0 else 0.0,
+            'recall_at_5': round(top5_passed / total, 4) if total > 0 else 0.0,
             'top3_passed': top3_passed,
+            'top5_passed': top5_passed,
             'mrr': round(mrr, 4),
             'total_cases': total,
             'passed': passed,
@@ -1255,13 +1266,20 @@ def print_summary(aggregate):
     lenient_passed = overall.get('lenient_passed', passed)
     lenient_recall = overall.get('lenient_recall_at_k', recall)
 
+    recall5 = overall.get('recall_at_5', 0.0)
+    top5_passed = overall.get('top5_passed', 0)
+
     print()
     print('=' * 50)
     print('RESULTS')
-    print('  Strict  Recall@10: %d%% (%d/%d passed)' % (int(recall * 100), passed, total))
-    print('  Lenient Recall@10: %d%% (%d/%d passed)' % (int(lenient_recall * 100), lenient_passed, total))
-    print('  Top-3:             %d%% (%d/%d)' % (int(recall3 * 100), top3_passed, total))
-    print('  MRR: %.3f' % mrr)
+    print('  ── Finden wir die Quelle? ──')
+    print('  Recall@30: %d%% (%d/%d)' % (int(recall * 100), passed, total))
+    print('  Lenient:   %d%% (%d/%d)' % (int(lenient_recall * 100), lenient_passed, total))
+    print()
+    print('  ── Wie präzise? ──')
+    print('  Recall@5:  %d%% (%d/%d)' % (int(recall5 * 100), top5_passed, total))
+    print('  Recall@3:  %d%% (%d/%d)' % (int(recall3 * 100), top3_passed, total))
+    print('  MRR:       %.3f' % mrr)
 
     if by_cat:
         print()

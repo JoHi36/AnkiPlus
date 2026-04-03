@@ -11,6 +11,39 @@ except ImportError:
 logger = get_logger(__name__)
 
 
+def _clean_field_value(val):
+    """Clean a card field value for LLM context.
+
+    Same thorough cleaning as embeddings.py _clean():
+    strips HTML, cloze markup, LaTeX, sound/image refs, URLs.
+    Works for any deck format (AMBOSS, custom, etc.).
+    """
+    if not val:
+        return ''
+    clean = val
+    # Sound and image references
+    clean = re.sub(r'\[sound:[^\]]+\]', '', clean)
+    clean = re.sub(r'\[image:[^\]]+\]', '', clean)
+    # LaTeX: keep content inside \(...\) and \[...\]
+    clean = re.sub(r'\\\((.+?)\\\)', r'\1', clean)
+    clean = re.sub(r'\\\[(.+?)\\\]', r'\1', clean)
+    # MathJax/LaTeX text commands: keep inner text
+    clean = re.sub(r'\\(?:text|mathrm|textbf|textit)\{([^}]*)\}', r'\1', clean)
+    clean = re.sub(r'\\[a-zA-Z]+', ' ', clean)
+    clean = re.sub(r'[{}]', '', clean)
+    # HTML tags and entities
+    clean = re.sub(r'<[^>]+>', ' ', clean)
+    clean = re.sub(r'&[a-zA-Z]+;', ' ', clean)
+    clean = re.sub(r'&#?\w+;', ' ', clean)
+    # Cloze markers: {{c1::answer}} → answer, {{c1::answer::hint}} → answer
+    clean = re.sub(r'\{\{c\d+::(.*?)(?:::[^}]*)?\}\}', r'\1', clean)
+    # URLs
+    clean = re.sub(r'https?://\S+', '', clean)
+    # Normalize whitespace
+    clean = re.sub(r'\s+', ' ', clean).strip()
+    return clean
+
+
 class RetrievalState:
     """Shared mutable state between retrieval and pipeline.
 
@@ -297,9 +330,7 @@ class HybridRetrieval:
 
             fields = {}
             for name, value in zip(note.keys(), note.values()):
-                clean = re.sub(r'<[^>]+>', '', value)
-                clean = re.sub(r'&[a-zA-Z]+;', ' ', clean)
-                clean = re.sub(r'\s+', ' ', clean).strip()
+                clean = _clean_field_value(value)
                 if clean:
                     fields[name] = clean
 
@@ -317,25 +348,39 @@ class HybridRetrieval:
             return None
 
     def _build_context_string(self, merged):
-        """Build formatted context string from merged results."""
+        """Build formatted context string from merged results.
+
+        Only includes answer/back fields (not the question) — one line per source.
+        Prefixes with short deck name for topic context.
+        Includes ALL sources (reranker filters afterwards).
+        Assigns [N] indices to each card so the LLM can cite them.
+        Also sets 'index' on each citation dict for CitationBuilder alignment.
+        """
         if not merged:
             return ""
 
         parts = []
+        idx = 0
         for note_id, data in merged.items():
-            sources = ', '.join(data.get('sources', ['unknown']))
             fields = data.get('fields', {})
-            if fields:
-                field_lines = []
-                for name, value in fields.items():
-                    if value:
-                        field_lines.append(f"  {name}: {value}")
-                if field_lines:
-                    parts.append(
-                        f"Note {note_id} (via {sources}):\n" + '\n'.join(field_lines)
-                    )
+            if not fields:
+                continue
+            field_values = list(fields.values())
+            answer_text = ' | '.join(v for v in field_values[1:] if v and v.strip())
+            if not answer_text:
+                answer_text = field_values[0] if field_values else ''
+            if not answer_text or not answer_text.strip():
+                continue
+            idx += 1
+            data['index'] = idx
+            deck = data.get('deckName', '')
+            deck_short = ' > '.join(deck.split('::')[-2:]) if '::' in deck else deck
+            if deck_short:
+                parts.append(f"[{idx}] ({deck_short}) {answer_text[:500]}")
+            else:
+                parts.append(f"[{idx}] {answer_text[:500]}")
 
-        return '\n\n'.join(parts)
+        return '\n'.join(parts)
 
     def _kg_retrieve(self, user_message, router_result):
         """Knowledge Graph retrieval: find cards via exact term matching + co-occurrence."""
@@ -565,11 +610,13 @@ class EnrichedRetrieval:
                     exclude.append(context['cardId'])
 
                 rank = 1
-                # Primary vector
+                # Primary vector — only accept score ≥0.65 (below is noise)
                 if primary_vec:
                     results = self.emb.search(primary_vec, top_k=max_notes,
                                               exclude_card_ids=exclude) or []
                     for card_id, score in results:
+                        if score < 0.65:
+                            continue
                         note_id = self._resolve_note_id(card_id)
                         if note_id and note_id not in semantic_results:
                             semantic_results[note_id] = {
@@ -580,12 +627,14 @@ class EnrichedRetrieval:
                             }
                             rank += 1
 
-                # Secondary vector
+                # Secondary vector — only accept score ≥0.55
                 if secondary_vec:
                     sec_rank = 1
                     sec_results = self.emb.search(secondary_vec, top_k=max_notes,
                                                   exclude_card_ids=exclude) or []
                     for card_id, score in sec_results:
+                        if score < 0.55:
+                            continue
                         note_id = self._resolve_note_id(card_id)
                         if note_id and note_id not in semantic_results:
                             semantic_results[note_id] = {
@@ -925,9 +974,7 @@ class EnrichedRetrieval:
 
             fields = {}
             for name, value in zip(note.keys(), note.values()):
-                clean = re.sub(r'<[^>]+>', '', value)
-                clean = re.sub(r'&[a-zA-Z]+;', ' ', clean)
-                clean = re.sub(r'\s+', ' ', clean).strip()
+                clean = _clean_field_value(value)
                 if clean:
                     fields[name] = clean
 
@@ -944,24 +991,40 @@ class EnrichedRetrieval:
             logger.warning("EnrichedRetrieval: Failed to load card %s: %s", card_id, e)
             return None
 
+    # Max sources in LERNMATERIAL prompt (fewer = better citation accuracy)
+    MAX_CONTEXT_SOURCES = 12
+
     def _build_context_string(self, merged):
-        """Build formatted context string for LLM from merged citations."""
+        """Build formatted context string for LLM from merged citations.
+
+        Only includes answer/back fields (not the question) — one line per source.
+        Prefixes with short deck name for topic context.
+        Includes ALL sources (reranker filters afterwards).
+        Assigns [N] indices to each card so the LLM can cite them.
+        Also sets 'index' on each citation dict for CitationBuilder alignment.
+        """
         if not merged:
             return ""
 
         parts = []
+        idx = 0
         for note_id, data in merged.items():
-            sources = ', '.join(data.get('sources', ['unknown']))
             fields = data.get('fields', {})
-            if fields:
-                field_lines = []
-                for name, value in fields.items():
-                    if value:
-                        field_lines.append(f"  {name}: {value}")
-                if field_lines:
-                    parts.append(
-                        f"Note {note_id} (via {sources}):\n"
-                        + '\n'.join(field_lines)
-                    )
+            if not fields:
+                continue
+            field_values = list(fields.values())
+            answer_text = ' | '.join(v for v in field_values[1:] if v and v.strip())
+            if not answer_text:
+                answer_text = field_values[0] if field_values else ''
+            if not answer_text or not answer_text.strip():
+                continue
+            idx += 1
+            data['index'] = idx
+            deck = data.get('deckName', '')
+            deck_short = ' > '.join(deck.split('::')[-2:]) if '::' in deck else deck
+            if deck_short:
+                parts.append(f"[{idx}] ({deck_short}) {answer_text[:500]}")
+            else:
+                parts.append(f"[{idx}] {answer_text[:500]}")
 
-        return '\n\n'.join(parts)
+        return '\n'.join(parts)
