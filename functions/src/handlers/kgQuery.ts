@@ -7,6 +7,7 @@
 
 import { Request, Response } from 'express';
 import { runCypher } from '../utils/neo4j';
+import neo4j from 'neo4j-driver';
 import * as v1 from 'firebase-functions/v1';
 import crypto from 'crypto';
 
@@ -98,7 +99,7 @@ async function vectorSearchCards(
   // Join through OWNS to get anki_card_id — this bridges Neo4j ↔ Anki
   const result = await runCypher(
     `
-    CALL db.index.vector.queryNodes('card_embedding', $k, $embedding)
+    CALL db.index.vector.queryNodes('card_embedding', toInteger($k), $embedding)
     YIELD node, score
     OPTIONAL MATCH (u:User)-[r:OWNS]->(node)
     RETURN node.content_hash AS content_hash,
@@ -107,7 +108,7 @@ async function vectorSearchCards(
            score
     ORDER BY score DESC
     `,
-    { k: topK, embedding }
+    { k: neo4j.int(topK), embedding }
   );
 
   return result.records
@@ -130,12 +131,12 @@ async function vectorSearchTerms(
 
   const result = await runCypher(
     `
-    CALL db.index.vector.queryNodes('term_embedding', $k, $embedding)
+    CALL db.index.vector.queryNodes('term_embedding', toInteger($k), $embedding)
     YIELD node, score
     RETURN node.name AS term, score
     ORDER BY score DESC
     `,
-    { k: topK, embedding }
+    { k: neo4j.int(topK), embedding }
   );
 
   return result.records.map((r) => ({
@@ -161,7 +162,7 @@ async function getRelatedCards(
            other.text AS text,
            shared AS shared_terms
     ORDER BY shared DESC
-    LIMIT $limit
+    LIMIT toInteger($limit)
     `,
     { hash: contentHash, limit }
   );
@@ -202,7 +203,7 @@ async function getTermExpansions(
     MATCH (t:Term {name: $term})-[r:CO_OCCURS]-(other:Term)
     RETURN other.name AS term, r.weight AS weight
     ORDER BY r.weight DESC
-    LIMIT $max
+    LIMIT toInteger($max)
     `,
     { term, max: maxTerms }
   );
@@ -225,7 +226,7 @@ async function getWeakTerms(
     WHERE NOT (u)-[:MASTERED]->(t)
     RETURN t.name AS term, s.count AS struggle_count
     ORDER BY s.count DESC
-    LIMIT $limit
+    LIMIT toInteger($limit)
     `,
     { uid: hashedUid, limit }
   );
