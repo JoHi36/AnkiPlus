@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Settings, Copy, LogOut, ChevronRight, Sun, Moon, Monitor } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
 import { bridgeAction } from '../actions';
+import { frontendLog } from '../utils/frontendLogger';
 
 const PLAN_MAP = {
   free:  { name: 'Free',  price: 'Kostenlos' },
@@ -24,127 +24,45 @@ const THEME_OPTIONS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Module-level style constants
-// ---------------------------------------------------------------------------
-
-const QR_CONTAINER_STYLE = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  gap: 'var(--ds-space-md)',
-  padding: 'var(--ds-space-lg)',
-  background: 'var(--ds-bg-canvas)',
-  borderRadius: 'var(--ds-radius-lg)',
-  border: '1px solid var(--ds-border)',
-};
-
-const QR_IMG_STYLE = {
-  width: 200,
-  height: 200,
-  borderRadius: 'var(--ds-radius-md)',
-};
-
-const STATUS_DOT_STYLE = {
-  width: 8,
-  height: 8,
-  borderRadius: '50%',
-  display: 'inline-block',
-  marginRight: 'var(--ds-space-xs)',
-};
-
-// ---------------------------------------------------------------------------
 // RemoteSection
 // ---------------------------------------------------------------------------
 
+const REMOTE_BTN_STYLE = {
+  width: '100%',
+  padding: 'var(--ds-space-md) var(--ds-space-lg)',
+  borderRadius: 'var(--ds-radius-sm)',
+  border: '1px solid var(--ds-border)',
+  background: 'var(--ds-bg-canvas)',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 'var(--ds-space-sm)',
+  cursor: 'default',
+  fontFamily: 'inherit',
+};
+
+const COMING_SOON_STYLE = {
+  fontSize: 9,
+  fontWeight: 700,
+  letterSpacing: '0.04em',
+  textTransform: 'uppercase',
+  color: 'var(--ds-accent)',
+  background: 'var(--ds-accent-10)',
+  padding: '2px 6px',
+  borderRadius: 'var(--ds-radius-sm)',
+  marginLeft: 'auto',
+};
+
 function RemoteSection() {
-  const [pairUrl, setPairUrl] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [connected, setConnected] = useState(false);
-  const [peerConnected, setPeerConnected] = useState(false);
-  const [appUrl, setAppUrl] = useState(null);
-
-  // Listen for QR data and status via CustomEvent dispatched by App.jsx
-  useEffect(() => {
-    const handler = (e) => {
-      const payload = e?.detail;
-      if (!payload || !payload.type) return;
-
-      if (payload.type === 'sidebarRemoteQR') {
-        setLoading(false);
-        const d = payload.data || {};
-        if (d.error) return;
-        if (d.pair_url) {
-          setPairUrl(d.pair_url);
-        } else if (d.pair_code) {
-          // Fallback: construct URL from pair_code if pair_url missing
-          setPairUrl(`http://localhost:3001?pair=${d.pair_code}`);
-        }
-      }
-      if (payload.type === 'sidebarRemoteStatus') {
-        const d = payload.data || {};
-        if (d.connected) setConnected(true);
-        if (d.peer_connected) setPeerConnected(true);
-        if (d.open_url) setAppUrl(d.open_url);
-      }
-    };
-    window.addEventListener('ankiReceive', handler);
-    // Delay slightly so listener is guaranteed active before response arrives
-    const t = setTimeout(() => {
-      bridgeAction('sidebarGetRemoteStatus');
-      bridgeAction('sidebarGetRemoteQR');
-    }, 300);
-    return () => { clearTimeout(t); window.removeEventListener('ankiReceive', handler); };
-  }, []);
-
-  const generateQR = useCallback(() => {
-    setLoading(true);
-    bridgeAction('sidebarGetRemoteQR');
-  }, []);
-
   return (
     <div style={{ marginTop: 'var(--ds-space-lg)' }}>
-      <h3 style={{ fontSize: 'var(--ds-text-md)', fontWeight: 600, color: 'var(--ds-text-primary)', marginBottom: 'var(--ds-space-sm)' }}>
-        Remote
-      </h3>
-
-      {pairUrl ? (
-        <div style={QR_CONTAINER_STYLE}>
-          {peerConnected && (
-            <div style={{ textAlign: 'center', marginBottom: 'var(--ds-space-sm)' }}>
-              <span style={{ ...STATUS_DOT_STYLE, background: 'var(--ds-green)' }} />
-              <span style={{ fontSize: 'var(--ds-text-sm)', color: 'var(--ds-green)' }}>Verbunden</span>
-            </div>
-          )}
-          <QRCodeSVG
-            value={pairUrl}
-            size={160}
-            bgColor="transparent"
-            fgColor="currentColor"
-            level="M"
-          />
-          <p style={{ fontSize: 'var(--ds-text-xs)', color: 'var(--ds-text-tertiary)', textAlign: 'center', marginTop: 'var(--ds-space-xs)' }}>
-            Scanne mit deinem Handy
-          </p>
-        </div>
-      ) : (
-        <button
-          onClick={generateQR}
-          disabled={loading}
-          style={{
-            width: '100%',
-            padding: 'var(--ds-space-md)',
-            borderRadius: 'var(--ds-radius-lg)',
-            border: '1px solid var(--ds-border)',
-            background: 'var(--ds-bg-canvas)',
-            color: 'var(--ds-text-primary)',
-            fontSize: 'var(--ds-text-sm)',
-            cursor: loading ? 'wait' : 'pointer',
-            fontFamily: 'inherit',
-          }}
-        >
-          {loading ? 'Verbindung wird hergestellt...' : 'Remote verbinden'}
-        </button>
-      )}
+      <div style={REMOTE_BTN_STYLE}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ds-text-secondary)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="7" width="20" height="15" rx="2" ry="2" />
+          <polyline points="17 2 12 7 7 2" />
+        </svg>
+        <span style={{ fontSize: 'var(--ds-text-sm)', fontWeight: 500, color: 'var(--ds-text-primary)' }}>Remote</span>
+        <span style={COMING_SOON_STYLE}>Coming Soon</span>
+      </div>
     </div>
   );
 }
@@ -164,14 +82,18 @@ export default function SettingsSidebar() {
     tokenLimit: 0,
   });
   const [copyLabel, setCopyLabel] = useState(null); // null = default, string = temporary
-  const [indexing, setIndexing] = useState(null); // { embeddings: {total, done}, kgTerms: {total, done, totalTerms} }
+  const [indexing, setIndexing] = useState(null);
+  const [kgMetrics, setKgMetrics] = useState(null); // { backend, totalCards, reviewedCards, avgEase, avgInterval }
 
   // Request status from Python on mount
   useEffect(() => {
     bridgeAction('sidebarGetStatus');
     bridgeAction('sidebarGetIndexingStatus');
-    // Poll indexing status every 10s (background thread updates DB)
-    const interval = setInterval(() => bridgeAction('sidebarGetIndexingStatus'), 10000);
+    bridgeAction('sidebarGetKgMetrics');
+    const interval = setInterval(() => {
+      bridgeAction('sidebarGetIndexingStatus');
+      bridgeAction('sidebarGetKgMetrics');
+    }, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -213,6 +135,9 @@ export default function SettingsSidebar() {
       }
       if (payload.type === 'indexingStatus') {
         setIndexing(payload.data);
+      }
+      if (payload.type === 'kgMetrics') {
+        setKgMetrics(payload.data);
       }
       if (payload.type === 'sidebarLogsCopied') {
         setCopyLabel('Kopiert ✓');
@@ -381,14 +306,23 @@ export default function SettingsSidebar() {
       {/* Divider */}
       <div style={{ height: 1, background: 'var(--ds-border-subtle)', margin: '12px 0' }} />
 
-      {/* Indexing Status Gauge */}
-      {indexing && <IndexingGauge data={indexing} />}
+      {/* KG Metrics (neo4j) or Indexing Gauge (sqlite fallback) */}
+      {kgMetrics?.backend === 'neo4j' ? (
+        <KgMetrics data={kgMetrics} />
+      ) : (
+        indexing && <IndexingGauge data={indexing} />
+      )}
 
       {/* Divider */}
       <div style={{ height: 1, background: 'var(--ds-border-subtle)', margin: '12px 0' }} />
 
       {/* Action Rows */}
       <div>
+        <ActionRow
+          icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="15" rx="2" ry="2" /><polyline points="17 2 12 7 7 2" /></svg>}
+          label="Remote"
+          sub="Coming Soon"
+        />
         <ActionRow icon={<Settings size={16} />} label="Anki-Einstellungen" onClick={openNativeSettings} chevron />
         <ActionRow
           icon={<Copy size={16} />}
@@ -444,9 +378,7 @@ export default function SettingsSidebar() {
         </div>
       </div>
 
-      {/* Remote Section */}
-      <div style={{ height: 1, background: 'var(--ds-border-subtle)', margin: '12px 0' }} />
-      <RemoteSection />
+      {/* Remote Section moved to Action Rows above */}
 
       {/* Divider + Logout */}
       {status.isAuthenticated && (
@@ -474,6 +406,122 @@ export default function SettingsSidebar() {
     </div>
   );
 }
+
+/* ─── KG Metrics (Neo4j) ─── */
+
+const KG_RING_SIZE = 64;
+const KG_RING_CENTER = KG_RING_SIZE / 2;
+const KG_RING_R = 26;
+const KG_RING_STROKE = 4;
+const KG_RING_CIRC = 2 * Math.PI * KG_RING_R;
+
+const KG_LABEL_STYLE = {
+  fontSize: 10, color: 'var(--ds-text-muted)', fontWeight: 500,
+};
+const KG_VALUE_STYLE = {
+  fontSize: 13, color: 'var(--ds-text-primary)', fontWeight: 600,
+  fontFamily: 'var(--ds-font-mono, monospace)',
+};
+const KG_DOT_STYLE = (color) => ({
+  width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0,
+});
+const KG_ROW_STYLE = {
+  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+  padding: '4px 0',
+};
+
+function KgMetrics({ data }) {
+  const total = data?.totalCards || 0;
+  const reviewed = data?.reviewedCards || 0;
+  const avgEase = data?.avgEase || 0;
+  const avgInterval = data?.avgInterval || 0;
+
+  const pct = total > 0 ? Math.min(1, reviewed / total) : 0;
+  const offset = KG_RING_CIRC * (1 - pct);
+  const fmt = (n) => n.toLocaleString('de-DE');
+
+  // Ease color: 1.0=red, 2.5=yellow, 4.0=green
+  const easeColor = avgEase <= 1.5 ? 'var(--ds-red)'
+    : avgEase <= 2.5 ? 'var(--ds-yellow)'
+    : 'var(--ds-green)';
+
+  return (
+    <div>
+      <div
+        className="uppercase font-semibold tracking-wide"
+        style={{ fontSize: 10, letterSpacing: '0.06em', color: 'var(--ds-text-muted)', marginBottom: 12 }}
+      >
+        Knowledge Graph
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        {/* Ring chart */}
+        <svg
+          width={KG_RING_SIZE}
+          height={KG_RING_SIZE}
+          viewBox={`0 0 ${KG_RING_SIZE} ${KG_RING_SIZE}`}
+          style={{ flexShrink: 0 }}
+        >
+          <circle cx={KG_RING_CENTER} cy={KG_RING_CENTER} r={KG_RING_R}
+            fill="none" stroke="var(--ds-border-subtle)" strokeWidth={KG_RING_STROKE}
+            opacity={0.4}
+          />
+          <circle cx={KG_RING_CENTER} cy={KG_RING_CENTER} r={KG_RING_R}
+            fill="none" stroke="var(--ds-green)" strokeWidth={KG_RING_STROKE}
+            strokeDasharray={KG_RING_CIRC}
+            strokeDashoffset={offset}
+            strokeLinecap="round"
+            transform={`rotate(-90 ${KG_RING_CENTER} ${KG_RING_CENTER})`}
+            style={{ transition: 'stroke-dashoffset 1s ease-out' }}
+          />
+          <text x={KG_RING_CENTER} y={KG_RING_CENTER + 1} textAnchor="middle"
+            dominantBaseline="central"
+            fill="var(--ds-text-primary)" fontSize="14" fontWeight="700"
+            fontFamily="var(--ds-font-mono, monospace)"
+          >
+            {Math.round(pct * 100)}%
+          </text>
+        </svg>
+
+        {/* Stats */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={KG_ROW_STYLE}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={KG_DOT_STYLE('var(--ds-accent)')} />
+              <span style={KG_LABEL_STYLE}>Cards</span>
+            </div>
+            <span style={KG_VALUE_STYLE}>{fmt(total)}</span>
+          </div>
+
+          <div style={KG_ROW_STYLE}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={KG_DOT_STYLE('var(--ds-green)')} />
+              <span style={KG_LABEL_STYLE}>Reviewed</span>
+            </div>
+            <span style={KG_VALUE_STYLE}>{fmt(reviewed)}</span>
+          </div>
+
+          <div style={KG_ROW_STYLE}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={KG_DOT_STYLE(easeColor)} />
+              <span style={KG_LABEL_STYLE}>Avg. Ease</span>
+            </div>
+            <span style={KG_VALUE_STYLE}>{avgEase.toFixed(1)}</span>
+          </div>
+
+          <div style={KG_ROW_STYLE}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={KG_DOT_STYLE('var(--ds-purple)')} />
+              <span style={KG_LABEL_STYLE}>Avg. Interval</span>
+            </div>
+            <span style={KG_VALUE_STYLE}>{avgInterval}d</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 /* ─── Dual Arc Gauge ─── */
 

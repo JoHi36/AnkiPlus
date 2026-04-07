@@ -20,6 +20,20 @@ except ImportError:
     from utils.logging import get_logger
 logger = get_logger(__name__)
 
+from operator import mul as _mul
+
+
+def _is_neo4j():
+    """Check if kg_backend is set to neo4j."""
+    try:
+        try:
+            from ..config import get_config
+        except ImportError:
+            from config import get_config
+        return get_config().get('kg_backend') == 'neo4j'
+    except Exception:
+        return False
+
 # Minimal universal stopwords — only the absolute basics (function words).
 # Domain filtering is handled dynamically by KG presence check, not by this list.
 # A term NOT in the KG is demoted to embedding-only (not used for SQL queries).
@@ -276,7 +290,7 @@ def _embedding_expand_terms(terms, kg_term_index, term_embeddings, sentence_embe
                 if is_morph_variant:
                     continue
 
-                score = sum(a * b for a, b in zip(normed, kg_vec))
+                score = sum(map(_mul, normed, kg_vec))
                 if score >= EMB_SIMILARITY_MIN:
                     scored.append((kg_term, score))
 
@@ -304,7 +318,7 @@ def _embedding_expand_terms(terms, kg_term_index, term_embeddings, sentence_embe
             # Skip terms already found by sentence expansion
             if '_sentence' in result and any(kg_term == t for t, _ in result['_sentence']):
                 continue
-            score = sum(a * b for a, b in zip(normed, kg_vec))
+            score = sum(map(_mul, normed, kg_vec))
             if score >= 0.75:  # Higher threshold for term-level (morphological only)
                 scored.append((kg_term, score))
 
@@ -323,6 +337,30 @@ def _get_edge_expansions(terms, db=None):
 
     Returns dict of {original_term: [(connected_term, weight), ...]}
     """
+    # Neo4j path — no SQLite
+    if _is_neo4j():
+        try:
+            try:
+                from ..storage.kg_client import get_term_expansions, exact_term_lookup
+            except ImportError:
+                from storage.kg_client import get_term_expansions, exact_term_lookup
+
+            expansions = {}
+            for term in terms:
+                edges = get_term_expansions(term, max_terms=5)
+                if not edges:
+                    canonical = exact_term_lookup(term)
+                    if canonical and canonical != term:
+                        edges = get_term_expansions(canonical, max_terms=5)
+                # kg_client returns list of dicts, convert to tuples
+                if edges:
+                    expansions[term] = [(e['term'], e['weight']) if isinstance(e, dict) else e for e in edges]
+            return expansions
+        except Exception as e:
+            logger.warning("_get_edge_expansions neo4j failed: %s", e)
+            return {}
+
+    # SQLite path (default)
     try:
         try:
             from ..storage.kg_store import get_term_expansions, exact_term_lookup
@@ -333,7 +371,6 @@ def _get_edge_expansions(terms, db=None):
 
     expansions = {}
     for term in terms:
-        # Try exact match first, then case-insensitive canonical lookup
         edges = get_term_expansions(term, max_terms=5, db=db)
         if not edges:
             canonical = exact_term_lookup(term, db=db)
@@ -447,13 +484,36 @@ def _filter_by_kg_presence(candidates, db=None):
 
     This replaces language-specific stopword lists with a universal approach.
     """
+    if _is_neo4j():
+        try:
+            try:
+                from ..storage.kg_client import exact_term_lookup
+            except ImportError:
+                from storage.kg_client import exact_term_lookup
+
+            kg_terms = []
+            non_kg_terms = []
+            for term in candidates:
+                canonical = exact_term_lookup(term)
+                if canonical:
+                    kg_terms.append(canonical)
+                else:
+                    non_kg_terms.append(term)
+            if non_kg_terms:
+                logger.debug("KG filter (neo4j): domain=%s, generic=%s", kg_terms, non_kg_terms)
+            return kg_terms, non_kg_terms
+        except Exception as e:
+            logger.warning("_filter_by_kg_presence neo4j failed: %s", e)
+            return candidates, []
+
+    # SQLite path
     try:
         try:
             from ..storage.kg_store import exact_term_lookup
         except ImportError:
             from storage.kg_store import exact_term_lookup
     except ImportError:
-        return candidates, []  # Can't check — keep all
+        return candidates, []
 
     kg_terms = []
     non_kg_terms = []
@@ -579,8 +639,10 @@ def enrich_query(user_message, resolved_intent=None, db=None, kg_term_index=None
             if t not in tier1_all_expanded:
                 tier1_all_expanded.append(t)
 
+    # Use KG-filtered terms as "original" for SQL — prevents generic words
+    # ("erkläre", "mir") from becoming precise SQL queries
     precise_primary, broad_primary = _build_queries(
-        tier1_query_terms, tier1_expansions, original_terms=tier1_candidates)
+        tier1_query_terms, tier1_expansions, original_terms=tier1_query_terms)
     embedding_primary = _build_embedding_query(user_message, tier1_all_expanded)
 
     # TIER 2: resolved_intent (new terms only)
@@ -614,7 +676,7 @@ def enrich_query(user_message, resolved_intent=None, db=None, kg_term_index=None
                         tier2_all_expanded.append(t)
 
             precise_secondary, broad_secondary = _build_queries(
-                tier2_query_terms, tier2_expansions, original_terms=tier2_new)
+                tier2_query_terms, tier2_expansions, original_terms=tier2_query_terms)
             embedding_secondary = _build_embedding_query(resolved_intent, tier2_all_expanded)
             tier2_terms = tier2_query_terms
 

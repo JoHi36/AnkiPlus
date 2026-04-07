@@ -56,6 +56,7 @@ def _handle_sidebar_message(msg_type, data):
     handlers = {
         'sidebarGetStatus': _msg_get_status,
         'sidebarGetIndexingStatus': _msg_get_indexing_status,
+        'sidebarGetKgMetrics': _msg_get_kg_metrics,
         'sidebarSetTheme': _msg_set_theme,
         'sidebarOpenNativeSettings': _msg_open_native_settings,
         'sidebarCopyLogs': _msg_copy_logs,
@@ -90,7 +91,7 @@ def _send_to_sidebar(payload_type, data):
 def _msg_get_status(_data):
     """Return status to React: tier, theme, auth, tokens."""
     try:
-        config = get_config()
+        config = get_config(force_reload=True)
         theme = config.get("theme", "dark")
         auth_token = config.get("auth_token", "")
         auth_validated = config.get("auth_validated", False)
@@ -150,47 +151,24 @@ def _msg_get_status(_data):
 
 
 def _msg_set_theme(theme):
-    """Update theme everywhere instantly."""
+    """Update theme everywhere — delegates to the central widget method."""
     if not isinstance(theme, str):
         return
-
+    logger.info("Theme changed to %s via sidebar — delegating to widget", theme)
+    try:
+        from ..ui.setup import get_chatbot_widget
+        widget = get_chatbot_widget()
+        if widget:
+            widget._msg_save_theme({"theme": theme})
+            return
+    except Exception:
+        pass
+    # Fallback: at least save to config
     try:
         from ..config import update_config
     except ImportError:
         from config import update_config
     update_config(theme=theme)
-    logger.info("Theme changed to %s via sidebar", theme)
-
-    # 1. Apply global Qt theme
-    try:
-        from ..ui.global_theme import apply_global_dark_theme
-        apply_global_dark_theme()
-    except Exception as e:
-        logger.warning("Could not apply global theme: %s", e)
-
-    # 2. Refresh MainViewWidget (deck browser / overview) to pick up theme change
-    try:
-        from ..ui.main_view import get_main_view
-        view = get_main_view()
-        if view and view.web_view:
-            payload = json.dumps({"type": "themeChanged", "data": {"theme": theme}})
-            view.web_view.page().runJavaScript(
-                f"window.ankiReceive && window.ankiReceive({payload});"
-            )
-    except Exception as e:
-        logger.warning("Could not refresh main view: %s", e)
-
-    # 3. Update chat panel theme
-    try:
-        from ..ui.setup import get_chatbot_widget
-        widget = get_chatbot_widget()
-        if widget and widget.web_view:
-            payload = json.dumps({"type": "themeChanged", "data": {"theme": theme}})
-            widget.web_view.page().runJavaScript(
-                f"window.ankiReceive && window.ankiReceive({payload});"
-            )
-    except Exception as e:
-        logger.warning("Could not update chat theme: %s", e)
 
     # 4. Update sidebar dock stylesheet for Qt
     try:
@@ -248,33 +226,57 @@ def _msg_connect(_data):
 
 
 def _msg_copy_logs(_data):
-    """Copy recent logs + system info to clipboard."""
+    """Copy recent logs + system info to clipboard, including frontend logs."""
     try:
         from ..utils.logging import get_recent_logs
     except ImportError:
         from utils.logging import get_recent_logs
 
+    def _build_and_copy(frontend_log_text):
+        try:
+            config = get_config()
+            sep = '=' * 60
+            header = (
+                f"AnkiPlus Debug Report\n"
+                f"Platform: {platform.platform()}\n"
+                f"Python: {platform.python_version()}\n"
+                f"Theme: {config.get('theme', 'dark')}\n"
+                f"Tier: {config.get('tier', 'free')}\n"
+                f"Auth: {config.get('auth_validated', False)}\n"
+                f"{sep}\n"
+            )
+            logs = get_recent_logs(max_age_seconds=600)
+            python_section = "\n".join(logs) if logs else "(keine Logs)"
+
+            fe_text = frontend_log_text if frontend_log_text else "NO FRONTEND LOGS"
+            frontend_section = (
+                f"\n{sep}\n"
+                f"FRONTEND LOGS\n"
+                f"{sep}\n"
+                f"{fe_text}\n"
+            )
+
+            text = header + python_section + frontend_section
+            clipboard = QApplication.clipboard()
+            if clipboard:
+                clipboard.setText(text)
+                logger.info("Logs copied to clipboard (%d python lines, frontend=%s)",
+                            len(logs), "yes" if frontend_log_text else "no")
+            _send_to_sidebar("sidebarLogsCopied", {})
+        except Exception:
+            logger.exception("_msg_copy_logs _build_and_copy failed")
+
     try:
-        config = get_config()
-        header = (
-            f"AnkiPlus Debug Report\n"
-            f"Platform: {platform.platform()}\n"
-            f"Python: {platform.python_version()}\n"
-            f"Theme: {config.get('theme', 'dark')}\n"
-            f"Tier: {config.get('tier', 'free')}\n"
-            f"Auth: {config.get('auth_validated', False)}\n"
-            f"{'=' * 60}\n"
-        )
-        logs = get_recent_logs(max_age_seconds=600)
-        text = header + "\n".join(logs) if logs else header + "(keine Logs)"
-        clipboard = QApplication.clipboard()
-        if clipboard:
-            clipboard.setText(text)
-            logger.info("Logs copied to clipboard (%d lines)", len(logs))
-        # Notify React
-        _send_to_sidebar("sidebarLogsCopied", {})
+        global _sidebar_webview
+        if _sidebar_webview:
+            js = "window._frontendLogs ? window._frontendLogs.join('\\n') : ''"
+            _sidebar_webview.page().runJavaScript(js, _build_and_copy)
+        else:
+            # No webview available, copy without frontend logs
+            _build_and_copy("")
     except Exception:
         logger.exception("_msg_copy_logs failed")
+        _build_and_copy("")
 
 
 def _msg_get_remote_qr(_data):
@@ -387,6 +389,36 @@ def _msg_get_indexing_status(_data):
             'embeddings': {'total': 0, 'done': 0},
             'kgTerms': {'total': 0, 'done': 0, 'totalTerms': 0},
             'kgTermEmbeddings': {'total': 0, 'done': 0},
+        })
+
+
+def _msg_get_kg_metrics(_data):
+    """Fetch KG metrics from Neo4j. Only sends real data — no SQLite fallback."""
+    try:
+        try:
+            from ..config import get_config
+        except ImportError:
+            from config import get_config
+
+        if get_config().get('kg_backend') != 'neo4j':
+            _send_to_sidebar('kgMetrics', {'backend': 'sqlite'})
+            return
+
+        try:
+            from ..storage.kg_client import get_kg_metrics
+        except ImportError:
+            from storage.kg_client import get_kg_metrics
+
+        metrics = get_kg_metrics()
+        metrics['backend'] = 'neo4j'
+        _send_to_sidebar('kgMetrics', metrics)
+    except Exception:
+        logger.exception("_msg_get_kg_metrics failed")
+        # Signal neo4j but offline — frontend can show "connecting..." state
+        _send_to_sidebar('kgMetrics', {
+            'backend': 'neo4j',
+            'offline': True,
+            'totalCards': 0, 'reviewedCards': 0, 'avgEase': 0, 'avgInterval': 0,
         })
 
 

@@ -35,6 +35,7 @@ DEFAULT_CONFIG = {
         "compact": True,     # Tool: Chat-Zusammenfassung / Insight Extraction
         "research": True,    # Sub-Agent: Research via OpenRouter
     },
+    "kg_backend": "sqlite",  # "sqlite" (default) or "neo4j"
     "firebase": {
         "enabled": False,  # Firebase MCP Integration aktiviert
         "service_account_path": "",  # Pfad zur Service Account JSON (optional, kann auch über Umgebungsvariable gesetzt werden)

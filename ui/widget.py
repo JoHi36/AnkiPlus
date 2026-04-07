@@ -1116,7 +1116,16 @@ class ChatbotWidget(QWidget):
         payload = {"type": payload_type, "data": data}
         if extra:
             payload.update(extra)
-        self.web_view.page().runJavaScript(f"window.ankiReceive({json.dumps(payload)});")
+        payload_json = json.dumps(payload)
+        js = f"""(function() {{
+            var p = {payload_json};
+            if (typeof window.ankiReceive === 'function') {{
+                window.ankiReceive(p);
+            }} else {{
+                console.error('[_send_to_frontend] window.ankiReceive NOT FOUND for type:', '{payload_type}');
+            }}
+        }})();"""
+        self.web_view.page().runJavaScript(js)
 
     def _send_to_frontend_with_event(self, payload_type, payload_dict, event_name):
         """Helper: Sendet via ankiReceive UND CustomEvent (für Reliability)."""
@@ -1249,12 +1258,14 @@ class ChatbotWidget(QWidget):
             'sidebarCopyLogs': self._msg_copy_logs,
             'sidebarGetStatus': self._msg_get_sidebar_status,
             'sidebarGetIndexingStatus': self._msg_get_indexing_status,
+            'sidebarGetKgMetrics': self._msg_get_kg_metrics,
             'sidebarSetTheme': self._msg_set_theme,
             'sidebarOpenNativeSettings': lambda d: __import__('aqt', fromlist=['mw']).mw.onPrefs(),
             'sidebarOpenUpgrade': self._msg_sidebar_upgrade,
             'sidebarConnect': self._msg_sidebar_connect,
             'sidebarLogout': self._msg_sidebar_logout,
             'sidebarGetRemoteQR': self._msg_get_remote_qr,
+            'sidebarRefreshRemoteQR': self._msg_refresh_remote_qr,
             'sidebarGetRemoteStatus': self._msg_get_remote_status,
             # Knowledge Graph
             'getGraphData': self._msg_get_graph_data,
@@ -1854,26 +1865,16 @@ class ChatbotWidget(QWidget):
         if self.web_view:
             self.web_view.page().runJavaScript(chat_js)
 
-        # 2-4. Push theme to all Anki webviews (reviewer, deck browser, overview)
-        # NOTE: AnkiWebView.eval() is Anki's built-in JS execution method (not Python eval).
+        # 2. MainViewWidget (fullscreen React app)
         try:
-            from aqt import mw as _mw
-            if _mw:
-                for wv_source in [
-                    lambda: _mw.reviewer.web if _mw.reviewer else None,
-                    lambda: _mw.deckBrowser.web if hasattr(_mw, 'deckBrowser') and _mw.deckBrowser else None,
-                    lambda: _mw.overview.web if hasattr(_mw, 'overview') and _mw.overview else None,
-                ]:
-                    try:
-                        wv = wv_source()
-                        if wv:
-                            wv.page().runJavaScript(set_theme_js)
-                    except (AttributeError, RuntimeError):
-                        pass
-        except (AttributeError, RuntimeError):
+            from .main_view import get_main_view
+            mv = get_main_view()
+            if mv and mv.web_view and mv.web_view is not self.web_view:
+                mv.web_view.page().runJavaScript(chat_js)
+        except (ImportError, AttributeError, RuntimeError):
             pass
 
-        # 5. Plusi panel webview
+        # 3. Plusi panel webview
         try:
             from ..plusi import panel as plusi_panel
             if hasattr(plusi_panel, '_panel_widget') and plusi_panel._panel_widget:
@@ -2078,6 +2079,7 @@ class ChatbotWidget(QWidget):
 
     def push_initial_state(self):
         """Sendet Start-Config an die Web-UI"""
+        self.config = get_config(force_reload=True)
         api_key = self.config.get("api_key", "")
         provider = "google"  # Immer Google
 
@@ -2855,6 +2857,19 @@ class ChatbotWidget(QWidget):
             back_field = re.sub(r'src="([^":/]+)"', 'src="file://%s/\\1"' % media_dir, back_field)
 
             event_type = "card.shown" if is_question else "card.answerShown"
+            # Session deck = the deck the user selected to study (not the card's own deck)
+            try:
+                session_deck_id = mw.col.decks.get_current_id()
+                session_deck_name = mw.col.decks.name(session_deck_id)
+            except Exception:
+                session_deck_id = card.did
+                session_deck_name = mw.col.decks.name(card.did)
+            # Live scheduler counts for the current review session
+            try:
+                counts = mw.col.sched.counts(card)
+                due_new, due_learning, due_review = counts[0], counts[1], counts[2]
+            except Exception:
+                due_new, due_learning, due_review = 0, 0, 0
             self._send_to_frontend(event_type, {
                 "cardId": card.id,
                 "frontHtml": front_html,
@@ -2863,7 +2878,11 @@ class ChatbotWidget(QWidget):
                 "backField": back_field,
                 "deckId": card.did,
                 "deckName": mw.col.decks.name(card.did),
+                "sessionDeckName": session_deck_name,
                 "isQuestion": is_question,
+                "dueNew": due_new,
+                "dueLearning": due_learning,
+                "dueReview": due_review,
             })
         except Exception as e:
             logger.error("_send_card_data error: %s", e)
@@ -2933,11 +2952,10 @@ class ChatbotWidget(QWidget):
             logger.warning("get_sidebar_status: %s", e)
 
     def _msg_set_theme(self, data=None):
-        """Set theme preference."""
+        """Set theme preference — delegates to _msg_save_theme (single path)."""
         try:
             theme = data if isinstance(data, str) else (json.loads(data) if data else 'dark')
-            update_config({'theme': theme})
-            self._send_to_frontend('themeChanged', {'theme': theme})
+            self._msg_save_theme({"theme": theme})
         except (AttributeError, RuntimeError, json.JSONDecodeError) as e:
             logger.warning("set_theme: %s", e)
 
@@ -3019,6 +3037,31 @@ class ChatbotWidget(QWidget):
         except Exception:
             logger.exception("_msg_get_indexing_status failed")
 
+    def _msg_get_kg_metrics(self, data=None):
+        """Return KG metrics from Neo4j (or signal sqlite backend)."""
+        try:
+            config = get_config()
+            if config.get('kg_backend') != 'neo4j':
+                self._send_to_frontend('kgMetrics', {'backend': 'sqlite'})
+                return
+
+            try:
+                try:
+                    from ..storage.kg_client import get_kg_metrics
+                except ImportError:
+                    from storage.kg_client import get_kg_metrics
+                metrics = get_kg_metrics()
+                metrics['backend'] = 'neo4j'
+                self._send_to_frontend('kgMetrics', metrics)
+            except Exception as e:
+                logger.debug("_msg_get_kg_metrics cloud query failed: %s", e)
+                self._send_to_frontend('kgMetrics', {
+                    'backend': 'neo4j', 'offline': True,
+                    'totalCards': 0, 'reviewedCards': 0, 'avgEase': 0, 'avgInterval': 0,
+                })
+        except Exception:
+            logger.exception("_msg_get_kg_metrics failed")
+
     def _msg_sidebar_logout(self, data=None):
         """Clear auth tokens."""
         try:
@@ -3028,7 +3071,7 @@ class ChatbotWidget(QWidget):
             logger.warning("sidebar_logout: %s", e)
 
     def _msg_copy_logs(self, data=None):
-        """Copy recent logs + system info to clipboard."""
+        """Copy recent logs + system info to clipboard, including frontend logs."""
         import platform
         try:
             from ..utils.logging import get_recent_logs
@@ -3038,55 +3081,117 @@ class ChatbotWidget(QWidget):
             from ..config import get_config
         except ImportError:
             from config import get_config
+
+        def _build_and_copy(frontend_log_text):
+            """Assemble full report and copy to clipboard."""
+            import re
+            try:
+                config = get_config()
+                sep = '=' * 60
+                header = (
+                    f"AnkiPlus Debug Report\n"
+                    f"Platform: {platform.platform()}\n"
+                    f"Python: {platform.python_version()}\n"
+                    f"Theme: {config.get('theme', 'dark')}\n"
+                    f"Tier: {config.get('tier', 'free')}\n"
+                    f"Auth: {config.get('auth_validated', False)}\n"
+                    f"{sep}\n"
+                )
+                # --- Parse Python logs ---
+                # Format: "21:32:07 INFO  [module]  message"
+                py_re = re.compile(r'^(\d{2}:\d{2}:\d{2})\s+(.*)$')
+                merged = []
+                for line in get_recent_logs(max_age_seconds=600):
+                    m = py_re.match(line)
+                    if m:
+                        ts = m.group(1) + '.000'
+                        merged.append((ts, f"{ts} [PY]  {m.group(2)}"))
+                    else:
+                        # Non-timestamped continuation line
+                        merged.append(('', f"              [PY]  {line}"))
+
+                # --- Parse Frontend logs ---
+                # Format: "21:32:07.170 [source] message"
+                fe_re = re.compile(r'^(\d{2}:\d{2}:\d{2}\.\d{3})\s+(.*)$')
+                if frontend_log_text:
+                    for line in frontend_log_text.split('\n'):
+                        line = line.strip()
+                        if not line:
+                            continue
+                        m = fe_re.match(line)
+                        if m:
+                            ts = m.group(1)
+                            merged.append((ts, f"{ts} [JS]  {m.group(2)}"))
+                        else:
+                            merged.append(('', f"              [JS]  {line}"))
+
+                # --- Sort chronologically ---
+                merged.sort(key=lambda x: x[0])
+                log_body = "\n".join(entry[1] for entry in merged) if merged else "(keine Logs)"
+
+                text = header + log_body + "\n"
+                clipboard = QApplication.clipboard()
+                if clipboard:
+                    clipboard.setText(text)
+                    py_count = sum(1 for _, l in merged if '[PY]' in l)
+                    js_count = sum(1 for _, l in merged if '[JS]' in l)
+                    logger.info("Logs copied to clipboard (%d PY + %d JS lines, merged)",
+                                py_count, js_count)
+                    self._send_to_frontend('sidebarLogsCopied', {})
+            except Exception:
+                logger.exception("_msg_copy_logs _build_and_copy failed")
+
         try:
-            config = get_config()
-            header = (
-                f"AnkiPlus Debug Report\n"
-                f"Platform: {platform.platform()}\n"
-                f"Python: {platform.python_version()}\n"
-                f"Theme: {config.get('theme', 'dark')}\n"
-                f"Tier: {config.get('tier', 'free')}\n"
-                f"Auth: {config.get('auth_validated', False)}\n"
-                f"{'=' * 60}\n"
-            )
-            logs = get_recent_logs(max_age_seconds=600)
-            text = header + "\n".join(logs) if logs else header + "(keine Logs)"
-            clipboard = QApplication.clipboard()
-            if clipboard:
-                clipboard.setText(text)
-                logger.info("Logs copied to clipboard (%d lines)", len(logs))
-                self._send_to_frontend('sidebarLogsCopied', {})
+            js = "window._frontendLogs ? window._frontendLogs.join('\\n') : ''"
+            self.web_view.page().runJavaScript(js, _build_and_copy)
         except Exception:
             logger.exception("_msg_copy_logs failed")
+            # Fallback: copy without frontend logs
+            _build_and_copy("")
 
     def _msg_get_remote_qr(self, data=None):
-        """Create pairing session and send QR data to frontend."""
-        from PyQt6.QtCore import QTimer
+        """Get or create pairing session (reuses existing). Called on sidebar mount."""
         logger.info("_msg_get_remote_qr: called")
-
-        def _do():
+        try:
             try:
-                try:
-                    from ..relay import create_pair
-                except ImportError:
-                    from relay import create_pair
+                from ..relay import create_pair
+            except ImportError:
+                from relay import create_pair
 
-                logger.info("_msg_get_remote_qr: calling create_pair()")
-                result = create_pair()
-                logger.info("_msg_get_remote_qr: result=%s", result)
+            result = create_pair()
+            logger.info("_msg_get_remote_qr: result=%s", result)
 
-                if "error" in result:
-                    QTimer.singleShot(0, lambda r=result: self._send_to_frontend("sidebarRemoteQR", r))
-                    return
+            if "error" in result:
+                self._send_to_frontend("sidebarRemoteQR", result)
+                return
 
-                payload = {"pair_code": result["pair_code"], "pair_url": result["pair_url"]}
-                logger.info("_msg_get_remote_qr: sending payload to frontend: %s", payload)
-                QTimer.singleShot(0, lambda p=payload: self._send_to_frontend("sidebarRemoteQR", p))
-            except Exception:
-                logger.exception("_msg_get_remote_qr failed")
-                QTimer.singleShot(0, lambda: self._send_to_frontend("sidebarRemoteQR", {"error": "Unbekannter Fehler"}))
+            payload = {"pair_code": result["pair_code"], "pair_url": result["pair_url"]}
+            self._send_to_frontend("sidebarRemoteQR", payload)
+        except Exception:
+            logger.exception("_msg_get_remote_qr failed")
+            self._send_to_frontend("sidebarRemoteQR", {"error": "Unbekannter Fehler"})
 
-        threading.Thread(target=_do, daemon=True).start()
+    def _msg_refresh_remote_qr(self, data=None):
+        """Force-create a fresh pair code. Called on explicit QR click."""
+        logger.info("_msg_refresh_remote_qr: called")
+        try:
+            try:
+                from ..relay import refresh_pair
+            except ImportError:
+                from relay import refresh_pair
+
+            result = refresh_pair()
+            logger.info("_msg_refresh_remote_qr: result=%s", result)
+
+            if "error" in result:
+                self._send_to_frontend("sidebarRemoteQR", result)
+                return
+
+            payload = {"pair_code": result["pair_code"], "pair_url": result["pair_url"]}
+            self._send_to_frontend("sidebarRemoteQR", payload)
+        except Exception:
+            logger.exception("_msg_refresh_remote_qr failed")
+            self._send_to_frontend("sidebarRemoteQR", {"error": "Unbekannter Fehler"})
 
     def _msg_get_remote_status(self, data=None):
         """Get current remote connection status."""

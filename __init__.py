@@ -23,6 +23,8 @@ TOKEN_REFRESH_INTERVAL_MS = 30 * 60 * 1000  # Periodic token refresh interval (3
 MAIN_VIEW_INIT_DELAY_MS = 200       # Delay before first MainViewWidget show (Anki init timing)
 STATE_CHANGE_DECK_DELAY_MS = 300    # Delay before sending deckSelected after state change (reviewer init timing)
 INIT_ADDON_LATE_DELAY_MS = 100      # Delay for init_addon when profile was already loaded at import time
+KG_DRAIN_INTERVAL_MS = 5 * 60 * 1000  # KG event drain interval (5 minutes)
+KG_DRAIN_INITIAL_DELAY_MS = 15_000    # Delay before first KG drain (after embedding init)
 
 # Global EmbeddingManager instance
 _embedding_manager = None
@@ -392,11 +394,48 @@ def init_addon():
 
         # Initialize EmbeddingManager deferred — index is lazy-loaded on first search
         QTimer.singleShot(2000, _init_embedding_manager)
+
+        # Initialize KG event drain (when neo4j backend is enabled)
+        QTimer.singleShot(KG_DRAIN_INITIAL_DELAY_MS, _init_kg_drain)
     except Exception as e:
         from aqt.utils import showInfo
         showInfo(f"Fehler beim Laden des Chatbot-Addons: {str(e)}")
 
 _heartbeat_timer = None
+
+
+def _init_kg_drain():
+    """Start periodic KG event drain if kg_backend == 'neo4j'.
+
+    Spawns a short-lived thread per tick to avoid blocking the main thread.
+    Steady-state only — backfill was a one-time direct Neo4j push.
+    """
+    import threading
+
+    try:
+        try:
+            from .config import get_config
+        except ImportError:
+            from config import get_config
+
+        if get_config().get("kg_backend") != "neo4j":
+            return
+
+        try:
+            from .storage.kg_sync import drain_events
+        except ImportError:
+            from storage.kg_sync import drain_events
+
+        def _drain_in_thread():
+            threading.Thread(target=drain_events, daemon=True, name="kg-drain").start()
+
+        timer = QTimer(mw)
+        timer.timeout.connect(_drain_in_thread)
+        timer.start(KG_DRAIN_INTERVAL_MS)
+        mw._kg_drain_timer = timer  # prevent GC
+        logger.info("KG drain: timer started (every %ds)", KG_DRAIN_INTERVAL_MS // 1000)
+    except Exception as e:
+        logger.error("KG drain initialization failed: %s", e)
 
 
 def _init_plusi_systems():
@@ -601,6 +640,26 @@ def on_reviewer_did_answer_card(reviewer, card, ease):
             record_card_review(deck_name, correct)
         except (AttributeError, ImportError, KeyError) as e:
             logger.debug("plusi awareness tracking error: %s", e)
+
+        # Emit KG event for card review (when neo4j backend enabled)
+        try:
+            try:
+                from .config import get_config
+            except ImportError:
+                from config import get_config
+            if get_config().get("kg_backend") == "neo4j":
+                try:
+                    from .storage.kg_events import queue_event
+                except ImportError:
+                    from storage.kg_events import queue_event
+                queue_event('card_reviewed', {
+                    'card_id': card.id,
+                    'ease': ease,
+                    'interval': card.ivl,
+                    'deck_id': card.did,
+                })
+        except Exception as e:
+            logger.debug("KG review event error: %s", e)
 
         # Send to chat panel (React)
         widget = get_chatbot_widget()

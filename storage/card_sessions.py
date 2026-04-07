@@ -113,6 +113,15 @@ def _init_schema(db):
         CREATE INDEX IF NOT EXISTS idx_sections_card   ON review_sections(card_id);
         CREATE INDEX IF NOT EXISTS idx_card_sessions_deck ON card_sessions(deck_id);
         CREATE INDEX IF NOT EXISTS idx_embeddings_hash ON card_embeddings(content_hash);
+
+        CREATE TABLE IF NOT EXISTS kg_events (
+            id          TEXT PRIMARY KEY,
+            event_type  TEXT NOT NULL,
+            payload     TEXT NOT NULL,
+            created_at  TEXT DEFAULT (datetime('now')),
+            synced      INTEGER DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_kg_events_pending ON kg_events(synced, created_at);
     """)
     db.commit()
 
