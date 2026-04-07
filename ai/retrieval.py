@@ -181,11 +181,11 @@ class HybridRetrieval:
                                 continue
                             results = vector_search_cards(list(emb), top_k=max_notes)
                             for item in results:
-                                # Neo4j returns content_hash, not card_id — use hash as key
-                                key = item.get('content_hash', '')
+                                # Neo4j now returns card_id (via OWNS join)
+                                card_id = item.get('card_id')
                                 score = item.get('score', 0)
-                                if key and (key not in seen_cards or score > seen_cards[key]):
-                                    seen_cards[key] = score
+                                if card_id and (card_id not in seen_cards or score > seen_cards[card_id]):
+                                    seen_cards[card_id] = score
                     except Exception as e:
                         logger.warning("HybridRetrieval: Neo4j vector search failed, falling back: %s", e)
                         _use_neo4j = False  # Fall through to local search
@@ -743,13 +743,16 @@ class EnrichedRetrieval:
                             score = item.get('score', 0)
                             if score < 0.65:
                                 continue
-                            key = item.get('content_hash', '')
-                            if key and key not in semantic_results:
-                                semantic_results[key] = {
+                            card_id = item.get('card_id')
+                            if not card_id:
+                                continue
+                            note_id = self._resolve_note_id(card_id)
+                            if note_id and note_id not in semantic_results:
+                                semantic_results[note_id] = {
                                     'rank': rank,
                                     'tier': 'primary',
                                     'score': score,
-                                    'content_hash': key,
+                                    'card_id': card_id,
                                 }
                                 rank += 1
 
@@ -760,13 +763,16 @@ class EnrichedRetrieval:
                             score = item.get('score', 0)
                             if score < 0.55:
                                 continue
-                            key = item.get('content_hash', '')
-                            if key and key not in semantic_results:
-                                semantic_results[key] = {
+                            card_id = item.get('card_id')
+                            if not card_id:
+                                continue
+                            note_id = self._resolve_note_id(card_id)
+                            if note_id and note_id not in semantic_results:
+                                semantic_results[note_id] = {
                                     'rank': sec_rank,
                                     'tier': 'secondary',
                                     'score': score,
-                                    'content_hash': key,
+                                    'card_id': card_id,
                                 }
                             sec_rank += 1
                 except Exception as e:

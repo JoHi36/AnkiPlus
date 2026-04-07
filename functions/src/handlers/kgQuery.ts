@@ -89,17 +89,20 @@ export async function kgQueryHandler(req: Request, res: Response): Promise<void>
 
 async function vectorSearchCards(
   params: Record<string, unknown>
-): Promise<Array<{ content_hash: string; text: string; score: number }>> {
+): Promise<Array<{ content_hash: string; card_id: number; text: string; score: number }>> {
   const embedding = params.embedding as number[];
   const topK = (params.top_k as number) || 10;
 
   if (!embedding || !Array.isArray(embedding)) return [];
 
+  // Join through OWNS to get anki_card_id — this bridges Neo4j ↔ Anki
   const result = await runCypher(
     `
     CALL db.index.vector.queryNodes('card_embedding', $k, $embedding)
     YIELD node, score
+    OPTIONAL MATCH (u:User)-[r:OWNS]->(node)
     RETURN node.content_hash AS content_hash,
+           r.anki_card_id AS card_id,
            node.text AS text,
            score
     ORDER BY score DESC
@@ -107,11 +110,14 @@ async function vectorSearchCards(
     { k: topK, embedding }
   );
 
-  return result.records.map((r) => ({
-    content_hash: r.get('content_hash'),
-    text: r.get('text'),
-    score: r.get('score'),
-  }));
+  return result.records
+    .filter((r) => r.get('card_id') != null)
+    .map((r) => ({
+      content_hash: r.get('content_hash'),
+      card_id: r.get('card_id').toNumber(),
+      text: r.get('text') || '',
+      score: r.get('score'),
+    }));
 }
 
 async function vectorSearchTerms(
