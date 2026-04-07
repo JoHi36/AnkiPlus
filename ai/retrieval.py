@@ -715,14 +715,70 @@ class EnrichedRetrieval:
             "embedding_queries": [q for q in [emb_primary_text, emb_secondary_text] if q]
         })
         semantic_results = {}
+
+        # Check Neo4j backend once for this scope
+        _sem_neo4j = False
         try:
-            if self.emb:
+            try:
+                from config import get_config as _sem_gc
+            except ImportError:
+                from ..config import get_config as _sem_gc
+            _sem_neo4j = _sem_gc().get('kg_backend') == 'neo4j'
+        except Exception:
+            pass
+
+        try:
+            if _sem_neo4j and (primary_vec or secondary_vec):
+                # Neo4j ANN vector search
+                try:
+                    try:
+                        from storage.kg_client import vector_search_cards as _vs
+                    except ImportError:
+                        from ..storage.kg_client import vector_search_cards as _vs
+
+                    rank = 1
+                    if primary_vec:
+                        results = _vs(list(primary_vec), top_k=max_notes) or []
+                        for item in results:
+                            score = item.get('score', 0)
+                            if score < 0.65:
+                                continue
+                            key = item.get('content_hash', '')
+                            if key and key not in semantic_results:
+                                semantic_results[key] = {
+                                    'rank': rank,
+                                    'tier': 'primary',
+                                    'score': score,
+                                    'content_hash': key,
+                                }
+                                rank += 1
+
+                    if secondary_vec:
+                        sec_rank = 1
+                        sec_results = _vs(list(secondary_vec), top_k=max_notes) or []
+                        for item in sec_results:
+                            score = item.get('score', 0)
+                            if score < 0.55:
+                                continue
+                            key = item.get('content_hash', '')
+                            if key and key not in semantic_results:
+                                semantic_results[key] = {
+                                    'rank': sec_rank,
+                                    'tier': 'secondary',
+                                    'score': score,
+                                    'content_hash': key,
+                                }
+                            sec_rank += 1
+                except Exception as e:
+                    logger.warning("EnrichedRetrieval: Neo4j vector search failed: %s", e)
+
+            elif self.emb:
+                # Local brute-force cosine search (SQLite backend)
                 exclude = []
                 if context and context.get('cardId'):
                     exclude.append(context['cardId'])
 
                 rank = 1
-                # Primary vector — only accept score ≥0.65 (below is noise)
                 if primary_vec:
                     results = self.emb.search(primary_vec, top_k=max_notes,
                                               exclude_card_ids=exclude) or []
@@ -739,7 +795,6 @@ class EnrichedRetrieval:
                             }
                             rank += 1
 
-                # Secondary vector — only accept score ≥0.55
                 if secondary_vec:
                     sec_rank = 1
                     sec_results = self.emb.search(secondary_vec, top_k=max_notes,
