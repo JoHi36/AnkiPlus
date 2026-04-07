@@ -780,16 +780,33 @@ class EnrichedRetrieval:
                 if top_sem_cards:
                     feedback_terms = set()
 
-                    # Fetch terms for each card — Neo4j or SQLite
-                    if _use_neo4j:
+                    # Check backend for this scope
+                    _fb_neo4j = False
+                    try:
+                        try:
+                            from config import get_config as _fbc
+                        except ImportError:
+                            from ..config import get_config as _fbc
+                        _fb_neo4j = _fbc().get('kg_backend') == 'neo4j'
+                    except Exception:
+                        pass
+
+                    if _fb_neo4j:
                         try:
                             try:
                                 from storage.kg_client import get_card_terms as _kg_get_terms
                             except ImportError:
                                 from ..storage.kg_client import get_card_terms as _kg_get_terms
+                            # Neo4j uses content_hash — look up from card_embeddings
+                            try:
+                                from storage.card_sessions import load_embedding
+                            except ImportError:
+                                from ..storage.card_sessions import load_embedding
                             for cid in top_sem_cards:
-                                terms = _kg_get_terms(str(cid))
-                                feedback_terms.update(terms if isinstance(terms, list) else [])
+                                emb_data = load_embedding(cid)
+                                if emb_data and emb_data.get('content_hash'):
+                                    terms = _kg_get_terms(emb_data['content_hash'])
+                                    feedback_terms.update(terms if isinstance(terms, list) else [])
                         except Exception as e:
                             logger.debug("Feedback neo4j term fetch failed: %s", e)
                     else:
