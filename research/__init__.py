@@ -98,9 +98,9 @@ def run_research(situation: str = '', emit_step=None, memory=None,
 
     try:
         try:
-            from ..ai.rag_pipeline import retrieve as rag_retrieve
+            from ..ai.rag_pipeline import retrieve_rag_context as rag_retrieve
         except ImportError:
-            from ai.rag_pipeline import retrieve as rag_retrieve
+            from ai.rag_pipeline import retrieve_rag_context as rag_retrieve
 
         # Router call — needed for resolved_intent + associated_terms
         # Without it, KG enrichment gets garbage terms from raw query
@@ -135,7 +135,6 @@ def run_research(situation: str = '', emit_step=None, memory=None,
             )
 
         rag_result = rag_retrieve(
-            agent_name='research',
             user_message=query,
             context=None,
             config=config,
