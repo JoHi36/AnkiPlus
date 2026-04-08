@@ -31,11 +31,11 @@ OPTIONS {indexConfig: {
   `vector.similarity_function`: 'cosine'
 }};
 
-// Term embeddings — 768-dim, card-averaged (cheaper storage)
+// Term embeddings — 3072-dim, card-averaged (same model as cards)
 CREATE VECTOR INDEX term_embedding IF NOT EXISTS
 FOR (t:Term) ON (t.embedding)
 OPTIONS {indexConfig: {
-  `vector.dimensions`: 768,
+  `vector.dimensions`: 3072,
   `vector.similarity_function`: 'cosine'
 }};
 
