@@ -166,12 +166,9 @@ def run_research(situation: str = '', emit_step=None, memory=None,
                 logger.warning("Research RAG failed: %s", e)
 
     # ------------------------------------------------------------------
-    # 2. Send to backend: cards as insights + Research prompt
+    # 1b. Reranker: filter to most relevant cards
     # ------------------------------------------------------------------
-    system_prompt = _get_research_prompt()
-
-    # Transport cards via rag_context → _build_chat_payload extracts as "insights"
-    # gemini.py expects cards as strings (lines), not dicts
+    # Convert cards to numbered lines for reranker
     card_lines = []
     for i, card in enumerate(cards_for_backend[:30], 1):
         if isinstance(card, str):
@@ -181,6 +178,38 @@ def run_research(situation: str = '', emit_step=None, memory=None,
             a = card.get('answer', '')
             deck = card.get('deck', '')
             card_lines.append('[%d] (%s) %s | %s' % (i, deck, q, a))
+
+    if card_lines:
+        try:
+            try:
+                from ..ai.reranker import rerank_sources
+            except ImportError:
+                from ai.reranker import rerank_sources
+
+            _numbered = [l for l in card_lines if l.strip().startswith('[')]
+            if _numbered:
+                if emit_step:
+                    emit_step("reranker", "running", {"sources": len(_numbered)})
+                rerank_result = rerank_sources(
+                    question=query,
+                    context_lines=_numbered,
+                    min_confidence="medium",
+                    emit_step=emit_step,
+                )
+                if rerank_result.get("reranked"):
+                    relevant_indices = set(rerank_result.get("relevant_indices", []))
+                    if relevant_indices:
+                        card_lines = [l for l in _numbered
+                                      if any(l.startswith('[%d]' % idx) for idx in relevant_indices)]
+                        logger.info("Research Reranker: kept %d/%d sources", len(card_lines), len(_numbered))
+        except Exception as e:
+            logger.warning("Research Reranker failed, using all cards: %s", e)
+
+    # ------------------------------------------------------------------
+    # 2. Send to backend: cards as insights + Research prompt
+    # ------------------------------------------------------------------
+    system_prompt = _get_research_prompt()
+
     rag_context = {"cards": card_lines} if card_lines else None
 
     try:
