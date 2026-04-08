@@ -251,9 +251,12 @@ def _embedding_expand_terms(terms, kg_term_index, term_embeddings, sentence_embe
     1. Sentence-level: embed the full question → find nearest KG terms (best for synonyms)
     2. Term-level: embed individual terms → find morphological variants (fallback)
 
+    When kg_backend == 'neo4j', uses Neo4j's server-side vector index instead of
+    local brute-force comparison — no need to download all 17K term embeddings.
+
     Args:
         terms: List of query term strings (from extract_query_terms).
-        kg_term_index: Dict of {kg_term: normalized_vector}.
+        kg_term_index: Dict of {kg_term: normalized_vector}. Empty when neo4j.
         term_embeddings: Dict of {query_term: embedding_vector} from batch embed.
         sentence_embedding: Embedding of the full user question (preferred for expansion).
 
@@ -261,6 +264,41 @@ def _embedding_expand_terms(terms, kg_term_index, term_embeddings, sentence_embe
         Dict of {'_sentence': [(kg_term, score), ...]} for sentence-level matches,
         plus per-term matches for individual terms.
     """
+    # Neo4j path — use server-side vector search instead of local brute-force
+    if _is_neo4j():
+        try:
+            try:
+                from ..storage.kg_client import vector_search_terms
+            except ImportError:
+                from storage.kg_client import vector_search_terms
+
+            result = {}
+            terms_lower = {t.lower() for t in terms}
+
+            if sentence_embedding:
+                matches = vector_search_terms(list(sentence_embedding), top_k=15)
+                filtered = [(m['term'], m['score']) for m in matches
+                            if m.get('term', '').lower() not in terms_lower and m.get('score', 0) >= 0.55]
+                if filtered:
+                    result['_sentence'] = filtered[:8]
+
+            for term in terms[:5]:
+                emb = term_embeddings.get(term)
+                if not emb:
+                    continue
+                matches = vector_search_terms(list(emb), top_k=8)
+                filtered = [(m['term'], m['score']) for m in matches
+                            if m.get('term', '').lower() not in terms_lower
+                            and m.get('term', '').lower() != term.lower()
+                            and m.get('score', 0) >= 0.55]
+                if filtered:
+                    result[term] = filtered[:5]
+
+            return result
+        except Exception as e:
+            logger.warning("Neo4j embedding expand failed: %s", e)
+            return {}
+
     if not kg_term_index:
         return {}
 

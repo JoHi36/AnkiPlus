@@ -11,6 +11,13 @@ import neo4j from 'neo4j-driver';
 import * as v1 from 'firebase-functions/v1';
 import crypto from 'crypto';
 
+/** Safely convert Neo4j Integer or plain JS number to number. */
+function toNum(val: unknown): number {
+  if (val == null) return 0;
+  if (typeof val === 'object' && (val as any).toNumber) return (val as any).toNumber();
+  return Number(val) || 0;
+}
+
 function hashUid(uid: string): string {
   return crypto.createHash('sha256').update(uid).digest('hex').slice(0, 32);
 }
@@ -82,9 +89,10 @@ export async function kgQueryHandler(req: Request, res: Response): Promise<void>
     }
 
     res.json({ result });
-  } catch (error) {
-    v1.logger.error('kgQuery: failed', { query_type, error });
-    res.status(500).json({ error: 'Query failed' });
+  } catch (error: any) {
+    const errMsg = error?.message || error?.code || String(error);
+    v1.logger.error('kgQuery: failed', { query_type, errorMessage: errMsg, errorCode: error?.code });
+    res.status(500).json({ error: 'Query failed', detail: errMsg });
   }
 }
 
@@ -113,12 +121,14 @@ async function vectorSearchCards(
 
   return result.records
     .filter((r) => r.get('card_id') != null)
-    .map((r) => ({
-      content_hash: r.get('content_hash'),
-      card_id: r.get('card_id').toNumber(),
-      text: r.get('text') || '',
-      score: r.get('score'),
-    }));
+    .map((r) => {
+      return {
+        content_hash: r.get('content_hash'),
+        card_id: toNum(r.get('card_id')),
+        text: r.get('text') || '',
+        score: r.get('score'),
+      };
+    });
 }
 
 async function vectorSearchTerms(
@@ -170,7 +180,7 @@ async function getRelatedCards(
   return result.records.map((r) => ({
     content_hash: r.get('content_hash'),
     text: r.get('text'),
-    shared_terms: r.get('shared_terms').toNumber(),
+    shared_terms: toNum(r.get('shared_terms')),
   }));
 }
 
@@ -210,7 +220,7 @@ async function getTermExpansions(
 
   return result.records.map((r) => ({
     term: r.get('term'),
-    weight: r.get('weight').toNumber(),
+    weight: toNum(r.get('weight')),
   }));
 }
 
@@ -233,7 +243,7 @@ async function getWeakTerms(
 
   return result.records.map((r) => ({
     term: r.get('term'),
-    struggle_count: r.get('struggle_count').toNumber(),
+    struggle_count: toNum(r.get('struggle_count')),
   }));
 }
 
@@ -258,8 +268,8 @@ async function getKgMetrics(
   }
 
   return {
-    totalCards: r.get('totalCards').toNumber(),
-    reviewedCards: r.get('reviewedCards').toNumber(),
+    totalCards: toNum(r.get('totalCards')),
+    reviewedCards: toNum(r.get('reviewedCards')),
     avgEase: r.get('avgEase') != null ? parseFloat(r.get('avgEase').toFixed(1)) : 0,
     avgInterval: r.get('avgInterval') != null ? Math.round(r.get('avgInterval')) : 0,
   };

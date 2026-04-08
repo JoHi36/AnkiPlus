@@ -288,34 +288,18 @@ class EmbeddingManager:
         import struct
         import math
 
-        # Neo4j path — embeddings come as float lists, no unpacking needed
+        # Neo4j path — skip bulk download, use vector_search_terms at query time instead.
+        # The kg_term_index stays empty; _embedding_expand_terms checks _is_neo4j()
+        # and calls vector_search_terms directly for on-demand nearest-neighbor lookup.
         try:
             try:
                 from config import get_config as _gc
             except ImportError:
                 from ..config import get_config as _gc
             if _gc().get('kg_backend') == 'neo4j':
-                try:
-                    try:
-                        from storage.kg_client import load_term_embeddings
-                    except ImportError:
-                        from ..storage.kg_client import load_term_embeddings
-                    raw = load_term_embeddings()
-                    index = {}
-                    for term, vec in raw.items():
-                        if not vec:
-                            continue
-                        norm = math.sqrt(sum(v * v for v in vec))
-                        if norm > 0:
-                            vec = [v / norm for v in vec]
-                        index[term] = vec
-                    self._kg_term_index = index
-                    logger.info("Loaded %d KG term embeddings from Neo4j", len(index))
-                    return index
-                except Exception as e:
-                    logger.warning("Neo4j term index load failed: %s", e)
-                    self._kg_term_index = {}
-                    return {}
+                self._kg_term_index = {}  # Empty — Neo4j handles search server-side
+                logger.info("KG term index: Neo4j backend — using server-side vector search")
+                return self._kg_term_index
         except Exception:
             pass
 
