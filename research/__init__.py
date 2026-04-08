@@ -1,8 +1,16 @@
-"""Research Agent — unified pipeline, no card context.
+"""Research Agent — DEPRECATED as standalone chat agent.
 
-Uses rag_pipeline.retrieve('research', ...) for high-quality retrieval,
-then generates via backend /chat. No dependency on SearchCardsThread —
-Canvas gets its cards separately, Research gets its own pipeline results.
+In the Agent-Kanal-Paradigma, the Stapel channel (SearchCardsThread + Clustering
++ KG + Canvas + Quick Answer) IS the Research Agent. This run_research() function
+was used for @Research mentions in chat, which no longer exist.
+
+The Stapel pipeline lives in:
+- ui/widget.py: SearchCardsThread (graph search, clustering)
+- ui/widget.py: KGDefinitionThread (term definitions)
+- ui/widget.py: QuickAnswerThread (LLM text generation)
+- frontend/src/hooks/useSmartSearch.js (frontend orchestration)
+
+This file is kept for backwards compatibility only.
 """
 try:
     from ..utils.logging import get_logger
@@ -24,6 +32,7 @@ def _get_research_prompt():
     if _RESEARCH_PROMPT_CACHE:
         return _RESEARCH_PROMPT_CACHE
 
+    # Try loading from TypeScript source
     import os, re
     prompt_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                'functions', 'src', 'prompts', 'research.ts')
@@ -37,6 +46,7 @@ def _get_research_prompt():
     except (OSError, IOError):
         pass
 
+    # Fallback
     _RESEARCH_PROMPT_CACHE = (
         "Du bist ein Wissens-Agent. Beantworte Fragen präzise auf Basis des Lernmaterials. "
         "Inline-Referenzen [1], [2] für Fakten aus Karten. Sachlich, keine Floskeln."
@@ -46,18 +56,12 @@ def _get_research_prompt():
 
 def run_research(situation: str = '', emit_step=None, memory=None,
                  stream_callback=None, citation_builder=None, **kwargs) -> dict:
-    """Research agent — unified pipeline, collection-wide, no card context.
+    """Research agent entry point.
 
     Pipeline:
-    1. Unified RAG retrieval (KG + SQL + Semantic + RRF + Reranker)
-    2. Generation via backend /chat with Research prompt
-
-    Args:
-        situation: User's search query.
-        emit_step: Pipeline visualization callback.
-        stream_callback: Streaming callback(chunk, done).
-        citation_builder: CitationBuilder instance.
-        **kwargs: config, history, model, embedding_manager, rag_retrieve_fn, etc.
+    1. Local: find cards via smart_search_context (pre-loaded) or RAG retrieval
+    2. Transport: cards sent as rag_context={"cards": [...]} → backend "insights"
+    3. Backend: generates answer with Research prompt + our cards
 
     Returns:
         dict with 'text', 'citations', '_used_streaming'.
@@ -70,119 +74,104 @@ def run_research(situation: str = '', emit_step=None, memory=None,
         citation_builder = CitationBuilder()
 
     config = kwargs.get('config') or get_config()
+    context = kwargs.get('context')
+    routing_result = kwargs.get('routing_result')
     model = kwargs.get('model', 'gemini-3-flash-preview')
     fallback_model = kwargs.get('fallback_model', 'gemini-2.5-flash')
     callback = kwargs.get('callback')
-    embedding_manager = kwargs.get('embedding_manager')
-    history = kwargs.get('history', [])
-
-    # Get rag_retrieve_fn (SQL search)
     rag_retrieve_fn = kwargs.get('rag_retrieve_fn')
-    if not rag_retrieve_fn:
-        try:
-            try:
-                from ..ai.rag import rag_retrieve_cards
-            except ImportError:
-                from ai.rag import rag_retrieve_cards
-            rag_retrieve_fn = rag_retrieve_cards
-        except Exception:
-            pass
+    embedding_manager = kwargs.get('embedding_manager')
+    smart_search_context = kwargs.get('smart_search_context')
 
     logger.info("Research Agent: query='%s'", query[:80])
 
     # ------------------------------------------------------------------
-    # 1. Router + Unified RAG retrieval
+    # 1. Find cards (local pipeline)
     # ------------------------------------------------------------------
-    rag_context = None
-    rag_result = None
+    cards_for_backend = []
 
-    try:
+    if smart_search_context:
+        # Smart Search path: cards already found by SearchCardsThread
+        cards = smart_search_context.get('cards_data', [])
+        for card in cards[:50]:
+            card_id = card.get('id') or card.get('card_id') or card.get('cardId') or 0
+            cards_for_backend.append({
+                'id': str(card_id),
+                'question': (card.get('question') or '')[:200],
+                'answer': (card.get('answer') or card.get('deck') or '')[:200],
+                'deck': card.get('deck', ''),
+            })
+            if card_id:
+                citation_builder.add_card(
+                    card_id=int(card_id) if card_id else 0,
+                    note_id=int(card_id) if card_id else 0,
+                    deck_name=card.get('deck', ''),
+                    front=(card.get('question') or '')[:200],
+                    back=(card.get('answer') or '')[:200],
+                    sources=['smart_search'],
+                )
+        if emit_step:
+            emit_step("sources_ready", "done", {"citations": citation_builder.build()})
+        logger.info("Research: %d cards from smart_search", len(cards_for_backend))
+    else:
+        # Normal path: local RAG retrieval
         try:
-            from ..ai.rag_pipeline import retrieve_rag_context as rag_retrieve
+            from ai.rag_pipeline import retrieve_rag_context
         except ImportError:
-            from ai.rag_pipeline import retrieve_rag_context as rag_retrieve
-
-        # Router call — needed for resolved_intent + associated_terms
-        # Without it, KG enrichment gets garbage terms from raw query
-        routing = None
-        try:
             try:
-                from ..ai.rag_analyzer import analyze_query, RagAnalysis
+                from ..ai.rag_pipeline import retrieve_rag_context
             except ImportError:
-                from ai.rag_analyzer import analyze_query, RagAnalysis
+                from rag_pipeline import retrieve_rag_context
 
-            if emit_step:
-                emit_step("router", "running")
-            routing = analyze_query(
-                query, card_context=None,
-                chat_history=history, config=config)
-            # Research always searches, override router decision
-            routing.search_needed = True
-            routing.search_scope = 'collection'
-            if emit_step:
-                emit_step("router", "done", {
-                    "search_needed": True,
-                    "resolved_intent": routing.resolved_intent or query,
-                    "retrieval_mode": routing.retrieval_mode,
-                })
-        except Exception as e:
-            logger.warning("Research router failed, using query as intent: %s", e)
-            routing = RagAnalysis(
-                search_needed=True,
-                resolved_intent=query,
-                retrieval_mode='both',
-                search_scope='collection',
-            )
-
-        rag_result = rag_retrieve(
-            user_message=query,
-            context=None,
-            config=config,
-            routing_result=routing,
-            emit_step=emit_step,
-            embedding_manager=embedding_manager,
-            rag_retrieve_fn=rag_retrieve_fn,
-        )
-
-        if rag_result and rag_result.rag_context:
-            rag_context = rag_result.rag_context
-
-            # Build citations from pipeline results
-            if rag_result.citations:
-                sorted_cits = sorted(
-                    rag_result.citations.values(),
-                    key=lambda c: c.get('index', 999))
-                for cdata in sorted_cits:
-                    if cdata.get('type') == 'web':
-                        citation_builder.add_web(
-                            url=cdata.get('url', ''),
-                            title=cdata.get('title', ''),
-                            domain=cdata.get('domain', ''))
-                    else:
-                        _fields = cdata.get('fields', {})
-                        _fvals = list(_fields.values())
-                        citation_builder.add_card(
-                            card_id=int(cdata.get('cardId', cdata.get('noteId', 0))),
-                            note_id=int(cdata.get('noteId', 0)),
-                            deck_name=cdata.get('deckName', ''),
-                            front=cdata.get('question', _fvals[0][:200] if _fvals else ''),
-                            back=cdata.get('answer', _fvals[1][:200] if len(_fvals) > 1 else ''),
-                            sources=cdata.get('sources', []))
-
-            if emit_step:
-                emit_step("sources_ready", "done", {"citations": citation_builder.build()})
-            logger.info("Research RAG: %d citations", len(citation_builder.build()))
-    except Exception as e:
-        logger.warning("Research RAG failed: %s", e)
+        if routing_result and (getattr(routing_result, 'search_needed', True) or
+                               (isinstance(routing_result, dict) and routing_result.get('search_needed', True))):
+            try:
+                rag_result = retrieve_rag_context(
+                    user_message=query,
+                    routing_result=routing_result,
+                    context=context,
+                    emit_step=emit_step,
+                    rag_retrieve_fn=rag_retrieve_fn,
+                    embedding_manager=embedding_manager,
+                )
+                if rag_result and rag_result.citations:
+                    # rag_result.citations may be a dict or list; convert to CitationBuilder entries
+                    raw_citations = rag_result.citations
+                    if isinstance(raw_citations, dict):
+                        for _key, cit in raw_citations.items():
+                            card_id = cit.get('cardId') or cit.get('id') or cit.get('noteId') or 0
+                            citation_builder.add_card(
+                                card_id=int(card_id) if card_id else 0,
+                                note_id=int(cit.get('noteId') or card_id) if (cit.get('noteId') or card_id) else 0,
+                                deck_name=cit.get('deckName', ''),
+                                front=(cit.get('front') or cit.get('question') or '')[:200],
+                                back=(cit.get('back') or '')[:200],
+                                sources=cit.get('sources') or [cit.get('source', 'rag')],
+                            )
+                    elif isinstance(raw_citations, list):
+                        for cit in raw_citations:
+                            card_id = cit.get('cardId') or cit.get('id') or cit.get('noteId') or 0
+                            citation_builder.add_card(
+                                card_id=int(card_id) if card_id else 0,
+                                note_id=int(cit.get('noteId') or card_id) if (cit.get('noteId') or card_id) else 0,
+                                deck_name=cit.get('deckName', ''),
+                                front=(cit.get('front') or cit.get('question') or '')[:200],
+                                back=(cit.get('back') or '')[:200],
+                                sources=cit.get('sources') or [cit.get('source', 'rag')],
+                            )
+                if rag_result and isinstance(rag_result.rag_context, dict):
+                    cards_for_backend = rag_result.rag_context.get('cards', [])
+                logger.info("Research RAG: %d citations", len(citation_builder.build()))
+            except Exception as e:
+                logger.warning("Research RAG failed: %s", e)
 
     # ------------------------------------------------------------------
-    # 2. Generate with Research prompt
+    # 2. Send to backend: cards as insights + Research prompt
     # ------------------------------------------------------------------
     system_prompt = _get_research_prompt()
 
-    # Build rag_context for backend (formatted string lines)
-    rag_lines = rag_context.get('cards', []) if rag_context else []
-    rag_for_backend = {"cards": rag_lines} if rag_lines else None
+    # Transport cards via rag_context → _build_chat_payload extracts as "insights"
+    rag_context = {"cards": cards_for_backend} if cards_for_backend else None
 
     try:
         try:
@@ -208,10 +197,10 @@ def run_research(situation: str = '', emit_step=None, memory=None,
             model=model,
             api_key='',
             context=None,
-            history=history,
+            history=[],
             mode='compact',
             callback=_stream_wrapper,
-            rag_context=rag_for_backend,
+            rag_context=rag_context,
             system_prompt_override=system_prompt,
             config=config,
             agent='research',
@@ -239,7 +228,7 @@ def run_research(situation: str = '', emit_step=None, memory=None,
                 model=fallback_model,
                 api_key='',
                 callback=_fb,
-                rag_context=rag_for_backend,
+                rag_context=rag_context,
                 system_prompt_override=system_prompt,
                 config=config,
                 agent='research',
