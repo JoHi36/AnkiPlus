@@ -171,7 +171,17 @@ def run_research(situation: str = '', emit_step=None, memory=None,
     system_prompt = _get_research_prompt()
 
     # Transport cards via rag_context → _build_chat_payload extracts as "insights"
-    rag_context = {"cards": cards_for_backend} if cards_for_backend else None
+    # gemini.py expects cards as strings (lines), not dicts
+    card_lines = []
+    for i, card in enumerate(cards_for_backend[:30], 1):
+        if isinstance(card, str):
+            card_lines.append(card)
+        elif isinstance(card, dict):
+            q = card.get('question', '')
+            a = card.get('answer', '')
+            deck = card.get('deck', '')
+            card_lines.append('[%d] (%s) %s | %s' % (i, deck, q, a))
+    rag_context = {"cards": card_lines} if card_lines else None
 
     try:
         try:
