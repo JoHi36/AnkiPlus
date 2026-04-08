@@ -289,7 +289,24 @@ function getClusterForImage(image, searchResult, clusterLabels) {
 
 // --- ImageTile (memoized) ---
 
-const ImageTile = React.memo(function ImageTile({ image, isSelected, onClick }) {
+const DECK_LABEL_STYLE = {
+  position: 'absolute',
+  top: 4,
+  left: 4,
+  background: 'var(--ds-bg-overlay)',
+  backdropFilter: 'blur(4px)',
+  borderRadius: 4,
+  padding: '1px 5px',
+  fontSize: 8,
+  fontWeight: 500,
+  color: 'var(--ds-text-tertiary)',
+  maxWidth: '70%',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+};
+
+const ImageTile = React.memo(function ImageTile({ image, deckLabel, isSelected, onClick }) {
   const multiCount = image.cardIds.length;
 
   return (
@@ -305,6 +322,7 @@ const ImageTile = React.memo(function ImageTile({ image, isSelected, onClick }) 
       onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.zIndex = '0'; }}
     >
       <img src={image.src} alt="" style={TILE_IMG_STYLE} loading="lazy" />
+      {deckLabel && <div style={DECK_LABEL_STYLE}>{deckLabel}</div>}
       {multiCount > 1 && <div style={BADGE_STYLE}>{multiCount} Karten</div>}
     </div>
   );
@@ -588,29 +606,19 @@ export default function ImageCanvas({
       overflowY: isLightboxOpen ? 'hidden' : 'auto',
     }}>
       <div style={{ ...CANVAS_INNER, display: isLightboxOpen ? 'none' : 'block' }}>
-        {deckGroups.map(group => {
-          const rows = chunkIntoRows(group.images, IMAGES_PER_ROW);
-          return (
-            <div key={group.deck} style={{ marginBottom: 16 }}>
-              <div style={DECK_HEADER_STYLE}>
-                {group.deck}
-                <span style={DECK_COUNT_STYLE}>{group.images.length}</span>
-              </div>
-              {rows.map((row, ri) => (
-                <div key={ri} style={GRID_ROW_STYLE}>
-                  {row.map(img => (
-                    <ImageTile
-                      key={img.filename}
-                      image={img}
-                      isSelected={lbImage?.filename === img.filename}
-                      onClick={() => openLightbox(img)}
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
-          );
-        })}
+        {chunkIntoRows(allImages, IMAGES_PER_ROW).map((row, ri) => (
+          <div key={ri} style={GRID_ROW_STYLE}>
+            {row.map(img => (
+              <ImageTile
+                key={img.filename}
+                image={img}
+                deckLabel={img.decks?.[String(img.cardIds[0])] || ''}
+                isSelected={lbImage?.filename === img.filename}
+                onClick={() => openLightbox(img)}
+              />
+            ))}
+          </div>
+        ))}
       </div>
 
       {/* Lightbox overlay */}

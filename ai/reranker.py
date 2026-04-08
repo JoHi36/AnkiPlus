@@ -101,66 +101,36 @@ def rerank_sources(
     try:
         import requests
 
-        # Direct OpenRouter call — bypasses backend system prompt (like Router does)
-        try:
-            from ..config import get_config
-        except ImportError:
-            from config import get_config
-        config = get_config() or {}
-        openrouter_key = config.get('openrouter_api_key', '')
-        if not openrouter_key:
-            # Fallback: use backend /chat with override
-            backend_url = get_backend_url()
-            token = get_auth_token()
-            if not backend_url:
-                logger.warning("Reranker: no API key and no backend URL, skipping")
-                return {"relevant_indices": list(range(1, len(numbered_lines) + 1)),
-                        "web_search": False, "reranked": False}
-            headers = {"Content-Type": "application/json"}
-            if token:
-                headers["Authorization"] = f"Bearer {token}"
-            payload = {
-                "message": prompt,
-                "model": RERANKER_MODEL,
-                "temperature": 0.0,
-                "maxOutputTokens": 256,
-                "history": [],
-                "agent": "tutor",
-                "mode": "compact",
-                "stream": False,
-                "systemPromptOverride": "Du bewertest Quellen. Antworte NUR mit validem JSON, kein anderer Text.",
-            }
-            t0 = time.time()
-            response = requests.post(
-                f"{backend_url}/chat", json=payload,
-                headers=headers, timeout=RERANKER_TIMEOUT_S,
-            )
-            elapsed_ms = int((time.time() - t0) * 1000)
-            response.raise_for_status()
-            data = response.json()
-            result_text = data.get("text", "")
-        else:
-            # Direct OpenRouter — no system prompt interference
-            openrouter_model = f"google/{RERANKER_MODEL}"
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {openrouter_key}",
-            }
-            payload = {
-                "model": openrouter_model,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.0,
-                "max_tokens": 256,
-            }
-            t0 = time.time()
-            response = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                json=payload, headers=headers, timeout=RERANKER_TIMEOUT_S,
-            )
-            elapsed_ms = int((time.time() - t0) * 1000)
-            response.raise_for_status()
-            data = response.json()
-            result_text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        # Always use backend /chat — unified OpenRouter routing
+        backend_url = get_backend_url()
+        token = get_auth_token()
+        if not backend_url:
+            logger.warning("Reranker: no backend URL configured, skipping")
+            return {"relevant_indices": list(range(1, len(numbered_lines) + 1)),
+                    "web_search": False, "reranked": False}
+        headers = {"Content-Type": "application/json"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        payload = {
+            "message": prompt,
+            "model": RERANKER_MODEL,
+            "temperature": 0.0,
+            "maxOutputTokens": 256,
+            "history": [],
+            "agent": "tutor",
+            "mode": "compact",
+            "stream": False,
+            "systemPromptOverride": "Du bewertest Quellen. Antworte NUR mit validem JSON, kein anderer Text.",
+        }
+        t0 = time.time()
+        response = requests.post(
+            f"{backend_url}/chat", json=payload,
+            headers=headers, timeout=RERANKER_TIMEOUT_S,
+        )
+        elapsed_ms = int((time.time() - t0) * 1000)
+        response.raise_for_status()
+        data = response.json()
+        result_text = data.get("text", "")
 
         # Parse JSON response
         # Handle markdown code blocks: ```json ... ```

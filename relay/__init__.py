@@ -167,14 +167,13 @@ def create_pair():
     if not relay_url:
         return {"error": "relay_url not configured"}
 
-    # If already connected with a pair code, just return the existing one
+    # Reuse existing pair code if client is connected and has one
     if _client and _client.is_connected and _client.pair_code:
         pair_url = f"{app_url}?pair={_client.pair_code}"
         logger.info("relay: reusing existing pair — code=%s", _client.pair_code)
         return {"pair_code": _client.pair_code, "pair_url": pair_url}
 
-    # If client exists and is connected (auto-reconnect) but has no pair code,
-    # create a new pair code on the existing client
+    # Client connected but no pair code — create one on existing connection
     if _client and _client.is_connected:
         pair_code = _client.create_pair()
         if not pair_code:
@@ -214,6 +213,19 @@ def create_pair():
     pair_url = f"{app_url}?pair={pair_code}"
     logger.info("relay: pair created — code=%s url=%s", pair_code, pair_url)
     return {"pair_code": pair_code, "pair_url": pair_url}
+
+
+def refresh_pair():
+    """Force-create a new pair code, replacing the existing one.
+
+    Called when user explicitly clicks the QR code to refresh it.
+    Unlike create_pair(), this always generates a fresh code even if
+    one already exists.
+    """
+    global _client
+    if _client and _client.is_connected:
+        _client.pair_code = None  # Clear cached code so create_pair doesn't reuse
+    return create_pair()
 
 
 def start():

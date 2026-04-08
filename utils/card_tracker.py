@@ -110,16 +110,35 @@ class CardTracker:
                             break
             
             # Bereinige front_field von HTML-Tags für bessere Title-Generierung
+            import re
+            def _clean_html(html):
+                if not html:
+                    return ''
+                clean = re.sub(r'<style[^>]*>.*?</style>', '', html, flags=re.DOTALL)
+                clean = re.sub(r'<script[^>]*>.*?</script>', '', clean, flags=re.DOTALL)
+                clean = re.sub(r'<[^>]+>', ' ', clean)
+                clean = re.sub(r'&[a-zA-Z]+;', ' ', clean)
+                clean = re.sub(r'\s+', ' ', clean)
+                return clean.strip()
+
             if front_field:
-                import re
-                # Entferne HTML-Tags
-                clean_front = re.sub(r'<[^>]+>', ' ', front_field)
-                # Entferne mehrfache Leerzeichen
-                clean_front = re.sub(r'\s+', ' ', clean_front)
-                # Entferne HTML-Entities
-                clean_front = re.sub(r'&[a-zA-Z]+;', ' ', clean_front)
-                front_field = clean_front.strip()
+                front_field = _clean_html(front_field)
                 logger.debug("card_tracker: frontField bereinigt: %s...", front_field[:100] if front_field else 'leer')
+
+            # Extract and clean back field (answer side)
+            back_field = None
+            for name in ['Back', 'Rückseite', 'Answer', 'Antwort', 'Extra']:
+                if name in fields and fields[name]:
+                    back_field = fields[name]
+                    break
+            if not back_field and field_names:
+                # Fallback: second non-empty field (first is front)
+                for name in field_names[1:]:
+                    if fields.get(name, '').strip():
+                        back_field = fields[name]
+                        break
+            if back_field:
+                back_field = _clean_html(back_field)
             
             # Hole Deck-Name
             deck_name = None
@@ -159,6 +178,7 @@ class CardTracker:
                 "fields": fields,
                 "tags": tags,
                 "frontField": front_field,  # Direktes Vorderseiten-Feld (ohne Templates)
+                "backField": back_field,   # Direktes Rückseiten-Feld (ohne Templates)
                 "deckId": card.did,
                 "deckName": deck_name,
                 "isQuestion": is_question,  # True = Frage, False = Antwort angezeigt

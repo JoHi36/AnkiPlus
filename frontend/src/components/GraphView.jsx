@@ -603,7 +603,7 @@ export default function GraphView({ onToggleView, isPremium, deckData, smartSear
                   color: 'var(--ds-text-muted)',
                   marginBottom: 10,
                 }}>
-                  Agent Canvas
+                  Research Canvas
                 </span>
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 6,

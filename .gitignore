@@ -71,3 +71,4 @@ meta.json
 # Cloud Function prototypes (separate deployment)
 backend/
 functions/
+.vercel

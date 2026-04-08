@@ -15,6 +15,7 @@ import { SessionContextProvider, useSessionContext } from './contexts/SessionCon
 import ChatMessage from './components/ChatMessage';
 import StreamingChatMessage from './components/StreamingChatMessage';
 import { getOrCreateDeviceId } from './utils/deviceId';
+import { frontendLog } from './utils/frontendLogger';
 import ChatInput from './components/ChatInput';
 import ContextSurface from './components/ContextSurface';
 import DeckBrowser from './components/DeckBrowser';
@@ -220,6 +221,7 @@ function AppInner() {
       return false;
     }
   });
+  const [subscriptionTier, setSubscriptionTier] = useState('free');
   const [showPaywall, setShowPaywall] = useState(false);
   
   // Custom Hooks
@@ -471,8 +473,14 @@ function AppInner() {
   const showSessionOverview = forceShowOverview;
 
   // Theme state — 'dark' | 'light' | 'system'; resolvedTheme is the effective value
-  const [theme, setTheme] = useState('dark');
+  const [theme, _setTheme] = useState('dark');
   const [resolvedTheme, setResolvedTheme] = useState('dark');
+
+  // When theme changes, also resolve it (dark/light directly, system → dark fallback)
+  const setTheme = useCallback((t) => {
+    _setTheme(t);
+    if (t === 'dark' || t === 'light') setResolvedTheme(t);
+  }, []);
 
   // Apply data-theme to document root whenever resolvedTheme changes
   useEffect(() => {
@@ -732,11 +740,22 @@ function AppInner() {
       if (!payload || typeof payload !== 'object') {
         return;
       }
-      
+
+      frontendLog('ankiReceive', payload.type);
+
       // Emit through Event Bus (agents can subscribe)
       emit(payload.type, payload);
       // Also dispatch as CustomEvent so child components can listen safely
       window.dispatchEvent(new CustomEvent('ankiReceive', { detail: payload }));
+
+      // Subscription tier from sidebar status
+      if (payload.type === 'sidebarStatus') {
+        const tier = payload.data?.tier || 'free';
+        setSubscriptionTier(tier);
+        setIsPremium(tier !== 'free');
+        try { localStorage.setItem('anki_premium_status', tier !== 'free' ? 'true' : 'false'); } catch (e) {}
+        return;
+      }
 
       // Remote control events (PWA)
       if (payload.type === 'remoteConnected') {
@@ -2208,8 +2227,9 @@ function AppInner() {
 
   // ── Fullscreen views (DeckBrowser, Overview) — merged from MainApp ──
 
-  // Settings panel — rendered as fixed overlay, visible on ALL views
-  const settingsPanel = (
+  // Settings panel — portalled to document.body so it NEVER remounts on view switches.
+  // z-index 70 — sits above content but below Plusi (80).
+  const settingsPanel = createPortal(
     <div style={{
       ...SETTINGS_PANEL_STYLE,
       transform: settingsOpen ? 'translateX(0)' : 'translateX(-100%)',
@@ -2217,7 +2237,8 @@ function AppInner() {
       transition: 'transform 0.35s cubic-bezier(0.25, 1, 0.5, 1)',
     }}>
       <SidebarShell bridge={bridge} />
-    </div>
+    </div>,
+    document.body,
   );
 
   // ── Persistent TopBar — never unmounts, slides between all tabs ──
@@ -2227,10 +2248,10 @@ function AppInner() {
       ankiState={ankiState}
       messageCount={0}
       totalDue={deckBrowserData?.totalDue || 0}
-      deckName={activeView === 'review' ? (cardData?.deckName || '') : (overviewData?.deckName || '')}
-      dueNew={ankiState === 'overview' ? (overviewData?.dueNew || 0) : (deckBrowserData?.totalNew || 0)}
-      dueLearning={ankiState === 'overview' ? (overviewData?.dueLearning || 0) : (deckBrowserData?.totalLearn || 0)}
-      dueReview={ankiState === 'overview' ? (overviewData?.dueReview || 0) : (deckBrowserData?.totalReview || 0)}
+      deckName={(activeView === 'review' || activeView === 'overview') ? (cardData?.sessionDeckName || overviewData?.deckName || '') : (overviewData?.deckName || '')}
+      dueNew={(activeView === 'overview' || activeView === 'review') ? (cardData?.dueNew ?? overviewData?.dueNew ?? 0) : (deckBrowserData?.totalNew || 0)}
+      dueLearning={(activeView === 'overview' || activeView === 'review') ? (cardData?.dueLearning ?? overviewData?.dueLearning ?? 0) : (deckBrowserData?.totalLearn || 0)}
+      dueReview={(activeView === 'overview' || activeView === 'review') ? (cardData?.dueReview ?? overviewData?.dueReview ?? 0) : (deckBrowserData?.totalReview || 0)}
       onTabClick={handleTabClick}
       onSidebarToggle={handleSidebarToggle}
       settingsOpen={settingsOpen}
@@ -2256,15 +2277,19 @@ function AppInner() {
     document.body,
   );
 
-  if (activeView === 'deckBrowser' || activeView === 'overview' || activeView === 'statistik') {
+  // Fullscreen views branch
+  const isFullscreenView = activeView === 'deckBrowser' || activeView === 'overview' || activeView === 'statistik';
+
+  if (isFullscreenView) {
     return (
-      <div className="ds-canvas-surface" style={{
+      <>
+      {settingsPanel}
+      <div className="ds-canvas-surface" key="fullscreen" style={{
         position: 'fixed', inset: 0,
         display: 'flex', flexDirection: 'column',
         marginLeft: settingsOpen ? 'var(--ds-settings-width)' : 0,
         transition: `margin-left 0.35s cubic-bezier(0.25, 1, 0.5, 1)`,
       }}>
-        {settingsPanel}
         {mascotElement}
 
         {/* Flex row: left (canvas) + right (SearchSidebar) */}
@@ -2293,6 +2318,7 @@ function AppInner() {
                     <DeckBrowserView
                       data={deckBrowserData}
                       isPremium={isPremium}
+                      subscriptionTier={subscriptionTier}
                       lidState={lidLift.state}
                       canvasOpen={searchSidebarMounted || lidIsActive}
                       sidebarOpen={searchSidebarMounted}
@@ -2413,14 +2439,18 @@ function AppInner() {
               termDefinition={smartSearch.termDefinition}
               imageSelectedCardIds={smartSearch.imageSelectedCardIds}
               searchStreamId={smartSearch.searchStreamId}
+              onClose={() => { lidLift.close(false); smartSearch.reset(); }}
             />
           )}
         </div>
       </div>
+      </>
     );
   }
 
   return (
+    <>
+    {settingsPanel}
     <ErrorBoundary>
     <style>{`
       /* All direct children of messages container: center at content width.
@@ -2450,7 +2480,6 @@ function AppInner() {
       .dock-pulse { animation: dockPulse 0.3s cubic-bezier(0.25, 1, 0.5, 1); }
     `}</style>
     <div className="ds-canvas-surface" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      {settingsPanel}
       {mascotElement}
       {/* Spacer — pushes content right when settings is open */}
       <div style={{
@@ -2967,6 +2996,7 @@ function AppInner() {
     })()}
 
     </ErrorBoundary>
+    </>
   );
 }
 

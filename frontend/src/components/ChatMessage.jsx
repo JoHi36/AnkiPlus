@@ -1483,7 +1483,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
       : fixedMessage;
 
     return (
-      <div style={{ paddingTop: 16 }}>
+      <div style={{ paddingTop: 16, paddingBottom: 8 }}>
         <div
           style={{
             fontSize: 21,
@@ -1877,7 +1877,7 @@ function ChatMessage({ message, from, cardContext, onAnswerSelect, onAutoFlip, i
                     return (
                       <div key={`${cell.agent}-${i}`}>
                         {/* Agent status bar — always visible */}
-                        <div style={{ marginTop: 2, marginBottom: cell.text ? 8 : 0 }}>
+                        <div style={{ marginTop: 0, marginBottom: cell.text ? 4 : 0 }}>
                           <TutorThinkingLive
                             requestId={requestId}
                             agentName={cell.agent || 'tutor'}

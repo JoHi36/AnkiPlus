@@ -172,6 +172,7 @@ export default function SearchSidebar({
   termDefinition,
   imageSelectedCardIds = [],  // NEW — from ImageCanvas selection
   searchStreamId,              // NEW — for ThinkingIndicator
+  onClose,                     // ESC / close canvas callback
 }) {
 
   // All hooks must be called unconditionally (before any early return)
@@ -359,7 +360,7 @@ export default function SearchSidebar({
       {/* Resize handle — same as session sidebar */}
       <ResizeHandle />
 
-      {/* Agent header — icon + name */}
+      {/* Agent header — icon + name + ESC */}
       <div style={{
         flexShrink: 0,
         padding: '14px 20px 0',
@@ -390,6 +391,28 @@ export default function SearchSidebar({
         }}>
           Research
         </span>
+        {onClose && (
+          <button
+            onClick={onClose}
+            style={{
+              marginLeft: 'auto',
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: 'none', border: 'none', cursor: 'pointer',
+              padding: 0, fontFamily: 'inherit',
+            }}
+          >
+            <kbd style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              padding: '2px 7px', borderRadius: 5,
+              background: 'var(--ds-hover-tint)',
+              border: '1px solid var(--ds-border-subtle)',
+              fontSize: 9, fontWeight: 500,
+              fontFamily: 'inherit', lineHeight: 1,
+              color: 'var(--ds-text-muted)',
+            }}>ESC</kbd>
+            <span style={{ fontSize: 11, color: 'var(--ds-text-muted)' }}>Verlassen</span>
+          </button>
+        )}
       </div>
 
       {/* Tab bar — always visible */}

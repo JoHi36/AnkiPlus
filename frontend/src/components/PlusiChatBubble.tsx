@@ -14,14 +14,12 @@ interface PlusiChatBubbleProps {
   voiceState: 'idle' | 'recording' | 'processing' | 'speaking';
 }
 
-const DEFAULT_MAX_HEIGHT = 200;
+const DEFAULT_MAX_HEIGHT = 500;
 const MIN_BUBBLE_HEIGHT = 60;
 const R = 8; // corner radius — matches ComponentViewer
 const TAIL_EXTEND = 8; // how far tail extends beyond body
 const TAIL_DROP = 2; // how far tail drops below body
 
-let _persistedMaxHeight = DEFAULT_MAX_HEIGHT;
-let _persistedMaxWidth = 280;
 
 /* ── SVG path generators — identical curves to ComponentViewer ── */
 
@@ -75,23 +73,11 @@ const INPUT_STYLE: React.CSSProperties = {
   color: 'var(--ds-text-primary)',
   fontFamily: "'SF Mono', 'SFMono-Regular', 'Menlo', monospace",
   resize: 'none',
-  padding: '14px 16px',
+  padding: '6px 10px',
+  margin: 0,
+  boxSizing: 'border-box',
   overflowY: 'auto',
   scrollbarWidth: 'none',
-};
-
-const THINKING_DOTS_STYLE: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  padding: '16px 20px',
-};
-
-const DOT_BASE: React.CSSProperties = {
-  width: 6,
-  height: 6,
-  borderRadius: '50%',
-  background: 'var(--ds-text-tertiary)',
 };
 
 const VOICE_ROW: React.CSSProperties = {
@@ -145,10 +131,8 @@ export default function PlusiChatBubble({
   const [audioProgress, setAudioProgress] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [maxHeight, _setMaxHeight] = useState(_persistedMaxHeight);
-  const [maxWidth, _setMaxWidth] = useState(_persistedMaxWidth);
-  const setMaxHeight = useCallback((h: number) => { _persistedMaxHeight = h; _setMaxHeight(h); }, []);
-  const setMaxWidth = useCallback((w: number) => { _persistedMaxWidth = w; _setMaxWidth(w); }, []);
+  const [maxHeight, setMaxHeight] = useState(DEFAULT_MAX_HEIGHT);
+  const [maxWidth, setMaxWidth] = useState(360);
   const [size, setSize] = useState({ w: 200, h: 44 });
   const [isOverflowing, setIsOverflowing] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -158,6 +142,7 @@ export default function PlusiChatBubble({
   const dragRef = useRef<{ startX: number; startY: number; startW: number; startH: number } | null>(null);
 
   // Measure content size with ResizeObserver
+  // Re-attach when open/bubbleState changes (ref is null when bubble is closed)
   useEffect(() => {
     if (!contentRef.current) return;
     const ro = new ResizeObserver(([entry]) => {
@@ -166,7 +151,7 @@ export default function PlusiChatBubble({
     });
     ro.observe(contentRef.current);
     return () => ro.disconnect();
-  }, []);
+  }, [open, bubbleState]);
 
   // Detect overflow
   useEffect(() => {
@@ -189,7 +174,7 @@ export default function PlusiChatBubble({
     const dy = dragRef.current.startY - e.clientY; // up = bigger
     setMaxWidth(Math.max(180, dragRef.current.startW + dx));
     setMaxHeight(Math.max(MIN_BUBBLE_HEIGHT, dragRef.current.startH + dy));
-  }, [setMaxWidth, setMaxHeight]);
+  }, []);
 
   const handleResizeEnd = useCallback(() => { dragRef.current = null; }, []);
 
@@ -210,7 +195,7 @@ export default function PlusiChatBubble({
   }, [voiceState, open]);
 
   useEffect(() => {
-    if (open) { setBubbleState('typing'); setInputText(''); setDisplayText(null); }
+    if (open) { setBubbleState('typing'); setInputText(''); setDisplayText(null); setMaxHeight(DEFAULT_MAX_HEIGHT); }
   }, [open]);
 
   useEffect(() => {
@@ -259,6 +244,9 @@ export default function PlusiChatBubble({
 
   if (!open) return null;
 
+  // Waiting: no bubble — Plusi mascot shows thinking animation instead
+  if (bubbleState === 'waiting') return null;
+
   // SVG dimensions
   const { w, h } = size;
   const d = tail === 'left' ? leftTailPath(w, h) : rightTailPath(w, h);
@@ -268,7 +256,7 @@ export default function PlusiChatBubble({
   return (
     <div style={{
       position: 'absolute',
-      bottom: 8,
+      bottom: 24,
       left: tail === 'left' ? 48 : 60,
       zIndex: 81,
       animation: 'plusi-bubble-in 200ms var(--ds-ease) both',
@@ -318,21 +306,13 @@ export default function PlusiChatBubble({
           />
         )}
 
-        {bubbleState === 'waiting' && (
-          <div style={THINKING_DOTS_STYLE}>
-            <div style={DOT_BASE} className="thinking-dot-pulse" />
-            <div style={DOT_BASE} className="thinking-dot-pulse" />
-            <div style={DOT_BASE} className="thinking-dot-pulse" />
-          </div>
-        )}
-
         {bubbleState === 'response' && displayText && (
           <div
             ref={scrollRef}
             style={{
               maxHeight,
               overflowY: 'auto',
-              padding: '14px 16px',
+              padding: '6px 10px',
               scrollbarWidth: 'none',
               cursor: 'pointer',
             }}

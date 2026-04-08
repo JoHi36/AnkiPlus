@@ -27,6 +27,9 @@ _KNOWN_ACTIONS = {
     "open_deck": ["deck_id"],
     "set_mode": ["mode"],
     "get_decks": [],
+    "switch_tab": ["tab"],
+    "chat_message": ["text"],
+    "request_mc": [],
 }
 
 # ---------------------------------------------------------------------------
@@ -268,6 +271,83 @@ def open_deck(client, deck_id):
     return _run_on_main(_fn)
 
 
+def switch_tab(client, tab):
+    """Switch the desktop Anki view based on tab name.
+
+    Maps remote tabs to Anki states:
+    - lernen → review (or overview if not in review)
+    - finden → deckBrowser
+    - planen → deckBrowser (statistics view)
+    """
+    TAB_MAP = {
+        "lernen": "review",
+        "finden": "deckBrowser",
+        "planen": "deckBrowser",
+    }
+    target = TAB_MAP.get(tab, "deckBrowser")
+
+    def _fn():
+        from aqt import mw
+        if not mw:
+            return {"error": "Anki not available"}
+        logger.info("relay.actions: switch_tab tab=%s → state=%s", tab, target)
+
+        # Also send to React frontend so it switches views
+        try:
+            from .state import AnkiStateReporter
+            view = None
+            try:
+                from ..ui.main_view import get_main_view
+            except ImportError:
+                from ui.main_view import get_main_view
+            view = get_main_view()
+            if view and hasattr(view, '_chatbot') and view._chatbot:
+                wv = view._chatbot.web_view
+                if wv:
+                    import json
+                    # Map tab to the React app's tab system
+                    tab_map = {"lernen": "session", "finden": "stapel", "planen": "statistik"}
+                    react_tab = tab_map.get(tab, "session")
+                    payload = json.dumps({"type": "remoteTabSwitch", "data": {"tab": react_tab}})
+                    wv.page().runJavaScript(
+                        f"window.ankiReceive && window.ankiReceive({payload});"
+                    )
+        except Exception as exc:
+            logger.debug("relay.actions: switch_tab desktop notify error: %s", exc)
+
+        mw.moveToState(target)
+        return {"switched": tab}
+
+    return _run_on_main(_fn)
+
+
+def _forward_chat_to_desktop(client, text):
+    """Forward a chat message from PWA to the desktop React app."""
+    if not text:
+        return None
+
+    def _fn():
+        try:
+            try:
+                from ..ui.main_view import get_main_view
+            except ImportError:
+                from ui.main_view import get_main_view
+            view = get_main_view()
+            if view and hasattr(view, '_chatbot') and view._chatbot:
+                wv = view._chatbot.web_view
+                if wv:
+                    import json
+                    payload = json.dumps({"type": "remoteChatMessage", "data": {"text": text}})
+                    wv.page().runJavaScript(
+                        f"window.ankiReceive && window.ankiReceive({payload});"
+                    )
+                    logger.info("relay.actions: chat forwarded to desktop (%d chars)", len(text))
+        except Exception as exc:
+            logger.error("relay.actions: _forward_chat error: %s", exc)
+
+    return _run_on_main(_fn)
+
+
 def get_decks(client):
     """Get deck list with due counts and send to PWA.
 
@@ -347,6 +427,20 @@ def handle_action(client, action_type, params):
 
     if action_type == "get_decks":
         return get_decks(client)
+
+    if action_type == "switch_tab":
+        tab = params.get("tab", "lernen")
+        return switch_tab(client, tab)
+
+    if action_type == "chat_message":
+        text = params.get("text", "")
+        logger.info("relay.actions: chat_message len=%d", len(text))
+        # Forward to desktop as a sendMessage action
+        return _forward_chat_to_desktop(client, text)
+
+    if action_type == "request_mc":
+        logger.info("relay.actions: request_mc — not yet implemented")
+        return None
 
     logger.warning("relay.actions: unknown action %s", action_type)
     return None

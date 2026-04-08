@@ -34,8 +34,10 @@ export default function TopBar({
   settingsOpen = false,
   canvasMode = false,
 }) {
+  const isSession = ankiState === 'overview' || ankiState === 'review'
+    || activeView === 'overview' || activeView === 'review';
   const activeTab = activeView === 'statistik' ? 'statistik'
-    : (ankiState === 'overview' || ankiState === 'review') ? 'session'
+    : isSession ? 'session'
     : 'stapel';
 
   // Plus/Close button — morphs between + and × via CSS rotation
@@ -58,17 +60,9 @@ export default function TopBar({
     </button>
   );
 
-  // Left content — depends on view and canvasMode
+  // Left content — depends on view
   let leftContent;
-  if (canvasMode) {
-    leftContent = (
-      <div style={ESC_WRAPPER_STYLE}>
-        {plusButton}
-        <kbd style={ESC_BADGE_STYLE}>ESC</kbd>
-        <span style={ESC_LABEL_STYLE}>Verlassen</span>
-      </div>
-    );
-  } else if (ankiState === 'overview') {
+  if (isSession) {
     const shortDeck = deckName ? deckName.split('::').pop() : '';
     leftContent = (
       <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -94,11 +88,9 @@ export default function TopBar({
     );
   }
 
-  // Right content — hide stats in canvasMode, keep empty slot for layout balance
+  // Right content
   let rightContent;
-  if (canvasMode) {
-    rightContent = null;
-  } else if (ankiState === 'overview') {
+  if (isSession) {
     rightContent = (
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11, fontWeight: 600, color: 'var(--ds-stat-new)', fontVariantNumeric: 'tabular-nums' }}>{dueNew}</span>
@@ -125,9 +117,9 @@ export default function TopBar({
 
   // Tab bar with sliding indicator
   const tabs = [
-    { id: 'stapel', label: 'Stapel' },
-    { id: 'session', label: 'Session' },
-    { id: 'statistik', label: 'Statistik' },
+    { id: 'stapel', label: 'Finden' },
+    { id: 'session', label: 'Lernen' },
+    { id: 'statistik', label: 'Planen' },
   ];
 
   const tabContainerRef = useRef(null);
@@ -181,7 +173,7 @@ export default function TopBar({
         : { flexShrink: 0 }
       ),
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '0 20px', height: isFloating ? 48 : 56, paddingTop: 4,
+      padding: '0 20px', height: 48, paddingTop: 4,
       background: 'transparent',
     }}>
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', ...(isFloating && { pointerEvents: 'auto' }) }}>{leftContent}</div>
@@ -225,7 +217,7 @@ export default function TopBar({
                 fontFamily: 'inherit', lineHeight: 1,
               }}
             >
-              {label}
+              {isActive ? `${label}.` : label}
             </button>
           );
         })}

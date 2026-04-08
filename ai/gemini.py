@@ -173,16 +173,26 @@ def _build_chat_payload(user_message, model, context=None, history=None,
         logger.debug("Failed to build tool definitions: %s", e)
 
     # Build card context from the context dict
+    # Prefer cleaned fields (frontField/backField) over raw HTML (question/answer)
     card_context = None
     if context:
         card_context = {
             "question": context.get('frontField') or context.get('question', ''),
-            "answer": context.get('answer', ''),
+            "answer": context.get('backField') or context.get('answer', ''),
             "deckName": context.get('deckName', ''),
             "tags": context.get('tags', []),
             "stats": context.get('stats', {}),
             "isQuestion": context.get('isQuestion', True),
         }
+        # Safety: if answer is still raw HTML (>2000 chars with <style>), strip it
+        _ans = card_context.get('answer', '')
+        if len(_ans) > 2000 and '<style' in _ans[:200]:
+            import re as _re
+            _ans = _re.sub(r'<style[^>]*>.*?</style>', '', _ans, flags=_re.DOTALL)
+            _ans = _re.sub(r'<script[^>]*>.*?</script>', '', _ans, flags=_re.DOTALL)
+            _ans = _re.sub(r'<[^>]+>', ' ', _ans)
+            _ans = _re.sub(r'\s+', ' ', _ans).strip()[:2000]
+            card_context['answer'] = _ans
 
     # Build insights list from RAG context
     insights = []
@@ -194,6 +204,15 @@ def _build_chat_payload(user_message, model, context=None, history=None,
                     len(insights), len(_preview_lines))
         for _pl in _preview_lines[:10]:
             logger.info("  LERNMATERIAL: %s", _pl[:120])
+
+    # Log card context for debugging
+    if card_context:
+        logger.info("cardContext to backend: question='%s', answer='%s' (%d chars)",
+                     (card_context.get('question') or '')[:60],
+                     (card_context.get('answer') or '')[:60],
+                     len(card_context.get('answer') or ''))
+    else:
+        logger.info("cardContext to backend: None")
 
     # Map mode to responseStyle
     response_style = mode if mode in ('compact', 'detailed') else 'compact'

@@ -266,8 +266,16 @@ def retrieve_rag_context(
 
         if _numbered and confidence != "low":
             _emit("reranker", "running", {"sources": len(_numbered)})
+            # Use resolved_intent for reranking when available — raw user
+            # message like "erkläre mir die karte" has no semantic overlap
+            # with anatomy cards, causing the reranker to reject everything.
+            _rerank_question = user_message
+            _resolved = _get('resolved_intent', '') or ''
+            if _resolved.strip():
+                _rerank_question = _resolved.strip()
+
             rerank_result = rerank_sources(
-                question=user_message,
+                question=_rerank_question,
                 context_lines=_numbered,
                 min_confidence=confidence,
                 emit_step=_emit,
@@ -301,9 +309,12 @@ def retrieve_rag_context(
         confidence = "low"
         logger.info("RAG: only %d indexed sources — forcing web search", indexed_count)
     if confidence == "low":
-        logger.info("RAG confidence is low, calling Perplexity for query: %s", user_message[:80])
-        _emit("web_search", "running", {"query": user_message[:200]})
-        web_context = _call_perplexity(user_message)
+        # Use resolved_intent for web search — raw "erkläre mir die karte"
+        # returns card games instead of anatomy content.
+        _web_query = (_get('resolved_intent', '') or '').strip() or user_message
+        logger.info("RAG confidence is low, calling Perplexity for query: %s", _web_query[:80])
+        _emit("web_search", "running", {"query": _web_query[:200]})
+        web_context = _call_perplexity(_web_query)
         if web_context and web_context.get("text"):
             sources = web_context.get("sources", [])
             # Assign [N] indices continuing from card citations (unified format)

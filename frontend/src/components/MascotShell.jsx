@@ -48,6 +48,7 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true,
   const [tapKey, setTapKey] = useState(0);
   const [overrideMood, setOverrideMood] = useState(null);
   const [bubbleOpen, setBubbleOpen] = useState(false);
+  const [plusiThinking, setPlusiThinking] = useState(false);
 
   const eventTimerRef = useRef(null);
   const dockRef = useRef(null);
@@ -124,6 +125,23 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true,
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       if (physicsRAFRef.current) cancelAnimationFrame(physicsRAFRef.current);
     };
+  }, []);
+
+  // When Plusi finishes thinking (response arrives), re-open bubble
+  const prevPlusiTextRef = useRef(plusiText);
+  useEffect(() => {
+    if (plusiText && plusiText !== prevPlusiTextRef.current && plusiThinking) {
+      setPlusiThinking(false);
+      setBubbleOpen(true);
+    }
+    prevPlusiTextRef.current = plusiText;
+  }, [plusiText, plusiThinking]);
+
+  // Handle waiting state from bubble — close bubble, show thinking on mascot
+  const handleBubbleWaiting = useCallback((waiting) => {
+    if (waiting) {
+      setPlusiThinking(true);
+    }
   }, []);
 
   // Close bubble on click outside
@@ -622,8 +640,9 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true,
   // After drag, state is updated normally.
   // Voice state overrides mood (recording=curious, processing=thinking, speaking=happy)
   const voiceMood = voiceState && voiceState !== 'idle' ? VOICE_STATE_MOOD[voiceState] : null;
+  const thinkingMood = plusiThinking ? 'thinking' : null;
   const bubbleMood = bubbleOpen ? 'curious' : null;
-  const effectiveMood = voiceMood || bubbleMood || overrideMood || (eventBubble ? eventBubble.mood : mood);
+  const effectiveMood = voiceMood || thinkingMood || bubbleMood || overrideMood || (eventBubble ? eventBubble.mood : mood);
   // Animation class — always set. During drag, animationName is killed via DOM.
   const animClass = mood === 'happy' || mood === 'excited'
     ? 'plusi-dock-bounce'
@@ -661,6 +680,7 @@ export default function MascotShell({ mood = 'neutral', onEvent, enabled = true,
         <PlusiChatBubble
           open={bubbleOpen}
           onClose={() => setBubbleOpen(false)}
+          onWaiting={handleBubbleWaiting}
           plusiText={plusiText}
           voiceAudio={voiceAudio}
           voiceTranscript={voiceTranscript}

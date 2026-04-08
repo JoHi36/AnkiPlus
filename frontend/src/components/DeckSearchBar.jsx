@@ -348,9 +348,10 @@ const DeckSearchBar = forwardRef(function DeckSearchBar({ onSubmit, lidState = '
       </div>
 
       <style>{`
-        /* Default: subtle border */
+        /* Default: shadow instead of border for softer appearance */
         .deck-search-snake-ring {
-          background: var(--ds-border-subtle);
+          background: transparent;
+          box-shadow: var(--ds-shadow-sm);
         }
         /* On focus: hide default border, show snake pseudo */
         .deck-search-snake-ring.active {

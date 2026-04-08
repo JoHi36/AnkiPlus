@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AnkiPlus Dev Dashboard</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#111;color:#e0e0e0}
+.app{display:flex;flex-direction:column;height:100vh;width:100vw;overflow:hidden}
+/* Top bar */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid #222;flex-shrink:0}
+.topbar h1{font-size:15px;color:#0A84FF;font-weight:600}
+/* Tabs */
+.tabs{display:flex;gap:0;border-bottom:1px solid #222;padding:0 16px;flex-shrink:0}
+.tab{padding:7px 14px;font-size:11px;color:#555;cursor:pointer;border-bottom:2px solid transparent;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.tab:hover{color:#999}.tab.active{color:#0A84FF;border-bottom-color:#0A84FF}
+/* Tab content */
+.tc{display:none;flex:1;overflow:hidden}.tc.active{display:flex}
+/* Query tab grid */
+.qg{display:flex;flex:1;overflow:hidden}
+.ql{width:320px;min-width:260px;padding:12px;overflow-y:auto;border-right:1px solid #222;flex-shrink:0}
+.qr{flex:1;padding:12px;overflow-y:auto;min-width:0}
+@media(max-width:700px){.qg{flex-direction:column}.ql{width:100%;border-right:none;border-bottom:1px solid #222;max-height:40vh}}
+/* Docs scroll */
+.ds{flex:1;overflow-y:auto;padding:16px 20px;max-width:900px}
+.ds h2{color:#0A84FF;font-size:14px;margin:18px 0 6px;padding-bottom:3px;border-bottom:1px solid #222}
+.ds p{font-size:12px;color:#888;line-height:1.5;margin-bottom:6px}
+.ds table{width:100%;border-collapse:collapse;margin:8px 0;font-size:11px}
+.ds th{text-align:left;color:#666;padding:4px 8px;border-bottom:1px solid #333;font-size:10px;text-transform:uppercase}
+.ds td{padding:4px 8px;border-bottom:1px solid #1a1a1a;color:#bbb}
+.ds code{background:#1C1C1E;padding:1px 4px;border-radius:3px;font-size:11px;color:#FF9F0A}
+/* Shared */
+.pt{font-size:10px;color:#444;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.ig{margin-bottom:6px}.ig label{display:block;font-size:10px;color:#555;margin-bottom:2px}
+.ig select,.ig input,.ig textarea{width:100%;padding:6px 8px;background:#1C1C1E;border:1px solid #2C2C2E;border-radius:6px;color:#e0e0e0;font-size:12px;outline:none}
+.ig textarea{min-height:40px;resize:vertical}
+.ig select:focus,.ig input:focus,.ig textarea:focus{border-color:#0A84FF}
+button{padding:5px 12px;background:#0A84FF;color:white;border:none;border-radius:6px;cursor:pointer;font-size:11px}
+button:hover{background:#0070E0}button:disabled{background:#2C2C2E;cursor:not-allowed}
+.bs{background:#1C1C1E;color:#888;font-size:10px;padding:4px 10px}.bs:hover{background:#2C2C2E;color:#ccc}
+.br{display:flex;gap:4px;margin-top:4px}
+/* Chat */
+.chat{max-height:32vh;overflow-y:auto;margin-top:6px}
+.msg{padding:4px 8px;margin-bottom:3px;border-radius:5px;font-size:11px;white-space:pre-wrap;line-height:1.3}
+.mu{background:#0A84FF10;border-left:2px solid #0A84FF}
+.mb{background:#161618;border-left:2px solid #30D158}
+.mm{font-size:9px;color:#333;margin-top:1px}
+/* Pipeline log */
+.step{display:flex;align-items:center;padding:4px 0;border-bottom:1px solid #1a1a1a;font-size:11px;cursor:pointer}
+.step:hover{background:#161618}
+.sd{width:6px;height:6px;border-radius:50%;margin-right:6px;flex-shrink:0}
+.sd.done{background:#30D158}.sd.error{background:#FF453A}
+.sn{width:110px;flex-shrink:0;font-weight:600;font-size:11px}
+.st{width:50px;flex-shrink:0;color:#444;text-align:right;margin-right:8px;font-size:10px}
+.ss{color:#666;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
+.det{display:none;font-size:10px;color:#444;padding:3px 6px 3px 122px;background:#141416;border-bottom:1px solid #1a1a1a;white-space:pre-wrap;word-break:break-all;max-height:180px;overflow-y:auto}
+.tot{display:flex;justify-content:space-between;padding:5px 0;font-size:12px;font-weight:600;border-top:2px solid #222;margin-top:4px}
+.tot .tv{color:#0A84FF}
+.inf{font-size:10px;color:#333;margin-top:3px}
+.cp{background:#1C1C1E;border-radius:5px;padding:5px 7px;margin-bottom:5px;font-size:10px}
+.cp .cd{color:#FFD60A;font-size:9px}.cp .cq{color:#999;margin-top:1px}
+.toast{position:fixed;bottom:12px;right:12px;background:#30D158;color:#111;padding:5px 12px;border-radius:6px;font-size:11px;display:none;z-index:99}
+/* Step card */
+.sc{background:#1C1C1E;border-radius:8px;padding:10px;margin-bottom:6px}
+.sc b{font-size:12px;color:#e0e0e0;display:block}
+.sc .sm{font-size:10px;color:#0A84FF;margin-top:1px}
+.sc .sd2{font-size:11px;color:#777;margin-top:3px;line-height:1.4}
+/* Bench */
+.bg{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin:10px 0}
+.sv{background:#1C1C1E;border-radius:8px;padding:10px;text-align:center}
+.sv .n{font-size:26px;font-weight:700;color:#30D158}
+.sv .l{font-size:9px;color:#555;text-transform:uppercase;margin-top:1px}
+.hr{display:flex;align-items:center;padding:3px 0;border-bottom:1px solid #1a1a1a;font-size:11px}
+.hr .hd{width:90px;color:#777}.hr .hp{flex:1}.hb{height:5px;border-radius:3px;background:#0A84FF}
+.hr .hv{width:40px;text-align:right;color:#555;font-size:10px}
+</style></head><body>
+<div class="app">
+<div class="topbar"><h1>AnkiPlus Dev Dashboard</h1><button class="bs" onclick="copyLog()">JSON kopieren</button></div>
+<div class="tabs" id="tabs"></div>
+<div class="tc active" id="tc-query"><div class="qg"><div class="ql" id="ql"></div><div class="qr"><div class="pt">Pipeline Log</div><div id="log"></div></div></div></div>
+<div class="tc" id="tc-pipeline"><div class="ds" id="pDocs"></div></div>
+<div class="tc" id="tc-bench"><div class="ds" id="bDocs"></div></div>
+<div class="tc" id="tc-agents"><div class="ds" id="aDocs"></div></div>
+</div>
+<div class="toast" id="toast">Kopiert!</div>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const mk=(tag,cls)=>{const e=document.createElement(tag);if(cls)e.className=cls;return e};
+const txt=s=>document.createTextNode(s||'');
+
+/* ── State ── */
+let sid='d'+Date.now(),hist=[],card=null,lastTrace=null;
+const tabIds=['query','pipeline','bench','agents'];
+const tabLabels=['Query','Pipeline','Benchmarks','Agents'];
+
+/* ── Build tabs ── */
+(function(){
+  const t=$('tabs');
+  tabIds.forEach((id,i)=>{
+    const d=mk('div','tab'+(i===0?' active':''));
+    d.textContent=tabLabels[i];
+    d.addEventListener('click',()=>switchTab(id));
+    t.appendChild(d);
+  });
+})();
+
+/* ── Build query panel ── */
+(function(){
+  const q=$('ql');
+  q.insertAdjacentHTML('beforeend',
+    '<div class="pt">Anfrage</div>'+
+    '<div class="ig"><label>Agent</label><select id="agent"><option value="tutor">Tutor</option></select></div>'+
+    '<div class="ig"><label>Karten-ID</label><div class="br"><input type="text" id="cardId" placeholder="1584183120624" style="flex:1"><button class="bs" onclick="loadCard()">Laden</button></div></div>'+
+    '<div id="cardPreview"></div>'+
+    '<div class="ig"><label>Frage</label><textarea id="query" placeholder="was ist glycin?"></textarea></div>'+
+    '<div class="br"><button onclick="sendQuery()" id="sendBtn">Senden</button><button class="bs" onclick="clearChat()">Reset</button></div>'+
+    '<div class="pt" style="margin-top:10px">Chat</div><div class="chat" id="chat"></div>'
+  );
+  $('query').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendQuery()}});
+})();
+
+/* ── Tab switching ── */
+function switchTab(id){
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',tabIds[i]===id));
+  tabIds.forEach(tid=>$('tc-'+tid).classList.toggle('active',tid===id));
+  if(id==='pipeline'&&!window._pL)loadPipeline();
+  if(id==='bench'&&!window._bL)loadBench();
+  if(id==='agents'&&!window._aL)loadAgents();
+}
+
+/* ── Pipeline tab ── */
+async function loadPipeline(){
+  window._pL=true;const r=await fetch('/api/pipeline-info');const d=await r.json();
+  const c=$('pDocs');c.textContent='';
+  const h=mk('h2');h.textContent='Pipeline-Schritte';c.appendChild(h);
+  const p=mk('p');p.textContent='Jede Anfrage durchlauft diese Schritte sequentiell:';c.appendChild(p);
+  (d.pipeline_steps||[]).forEach((s,i)=>{
+    const sc=mk('div','sc');
+    const b=mk('b');b.textContent=(i+1)+'. '+s.name;sc.appendChild(b);
+    const sm=mk('div','sm');sm.textContent=s.model;sc.appendChild(sm);
+    const sd=mk('div','sd2');sd.textContent=s.desc;sc.appendChild(sd);
+    c.appendChild(sc);
+  });
+  const h2=mk('h2');h2.textContent='Agent RAG-Konfigurationen';c.appendChild(h2);
+  const tbl=mk('table');
+  const thead=mk('tr');['Agent','Scope','Max','Reranker','Web','Format'].forEach(t=>{const th=mk('th');th.textContent=t;thead.appendChild(th)});
+  tbl.appendChild(thead);
+  Object.entries(d.configs||{}).forEach(([name,cfg])=>{
+    const tr=mk('tr');
+    [name,cfg.search_scope,String(cfg.max_notes),cfg.use_reranker?'Yes':'-',cfg.web_search_enabled?'Yes':'-',cfg.context_format].forEach(v=>{const td=mk('td');td.textContent=v;tr.appendChild(td)});
+    tbl.appendChild(tr);
+  });
+  c.appendChild(tbl);
+}
+
+/* ── Benchmarks tab ── */
+async function loadBench(){
+  window._bL=true;const r=await fetch('/api/benchmarks');const d=await r.json();
+  const c=$('bDocs');c.textContent='';
+  const lat=d.latest;
+  if(lat&&lat.aggregate){
+    const ov=lat.aggregate.overall||{};
+    const h=mk('h2');h.textContent='Aktuelle Ergebnisse';c.appendChild(h);
+    const g=mk('div','bg');
+    [{v:Math.round((ov.recall_at_k||0)*100)+'%',l:'Recall@30'},
+     {v:Math.round((ov.recall_at_5||0)*100)+'%',l:'Recall@5'},
+     {v:Math.round((ov.recall_at_3||0)*100)+'%',l:'Recall@3'},
+     {v:String(Math.round((ov.mrr||0)*100)/100),l:'MRR'},
+     {v:String(ov.total_cases||0),l:'Test Cases'},
+     {v:String(ov.passed||0),l:'Passed'}
+    ].forEach(s=>{
+      const sc=mk('div','sv');
+      const n=mk('div','n');n.textContent=s.v;sc.appendChild(n);
+      const l=mk('div','l');l.textContent=s.l;sc.appendChild(l);
+      g.appendChild(sc);
+    });
+    c.appendChild(g);
+    if(lat.aggregate.by_category){
+      const h2=mk('h2');h2.textContent='Nach Kategorie';c.appendChild(h2);
+      const tbl=mk('table');
+      const thead=mk('tr');['Kategorie','Cases','Passed','Recall@5'].forEach(t=>{const th=mk('th');th.textContent=t;thead.appendChild(th)});
+      tbl.appendChild(thead);
+      Object.entries(lat.aggregate.by_category).forEach(([cat,x])=>{
+        const tr=mk('tr');
+        [cat,String(x.cases),String(x.passed),((x.top5_passed||0)/x.cases*100).toFixed(0)+'%'].forEach(v=>{const td=mk('td');td.textContent=v;tr.appendChild(td)});
+        tbl.appendChild(tr);
+      });
+      c.appendChild(tbl);
+    }
+  }
+  if(d.history&&d.history.length){
+    const h=mk('h2');h.textContent='Verlauf';c.appendChild(h);
+    d.history.slice().reverse().forEach(item=>{
+      const row=mk('div','hr');
+      const hd=mk('div','hd');hd.textContent=item.date;row.appendChild(hd);
+      const hp=mk('div','hp');const bar=mk('div','hb');bar.style.width=item.recall_pct+'%';hp.appendChild(bar);row.appendChild(hp);
+      const hv=mk('div','hv');hv.textContent=item.recall_pct+'%';row.appendChild(hv);
+      c.appendChild(row);
+    });
+  }
+}
+
+/* ── Agents tab ── */
+async function loadAgents(){
+  window._aL=true;const r=await fetch('/api/pipeline-info');const d=await r.json();
+  const c=$('aDocs');c.textContent='';
+  const h=mk('h2');h.textContent='Agent-Kanal-Paradigma';c.appendChild(h);
+  const p=mk('p');p.textContent='Jeder Agent ist an einen Kanal (UI-Bereich) gebunden. Der Kanal bestimmt den Agenten.';c.appendChild(p);
+  [{n:'Tutor',ch:'Chat-Sidebar (session)',m:'Verlaufsbasiert',d:'Erklaert Karteninhalte, beantwortet Fragen, sucht im Deck.'},
+   {n:'Research',ch:'Suchleiste > Canvas (stapel)',m:'State-basiert',d:'Recherche mit externen Quellen, Canvas-Darstellung.'},
+   {n:'Definition',ch:'Term-Klick im Reviewer',m:'Popup, KG-basiert',d:'Kurze Definitionen aus Knowledge Graph.'},
+   {n:'Pruefer',ch:'MC + Bewertung (reviewer-inline)',m:'Inline-Bewertung',d:'Multiple-Choice und Antwort-Bewertung.'},
+   {n:'Plusi',ch:'Sprechblase (plusi)',m:'Persoenlichkeit',d:'Companion mit eigenem Charakter, App-Hilfe.'}
+  ].forEach(a=>{
+    const sc=mk('div','sc');
+    const b=mk('b');b.textContent=a.n;sc.appendChild(b);
+    const sm=mk('div','sm');sm.textContent='Kanal: '+a.ch+' | Modus: '+a.m;sc.appendChild(sm);
+    const sd=mk('div','sd2');sd.textContent=a.d;sc.appendChild(sd);
+    c.appendChild(sc);
+  });
+  const h2=mk('h2');h2.textContent='RAG-Konfiguration pro Agent';c.appendChild(h2);
+  const tbl=mk('table');
+  const thead=mk('tr');['Agent','Scope','Max','Reranker','Web','Trigger'].forEach(t=>{const th=mk('th');th.textContent=t;thead.appendChild(th)});
+  tbl.appendChild(thead);
+  Object.entries(d.configs||{}).forEach(([name,cfg])=>{
+    const tr=mk('tr');
+    [name,cfg.search_scope,String(cfg.max_notes),cfg.use_reranker?'Yes':'-',cfg.web_search_enabled?'Yes':'-',cfg.triggered_by].forEach(v=>{const td=mk('td');td.textContent=v;tr.appendChild(td)});
+    tbl.appendChild(tr);
+  });
+  c.appendChild(tbl);
+}
+
+/* ── Query logic ── */
+async function loadCard(){
+  const id=$('cardId').value.trim();if(!id)return;
+  const r=await fetch('/api/card/'+id);const d=await r.json();
+  const b=$('cardPreview');b.textContent='';
+  if(d.error){const p=mk('div','cp');p.style.color='#FF453A';p.appendChild(txt('Fehler: '+d.error));b.appendChild(p);card=null}
+  else{card=d;const p=mk('div','cp');const dk=mk('div','cd');dk.appendChild(txt(d.deckName||''));p.appendChild(dk);
+  const q=mk('div','cq');q.appendChild(txt((d.question||'').replace(/<[^>]+>/g,'').substring(0,120)));p.appendChild(q);b.appendChild(p)}
+}
+async function sendQuery(){
+  const q=$('query').value.trim();if(!q)return;
+  $('sendBtn').disabled=true;$('sendBtn').textContent='...';
+  const lg=$('log');lg.textContent='';
+  const ld=mk('div','inf');ld.style.cssText='text-align:center;padding:30px';ld.appendChild(txt('Pipeline laeuft...'));lg.appendChild(ld);
+  addMsg('user',q);$('query').value='';
+  try{
+    const r=await fetch('/api/query',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({agent:$('agent').value,query:q,card_context:card,history:hist,session_id:sid})});
+    const d=await r.json();lastTrace=d;const t=d.trace||{};
+    addMsg('bot',d.response||'—',t.step_count+' steps | '+t.total_ms+'ms | '+t.source_count+' sources');
+    hist.push({role:'user',content:q},{role:'assistant',content:d.response||''});renderLog(t);
+  }catch(e){addMsg('bot','Fehler: '+e.message)}
+  $('sendBtn').disabled=false;$('sendBtn').textContent='Senden';
+}
+function addMsg(r,t,m){
+  const c=$('chat');const d=mk('div','msg '+(r==='user'?'mu':'mb'));d.appendChild(txt(t.substring(0,600)));
+  if(m){const mt=mk('div','mm');mt.appendChild(txt(m));d.appendChild(mt)}
+  c.appendChild(d);c.scrollTop=c.scrollHeight;
+}
+function clearChat(){hist=[];$('chat').textContent='';$('log').textContent='';
+  const i=mk('div','inf');i.style.cssText='text-align:center;padding:30px';i.appendChild(txt('Sende eine Anfrage.'));$('log').appendChild(i)}
+function renderLog(t){
+  const l=$('log');l.textContent='';
+  (t.steps||[]).forEach((s,i)=>{
+    const row=mk('div','step');row.appendChild(mk('div','sd '+s.status));
+    const n=mk('div','sn');n.appendChild(txt(s.name));row.appendChild(n);
+    const tm=mk('div','st');tm.appendChild(txt(s.elapsed_ms>0?s.elapsed_ms+'ms':'—'));row.appendChild(tm);
+    const sm=mk('div','ss');sm.appendChild(txt(s.summary||''));row.appendChild(sm);l.appendChild(row);
+    if(s.data&&Object.keys(s.data).length>0){
+      const dt=mk('div','det');dt.appendChild(txt(JSON.stringify(s.data,null,2)));l.appendChild(dt);
+      row.addEventListener('click',()=>{dt.style.display=dt.style.display==='block'?'none':'block'})}
+  });
+  const bar=mk('div','tot');const left=mk('span');left.appendChild(txt((t.step_count||0)+' Steps'));bar.appendChild(left);
+  const right=mk('span','tv');right.appendChild(txt((t.total_ms||0)+'ms'));bar.appendChild(right);l.appendChild(bar);
+  const info=mk('div','inf');info.appendChild(txt('Quellen: '+(t.source_count||0)+' | Response: '+(t.response_length||0)+' chars'));l.appendChild(info);
+}
+function copyLog(){if(!lastTrace)return;navigator.clipboard.writeText(JSON.stringify(lastTrace,null,2)).then(()=>{$('toast').style.display='block';setTimeout(()=>$('toast').style.display='none',1500)})}
+
+/* Init */
+clearChat();
+</script></body></html>

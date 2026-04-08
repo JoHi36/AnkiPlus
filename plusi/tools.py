@@ -503,12 +503,19 @@ def _theme_wechseln(theme: str) -> dict:
         return {"error": f"Ungültiges Theme '{theme}'. Erlaubt: {valid_themes}"}
 
     try:
-        try:
-            from ..config import update_config  # type: ignore
-        except ImportError:
-            from config import update_config  # type: ignore
+        # Must run on main thread — widget JS calls require it
+        from ..utils.anki import run_on_main_thread
 
-        update_config(**{"theme": theme})
+        def _apply():
+            from ..ui.setup import get_chatbot_widget
+            w = get_chatbot_widget()
+            if w:
+                w._msg_save_theme({"theme": theme})
+            else:
+                from ..config import update_config  # type: ignore
+                update_config(**{"theme": theme})
+
+        run_on_main_thread(_apply)
         logger.info("plusi/tools: _theme_wechseln → %s", theme)
         return {"changed": True, "theme": theme}
     except Exception as exc:

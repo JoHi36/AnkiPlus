@@ -8,28 +8,39 @@ import { chatCompletionWithRetry, fetchGenerationCost } from '../utils/openroute
 import { calculateNormalizedTokens, calculateCostMicrodollars, normalizeFromCost, costToMicrodollars } from '../utils/tokenPricing';
 import { debitTokens, getCurrentDateString, getCurrentWeekString } from '../utils/firestore';
 
-const ROUTER_MODEL = 'gemini-2.5-flash';
+const ROUTER_MODEL = 'gemini-2.5-flash-lite';
 
 export async function routerHandler(req: Request, res: Response): Promise<void> {
   try {
-    const { message, cardContext, lastAssistantMessage: _lastAssistantMessage, mode, agentDescriptions } = req.body;
+    const { message, cardContext, lastAssistantMessage, mode, agentDescriptions } = req.body;
 
     if (!message) {
       res.status(400).json({ error: 'message required' });
       return;
     }
 
-    // Build compact card hint (keywords only, not full content)
+    // Build compact card hint
     let cardHint = '';
-    if (cardContext && cardContext.cardId) {
+    if (cardContext && (cardContext.cardId || cardContext.question)) {
       const qClean = (cardContext.question || cardContext.frontField || '')
         .replace(/<[^>]+>/g, ' ')
         .trim()
         .substring(0, 200);
+      const aClean = (cardContext.answer || '')
+        .replace(/<[^>]+>/g, ' ')
+        .trim()
+        .substring(0, 300);
       const deck = cardContext.deckName || '';
-      if (qClean) {
-        cardHint = `Karte: ${qClean} (Deck: ${deck})\n`;
-      }
+      const parts = [`Deck: ${deck}`];
+      if (qClean) parts.push(`Frage: ${qClean}`);
+      if (aClean) parts.push(`Antwort: ${aClean}`);
+      cardHint = `Karte: ${parts.join(' | ')}\n`;
+    }
+
+    // Build conversation context hint
+    let conversationHint = '';
+    if (lastAssistantMessage && typeof lastAssistantMessage === 'string') {
+      conversationHint = `Letzte Antwort: "${lastAssistantMessage.substring(0, 200)}"\n`;
     }
 
     const agents = agentDescriptions ||
@@ -60,7 +71,7 @@ CRITICAL for associated_terms:
 - Example: "Wernicke-Zentrum" → ["Broca-Aphasie", "Sprachverständnis", "Temporallappen", "sensorische Aphasie", "Gyrus temporalis superior"]
 - These terms are used for card search — be specific, use the user's language.
 
-${cardHint}Mode: ${currentMode}
+${cardHint}${conversationHint}Mode: ${currentMode}
 Message: "${userMsg}"
 
 Output JSON only:

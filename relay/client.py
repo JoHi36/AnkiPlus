@@ -126,16 +126,24 @@ class RelayClient:
 
     @staticmethod
     def dispatch_on_main(fn):
-        """Run *fn* on the Qt main thread via ``QTimer.singleShot(0, fn)``.
+        """Run *fn* on the Qt main thread (thread-safe).
 
-        Falls back to a direct call if Qt is not available (e.g. in tests).
+        Uses ``mw.taskman.run_on_main()`` which is safe to call from any
+        thread.  Falls back to a direct call if Anki is not available
+        (e.g. in tests).
         """
         try:
-            from PyQt6.QtCore import QTimer
-            QTimer.singleShot(0, fn)
+            from aqt import mw
+            if mw and hasattr(mw, "taskman") and mw.taskman:
+                mw.taskman.run_on_main(fn)
+                return
         except Exception:
-            # No Qt available — run directly (test environment)
+            pass
+        # Fallback: direct call (test environment / no Anki)
+        try:
             fn()
+        except Exception:
+            pass
 
     # -- Pairing ------------------------------------------------------------
 
@@ -144,7 +152,18 @@ class RelayClient:
 
         Returns the pair code string on success, or ``None`` on failure.
         Stores ``pair_code`` and ``session_token`` on the instance.
+
+        If polling is active, stops it first and restarts after the new
+        session is established — the relay invalidates old sessions when
+        a new pair is created for the same uid.
         """
+        # Stop existing polling — the old session will be invalidated
+        was_polling = self._thread and self._thread.is_alive()
+        if was_polling:
+            self._stop_event.set()
+            self._thread.join(timeout=2)
+            logger.info("relay.client: stopped old polling before create_pair")
+
         resp = _relay_post(self.relay_url, {
             "action": "create_pair",
             "secret": self.secret,
@@ -164,6 +183,13 @@ class RelayClient:
 
         self._connected = True
         self._peer_connected = resp.get("peer_connected", False)
+
+        # Restart polling with the new session token
+        if was_polling:
+            self._stop_event.clear()
+            self._thread = None
+            self.start_polling()
+            logger.info("relay.client: restarted polling with new session")
 
         logger.info("relay.client: pair created (code=%s, peer=%s)",
                      self.pair_code, self._peer_connected)
@@ -279,6 +305,13 @@ class RelayClient:
         parsed = parse_action(msg)
         if parsed and self._action_handler:
             at, p = parsed
+            # If we receive an action, the peer is obviously connected
+            if not self._peer_connected:
+                self._peer_connected = True
+                logger.info("relay.client: peer connected (inferred from action)")
+                if self._on_peer_change:
+                    pc_handler = self._on_peer_change
+                    self.dispatch_on_main(lambda h=pc_handler: h(True))
             handler = self._action_handler
             self.dispatch_on_main(lambda at=at, p=p, handler=handler: handler(at, p))
             logger.info("relay.client: dispatched action %s %s", at, p)

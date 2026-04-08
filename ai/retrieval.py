@@ -632,8 +632,13 @@ class EnrichedRetrieval:
         if self.emb and texts_to_embed:
             try:
                 all_embeddings = self.emb.embed_texts(texts_to_embed) or []
+                logger.info("EnrichedRetrieval: embed_texts returned %d embeddings for %d texts",
+                            len(all_embeddings), len(texts_to_embed))
             except Exception as e:
                 logger.warning("EnrichedRetrieval: embed_texts failed: %s", e)
+        else:
+            logger.warning("EnrichedRetrieval: skipping embed — emb=%s, texts=%d",
+                           bool(self.emb), len(texts_to_embed))
 
         # Wait for KG index (should be done by now — ran during embedding)
         if _kg_future:
@@ -724,8 +729,13 @@ class EnrichedRetrieval:
             except ImportError:
                 from ..config import get_config as _sem_gc
             _sem_neo4j = _sem_gc().get('kg_backend') == 'neo4j'
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("EnrichedRetrieval: kg_backend config check failed: %s", e)
+
+        logger.info("EnrichedRetrieval semantic: neo4j=%s, primary_vec=%s, secondary_vec=%s",
+                     _sem_neo4j,
+                     "yes(%d-dim)" % len(primary_vec) if primary_vec else "None",
+                     "yes(%d-dim)" % len(secondary_vec) if secondary_vec else "None")
 
         try:
             if _sem_neo4j and (primary_vec or secondary_vec):
@@ -738,7 +748,9 @@ class EnrichedRetrieval:
 
                     rank = 1
                     if primary_vec:
+                        logger.info("EnrichedRetrieval: calling vector_search_cards (primary, %d-dim)", len(primary_vec))
                         results = _vs(list(primary_vec), top_k=max_notes) or []
+                        logger.info("EnrichedRetrieval: vector_search_cards returned %d results", len(results))
                         for item in results:
                             score = item.get('score', 0)
                             if score < 0.65:

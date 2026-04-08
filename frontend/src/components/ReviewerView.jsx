@@ -82,36 +82,51 @@ const CARD_BG_OVERRIDE = (
   `}</style>
 );
 
+const MC_BADGE_BASE = {
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  width: 24, height: 24, borderRadius: 6,
+  fontSize: 11, fontWeight: 700, fontFamily: 'var(--ds-font-mono)', flexShrink: 0,
+};
+const MC_BADGE_IDLE = { ...MC_BADGE_BASE, background: 'var(--ds-hover-tint)', color: 'var(--ds-text-secondary)' };
+const MC_BADGE_CORRECT = { ...MC_BADGE_BASE, background: 'var(--ds-green)', color: 'var(--ds-bg-canvas)' };
+const MC_BADGE_WRONG = { ...MC_BADGE_BASE, background: 'var(--ds-red)', color: 'var(--ds-bg-canvas)' };
+const MC_ROW_STYLE = { display: 'flex', alignItems: 'center', gap: 14 };
+const MC_EXPLAIN_CORRECT = { padding: '10px 0 0 38px', fontSize: 14, lineHeight: 1.6, color: 'var(--ds-green-50)' };
+const MC_EXPLAIN_WRONG = { padding: '10px 0 0 38px', fontSize: 14, lineHeight: 1.6, color: 'var(--ds-red-50)' };
+
 function MCOptions({ options, selected, isResult, onSelect }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 24 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 24 }}>
       {options.map((opt, i) => {
         const correct = opt.correct || opt.isCorrect || false;
         const sel = selected[i];
-        let cls = 'ds-mc-option';
-        if (isResult && correct) cls += ' correct';
-        else if (sel === 'wrong') cls += ' wrong';
-        else if (sel === 'correct') cls += ' correct';
+
+        // Determine visual state
+        let state = 'idle';
+        if (isResult && correct) state = 'correct';
+        else if (sel === 'wrong') state = 'wrong';
+        else if (sel === 'correct') state = 'correct';
+        else if (isResult) state = 'dimmed';
+
+        const cls = `ds-mc-option${state !== 'idle' ? ` ${state}` : ''}`;
+        const showExplanation = (state === 'correct' || state === 'wrong') && opt.explanation;
+        const badge = state === 'correct' ? MC_BADGE_CORRECT : state === 'wrong' ? MC_BADGE_WRONG : MC_BADGE_IDLE;
+        const textColor = state === 'correct' ? 'var(--ds-green)' : state === 'wrong' ? 'var(--ds-red)' : 'var(--ds-text-primary)';
+        const textWeight = state === 'correct' ? 600 : 400;
+
         return (
           <button key={i} className={cls} disabled={isResult || sel === 'wrong'}
             onClick={() => { if (!isResult && sel !== 'wrong') onSelect(i, correct); }}>
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              width: 24, height: 24, borderRadius: 4,
-              fontSize: 12, fontWeight: 700, fontFamily: 'var(--ds-font-mono)',
-              background: 'var(--ds-hover-tint)', color: 'var(--ds-text-secondary)', flexShrink: 0,
-            }}>{MC_LETTERS[i]}</span>
-            <span>{opt.text}</span>
+            <div style={MC_ROW_STYLE}>
+              <span style={badge}>{MC_LETTERS[i]}</span>
+              <span style={{ fontSize: 15, color: textColor, fontWeight: textWeight }}>{opt.text}</span>
+            </div>
+            {showExplanation && (
+              <div style={state === 'correct' ? MC_EXPLAIN_CORRECT : MC_EXPLAIN_WRONG}>
+                {opt.explanation}
+              </div>
+            )}
           </button>
-        );
-      })}
-      {isResult && options.map((opt, i) => {
-        if (!(opt.correct || opt.isCorrect) || !opt.explanation) return null;
-        return (
-          <div key={`x${i}`} className="ds-review-result correct" style={{ marginTop: 8 }}>
-            <span className="ds-result-label">Erklärung</span>
-            <span className="ds-result-body">{opt.explanation}</span>
-          </div>
         );
       })}
     </div>

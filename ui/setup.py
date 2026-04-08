@@ -286,8 +286,26 @@ def setup_menu():
     toggle_reviewer_action.triggered.connect(toggle_custom_reviewer)
     mw.form.menuTools.addAction(toggle_reviewer_action)
 
+    # Dev Dashboard (only visible, localhost only)
+    dev_action = QAction("Dev Dashboard", mw)
+    dev_action.triggered.connect(_start_dev_dashboard)
+    mw.form.menuTools.addAction(dev_action)
+
     # Einstellungen werden nur über das Chat-Fenster zugänglich gemacht
     # (kein separater Menü-Eintrag mehr)
+
+
+def _start_dev_dashboard():
+    """Start the dev dashboard HTTP server."""
+    try:
+        try:
+            from ..ui.dev_server import start_dev_server
+        except ImportError:
+            from ui.dev_server import start_dev_server
+        start_dev_server()
+    except Exception as e:
+        from aqt.utils import showInfo
+        showInfo(f"Dev Dashboard error: {e}")
 
 
 def toggle_settings_sidebar():

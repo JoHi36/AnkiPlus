@@ -26,5 +26,8 @@ export function getAvailableActions() {
 }
 
 export function bridgeAction(name, data) {
+  if (typeof window !== 'undefined' && window._frontendLog) {
+    window._frontendLog('bridgeAction', name);
+  }
   window.ankiBridge?.addMessage(name, typeof data === 'object' ? JSON.stringify(data) : (data || ''));
 }

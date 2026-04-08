@@ -122,6 +122,7 @@ export const DeckNode = React.memo(function DeckNode({ node, depth = 0, isExpand
           overflow: 'hidden',
           background: 'var(--ds-bg-canvas)',
           border: '1px solid var(--ds-border-subtle)',
+          boxShadow: 'var(--ds-shadow-sm)',
           animationDelay,
         }}
       >
@@ -184,7 +185,7 @@ export const DeckNode = React.memo(function DeckNode({ node, depth = 0, isExpand
 
         {/* Children section */}
         {hasChildren && expanded && (
-          <div style={{ borderTop: '1px solid var(--ds-border-subtle)' }}>
+          <div>
             {children.map((child, i) => (
               <DeckNode
                 key={child.id}
@@ -221,7 +222,7 @@ export const DeckNode = React.memo(function DeckNode({ node, depth = 0, isExpand
           cursor: 'pointer',
           userSelect: 'none',
           minHeight: '36px',
-          borderBottom: '1px solid var(--ds-border-subtle)',
+          borderTop: '1px solid var(--ds-border-subtle)',
           background: rowHovered ? 'var(--ds-hover-tint)' : 'transparent',
           transition: 'background 0.12s',
         }}

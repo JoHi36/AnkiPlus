@@ -78,10 +78,18 @@ def analyze_query(user_message, card_context=None, chat_history=None,
     if card_context and card_context.get('cardId'):
         q = card_context.get('frontField') or card_context.get('question') or ''
         q_clean = re.sub(r'<[^>]+>', ' ', q).strip()[:500]
+        a = card_context.get('backField') or card_context.get('answer') or ''
+        # Strip style/script blocks before HTML tag removal
+        a = re.sub(r'<style[^>]*>.*?</style>', '', a, flags=re.DOTALL)
+        a = re.sub(r'<script[^>]*>.*?</script>', '', a, flags=re.DOTALL)
+        a_clean = re.sub(r'<[^>]+>', ' ', a)
+        a_clean = re.sub(r'\s+', ' ', a_clean).strip()[:500]
         compact_card = {
             'question': q_clean,
             'deckName': card_context.get('deckName', ''),
         }
+        if a_clean:
+            compact_card['answer'] = a_clean
 
     last_assistant = ''
     if chat_history:

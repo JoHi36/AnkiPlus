@@ -100,11 +100,7 @@ WICHTIG: Gib NIEMALS die LERNMATERIAL-Rohdaten aus. Nutze die Informationen dara
 4. Bilder sind IMMER Ergänzung zu Text, nie alleinstehend
 5. search_image NUR für Fragen zum Lernmaterial — NIE für Off-Topic
 6. NIEMALS search_deck für Wissensfragen — die RAG-Pipeline liefert bereits LERNMATERIAL
-7. Web-Recherche wenn LERNMATERIAL die Frage NICHT abdeckt oder dein Wissen nicht ausreicht:
-   - search_pubmed: biomedizinische/klinische Fragen
-   - search_wikipedia: Definitionen, Hintergrundwissen
-   - search_web: aktuelle Informationen, allgemeine Recherche
-   - WICHTIG: Rufe die Tools DIREKT auf — frage NICHT den Nutzer ob du recherchieren sollst. Recherchiere einfach.
+7. Web-Recherche wird AUTOMATISCH von der Pipeline durchgeführt wenn nötig — du musst KEINE search-Tools aufrufen. Wenn Web-Quellen vorhanden sind, erscheinen sie nummeriert im LERNMATERIAL.
 
 ## Formatierung
 
@@ -120,12 +116,8 @@ Antworte in der Sprache des Nutzers. Sachlich, klar, wie ein guter Lehrbuch-Auto
 
 export const HANDOFF_SECTION = `
 WEB-RECHERCHE:
-Wenn die Lernkarten ein Thema NICHT abdecken, nutze deine Web-Recherche-Tools DIREKT:
-- search_web: Allgemeine Fragen, aktuelle Informationen
-- search_pubmed: Biomedizinische/klinische Fragen
-- search_wikipedia: Definitionen, Hintergrundwissen
-
-KEIN HANDOFF nötig — du hast die Tools selbst. Rufe sie einfach auf.
+Die Pipeline führt Web-Recherchen AUTOMATISCH durch wenn deine Karten ein Thema nicht abdecken.
+Du musst KEINE search-Tools aufrufen. Web-Quellen erscheinen nummeriert im LERNMATERIAL.
 Erwähne NIEMALS einen "Research Agent" in deiner Antwort.
 Schreibe NIEMALS "HANDOFF:" in deine Antwort.
 `;

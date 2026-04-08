@@ -7,7 +7,7 @@ import { executeAction, bridgeAction } from '../actions';
 
 const MAX_W = 'var(--ds-content-width)';
 
-export default function DeckBrowserView({ data, isPremium, lidState, canvasOpen, sidebarOpen, onLidClick, onLidAnimEnd, searchBarRef, onSearchSubmit, flipRect }) {
+export default function DeckBrowserView({ data, isPremium, subscriptionTier = 'free', lidState, canvasOpen, sidebarOpen, onLidClick, onLidAnimEnd, searchBarRef, onSearchSubmit, flipRect }) {
   const { isExpanded, toggleExpanded, ensureRootsExpanded } = useDeckTree();
 
   if (!data) return null;
@@ -43,7 +43,7 @@ export default function DeckBrowserView({ data, isPremium, lidState, canvasOpen,
           <span style={{
             fontFamily: '-apple-system, "SF Pro Display", system-ui, sans-serif',
             fontSize: 46, fontWeight: 300, letterSpacing: '-1px',
-            color: 'var(--ds-text-muted)', lineHeight: 1,
+            color: isPremium ? 'var(--ds-accent)' : 'var(--ds-text-muted)', lineHeight: 1,
           }}>.plus</span>
         </div>
         <span
@@ -57,7 +57,7 @@ export default function DeckBrowserView({ data, isPremium, lidState, canvasOpen,
           }}
           onClick={() => executeAction('settings.toggle')}
         >
-          {isPremium ? 'Pro' : 'Free'}
+          {subscriptionTier === 'tier2' ? 'Max' : subscriptionTier === 'tier1' ? 'Pro' : 'Free'}
         </span>
       </div>
 

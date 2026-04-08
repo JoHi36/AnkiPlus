@@ -1,23 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import React, { useState, useCallback } from 'react';
 import useRemoteSocket from './hooks/useRemoteSocket';
 import useCardState from './hooks/useCardState';
+import useDemoMode, { isDemoMode } from './hooks/useDemoMode';
+import MockupViewer from './components/MockupViewer';
 import ConnectingScreen from './components/ConnectingScreen';
 import PairingScreen from './components/PairingScreen';
-import DeckPicker from './components/DeckPicker';
-import QuestionScreen from './components/QuestionScreen';
-import AnswerScreen from './components/AnswerScreen';
-import MCScreen from './components/MCScreen';
+import RemoteDock from './components/RemoteDock';
+import { copyPwaLogs } from './utils/pwaLogger';
 
 const RELAY_URL = import.meta.env.VITE_RELAY_URL || 'https://europe-west1-ankiplus-b0ffb.cloudfunctions.net/api/relay';
-
-const SLIDE_VARIANTS = {
-  enter: { x: '100%', opacity: 0 },
-  center: { x: 0, opacity: 1 },
-  exit: { x: '-100%', opacity: 0 },
-};
-
-const SLIDE_TRANSITION = { duration: 0.25, ease: [0.25, 1, 0.5, 1] };
+const DEMO = isDemoMode();
+const MOCKUP = new URLSearchParams(window.location.search).has('mockup');
 
 const CONTAINER_STYLE = {
   height: '100%',
@@ -27,133 +20,87 @@ const CONTAINER_STYLE = {
   overflow: 'hidden',
 };
 
-const MODE_TOGGLE_STYLE = {
-  display: 'flex',
-  gap: 'var(--ds-space-xs)',
-  padding: 'var(--ds-space-xs)',
-  borderRadius: 'var(--ds-radius-full)',
-  background: 'var(--ds-bg-canvas)',
-  border: '1px solid var(--ds-border)',
-  margin: 'var(--ds-space-sm) var(--ds-space-lg)',
+const LOG_BTN_STYLE = {
+  position: 'fixed',
+  bottom: 8,
+  right: 8,
+  zIndex: 9999,
+  padding: '4px 10px',
+  borderRadius: 8,
+  border: '1px solid rgba(255,255,255,0.1)',
+  background: 'rgba(0,0,0,0.3)',
+  color: 'rgba(255,255,255,0.3)',
+  fontSize: 10,
+  fontFamily: 'monospace',
+  cursor: 'pointer',
+  WebkitTapHighlightColor: 'transparent',
 };
 
-const MODE_BTN = {
-  flex: 1,
-  padding: 'var(--ds-space-xs) var(--ds-space-md)',
-  borderRadius: 'var(--ds-radius-full)',
-  border: 'none',
-  cursor: 'pointer',
-  fontSize: 'var(--ds-text-sm)',
-  fontWeight: 500,
-  transition: 'all 0.2s',
-};
+function LogCopyButton() {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = useCallback(() => {
+    const ok = copyPwaLogs();
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }, []);
+  return (
+    <button style={LOG_BTN_STYLE} onClick={handleCopy}>
+      {copied ? 'Copied' : 'Logs'}
+    </button>
+  );
+}
 
 export default function App() {
-  const { connected, peerConnected, needsPairing, send, messages, consumeMessages, ankiState } = useRemoteSocket(RELAY_URL);
-  const [modeOverride, setModeOverride] = useState(null);
-  const effectiveMode = modeOverride || (ankiState === 'reviewing' ? 'duo' : 'solo');
-  const { card, phase, progress, mcOptions, deckList, cardKey } = useCardState(messages, consumeMessages);
-  const [view, setView] = useState('remote');
+  if (MOCKUP) return <MockupViewer />;
 
-  useEffect(() => {
-    if (modeOverride) {
-      localStorage.setItem('remote-mode', modeOverride);
-      send({ type: 'set_mode', mode: modeOverride });
-    }
-  }, [modeOverride, send]);
+  const remote = useRemoteSocket(DEMO ? null : RELAY_URL);
+  const demo = useDemoMode();
 
-  useEffect(() => {
-    if (view === 'decks') send({ type: 'get_decks' });
-  }, [view, send]);
+  const connected = DEMO ? true : remote.connected;
+  const peerConnected = DEMO ? true : remote.peerConnected;
+  const needsPairing = DEMO ? false : remote.needsPairing;
+  const sendRemote = DEMO ? demo.send : remote.send;
 
-  const handleFlip = useCallback(() => send({ type: 'flip' }), [send]);
-  const handleRate = useCallback((ease) => send({ type: 'rate', ease }), [send]);
-  const handleMCSelect = useCallback((optionId) => send({ type: 'mc_select', option_id: optionId }), [send]);
-  const handleOpenDeck = useCallback((deckId) => {
-    send({ type: 'open_deck', deck_id: deckId });
-    setView('remote');
-  }, [send]);
+  const cardState = useCardState(
+    DEMO ? [] : remote.messages,
+    DEMO ? (() => []) : remote.consumeMessages,
+  );
+
+  const card = DEMO ? demo.card : cardState.card;
+  const phase = DEMO ? demo.phase : cardState.phase;
+  const progress = DEMO ? demo.progress : cardState.progress;
+  const mcOptions = DEMO ? demo.mcOptions : cardState.mcOptions;
 
   if (needsPairing) {
     return (
       <div style={CONTAINER_STYLE}>
         <PairingScreen />
+        <LogCopyButton />
       </div>
     );
   }
 
-  if (!connected || !peerConnected || !card) {
+  if (!connected || !peerConnected) {
     return (
       <div style={CONTAINER_STYLE}>
         <ConnectingScreen peerConnected={peerConnected} />
-      </div>
-    );
-  }
-
-  if (view === 'decks') {
-    return (
-      <div style={CONTAINER_STYLE}>
-        <DeckPicker decks={deckList} onOpenDeck={handleOpenDeck} />
-        <motion.button
-          style={{ ...MODE_BTN, background: 'var(--ds-bg-canvas)', color: 'var(--ds-text-secondary)',
-                   margin: 'var(--ds-space-md)', border: '1px solid var(--ds-border)' }}
-          whileTap={{ scale: 0.97 }}
-          onClick={() => setView('remote')}
-        >
-          Zurück
-        </motion.button>
+        <LogCopyButton />
       </div>
     );
   }
 
   return (
-    <div style={CONTAINER_STYLE}>
-      <div style={MODE_TOGGLE_STYLE}>
-        {['duo', 'solo'].map(m => (
-          <button key={m} style={{
-            ...MODE_BTN,
-            background: effectiveMode === m ? 'var(--ds-accent-10)' : 'transparent',
-            color: effectiveMode === m ? 'var(--ds-accent)' : 'var(--ds-text-tertiary)',
-          }} onClick={() => setModeOverride(m)}>
-            {m === 'duo' ? 'Duo' : 'Solo'}
-          </button>
-        ))}
-      </div>
-
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={`${cardKey}-${phase}`}
-            variants={SLIDE_VARIANTS}
-            initial="enter"
-            animate="center"
-            exit="exit"
-            transition={SLIDE_TRANSITION}
-            style={{ position: 'absolute', inset: 0 }}
-          >
-            {mcOptions && phase === 'question' ? (
-              <MCScreen card={card} progress={progress} mcOptions={mcOptions}
-                        onSelect={handleMCSelect} onRate={handleRate} />
-            ) : phase === 'question' ? (
-              <QuestionScreen card={card} progress={progress} mode={effectiveMode} onFlip={handleFlip} />
-            ) : phase === 'answer' ? (
-              <AnswerScreen card={card} progress={progress} mode={effectiveMode} onRate={handleRate} />
-            ) : (
-              <ConnectingScreen peerConnected={false} />
-            )}
-          </motion.div>
-        </AnimatePresence>
-      </div>
-
-      <motion.button
-        style={{ ...MODE_BTN, background: 'transparent', color: 'var(--ds-text-tertiary)',
-                 margin: 'var(--ds-space-xs) var(--ds-space-lg) var(--ds-space-md)',
-                 border: 'none', fontSize: 'var(--ds-text-xs)' }}
-        whileTap={{ scale: 0.97 }}
-        onClick={() => setView('decks')}
-      >
-        Deck wechseln
-      </motion.button>
-    </div>
+    <>
+      <RemoteDock
+        phase={card ? phase : 'idle'}
+        card={card}
+        mcOptions={mcOptions}
+        progress={progress}
+        send={sendRemote}
+      />
+      <LogCopyButton />
+    </>
   );
 }

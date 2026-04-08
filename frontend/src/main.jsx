@@ -3,12 +3,16 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import ComponentViewer from './ComponentViewer';
 import GlassLab from './GlassLab';
+import RemoteDockLab from './RemoteDockLab';
 import { ReasoningProvider } from './reasoning/store/ReasoningProvider';
+import { initFrontendLogger, frontendLog } from './utils/frontendLogger';
 import './index.css';
 import './styles/card-enhancement.css';
 import 'katex/dist/katex.min.css'; // KaTeX CSS
 
 if (typeof window !== 'undefined') {
+  // Initialize frontend log buffer before anything else
+  initFrontendLogger();
   // Apply dark theme immediately to avoid flash of unstyled content
   // Python will send the correct theme via init payload; this is the safe default
   document.documentElement.setAttribute('data-theme', 'dark');
@@ -21,6 +25,7 @@ if (typeof window !== 'undefined') {
       if (!payload || typeof payload !== 'object') {
         return;
       }
+      frontendLog('ankiReceive:early', payload.type);
       // Apply theme immediately when received — before React is ready
       if ((payload.type === 'init' || payload.type === 'themeChanged' || payload.type === 'themeLoaded') && payload.resolvedTheme) {
         document.documentElement.setAttribute('data-theme', payload.resolvedTheme);
@@ -52,6 +57,13 @@ try {
     root.render(
       <React.StrictMode>
         <GlassLab />
+      </React.StrictMode>
+    );
+  } else if (view === 'remote-dock') {
+    // Remote Dock Lab — localhost:3000?view=remote-dock
+    root.render(
+      <React.StrictMode>
+        <RemoteDockLab />
       </React.StrictMode>
     );
   } else {

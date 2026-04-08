@@ -5,14 +5,12 @@ import ChatMessage from './components/ChatMessage';
 import StreamingChatMessage from './components/StreamingChatMessage';
 import TopBar from './components/TopBar';
 import ThoughtStream from './components/ThoughtStream';
-import MultipleChoiceCard from './components/MultipleChoiceCard';
 import { Button } from '../../shared/components/Button';
 import CardWidget from './components/CardWidget';
 import StatsWidget from './components/StatsWidget';
 import CompactWidget from './components/CompactWidget';
 import ImageWidget from './components/ImageWidget';
 import MascotCharacter from './components/MascotCharacter';
-import ReviewFeedback from './components/ReviewFeedback';
 import { DockEvalResult, DockTimer, DockStars, DockLoading } from './components/ReviewerDock';
 import SourceCard from './components/SourceCard';
 import CitationRef from '../../shared/components/CitationRef';
@@ -100,6 +98,83 @@ setRegistry([
 
 const DOCK_LOADING_STEPS = [{ label: 'KI bewertet...' }];
 
+/* ── MC Demo data + component ── */
+const MC_DEMO_OPTIONS = [
+  { text: 'M. biceps femoris', correct: false, explanation: 'Wird vom N. ischiadicus innerviert, nicht vom N. femoralis.' },
+  { text: 'M. quadriceps femoris', correct: true, explanation: 'Korrekt — der N. femoralis (L2–L4) innerviert alle vier Köpfe des M. quadriceps femoris.' },
+  { text: 'M. gluteus maximus', correct: false, explanation: 'Wird vom N. gluteus inferior (L5–S2) innerviert. Hauptfunktion: Hüftstreckung.' },
+  { text: 'M. gastrocnemius', correct: false, explanation: 'Wird vom N. tibialis (S1–S2) innerviert. Gehört zur Wadenmuskulatur.' },
+];
+const MC_DEMO_LETTERS = ['A', 'B', 'C', 'D', 'E'];
+const MC_BADGE = {
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  width: 24, height: 24, borderRadius: 6,
+  fontSize: 11, fontWeight: 700, fontFamily: 'var(--ds-font-mono)', flexShrink: 0,
+};
+
+function MCDemo() {
+  const [selected, setSelected] = useState({});
+  const [resolved, setResolved] = useState(false);
+
+  const handleSelect = (idx) => {
+    if (resolved) return;
+    const isCorrect = MC_DEMO_OPTIONS[idx].correct;
+    setSelected(prev => ({ ...prev, [idx]: isCorrect ? 'correct' : 'wrong' }));
+    if (isCorrect) setResolved(true);
+  };
+
+  const handleReset = () => { setSelected({}); setResolved(false); };
+
+  return (
+    <div style={{ maxWidth: 480 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {MC_DEMO_OPTIONS.map((opt, i) => {
+          const sel = selected[i];
+          let state = 'idle';
+          if (resolved && opt.correct) state = 'correct';
+          else if (sel === 'wrong') state = 'wrong';
+          else if (sel === 'correct') state = 'correct';
+          else if (resolved) state = 'dimmed';
+
+          const cls = `ds-mc-option${state !== 'idle' ? ` ${state}` : ''}`;
+          const badge = state === 'correct'
+            ? { ...MC_BADGE, background: 'var(--ds-green)', color: 'var(--ds-bg-canvas)' }
+            : state === 'wrong'
+            ? { ...MC_BADGE, background: 'var(--ds-red)', color: 'var(--ds-bg-canvas)' }
+            : { ...MC_BADGE, background: 'var(--ds-hover-tint)', color: 'var(--ds-text-secondary)' };
+          const textColor = state === 'correct' ? 'var(--ds-green)' : state === 'wrong' ? 'var(--ds-red)' : 'var(--ds-text-primary)';
+          const showExplanation = (state === 'correct' || state === 'wrong') && opt.explanation;
+
+          return (
+            <button key={i} className={cls} disabled={resolved || sel === 'wrong'}
+              onClick={() => handleSelect(i)}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <span style={badge}>{MC_DEMO_LETTERS[i]}</span>
+                <span style={{ fontSize: 15, color: textColor, fontWeight: state === 'correct' ? 600 : 400 }}>{opt.text}</span>
+              </div>
+              {showExplanation && (
+                <div style={{
+                  padding: '10px 0 0 38px', fontSize: 14, lineHeight: 1.6,
+                  color: state === 'correct' ? 'var(--ds-green-50)' : 'var(--ds-red-50)',
+                }}>
+                  {opt.explanation}
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {resolved && (
+        <button onClick={handleReset} style={{
+          marginTop: 16, padding: '8px 16px', borderRadius: 8, border: 'none',
+          background: 'var(--ds-hover-tint)', color: 'var(--ds-text-secondary)',
+          fontSize: 13, cursor: 'pointer', fontFamily: 'var(--ds-font-sans)',
+        }}>Zurücksetzen</button>
+      )}
+    </div>
+  );
+}
+
 const SOURCE_CARD_STYLE = { width: 192, height: 110 };
 const SOURCE_CARDS_ROW_STYLE = { display: 'flex', gap: 'var(--ds-space-md)', flexWrap: 'wrap', alignItems: 'flex-start' };
 
@@ -121,12 +196,8 @@ const NAV = [
     { id: 'topbar', label: 'TopBar' },
     { id: 'thoughtstream', label: 'ThoughtStream' },
     { id: 'chatmessage', label: 'ChatMessage' },
-    { id: 'reviewfeedback', label: 'ReviewFeedback' },
-    { id: 'dockwidgets', label: 'Dock Widgets' },
     { id: 'sourcecard', label: 'SourceCard' },
     { id: 'citationref', label: 'CitationRef' },
-    { id: 'agenticcell', label: 'AgenticCell' },
-    { id: 'multiplechoice', label: 'MultipleChoiceCard' },
   ]},
   { id: 'blocks', label: 'Blocks', children: [
     { id: 'block-card', label: 'CardWidget' },
@@ -145,6 +216,7 @@ const NAV = [
     { id: 'agent-research', label: '@Research' },
     { id: 'agent-plusi', label: '@Plusi' },
     { id: 'agent-help', label: '@Help' },
+    { id: 'agent-prufer', label: '@Prüfer' },
   ]},
 ];
 
@@ -1372,22 +1444,6 @@ export default function ComponentViewer() {
               <button className="ds-btn-primary" disabled>Disabled</button>
             </div>
           </Showcase>
-          <Showcase label="Multiple Choice Options">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ds-space-xs)', maxWidth: 400 }}>
-              <button className="ds-mc-option">
-                <span style={{ fontFamily: 'var(--ds-font-mono)', fontSize: 'var(--ds-text-sm)', color: 'var(--ds-text-muted)' }}>A</span>
-                Default state
-              </button>
-              <button className="ds-mc-option correct">
-                <span style={{ fontFamily: 'var(--ds-font-mono)', fontSize: 'var(--ds-text-sm)' }}>B</span>
-                Correct answer
-              </button>
-              <button className="ds-mc-option wrong">
-                <span style={{ fontFamily: 'var(--ds-font-mono)', fontSize: 'var(--ds-text-sm)' }}>C</span>
-                Wrong answer
-              </button>
-            </div>
-          </Showcase>
           <Showcase label="Tab Bar">
             <div className="ds-tab-bar" style={{ maxWidth: 300 }}>
               <button className="ds-tab active">Stapel</button>
@@ -1658,46 +1714,6 @@ export default function ComponentViewer() {
             />
           </Showcase>
 
-          {/* ReviewFeedback */}
-          <SubHeader id="reviewfeedback" label="Review Feedback" refs={sectionRefs} />
-          <Showcase label="Score states">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ds-space-md)', maxWidth: 400 }}>
-              <ReviewFeedback score={30} />
-              <ReviewFeedback score={70} />
-              <ReviewFeedback score={100} />
-            </div>
-          </Showcase>
-
-          {/* Dock Widgets */}
-          <SubHeader id="dockwidgets" label="Dock Widgets" refs={sectionRefs} />
-          <Showcase label="DockLoading — AI evaluating">
-            <DockLoading steps={DOCK_LOADING_STEPS} />
-          </Showcase>
-          <VariantLabel>DockEvalResult — score display</VariantLabel>
-          <Showcase>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ds-space-sm)' }}>
-              <DockEvalResult result={{ score: 20, feedback: 'Teilweise richtig, wichtige Details fehlen.' }} />
-              <DockEvalResult result={{ score: 65, feedback: 'Gut! Kleiner Fehler bei der Innervation.' }} />
-              <DockEvalResult result={{ score: 95, feedback: 'Ausgezeichnet!' }} />
-            </div>
-          </Showcase>
-          <VariantLabel>DockTimer — elapsed + rating</VariantLabel>
-          <Showcase>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ds-space-sm)' }}>
-              <DockTimer frozenElapsed={4200} rating={1} onCycleRating={() => {}} />
-              <DockTimer frozenElapsed={8900} rating={3} onCycleRating={() => {}} />
-              <DockTimer frozenElapsed={12400} rating={4} onCycleRating={() => {}} />
-            </div>
-          </Showcase>
-          <VariantLabel>DockStars — star count</VariantLabel>
-          <Showcase>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ds-space-sm)' }}>
-              <DockStars stars={1} rating={1} isResult={false} />
-              <DockStars stars={2} rating={2} isResult={false} />
-              <DockStars stars={3} rating={4} isResult={true} />
-            </div>
-          </Showcase>
-
           {/* SourceCard */}
           <SubHeader id="sourcecard" label="Source Card" refs={sectionRefs} />
           <Showcase label="Match types">
@@ -1747,44 +1763,6 @@ export default function ComponentViewer() {
               <CitationRef index={1} variant="card" size="md" />
               <CitationRef index={2} variant="web" size="md" />
             </div>
-          </Showcase>
-
-          {/* AgenticCell */}
-          <SubHeader id="agenticcell" label="Agentic Cell" refs={sectionRefs} />
-          <Showcase label="Loading state">
-            <AgenticCell agentName="tutor" isLoading={true} loadingHint="@Tutor analysiert die Karte..." />
-          </Showcase>
-          <VariantLabel>Loaded — with content</VariantLabel>
-          <Showcase>
-            <AgenticCell agentName="tutor" isLoading={false}>
-              <div style={{ fontSize: 'var(--ds-text-base)', color: 'var(--ds-text-secondary)', lineHeight: 1.6 }}>
-                Der <strong style={{ color: 'var(--ds-text-primary)' }}>M. quadriceps femoris</strong> besteht aus
-                vier Köpfen und wird vom N. femoralis (L2–L4) innerviert.
-              </div>
-            </AgenticCell>
-          </Showcase>
-          <VariantLabel>Research agent</VariantLabel>
-          <Showcase>
-            <AgenticCell agentName="research" isLoading={false}>
-              <div style={{ fontSize: 'var(--ds-text-base)', color: 'var(--ds-text-secondary)', lineHeight: 1.6 }}>
-                Aktuelle Studien bestätigen den klinischen Zusammenhang zwischen
-                IT-Band-Syndrom und lateralem Knieschmerz bei Läufern.
-              </div>
-            </AgenticCell>
-          </Showcase>
-
-          {/* MultipleChoiceCard */}
-          <SubHeader id="multiplechoice" label="MultipleChoiceCard" refs={sectionRefs} />
-          <Showcase label="Quiz Interface">
-            <MultipleChoiceCard
-              question="Welcher Muskel wird vom N. femoralis innerviert?"
-              options={[
-                { letter: 'A', text: 'M. biceps femoris', isCorrect: false, explanation: 'Wird vom N. ischiadicus innerviert.' },
-                { letter: 'B', text: 'M. quadriceps femoris', isCorrect: true, explanation: 'Korrekt! Der N. femoralis innerviert den M. quadriceps femoris.' },
-                { letter: 'C', text: 'M. gluteus maximus', isCorrect: false, explanation: 'Wird vom N. gluteus inferior innerviert.' },
-                { letter: 'D', text: 'M. gastrocnemius', isCorrect: false, explanation: 'Wird vom N. tibialis innerviert.' },
-              ]}
-            />
           </Showcase>
 
           {/* ──────────── PATTERNS ──────────── */}
@@ -2031,7 +2009,24 @@ export default function ComponentViewer() {
               ))}
             </div>
           </Showcase>
-
+          <VariantLabel>AgenticCell — Loading + Content</VariantLabel>
+          <Showcase>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 560 }}>
+              <AgenticCell agentName="tutor" isLoading={true} loadingHint="@Tutor analysiert die Karte..." />
+              <AgenticCell agentName="tutor" isLoading={false}>
+                <div style={{ fontSize: 'var(--ds-text-base)', color: 'var(--ds-text-secondary)', lineHeight: 1.6 }}>
+                  Der <strong style={{ color: 'var(--ds-text-primary)' }}>M. quadriceps femoris</strong> besteht aus
+                  vier Köpfen und wird vom N. femoralis (L2–L4) innerviert.
+                </div>
+              </AgenticCell>
+              <AgenticCell agentName="research" isLoading={false}>
+                <div style={{ fontSize: 'var(--ds-text-base)', color: 'var(--ds-text-secondary)', lineHeight: 1.6 }}>
+                  Aktuelle Studien bestätigen den klinischen Zusammenhang zwischen
+                  IT-Band-Syndrom und lateralem Knieschmerz bei Läufern.
+                </div>
+              </AgenticCell>
+            </div>
+          </Showcase>
           {/* Default Agent */}
           <SubHeader id="agent-default" label="Default Agent" refs={sectionRefs} />
           <Showcase label="Base template — all agents inherit this">
@@ -2061,6 +2056,45 @@ export default function ComponentViewer() {
 
           {/* @Tutor */}
           <SubHeader id="agent-tutor" label="@Tutor" refs={sectionRefs} />
+          <VariantLabel>Gedankenprozess</VariantLabel>
+          <Showcase>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 560 }}>
+              <ThinkingIndicator
+                phases={[{ name: 'Kontextanalyse', status: 'active', color: 'var(--ds-green)' }]}
+                agentLabel="Tutor"
+                showSkeleton
+              />
+              <ThinkingIndicator
+                phases={[
+                  { name: 'Kontextanalyse', status: 'done', data: '23 Begriffe' },
+                  { name: 'Wissensabgleich', status: 'done', data: '14 Karten' },
+                  { name: 'Synthese', status: 'active', color: 'var(--ds-green)' },
+                ]}
+                agentLabel="Tutor"
+                showSkeleton
+              />
+              <ThinkingIndicator
+                phases={[
+                  { name: 'Kontextanalyse', status: 'done', data: '23 Begriffe' },
+                  { name: 'Wissensabgleich', status: 'done', data: '14 Karten' },
+                  { name: 'Synthese', status: 'done' },
+                ]}
+                agentLabel="Tutor"
+                doneLabel="6 Quellen"
+              />
+              <ThinkingIndicator
+                phases={[
+                  { name: 'Kontextanalyse', status: 'done', data: '12 Begriffe' },
+                  { name: 'Wissensabgleich', status: 'done', data: '3 Karten' },
+                  { name: 'Web-Recherche', status: 'done', data: '4 Quellen' },
+                  { name: 'Synthese', status: 'active', color: 'var(--ds-green)' },
+                ]}
+                agentLabel="Tutor"
+                showSkeleton
+              />
+            </div>
+          </Showcase>
+          <VariantLabel>Agent-Darstellung</VariantLabel>
           <Showcase>
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--ds-space-md)', marginBottom: 'var(--ds-space-lg)' }}>
               <div style={{
@@ -2098,6 +2132,21 @@ export default function ComponentViewer() {
 
           {/* @Research */}
           <SubHeader id="agent-research" label="@Research" refs={sectionRefs} />
+          <VariantLabel>Gedankenprozess</VariantLabel>
+          <Showcase>
+            <div style={{ maxWidth: 560 }}>
+              <ThinkingIndicator
+                phases={[
+                  { name: 'Kontextanalyse', status: 'done', data: '38 Begriffe' },
+                  { name: 'Wissensabgleich', status: 'done', data: '42 Karten' },
+                  { name: 'Strukturanalyse', status: 'active', data: '5 Cluster', color: 'var(--ds-accent)' },
+                ]}
+                agentLabel="Research"
+                showSkeleton
+              />
+            </div>
+          </Showcase>
+          <VariantLabel>Agent-Darstellung</VariantLabel>
           <Showcase>
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--ds-space-md)', marginBottom: 'var(--ds-space-lg)' }}>
               <div style={{
@@ -2126,6 +2175,16 @@ export default function ComponentViewer() {
 
           {/* @Plusi */}
           <SubHeader id="agent-plusi" label="@Plusi" refs={sectionRefs} />
+          <VariantLabel>Gedankenprozess</VariantLabel>
+          <Showcase>
+            <div style={{ maxWidth: 560 }}>
+              <ThinkingIndicator
+                phases={[{ name: 'Reflexion', status: 'active', color: 'var(--ds-purple)' }]}
+                agentLabel="Plusi"
+              />
+            </div>
+          </Showcase>
+          <VariantLabel>Agent-Darstellung</VariantLabel>
           <Showcase>
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--ds-space-md)', marginBottom: 'var(--ds-space-lg)' }}>
               <div style={{
@@ -2396,104 +2455,28 @@ export default function ComponentViewer() {
           </Showcase>
 
           {/* ═══════════════════════════════════════════════════════════ */}
-          {/* ThinkingIndicator — Unified Reasoning Display Prototype     */}
+          {/* @Prüfer — Output-Widgets (MC + Bewertung)                    */}
           {/* ═══════════════════════════════════════════════════════════ */}
 
-          <SubHeader id="thinking-indicator" label="Thinking Indicator (Bar)" refs={sectionRefs} />
-
-          {/* --- Bar-style ThinkingIndicator using real component --- */}
-
-          <VariantLabel>Tutor — Kontextanalyse (loading + skeleton)</VariantLabel>
+          <SubHeader id="agent-prufer" label="@Prüfer" refs={sectionRefs} />
           <Showcase>
-            <div style={{ maxWidth: 560 }}>
-              <ThinkingIndicator
-                phases={[{ name: 'Kontextanalyse', status: 'active', color: 'var(--ds-accent)' }]}
-                agentLabel="Tutor"
-                showSkeleton
-              />
-            </div>
-          </Showcase>
-
-          <VariantLabel>Tutor — Wissensabgleich (active, Kontextanalyse done)</VariantLabel>
-          <Showcase>
-            <div style={{ maxWidth: 560 }}>
-              <ThinkingIndicator
-                phases={[
-                  { name: 'Kontextanalyse', status: 'done', data: '23 Begriffe' },
-                  { name: 'Wissensabgleich', status: 'active', color: 'var(--ds-accent)' },
-                ]}
-                agentLabel="Tutor"
-                showSkeleton
-              />
-            </div>
-          </Showcase>
-
-          <VariantLabel>Tutor — Synthese (active, RAG done)</VariantLabel>
-          <Showcase>
-            <div style={{ maxWidth: 560 }}>
-              <ThinkingIndicator
-                phases={[
-                  { name: 'Kontextanalyse', status: 'done', data: '23 Begriffe' },
-                  { name: 'Wissensabgleich', status: 'done', data: '14 Karten' },
-                  { name: 'Synthese', status: 'active', color: 'var(--ds-accent)' },
-                ]}
-                agentLabel="Tutor"
-                showSkeleton
-              />
-            </div>
-          </Showcase>
-
-          <VariantLabel>Tutor — fertig (doneLabel: "6 Quellen")</VariantLabel>
-          <Showcase>
-            <div style={{ maxWidth: 560 }}>
-              <ThinkingIndicator
-                phases={[
-                  { name: 'Kontextanalyse', status: 'done', data: '23 Begriffe' },
-                  { name: 'Wissensabgleich', status: 'done', data: '14 Karten' },
-                  { name: 'Synthese', status: 'done' },
-                ]}
-                agentLabel="Tutor"
-                doneLabel="6 Quellen"
-              />
-              <div style={{ marginTop: 14, fontSize: 15, color: 'var(--ds-text-primary)', lineHeight: 1.65 }}>
-                Die Zellschichten der Haut bestehen aus drei Hauptschichten:
-                <strong> Epidermis</strong>, <strong>Dermis</strong> und <strong>Subkutis</strong>...
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--ds-space-md)', marginBottom: 'var(--ds-space-md)' }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 'var(--ds-radius-sm)',
+                background: 'var(--ds-hover-tint)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <span style={{ fontSize: 'var(--ds-text-md)', fontWeight: 700, color: '#AF52DE' }}>P</span>
+              </div>
+              <div>
+                <div style={{ fontSize: 'var(--ds-text-md)', fontWeight: 600, color: '#AF52DE' }}>@Prüfer</div>
+                <div style={{ fontSize: 'var(--ds-text-xs)', color: 'var(--ds-text-tertiary)' }}>Exam agent — MC + Bewertung — <code style={{ fontFamily: 'var(--ds-font-mono)', fontSize: 'var(--ds-text-xs)' }}>#AF52DE</code></div>
               </div>
             </div>
           </Showcase>
 
-          <VariantLabel>Tutor — mit Web-Recherche</VariantLabel>
-          <Showcase>
-            <div style={{ maxWidth: 560 }}>
-              <ThinkingIndicator
-                phases={[
-                  { name: 'Kontextanalyse', status: 'done', data: '12 Begriffe' },
-                  { name: 'Wissensabgleich', status: 'done', data: '3 Karten' },
-                  { name: 'Web-Recherche', status: 'done', data: '4 Quellen' },
-                  { name: 'Synthese', status: 'active', color: 'var(--ds-accent)' },
-                ]}
-                agentLabel="Tutor"
-                showSkeleton
-              />
-            </div>
-          </Showcase>
-
-          <VariantLabel>Research — Stapel</VariantLabel>
-          <Showcase>
-            <div style={{ maxWidth: 560 }}>
-              <ThinkingIndicator
-                phases={[
-                  { name: 'Kontextanalyse', status: 'done', data: '38 Begriffe' },
-                  { name: 'Wissensabgleich', status: 'done', data: '42 Karten' },
-                  { name: 'Strukturanalyse', status: 'active', data: '5 Cluster', color: '#00D084' },
-                ]}
-                agentLabel="Research"
-                showSkeleton
-              />
-            </div>
-          </Showcase>
-
-          <VariantLabel>Prüfer — Evaluation</VariantLabel>
+          {/* ── ThinkingIndicator ── */}
+          <VariantLabel>Gedankenprozess — Evaluation</VariantLabel>
           <Showcase>
             <div style={{ maxWidth: 560 }}>
               <ThinkingIndicator
@@ -2507,27 +2490,69 @@ export default function ComponentViewer() {
             </div>
           </Showcase>
 
-          <VariantLabel>Plusi — Reflexion (kein RAG)</VariantLabel>
+          {/* ── MCOptions — Interactive Demo ── */}
+          <VariantLabel>MCOptions — Interaktiv (klick eine Option!)</VariantLabel>
           <Showcase>
-            <div style={{ maxWidth: 560 }}>
-              <ThinkingIndicator
-                phases={[{ name: 'Reflexion', status: 'active', color: 'var(--ds-accent)' }]}
-                agentLabel="Plusi"
-              />
+            <MCDemo />
+          </Showcase>
+
+          {/* ── DockEvalResult ── */}
+          <VariantLabel>DockEvalResult — Score-Anzeige</VariantLabel>
+          <Showcase>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 400 }}>
+              <div style={{ background: 'var(--ds-bg-frosted)', borderRadius: 12, overflow: 'hidden' }}>
+                <DockEvalResult result={{ score: 25, feedback: 'Teilweise richtig, wichtige Details fehlen.' }} />
+              </div>
+              <div style={{ background: 'var(--ds-bg-frosted)', borderRadius: 12, overflow: 'hidden' }}>
+                <DockEvalResult result={{ score: 65, feedback: 'Gut! Kleiner Fehler bei der Innervation.' }} />
+              </div>
+              <div style={{ background: 'var(--ds-bg-frosted)', borderRadius: 12, overflow: 'hidden' }}>
+                <DockEvalResult result={{ score: 95, feedback: 'Ausgezeichnet!' }} />
+              </div>
             </div>
           </Showcase>
 
-          {/* Compare all channels */}
-          <VariantLabel>Vergleich — alle Kanäle</VariantLabel>
+          {/* ── DockStars ── */}
+          <VariantLabel>DockStars — MC-Ergebnis</VariantLabel>
           <Showcase>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, maxWidth: 720 }}>
-              <ThinkingIndicator phases={[{ name: 'Kontextanalyse', status: 'done', data: '23 Begriffe' }, { name: 'Wissensabgleich', status: 'done', data: '14 Karten' }, { name: 'Synthese', status: 'active', color: 'var(--ds-accent)' }]} agentLabel="Tutor" />
-              <ThinkingIndicator phases={[{ name: 'Kontextanalyse', status: 'done', data: '38 Begriffe' }, { name: 'Wissensabgleich', status: 'done', data: '42 Karten' }, { name: 'Strukturanalyse', status: 'active', color: '#00D084' }]} agentLabel="Research" />
-              <ThinkingIndicator phases={[{ name: 'Kontextanalyse', status: 'done', data: '11 Begriffe' }, { name: 'Evaluation', status: 'active', color: '#AF52DE' }]} agentLabel="Prüfer" />
-              <ThinkingIndicator phases={[{ name: 'Reflexion', status: 'active', color: 'var(--ds-accent)' }]} agentLabel="Plusi" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 400 }}>
+              <div style={{ background: 'var(--ds-bg-frosted)', borderRadius: 12, overflow: 'hidden' }}>
+                <DockStars stars={3} rating={4} isResult={true} />
+              </div>
+              <div style={{ background: 'var(--ds-bg-frosted)', borderRadius: 12, overflow: 'hidden' }}>
+                <DockStars stars={2} rating={2} isResult={true} />
+              </div>
+              <div style={{ background: 'var(--ds-bg-frosted)', borderRadius: 12, overflow: 'hidden' }}>
+                <DockStars stars={1} rating={1} isResult={true} />
+              </div>
             </div>
           </Showcase>
 
+          {/* ── DockTimer ── */}
+          <VariantLabel>DockTimer — Antwortzeit + Rating</VariantLabel>
+          <Showcase>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 400 }}>
+              <div style={{ background: 'var(--ds-bg-frosted)', borderRadius: 12, overflow: 'hidden' }}>
+                <DockTimer frozenElapsed={4200} rating={1} onCycleRating={() => {}} />
+              </div>
+              <div style={{ background: 'var(--ds-bg-frosted)', borderRadius: 12, overflow: 'hidden' }}>
+                <DockTimer frozenElapsed={8900} rating={3} onCycleRating={() => {}} />
+              </div>
+              <div style={{ background: 'var(--ds-bg-frosted)', borderRadius: 12, overflow: 'hidden' }}>
+                <DockTimer frozenElapsed={12400} rating={4} onCycleRating={() => {}} />
+              </div>
+            </div>
+          </Showcase>
+
+          {/* ── DockLoading ── */}
+          <VariantLabel>DockLoading — Evaluation läuft</VariantLabel>
+          <Showcase>
+            <div style={{ maxWidth: 400 }}>
+              <div style={{ background: 'var(--ds-bg-frosted)', borderRadius: 12, overflow: 'hidden' }}>
+                <DockLoading steps={[{ label: 'Evaluation' }]} />
+              </div>
+            </div>
+          </Showcase>
 
           {/* Footer */}
           <div style={{
