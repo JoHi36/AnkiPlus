@@ -108,18 +108,47 @@ def run_research(situation: str = '', emit_step=None, memory=None,
     rag_result = None
 
     if smart_search_context:
-        # Normalize Smart Search cards to the dict shape the pipeline expects.
+        # Re-fetch full card content via fetch_card_snippets — SearchCardsThread
+        # only stores a 80-char front-field snippet with cloze syntax intact and
+        # no answer field at all, which is too thin for the LLM to disambiguate
+        # cards. We use the pipeline_blocks helper to get cleaned full
+        # question + answer for each card, marshalled to the main thread.
+        # run_research is invoked from SmartSearchAgentThread (a QThread), so
+        # fetch_card_snippets's main-thread marshalling works correctly.
+        try:
+            from ai.pipeline_blocks import fetch_card_snippets
+        except ImportError:
+            try:
+                from ..ai.pipeline_blocks import fetch_card_snippets
+            except ImportError:
+                from pipeline_blocks import fetch_card_snippets
+
         cards = smart_search_context.get('cards_data', []) or []
-        preloaded = []
+        # Extract integer card IDs in original order (which is similarity-ranked)
+        card_ids = []
         for card in cards[:50]:
-            card_id = card.get('id') or card.get('card_id') or card.get('cardId') or 0
+            cid = card.get('id') or card.get('card_id') or card.get('cardId') or 0
+            try:
+                card_ids.append(int(cid))
+            except (ValueError, TypeError):
+                continue
+
+        # Get cleaned full content (cloze stripped, longer truncation than the
+        # SearchCardsThread snippet)
+        snippets = fetch_card_snippets(card_ids, max_field_len=400)
+
+        preloaded = []
+        for s in snippets:
             preloaded.append({
-                'id': card_id,
-                'question': (card.get('question') or '')[:200],
-                'answer': (card.get('answer') or card.get('deck') or '')[:200],
-                'deck': card.get('deck', ''),
+                'id': s.get('cardId'),
+                'question': s.get('question', ''),
+                'answer': s.get('answer', ''),  # real back side, not deck-name fallback
+                'deck': s.get('deckName', ''),
             })
-        logger.info("Research: %d cards from smart_search → unified pipeline", len(preloaded))
+        logger.info(
+            "Research: %d cards from smart_search → enriched to %d snippets → unified pipeline",
+            len(card_ids), len(preloaded),
+        )
         try:
             rag_result = retrieve_rag_context(
                 user_message=query,

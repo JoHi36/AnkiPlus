@@ -131,9 +131,25 @@ def _build_preloaded_context(preloaded_cards: List[dict]) -> tuple:
     """Convert caller-provided cards into the (context_string, citations) shape.
 
     Used by the Smart Search path: cards are already loaded by another pipeline
-    (e.g. SearchCardsThread). We just format them so the rest of the unified
-    pipeline (reranker, web fallback, current-card injection) can run on them.
+    (e.g. SearchCardsThread). Callers SHOULD pre-clean their cards (strip HTML
+    and cloze syntax via utils/anki.py:strip_html_and_cloze) and provide both
+    a question and an answer field. As a defensive fallback we strip cloze
+    here too — leftover {{c1::...}} markup confuses the LLM and causes it to
+    hallucinate citations.
+
+    Notably we do NOT fall back the answer field to the deck name when answer
+    is missing — that produced LERNMATERIAL like "[1] (deck) Q | deck" where
+    every card looked identical to the LLM, leading to citation hallucination.
+    A missing answer stays as an empty string; the LLM sees question only.
     """
+    try:
+        try:
+            from ..utils.anki import strip_html_and_cloze
+        except ImportError:
+            from utils.anki import strip_html_and_cloze
+    except ImportError:
+        strip_html_and_cloze = lambda s: s  # noqa: E731 — graceful no-op fallback
+
     context_lines = []
     citations = {}
     for i, card in enumerate(preloaded_cards[:50]):
@@ -146,10 +162,20 @@ def _build_preloaded_context(preloaded_cards: List[dict]) -> tuple:
             card_id_int = int(card_id) if card_id else 0
         except (ValueError, TypeError):
             card_id_int = 0
-        question = (card.get('question') or '')[:200]
-        answer = (card.get('answer') or card.get('back') or '')[:200]
+        # Defensive cleaning: even if the caller pre-cleaned, double-stripping
+        # is cheap and idempotent. Truncation widened to 400 chars to give the
+        # LLM enough content per card to disambiguate citations.
+        question = strip_html_and_cloze((card.get('question') or ''))[:400]
+        answer_raw = card.get('answer') or card.get('back') or ''
+        answer = strip_html_and_cloze(answer_raw)[:400] if answer_raw else ''
         deck = card.get('deck') or card.get('deckName') or ''
-        context_lines.append(f'[{idx}] ({deck}) {question} | {answer}')
+        # Format: [N] (deck) question | answer  — matching neo4j-kg's working format.
+        # If answer is empty, omit the trailing pipe so the line doesn't look
+        # like "[1] (deck) question | " which the LLM might parse as "no answer".
+        if answer:
+            context_lines.append(f'[{idx}] ({deck}) {question} | {answer}')
+        else:
+            context_lines.append(f'[{idx}] ({deck}) {question}')
         key = str(card_id_int) if card_id_int else f'preloaded_{i}'
         citations[key] = {
             'index': idx,
