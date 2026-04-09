@@ -874,6 +874,49 @@ class KGDefinitionThread(QThread):
             }))
 
 
+class _AgentDispatchThread(QThread):
+    """Run AIHandler._dispatch_agent on a background thread.
+
+    Why this exists: agents that call fetch_card_snippets / run_on_main_thread
+    deadlock if dispatched synchronously from the main Qt thread, because
+    run_on_main_thread posts a callback then blocks on done.wait() — the
+    main thread can't service the queued callback if it's blocking. Running
+    _dispatch_agent on a worker thread keeps the main thread free.
+
+    on_finished is invoked from inside _dispatch_agent via mw.taskman.run_on_main,
+    so result delivery is already main-thread-safe. We just need the dispatch
+    itself off the main thread.
+
+    Used by _start_kg_definition for the Definition agent. Could be reused
+    by any future agent dispatch that needs the same fix.
+    """
+
+    def __init__(self, handler, run_fn, situation, request_id,
+                 on_finished, extra_kwargs, agent_def):
+        super().__init__()
+        self._handler = handler
+        self._run_fn = run_fn
+        self._situation = situation
+        self._request_id = request_id
+        self._on_finished = on_finished
+        self._extra_kwargs = extra_kwargs
+        self._agent_def = agent_def
+
+    def run(self):
+        try:
+            self._handler._dispatch_agent(
+                agent_name=self._agent_def.name,
+                run_fn=self._run_fn,
+                situation=self._situation,
+                request_id=self._request_id,
+                on_finished=self._on_finished,
+                extra_kwargs=self._extra_kwargs,
+                agent_def=self._agent_def,
+            )
+        except Exception:
+            logger.exception("_AgentDispatchThread failed for %s", self._agent_def.name)
+
+
 class SmartSearchAgentThread(QThread):
     """Dispatch Research agent for Smart Search answer + parallel cluster labeling."""
     result_signal = pyqtSignal(str)  # JSON for graph.quickAnswer (cluster labels only)
@@ -3792,8 +3835,14 @@ class ChatbotWidget(QWidget):
             except Exception:
                 logger.exception("Failed to send definition result")
 
-        self._handler._dispatch_agent(
-            agent_name='definition',
+        # Dispatch on a background QThread — running the agent synchronously
+        # on the main thread deadlocks because run_definition calls
+        # fetch_card_snippets → run_on_main_thread, which posts a callback
+        # and then blocks on done.wait() that only the main thread can fire.
+        # The thread reference is stored on the widget so it isn't
+        # garbage-collected before run() finishes.
+        thread = _AgentDispatchThread(
+            handler=self._handler,
             run_fn=run_fn,
             situation=term,
             request_id='definition_%s' % id(self),
@@ -3801,6 +3850,12 @@ class ChatbotWidget(QWidget):
             extra_kwargs={'search_query': search_query},
             agent_def=agent_def,
         )
+        if not hasattr(self, '_definition_threads'):
+            self._definition_threads = []
+        # Drop references to threads that have already finished
+        self._definition_threads = [t for t in self._definition_threads if t.isRunning()]
+        self._definition_threads.append(thread)
+        thread.start()
 
     def _on_kg_result(self, result_json):
         """Handle KG thread result — push to frontend."""

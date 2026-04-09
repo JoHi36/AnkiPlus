@@ -154,9 +154,9 @@ def fetch_card_snippets(
 
     try:
         try:
-            from ..utils.anki import run_on_main_thread, strip_html_and_cloze
+            from ..utils.anki import run_on_main_thread, strip_html_and_cloze, is_main_thread
         except ImportError:
-            from utils.anki import run_on_main_thread, strip_html_and_cloze
+            from utils.anki import run_on_main_thread, strip_html_and_cloze, is_main_thread
     except ImportError as e:
         logger.warning("fetch_card_snippets: utils.anki import failed: %s", e)
         return []
@@ -189,6 +189,17 @@ def fetch_card_snippets(
                 logger.debug("fetch_card_snippets: card %s lookup failed: %s", cid, e)
                 continue
         return snippets
+
+    # If the caller is already on the main thread, calling run_on_main_thread
+    # would deadlock (it posts a callback then blocks on done.wait, and the
+    # main thread that needs to fire the callback is the one that's blocked).
+    # Run _fetch directly in that case.
+    if is_main_thread():
+        try:
+            return _fetch()
+        except Exception as e:
+            logger.warning("fetch_card_snippets: direct fetch failed: %s", e)
+            return []
 
     try:
         return run_on_main_thread(_fetch)
