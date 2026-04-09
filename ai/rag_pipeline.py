@@ -40,8 +40,17 @@ PERPLEXITY_TIMEOUT_S = 15
 class RetrievalConfig:
     """Per-agent configuration for the unified RAG pipeline.
 
-    Defaults match Tutor behavior. Override only the knobs that differ.
-    See ai/agents.py for per-agent instances (TUTOR_RETRIEVAL, etc.).
+    Defaults match main's stable rag_pipeline.py behavior:
+      - No reranker (LLM filtering off)
+      - Web fallback fires ONLY on confidence == 'low' from retrieval
+        (single trigger, last resort, matches main exactly)
+      - Current-card injection on (matches Tutor on main)
+
+    Agents customize by overriding fields. The reranker_enabled flag
+    exists for opt-in but is off by default — earlier versions of this
+    config defaulted it to True and that introduced source-quality
+    regressions vs. main's behavior. See ai/reranker.py if you want to
+    enable it for an experiment.
     """
     # --- Retrieval defaults (used if routing_result omits them) ---
     retrieval_mode_default: str = 'both'
@@ -50,12 +59,15 @@ class RetrievalConfig:
     kg_enrichment: bool = True
 
     # --- Reranker (LLM-based source filtering) ---
-    reranker_enabled: bool = True
+    # Off by default — main's stable pipeline has no reranker.
+    reranker_enabled: bool = False
     use_resolved_intent_for_reranker: bool = True
 
     # --- Web fallback (Perplexity via backend /research) ---
+    # Web search is a LAST RESORT — fires only when retrieval reports
+    # confidence == 'low'. There is no minimum-source threshold. This
+    # matches main's single-condition fallback exactly.
     web_fallback_enabled: bool = True
-    web_fallback_min_sources: int = 3
     use_resolved_intent_for_web: bool = True
 
     # --- Current-card injection ---
@@ -65,7 +77,7 @@ class RetrievalConfig:
     accept_preloaded_cards: bool = False
 
 
-# Default = Tutor behavior. Used when caller passes retrieval_config=None.
+# Default = main's stable behavior. Used when caller passes retrieval_config=None.
 _DEFAULT_CONFIG = RetrievalConfig()
 
 
@@ -386,14 +398,11 @@ def retrieve_rag_context(
             logger.warning("Reranker failed, continuing without: %s", e)
 
     # ── Phase 3: Web fallback (Perplexity) ────────────────────────────────
+    # Web search is the LAST RESORT — fires only if retrieval reported
+    # confidence='low'. This is a single condition, matching main's stable
+    # rag_pipeline.py exactly. No minimum-source threshold, no double-trigger.
     web_context = None
     if cfg.web_fallback_enabled:
-        indexed_count = sum(1 for c in citations.values() if c.get('index'))
-        if indexed_count < cfg.web_fallback_min_sources and confidence != "low":
-            confidence = "low"
-            logger.info("RAG: only %d indexed sources (<%d), forcing web search",
-                        indexed_count, cfg.web_fallback_min_sources)
-
         if confidence == "low":
             _web_query = user_message
             if cfg.use_resolved_intent_for_web:
