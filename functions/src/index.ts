@@ -23,9 +23,6 @@ import { insightsExtractHandler } from './handlers/insights';
 import { pipelineHandler } from './handlers/pipeline';
 import { voiceTranscribeHandler, voiceSpeakHandler } from './handlers/voice';
 import { deleteAccountHandler, dataExportHandler, cleanupOldData } from './handlers/gdpr';
-import { kgEventsHandler } from './handlers/kgEvents';
-import { kgQueryHandler } from './handlers/kgQuery';
-import { processKgEvent } from './handlers/kgProcessor';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -128,10 +125,6 @@ app.post('/voice/speak', validateTokenOptional, voiceSpeakHandler);
 app.delete('/user/account', validateToken, deleteAccountHandler);
 app.get('/user/data-export', validateToken, dataExportHandler);
 
-// Knowledge Graph routes
-app.post('/kg/events', validateToken, kgEventsHandler);
-app.post('/kg/query', validateToken, kgQueryHandler);
-
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
   v1.logger.error('Unhandled error', {
@@ -165,9 +158,6 @@ export const apiv2 = onRequest(
   { region: 'europe-west1', timeoutSeconds: 120, invoker: 'public' },
   app
 );
-
-// Knowledge Graph: Firestore onCreate trigger — processes KG events into Neo4j
-export { processKgEvent };
 
 // Scheduled cleanup: delete analytics/anonymous data older than 90 days (DSGVO retention policy)
 // Runs daily at 03:00 UTC

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Settings, Copy, LogOut, ChevronRight, Sun, Moon, Monitor } from 'lucide-react';
 import { bridgeAction } from '../actions';
-import { frontendLog } from '../utils/frontendLogger';
 
 const PLAN_MAP = {
   free:  { name: 'Free',  price: 'Kostenlos' },
@@ -83,16 +82,13 @@ export default function SettingsSidebar() {
   });
   const [copyLabel, setCopyLabel] = useState(null); // null = default, string = temporary
   const [indexing, setIndexing] = useState(null);
-  const [kgMetrics, setKgMetrics] = useState(null); // { backend, totalCards, reviewedCards, avgEase, avgInterval }
 
   // Request status from Python on mount
   useEffect(() => {
     bridgeAction('sidebarGetStatus');
     bridgeAction('sidebarGetIndexingStatus');
-    bridgeAction('sidebarGetKgMetrics');
     const interval = setInterval(() => {
       bridgeAction('sidebarGetIndexingStatus');
-      bridgeAction('sidebarGetKgMetrics');
     }, 10000);
     return () => clearInterval(interval);
   }, []);
@@ -135,9 +131,6 @@ export default function SettingsSidebar() {
       }
       if (payload.type === 'indexingStatus') {
         setIndexing(payload.data);
-      }
-      if (payload.type === 'kgMetrics') {
-        setKgMetrics(payload.data);
       }
       if (payload.type === 'sidebarLogsCopied') {
         setCopyLabel('Kopiert ✓');
@@ -306,12 +299,8 @@ export default function SettingsSidebar() {
       {/* Divider */}
       <div style={{ height: 1, background: 'var(--ds-border-subtle)', margin: '12px 0' }} />
 
-      {/* KG Metrics (neo4j) or Indexing Gauge (sqlite fallback) */}
-      {kgMetrics?.backend === 'neo4j' ? (
-        <KgMetrics data={kgMetrics} />
-      ) : (
-        indexing && <IndexingGauge data={indexing} />
-      )}
+      {/* Indexing Gauge */}
+      {indexing && <IndexingGauge data={indexing} />}
 
       {/* Divider */}
       <div style={{ height: 1, background: 'var(--ds-border-subtle)', margin: '12px 0' }} />
@@ -406,122 +395,6 @@ export default function SettingsSidebar() {
     </div>
   );
 }
-
-/* ─── KG Metrics (Neo4j) ─── */
-
-const KG_RING_SIZE = 64;
-const KG_RING_CENTER = KG_RING_SIZE / 2;
-const KG_RING_R = 26;
-const KG_RING_STROKE = 4;
-const KG_RING_CIRC = 2 * Math.PI * KG_RING_R;
-
-const KG_LABEL_STYLE = {
-  fontSize: 10, color: 'var(--ds-text-muted)', fontWeight: 500,
-};
-const KG_VALUE_STYLE = {
-  fontSize: 13, color: 'var(--ds-text-primary)', fontWeight: 600,
-  fontFamily: 'var(--ds-font-mono, monospace)',
-};
-const KG_DOT_STYLE = (color) => ({
-  width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0,
-});
-const KG_ROW_STYLE = {
-  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-  padding: '4px 0',
-};
-
-function KgMetrics({ data }) {
-  const total = data?.totalCards || 0;
-  const reviewed = data?.reviewedCards || 0;
-  const avgEase = data?.avgEase || 0;
-  const avgInterval = data?.avgInterval || 0;
-
-  const pct = total > 0 ? Math.min(1, reviewed / total) : 0;
-  const offset = KG_RING_CIRC * (1 - pct);
-  const fmt = (n) => n.toLocaleString('de-DE');
-
-  // Ease color: 1.0=red, 2.5=yellow, 4.0=green
-  const easeColor = avgEase <= 1.5 ? 'var(--ds-red)'
-    : avgEase <= 2.5 ? 'var(--ds-yellow)'
-    : 'var(--ds-green)';
-
-  return (
-    <div>
-      <div
-        className="uppercase font-semibold tracking-wide"
-        style={{ fontSize: 10, letterSpacing: '0.06em', color: 'var(--ds-text-muted)', marginBottom: 12 }}
-      >
-        Knowledge Graph
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        {/* Ring chart */}
-        <svg
-          width={KG_RING_SIZE}
-          height={KG_RING_SIZE}
-          viewBox={`0 0 ${KG_RING_SIZE} ${KG_RING_SIZE}`}
-          style={{ flexShrink: 0 }}
-        >
-          <circle cx={KG_RING_CENTER} cy={KG_RING_CENTER} r={KG_RING_R}
-            fill="none" stroke="var(--ds-border-subtle)" strokeWidth={KG_RING_STROKE}
-            opacity={0.4}
-          />
-          <circle cx={KG_RING_CENTER} cy={KG_RING_CENTER} r={KG_RING_R}
-            fill="none" stroke="var(--ds-green)" strokeWidth={KG_RING_STROKE}
-            strokeDasharray={KG_RING_CIRC}
-            strokeDashoffset={offset}
-            strokeLinecap="round"
-            transform={`rotate(-90 ${KG_RING_CENTER} ${KG_RING_CENTER})`}
-            style={{ transition: 'stroke-dashoffset 1s ease-out' }}
-          />
-          <text x={KG_RING_CENTER} y={KG_RING_CENTER + 1} textAnchor="middle"
-            dominantBaseline="central"
-            fill="var(--ds-text-primary)" fontSize="14" fontWeight="700"
-            fontFamily="var(--ds-font-mono, monospace)"
-          >
-            {Math.round(pct * 100)}%
-          </text>
-        </svg>
-
-        {/* Stats */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={KG_ROW_STYLE}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={KG_DOT_STYLE('var(--ds-accent)')} />
-              <span style={KG_LABEL_STYLE}>Cards</span>
-            </div>
-            <span style={KG_VALUE_STYLE}>{fmt(total)}</span>
-          </div>
-
-          <div style={KG_ROW_STYLE}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={KG_DOT_STYLE('var(--ds-green)')} />
-              <span style={KG_LABEL_STYLE}>Reviewed</span>
-            </div>
-            <span style={KG_VALUE_STYLE}>{fmt(reviewed)}</span>
-          </div>
-
-          <div style={KG_ROW_STYLE}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={KG_DOT_STYLE(easeColor)} />
-              <span style={KG_LABEL_STYLE}>Avg. Ease</span>
-            </div>
-            <span style={KG_VALUE_STYLE}>{avgEase.toFixed(1)}</span>
-          </div>
-
-          <div style={KG_ROW_STYLE}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={KG_DOT_STYLE('var(--ds-purple)')} />
-              <span style={KG_LABEL_STYLE}>Avg. Interval</span>
-            </div>
-            <span style={KG_VALUE_STYLE}>{avgInterval}d</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 
 /* ─── Dual Arc Gauge ─── */
 

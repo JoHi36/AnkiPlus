@@ -1258,7 +1258,6 @@ class ChatbotWidget(QWidget):
             'sidebarCopyLogs': self._msg_copy_logs,
             'sidebarGetStatus': self._msg_get_sidebar_status,
             'sidebarGetIndexingStatus': self._msg_get_indexing_status,
-            'sidebarGetKgMetrics': self._msg_get_kg_metrics,
             'sidebarSetTheme': self._msg_set_theme,
             'sidebarOpenNativeSettings': lambda d: __import__('aqt', fromlist=['mw']).mw.onPrefs(),
             'sidebarOpenUpgrade': self._msg_sidebar_upgrade,
@@ -3036,31 +3035,6 @@ class ChatbotWidget(QWidget):
             })
         except Exception:
             logger.exception("_msg_get_indexing_status failed")
-
-    def _msg_get_kg_metrics(self, data=None):
-        """Return KG metrics from Neo4j (or signal sqlite backend)."""
-        try:
-            config = get_config()
-            if config.get('kg_backend') != 'neo4j':
-                self._send_to_frontend('kgMetrics', {'backend': 'sqlite'})
-                return
-
-            try:
-                try:
-                    from ..storage.kg_client import get_kg_metrics
-                except ImportError:
-                    from storage.kg_client import get_kg_metrics
-                metrics = get_kg_metrics()
-                metrics['backend'] = 'neo4j'
-                self._send_to_frontend('kgMetrics', metrics)
-            except Exception as e:
-                logger.debug("_msg_get_kg_metrics cloud query failed: %s", e)
-                self._send_to_frontend('kgMetrics', {
-                    'backend': 'neo4j', 'offline': True,
-                    'totalCards': 0, 'reviewedCards': 0, 'avgEase': 0, 'avgInterval': 0,
-                })
-        except Exception:
-            logger.exception("_msg_get_kg_metrics failed")
 
     def _msg_sidebar_logout(self, data=None):
         """Clear auth tokens."""

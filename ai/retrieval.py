@@ -154,56 +154,20 @@ class HybridRetrieval:
                 if context and context.get('cardId'):
                     exclude.append(context['cardId'])
 
-                # Check if Neo4j vector search is enabled
-                _use_neo4j = False
-                try:
-                    try:
-                        from config import get_config as _gc
-                    except ImportError:
-                        from ..config import get_config as _gc
-                    _use_neo4j = _gc().get("kg_backend") == "neo4j"
-                except Exception:
-                    pass
-
+                # Batch all embedding queries into a single call, then search per embedding
                 seen_cards = {}  # card_id -> best_score
-
-                if _use_neo4j:
-                    # Neo4j ANN vector search via Cloud Function
-                    try:
-                        try:
-                            from storage.kg_client import vector_search_cards
-                        except ImportError:
-                            from ..storage.kg_client import vector_search_cards
-
-                        all_embeddings = self.emb.embed_texts(embedding_queries)
-                        for eq, emb in zip(embedding_queries, all_embeddings or []):
-                            if not emb:
-                                continue
-                            results = vector_search_cards(list(emb), top_k=max_notes)
-                            for item in results:
-                                # Neo4j returns content_hash, not card_id — use hash as key
-                                key = item.get('content_hash', '')
-                                score = item.get('score', 0)
-                                if key and (key not in seen_cards or score > seen_cards[key]):
-                                    seen_cards[key] = score
-                    except Exception as e:
-                        logger.warning("HybridRetrieval: Neo4j vector search failed, falling back: %s", e)
-                        _use_neo4j = False  # Fall through to local search
-
-                if not _use_neo4j:
-                    # Local brute-force cosine search (default)
-                    all_embeddings = self.emb.embed_texts(embedding_queries)
-                    for eq, emb in zip(embedding_queries, all_embeddings or []):
-                        if not emb:
-                            continue
-                        results = self.emb.search(
-                            emb,
-                            top_k=max_notes,
-                            exclude_card_ids=exclude
-                        )
-                        for card_id, score in results:
-                            if card_id not in seen_cards or score > seen_cards[card_id]:
-                                seen_cards[card_id] = score
+                all_embeddings = self.emb.embed_texts(embedding_queries)
+                for eq, emb in zip(embedding_queries, all_embeddings or []):
+                    if not emb:
+                        continue
+                    results = self.emb.search(
+                        emb,
+                        top_k=max_notes,
+                        exclude_card_ids=exclude
+                    )
+                    for card_id, score in results:
+                        if card_id not in seen_cards or score > seen_cards[card_id]:
+                            seen_cards[card_id] = score
 
                 # Sort merged results by score descending, take top max_notes
                 semantic_results = sorted(seen_cards.items(), key=lambda x: x[1], reverse=True)[:max_notes]
@@ -421,16 +385,12 @@ class HybridRetrieval:
     def _kg_retrieve(self, user_message, router_result):
         """Knowledge Graph retrieval: find cards via exact term matching + co-occurrence."""
         try:
-            # Check backend once
-            _neo4j = False
             try:
-                try:
-                    from config import get_config as _gc
-                except ImportError:
-                    from ..config import get_config as _gc
-                _neo4j = _gc().get('kg_backend') == 'neo4j'
-            except Exception:
-                pass
+                from ..storage.kg_store import _get_db as kg_get_db
+            except ImportError:
+                from storage.kg_store import _get_db as kg_get_db
+
+            db = kg_get_db()
 
             # Build candidate terms: full query + individual words (≥3 chars)
             candidates = [user_message.strip()]
@@ -438,99 +398,55 @@ class HybridRetrieval:
             if not candidates:
                 return [], []
 
-            if _neo4j:
-                return self._kg_retrieve_neo4j(candidates)
-            return self._kg_retrieve_sqlite(candidates)
+            # Exact term matching (case-insensitive) — no LIKE wildcards
+            matched_terms = []
+            for candidate in candidates[:8]:
+                rows = db.execute(
+                    "SELECT term FROM kg_terms WHERE LOWER(term) = LOWER(?) ORDER BY frequency DESC LIMIT 1",
+                    (candidate,)
+                ).fetchall()
+                matched_terms.extend([r[0] for r in rows])
+
+            # If no exact matches, try prefix matching (starts with) as softer fallback
+            if not matched_terms:
+                for candidate in candidates[:5]:
+                    if len(candidate) >= 4:
+                        rows = db.execute(
+                            "SELECT term FROM kg_terms WHERE LOWER(term) LIKE ? ORDER BY frequency DESC LIMIT 3",
+                            (candidate.lower() + '%',)
+                        ).fetchall()
+                        matched_terms.extend([r[0] for r in rows])
+
+            if not matched_terms:
+                return [], []
+
+            matched_terms = list(dict.fromkeys(matched_terms))[:10]
+
+            term_placeholders = ','.join('?' * len(matched_terms))
+            connected_rows = db.execute(
+                "SELECT DISTINCT b.term FROM kg_card_terms a "
+                "JOIN kg_card_terms b ON a.card_id = b.card_id AND a.term != b.term "
+                "WHERE a.term IN (%s) "
+                "GROUP BY b.term "
+                "HAVING COUNT(DISTINCT a.card_id) >= 2 "
+                "ORDER BY COUNT(DISTINCT a.card_id) DESC "
+                "LIMIT 15" % term_placeholders,
+                matched_terms
+            ).fetchall()
+            expanded_terms = matched_terms + [r[0] for r in connected_rows]
+            expanded_terms = list(dict.fromkeys(expanded_terms))[:20]
+
+            exp_placeholders = ','.join('?' * len(expanded_terms))
+            card_rows = db.execute(
+                "SELECT DISTINCT card_id FROM kg_card_terms WHERE term IN (%s)" % exp_placeholders,
+                expanded_terms
+            ).fetchall()
+            card_ids = [r[0] for r in card_rows]
+
+            return card_ids, expanded_terms
         except Exception as e:
             logger.warning("KG retrieval failed: %s", e)
             return [], []
-
-    def _kg_retrieve_neo4j(self, candidates):
-        """KG retrieval via Neo4j Cloud Function."""
-        try:
-            from ..storage.kg_client import exact_term_lookup, get_term_expansions
-        except ImportError:
-            from storage.kg_client import exact_term_lookup, get_term_expansions
-
-        matched_terms = []
-        for candidate in candidates[:8]:
-            canonical = exact_term_lookup(candidate)
-            if canonical:
-                matched_terms.append(canonical)
-
-        if not matched_terms:
-            return [], []
-
-        matched_terms = list(dict.fromkeys(matched_terms))[:10]
-
-        # Expand via co-occurrence edges
-        expanded_terms = list(matched_terms)
-        for term in matched_terms[:5]:
-            edges = get_term_expansions(term, max_terms=5)
-            for e in edges:
-                t = e['term'] if isinstance(e, dict) else e[0]
-                if t not in expanded_terms:
-                    expanded_terms.append(t)
-        expanded_terms = expanded_terms[:20]
-
-        # Get card IDs via related cards for matched terms
-        # (Neo4j doesn't return card_ids directly from term lookup,
-        #  but the merged results use terms for SQL keyword search)
-        return [], expanded_terms
-
-    def _kg_retrieve_sqlite(self, candidates):
-        """KG retrieval via local SQLite."""
-        try:
-            from ..storage.kg_store import _get_db as kg_get_db
-        except ImportError:
-            from storage.kg_store import _get_db as kg_get_db
-
-        db = kg_get_db()
-
-        matched_terms = []
-        for candidate in candidates[:8]:
-            rows = db.execute(
-                "SELECT term FROM kg_terms WHERE LOWER(term) = LOWER(?) ORDER BY frequency DESC LIMIT 1",
-                (candidate,)
-            ).fetchall()
-            matched_terms.extend([r[0] for r in rows])
-
-        if not matched_terms:
-            for candidate in candidates[:5]:
-                if len(candidate) >= 4:
-                    rows = db.execute(
-                        "SELECT term FROM kg_terms WHERE LOWER(term) LIKE ? ORDER BY frequency DESC LIMIT 3",
-                        (candidate.lower() + '%',)
-                    ).fetchall()
-                    matched_terms.extend([r[0] for r in rows])
-
-        if not matched_terms:
-            return [], []
-
-        matched_terms = list(dict.fromkeys(matched_terms))[:10]
-
-        term_placeholders = ','.join('?' * len(matched_terms))
-        connected_rows = db.execute(
-            "SELECT DISTINCT b.term FROM kg_card_terms a "
-            "JOIN kg_card_terms b ON a.card_id = b.card_id AND a.term != b.term "
-            "WHERE a.term IN (%s) "
-            "GROUP BY b.term "
-            "HAVING COUNT(DISTINCT a.card_id) >= 2 "
-            "ORDER BY COUNT(DISTINCT a.card_id) DESC "
-            "LIMIT 15" % term_placeholders,
-            matched_terms
-        ).fetchall()
-        expanded_terms = matched_terms + [r[0] for r in connected_rows]
-        expanded_terms = list(dict.fromkeys(expanded_terms))[:20]
-
-        exp_placeholders = ','.join('?' * len(expanded_terms))
-        card_rows = db.execute(
-            "SELECT DISTINCT card_id FROM kg_card_terms WHERE term IN (%s)" % exp_placeholders,
-            expanded_terms
-        ).fetchall()
-        card_ids = [r[0] for r in card_rows]
-
-        return card_ids, expanded_terms
 
 
 try:
@@ -780,33 +696,17 @@ class EnrichedRetrieval:
                 if top_sem_cards:
                     feedback_terms = set()
 
-                    # Fetch terms for each card — Neo4j or SQLite
-                    if _use_neo4j:
-                        try:
-                            try:
-                                from storage.kg_client import get_card_terms as _kg_get_terms
-                            except ImportError:
-                                from ..storage.kg_client import get_card_terms as _kg_get_terms
-                            for cid in top_sem_cards:
-                                terms = _kg_get_terms(str(cid))
-                                feedback_terms.update(terms if isinstance(terms, list) else [])
-                        except Exception as e:
-                            logger.debug("Feedback neo4j term fetch failed: %s", e)
-                    else:
-                        try:
-                            try:
-                                from ..storage.kg_store import _get_db as _kg_db
-                            except ImportError:
-                                from storage.kg_store import _get_db as _kg_db
-                            kg_db = _kg_db()
-                            for cid in top_sem_cards:
-                                rows = kg_db.execute(
-                                    "SELECT term FROM kg_card_terms WHERE card_id = ?", (cid,)
-                                ).fetchall()
-                                for r in rows:
-                                    feedback_terms.add(r[0])
-                        except Exception as e:
-                            logger.debug("Feedback sqlite term fetch failed: %s", e)
+                    try:
+                        from ..storage.kg_store import _get_db as _kg_db
+                    except ImportError:
+                        from storage.kg_store import _get_db as _kg_db
+                    kg_db = _kg_db()
+                    for cid in top_sem_cards:
+                        rows = kg_db.execute(
+                            "SELECT term FROM kg_card_terms WHERE card_id = ?", (cid,)
+                        ).fetchall()
+                        for r in rows:
+                            feedback_terms.add(r[0])
 
                     # Remove terms we already searched for
                     existing_lower = {t.lower() for t in enrichment.get('tier1_terms', [])}

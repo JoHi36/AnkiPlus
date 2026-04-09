@@ -56,7 +56,6 @@ def _handle_sidebar_message(msg_type, data):
     handlers = {
         'sidebarGetStatus': _msg_get_status,
         'sidebarGetIndexingStatus': _msg_get_indexing_status,
-        'sidebarGetKgMetrics': _msg_get_kg_metrics,
         'sidebarSetTheme': _msg_set_theme,
         'sidebarOpenNativeSettings': _msg_open_native_settings,
         'sidebarCopyLogs': _msg_copy_logs,
@@ -389,36 +388,6 @@ def _msg_get_indexing_status(_data):
             'embeddings': {'total': 0, 'done': 0},
             'kgTerms': {'total': 0, 'done': 0, 'totalTerms': 0},
             'kgTermEmbeddings': {'total': 0, 'done': 0},
-        })
-
-
-def _msg_get_kg_metrics(_data):
-    """Fetch KG metrics from Neo4j. Only sends real data — no SQLite fallback."""
-    try:
-        try:
-            from ..config import get_config
-        except ImportError:
-            from config import get_config
-
-        if get_config().get('kg_backend') != 'neo4j':
-            _send_to_sidebar('kgMetrics', {'backend': 'sqlite'})
-            return
-
-        try:
-            from ..storage.kg_client import get_kg_metrics
-        except ImportError:
-            from storage.kg_client import get_kg_metrics
-
-        metrics = get_kg_metrics()
-        metrics['backend'] = 'neo4j'
-        _send_to_sidebar('kgMetrics', metrics)
-    except Exception:
-        logger.exception("_msg_get_kg_metrics failed")
-        # Signal neo4j but offline — frontend can show "connecting..." state
-        _send_to_sidebar('kgMetrics', {
-            'backend': 'neo4j',
-            'offline': True,
-            'totalCards': 0, 'reviewedCards': 0, 'avgEase': 0, 'avgInterval': 0,
         })
 
 

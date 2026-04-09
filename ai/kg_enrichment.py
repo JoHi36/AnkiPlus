@@ -23,17 +23,6 @@ logger = get_logger(__name__)
 from operator import mul as _mul
 
 
-def _is_neo4j():
-    """Check if kg_backend is set to neo4j."""
-    try:
-        try:
-            from ..config import get_config
-        except ImportError:
-            from config import get_config
-        return get_config().get('kg_backend') == 'neo4j'
-    except Exception:
-        return False
-
 # Minimal universal stopwords — only the absolute basics (function words).
 # Domain filtering is handled dynamically by KG presence check, not by this list.
 # A term NOT in the KG is demoted to embedding-only (not used for SQL queries).
@@ -337,30 +326,6 @@ def _get_edge_expansions(terms, db=None):
 
     Returns dict of {original_term: [(connected_term, weight), ...]}
     """
-    # Neo4j path — no SQLite
-    if _is_neo4j():
-        try:
-            try:
-                from ..storage.kg_client import get_term_expansions, exact_term_lookup
-            except ImportError:
-                from storage.kg_client import get_term_expansions, exact_term_lookup
-
-            expansions = {}
-            for term in terms:
-                edges = get_term_expansions(term, max_terms=5)
-                if not edges:
-                    canonical = exact_term_lookup(term)
-                    if canonical and canonical != term:
-                        edges = get_term_expansions(canonical, max_terms=5)
-                # kg_client returns list of dicts, convert to tuples
-                if edges:
-                    expansions[term] = [(e['term'], e['weight']) if isinstance(e, dict) else e for e in edges]
-            return expansions
-        except Exception as e:
-            logger.warning("_get_edge_expansions neo4j failed: %s", e)
-            return {}
-
-    # SQLite path (default)
     try:
         try:
             from ..storage.kg_store import get_term_expansions, exact_term_lookup
@@ -484,29 +449,6 @@ def _filter_by_kg_presence(candidates, db=None):
 
     This replaces language-specific stopword lists with a universal approach.
     """
-    if _is_neo4j():
-        try:
-            try:
-                from ..storage.kg_client import exact_term_lookup
-            except ImportError:
-                from storage.kg_client import exact_term_lookup
-
-            kg_terms = []
-            non_kg_terms = []
-            for term in candidates:
-                canonical = exact_term_lookup(term)
-                if canonical:
-                    kg_terms.append(canonical)
-                else:
-                    non_kg_terms.append(term)
-            if non_kg_terms:
-                logger.debug("KG filter (neo4j): domain=%s, generic=%s", kg_terms, non_kg_terms)
-            return kg_terms, non_kg_terms
-        except Exception as e:
-            logger.warning("_filter_by_kg_presence neo4j failed: %s", e)
-            return candidates, []
-
-    # SQLite path
     try:
         try:
             from ..storage.kg_store import exact_term_lookup

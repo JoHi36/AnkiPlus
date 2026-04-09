@@ -202,26 +202,9 @@ class EmbeddingManager:
     # ── In-Memory Index ──
 
     def load_index(self):
-        """Load all embeddings from DB into memory. Safe to call multiple times.
-
-        Skips loading when kg_backend == 'neo4j' — vector search goes through
-        the Neo4j ANN index instead of in-memory brute-force.
-        """
+        """Load all embeddings from DB into memory. Safe to call multiple times."""
         if self._index_loaded:
             return
-
-        # Skip expensive index load when Neo4j handles vector search
-        try:
-            try:
-                from config import get_config as _gc
-            except ImportError:
-                from ..config import get_config as _gc
-            if _gc().get("kg_backend") == "neo4j":
-                self._index_loaded = True
-                logger.info("EmbeddingManager: skipping local index load (neo4j backend)")
-                return
-        except Exception:
-            pass
 
         try:
             from storage.card_sessions import load_all_embeddings
@@ -288,38 +271,6 @@ class EmbeddingManager:
         import struct
         import math
 
-        # Neo4j path — embeddings come as float lists, no unpacking needed
-        try:
-            try:
-                from config import get_config as _gc
-            except ImportError:
-                from ..config import get_config as _gc
-            if _gc().get('kg_backend') == 'neo4j':
-                try:
-                    try:
-                        from storage.kg_client import load_term_embeddings
-                    except ImportError:
-                        from ..storage.kg_client import load_term_embeddings
-                    raw = load_term_embeddings()
-                    index = {}
-                    for term, vec in raw.items():
-                        if not vec:
-                            continue
-                        norm = math.sqrt(sum(v * v for v in vec))
-                        if norm > 0:
-                            vec = [v / norm for v in vec]
-                        index[term] = vec
-                    self._kg_term_index = index
-                    logger.info("Loaded %d KG term embeddings from Neo4j", len(index))
-                    return index
-                except Exception as e:
-                    logger.warning("Neo4j term index load failed: %s", e)
-                    self._kg_term_index = {}
-                    return {}
-        except Exception:
-            pass
-
-        # SQLite path — embeddings are packed binary blobs
         try:
             try:
                 from ..storage.kg_store import load_term_embeddings
@@ -399,17 +350,6 @@ class EmbeddingManager:
     # ── Lazy Embedding ──
 
     def ensure_embedded(self, card_id, card_data):
-        # Neo4j has all vectors — skip local SQLite embedding
-        try:
-            try:
-                from config import get_config as _gc
-            except ImportError:
-                from ..config import get_config as _gc
-            if _gc().get('kg_backend') == 'neo4j':
-                return None
-        except Exception:
-            pass
-
         try:
             from storage.card_sessions import load_embedding, save_embedding
         except ImportError:
@@ -491,27 +431,6 @@ class BackgroundEmbeddingThread(QThread):
             except ImportError:
                 save_card_content = None
 
-        # Check KG backend once at thread start
-        kg_enabled = False
-        try:
-            try:
-                from config import get_config
-            except ImportError:
-                from ..config import get_config
-            kg_enabled = get_config().get("kg_backend") == "neo4j"
-        except Exception:
-            pass
-
-        queue_event = None
-        if kg_enabled:
-            try:
-                try:
-                    from storage.kg_events import queue_event
-                except ImportError:
-                    from ..storage.kg_events import queue_event
-            except ImportError:
-                kg_enabled = False
-
         try:
             all_cards = self.get_all_cards_fn()
         except Exception as e:
@@ -580,13 +499,6 @@ class BackgroundEmbeddingThread(QThread):
                     item = batch[j]
                     save_embedding(item['card_id'], _pack_floats(emb), item['hash'], self.manager.MODEL)
                     self.manager.add_to_index(item['card_id'], emb)
-                    if kg_enabled and queue_event:
-                        queue_event('card_embedded', {
-                            'card_id': item['card_id'],
-                            'content_hash': item['hash'],
-                            'text': item['text'][:2000],
-                            'embedding': list(emb),
-                        })
                 embedded += len(embeddings)
                 self.progress_signal.emit(embedded, total)
             except (OSError, ValueError, KeyError) as e:
