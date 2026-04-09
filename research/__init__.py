@@ -86,84 +86,116 @@ def run_research(situation: str = '', emit_step=None, memory=None,
     logger.info("Research Agent: query='%s'", query[:80])
 
     # ------------------------------------------------------------------
-    # 1. Find cards (local pipeline)
+    # 1. Find cards via the unified RAG pipeline
     # ------------------------------------------------------------------
-    cards_for_backend = []
+    # Two paths into the pipeline:
+    #   - Smart Search: cards pre-loaded by SearchCardsThread, passed via
+    #     preloaded_cards (RESEARCH_RETRIEVAL has accept_preloaded_cards=True).
+    #   - Normal: routing_result drives the full retrieval phase.
+    # In both cases the unified pipeline runs the reranker and (optionally)
+    # web fallback, so this file no longer duplicates that logic.
+    try:
+        from ai.rag_pipeline import retrieve_rag_context
+        from ai.agents import RESEARCH_RETRIEVAL
+    except ImportError:
+        try:
+            from ..ai.rag_pipeline import retrieve_rag_context
+            from ..ai.agents import RESEARCH_RETRIEVAL
+        except ImportError:
+            from rag_pipeline import retrieve_rag_context
+            from agents import RESEARCH_RETRIEVAL
+
+    rag_result = None
 
     if smart_search_context:
-        # Smart Search path: cards already found by SearchCardsThread
-        cards = smart_search_context.get('cards_data', [])
+        # Normalize Smart Search cards to the dict shape the pipeline expects.
+        cards = smart_search_context.get('cards_data', []) or []
+        preloaded = []
         for card in cards[:50]:
             card_id = card.get('id') or card.get('card_id') or card.get('cardId') or 0
-            cards_for_backend.append({
-                'id': str(card_id),
+            preloaded.append({
+                'id': card_id,
                 'question': (card.get('question') or '')[:200],
                 'answer': (card.get('answer') or card.get('deck') or '')[:200],
                 'deck': card.get('deck', ''),
             })
-            if card_id:
-                citation_builder.add_card(
-                    card_id=int(card_id) if card_id else 0,
-                    note_id=int(card_id) if card_id else 0,
-                    deck_name=card.get('deck', ''),
-                    front=(card.get('question') or '')[:200],
-                    back=(card.get('answer') or '')[:200],
-                    sources=['smart_search'],
-                )
-        if emit_step:
-            emit_step("sources_ready", "done", {"citations": citation_builder.build()})
-        logger.info("Research: %d cards from smart_search", len(cards_for_backend))
-    else:
-        # Normal path: local RAG retrieval
+        logger.info("Research: %d cards from smart_search → unified pipeline", len(preloaded))
         try:
-            from ai.rag_pipeline import retrieve_rag_context
-        except ImportError:
-            try:
-                from ..ai.rag_pipeline import retrieve_rag_context
-            except ImportError:
-                from rag_pipeline import retrieve_rag_context
-
-        if routing_result and (getattr(routing_result, 'search_needed', True) or
-                               (isinstance(routing_result, dict) and routing_result.get('search_needed', True))):
+            rag_result = retrieve_rag_context(
+                user_message=query,
+                context=context,
+                config=config,
+                routing_result=None,
+                retrieval_config=RESEARCH_RETRIEVAL,
+                preloaded_cards=preloaded,
+                emit_step=emit_step,
+                embedding_manager=embedding_manager,
+            )
+        except Exception as e:
+            logger.warning("Research smart_search pipeline failed: %s", e)
+    else:
+        # Normal path: routing_result drives retrieval
+        if routing_result and (
+            getattr(routing_result, 'search_needed', True)
+            or (isinstance(routing_result, dict) and routing_result.get('search_needed', True))
+        ):
             try:
                 rag_result = retrieve_rag_context(
                     user_message=query,
-                    routing_result=routing_result,
                     context=context,
+                    config=config,
+                    routing_result=routing_result,
+                    retrieval_config=RESEARCH_RETRIEVAL,
                     emit_step=emit_step,
                     rag_retrieve_fn=rag_retrieve_fn,
                     embedding_manager=embedding_manager,
                 )
-                if rag_result and rag_result.citations:
-                    # rag_result.citations may be a dict or list; convert to CitationBuilder entries
-                    raw_citations = rag_result.citations
-                    if isinstance(raw_citations, dict):
-                        for _key, cit in raw_citations.items():
-                            card_id = cit.get('cardId') or cit.get('id') or cit.get('noteId') or 0
-                            citation_builder.add_card(
-                                card_id=int(card_id) if card_id else 0,
-                                note_id=int(cit.get('noteId') or card_id) if (cit.get('noteId') or card_id) else 0,
-                                deck_name=cit.get('deckName', ''),
-                                front=(cit.get('front') or cit.get('question') or '')[:200],
-                                back=(cit.get('back') or '')[:200],
-                                sources=cit.get('sources') or [cit.get('source', 'rag')],
-                            )
-                    elif isinstance(raw_citations, list):
-                        for cit in raw_citations:
-                            card_id = cit.get('cardId') or cit.get('id') or cit.get('noteId') or 0
-                            citation_builder.add_card(
-                                card_id=int(card_id) if card_id else 0,
-                                note_id=int(cit.get('noteId') or card_id) if (cit.get('noteId') or card_id) else 0,
-                                deck_name=cit.get('deckName', ''),
-                                front=(cit.get('front') or cit.get('question') or '')[:200],
-                                back=(cit.get('back') or '')[:200],
-                                sources=cit.get('sources') or [cit.get('source', 'rag')],
-                            )
-                if rag_result and isinstance(rag_result.rag_context, dict):
-                    cards_for_backend = rag_result.rag_context.get('cards', [])
-                logger.info("Research RAG: %d citations", len(citation_builder.build()))
             except Exception as e:
                 logger.warning("Research RAG failed: %s", e)
+
+    # ------------------------------------------------------------------
+    # 2. Extract reranked card lines + populate CitationBuilder from result
+    # ------------------------------------------------------------------
+    # The unified pipeline already reranked, renumbered, and (if needed)
+    # added web sources. We translate its citations dict into the
+    # CitationBuilder so the frontend gets the right [N] chips.
+    cards_for_backend = []
+    if rag_result and rag_result.rag_context:
+        cards_for_backend = rag_result.rag_context.get('cards', []) or []
+
+        if rag_result.citations:
+            # Sort by [N] index for deterministic ordering
+            sorted_cits = sorted(
+                (c for c in rag_result.citations.values() if c.get('index')),
+                key=lambda c: c.get('index', 0),
+            )
+            for cit in sorted_cits:
+                if cit.get('type') == 'web':
+                    citation_builder.add_web(
+                        url=cit.get('url', ''),
+                        title=cit.get('title', ''),
+                        domain=cit.get('domain', ''),
+                    )
+                else:
+                    card_id = cit.get('cardId') or cit.get('id') or cit.get('noteId') or 0
+                    note_id = cit.get('noteId') or card_id
+                    try:
+                        card_id_int = int(card_id) if card_id else 0
+                        note_id_int = int(note_id) if note_id else 0
+                    except (ValueError, TypeError):
+                        card_id_int = 0
+                        note_id_int = 0
+                    citation_builder.add_card(
+                        card_id=card_id_int,
+                        note_id=note_id_int,
+                        deck_name=cit.get('deckName', ''),
+                        front=(cit.get('question') or cit.get('front') or '')[:200],
+                        back=(cit.get('answer') or cit.get('back') or '')[:200],
+                        sources=cit.get('sources') or ['research'],
+                    )
+
+    if emit_step:
+        emit_step("sources_ready", "done", {"citations": citation_builder.build()})
 
     # ------------------------------------------------------------------
     # 2. Send to backend: cards as insights + Research prompt
