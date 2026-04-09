@@ -25,9 +25,11 @@ logger = get_logger(__name__)
 # and to work in both addon and standalone contexts.
 
 try:
-    from .retrieval_agents.tutor_retrieval import retrieve_rag_context
+    from .rag_pipeline import retrieve_rag_context
+    from .agents import TUTOR_RETRIEVAL
 except ImportError:
-    from retrieval_agents.tutor_retrieval import retrieve_rag_context
+    from rag_pipeline import retrieve_rag_context
+    from agents import TUTOR_RETRIEVAL
 
 try:
     from .gemini import get_google_response_streaming
@@ -181,6 +183,7 @@ def run_tutor(situation, emit_step=None, memory=None,
                     context=context,
                     config=config,
                     routing_result=rag_analysis,
+                    retrieval_config=TUTOR_RETRIEVAL,
                     emit_step=emit_step,
                     embedding_manager=embedding_manager,
                     rag_retrieve_fn=_rag_fn,
@@ -189,10 +192,16 @@ def run_tutor(situation, emit_step=None, memory=None,
                 if rag_result.cards_found > 0:
                     rag_context = rag_result.rag_context
                     old_citations = rag_result.citations or {}
-                    # Sort by RAG index to ensure CitationBuilder indices match
-                    # what Gemini sees in LERNMATERIAL ([1], [2], [3]...)
+                    # Only keep citations that have an index (reranker removes
+                    # index from filtered-out citations). Sort by index so
+                    # CitationBuilder assigns [1],[2],[3] matching LERNMATERIAL.
+                    # If NO citations have an index (no reranker ran), keep all.
+                    _all_vals = list(old_citations.values())
+                    indexed_citations = [c for c in _all_vals if c.get('index') is not None]
+                    if not indexed_citations:
+                        indexed_citations = _all_vals
                     sorted_citations = sorted(
-                        old_citations.values(),
+                        indexed_citations,
                         key=lambda c: c.get('index', 999)
                     )
 
@@ -203,11 +212,9 @@ def run_tutor(situation, emit_step=None, memory=None,
                         _idx = cdata.get('index', '?')
                         _cid = cdata.get('cardId', cdata.get('noteId', '?'))
                         _deck = cdata.get('deckName', '')
-                        # Get preview from fields dict — field names vary per note type
                         _fields = cdata.get('fields', {})
                         _front = ''
                         if _fields:
-                            # Take first non-empty field value as preview
                             for _fval in _fields.values():
                                 if _fval and _fval.strip():
                                     _front = _fval.strip()

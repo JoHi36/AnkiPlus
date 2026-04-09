@@ -12,11 +12,37 @@ except ImportError:
     from ai.workflows import Workflow, Slot
 
 try:
+    from .rag_pipeline import RetrievalConfig
+except ImportError:
+    from ai.rag_pipeline import RetrievalConfig
+
+try:
     from ..utils.logging import get_logger
 except ImportError:
     from utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Per-agent RetrievalConfigs
+# ---------------------------------------------------------------------------
+# Each config customizes the unified RAG pipeline (ai/rag_pipeline.py) for
+# one agent. Defaults match Tutor; other agents override only what differs.
+# Only agents that actually call retrieve_rag_context get a config.
+# Prufer, Definition, and Plusi bypass RAG entirely today (see their run_*
+# functions) and are intentionally not listed.
+
+# Tutor: full pipeline — KG enrichment, reranker, web fallback, current card.
+TUTOR_RETRIEVAL = RetrievalConfig()
+
+# Research: reranker + web fallback + KG, no current-card injection (Research
+# is not card-bound), high max_sources, accepts preloaded cards from Smart Search.
+RESEARCH_RETRIEVAL = RetrievalConfig(
+    inject_current_card=False,
+    max_sources_default='high',
+    accept_preloaded_cards=True,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -45,6 +71,7 @@ class AgentDefinition:
     # Channel binding (agent-kanal-paradigma)
     channel: str = ''                  # 'stapel', 'session', 'plusi', 'reviewer-inline'
     uses_rag: bool = False             # Whether this agent calls analyze_query()
+    retrieval_config: Optional[RetrievalConfig] = None  # Pipeline config; None = no RAG
 
     # Execution
     run_module: str = ''               # 'ai.tutor', 'research', 'plusi.agent'
@@ -351,6 +378,7 @@ register_agent(AgentDefinition(
     # Channel
     channel='session',
     uses_rag=True,
+    retrieval_config=TUTOR_RETRIEVAL,
     # Execution
     run_module='ai.tutor',
     run_function='run_tutor',
@@ -431,6 +459,7 @@ register_agent(AgentDefinition(
     # Channel
     channel='stapel',
     uses_rag=False,  # Stapel pipeline (SearchCardsThread) has its own search, doesn't use analyze_query()
+    retrieval_config=RESEARCH_RETRIEVAL,
     # Execution
     # Note: run_research() is the legacy chat path. The primary Research
     # pipeline is SearchCardsThread in ui/widget.py (agent-kanal-paradigma).
