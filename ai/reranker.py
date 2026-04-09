@@ -96,6 +96,12 @@ def rerank_sources(
         sources=sources_text,
     )
 
+    # [RAG-STATE 4/7] reranker — log what it actually sees
+    logger.info("[RAG-STATE 4/7] reranker.question : %r", question[:200])
+    logger.info("[RAG-STATE 4/7] reranker.sources  : %d lines (first 3 below)", len(numbered_lines))
+    for _i, _ln in enumerate(numbered_lines[:3]):
+        logger.info("[RAG-STATE 4/7]   src[%d] %s", _i + 1, _ln[:160])
+
     result_text = ''
     clean = ''
     try:
@@ -180,6 +186,8 @@ def rerank_sources(
 
         logger.info("Reranker: %d/%d sources relevant, web_search=%s (%dms, model=%s)",
                     len(relevant), len(numbered_lines), web_search, elapsed_ms, RERANKER_MODEL)
+        logger.info("[RAG-STATE 4/7] reranker.raw_json : %s", clean[:300] if clean else "(empty)")
+        logger.info("[RAG-STATE 4/7] reranker.kept_idx : %s", relevant)
 
         _emit("reranker", "done", {
             "relevant_count": len(relevant),

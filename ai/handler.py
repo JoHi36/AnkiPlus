@@ -719,6 +719,38 @@ class AIHandler:
                 agent_def = get_default_agent()
                 run_fn = lazy_load_run_fn(agent_def)
 
+            # ═══════════════════════════════════════════════════════════════
+            # [RAG-STATE 0/7] REQUEST ENTRY — mark start of pipeline
+            # ═══════════════════════════════════════════════════════════════
+            _card_id = (context or {}).get('cardId') if context else None
+            _deck_name = (context or {}).get('deckName', '') if context else ''
+            logger.info("")
+            logger.info("╔════════════════════════════════════════════════════════════════")
+            logger.info("║ [RAG-STATE 0/7] REQUEST ENTRY")
+            logger.info("║   agent       : %s", agent_name)
+            logger.info("║   request_id  : %s", request_id)
+            logger.info("║   user_message: %r", (user_message or '')[:200])
+            logger.info("║   card_id     : %s", _card_id)
+            logger.info("║   deck        : %r", _deck_name[:100])
+            logger.info("║   history_len : %d", len(history or []))
+            logger.info("╚════════════════════════════════════════════════════════════════")
+
+            # ── [CARD-FLOW 3/5] handler received context ────────────────────
+            # What get_response_with_rag got as `context`. Compare to
+            # CARD-FLOW 2 — if cardId dropped between AIRequestThread and
+            # here, the get_response_with_rag caller (AIRequestThread.run)
+            # did something to it.
+            if context:
+                logger.info(
+                    "[CARD-FLOW 3/5] handler.get_response_with_rag: cardId=%s noteId=%s keys=%s agent=%s",
+                    context.get('cardId'),
+                    context.get('noteId'),
+                    sorted(context.keys()) if isinstance(context, dict) else type(context).__name__,
+                    agent_name,
+                )
+            else:
+                logger.warning("[CARD-FLOW 3/5] handler.get_response_with_rag: context=None")
+
             # RAG analysis — only for agents that need it
             rag_analysis = None
             if agent_def.uses_rag:
