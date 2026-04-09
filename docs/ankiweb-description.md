@@ -9,45 +9,70 @@ Keep this in sync with [anki.plus](https://anki.plus) when the product voice evo
 
 **Die erste agentische Lernplattform.**
 
-Ein Team spezialisierter KI-Agenten. Ein eigenständiger Lern-Companion. Eine
-komplett neu gedachte Lern-Erfahrung — eingebettet in die Anki-Umgebung, die
-du bereits kennst.
+Ein komplett redesigntes Anki, ein Team spezialisierter KI-Agenten und ein
+eigenständiger Lern-Companion — für alle, die nicht nur pauken, sondern
+verstehen wollen.
 
 ---
 
-### Nicht noch ein Plugin.
+### Anki, komplett neu gedacht.
 
-Anki.plus ist keine Erweiterung, die sich in eine Ecke klemmt. Es ist eine
-komplette Neubetrachtung dessen, was Lernen mit Karteikarten bedeuten kann.
+Anki.plus ist keine Erweiterung, die sich in eine Ecke klemmt. Die gesamte
+Oberfläche wurde von Grund auf neu gebaut — fullscreen, minimalistisch,
+premium. Kein visueller Lärm, keine überladenen Toolbars, keine
+Kontextwechsel.
 
-Mehrere KI-Agenten arbeiten parallel: ein Tutor, der deine Karten kontextuell
-versteht. Ein Research-Agent, der das Web nach Quellen durchsucht. Ein
-Help-Agent für Meta-Fragen. Und Plusi — dein eigenständiger Lern-Companion
-mit Persönlichkeit, Erinnerungen und einem eigenen Token-Budget.
+Der **Smart Reviewer** ersetzt Ankis native Card-UI durch ein reduziertes
+Design, das den Inhalt in den Mittelpunkt stellt. Ein eigenes, token-basiertes
+Design-System sorgt für native Qualität auf Mac, Windows und Linux — in Dark
+& Light Mode, auf Deutsch und Englisch.
+
+**Lernen wird zum Erlebnis. Nicht zur Pflicht.**
+
+### Das Agenten-System
+
+Mehrere KI-Agenten arbeiten für dich — jeder mit einer eigenen Rolle, aber
+alle mit Zugriff auf dieselben Werkzeuge und dieselbe Wissens-Engine:
+
+- **Tutor-Agent** — versteht deine Karte, dein Deck und deine Lernhistorie
+  kontextuell. Antwortet nicht nur, sondern erklärt im Kontext dessen, was
+  du gerade lernst.
+- **Help-Agent** — für Meta-Fragen zu Anki, zu deiner Lernstrategie oder zum
+  Deck selbst.
+- **Plusi** — dein eigenständiger Lern-Companion. Kein Assistent, sondern
+  ein Wesen mit eigener Persönlichkeit.
+
+Jeder Agent kann echte Werkzeuge aufrufen: Bildsuche, Diagramm-Rendering,
+Molekül-Darstellung, Multiple-Choice-Generierung, Deck-Statistiken. Agenten
+können sich gegenseitig um Hilfe bitten (Handoffs), während einer Antwort
+mehrere Tools hintereinander nutzen und komplexe Aufgaben eigenständig lösen.
 
 Das ist agentisches Lernen. Nicht „KI-Chat mit Karteikarten".
 
-### Die wichtigsten Features
+### Die Wissens-Engine
 
-**Multi-Agent-System mit Tool-Use**
-Spezialisierte Agenten, die echte Werkzeuge aufrufen: Bildsuche, Diagramme,
-Molekül-Darstellung, Multiple-Choice-Generierung, Deck-Statistiken,
-Web-Recherche. Der richtige Agent für die richtige Frage — mit Handoffs
-zwischen den Agenten.
+Eine hybride Such-Engine verbindet dein eigenes Deck und das offene Web zu
+einem einzigen, durchsuchbaren Wissensspeicher — verfügbar für jeden Agenten:
 
-**Smart Reviewer**
-Ein minimalistisches, fullscreen Card-Review, das Ankis native UI ersetzt.
-Kein visueller Lärm, kein Kontextwechsel. Nur du und der Inhalt.
+- **Vektor-Embeddings** über all deine Karten — semantische Suche, die
+  Zusammenhänge findet, an die du nicht mehr gedacht hast
+- **Volltext-Retrieval** über deine gesamte Collection
+- **Knowledge-Graph**, der Beziehungen zwischen Karten, Themen und Konzepten
+  sichtbar macht
+- **Live-Web-Recherche** mit inline-Quellen und Zitaten
 
-**Plusi — Autonomer Companion**
+Jede KI-Antwort ist rückverfolgbar — zu deiner eigenen Karte oder zu einer
+echten Web-Quelle. Dein Deck wird nicht länger zu einer Liste von
+Karteikarten, sondern zu einem Wissensnetz, das sich selbst findet.
+
+### Plusi — Autonomer Companion
+
 Kein Assistent. Kein Chatbot. Ein eigenständiges Wesen mit Persönlichkeit,
 Stimmungen, Erinnerungen, Träumen und einem privaten Tagebuch. Plusi
-reflektiert deine Karten auch dann, wenn du nicht lernst — und wächst mit dir.
+reflektiert deine Karten auch dann, wenn du nicht lernst, hat ein eigenes
+Token-Budget und wächst mit dir.
 
-**RAG über dein eigenes Deck**
-Dein Deck wird zum durchsuchbaren Wissensspeicher. Hybride Retrieval
-(semantisch + Volltext) findet Zusammenhänge zwischen allen deinen Karten —
-auch solchen, die du seit Monaten nicht mehr gesehen hast.
+### Weitere Features
 
 **Persistente Card-Sessions**
 Jede Karte hat ihre eigene Gesprächshistorie. Was du heute fragst, ist morgen
@@ -56,14 +81,6 @@ wieder da.
 **Insights-Dashboard**
 Die KI erkennt Muster in deinem Lernverhalten und zeigt dir, woran du
 wirklich arbeiten solltest — nicht nur, was als nächstes dran wäre.
-
-**Research-Agent mit Zitaten**
-Tiefe Web-Recherche mit inline-Quellen direkt aus der Lern-Session heraus.
-Jede Aussage ist rückverfolgbar.
-
-**Premium Design System**
-Dark & Light Mode. Deutsch & Englisch. Ein eigenes token-basiertes Design
-System — native Qualität auf Mac, Windows und Linux.
 
 ### Preise — ehrlich erklärt
 
