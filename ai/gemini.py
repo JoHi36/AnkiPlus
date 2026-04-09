@@ -188,8 +188,23 @@ def _build_chat_payload(user_message, model, context=None, history=None,
     insights = []
     if rag_context and rag_context.get("cards"):
         insights = rag_context["cards"]
-        # ── DEBUG: Log what the model actually sees as LERNMATERIAL ──
+        # ── S16 gemini.build_payload — log the LERNMATERIAL the LLM will see ──
         _preview_lines = [line for line in insights if line.strip().startswith('[')]
+        try:
+            try:
+                from .rag_pipeline import _log_state as _log_state_rag
+            except ImportError:
+                from rag_pipeline import _log_state as _log_state_rag
+            _log_state_rag(
+                'S16 gemini.build_payload', 'RESULT',
+                insight_lines=len(insights),
+                numbered_cards=len(_preview_lines),
+                model=model or 'gemini-3-flash-preview',
+                agent=agent,
+                stream=stream,
+            )
+        except Exception:
+            pass
         logger.info("=== LERNMATERIAL DEBUG: %d total lines, %d numbered cards ===",
                     len(insights), len(_preview_lines))
         for _pl in _preview_lines[:10]:

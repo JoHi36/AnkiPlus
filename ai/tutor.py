@@ -92,6 +92,28 @@ def run_tutor(situation, emit_step=None, memory=None,
     embedding_manager = kwargs.get('embedding_manager')
     smart_search_context = kwargs.get('smart_search_context')
 
+    # ── S7 tutor.entry — log every incoming parameter at a glance ─────
+    try:
+        from .rag_pipeline import _log_state as _log_state_rag
+    except ImportError:
+        from rag_pipeline import _log_state as _log_state_rag
+    _log_state_rag(
+        'S7 tutor.entry', 'ENTER',
+        user_message=(situation or '')[:120],
+        card_id=(context.get('cardId') if isinstance(context, dict) else None),
+        deck=(context.get('deckName', '')[:60] if isinstance(context, dict) else ''),
+        history_len=len(history or []),
+        mode=mode,
+        model=model,
+        fallback_model=fallback_model,
+        has_routing=rag_analysis is not None,
+        routing_search_needed=(getattr(rag_analysis, 'search_needed', None) if rag_analysis else None),
+        routing_scope=(getattr(rag_analysis, 'search_scope', None) if rag_analysis else None),
+        routing_resolved_intent=(getattr(rag_analysis, 'resolved_intent', '') or '')[:120] if rag_analysis else '',
+        has_embedding_manager=bool(embedding_manager),
+        has_smart_search=smart_search_context is not None,
+    )
+
     # ------------------------------------------------------------------
     # 2. Track memory
     # ------------------------------------------------------------------
@@ -172,7 +194,13 @@ def run_tutor(situation, emit_step=None, memory=None,
                 # Router often says False for follow-up questions ("erkläre mehr")
                 # but we still want card-based citations
                 if context and context.get('cardId'):
+                    _was_search_needed = getattr(rag_analysis, 'search_needed', False)
                     rag_analysis.search_needed = True
+                    if not _was_search_needed:
+                        _log_state_rag('S7 tutor.entry', 'BRANCH',
+                                       reason='forcing_search_needed_for_card_context',
+                                       router_said=_was_search_needed,
+                                       card_id=context.get('cardId'))
 
                 _rag_fn = rag_retrieve_fn
                 if _rag_fn is None:
@@ -224,6 +252,8 @@ def run_tutor(situation, emit_step=None, memory=None,
                         logger.info("  [%s] cardId=%s deck='%s' front='%s'",
                                     _idx, _cid, _deck, str(_front)[:100])
 
+                    _n_card = 0
+                    _n_web = 0
                     for cdata in sorted_citations:
                         if cdata.get('type') == 'web':
                             citation_builder.add_web(
@@ -231,6 +261,7 @@ def run_tutor(situation, emit_step=None, memory=None,
                                 title=cdata.get('title', ''),
                                 domain=cdata.get('domain', ''),
                             )
+                            _n_web += 1
                         else:
                             citation_builder.add_card(
                                 card_id=int(cdata.get('cardId', cdata.get('noteId', 0))),
@@ -240,14 +271,28 @@ def run_tutor(situation, emit_step=None, memory=None,
                                 back=cdata.get('answer', cdata.get('back', '')),
                                 sources=cdata.get('sources', []),
                             )
-                    logger.debug("Tutor RAG: %s citations", len(old_citations))
+                            _n_card += 1
+                    _log_state_rag('S14 tutor.citation_build', 'OK',
+                                   total_sorted=len(sorted_citations),
+                                   card_added=_n_card,
+                                   web_added=_n_web,
+                                   raw_old_citations=len(old_citations))
                     if emit_step and old_citations:
                         emit_step("sources_ready", "done", {"citations": citation_builder.build()})
+                else:
+                    _log_state_rag('S14 tutor.citation_build', 'SKIP',
+                                   reason='rag_result.cards_found==0',
+                                   cards_found=rag_result.cards_found if rag_result else 0)
         except Exception as e:
+            _log_state_rag('S14 tutor.citation_build', 'FAIL', error=str(e)[:200])
             logger.warning("Tutor RAG retrieval failed: %s", e)
 
         # Even without search results, include current card as context
         if not rag_context and context and context.get('cardId'):
+            _log_state_rag('S14 tutor.citation_build', 'BRANCH',
+                           reason='no_rag_context_but_have_current_card',
+                           card_id=context.get('cardId'),
+                           action='inject_current_card_as_sole_source')
             rag_context = _build_current_card_context(context)
             if rag_context:
                 old_citations = rag_context.get('citations', {})
@@ -289,6 +334,22 @@ def run_tutor(situation, emit_step=None, memory=None,
         if callback:
             callback(chunk, False, False)
 
+    # ── S15 tutor.llm_dispatch — hand off to Gemini ────────────────────
+    _rag_cards = (rag_context or {}).get('cards', []) if rag_context else []
+    _rag_citations = (rag_context or {}).get('citations', {}) if rag_context else {}
+    _log_state_rag(
+        'S15 tutor.llm_dispatch', 'TRY',
+        primary_model=model,
+        fallback_model=fallback_model,
+        mode=mode,
+        history_len=len(history or []),
+        rag_cards=len(_rag_cards),
+        rag_citations=len(_rag_citations),
+        rag_card_cites=sum(1 for c in _rag_citations.values() if c.get('type') != 'web'),
+        rag_web_cites=sum(1 for c in _rag_citations.values() if c.get('type') == 'web'),
+        ai_tools_enabled=[k for k, v in ai_tools.items() if v],
+    )
+
     result_text = _generate_with_fallback(
         situation=generation_situation,
         primary_model=model,
@@ -305,6 +366,8 @@ def run_tutor(situation, emit_step=None, memory=None,
     )
 
     if result_text is None:
+        _log_state_rag('S15 tutor.llm_dispatch', 'FAIL',
+                       reason='all_3_fallback_levels_failed')
         # All 3 levels failed
         if emit_step:
             emit_step("generating", "error")
@@ -312,6 +375,10 @@ def run_tutor(situation, emit_step=None, memory=None,
         if stream_callback:
             stream_callback(error_msg, True)
         return {'text': error_msg, 'citations': []}
+
+    _log_state_rag('S15 tutor.llm_dispatch', 'OK',
+                   result_text_chars=len(result_text or ''),
+                   next='S18 tutor.handoff_parse')
 
     # Signal streaming done
     if stream_callback:
@@ -402,6 +469,16 @@ def run_tutor(situation, emit_step=None, memory=None,
     }
     if rag_result and hasattr(rag_result, 'web_sources') and rag_result.web_sources:
         result['webSources'] = rag_result.web_sources
+
+    # ── S19 tutor.return — final log before handing back to _dispatch_agent ──
+    _built = citation_builder.build() or []
+    _log_state_rag('S19 tutor.return', 'EXIT',
+                   text_chars=len(final_text),
+                   total_citations=len(_built),
+                   card_citations=sum(1 for c in _built if c.get('type') == 'card'),
+                   web_citations=sum(1 for c in _built if c.get('type') == 'web'),
+                   has_handoff=bool(handoff_marker),
+                   web_sources=len(result.get('webSources', [])))
     return result
 
 

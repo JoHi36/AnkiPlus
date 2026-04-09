@@ -113,6 +113,19 @@ def analyze_query(user_message, card_context=None, chat_history=None,
                 last_assistant = (msg.get('content') or msg.get('text') or '')[:300]
                 break
 
+    # ── S5 rag.analyze_query — entry ──────────────────────────────────────
+    try:
+        from .rag_pipeline import _log_state as _log_state_rag
+    except ImportError:
+        from rag_pipeline import _log_state as _log_state_rag
+    _log_state_rag(
+        'S5 rag.analyze_query', 'ENTER',
+        user_message=(user_message or '')[:120],
+        card_id=compact_card.get('cardId'),
+        deck=(compact_card.get('deckName') or '')[:60],
+        has_history=bool(last_assistant),
+    )
+
     # ═══════════════════════════════════════════════════════════════════════
     # [RAG-STATE 1/7] ROUTER — request
     # ═══════════════════════════════════════════════════════════════════════
@@ -183,6 +196,16 @@ def analyze_query(user_message, card_context=None, chat_history=None,
                 _filler_hits,
             )
 
+        _log_state_rag(
+            'S5 rag.analyze_query', 'EXIT',
+            search_needed=parsed.get('search_needed', True),
+            retrieval_mode=parsed.get('retrieval_mode') or 'both',
+            search_scope=parsed.get('search_scope') or 'current_deck',
+            resolved_intent=(parsed.get('resolved_intent') or '')[:120],
+            precise_queries_count=len(parsed.get('precise_queries') or []),
+            broad_queries_count=len(parsed.get('broad_queries') or []),
+            next='S6 handler.dispatch',
+        )
         return RagAnalysis(
             search_needed=parsed.get('search_needed', True),
             resolved_intent=parsed.get('resolved_intent') or '',
@@ -196,5 +219,8 @@ def analyze_query(user_message, card_context=None, chat_history=None,
         )
 
     except Exception as e:
+        _log_state_rag('S5 rag.analyze_query', 'FAIL',
+                       error=str(e)[:200],
+                       action='return_default_RagAnalysis')
         logger.warning("[RAG-STATE 1/7] ⚠️  Router call failed: %s → using default RagAnalysis", e)
         return _default

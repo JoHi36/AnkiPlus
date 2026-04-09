@@ -546,7 +546,8 @@ def _process_tier(candidates, kg_term_index, term_embeddings, sentence_embedding
 
 
 def enrich_query(user_message, resolved_intent=None, db=None, kg_term_index=None,
-                 term_embeddings=None, sentence_embeddings=None):
+                 term_embeddings=None, sentence_embeddings=None,
+                 associated_terms=None, associated_term_embeddings=None):
     """Main enrichment entry point. Embedding-first, then graph edges.
 
     Args:
@@ -557,6 +558,14 @@ def enrich_query(user_message, resolved_intent=None, db=None, kg_term_index=None
         term_embeddings: Dict of {query_term: embedding_vector} from batch embed call.
         sentence_embeddings: Dict of {text: embedding_vector} for full-sentence embeddings.
             Keys: user_message and optionally resolved_intent.
+        associated_terms: List of LLM-curated domain terms from the router
+            (e.g. ['indirekte Kalorimetrie', 'Energieumsatz', ...]). These
+            are the most reliable signal for the precise query lane because
+            the router LLM has already done domain reasoning on them.
+        associated_term_embeddings: Dict of {associated_term: embedding_vector}
+            so each router term can be cosine-matched against kg_term_index
+            to find the actual KG term in the user's collection (handles
+            morphology, synonyms, compound terms).
 
     Returns:
         Dict with all query data for the retrieval pipeline.
@@ -564,6 +573,8 @@ def enrich_query(user_message, resolved_intent=None, db=None, kg_term_index=None
     kg_term_index = kg_term_index or {}
     term_embeddings = term_embeddings or {}
     sentence_embeddings = sentence_embeddings or {}
+    associated_terms = associated_terms or []
+    associated_term_embeddings = associated_term_embeddings or {}
 
     # TIER 1: user's direct query
     tier1_candidates = extract_query_terms(user_message)
@@ -618,6 +629,62 @@ def enrich_query(user_message, resolved_intent=None, db=None, kg_term_index=None
             embedding_secondary = _build_embedding_query(resolved_intent, tier2_all_expanded)
             tier2_terms = tier2_query_terms
 
+    # ── TIER ROUTER: LLM-curated associated_terms → semantic KG match ────
+    # The router's LLM has already done domain reasoning and given us
+    # high-quality candidate terms. Embed-match each one against the user's
+    # KG term index to find the actual canonical form in the collection
+    # (handles German morphology, compound terms, and synonyms).
+    # Result becomes the PRIMARY precise query lane — these beat anything
+    # tier1/tier2 produces via word-splitting.
+    router_kg_terms = []
+    if associated_terms and kg_term_index:
+        seen_router = set()
+
+        # Step 1: Case-insensitive exact match against kg_term_index.
+        # Catches "indirekte Kalorimetrie" → "indirekte Kalorimetrie" and
+        # restores the canonical casing from the KG.
+        kg_keys_lower = {k.lower(): k for k in kg_term_index.keys()}
+        for t in associated_terms:
+            canonical = kg_keys_lower.get((t or '').lower())
+            if canonical and canonical.lower() not in seen_router:
+                seen_router.add(canonical.lower())
+                router_kg_terms.append(canonical)
+
+        # Step 2: Embedding similarity against kg_term_index.
+        # Catches "Energieumsatz" (LLM) → "Gesamtenergieumsatz",
+        # "Ruheenergieumsatz" (KG variants). Also catches stem variants
+        # ("Kalorimetrie" → "indirekte Kalorimetrie") that exact match
+        # would miss.
+        if associated_term_embeddings:
+            router_expansions = _embedding_expand_terms(
+                associated_terms,
+                kg_term_index,
+                associated_term_embeddings,
+                sentence_embedding=None,
+            )
+            for t in associated_terms:
+                for kg_t, _score in router_expansions.get(t, []):
+                    if kg_t.lower() not in seen_router:
+                        seen_router.add(kg_t.lower())
+                        router_kg_terms.append(kg_t)
+
+        if router_kg_terms:
+            logger.info(
+                "KG enrich: router associated_terms → %d KG matches (first %d): %s",
+                len(router_kg_terms), min(8, len(router_kg_terms)),
+                router_kg_terms[:8],
+            )
+
+    # If the router path produced any matches, promote them to the top of
+    # precise_primary. They're already-validated domain terms; existing
+    # tier1/tier2 queries (which may contain stopword decompositions when
+    # the KG filter fell through) come second and are capped.
+    if router_kg_terms:
+        router_precise = ['"%s"' % t for t in router_kg_terms[:MAX_PRECISE_QUERIES]]
+        existing_set_lower = {q.lower() for q in router_precise}
+        tier_rest = [q for q in precise_primary if q.lower() not in existing_set_lower]
+        precise_primary = (router_precise + tier_rest)[:MAX_PRECISE_QUERIES]
+
     # Metadata for logging/UI
     kg_terms_found = [t for t in tier1_query_terms if t not in tier1_candidates]
 
@@ -625,6 +692,7 @@ def enrich_query(user_message, resolved_intent=None, db=None, kg_term_index=None
         'tier1_terms': tier1_query_terms,
         'tier2_terms': tier2_terms,
         'kg_terms_found': kg_terms_found,
+        'router_kg_terms': router_kg_terms,
         'expansions': tier1_expansions,
         'precise_primary': precise_primary,
         'broad_primary': broad_primary,

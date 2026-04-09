@@ -34,7 +34,13 @@ logger = get_logger(__name__)
 # functions) and are intentionally not listed.
 
 # Tutor: full pipeline — KG enrichment, reranker, web fallback, current card.
-TUTOR_RETRIEVAL = RetrievalConfig()
+# Matches main's retrieval_agents/tutor_retrieval.py behavior:
+#   - reranker_enabled=True  → LLM filters irrelevant sources before the LLM sees them
+#   - min_indexed_for_web=3  → fewer than 3 surviving cards forces a Perplexity fallback
+TUTOR_RETRIEVAL = RetrievalConfig(
+    reranker_enabled=True,
+    min_indexed_for_web=3,
+)
 
 # Research: reranker + web fallback + KG, no current-card injection (Research
 # is not card-bound), high max_sources, accepts preloaded cards from Smart Search.

@@ -40,17 +40,19 @@ Aufgabe:
 2. Kann die Frage VOLLSTÄNDIG aus den Quellen beantwortet werden?
 
 Antworte NUR mit JSON, kein anderer Text:
-{{"relevant": [1, 3, 7], "web_search": false}}
+{{"relevant": [1, 2, 4, 5, 8, 10, 13, 17, 21], "web_search": false}}
 
 Regeln:
-- "relevant": Liste der Quellen-Nummern [N] die tatsächlich zur Frage passen (max 12)
+- "relevant": Liste ALLER Quellen-Nummern [N] die zur Frage passen — nicht nur die "besten"
+  drei. Wenn 15 Quellen relevante Informationen enthalten, gib alle 15 zurück.
+  Vollständigkeit ist wichtiger als Kürze: lieber 20 relevante Quellen als 3 ausgewählte.
 - "web_search": true wenn:
   • KEINE Quelle die Frage beantwortet, ODER
   • die Quellen nur TEILWEISE antworten und wichtige Aspekte fehlen, ODER
   • die Frage nach aktuellen Studien, Leitlinien oder Daten fragt
-- Thematisch nahes Material ist NICHT automatisch relevant
-- Eine leere Liste [] ist korrekt wenn nichts passt
-- Sei streng: nur Quellen die echte Antwortteile enthalten"""
+- Relevanz-Schwelle: Die Quelle enthält einen echten Antwortteil (nicht nur thematisch nah).
+  Sei streng bei dieser Schwelle — aber sobald eine Quelle darüber liegt, nimm sie auf.
+- Eine leere Liste [] ist korrekt wenn wirklich nichts passt."""
 
 
 def rerank_sources(

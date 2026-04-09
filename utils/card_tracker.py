@@ -86,53 +86,81 @@ class CardTracker:
 
             # Hole Karten-Informationen.
             # `card.question()` / `card.answer()` return the FULLY RENDERED
-            # card HTML — which includes the card template's <style> block.
-            # For AMBOSS note types that <style> block begins with a CSS
-            # comment header ("/* © 2024 AMBOSS feat. Ankiphil */"), and a
-            # naive tag-strip downstream preserves that comment as plain
-            # text. Strip style/script + other HTML here at the source so
-            # every consumer (LLM context, citation validator, frontend
-            # fallback) sees clean field content instead of template CSS.
+            # card HTML — which for AMBOSS-style templates prepends a footer
+            # block of the form "Tags | AMBOSS | Note ID 12345 #tag1 #tag2…".
+            # When downstream code truncates the "question" to ~200 chars for
+            # the LLM context, the footer is all that survives and the actual
+            # question is lost. We keep these rendered values as a last-resort
+            # fallback only; below we extract the raw field values (which have
+            # no template chrome) and use those as `question`/`answer`.
             note = card.note()
-            question = clean_html(card.question(), max_len=5000)
-            answer = clean_html(card.answer(), max_len=5000)
-            
+            rendered_question = clean_html(card.question(), max_len=5000)
+            rendered_answer = clean_html(card.answer(), max_len=5000)
+
             # Extrahiere relevante Felder
             fields = {}
             for field_name in note.keys():
                 fields[field_name] = note[field_name]
-            
+
             # Tags extrahieren
             tags = note.tags
-            
-            # Extrahiere Vorderseite direkt aus den Notizfeldern
-            # Versuche verschiedene Feldnamen (Front, Vorderseite, Text, etc.)
+
+            # Extract front_field + back_field directly from the note fields.
+            # These bypass the card template entirely, so no footer, no CSS,
+            # no tag-metadata garbage.
             front_field = None
+            back_field = None
             field_names = list(note.keys())
             if field_names:
-                # Priorität: Front > Vorderseite > erstes Feld
+                # Front: Front > Vorderseite > Text (cloze) > Question > Frage
                 for name in ['Front', 'Vorderseite', 'Text', 'Question', 'Frage']:
                     if name in fields and fields[name]:
                         front_field = fields[name]
                         break
-                # Fallback: Erstes nicht-leeres Feld
+                # Fallback: first non-empty field
                 if not front_field:
                     for name in field_names:
                         if fields[name] and fields[name].strip():
                             front_field = fields[name]
                             break
-            
-            # Bereinige front_field von HTML-Tags für bessere Title-Generierung
+
+                # Back: Back > Rückseite > Extra > Answer > Antwort.
+                # For cloze note types there typically is no separate back
+                # field — the answer is derived from the cloze-expanded Text
+                # field. In that case we leave back_field None and let the
+                # consumer fall back to front_field (which already contains
+                # the cloze markup the LLM can reason over).
+                for name in ['Back', 'Rückseite', 'Extra', 'Answer', 'Antwort']:
+                    if name in fields and fields[name] and fields[name].strip():
+                        back_field = fields[name]
+                        break
+
+            # Clean front_field of HTML tags, whitespace collapse, entities.
+            # Same cleaner is used for back_field below — inlined so both
+            # paths go through identical normalization.
+            import re
+            def _clean_field(value):
+                if not value:
+                    return value
+                out = re.sub(r'<[^>]+>', ' ', value)
+                out = re.sub(r'\s+', ' ', out)
+                out = re.sub(r'&[a-zA-Z]+;', ' ', out)
+                return out.strip()
+
+            front_field = _clean_field(front_field)
+            back_field = _clean_field(back_field)
             if front_field:
-                import re
-                # Entferne HTML-Tags
-                clean_front = re.sub(r'<[^>]+>', ' ', front_field)
-                # Entferne mehrfache Leerzeichen
-                clean_front = re.sub(r'\s+', ' ', clean_front)
-                # Entferne HTML-Entities
-                clean_front = re.sub(r'&[a-zA-Z]+;', ' ', clean_front)
-                front_field = clean_front.strip()
-                logger.debug("card_tracker: frontField bereinigt: %s...", front_field[:100] if front_field else 'leer')
+                logger.debug("card_tracker: frontField bereinigt: %s...",
+                             front_field[:100])
+
+            # Populate `question` / `answer` from the clean field values.
+            # Downstream consumers (rag_pipeline S12, tutor.py, rag_analyzer,
+            # gemini.py cardContext) all want the clean raw field content,
+            # not the rendered-template output that contains AMBOSS footer.
+            # Fall back to the rendered versions only if field extraction
+            # produced nothing (unusual note types).
+            question = front_field or rendered_question
+            answer = back_field or front_field or rendered_answer
             
             # Hole Deck-Name
             deck_name = None

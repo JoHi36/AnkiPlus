@@ -2265,6 +2265,26 @@ class ChatbotWidget(QWidget):
         if not text:
             return
 
+        # ── S2 widget.handle_message — first Python-side entry log ────
+        try:
+            try:
+                from ..ai.rag_pipeline import _log_state as _log_state_rag
+            except ImportError:
+                from ai.rag_pipeline import _log_state as _log_state_rag
+            _cc = self.current_card_context or {}
+            _log_state_rag(
+                'S2 widget.handle_message', 'ENTER',
+                text=text[:120],
+                agent=agent_name or 'tutor',
+                mode=mode,
+                request_id=request_id or '',
+                history_len=len(history or []),
+                card_id=_cc.get('cardId'),
+                deck=(_cc.get('deckName') or '')[:60],
+            )
+        except Exception:
+            pass  # Logging must never break the UI entry point
+
         # Set frontend callback for tools that need to push events (e.g. spawn_plusi)
         try:
             from ..ai.tool_executor import set_frontend_callback

@@ -40,17 +40,10 @@ PERPLEXITY_TIMEOUT_S = 15
 class RetrievalConfig:
     """Per-agent configuration for the unified RAG pipeline.
 
-    Defaults match main's stable rag_pipeline.py behavior:
-      - No reranker (LLM filtering off)
-      - Web fallback fires ONLY on confidence == 'low' from retrieval
-        (single trigger, last resort, matches main exactly)
-      - Current-card injection on (matches Tutor on main)
-
-    Agents customize by overriding fields. The reranker_enabled flag
-    exists for opt-in but is off by default — earlier versions of this
-    config defaulted it to True and that introduced source-quality
-    regressions vs. main's behavior. See ai/reranker.py if you want to
-    enable it for an experiment.
+    Defaults are conservative (no reranker, no min-indexed threshold) so
+    lightweight agents opt in only to what they need. The Tutor agent is
+    the full-featured path on main — it enables the reranker and the
+    min_indexed_for_web=3 fallback. See TUTOR_RETRIEVAL in ai/agents.py.
     """
     # --- Retrieval defaults (used if routing_result omits them) ---
     retrieval_mode_default: str = 'both'
@@ -59,15 +52,18 @@ class RetrievalConfig:
     kg_enrichment: bool = True
 
     # --- Reranker (LLM-based source filtering) ---
-    # Off by default — main's stable pipeline has no reranker.
+    # Off by default. Tutor sets this to True to match main's
+    # retrieval_agents/tutor_retrieval.py behavior.
     reranker_enabled: bool = False
     use_resolved_intent_for_reranker: bool = True
 
     # --- Web fallback (Perplexity via backend /research) ---
-    # Web search is a LAST RESORT — fires only when retrieval reports
-    # confidence == 'low'. There is no minimum-source threshold. This
-    # matches main's single-condition fallback exactly.
+    # Fires when retrieval reports confidence == 'low' OR, if
+    # min_indexed_for_web > 0, when fewer than that many indexed cards
+    # survived retrieval+reranker. Tutor sets min_indexed_for_web=3 to
+    # match main's "<3 sources forces web" rule.
     web_fallback_enabled: bool = True
+    min_indexed_for_web: int = 0  # 0 = disabled; Tutor = 3
     use_resolved_intent_for_web: bool = True
 
     # --- Current-card injection ---
@@ -125,6 +121,30 @@ def _attr_or_key(obj):
     if isinstance(obj, dict):
         return lambda key, default=None: obj.get(key, default)
     return lambda key, default=None: getattr(obj, key, default)
+
+
+def _log_state(state: str, status: str, **data) -> None:
+    """Emit a structured pipeline-state log line.
+
+    Every state transition in retrieve_rag_context() calls this so that
+    INFO-level logs give a complete trace of the pipeline's decisions:
+    which phase ran, which branch was taken, what each phase produced.
+    Format is grep-friendly, e.g. ``[STATE S9 rag.retrieval] ENTER | ...``.
+
+    Args:
+        state: Short identifier like ``'S9 rag.retrieval'`` (S-number + dotted name).
+        status: One of ENTER, EXIT, TRY, OK, SKIP, BRANCH, RESULT, WARN, FAIL.
+        **data: Extra key/value pairs to append. Strings get repr'd so empty
+            values and whitespace stay visible.
+    """
+    if data:
+        kv = ' '.join(
+            f"{k}={v!r}" if isinstance(v, str) else f"{k}={v}"
+            for k, v in data.items()
+        )
+        logger.info("[STATE %s] %s | %s", state, status, kv)
+    else:
+        logger.info("[STATE %s] %s", state, status)
 
 
 def _build_preloaded_context(preloaded_cards: List[dict]) -> tuple:
@@ -231,6 +251,20 @@ def retrieve_rag_context(
     _emit = emit_step or (lambda step, status, data=None: None)
     _get = _attr_or_key(routing_result)
 
+    # ── S8 rag.parse_routing — entry ──────────────────────────────────────
+    _log_state(
+        'S8 rag.parse_routing', 'ENTER',
+        user_message=(user_message or '')[:120],
+        has_context=bool(context and (context.get('cardId')
+                                      if isinstance(context, dict) else False)),
+        card_id=(context.get('cardId') if isinstance(context, dict) else None),
+        has_preloaded=preloaded_cards is not None,
+        cfg_reranker_enabled=cfg.reranker_enabled,
+        cfg_min_indexed_for_web=cfg.min_indexed_for_web,
+        cfg_web_fallback_enabled=cfg.web_fallback_enabled,
+        cfg_inject_current_card=cfg.inject_current_card,
+    )
+
     # ── Phase 1: Retrieval (or preloaded cards path) ──────────────────────
     retrieval_result = None
     retrieval_state = None
@@ -244,13 +278,25 @@ def retrieve_rag_context(
     )
 
     if use_preloaded:
+        _log_state('S8 rag.parse_routing', 'BRANCH', path='preloaded_cards',
+                   count=len(preloaded_cards) if preloaded_cards else 0)
         context_string, citations = _build_preloaded_context(preloaded_cards)
         confidence = 'medium'
         if not context_string:
+            _log_state('S8 rag.parse_routing', 'EXIT',
+                       reason='preloaded_cards_produced_empty_context',
+                       next='return empty RagResult')
             return RagResult(rag_context=None, citations={}, cards_found=0)
+        _log_state('S8 rag.parse_routing', 'OK',
+                   preloaded_citations=len(citations),
+                   context_chars=len(context_string),
+                   next='S10 rag.reranker')
     else:
         search_needed = _get('search_needed', False)
         if not search_needed:
+            _log_state('S8 rag.parse_routing', 'EXIT',
+                       reason='router_said_search_not_needed',
+                       next='return empty RagResult')
             return RagResult(rag_context=None, citations={}, cards_found=0)
 
         retrieval_mode = _get('retrieval_mode', cfg.retrieval_mode_default) \
@@ -261,28 +307,48 @@ def retrieve_rag_context(
             or cfg.max_sources_default
         max_notes = {"low": 10, "medium": 30, "high": 50}.get(max_sources_level, 30)
 
-        precise_queries = [q for q in (_get('precise_queries', []) or []) if q and q.strip()]
-        broad_queries = [q for q in (_get('broad_queries', []) or []) if q and q.strip()]
+        _raw_precise = _get('precise_queries', []) or []
+        _raw_broad = _get('broad_queries', []) or []
+        _raw_resolved = _get('resolved_intent', '') or ''
 
+        precise_queries = [q for q in _raw_precise if q and q.strip()]
+        broad_queries = [q for q in _raw_broad if q and q.strip()]
+
+        query_source = 'router'
         if not precise_queries and not broad_queries:
-            resolved_intent = _get('resolved_intent', '') or ''
-            if resolved_intent and resolved_intent.strip():
-                precise_queries = [resolved_intent.strip()]
-                logger.debug("RAG pipeline: using resolved_intent as query: %s",
-                             resolved_intent[:80])
+            if _raw_resolved and _raw_resolved.strip():
+                precise_queries = [_raw_resolved.strip()]
+                query_source = 'fallback:resolved_intent'
             elif user_message and user_message.strip():
                 precise_queries = [user_message.strip()]
-                logger.debug("RAG pipeline: no queries from router, using user_message")
+                query_source = 'fallback:user_message'
 
-        logger.debug("RAG pipeline: mode=%s, scope=%s, max_notes=%s, precise=%d, broad=%d",
-                     retrieval_mode, search_scope, max_notes,
-                     len(precise_queries), len(broad_queries))
+        _log_state(
+            'S8 rag.parse_routing', 'RESULT',
+            retrieval_mode=retrieval_mode,
+            search_scope=search_scope,
+            max_notes=max_notes,
+            query_source=query_source,
+            precise_queries=precise_queries[:5],
+            broad_queries=broad_queries[:5],
+            resolved_intent=_raw_resolved[:100],
+        )
 
         if not precise_queries and not broad_queries:
+            _log_state('S8 rag.parse_routing', 'EXIT',
+                       reason='no_queries_available',
+                       next='return empty RagResult')
             return RagResult(rag_context=None, citations={}, cards_found=0)
+
+        # ── S9 rag.retrieval — entry ──────────────────────────────────────
+        _log_state('S9 rag.retrieval', 'ENTER',
+                   embedding_manager=bool(embedding_manager),
+                   mode=retrieval_mode,
+                   kg_enrichment=cfg.kg_enrichment)
 
         if embedding_manager and retrieval_mode in ('semantic', 'both'):
             if cfg.kg_enrichment:
+                _log_state('S9 rag.retrieval', 'TRY', retriever='EnrichedRetrieval')
                 try:
                     try:
                         from .retrieval import EnrichedRetrieval, RetrievalState
@@ -310,12 +376,18 @@ def retrieve_rag_context(
 
                     retrieval_result = enriched.retrieve(
                         user_message, routing_result, context, max_notes=max_notes)
-
+                    _cc = retrieval_result.get('citations', {}) if retrieval_result else {}
+                    _log_state('S9 rag.retrieval', 'OK', retriever='EnrichedRetrieval',
+                               citations=len(_cc),
+                               confidence=(retrieval_result or {}).get('confidence', 'medium'),
+                               keyword_hits=(retrieval_result or {}).get('keyword_count', 0))
                 except Exception as e:
-                    logger.warning("EnrichedRetrieval failed, falling back to HybridRetrieval: %s", e)
+                    _log_state('S9 rag.retrieval', 'FAIL',
+                               retriever='EnrichedRetrieval', error=str(e)[:200])
                     retrieval_result = None
 
             if retrieval_result is None:
+                _log_state('S9 rag.retrieval', 'TRY', retriever='HybridRetrieval')
                 try:
                     try:
                         from .retrieval import HybridRetrieval, RetrievalState
@@ -337,11 +409,18 @@ def retrieve_rag_context(
                     }
                     retrieval_result = hybrid.retrieve(
                         user_message, router_dict, context, max_notes=max_notes)
+                    _cc = retrieval_result.get('citations', {}) if retrieval_result else {}
+                    _log_state('S9 rag.retrieval', 'OK', retriever='HybridRetrieval',
+                               citations=len(_cc),
+                               confidence=(retrieval_result or {}).get('confidence', 'medium'),
+                               keyword_hits=(retrieval_result or {}).get('keyword_count', 0))
                 except Exception as e2:
-                    logger.warning("HybridRetrieval also failed: %s", e2)
+                    _log_state('S9 rag.retrieval', 'FAIL',
+                               retriever='HybridRetrieval', error=str(e2)[:200])
                     retrieval_result = None
 
         if retrieval_result is None and rag_retrieve_fn:
+            _log_state('S9 rag.retrieval', 'TRY', retriever='SQL_only_fallback')
             try:
                 retrieval_result = rag_retrieve_fn(
                     precise_queries=precise_queries,
@@ -350,12 +429,25 @@ def retrieve_rag_context(
                     context=context,
                     max_notes=max_notes,
                 )
+                _cc = retrieval_result.get('citations', {}) if retrieval_result else {}
+                _log_state('S9 rag.retrieval', 'OK', retriever='SQL_only_fallback',
+                           citations=len(_cc),
+                           confidence=(retrieval_result or {}).get('confidence', 'medium'))
             except Exception as e:
-                logger.warning("SQL retrieval failed: %s", e)
+                _log_state('S9 rag.retrieval', 'FAIL',
+                           retriever='SQL_only_fallback', error=str(e)[:200])
+                _log_state('S9 rag.retrieval', 'EXIT',
+                           reason='all_retrievers_failed',
+                           next='return empty RagResult')
                 return RagResult(rag_context=None, citations={}, cards_found=0,
                                  retrieval_state=retrieval_state)
 
         if not retrieval_result or not retrieval_result.get("context_string"):
+            _log_state('S9 rag.retrieval', 'EXIT',
+                       reason='empty_context_string',
+                       retrieval_result_present=bool(retrieval_result),
+                       keyword_hits=(retrieval_result or {}).get('keyword_count', 0),
+                       next='return empty RagResult')
             return RagResult(rag_context=None, citations={}, cards_found=0,
                              retrieval_state=retrieval_state)
 
@@ -363,24 +455,56 @@ def retrieve_rag_context(
         citations = retrieval_result.get("citations", {})
         confidence = retrieval_result.get("confidence", "medium")
 
-    # ── Phase 2: LLM Reranker — filter irrelevant sources ─────────────────
-    if cfg.reranker_enabled:
+        # Log top 5 retrieved cards so we can see what went into the reranker
+        _indexed_top = sorted(
+            [c for c in citations.values() if c.get('index')],
+            key=lambda c: c.get('index', 999),
+        )[:5]
+        for _c in _indexed_top:
+            _front = (_c.get('question') or _c.get('front') or '')[:80]
+            _log_state('S9 rag.retrieval', 'RESULT',
+                       idx=_c.get('index'),
+                       deck=_c.get('deckName', '')[:40],
+                       front=_front)
+        _log_state('S9 rag.retrieval', 'EXIT',
+                   citations=len(citations),
+                   context_chars=len(context_string),
+                   confidence=confidence,
+                   next='S10 rag.reranker')
+
+    # ── S10 rag.reranker — Phase 2: LLM source filter ─────────────────────
+    if not cfg.reranker_enabled:
+        _log_state('S10 rag.reranker', 'SKIP', reason='disabled_in_config',
+                   next='S11 rag.web_fallback')
+    else:
+        _prelim_lines = context_string.split('\n') if context_string else []
+        _numbered = [l for l in _prelim_lines if l.strip().startswith('[')]
+        _log_state('S10 rag.reranker', 'ENTER',
+                   input_sources=len(_numbered), confidence=confidence)
         try:
             try:
                 from .reranker import rerank_sources
             except ImportError:
                 from reranker import rerank_sources
 
-            _prelim_lines = context_string.split('\n') if context_string else []
-            _numbered = [l for l in _prelim_lines if l.strip().startswith('[')]
-
-            if _numbered and confidence != "low":
+            if not _numbered:
+                _log_state('S10 rag.reranker', 'SKIP',
+                           reason='no_numbered_context_lines',
+                           next='S11 rag.web_fallback')
+            elif confidence == 'low':
+                _log_state('S10 rag.reranker', 'SKIP',
+                           reason='confidence_already_low',
+                           next='S11 rag.web_fallback')
+            else:
                 _emit("reranker", "running", {"sources": len(_numbered)})
                 _rerank_question = user_message
                 if cfg.use_resolved_intent_for_reranker:
                     _resolved = _get('resolved_intent', '') or ''
                     if _resolved.strip():
                         _rerank_question = _resolved.strip()
+                _log_state('S10 rag.reranker', 'TRY',
+                           question=_rerank_question[:120],
+                           sources=len(_numbered))
 
                 rerank_result = rerank_sources(
                     question=_rerank_question,
@@ -388,12 +512,18 @@ def retrieve_rag_context(
                     min_confidence=confidence,
                     emit_step=_emit,
                 )
+                _log_state('S10 rag.reranker', 'RESULT',
+                           reranked=rerank_result.get('reranked'),
+                           relevant_indices=rerank_result.get('relevant_indices'),
+                           web_search_recommended=rerank_result.get('web_search'))
 
                 if rerank_result.get("reranked"):
                     relevant_indices = set(rerank_result.get("relevant_indices", []))
+                    _rejected = []
                     for note_id, cdata in list(citations.items()):
                         idx = cdata.get('index')
                         if idx and idx not in relevant_indices:
+                            _rejected.append(idx)
                             cdata.pop('index', None)
                     relevant_lines = [l for l in _numbered
                                       if any(l.startswith(f'[{i}]') for i in relevant_indices)]
@@ -411,32 +541,75 @@ def retrieve_rag_context(
                         old_idx = cdata.get('index')
                         if old_idx and old_idx in _old_to_new:
                             cdata['index'] = _old_to_new[old_idx]
-                    logger.info("Reranker: kept %d/%d sources (renumbered)",
-                                len(relevant_lines), len(_numbered))
+                    _log_state('S10 rag.reranker', 'OK',
+                               kept=len(relevant_lines), rejected=len(_rejected),
+                               rejected_idx=sorted(_rejected)[:10],
+                               renumbered_to=list(range(1, _new_idx)))
 
                     if rerank_result.get("web_search"):
                         confidence = "low"
-                        logger.info("Reranker recommends web search")
+                        _log_state('S10 rag.reranker', 'BRANCH',
+                                   reason='reranker_recommends_web',
+                                   new_confidence='low')
                     elif not relevant_indices:
                         confidence = "low"
-                        logger.info("Reranker: 0 relevant sources, forcing web search")
+                        _log_state('S10 rag.reranker', 'BRANCH',
+                                   reason='reranker_kept_0_sources',
+                                   new_confidence='low')
+                else:
+                    _log_state('S10 rag.reranker', 'SKIP',
+                               reason='reranker_returned_reranked_false')
         except Exception as e:
-            logger.warning("Reranker failed, continuing without: %s", e)
+            _log_state('S10 rag.reranker', 'FAIL', error=str(e)[:200],
+                       next='continue without reranker')
+        _log_state('S10 rag.reranker', 'EXIT',
+                   citations_indexed=sum(1 for c in citations.values() if c.get('index')),
+                   context_chars=len(context_string),
+                   confidence=confidence, next='S11 rag.web_fallback')
 
-    # ── Phase 3: Web fallback (Perplexity) ────────────────────────────────
-    # Web search is the LAST RESORT — fires only if retrieval reported
-    # confidence='low'. This is a single condition, matching main's stable
-    # rag_pipeline.py exactly. No minimum-source threshold, no double-trigger.
+    # ── S11 rag.web_fallback — Phase 3: Perplexity backup ─────────────────
+    # Fires when retrieval reports confidence == 'low' OR, if the agent
+    # sets cfg.min_indexed_for_web > 0, when too few indexed sources
+    # survived retrieval+reranker. Tutor uses the threshold to match main's
+    # old per-agent pipeline's "<3 sources forces web" rule.
     web_context = None
-    if cfg.web_fallback_enabled:
+    if not cfg.web_fallback_enabled:
+        _log_state('S11 rag.web_fallback', 'SKIP', reason='disabled_in_config',
+                   next='S12 rag.inject_current_card')
+    else:
+        indexed_count = sum(1 for c in citations.values() if c.get('index'))
+        _log_state('S11 rag.web_fallback', 'ENTER',
+                   confidence=confidence,
+                   indexed_count=indexed_count,
+                   min_indexed_for_web=cfg.min_indexed_for_web)
+
+        # Threshold check — can escalate medium → low
+        if cfg.min_indexed_for_web and confidence != "low":
+            if indexed_count < cfg.min_indexed_for_web:
+                _log_state('S11 rag.web_fallback', 'BRANCH',
+                           reason='indexed_below_threshold',
+                           indexed=indexed_count,
+                           threshold=cfg.min_indexed_for_web,
+                           action='force_confidence=low')
+                confidence = "low"
+            else:
+                _log_state('S11 rag.web_fallback', 'OK',
+                           reason='indexed_meets_threshold',
+                           indexed=indexed_count,
+                           threshold=cfg.min_indexed_for_web)
+
         if confidence == "low":
             _web_query = user_message
+            _web_query_source = 'user_message'
             if cfg.use_resolved_intent_for_web:
                 _resolved = (_get('resolved_intent', '') or '').strip()
                 if _resolved:
                     _web_query = _resolved
-            logger.info("RAG confidence is low, calling Perplexity for query: %s",
-                        _web_query[:80])
+                    _web_query_source = 'resolved_intent'
+            _log_state('S11 rag.web_fallback', 'TRY',
+                       provider='perplexity',
+                       web_query=_web_query[:120],
+                       web_query_source=_web_query_source)
             _emit("web_search", "running", {"query": _web_query[:200]})
             web_context = _call_perplexity(_web_query)
             if web_context and web_context.get("text"):
@@ -463,15 +636,49 @@ def retrieve_rag_context(
                        if web_source_lines else "")
                 )
                 _emit("web_search", "done", {"sources_count": len(sources)})
-                logger.info("Perplexity returned %d web sources", len(sources))
+                _log_state('S11 rag.web_fallback', 'OK',
+                           provider='perplexity',
+                           web_sources=len(sources),
+                           web_text_chars=len(web_context.get('text', '')),
+                           web_indices_assigned=[_max_idx + i + 1 for i in range(len(sources))])
+                for _i, _s in enumerate(sources[:5]):
+                    _domain = ''
+                    _url = _s.get('url', '') or ''
+                    if _url.count('/') >= 2:
+                        _domain = _url.split('/')[2]
+                    _log_state('S11 rag.web_fallback', 'RESULT',
+                               web_idx=_max_idx + _i + 1,
+                               title=(_s.get('title') or '')[:80],
+                               domain=_domain)
             else:
                 _emit("web_search", "error", {"reason": "no results"})
-                logger.warning("Perplexity returned no usable web context")
+                _log_state('S11 rag.web_fallback', 'FAIL',
+                           reason='perplexity_returned_no_usable_text')
+        else:
+            _log_state('S11 rag.web_fallback', 'SKIP',
+                       reason='confidence_not_low',
+                       confidence=confidence,
+                       next='S12 rag.inject_current_card')
+        _log_state('S11 rag.web_fallback', 'EXIT',
+                   web_context_present=bool(web_context),
+                   total_citations=len(citations),
+                   context_chars=len(context_string),
+                   next='S12 rag.inject_current_card')
 
-    # ── Phase 4: Inject current card if not already in results ────────────
-    if cfg.inject_current_card and context and context.get('cardId'):
+    # ── S12 rag.inject_current_card — Phase 4 ─────────────────────────────
+    if not cfg.inject_current_card:
+        _log_state('S12 rag.inject_current_card', 'SKIP',
+                   reason='disabled_in_config', next='S13 rag.build_result')
+    elif not (context and context.get('cardId')):
+        _log_state('S12 rag.inject_current_card', 'SKIP',
+                   reason='no_current_card_context', next='S13 rag.build_result')
+    else:
         current_note_id = str(context.get('noteId', context['cardId']))
-        if current_note_id not in citations:
+        if current_note_id in citations:
+            _log_state('S12 rag.inject_current_card', 'SKIP',
+                       reason='current_card_already_in_results',
+                       note_id=current_note_id, next='S13 rag.build_result')
+        else:
             _q = context.get('question') or context.get('frontField') or ''
             _a = context.get('answer') or ''
             _q_clean = re.sub(r'<[^>]+>', ' ', _q).strip()[:200]
@@ -494,8 +701,13 @@ def retrieve_rag_context(
                 f"  Frage: {_q_clean}\n  Antwort: {_a_clean}\n\n"
                 f"{context_string}"
             )
+            _log_state('S12 rag.inject_current_card', 'OK',
+                       injected_at_index=_current_idx,
+                       card_id=context['cardId'],
+                       front=_q_clean[:80],
+                       next='S13 rag.build_result')
 
-    # ── Phase 5: Build result ─────────────────────────────────────────────
+    # ── S13 rag.build_result — Phase 5 ────────────────────────────────────
     formatted_cards = [line for line in context_string.split("\n") if line.strip()]
     rag_context = {
         "cards": formatted_cards,
@@ -503,8 +715,27 @@ def retrieve_rag_context(
         "citations": citations,
     }
 
-    logger.debug("RAG pipeline: %d cards, %d citations",
-                 len(formatted_cards), len(citations))
+    _card_cites = sum(1 for c in citations.values() if c.get('type') != 'web')
+    _web_cites = sum(1 for c in citations.values() if c.get('type') == 'web')
+    _current_marked = sum(1 for c in citations.values() if c.get('isCurrentCard'))
+    _indexed = sum(1 for c in citations.values() if c.get('index'))
+    _log_state('S13 rag.build_result', 'RESULT',
+               formatted_lines=len(formatted_cards),
+               total_citations=len(citations),
+               card_citations=_card_cites,
+               web_citations=_web_cites,
+               current_card=_current_marked,
+               indexed=_indexed,
+               context_chars=len(context_string))
+    # Dump the first 12 LERNMATERIAL lines so the LLM input is visible
+    for _i, _line in enumerate(formatted_cards[:12]):
+        logger.info("[STATE S13 rag.build_result] CTX[%02d] %s", _i, _line[:160])
+    if len(formatted_cards) > 12:
+        logger.info("[STATE S13 rag.build_result] CTX (+%d more lines)",
+                    len(formatted_cards) - 12)
+    _log_state('S13 rag.build_result', 'EXIT',
+               cards_found=len(citations),
+               next='return to run_tutor (S14)')
 
     return RagResult(
         rag_context=rag_context,

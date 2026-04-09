@@ -389,6 +389,19 @@ class AIHandler:
         """
         extra_kwargs = extra_kwargs or {}
 
+        # ── S6 handler.dispatch_agent — entry ──────────────────────────────
+        try:
+            from .rag_pipeline import _log_state as _log_state_rag
+        except ImportError:
+            from rag_pipeline import _log_state as _log_state_rag
+        _log_state_rag(
+            'S6 handler.dispatch_agent', 'ENTER',
+            agent=agent_name,
+            request_id=request_id or '',
+            situation=(situation or '')[:120],
+            has_agent_def=agent_def is not None,
+        )
+
         # Orchestration — always show agent routing, never search details.
         # Search details (retrieval_mode, scope) are agent-internal pipeline steps.
         rag_analysis = extra_kwargs.get('routing_result')  # RagAnalysis or None
@@ -627,6 +640,17 @@ class AIHandler:
                 mw.taskman.run_on_main(
                     lambda: on_finished(_widget, agent_name, _result))
 
+        # ── S20 handler.dispatch_agent — exit ──────────────────────────────
+        _log_state_rag(
+            'S20 handler.dispatch_agent', 'EXIT',
+            agent=agent_name,
+            text_chars=len(text),
+            citations=len(citations) if citations else 0,
+            card_citations=sum(1 for c in (citations or []) if c.get('type') == 'card'),
+            web_citations=sum(1 for c in (citations or []) if c.get('type') == 'web'),
+            used_streaming=bool(_used_streaming or used_streaming),
+            next='S21 thread.finalize → Qt signals',
+        )
         return text
 
     def dispatch_smart_search(self, query, cards_data, cluster_info, request_id=None):
@@ -734,6 +758,22 @@ class AIHandler:
             logger.info("║   deck        : %r", _deck_name[:100])
             logger.info("║   history_len : %d", len(history or []))
             logger.info("╚════════════════════════════════════════════════════════════════")
+            # ── S4 handler.entry — structured form of the header above ────
+            try:
+                from .rag_pipeline import _log_state as _log_state_rag
+            except ImportError:
+                from rag_pipeline import _log_state as _log_state_rag
+            _log_state_rag(
+                'S4 handler.entry', 'ENTER',
+                agent=agent_name,
+                request_id=request_id or '',
+                user_message=(user_message or '')[:120],
+                card_id=_card_id,
+                deck=_deck_name[:60],
+                history_len=len(history or []),
+                uses_rag=agent_def.uses_rag,
+                mode=mode,
+            )
 
             # ── [CARD-FLOW 3/5] handler received context ────────────────────
             # What get_response_with_rag got as `context`. Compare to

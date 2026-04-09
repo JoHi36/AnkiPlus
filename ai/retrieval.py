@@ -519,11 +519,19 @@ class EnrichedRetrieval:
         tier1_candidates = extract_query_terms(user_message)
         tier2_candidates = extract_query_terms(resolved_intent) if resolved_intent else []
 
-        # Batch embed: all candidate terms + semantic query
+        # Batch embed: all candidate terms + semantic queries + router's
+        # LLM-curated associated_terms. We bundle them into one embed_texts()
+        # call so there's only a single HTTP round-trip for the whole pipeline.
         all_candidate_terms = list(dict.fromkeys(tier1_candidates + tier2_candidates))
+        # Deduplicate associated_terms against candidates we're already embedding
+        _cand_lower = {t.lower() for t in all_candidate_terms}
+        at_to_embed = [t for t in (associated_terms or [])
+                       if t and t.strip() and t.lower() not in _cand_lower]
+
         texts_to_embed = list(all_candidate_terms) + [user_message]
         if resolved_intent:
             texts_to_embed.append(resolved_intent)
+        texts_to_embed.extend(at_to_embed)
 
         all_embeddings = []
         if self.emb and texts_to_embed:
@@ -532,7 +540,7 @@ class EnrichedRetrieval:
             except Exception as e:
                 logger.warning("EnrichedRetrieval: embed_texts failed: %s", e)
 
-        # Split embeddings: term vectors + semantic vectors
+        # Split embeddings: term vectors + semantic vectors + associated_term vectors
         term_embeddings = {}
         for i, term in enumerate(all_candidate_terms):
             if i < len(all_embeddings) and all_embeddings[i]:
@@ -541,6 +549,19 @@ class EnrichedRetrieval:
         sem_offset = len(all_candidate_terms)
         primary_vec = all_embeddings[sem_offset] if sem_offset < len(all_embeddings) else None
         secondary_vec = all_embeddings[sem_offset + 1] if (resolved_intent and sem_offset + 1 < len(all_embeddings)) else None
+
+        # Associated-term vectors live after user_message + optional resolved_intent
+        at_offset = sem_offset + (2 if resolved_intent else 1)
+        associated_term_embeddings = {}
+        for i, term in enumerate(at_to_embed):
+            idx = at_offset + i
+            if idx < len(all_embeddings) and all_embeddings[idx]:
+                associated_term_embeddings[term] = all_embeddings[idx]
+        # If an associated_term was already embedded as a candidate,
+        # reuse that vector so enrich_query can look it up.
+        for t in (associated_terms or []):
+            if t and t in term_embeddings and t not in associated_term_embeddings:
+                associated_term_embeddings[t] = term_embeddings[t]
 
         # ── 3. KG Enrichment (embedding-first, then edges) ──────────────────
         self.emit_step("kg_enrichment", "active", {"terms": []})
@@ -556,6 +577,8 @@ class EnrichedRetrieval:
             enrichment = enrich_query(
                 user_message,
                 resolved_intent=resolved_intent,
+                associated_terms=associated_terms,
+                associated_term_embeddings=associated_term_embeddings,
                 kg_term_index=kg_term_index,
                 term_embeddings=term_embeddings,
                 sentence_embeddings=sentence_embs,
@@ -564,7 +587,23 @@ class EnrichedRetrieval:
                 "terms": enrichment.get('kg_terms_found', [])[:8],
                 "tier1_terms": enrichment.get('tier1_terms', []),
                 "tier2_terms": enrichment.get('tier2_terms', []),
+                "router_kg_terms": enrichment.get('router_kg_terms', [])[:8],
             })
+            # Pipeline-state log: this is the path fix — router terms → KG
+            try:
+                try:
+                    from .rag_pipeline import _log_state as _log_state_rag
+                except ImportError:
+                    from rag_pipeline import _log_state as _log_state_rag
+                _log_state_rag(
+                    'S9.1 rag.router_kg_match', 'RESULT',
+                    associated_terms_in=len(associated_terms or []),
+                    router_kg_matches=len(enrichment.get('router_kg_terms', []) or []),
+                    top_matches=(enrichment.get('router_kg_terms', []) or [])[:6],
+                    precise_primary=enrichment.get('precise_primary', [])[:8],
+                )
+            except Exception:
+                pass
         except Exception as e:
             logger.warning("EnrichedRetrieval: KG enrichment failed: %s", e)
             self.emit_step("kg_enrichment", "error", {"message": str(e)})
