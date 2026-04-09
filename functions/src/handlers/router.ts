@@ -67,9 +67,6 @@ export async function routerHandler(req: Request, res: Response): Promise<void> 
 3. If search is needed: write a clear, specific description of what the user wants to know
 4. List 5-10 associated domain terms (synonyms, related concepts, parent/child terms)
 
-Agents: tutor (default, learning questions), ${agents}
-Rules: tutor in doubt. Others ONLY when clearly not a learning topic.
-
 CRITICAL for resolved_intent:
 - For context-dependent questions ("what do you mean?", "explain that"):
   Use the card context and recent exchange to determine the SPECIFIC topic.
@@ -88,7 +85,7 @@ ${cardHint}Mode: ${currentMode}
 Message: "${userMsg}"
 
 Output JSON only:
-{"agent":"tutor","search_needed":true,"resolved_intent":"clear description","associated_terms":["term1","term2","term3"]}`;
+{"search_needed":true,"resolved_intent":"clear description","associated_terms":["term1","term2","term3"]}`;
 
     // ── [ROUTER 2/5] prompt built ─────────────────────────────────────────
     // The full prompt the LLM will see. `provider` makes the OpenRouter-vs-
