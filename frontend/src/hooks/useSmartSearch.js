@@ -33,7 +33,9 @@ export default function useSmartSearch() {
     const onSearchCards = (e) => {
       const result = e.detail;
       setSearchResult(result);
-      setIsSearching(false);
+      // Only clear isSearching if no cards found (no text answer will follow).
+      // Otherwise msg_done clears it after text streaming finishes.
+      if (!result?.cards?.length) setIsSearching(false);
       setClusterLabels(null);
       setClusterSummaries(null);
       setCardRefs(null);
@@ -96,6 +98,7 @@ export default function useSmartSearch() {
 
       if (data.type === 'msg_done') {
         setIsAnswerStreaming(false);
+        setIsSearching(false);
       }
 
       // Pipeline steps — dispatch into ReasoningStore for live pacing + animation

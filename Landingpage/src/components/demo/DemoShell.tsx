@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { DEMO_SCENARIOS } from './DemoData';
 import ChatInput from '@frontend/components/ChatInput.tsx';
 import ReviewFeedback from '@frontend/components/ReviewFeedback.jsx';
-import { QuizCard } from '@shared/components/QuizCard';
+import { MultipleChoiceCard as QuizCard } from '@shared/components/MultipleChoiceCard';
 
 // ───────────────────────────────────────────────
 // Styles

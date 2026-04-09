@@ -81,6 +81,7 @@ export default function SettingsSidebar() {
     tokenUsed: 0,
     tokenLimit: 0,
   });
+  const [statusLoaded, setStatusLoaded] = useState(false);
   const [copyLabel, setCopyLabel] = useState(null); // null = default, string = temporary
   const [indexing, setIndexing] = useState(null);
   const [kgMetrics, setKgMetrics] = useState(null); // { backend, totalCards, reviewedCards, avgEase, avgInterval }
@@ -124,6 +125,7 @@ export default function SettingsSidebar() {
           tokenUsed: d.tokenUsed || 0,
           tokenLimit: d.tokenLimit || 0,
         });
+        setStatusLoaded(true);
         document.documentElement.setAttribute('data-theme', d.theme === 'light' ? 'light' : 'dark');
       }
       if (payload.type === 'themeChanged') {
@@ -218,56 +220,63 @@ export default function SettingsSidebar() {
             : 'none',
         }}
       >
-        <div
-          className="uppercase font-semibold tracking-wide"
-          style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--ds-text-tertiary)', marginBottom: 4 }}
-        >
-          DEIN PLAN
-        </div>
-        <div className="flex justify-between items-baseline" style={{ marginBottom: 10 }}>
-          <span className="font-bold" style={{ fontSize: 18, color: 'var(--ds-text-primary)' }}>
-            {status.planName}
-          </span>
-          <span style={{ fontSize: 11, color: 'var(--ds-text-tertiary)' }}>
-            {status.price}
-          </span>
-        </div>
+        {!statusLoaded ? (
+          <SettingsCardSkeleton />
+        ) : (
+          <>
+            <div
+              className="uppercase font-semibold tracking-wide"
+              style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--ds-text-tertiary)', marginBottom: 4 }}
+            >
+              DEIN PLAN
+            </div>
+            <div className="flex justify-between items-baseline" style={{ marginBottom: 10 }}>
+              <span className="font-bold" style={{ fontSize: 18, color: 'var(--ds-text-primary)' }}>
+                {status.planName}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--ds-text-tertiary)' }}>
+                {status.price}
+              </span>
+            </div>
 
-        {/* Token bar */}
-        <div
-          className="w-full rounded-sm overflow-hidden"
-          style={{ height: 3, background: 'var(--ds-border-subtle)', marginBottom: 6 }}
-        >
-          <div
-            className="h-full rounded-sm transition-all duration-400"
-            style={{ width: `${tokenPct}%`, background: 'var(--ds-accent)' }}
-          />
-        </div>
+            {/* Token bar */}
+            <div
+              className="w-full rounded-sm overflow-hidden"
+              style={{ height: 3, background: 'var(--ds-border-subtle)', marginBottom: 6 }}
+            >
+              <div
+                className="h-full rounded-sm transition-all duration-400"
+                style={{ width: `${tokenPct}%`, background: 'var(--ds-accent)' }}
+              />
+            </div>
 
-        <div className="flex justify-between items-center" style={{ marginBottom: 10 }}>
-          <span style={{ fontSize: 10, color: 'var(--ds-text-tertiary)' }}>
-            {status.isAuthenticated
-              ? (status.tokenLimit > 0 ? `${tokenPct}%` : 'Verbunden')
-              : 'Nicht verbunden'}
-          </span>
-          <button
-            onClick={status.isAuthenticated ? handleUpgrade : handleConnect}
-            className="font-semibold transition-opacity hover:opacity-80"
-            style={{
-              fontSize: 11,
-              color: 'var(--ds-accent)',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: 0,
-              fontFamily: 'inherit',
-            }}
-          >
-            {!status.isAuthenticated
-              ? 'Verbinden →'
-              : status.tier === 'free' ? 'Upgrade →' : 'Abo verwalten →'}
-          </button>
-        </div>
+            <div className="flex justify-between items-center" style={{ marginBottom: 10 }}>
+              <span style={{ fontSize: 10, color: 'var(--ds-text-tertiary)' }}>
+                {status.isAuthenticated
+                  ? (status.tokenLimit > 0 ? `${tokenPct}%` : 'Verbunden')
+                  : 'Nicht verbunden'}
+              </span>
+              <button
+                onClick={status.isAuthenticated ? handleUpgrade : handleConnect}
+                className="font-semibold transition-opacity hover:opacity-80"
+                style={{
+                  fontSize: 11,
+                  color: '#fff',
+                  background: 'var(--ds-accent)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '5px 12px',
+                  borderRadius: 'var(--ds-radius-sm)',
+                  fontFamily: 'inherit',
+                }}
+              >
+                {!status.isAuthenticated
+                  ? 'Verbinden'
+                  : status.tier === 'free' ? 'Upgrade' : 'Verwalten'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Theme Toggle */}
@@ -309,8 +318,10 @@ export default function SettingsSidebar() {
       {/* KG Metrics (neo4j) or Indexing Gauge (sqlite fallback) */}
       {kgMetrics?.backend === 'neo4j' ? (
         <KgMetrics data={kgMetrics} />
+      ) : indexing ? (
+        <IndexingGauge data={indexing} />
       ) : (
-        indexing && <IndexingGauge data={indexing} />
+        <MetricsSkeleton />
       )}
 
       {/* Divider */}
@@ -709,6 +720,73 @@ function IndexingGauge({ data }) {
   );
 }
 
+
+/* ─── Skeleton Components ─── */
+
+const SKELETON_SHIMMER = `
+@keyframes settingsShimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+`;
+
+const SKEL_BAR_STYLE = {
+  borderRadius: 4,
+  background: 'linear-gradient(90deg, var(--ds-border-subtle) 25%, var(--ds-hover-tint) 50%, var(--ds-border-subtle) 75%)',
+  backgroundSize: '200% 100%',
+  animation: 'settingsShimmer 1.8s ease-in-out infinite',
+};
+
+function SettingsCardSkeleton() {
+  return (
+    <>
+      <style>{SKELETON_SHIMMER}</style>
+      {/* Plan label */}
+      <div style={{ ...SKEL_BAR_STYLE, width: 60, height: 8, marginBottom: 10 }} />
+      {/* Plan name + price row */}
+      <div className="flex justify-between items-baseline" style={{ marginBottom: 12 }}>
+        <div style={{ ...SKEL_BAR_STYLE, width: 50, height: 16 }} />
+        <div style={{ ...SKEL_BAR_STYLE, width: 80, height: 10 }} />
+      </div>
+      {/* Token bar */}
+      <div style={{ ...SKEL_BAR_STYLE, width: '100%', height: 3, marginBottom: 8 }} />
+      {/* Status + button row */}
+      <div className="flex justify-between items-center" style={{ marginBottom: 6 }}>
+        <div style={{ ...SKEL_BAR_STYLE, width: 70, height: 9 }} />
+        <div style={{ ...SKEL_BAR_STYLE, width: 64, height: 24, borderRadius: 'var(--ds-radius-sm)' }} />
+      </div>
+    </>
+  );
+}
+
+function MetricsSkeleton() {
+  return (
+    <div>
+      <style>{SKELETON_SHIMMER}</style>
+      {/* Section label */}
+      <div style={{ ...SKEL_BAR_STYLE, width: 80, height: 8, marginBottom: 14 }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        {/* Ring placeholder */}
+        <div style={{ ...SKEL_BAR_STYLE, width: 64, height: 64, borderRadius: '50%', flexShrink: 0 }} />
+        {/* Stats rows */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <div style={{ ...SKEL_BAR_STYLE, width: 50, height: 10 }} />
+            <div style={{ ...SKEL_BAR_STYLE, width: 36, height: 10 }} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <div style={{ ...SKEL_BAR_STYLE, width: 60, height: 10 }} />
+            <div style={{ ...SKEL_BAR_STYLE, width: 30, height: 10 }} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <div style={{ ...SKEL_BAR_STYLE, width: 55, height: 10 }} />
+            <div style={{ ...SKEL_BAR_STYLE, width: 24, height: 10 }} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /** Reusable action row */
 function ActionRow({ icon, label, sub, onClick, chevron, last }) {

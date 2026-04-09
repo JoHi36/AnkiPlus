@@ -1,15 +1,22 @@
 """
-RAG Pipeline: Standalone card retrieval orchestration.
+Unified RAG retrieval pipeline — single source of truth for all agents.
 
-Extracted from handler.py so that any agent (Tutor, future agents) can call
-retrieve_rag_context() without importing handler internals.
+Each agent passes a RetrievalConfig that customizes which phases run and how.
+The defaults match the Tutor agent's behavior (the most full-featured path);
+other agents override only what they need.
 
-Handles:
-- Query parsing from routing_result
-- HybridRetrieval (SQL + semantic) when embedding_manager is available
-- SQL-only fallback
-- Context string + citations formatting
-- Current card injection if not already in results
+Pipeline phases (each gated by RetrievalConfig flags):
+  0. Routing parse — extract queries from routing_result
+  1. Retrieval — KG-enriched (EnrichedRetrieval) or hybrid (HybridRetrieval)
+     OR preloaded_cards path (skip retrieval, use caller-provided cards)
+  2. Reranker — LLM filters irrelevant sources, renumbers [N]
+  3. Web fallback — Perplexity if confidence low or too few relevant sources
+  4. Current-card injection — add the user's currently-reviewing card
+  5. Build RagResult
+
+History: forked from rag_pipeline.py and tutor_retrieval.py on 2026-04-09.
+The unified version replaces both. Per-agent forks in ai/retrieval_agents/
+have been deleted — agents customize via RetrievalConfig, not by copying code.
 """
 import re
 from dataclasses import dataclass, field
@@ -25,256 +32,417 @@ PERPLEXITY_QUERY_MAX_LEN = 500
 PERPLEXITY_TIMEOUT_S = 15
 
 
+# ---------------------------------------------------------------------------
+# RetrievalConfig — per-agent pipeline configuration
+# ---------------------------------------------------------------------------
+
+@dataclass
+class RetrievalConfig:
+    """Per-agent configuration for the unified RAG pipeline.
+
+    Defaults match Tutor behavior. Override only the knobs that differ.
+    See ai/agents.py for per-agent instances (TUTOR_RETRIEVAL, etc.).
+    """
+    # --- Retrieval defaults (used if routing_result omits them) ---
+    retrieval_mode_default: str = 'both'
+    search_scope_default: str = 'collection'
+    max_sources_default: str = 'medium'
+    kg_enrichment: bool = True
+
+    # --- Reranker (LLM-based source filtering) ---
+    reranker_enabled: bool = True
+    use_resolved_intent_for_reranker: bool = True
+
+    # --- Web fallback (Perplexity via backend /research) ---
+    web_fallback_enabled: bool = True
+    web_fallback_min_sources: int = 3
+    use_resolved_intent_for_web: bool = True
+
+    # --- Current-card injection ---
+    inject_current_card: bool = True
+
+    # --- Preloaded cards path (Smart Search) ---
+    accept_preloaded_cards: bool = False
+
+
+# Default = Tutor behavior. Used when caller passes retrieval_config=None.
+_DEFAULT_CONFIG = RetrievalConfig()
+
+
+# ---------------------------------------------------------------------------
+# RagResult
+# ---------------------------------------------------------------------------
+
 @dataclass
 class RagResult:
     """Result of a RAG retrieval pipeline call."""
-    rag_context: Optional[Dict[str, Any]]  # {cards, citations, reasoning} or None
+    rag_context: Optional[Dict[str, Any]]
     citations: Dict[str, Any]
     cards_found: int
-    retrieval_state: Any = None  # RetrievalState if hybrid was used
-    keyword_hits: int = 0  # SQL keyword search hit count (0 = topic not in cards)
-    web_sources: List[Dict[str, Any]] = field(default_factory=list)  # Perplexity web sources
+    retrieval_state: Any = None
+    keyword_hits: int = 0
+    web_sources: List[Dict[str, Any]] = field(default_factory=list)
 
 
-def _call_perplexity(query: str, auth_token: Optional[str] = None, backend_url: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """Call the backend /research endpoint to get Perplexity web results.
+# ---------------------------------------------------------------------------
+# Web fallback — delegates to the shared pipeline block
+# ---------------------------------------------------------------------------
 
-    Args:
-        query: The user's search query (truncated to 500 chars).
-        auth_token: Optional auth token; fetched from config if not provided.
-        backend_url: Optional backend URL; fetched from config if not provided.
+def _call_perplexity(query: str, auth_token: Optional[str] = None,
+                     backend_url: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Call backend /research for web results.
 
-    Returns:
-        Dict with 'text', 'sources', 'tokens' keys, or None on failure.
+    Thin wrapper around ai.pipeline_blocks.web_search — kept for internal
+    use by the orchestrator. New code should call web_search directly.
     """
     try:
-        import requests
+        from .pipeline_blocks import web_search
     except ImportError:
-        logger.warning("requests library not available, cannot call Perplexity")
-        return None
+        from pipeline_blocks import web_search
+    return web_search(query, auth_token=auth_token, backend_url=backend_url)
 
-    try:
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _attr_or_key(obj):
+    """Return a getter that works on both objects with attributes and dicts."""
+    if obj is None:
+        return lambda key, default=None: default
+    if isinstance(obj, dict):
+        return lambda key, default=None: obj.get(key, default)
+    return lambda key, default=None: getattr(obj, key, default)
+
+
+def _build_preloaded_context(preloaded_cards: List[dict]) -> tuple:
+    """Convert caller-provided cards into the (context_string, citations) shape.
+
+    Used by the Smart Search path: cards are already loaded by another pipeline
+    (e.g. SearchCardsThread). We just format them so the rest of the unified
+    pipeline (reranker, web fallback, current-card injection) can run on them.
+    """
+    context_lines = []
+    citations = {}
+    for i, card in enumerate(preloaded_cards[:50]):
+        if isinstance(card, str):
+            context_lines.append(card)
+            continue
+        idx = i + 1
+        card_id = card.get('id') or card.get('cardId') or card.get('card_id') or 0
         try:
-            from ..config import get_backend_url, get_auth_token
-        except ImportError:
-            from config import get_backend_url, get_auth_token
-
-        url = backend_url or get_backend_url()
-        token = auth_token or get_auth_token()
-
-        if not url:
-            logger.warning("No backend URL configured, skipping Perplexity call")
-            return None
-
-        headers = {"Content-Type": "application/json"}
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
-
-        response = requests.post(
-            f"{url}/research",
-            json={"message": query[:PERPLEXITY_QUERY_MAX_LEN]},
-            headers=headers,
-            timeout=PERPLEXITY_TIMEOUT_S,
-        )
-        response.raise_for_status()
-        data = response.json()
-        return {
-            "text": data.get("text", ""),
-            "sources": data.get("sources", []),
-            "tokens": data.get("tokens", {}),
+            card_id_int = int(card_id) if card_id else 0
+        except (ValueError, TypeError):
+            card_id_int = 0
+        question = (card.get('question') or '')[:200]
+        answer = (card.get('answer') or card.get('back') or '')[:200]
+        deck = card.get('deck') or card.get('deckName') or ''
+        context_lines.append(f'[{idx}] ({deck}) {question} | {answer}')
+        key = str(card_id_int) if card_id_int else f'preloaded_{i}'
+        citations[key] = {
+            'index': idx,
+            'cardId': card_id_int,
+            'noteId': card_id_int,
+            'question': question,
+            'answer': answer,
+            'deckName': deck,
+            'sources': ['preloaded'],
         }
-    except Exception as e:
-        logger.warning("Perplexity call failed: %s", e)
-        return None
+    return '\n'.join(context_lines), citations
 
+
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
 
 def retrieve_rag_context(
     user_message: str,
-    context: Optional[dict],
-    config: dict,
-    routing_result,
+    context: Optional[dict] = None,
+    config: Optional[dict] = None,
+    routing_result=None,
+    *,
+    retrieval_config: Optional[RetrievalConfig] = None,
+    preloaded_cards: Optional[List[dict]] = None,
     emit_step: Optional[Callable] = None,
     embedding_manager=None,
     rag_retrieve_fn: Optional[Callable] = None,
     request_steps_ref: Optional[List] = None,
 ) -> RagResult:
-    """Orchestrate card retrieval for a user query.
+    """Orchestrate RAG retrieval for a user query.
 
     Args:
         user_message: The user's question text.
         context: Current card context dict (cardId, noteId, question, answer, ...).
         config: Application config dict.
-        routing_result: Routing result object with search parameters.
-            Must have attributes: search_needed, retrieval_mode, precise_queries,
-            broad_queries, embedding_queries, search_scope, max_sources.
+        routing_result: Routing result object/dict with search parameters.
+            Can be None if preloaded_cards is provided.
+        retrieval_config: Per-agent RetrievalConfig. None = Tutor defaults.
+        preloaded_cards: Optional list of pre-loaded card dicts. If provided
+            AND retrieval_config.accept_preloaded_cards is True, retrieval is
+            skipped and these cards become the context. Used by Research's
+            Smart Search path.
         emit_step: Optional callback(step, status, data=None) for pipeline visualization.
         embedding_manager: Optional embedding manager for semantic search.
         rag_retrieve_fn: Callable for SQL keyword retrieval.
-            Signature: (precise_queries, broad_queries, search_scope, context,
-                        max_notes, suppress_event) -> {context_string, citations}
-        request_steps_ref: Optional shared list of request steps (from handler's
-            _current_request_steps). Used by HybridRetrieval to parse query hit
-            counts from AI state events. If provided, the RetrievalState will
-            be kept in sync with this reference after each rag_retrieve_fn call.
+        request_steps_ref: Optional shared list for HybridRetrieval state sync.
 
     Returns:
-        RagResult with rag_context dict (or None), citations, and cards_found count.
+        RagResult.
     """
+    cfg = retrieval_config or _DEFAULT_CONFIG
     _emit = emit_step or (lambda step, status, data=None: None)
-
-    # Check if search is needed
-    search_needed = getattr(routing_result, 'search_needed', None)
-    if search_needed is None:
-        search_needed = routing_result.get('search_needed', False) if isinstance(routing_result, dict) else False
-    if not search_needed:
-        return RagResult(rag_context=None, citations={}, cards_found=0)
-
-    # Parse search parameters from routing_result
     _get = _attr_or_key(routing_result)
-    retrieval_mode = _get('retrieval_mode', 'both')
-    search_scope = _get('search_scope', 'current_deck')
-    max_sources_level = _get('max_sources', 'medium')
-    max_notes = {"low": 10, "medium": 30, "high": 50}.get(max_sources_level, 30)
 
-    precise_queries = [q for q in (_get('precise_queries', []) or []) if q and q.strip()]
-    broad_queries = [q for q in (_get('broad_queries', []) or []) if q and q.strip()]
-
-    # Build queries from resolved_intent if router didn't provide explicit queries
-    if not precise_queries and not broad_queries:
-        resolved_intent = _get('resolved_intent', '') or ''
-        if resolved_intent and resolved_intent.strip():
-            precise_queries = [resolved_intent.strip()]
-            logger.debug("RAG pipeline: using resolved_intent as query: %s", resolved_intent[:80])
-        elif user_message and user_message.strip():
-            precise_queries = [user_message.strip()]
-            logger.debug("RAG pipeline: no queries from router, using user_message as fallback query")
-
-    logger.debug("RAG pipeline: mode=%s, scope=%s, max_notes=%s, precise=%d, broad=%d",
-                 retrieval_mode, search_scope, max_notes, len(precise_queries), len(broad_queries))
-
-    if not precise_queries and not broad_queries:
-        return RagResult(rag_context=None, citations={}, cards_found=0)
-
-    # Execute retrieval
+    # ── Phase 1: Retrieval (or preloaded cards path) ──────────────────────
     retrieval_result = None
     retrieval_state = None
+    confidence = 'medium'
+    citations: Dict[str, Any] = {}
+    context_string = ''
 
-    if embedding_manager and retrieval_mode in ('semantic', 'both'):
-        # Try EnrichedRetrieval first (new KG-enriched pipeline)
-        try:
-            try:
-                from .retrieval import EnrichedRetrieval, RetrievalState
-            except ImportError:
-                from retrieval import EnrichedRetrieval, RetrievalState
+    use_preloaded = (
+        preloaded_cards is not None
+        and cfg.accept_preloaded_cards
+    )
 
-            retrieval_state = RetrievalState()
-            if request_steps_ref is not None:
-                retrieval_state.request_steps = list(request_steps_ref)
+    if use_preloaded:
+        context_string, citations = _build_preloaded_context(preloaded_cards)
+        confidence = 'medium'
+        if not context_string:
+            return RagResult(rag_context=None, citations={}, cards_found=0)
+    else:
+        search_needed = _get('search_needed', False)
+        if not search_needed:
+            return RagResult(rag_context=None, citations={}, cards_found=0)
 
-            _inner_fn = rag_retrieve_fn
-            def _syncing_rag(**kwargs):
-                result = _inner_fn(**kwargs)
-                if request_steps_ref is not None:
-                    retrieval_state.request_steps = list(request_steps_ref)
-                return result
+        retrieval_mode = _get('retrieval_mode', cfg.retrieval_mode_default) \
+            or cfg.retrieval_mode_default
+        search_scope = _get('search_scope', cfg.search_scope_default) \
+            or cfg.search_scope_default
+        max_sources_level = _get('max_sources', cfg.max_sources_default) \
+            or cfg.max_sources_default
+        max_notes = {"low": 10, "medium": 30, "high": 50}.get(max_sources_level, 30)
 
-            enriched = EnrichedRetrieval(
-                embedding_manager,
-                emit_step=_emit,
-                rag_retrieve_fn=_syncing_rag,
-                state=retrieval_state,
-            )
+        precise_queries = [q for q in (_get('precise_queries', []) or []) if q and q.strip()]
+        broad_queries = [q for q in (_get('broad_queries', []) or []) if q and q.strip()]
 
-            retrieval_result = enriched.retrieve(
-                user_message, routing_result, context, max_notes=max_notes)
+        if not precise_queries and not broad_queries:
+            resolved_intent = _get('resolved_intent', '') or ''
+            if resolved_intent and resolved_intent.strip():
+                precise_queries = [resolved_intent.strip()]
+                logger.debug("RAG pipeline: using resolved_intent as query: %s",
+                             resolved_intent[:80])
+            elif user_message and user_message.strip():
+                precise_queries = [user_message.strip()]
+                logger.debug("RAG pipeline: no queries from router, using user_message")
 
-        except Exception as e:
-            logger.warning("EnrichedRetrieval failed, falling back to HybridRetrieval: %s", e)
-            retrieval_result = None
+        logger.debug("RAG pipeline: mode=%s, scope=%s, max_notes=%s, precise=%d, broad=%d",
+                     retrieval_mode, search_scope, max_notes,
+                     len(precise_queries), len(broad_queries))
 
-        # Fallback to legacy HybridRetrieval
-        if retrieval_result is None:
-            try:
+        if not precise_queries and not broad_queries:
+            return RagResult(rag_context=None, citations={}, cards_found=0)
+
+        if embedding_manager and retrieval_mode in ('semantic', 'both'):
+            if cfg.kg_enrichment:
                 try:
-                    from .retrieval import HybridRetrieval
-                except ImportError:
-                    from retrieval import HybridRetrieval
+                    try:
+                        from .retrieval import EnrichedRetrieval, RetrievalState
+                    except ImportError:
+                        from retrieval import EnrichedRetrieval, RetrievalState
 
-                retrieval_state = RetrievalState()
+                    retrieval_state = RetrievalState()
+                    if request_steps_ref is not None:
+                        retrieval_state.request_steps = list(request_steps_ref)
 
-                hybrid = HybridRetrieval(
-                    embedding_manager, emit_step=_emit,
-                    rag_retrieve_fn=rag_retrieve_fn, state=retrieval_state,
+                    _inner_fn = rag_retrieve_fn
+
+                    def _syncing_rag(**kwargs):
+                        result = _inner_fn(**kwargs)
+                        if request_steps_ref is not None:
+                            retrieval_state.request_steps = list(request_steps_ref)
+                        return result
+
+                    enriched = EnrichedRetrieval(
+                        embedding_manager,
+                        emit_step=_emit,
+                        rag_retrieve_fn=_syncing_rag,
+                        state=retrieval_state,
+                    )
+
+                    retrieval_result = enriched.retrieve(
+                        user_message, routing_result, context, max_notes=max_notes)
+
+                except Exception as e:
+                    logger.warning("EnrichedRetrieval failed, falling back to HybridRetrieval: %s", e)
+                    retrieval_result = None
+
+            if retrieval_result is None:
+                try:
+                    try:
+                        from .retrieval import HybridRetrieval, RetrievalState
+                    except ImportError:
+                        from retrieval import HybridRetrieval, RetrievalState
+
+                    retrieval_state = RetrievalState()
+
+                    hybrid = HybridRetrieval(
+                        embedding_manager, emit_step=_emit,
+                        rag_retrieve_fn=rag_retrieve_fn, state=retrieval_state,
+                    )
+                    router_dict = {
+                        'search_needed': True, 'retrieval_mode': retrieval_mode,
+                        'search_scope': 'collection',
+                        'precise_queries': precise_queries,
+                        'broad_queries': broad_queries,
+                        'embedding_queries': _get('embedding_queries', []) or [],
+                    }
+                    retrieval_result = hybrid.retrieve(
+                        user_message, router_dict, context, max_notes=max_notes)
+                except Exception as e2:
+                    logger.warning("HybridRetrieval also failed: %s", e2)
+                    retrieval_result = None
+
+        if retrieval_result is None and rag_retrieve_fn:
+            try:
+                retrieval_result = rag_retrieve_fn(
+                    precise_queries=precise_queries,
+                    broad_queries=broad_queries,
+                    search_scope=search_scope,
+                    context=context,
+                    max_notes=max_notes,
                 )
-                router_dict = {
-                    'search_needed': True, 'retrieval_mode': retrieval_mode,
-                    'search_scope': 'collection',
-                    'precise_queries': precise_queries,
-                    'broad_queries': broad_queries,
-                    'embedding_queries': _get('embedding_queries', []) or [],
-                }
-                retrieval_result = hybrid.retrieve(
-                    user_message, router_dict, context, max_notes=max_notes)
-            except Exception as e2:
-                logger.warning("HybridRetrieval also failed: %s", e2)
-                retrieval_result = None
+            except Exception as e:
+                logger.warning("SQL retrieval failed: %s", e)
+                return RagResult(rag_context=None, citations={}, cards_found=0,
+                                 retrieval_state=retrieval_state)
 
-    # SQL-only fallback (or if hybrid wasn't attempted)
-    if retrieval_result is None and rag_retrieve_fn:
-        try:
-            retrieval_result = rag_retrieve_fn(
-                precise_queries=precise_queries,
-                broad_queries=broad_queries,
-                search_scope=search_scope,
-                context=context,
-                max_notes=max_notes,
-            )
-        except Exception as e:
-            logger.warning("SQL retrieval failed: %s", e)
+        if not retrieval_result or not retrieval_result.get("context_string"):
             return RagResult(rag_context=None, citations={}, cards_found=0,
                              retrieval_state=retrieval_state)
 
-    # Process retrieval results
-    if not retrieval_result or not retrieval_result.get("context_string"):
-        return RagResult(rag_context=None, citations={}, cards_found=0,
-                         retrieval_state=retrieval_state)
+        context_string = retrieval_result["context_string"]
+        citations = retrieval_result.get("citations", {})
+        confidence = retrieval_result.get("confidence", "medium")
 
-    context_string = retrieval_result["context_string"]
-    citations = retrieval_result.get("citations", {})
+    # ── Phase 2: LLM Reranker — filter irrelevant sources ─────────────────
+    if cfg.reranker_enabled:
+        try:
+            try:
+                from .reranker import rerank_sources
+            except ImportError:
+                from reranker import rerank_sources
 
-    # Auto web search: if confidence is low, augment with Perplexity results
+            _prelim_lines = context_string.split('\n') if context_string else []
+            _numbered = [l for l in _prelim_lines if l.strip().startswith('[')]
+
+            if _numbered and confidence != "low":
+                _emit("reranker", "running", {"sources": len(_numbered)})
+                _rerank_question = user_message
+                if cfg.use_resolved_intent_for_reranker:
+                    _resolved = _get('resolved_intent', '') or ''
+                    if _resolved.strip():
+                        _rerank_question = _resolved.strip()
+
+                rerank_result = rerank_sources(
+                    question=_rerank_question,
+                    context_lines=_numbered,
+                    min_confidence=confidence,
+                    emit_step=_emit,
+                )
+
+                if rerank_result.get("reranked"):
+                    relevant_indices = set(rerank_result.get("relevant_indices", []))
+                    for note_id, cdata in list(citations.items()):
+                        idx = cdata.get('index')
+                        if idx and idx not in relevant_indices:
+                            cdata.pop('index', None)
+                    relevant_lines = [l for l in _numbered
+                                      if any(l.startswith(f'[{i}]') for i in relevant_indices)]
+                    _renumbered = []
+                    _new_idx = 1
+                    _old_to_new = {}
+                    for line in relevant_lines:
+                        _renumbered.append(re.sub(r'^\[\d+\]', f'[{_new_idx}]', line))
+                        _m = re.match(r'^\[(\d+)\]', line)
+                        if _m:
+                            _old_to_new[int(_m.group(1))] = _new_idx
+                        _new_idx += 1
+                    context_string = '\n'.join(_renumbered)
+                    for note_id, cdata in citations.items():
+                        old_idx = cdata.get('index')
+                        if old_idx and old_idx in _old_to_new:
+                            cdata['index'] = _old_to_new[old_idx]
+                    logger.info("Reranker: kept %d/%d sources (renumbered)",
+                                len(relevant_lines), len(_numbered))
+
+                    if rerank_result.get("web_search"):
+                        confidence = "low"
+                        logger.info("Reranker recommends web search")
+                    elif not relevant_indices:
+                        confidence = "low"
+                        logger.info("Reranker: 0 relevant sources, forcing web search")
+        except Exception as e:
+            logger.warning("Reranker failed, continuing without: %s", e)
+
+    # ── Phase 3: Web fallback (Perplexity) ────────────────────────────────
     web_context = None
-    confidence = retrieval_result.get("confidence", "medium")
-    if confidence == "low":
-        logger.info("RAG confidence is low, calling Perplexity for query: %s", user_message[:80])
-        _emit("web_search", "running", {"query": user_message[:200]})
-        web_context = _call_perplexity(user_message)
-        if web_context and web_context.get("text"):
-            sources = web_context.get("sources", [])
-            source_lines = "\n".join(
-                f"[[WEB:{i + 1}]] {s.get('title', 'Quelle')} ({s.get('url', '')})"
-                for i, s in enumerate(sources)
-            )
-            context_string = (
-                context_string
-                + f"\n\n--- WEB-RECHERCHE (Perplexity) ---\n{web_context['text']}"
-                + (f"\n\nWeb-Quellen:\n{source_lines}" if source_lines else "")
-            )
-            _emit("web_search", "done", {"sources_count": len(sources)})
-            logger.info("Perplexity returned %d web sources", len(sources))
-        else:
-            _emit("web_search", "error", {"reason": "no results"})
-            logger.warning("Perplexity returned no usable web context")
+    if cfg.web_fallback_enabled:
+        indexed_count = sum(1 for c in citations.values() if c.get('index'))
+        if indexed_count < cfg.web_fallback_min_sources and confidence != "low":
+            confidence = "low"
+            logger.info("RAG: only %d indexed sources (<%d), forcing web search",
+                        indexed_count, cfg.web_fallback_min_sources)
 
-    # Inject current card if not already in results
-    if context and context.get('cardId'):
+        if confidence == "low":
+            _web_query = user_message
+            if cfg.use_resolved_intent_for_web:
+                _resolved = (_get('resolved_intent', '') or '').strip()
+                if _resolved:
+                    _web_query = _resolved
+            logger.info("RAG confidence is low, calling Perplexity for query: %s",
+                        _web_query[:80])
+            _emit("web_search", "running", {"query": _web_query[:200]})
+            web_context = _call_perplexity(_web_query)
+            if web_context and web_context.get("text"):
+                sources = web_context.get("sources", [])
+                _max_idx = max((c.get('index', 0) for c in citations.values()), default=0)
+                web_source_lines = []
+                for i, s in enumerate(sources):
+                    _web_idx = _max_idx + i + 1
+                    _title = s.get('title', 'Quelle')
+                    _url = s.get('url', '')
+                    web_source_lines.append(f"[{_web_idx}] (Web) {_title}")
+                    _web_key = f"web_{i}"
+                    citations[_web_key] = {
+                        'type': 'web',
+                        'index': _web_idx,
+                        'url': _url,
+                        'title': _title,
+                        'domain': _url.split('/')[2] if _url.count('/') >= 2 else '',
+                    }
+                context_string = (
+                    context_string
+                    + f"\n\n--- WEB-RECHERCHE ---\n{web_context['text']}"
+                    + ("\n\nWeb-Quellen:\n" + "\n".join(web_source_lines)
+                       if web_source_lines else "")
+                )
+                _emit("web_search", "done", {"sources_count": len(sources)})
+                logger.info("Perplexity returned %d web sources", len(sources))
+            else:
+                _emit("web_search", "error", {"reason": "no results"})
+                logger.warning("Perplexity returned no usable web context")
+
+    # ── Phase 4: Inject current card if not already in results ────────────
+    if cfg.inject_current_card and context and context.get('cardId'):
         current_note_id = str(context.get('noteId', context['cardId']))
         if current_note_id not in citations:
             _q = context.get('question') or context.get('frontField') or ''
             _a = context.get('answer') or ''
             _q_clean = re.sub(r'<[^>]+>', ' ', _q).strip()[:200]
             _a_clean = re.sub(r'<[^>]+>', ' ', _a).strip()[:200]
-            # Index: use next position after all retrieved cards
+            _max_idx = max((c.get('index', 0) for c in citations.values()), default=0)
+            _current_idx = _max_idx + 1
             citations[current_note_id] = {
                 'noteId': context.get('noteId', context['cardId']),
                 'cardId': context['cardId'],
@@ -284,19 +452,19 @@ def retrieve_rag_context(
                 'deckName': context.get('deckName', ''),
                 'isCurrentCard': True,
                 'sources': ['current'],
-                'index': len(citations) + 1,  # Stable index for [N] inline references
+                'index': _current_idx,
             }
             context_string = (
-                f"Note {current_note_id} (aktuelle Karte):\n"
-                f"  Frage: {_q_clean}\n  Antwort: {_a_clean}\n"
+                f"[{_current_idx}] (aktuelle Karte):\n"
+                f"  Frage: {_q_clean}\n  Antwort: {_a_clean}\n\n"
                 f"{context_string}"
             )
 
-    # Build rag_context dict
+    # ── Phase 5: Build result ─────────────────────────────────────────────
     formatted_cards = [line for line in context_string.split("\n") if line.strip()]
     rag_context = {
         "cards": formatted_cards,
-        "reasoning": _get('reasoning', '') if hasattr(routing_result, 'reasoning') or isinstance(routing_result, dict) else '',
+        "reasoning": _get('reasoning', ''),
         "citations": citations,
     }
 
@@ -308,13 +476,6 @@ def retrieve_rag_context(
         citations=citations,
         cards_found=len(citations),
         retrieval_state=retrieval_state,
-        keyword_hits=retrieval_result.get("keyword_count", 0),
+        keyword_hits=(retrieval_result or {}).get("keyword_count", 0),
         web_sources=web_context.get("sources", []) if web_context else [],
     )
-
-
-def _attr_or_key(obj):
-    """Return a getter that works on both objects with attributes and dicts."""
-    if isinstance(obj, dict):
-        return lambda key, default=None: obj.get(key, default)
-    return lambda key, default=None: getattr(obj, key, default)

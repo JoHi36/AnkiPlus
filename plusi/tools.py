@@ -253,7 +253,11 @@ def _lernstatistik() -> dict:
 # ---------------------------------------------------------------------------
 
 def _suche_karten(query: str, top_k: int = 10) -> dict:
-    """Semantic card search using the embedding manager.
+    """Semantic card search — composed from pipeline blocks.
+
+    Plusi's lightweight search tool: embed the query, run cosine top-k,
+    fetch and clean the results. No reranker, no web fallback, no KG —
+    Plusi's LLM expects results within a single tool-call latency budget.
 
     Parameters
     ----------
@@ -264,55 +268,28 @@ def _suche_karten(query: str, top_k: int = 10) -> dict:
     -------
     {"cards": [{"card_id": int, "text": str, "deck": str, "score": float}, ...]}
     """
-    _check_embed()
     try:
-        from aqt import mw  # type: ignore
-        if mw is None or mw.col is None:
-            return {"cards": [], "error": "Anki collection not available"}
-
-        floats = _embed_fn(query)
-        if floats is None:
-            return {"cards": [], "error": "Embedding failed"}
-
-        # Resolve the embedding manager
         try:
-            try:
-                from ..ai.handler import _embedding_manager  # type: ignore
-            except ImportError:
-                from ai.handler import _embedding_manager  # type: ignore
-            em = _embedding_manager
-        except (ImportError, AttributeError):
-            em = None
+            from ..ai.pipeline_blocks import embed_search, fetch_card_snippets
+        except ImportError:
+            from ai.pipeline_blocks import embed_search, fetch_card_snippets
 
-        if em is None:
-            return {"cards": [], "error": "Embedding manager not available"}
-
-        hits = em.search(floats, top_k=int(top_k))
+        hits = embed_search(query, top_k=int(top_k))
         if not hits:
             return {"cards": []}
 
-        results = []
-        for card_id, score in hits:
-            try:
-                card = mw.col.get_card(card_id)
-                note = card.note()
-                fields = note.fields
-                try:
-                    from ..utils.anki import strip_html_and_cloze  # type: ignore
-                except ImportError:
-                    from utils.anki import strip_html_and_cloze  # type: ignore
-                text = strip_html_and_cloze(fields[0]) if fields else ""
-                deck = mw.col.decks.name(card.did)
-                results.append({
-                    "card_id": card_id,
-                    "text": text[:300],
-                    "deck": deck,
-                    "score": round(score, 4),
-                })
-            except Exception as card_exc:
-                logger.debug("plusi/tools: _suche_karten card %s error: %s", card_id, card_exc)
-                continue
+        score_by_id = {cid: score for cid, score in hits}
+        snippets = fetch_card_snippets([cid for cid, _ in hits], max_field_len=300)
 
+        results = [
+            {
+                "card_id": s["cardId"],
+                "text": s["question"],
+                "deck": s["deckName"],
+                "score": round(score_by_id.get(s["cardId"], 0.0), 4),
+            }
+            for s in snippets
+        ]
         logger.debug("plusi/tools: _suche_karten returned %d results", len(results))
         return {"cards": results}
     except Exception as exc:
