@@ -74,11 +74,34 @@ def analyze_query(user_message, card_context=None, chat_history=None,
     if not backend_url or not _token:
         return _default
 
+    # ── [CARD-FLOW 4/5] rag_analyzer received card_context ─────────────────
+    # What analyze_query got from handler.get_response_with_rag. Gap between
+    # CARD-FLOW 3 and 4 means handler.py did something to the context between
+    # the handler log and the analyze_query call (unlikely — they are one
+    # statement apart — but logged for completeness).
+    if card_context:
+        logger.info(
+            "[CARD-FLOW 4/5] analyze_query received: cardId=%s noteId=%s deckName=%r keys=%s",
+            card_context.get('cardId') if isinstance(card_context, dict) else None,
+            card_context.get('noteId') if isinstance(card_context, dict) else None,
+            (card_context.get('deckName') if isinstance(card_context, dict) else '') or '',
+            sorted(card_context.keys()) if isinstance(card_context, dict) else type(card_context).__name__,
+        )
+    else:
+        logger.warning("[CARD-FLOW 4/5] analyze_query received: card_context=None")
+
     compact_card = {}
     if card_context and card_context.get('cardId'):
         q = card_context.get('frontField') or card_context.get('question') or ''
         q_clean = re.sub(r'<[^>]+>', ' ', q).strip()[:500]
         compact_card = {
+            # cardId + noteId MUST be forwarded to the backend. The /router
+            # handler in functions/src/handlers/router.ts gates its cardHint
+            # assembly on `cardContext.cardId` — without it, the LLM prompt
+            # contains no card content and the router returns a junk
+            # "Erklärung des Inhalts der aktuellen Lernkarte" paraphrase.
+            'cardId': card_context.get('cardId'),
+            'noteId': card_context.get('noteId'),
             'question': q_clean,
             'deckName': card_context.get('deckName', ''),
         }
@@ -90,6 +113,15 @@ def analyze_query(user_message, card_context=None, chat_history=None,
                 last_assistant = (msg.get('content') or msg.get('text') or '')[:300]
                 break
 
+    # ═══════════════════════════════════════════════════════════════════════
+    # [RAG-STATE 1/7] ROUTER — request
+    # ═══════════════════════════════════════════════════════════════════════
+    logger.info("═════════ [RAG-STATE 1/7] ROUTER CALL ═════════")
+    logger.info("[RAG-STATE 1/7] user_message    : %r", (user_message or '')[:200])
+    logger.info("[RAG-STATE 1/7] card.question   : %r", compact_card.get('question', '')[:200])
+    logger.info("[RAG-STATE 1/7] card.deckName   : %r", compact_card.get('deckName', ''))
+    logger.info("[RAG-STATE 1/7] lastAssistant   : %r", last_assistant[:120])
+
     try:
         url = '%s/router' % backend_url.rstrip('/')
         payload = {
@@ -97,6 +129,24 @@ def analyze_query(user_message, card_context=None, chat_history=None,
             'cardContext': compact_card,
             'lastAssistantMessage': last_assistant,
         }
+
+        # ── [CARD-FLOW 5/5] HTTP payload leaving for /router ───────────────
+        # LAST checkpoint before the wire. Compare to CARD-FLOW 4:
+        # - if cardId was present in CARD-FLOW 4 but compact_card.keys()
+        #   does NOT include cardId here → the transformation dropped it.
+        #   That transformation is the compact_card = {...} block right above.
+        # - Compare this log to the backend [ROUTER 1/5] entry: the keys
+        #   in payload['cardContext'] here MUST match what router.ts sees.
+        logger.info(
+            "[CARD-FLOW 5/5] → POST %s  cardContext.keys=%s cardContext.cardId=%s "
+            "message_preview=%r lastAssistant_len=%d",
+            url,
+            sorted(compact_card.keys()) if compact_card else [],
+            compact_card.get('cardId') if isinstance(compact_card, dict) else None,
+            (user_message or '')[:120],
+            len(last_assistant),
+        )
+
         response = _requests.post(
             url,
             json=payload,
@@ -108,6 +158,30 @@ def analyze_query(user_message, card_context=None, chat_history=None,
         )
         response.raise_for_status()
         parsed = response.json()
+
+        # ═══════════════════════════════════════════════════════════════════
+        # [RAG-STATE 1/7] ROUTER — response
+        # ═══════════════════════════════════════════════════════════════════
+        logger.info("[RAG-STATE 1/7] ← response keys    : %s", sorted(parsed.keys()))
+        logger.info("[RAG-STATE 1/7] ← search_needed    : %s", parsed.get('search_needed'))
+        logger.info("[RAG-STATE 1/7] ← resolved_intent  : %r", (parsed.get('resolved_intent') or '')[:200])
+        logger.info("[RAG-STATE 1/7] ← retrieval_mode   : %s", parsed.get('retrieval_mode'))
+        logger.info("[RAG-STATE 1/7] ← search_scope     : %s", parsed.get('search_scope'))
+        logger.info("[RAG-STATE 1/7] ← precise_queries  : %s", parsed.get('precise_queries'))
+        logger.info("[RAG-STATE 1/7] ← broad_queries    : %s", parsed.get('broad_queries'))
+        logger.info("[RAG-STATE 1/7] ← embedding_queries: %s", parsed.get('embedding_queries'))
+        logger.info("[RAG-STATE 1/7] ← associated_terms : %s", parsed.get('associated_terms'))
+        logger.info("[RAG-STATE 1/7] ← reasoning        : %r", (parsed.get('reasoning') or '')[:200])
+        # Diagnostic: does the router treat 'die Karte' / pronouns as literal strings?
+        _precise = parsed.get('precise_queries') or []
+        _fillers = {'komm', 'man', 'mir', 'die', 'das', 'der', 'ein', 'eine', 'karte', 'erklär', 'erkläre'}
+        _filler_hits = [q for q in _precise if isinstance(q, str) and q.strip().lower() in _fillers]
+        if _filler_hits:
+            logger.warning(
+                "[RAG-STATE 1/7] ⚠️  ROUTER RETURNED FILLER-WORD QUERIES: %s — "
+                "router failed to resolve meta-reference to current card",
+                _filler_hits,
+            )
 
         return RagAnalysis(
             search_needed=parsed.get('search_needed', True),
@@ -122,5 +196,5 @@ def analyze_query(user_message, card_context=None, chat_history=None,
         )
 
     except Exception as e:
-        logger.warning("RAG analyze_query failed: %s", e)
+        logger.warning("[RAG-STATE 1/7] ⚠️  Router call failed: %s → using default RagAnalysis", e)
         return _default

@@ -113,10 +113,20 @@ class AIRequestThread(QThread):
             return
         try:
             context = widget.current_card_context if widget is not None else None
+            # ── [CARD-FLOW 2/5] widget → AI thread read ─────────────────────
+            # What AIRequestThread sees when it reads widget.current_card_context.
+            # Gap between CARD-FLOW 1 and 2 means card_tracker never wrote it,
+            # or the widget instance differs from the one card_tracker knows.
             if context:
-                logger.debug("🔍 AIRequestThread.run: context=has cardId=%s, question='%s'", context.get('cardId'), (context.get('frontField') or context.get('question') or '')[:60])
+                logger.info(
+                    "[CARD-FLOW 2/5] thread read cardId=%s noteId=%s deckName=%r keys=%s",
+                    context.get('cardId'),
+                    context.get('noteId'),
+                    (context.get('deckName') or '')[:60],
+                    sorted(context.keys()),
+                )
             else:
-                logger.debug("🔍 AIRequestThread.run: context=None")
+                logger.warning("[CARD-FLOW 2/5] thread read context=None — widget has no current_card_context")
 
             # Load card-specific history from SQLite (moved here from main thread)
             card_history = self.history

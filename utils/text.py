@@ -11,6 +11,15 @@ def clean_html(text, max_len=1500):
     if not text:
         return ""
     clean = text
+    # Strip <style>...</style> and <script>...</script> blocks *entirely*
+    # (including the content between tags) BEFORE stripping remaining tags.
+    # Otherwise the naive tag strip below only removes the <style> open/close
+    # markers and leaves the CSS body as plain text — which is exactly how
+    # the AMBOSS note type's "/* © 2024 AMBOSS feat. Ankiphil */" comment
+    # header ended up in the "card question" seen by the LLM and citation
+    # validator. `re.DOTALL` is required because card HTML is multi-line.
+    clean = re.sub(r'<style\b[^>]*>.*?</style>', ' ', clean, flags=re.IGNORECASE | re.DOTALL)
+    clean = re.sub(r'<script\b[^>]*>.*?</script>', ' ', clean, flags=re.IGNORECASE | re.DOTALL)
     # Sound and image references
     clean = re.sub(r'\[sound:[^\]]+\]', '', clean)
     clean = re.sub(r'\[image:[^\]]+\]', '', clean)

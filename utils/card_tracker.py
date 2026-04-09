@@ -78,11 +78,24 @@ class CardTracker:
             from aqt import mw
             if not card or not self.widget.web_view:
                 return
-            
-            # Hole Karten-Informationen
+
+            try:
+                from .text import clean_html
+            except ImportError:
+                from utils.text import clean_html
+
+            # Hole Karten-Informationen.
+            # `card.question()` / `card.answer()` return the FULLY RENDERED
+            # card HTML — which includes the card template's <style> block.
+            # For AMBOSS note types that <style> block begins with a CSS
+            # comment header ("/* © 2024 AMBOSS feat. Ankiphil */"), and a
+            # naive tag-strip downstream preserves that comment as plain
+            # text. Strip style/script + other HTML here at the source so
+            # every consumer (LLM context, citation validator, frontend
+            # fallback) sees clean field content instead of template CSS.
             note = card.note()
-            question = card.question()
-            answer = card.answer()
+            question = clean_html(card.question(), max_len=5000)
+            answer = clean_html(card.answer(), max_len=5000)
             
             # Extrahiere relevante Felder
             fields = {}
@@ -173,6 +186,18 @@ class CardTracker:
             
             # Speichere Kontext für AI-Anfragen (im Widget)
             self.widget.current_card_context = context
+
+            # ── [CARD-FLOW 1/5] origin — context built in card_tracker ──────
+            # Source of truth: what card_tracker hands to the widget.
+            # If cardId is missing HERE, the Anki card object itself is broken.
+            logger.info(
+                "[CARD-FLOW 1/5] origin cardId=%s noteId=%s deckId=%s keys=%s question_preview=%r",
+                context.get('cardId'),
+                context.get('noteId'),
+                context.get('deckId'),
+                sorted(context.keys()),
+                (context.get('frontField') or context.get('question') or '')[:80],
+            )
             
             payload = {
                 "type": "cardContext",

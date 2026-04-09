@@ -73,6 +73,8 @@ def _call_perplexity(query: str, auth_token: Optional[str] = None, backend_url: 
         if token:
             headers["Authorization"] = f"Bearer {token}"
 
+        logger.info("[RAG-STATE 5/7] → POST %s/research  query=%r",
+                    url.rstrip('/'), query[:PERPLEXITY_QUERY_MAX_LEN][:200])
         response = requests.post(
             f"{url}/research",
             json={"query": query[:PERPLEXITY_QUERY_MAX_LEN]},
@@ -81,6 +83,8 @@ def _call_perplexity(query: str, auth_token: Optional[str] = None, backend_url: 
         )
         response.raise_for_status()
         data = response.json()
+        logger.info("[RAG-STATE 5/7] ← /research status=%s answer_len=%d citations=%d",
+                    response.status_code, len(data.get("answer", "")), len(data.get("citations", [])))
         # Backend returns 'answer' + 'citations', map to our format
         sources = []
         for cit in data.get("citations", []):
@@ -132,11 +136,22 @@ def retrieve_rag_context(
     """
     _emit = emit_step or (lambda step, status, data=None: None)
 
+    # ═══════════════════════════════════════════════════════════════════════
+    # [RAG-STATE 2/7] QUERY SELECTION
+    # ═══════════════════════════════════════════════════════════════════════
+    logger.info("═════════ [RAG-STATE 2/7] QUERY SELECTION ═════════")
+    logger.info("[RAG-STATE 2/7] user_message    : %r", (user_message or '')[:200])
+    _ctx_card_id = (context or {}).get('cardId') if context else None
+    _ctx_q = (context or {}).get('question') or (context or {}).get('frontField') or ''
+    logger.info("[RAG-STATE 2/7] context.cardId  : %s", _ctx_card_id)
+    logger.info("[RAG-STATE 2/7] context.question: %r", re.sub(r'<[^>]+>', ' ', _ctx_q).strip()[:200])
+
     # Check if search is needed
     search_needed = getattr(routing_result, 'search_needed', None)
     if search_needed is None:
         search_needed = routing_result.get('search_needed', False) if isinstance(routing_result, dict) else False
     if not search_needed:
+        logger.info("[RAG-STATE 2/7] → search_needed=False, skipping retrieval")
         return RagResult(rag_context=None, citations={}, cards_found=0)
 
     # Parse search parameters from routing_result
@@ -146,23 +161,39 @@ def retrieve_rag_context(
     max_sources_level = _get('max_sources', 'medium')
     max_notes = {"low": 10, "medium": 30, "high": 50}.get(max_sources_level, 30)
 
-    precise_queries = [q for q in (_get('precise_queries', []) or []) if q and q.strip()]
-    broad_queries = [q for q in (_get('broad_queries', []) or []) if q and q.strip()]
+    _raw_precise = _get('precise_queries', []) or []
+    _raw_broad = _get('broad_queries', []) or []
+    _raw_resolved = _get('resolved_intent', '') or ''
+
+    logger.info("[RAG-STATE 2/7] router.precise_queries  : %s", _raw_precise)
+    logger.info("[RAG-STATE 2/7] router.broad_queries    : %s", _raw_broad)
+    logger.info("[RAG-STATE 2/7] router.resolved_intent  : %r", _raw_resolved[:200])
+    logger.info("[RAG-STATE 2/7] router.retrieval_mode   : %s", retrieval_mode)
+    logger.info("[RAG-STATE 2/7] router.search_scope     : %s", search_scope)
+    logger.info("[RAG-STATE 2/7] router.max_notes        : %s", max_notes)
+
+    precise_queries = [q for q in _raw_precise if q and q.strip()]
+    broad_queries = [q for q in _raw_broad if q and q.strip()]
 
     # Build queries from resolved_intent if router didn't provide explicit queries
+    query_source = 'router'
     if not precise_queries and not broad_queries:
-        resolved_intent = _get('resolved_intent', '') or ''
+        resolved_intent = _raw_resolved
         if resolved_intent and resolved_intent.strip():
             precise_queries = [resolved_intent.strip()]
-            logger.debug("RAG pipeline: using resolved_intent as query: %s", resolved_intent[:80])
+            query_source = 'fallback:resolved_intent'
         elif user_message and user_message.strip():
             precise_queries = [user_message.strip()]
-            logger.debug("RAG pipeline: no queries from router, using user_message as fallback query")
+            query_source = 'fallback:user_message'
 
+    logger.info("[RAG-STATE 2/7] → query_source          : %s", query_source)
+    logger.info("[RAG-STATE 2/7] → final precise_queries : %s", precise_queries)
+    logger.info("[RAG-STATE 2/7] → final broad_queries   : %s", broad_queries)
     logger.debug("RAG pipeline: mode=%s, scope=%s, max_notes=%s, precise=%d, broad=%d",
                  retrieval_mode, search_scope, max_notes, len(precise_queries), len(broad_queries))
 
     if not precise_queries and not broad_queries:
+        logger.warning("[RAG-STATE 2/7] ⚠️  No queries available — aborting retrieval")
         return RagResult(rag_context=None, citations={}, cards_found=0)
 
     # Execute retrieval
@@ -244,16 +275,40 @@ def retrieve_rag_context(
             return RagResult(rag_context=None, citations={}, cards_found=0,
                              retrieval_state=retrieval_state)
 
-    # Process retrieval results
-    if not retrieval_result or not retrieval_result.get("context_string"):
+    # ═══════════════════════════════════════════════════════════════════════
+    # [RAG-STATE 3/7] RETRIEVAL RESULT
+    # ═══════════════════════════════════════════════════════════════════════
+    logger.info("═════════ [RAG-STATE 3/7] RETRIEVAL RESULT ═════════")
+    if not retrieval_result:
+        logger.warning("[RAG-STATE 3/7] ⚠️  retrieval_result is None — all retrievers failed")
+        return RagResult(rag_context=None, citations={}, cards_found=0,
+                         retrieval_state=retrieval_state)
+    if not retrieval_result.get("context_string"):
+        logger.warning("[RAG-STATE 3/7] ⚠️  retrieval_result has empty context_string — no cards matched queries")
+        logger.info("[RAG-STATE 3/7] keyword_count=%s confidence=%s",
+                    retrieval_result.get("keyword_count"), retrieval_result.get("confidence"))
         return RagResult(rag_context=None, citations={}, cards_found=0,
                          retrieval_state=retrieval_state)
 
     context_string = retrieval_result["context_string"]
     citations = retrieval_result.get("citations", {})
+    _confidence = retrieval_result.get("confidence", "medium")
+    _kw_count = retrieval_result.get("keyword_count", 0)
+    logger.info("[RAG-STATE 3/7] citations count : %d", len(citations))
+    logger.info("[RAG-STATE 3/7] keyword hits    : %d", _kw_count)
+    logger.info("[RAG-STATE 3/7] confidence      : %s", _confidence)
+    # Log top 5 cards by index so we can see what the retriever picked
+    _by_idx = sorted(
+        [(c.get('index', 999), nid, c) for nid, c in citations.items() if c.get('index')],
+        key=lambda x: x[0],
+    )[:5]
+    for _idx, _nid, _c in _by_idx:
+        _front = (_c.get('question') or _c.get('front') or _c.get('fields', {}).get('Front') or '')[:100]
+        _deck = _c.get('deckName', '')[:60]
+        logger.info("[RAG-STATE 3/7]   top[%d] deck=%r front=%r", _idx, _deck, _front)
 
     # ── LLM Reranker: filter irrelevant sources + decide web search ──
-    confidence = retrieval_result.get("confidence", "medium")
+    confidence = _confidence
     try:
         try:
             from ..reranker import rerank_sources
@@ -264,6 +319,14 @@ def retrieve_rag_context(
         _prelim_lines = context_string.split('\n') if context_string else []
         _numbered = [l for l in _prelim_lines if l.strip().startswith('[')]
 
+        # ═══════════════════════════════════════════════════════════════════
+        # [RAG-STATE 4/7] RERANKER
+        # ═══════════════════════════════════════════════════════════════════
+        logger.info("═════════ [RAG-STATE 4/7] RERANKER ═════════")
+        logger.info("[RAG-STATE 4/7] input sources   : %d numbered lines", len(_numbered))
+        logger.info("[RAG-STATE 4/7] question        : %r", user_message[:200])
+        logger.info("[RAG-STATE 4/7] min_confidence  : %s", confidence)
+
         if _numbered and confidence != "low":
             _emit("reranker", "running", {"sources": len(_numbered)})
             rerank_result = rerank_sources(
@@ -273,13 +336,21 @@ def retrieve_rag_context(
                 emit_step=_emit,
             )
 
+            logger.info("[RAG-STATE 4/7] ← reranked      : %s", rerank_result.get("reranked"))
+            logger.info("[RAG-STATE 4/7] ← relevant_idx  : %s", rerank_result.get("relevant_indices"))
+            logger.info("[RAG-STATE 4/7] ← web_search    : %s", rerank_result.get("web_search"))
+
             if rerank_result.get("reranked"):
                 relevant_indices = set(rerank_result.get("relevant_indices", []))
                 # Filter citations + rebuild context with only relevant sources
+                _rejected_indices = []
                 for note_id, cdata in list(citations.items()):
                     idx = cdata.get('index')
                     if idx and idx not in relevant_indices:
+                        _rejected_indices.append(idx)
                         cdata.pop('index', None)
+                logger.info("[RAG-STATE 4/7] kept %d, rejected %d (rejected idx: %s)",
+                            len(relevant_indices), len(_rejected_indices), sorted(_rejected_indices)[:10])
                 relevant_lines = [l for l in _numbered
                                   if any(l.startswith(f'[{i}]') for i in relevant_indices)]
                 context_string = '\n'.join(relevant_lines)
@@ -287,25 +358,42 @@ def retrieve_rag_context(
 
                 if rerank_result.get("web_search"):
                     confidence = "low"
-                    logger.info("Reranker recommends web search")
+                    logger.info("[RAG-STATE 4/7] → reranker → web_search=True → confidence=low")
                 elif not relevant_indices:
                     confidence = "low"
-                    logger.info("Reranker: 0 relevant sources → forcing web search")
+                    logger.info("[RAG-STATE 4/7] → reranker kept 0 sources → forcing web_search")
+        else:
+            logger.info("[RAG-STATE 4/7] skipped (confidence=%s already low OR no numbered lines)", confidence)
     except Exception as e:
-        logger.warning("Reranker failed, continuing without: %s", e)
+        logger.warning("[RAG-STATE 4/7] ⚠️  Reranker failed, continuing without: %s", e)
 
+    # ═══════════════════════════════════════════════════════════════════════
+    # [RAG-STATE 5/7] WEB SEARCH DECISION
+    # ═══════════════════════════════════════════════════════════════════════
+    logger.info("═════════ [RAG-STATE 5/7] WEB SEARCH DECISION ═════════")
     # Auto web search: trigger if confidence is low OR too few relevant sources
     web_context = None
     indexed_count = sum(1 for c in citations.values() if c.get('index'))
+    logger.info("[RAG-STATE 5/7] indexed card count: %d", indexed_count)
+    logger.info("[RAG-STATE 5/7] confidence        : %s", confidence)
     if indexed_count < 3 and confidence != "low":
         confidence = "low"
-        logger.info("RAG: only %d indexed sources — forcing web search", indexed_count)
+        logger.info("[RAG-STATE 5/7] → only %d indexed sources → forcing web_search", indexed_count)
     if confidence == "low":
-        logger.info("RAG confidence is low, calling Perplexity for query: %s", user_message[:80])
+        logger.info("[RAG-STATE 5/7] → CALLING PERPLEXITY")
+        logger.info("[RAG-STATE 5/7] web query (raw)   : %r", user_message[:200])
+        logger.warning(
+            "[RAG-STATE 5/7] ⚠️  NOTE: web query is the RAW user_message. "
+            "If message contains only filler words ('explain the card'), web search "
+            "will return results for 'card' literally, not the card's topic.",
+        )
         _emit("web_search", "running", {"query": user_message[:200]})
         web_context = _call_perplexity(user_message)
         if web_context and web_context.get("text"):
             sources = web_context.get("sources", [])
+            logger.info("[RAG-STATE 5/7] ← perplexity returned %d sources", len(sources))
+            for _i, _s in enumerate(sources[:5]):
+                logger.info("[RAG-STATE 5/7]   web[%d] %r", _i + 1, (_s.get('title') or '')[:80])
             # Assign [N] indices continuing from card citations (unified format)
             _max_idx = max((c.get('index', 0) for c in citations.values()), default=0)
             web_source_lines = []
@@ -332,8 +420,14 @@ def retrieve_rag_context(
             logger.info("Perplexity returned %d web sources", len(sources))
         else:
             _emit("web_search", "error", {"reason": "no results"})
-            logger.warning("Perplexity returned no usable web context")
+            logger.warning("[RAG-STATE 5/7] ⚠️  Perplexity returned no usable web context")
+    else:
+        logger.info("[RAG-STATE 5/7] skipped (confidence=%s, indexed=%d)", confidence, indexed_count)
 
+    # ═══════════════════════════════════════════════════════════════════════
+    # [RAG-STATE 6/7] CURRENT CARD INJECTION
+    # ═══════════════════════════════════════════════════════════════════════
+    logger.info("═════════ [RAG-STATE 6/7] CURRENT CARD INJECTION ═════════")
     # Inject current card if not already in results
     if context and context.get('cardId'):
         current_note_id = str(context.get('noteId', context['cardId']))
@@ -361,7 +455,16 @@ def retrieve_rag_context(
                 f"  Frage: {_q_clean}\n  Antwort: {_a_clean}\n\n"
                 f"{context_string}"
             )
+            logger.info("[RAG-STATE 6/7] → injected current card at index [%d]", _current_idx)
+            logger.info("[RAG-STATE 6/7]   front: %r", _q_clean[:120])
+        else:
+            logger.info("[RAG-STATE 6/7] current card already in citations (noteId=%s)", current_note_id)
+    else:
+        logger.info("[RAG-STATE 6/7] no card context — skipping injection")
 
+    # ═══════════════════════════════════════════════════════════════════════
+    # [RAG-STATE 7/7] FINAL CONTEXT TO LLM
+    # ═══════════════════════════════════════════════════════════════════════
     # Build rag_context dict
     formatted_cards = [line for line in context_string.split("\n") if line.strip()]
     rag_context = {
@@ -370,6 +473,18 @@ def retrieve_rag_context(
         "citations": citations,
     }
 
+    logger.info("═════════ [RAG-STATE 7/7] FINAL CONTEXT ═════════")
+    _card_cites = sum(1 for c in citations.values() if c.get('type') != 'web')
+    _web_cites = sum(1 for c in citations.values() if c.get('type') == 'web')
+    _current_marked = sum(1 for c in citations.values() if c.get('isCurrentCard'))
+    logger.info("[RAG-STATE 7/7] formatted lines : %d", len(formatted_cards))
+    logger.info("[RAG-STATE 7/7] total citations : %d (card=%d, web=%d, current_card=%d)",
+                len(citations), _card_cites, _web_cites, _current_marked)
+    # Dump the first ~12 context lines so we can see exactly what the LLM gets
+    for _i, _line in enumerate(formatted_cards[:12]):
+        logger.info("[RAG-STATE 7/7]   ctx[%02d] %s", _i, _line[:160])
+    if len(formatted_cards) > 12:
+        logger.info("[RAG-STATE 7/7]   … (+%d more lines)", len(formatted_cards) - 12)
     logger.debug("RAG pipeline: %d cards, %d citations",
                  len(formatted_cards), len(citations))
 
