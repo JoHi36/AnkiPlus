@@ -2,9 +2,8 @@
 
 Formalizes the KGDefinitionThread (ui/widget.py:750-874) as a registered agent.
 Uses CitationBuilder for card references and caches results in KG store.
+Retrieval is composed from ai/pipeline_blocks.py — no inline embedding/lookup.
 """
-
-import threading
 
 try:
     from ..utils.logging import get_logger
@@ -51,13 +50,11 @@ def run_definition(situation, emit_step=None, memory=None,
                 get_definition, get_term_card_ids,
                 save_definition, get_connected_terms,
             )
-            from .. import get_embedding_manager
         except ImportError:
             from storage.kg_store import (
                 get_definition, get_term_card_ids,
                 save_definition, get_connected_terms,
             )
-            from __init__ import get_embedding_manager
 
         # ── 1. Cache check ──────────────────────────────────────────────────
         cached = get_definition(term)
@@ -85,34 +82,32 @@ def run_definition(situation, emit_step=None, memory=None,
                 'generatedBy': cached.get('generatedBy', 'cache'),
             }
 
-        # ── 2. Embedding search ─────────────────────────────────────────────
-        emb_mgr = get_embedding_manager()
-        if emb_mgr is None:
-            return {
-                'text': '',
-                'citations': [],
-                'error': 'Embedding-Manager nicht verfuegbar',
-                'connectedTerms': [],
-                'sourceCount': 0,
-            }
+        # ── 2. Embedding search via shared pipeline block ───────────────────
+        try:
+            from .pipeline_blocks import embed_search, fetch_card_snippets
+        except ImportError:
+            from ai.pipeline_blocks import embed_search, fetch_card_snippets
 
         if emit_step:
             emit_step({'id': 'semantic_search', 'label': 'Semantische Suche', 'status': 'running'})
 
-        query = 'Was ist %s? Definition' % term
-        query_emb = emb_mgr.embed_texts([query])
-        if not query_emb:
+        # Constrain search to cards that mention this term (KG-derived).
+        card_ids_set = set(get_term_card_ids(term))
+        if not card_ids_set:
+            connected = get_connected_terms(term)
             return {
                 'text': '',
                 'citations': [],
-                'error': 'Embedding fehlgeschlagen',
-                'connectedTerms': [],
+                'error': 'Keine Karten zu diesem Begriff',
+                'connectedTerms': connected,
                 'sourceCount': 0,
             }
 
-        card_ids_set = set(get_term_card_ids(term))
-        all_results = emb_mgr.search(query_emb[0], top_k=50)
-        top_cards = [(cid, score) for cid, score in all_results if cid in card_ids_set][:8]
+        top_cards = embed_search(
+            query='Was ist %s? Definition' % term,
+            top_k=8,
+            card_id_filter=card_ids_set,
+        )
 
         if len(top_cards) < 2:
             connected = get_connected_terms(term)
@@ -124,34 +119,9 @@ def run_definition(situation, emit_step=None, memory=None,
                 'sourceCount': 0,
             }
 
-        # ── 3. Fetch card texts on main thread ──────────────────────────────
-        try:
-            from ..utils.anki import run_on_main_thread
-        except ImportError:
-            from utils.anki import run_on_main_thread
-
-        card_texts = []
-        event = threading.Event()
-
-        def _fetch_texts():
-            try:
-                from aqt import mw
-                for cid, _ in top_cards:
-                    try:
-                        card = mw.col.get_card(cid)
-                        note = card.note()
-                        fields = note.fields
-                        card_texts.append({
-                            'question': fields[0] if fields else '',
-                            'answer': fields[1] if len(fields) > 1 else '',
-                        })
-                    except Exception:
-                        pass
-            finally:
-                event.set()
-
-        run_on_main_thread(_fetch_texts)
-        event.wait(timeout=10)
+        # ── 3. Fetch card texts via shared block ────────────────────────────
+        snippets = fetch_card_snippets([cid for cid, _ in top_cards], max_field_len=2000)
+        card_texts = [{'question': s['question'], 'answer': s['answer']} for s in snippets]
 
         # ── 4. Generate definition via Gemini ───────────────────────────────
         if emit_step:
