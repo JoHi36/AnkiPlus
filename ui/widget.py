@@ -3057,6 +3057,7 @@ class ChatbotWidget(QWidget):
 
             total_cards = 0
             try:
+                from aqt import mw
                 if mw and mw.col and mw.col.db:
                     total_cards = mw.col.db.scalar("SELECT COUNT() FROM cards") or 0
             except Exception as e:

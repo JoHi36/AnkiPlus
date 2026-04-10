@@ -45,12 +45,44 @@ def _resolve_embedding_manager():
     Single source of truth for finding the embedding manager. Replaces
     multiple inconsistent lookups across plusi/tools.py, ai/definition.py,
     ai/handler.py, etc.
+
+    KNOWN BUG — fallback path is broken in QThread context.
+    ─────────────────────────────────────────────────────────
+    `from .. import get_embedding_manager` works on the main thread but
+    fails inside an _AgentDispatchThread / QThread with a cryptic
+    "No module named 'theme'" error from the import machinery (the
+    relative-import resolution can't reach AnkiPlus_main from a
+    background thread context cleanly). The `from __init__ import ...`
+    second clause is also broken — `__init__` is not a top-level module
+    name, only the package init file. So when the relative import fails
+    on the first line, the second line raises ModuleNotFoundError too,
+    and the outer except returns None.
+
+    The CORRECT pattern is the one ai/handler.py:488 uses for the same
+    lookup — read sys.modules directly, no import statement needed:
+
+        import sys
+        init_mod = sys.modules.get('AnkiPlus_main') or sys.modules.get('__init__')
+        if init_mod and hasattr(init_mod, 'get_embedding_manager'):
+            return init_mod.get_embedding_manager()
+        return None
+
+    This is not yet ported here because every current caller of
+    embed_search() that runs from a background thread (Definition,
+    Tutor) gets `embedding_manager` injected as a kwarg by
+    AIHandler._dispatch_agent and never reaches this fallback. New
+    callers that hit this path on a worker thread will silently get
+    no semantic search. If you add such a caller, port the sys.modules
+    pattern above before relying on this resolver.
+
+    Tracking: see git commit ff02338 ("fix(definition): unblock KG term
+    definitions") for the diagnostic trail that uncovered this.
     """
     try:
         try:
             from .. import get_embedding_manager
         except ImportError:
-            from __init__ import get_embedding_manager
+            from __init__ import get_embedding_manager  # noqa: F401  (broken fallback, see docstring)
         return get_embedding_manager()
     except Exception as e:
         logger.debug("pipeline_blocks: embedding manager lookup failed: %s", e)
