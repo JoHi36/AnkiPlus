@@ -3831,14 +3831,19 @@ class ChatbotWidget(QWidget):
 
     def _start_kg_definition(self, term, search_query=None):
         """Launch definition agent via standard dispatch."""
-        if not self._handler:
+        try:
+            from ..ai.handler import get_ai_handler
+        except ImportError:
+            from ai.handler import get_ai_handler
+        handler = get_ai_handler(self)
+        if not handler:
             logger.warning("No AI handler for definition agent")
             return
 
         try:
-            from .agents import get_agent
+            from ..ai.agents import get_agent
         except ImportError:
-            from agents import get_agent
+            from ai.agents import get_agent
 
         agent_def = get_agent('definition')
         if not agent_def:
@@ -3872,7 +3877,7 @@ class ChatbotWidget(QWidget):
         # The thread reference is stored on the widget so it isn't
         # garbage-collected before run() finishes.
         thread = _AgentDispatchThread(
-            handler=self._handler,
+            handler=handler,
             run_fn=run_fn,
             situation=term,
             request_id='definition_%s' % id(self),

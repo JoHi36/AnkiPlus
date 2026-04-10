@@ -14,7 +14,8 @@ logger = get_logger(__name__)
 
 
 def run_definition(situation, emit_step=None, memory=None,
-                   stream_callback=None, citation_builder=None, **kwargs):
+                   stream_callback=None, citation_builder=None,
+                   embedding_manager=None, **kwargs):
     """Generate a definition for a term from the current card corpus.
 
     Args:
@@ -23,6 +24,9 @@ def run_definition(situation, emit_step=None, memory=None,
         memory: Optional memory context (unused for now).
         stream_callback: Optional streaming callback (unused — output is synchronous).
         citation_builder: CitationBuilder instance for card references.
+        embedding_manager: Injected by AIHandler._dispatch_agent. Required for
+            embed_search; falling back to pipeline_blocks._resolve_embedding_manager
+            fails inside the dispatch QThread (relative-import context issue).
         **kwargs: May include 'search_query' for the original search context.
 
     Returns:
@@ -89,7 +93,7 @@ def run_definition(situation, emit_step=None, memory=None,
             from ai.pipeline_blocks import embed_search, fetch_card_snippets
 
         if emit_step:
-            emit_step({'id': 'semantic_search', 'label': 'Semantische Suche', 'status': 'running'})
+            emit_step('semantic_search', 'active')
 
         # Constrain search to cards that mention this term (KG-derived).
         card_ids_set = set(get_term_card_ids(term))
@@ -107,6 +111,7 @@ def run_definition(situation, emit_step=None, memory=None,
             query='Was ist %s? Definition' % term,
             top_k=8,
             card_id_filter=card_ids_set,
+            embedding_manager=embedding_manager,
         )
 
         if len(top_cards) < 2:
@@ -125,7 +130,7 @@ def run_definition(situation, emit_step=None, memory=None,
 
         # ── 4. Generate definition via Gemini ───────────────────────────────
         if emit_step:
-            emit_step({'id': 'merge', 'label': 'Definition generieren', 'status': 'running'})
+            emit_step('merge', 'active')
 
         try:
             from .gemini import generate_definition
