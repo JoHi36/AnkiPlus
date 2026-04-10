@@ -22,6 +22,7 @@ BENCHMARK_GENERATE_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "benchmark_gen
 BENCHMARK_ROUTER_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "benchmark_router.py")
 DOCS_PATH = os.path.join(PROJECT_ROOT, "docs", "agents", "overview.md")
 AGENTS_DOCS_DIR = os.path.join(PROJECT_ROOT, "docs", "agents")
+ARCHITECTURE_DOCS_DIR = os.path.join(PROJECT_ROOT, "docs", "architecture")
 DESIGN_CSS_PATH = os.path.join(PROJECT_ROOT, "shared", "styles", "design-system.css")
 HISTORY_DIR = os.path.join(PROJECT_ROOT, "benchmark", "history")
 
@@ -686,6 +687,12 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       <button class="sidebar-item" data-nav="agent-definition" onclick="openAgent('definition')">Definition</button>
       <button class="sidebar-item" data-nav="agent-prufer" onclick="openAgent('prufer')">Prüfer</button>
       <button class="sidebar-item" data-nav="agent-plusi" onclick="openAgent('plusi')">Plusi</button>
+    </div>
+    <div class="sidebar-section" id="architecture-section">
+      <div class="sidebar-label">Architektur</div>
+      <div id="architecture-list">
+        <!-- populated by _loadArchitectureSidebar() -->
+      </div>
     </div>
     <div class="sidebar-section">
       <div class="sidebar-label">Tools</div>
@@ -2047,10 +2054,70 @@ function showDesignSystem() {
   loadComponents();
 }
 
+// ── Architecture Docs ──
+//
+// Reuses the existing #agent-docs content area + Mermaid renderer. The
+// sidebar list is populated dynamically from /api/architecture_docs so
+// new docs in docs/architecture/ appear without touching this file.
+// HTML payload is server-rendered by _render_markdown from trusted local
+// .md files — same pattern as _loadMarkdown above.
+
+async function _loadArchitectureSidebar() {
+  try {
+    var resp = await fetch('/api/architecture_docs');
+    var data = await resp.json();
+    var docs = (data && data.docs) || [];
+    var container = document.getElementById('architecture-list');
+    var section = document.getElementById('architecture-section');
+    if (!container || !section) return;
+    if (!docs.length) {
+      section.style.display = 'none';
+      return;
+    }
+    section.style.display = '';
+    container.textContent = '';
+    docs.forEach(function(doc) {
+      var btn = document.createElement('button');
+      btn.className = 'sidebar-item';
+      btn.setAttribute('data-nav', 'arch-' + doc.slug);
+      btn.textContent = doc.label;
+      btn.onclick = function() { loadArchitectureDoc(doc.slug); };
+      container.appendChild(btn);
+    });
+  } catch(err) {
+    // Sidebar population is non-critical — fail silently
+  }
+}
+
+async function loadArchitectureDoc(slug) {
+  _setActiveSidebar(document.querySelector('[data-nav="arch-' + slug + '"]'));
+  _hideAll();
+  var target = document.getElementById('agent-docs');
+  target.style.display = 'block';
+  try {
+    var resp = await fetch('/api/architecture_docs/' + slug);
+    var data = await resp.json();
+    if (data.error) {
+      target.textContent = 'Error: ' + data.error;
+      return;
+    }
+    // Trusted server-rendered HTML from local docs/architecture/*.md
+    target.innerHTML = data.html;  // nosec: trusted server-rendered docs
+    try {
+      if (typeof mermaid !== 'undefined') {
+        await mermaid.run({nodes: document.querySelectorAll('#agent-docs .mermaid')});
+      }
+    } catch(e) {}
+  } catch(err) {
+    target.textContent = 'Failed to load: ' + err.message;
+  }
+}
+
 // ── Init ─────────────────────────────────────────────────────────────────
 
 document.getElementById('benchmark-wrapper').style.display = 'none';
 loadOverview();
+_loadArchitectureSidebar();
 </script>
 
   </main>
@@ -2363,6 +2430,49 @@ class BenchmarkHandler(BaseHTTPRequestHandler):
                     content = fh.read()
                 rendered_html = _render_markdown(content)
                 self._send_json(200, {"html": rendered_html, "agent": agent_name, "path": doc_path})
+            except OSError as exc:
+                self._send_error_json(500, str(exc))
+
+        elif self.path == "/api/architecture_docs":
+            # List all .md files in docs/architecture/ for sidebar population.
+            try:
+                if not os.path.isdir(ARCHITECTURE_DOCS_DIR):
+                    self._send_json(200, {"docs": []})
+                    return
+                docs = []
+                for fname in sorted(os.listdir(ARCHITECTURE_DOCS_DIR)):
+                    if not fname.endswith(".md"):
+                        continue
+                    slug = fname[:-3]
+                    # Derive a human label from the filename or the first H1 in the file.
+                    label = slug.replace("-", " ").replace("_", " ").title()
+                    try:
+                        with open(os.path.join(ARCHITECTURE_DOCS_DIR, fname), "r", encoding="utf-8") as fh:
+                            for line in fh:
+                                if line.startswith("# "):
+                                    label = line[2:].strip()
+                                    break
+                    except OSError:
+                        pass
+                    docs.append({"slug": slug, "label": label})
+                self._send_json(200, {"docs": docs})
+            except OSError as exc:
+                self._send_error_json(500, str(exc))
+
+        elif self.path.startswith("/api/architecture_docs/"):
+            slug = self.path.split("/api/architecture_docs/", 1)[1].rstrip("/")
+            if ".." in slug or "/" in slug:
+                self._send_error_json(400, "Invalid doc slug")
+                return
+            doc_path = os.path.join(ARCHITECTURE_DOCS_DIR, f"{slug}.md")
+            if not os.path.isfile(doc_path):
+                self._send_error_json(404, f"No architecture doc: {slug}")
+                return
+            try:
+                with open(doc_path, "r", encoding="utf-8") as fh:
+                    content = fh.read()
+                rendered_html = _render_markdown(content)
+                self._send_json(200, {"html": rendered_html, "slug": slug, "path": doc_path})
             except OSError as exc:
                 self._send_error_json(500, str(exc))
 

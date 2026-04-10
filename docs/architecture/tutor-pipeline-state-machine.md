@@ -27,6 +27,27 @@ Statuses in use:
 - **FAIL** — caught exception, falling through
 - **EXIT** — state is done, includes the `next=` pointer
 
+## Worked example threaded through the diagram
+
+To make the diagram concrete, every transition label below shows real
+data from a single hypothetical request:
+
+> **Setup:** A medical student has a card open titled *"Aphasien —
+> Übersicht"* (`card_id=1234`) and types into the chat:
+>
+> > "Was ist Wernicke-Aphasie?"
+
+The numbers and quoted strings on the diagram's edges (`18 raw`,
+`kept 11/15`, `precise=['Wernicke-Aphasie', ...]`, etc.) are what flows
+through the pipeline for this exact query on the happy path. Notes
+attached to certain states show alternative paths (e.g. what happens
+when the reranker over-rejects, or when the question is a meta-reference
+like *"Erklär mir die Karte"*).
+
+This is the same "happy path through a typical card-anchored query"
+example that the debugging recipes below also use, so you can map
+log lines back to the diagram one-to-one.
+
 ## Mermaid state diagram
 
 ```mermaid
@@ -60,54 +81,105 @@ stateDiagram-v2
     S22_main_relay: S22 main_thread.relay
     S23_react: S23 react.receive
 
-    S0_idle_ui --> S1_queued_js_to_py: user sends message
-    S1_queued_js_to_py --> S2_widget: poll (every 200ms)
-    S2_widget --> S3_thread: AIRequestThread.start()
+    S0_idle_ui --> S1_queued_js_to_py: user types "Was ist Wernicke-Aphasie?" + Enter
+    S1_queued_js_to_py --> S2_widget: 200 ms QTimer drains JS queue
+    S2_widget --> S3_thread: AIRequestThread.start() (card_id=1234)
     S3_thread --> S4_handler: handler.get_response_with_rag()
-    S4_handler --> S5_router: agent.uses_rag == True
-    S5_router --> S6_dispatch: RagAnalysis returned
-    S4_handler --> S6_dispatch: agent.uses_rag == False (skip router)
-    S6_dispatch --> S7_tutor: run_fn(agent=tutor)
-    S7_tutor --> S8_parse: retrieve_rag_context()
+    S4_handler --> S5_router: agent='tutor', uses_rag=True
+    S5_router --> S6_dispatch: RagAnalysis{search_needed=T, intent='Wernicke aphasia', precise=['Wernicke-Aphasie',...]}
+    S4_handler --> S6_dispatch: uses_rag=False (Definition / Plusi)
+    S6_dispatch --> S7_tutor: run_fn(situation='Was ist Wernicke-Aphasie?')
+    S7_tutor --> S8_parse: retrieve_rag_context() (card-context override → search_needed=T)
 
-    S8_parse --> S9_retrieval: queries parsed OK
-    S8_parse --> S13_build: preloaded_cards path
+    S8_parse --> S9_retrieval: query_source='router', precise=[3] broad=[8]
+    S8_parse --> S13_build: preloaded_cards (Smart Search path)
     S8_parse --> ReturnEmpty1: search_needed=False
     S8_parse --> ReturnEmpty2: no queries available
 
-    S9_retrieval --> S10_reranker: context_string present
+    S9_retrieval --> S10_reranker: 18 raw → 15 ranked, confidence='medium'
     S9_retrieval --> ReturnEmpty3: all retrievers failed
     S9_retrieval --> ReturnEmpty4: empty context_string
 
-    S10_reranker --> S11_web: reranker done or skipped
-    S11_web --> S12_inject: web done or skipped
-    S12_inject --> S13_build: injection done or skipped
+    S10_reranker --> S11_web: kept 11/15, web_search_recommended=False
+    S11_web --> S12_inject: SKIP (indexed=11 ≥ 3)
+    S12_inject --> S13_build: SKIP (current card already in results)
 
     ReturnEmpty1 --> S14_citations: empty RagResult
     ReturnEmpty2 --> S14_citations: empty RagResult
     ReturnEmpty3 --> S14_citations: empty RagResult
     ReturnEmpty4 --> S14_citations: empty RagResult
-    S13_build --> S14_citations: RagResult populated
+    S13_build --> S14_citations: RagResult{card_citations=11, web_citations=0}
 
-    S14_citations --> S15_llm: citations built
+    S14_citations --> S15_llm: 11 card citations queued
     S14_citations --> InjectCurrentOnly: no rag context but current card
     InjectCurrentOnly --> S15_llm: current-card-only context
 
-    S15_llm --> S16_payload: _generate_with_fallback()
-    S16_payload --> S17_loop: SSE stream starts
-    S17_loop --> S17_loop: tool call detected (max 20 iterations)
+    S15_llm --> S16_payload: _generate_with_fallback(model='gemini-2.5-flash')
+    S16_payload --> S17_loop: SSE stream starts (LERNMATERIAL: 11 lines)
+    S17_loop --> S17_loop: function_call → run tool → re-iterate (max 20)
     S17_loop --> S18_handoff: plain text, no more tool calls
     S17_loop --> S18_handoff: duplicate tool call OR max iterations
 
-    S18_handoff --> S19_return: handoff parsed (may be none)
-    S19_return --> S20_dispatch_exit: result returned up
-    S20_dispatch_exit --> S21_signals: text returned to thread
-    S21_signals --> S22_main_relay: Qt signals emitted
-    S22_main_relay --> S23_react: runJavaScript(window.ankiReceive)
-    S23_react --> S0_idle_ui: React renders final bubble
+    S18_handoff --> S19_return: handoff=None (no agent transfer)
+    S19_return --> S20_dispatch_exit: {text: 720 chars, citations: 11, handoff: None}
+    S20_dispatch_exit --> S21_signals: msg_done emitted
+    S21_signals --> S22_main_relay: Qt finished_signal → main thread
+    S22_main_relay --> S23_react: window.ankiReceive(payload)
+    S23_react --> S0_idle_ui: React renders bubble with [1]…[11] CitationRefs
 
     S15_llm --> GenerationFail: all 3 fallback models failed
     GenerationFail --> [*]: error bubble to user
+
+    note right of S5_router
+        EXAMPLE — happy path (this query):
+          IN  : "Was ist Wernicke-Aphasie?"
+          OUT : { search_needed=True,
+                  resolved_intent='Wernicke aphasia symptoms',
+                  precise_queries=['Wernicke-Aphasie',
+                                   'sensorische Aphasie',
+                                   'Temporallappen'],
+                  associated_terms=[8 more] }
+
+        EDGE — meta-reference (the hard case):
+          IN  : "Erklär mir die Karte"
+          OUT : may return precise_queries=[]
+                → fallback chain in S8 takes over
+                → uses card content as the query
+    end note
+
+    note left of S10_reranker
+        EXAMPLE — over-rejection failure:
+          kept=0  rejected=15
+          → BRANCH new_confidence='low'
+          → S11 will be forced to call web search
+        WHEN: Flash Lite over-rejected.
+              Loosen ai/reranker.py prompt
+              or check if cards are off-topic.
+    end note
+
+    note right of S11_web
+        EXAMPLE — threshold trip:
+          BRANCH reason='indexed_below_threshold'
+                 indexed=1  threshold=3
+                 action='force_confidence=low'
+          → web search will run
+        DESIGNED: low-signal card retrieval triggers
+        Perplexity augmentation. Threshold is set
+        per agent in ai/agents.py (TUTOR_RETRIEVAL).
+    end note
+
+    note left of S17_loop
+        EXAMPLE — typical 1-iteration loop:
+          chunk → chunk → chunk → done
+          (no function_call, just text)
+          → falls through to S18
+
+        EXAMPLE — with tool use:
+          chunk(function_call=image_search) →
+          run tool → feed result back →
+          chunk → chunk → done
+          (loop bounded at 20 iterations)
+    end note
 ```
 
 ## State-by-state reference

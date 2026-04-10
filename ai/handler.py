@@ -669,12 +669,35 @@ class AIHandler:
             str: The Research agent's response text.
         """
         try:
+            from .rag_pipeline import _log_state as _log_state_rag
+        except ImportError:
+            from rag_pipeline import _log_state as _log_state_rag
+        _log_state_rag('R6 handler.dispatch_smart_search', 'ENTER',
+                       query=query[:120], cards_count=len(cards_data or []),
+                       cluster_keys=len(cluster_info or {}),
+                       request_id=request_id)
+
+        try:
             from .agents import get_agent, lazy_load_run_fn
         except ImportError:
             from agents import get_agent, lazy_load_run_fn
 
         agent_def = get_agent('research')
+        if agent_def is None:
+            _log_state_rag('R6 handler.dispatch_smart_search', 'FAIL',
+                           reason='research_agent_not_registered')
+            return ''
         run_fn = lazy_load_run_fn(agent_def)
+        if run_fn is None:
+            _log_state_rag('R6 handler.dispatch_smart_search', 'FAIL',
+                           reason='lazy_load_run_fn_returned_None',
+                           run_module=agent_def.run_module,
+                           run_function=agent_def.run_function)
+            return ''
+        _log_state_rag('R6 handler.dispatch_smart_search', 'OK',
+                       agent_def_loaded=True, run_fn_resolved=True,
+                       run_module=agent_def.run_module,
+                       run_function=agent_def.run_function)
 
         self._current_request_id = request_id
 
@@ -685,6 +708,8 @@ class AIHandler:
             'cluster_info': cluster_info,
         }
 
+        _log_state_rag('R6 handler.dispatch_smart_search', 'EXIT',
+                       next='S6 handler.dispatch_agent (agent=research)')
         return self._dispatch_agent(
             agent_name='research',
             run_fn=run_fn,

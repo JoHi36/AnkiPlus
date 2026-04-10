@@ -388,6 +388,15 @@ class SearchCardsThread(QThread):
         return []
 
     def run(self):
+        # ── [STATE R2 thread.search_run] ─────────────────────────────────
+        try:
+            from ..ai.rag_pipeline import _log_state as _log_state_rag
+        except ImportError:
+            from ai.rag_pipeline import _log_state as _log_state_rag
+        _log_state_rag('R2 thread.search_run', 'ENTER',
+                       query=self.query[:200], top_k=self.top_k,
+                       request_id=self._request_id)
+
         try:
             import re as _re
 
@@ -739,6 +748,11 @@ class SearchCardsThread(QThread):
                                 "type": "inter_cluster",
                             })
 
+            _log_state_rag('R2 thread.search_run', 'RESULT',
+                           cards_count=len(cards_data),
+                           clusters_count=len(cluster_output),
+                           cluster_links_count=len(cluster_links),
+                           query=self.query[:120])
             self.result_signal.emit(json.dumps({
                 "type": "graph.searchCards",
                 "data": {
@@ -750,8 +764,13 @@ class SearchCardsThread(QThread):
                     "totalFound": len(cards_data),
                 }
             }))
+            _log_state_rag('R2 thread.search_run', 'EXIT',
+                           cards_count=len(cards_data),
+                           next='R3 widget.cards_received')
 
         except Exception as e:
+            _log_state_rag('R2 thread.search_run', 'FAIL',
+                           error=str(e)[:200], query=self.query[:120])
             logger.exception("SearchCardsThread failed for query: %s", self.query)
             self.result_signal.emit(json.dumps({"type": "graph.searchCards", "data": {
                 "cards": [], "edges": [], "error": str(e)}}))
@@ -951,20 +970,55 @@ class SmartSearchAgentThread(QThread):
     def _generate_cluster_labels(self):
         """Generate cluster labels via LLM (runs in parallel with Tutor)."""
         try:
+            from ..ai.rag_pipeline import _log_state as _log_state_rag
+        except ImportError:
+            from ai.rag_pipeline import _log_state as _log_state_rag
+        _log_state_rag('R5.1 cluster_labels.run', 'ENTER',
+                       query=(self.query or '')[:120],
+                       cards_count=len(self.cards_data or []),
+                       cluster_keys=len(self.cluster_info or {}))
+        try:
             try:
                 from ..ai.gemini import generate_quick_answer
             except ImportError:
                 from ai.gemini import generate_quick_answer
-            return generate_quick_answer(
+            result = generate_quick_answer(
                 self.query, self.cards_data, cluster_labels=self.cluster_info
             )
-        except Exception:
+            _log_state_rag('R5.1 cluster_labels.run', 'OK',
+                           cluster_labels_count=len(result.get('clusterLabels', {}) or {}),
+                           cluster_summaries_count=len(result.get('clusterSummaries', {}) or {}),
+                           card_refs_count=len(result.get('cardRefs', {}) or {}))
+            # Dump first 4 entries from each dict so we can see actual content
+            _log_state_rag('R5.1 cluster_labels.run', 'PREVIEW',
+                           labels_first4=list((result.get('clusterLabels') or {}).items())[:4],
+                           summaries_first4=[
+                               (k, (v or '')[:80]) for k, v in
+                               list((result.get('clusterSummaries') or {}).items())[:4]
+                           ],
+                           cardrefs_first4=list((result.get('cardRefs') or {}).items())[:4])
+            return result
+        except Exception as _e:
+            _log_state_rag('R5.1 cluster_labels.run', 'FAIL',
+                           error=str(_e)[:200])
             logger.exception("Cluster labeling failed for: %s", self.query)
             return {"clusterLabels": {}, "clusterSummaries": {}, "cardRefs": {}}
 
     def run(self):
+        try:
+            from ..ai.rag_pipeline import _log_state as _log_state_rag
+        except ImportError:
+            from ai.rag_pipeline import _log_state as _log_state_rag
+        _log_state_rag('R5 agent_thread.run', 'ENTER',
+                       request_id=self._request_id,
+                       query=self.query[:120],
+                       cards_count=len(self.cards_data),
+                       cluster_keys=len(self.cluster_info or {}))
+
         handler = self._handler_ref() if self._handler_ref else None
         if handler is None:
+            _log_state_rag('R5 agent_thread.run', 'FAIL',
+                           reason='handler_ref_destroyed')
             logger.warning("SmartSearchAgentThread: handler destroyed, aborting")
             return
 
@@ -984,6 +1038,10 @@ class SmartSearchAgentThread(QThread):
             # Run Research agent + cluster labeling in parallel
             from concurrent.futures import ThreadPoolExecutor
 
+            _log_state_rag('R5 agent_thread.run', 'TRY',
+                           submitting='dispatch_smart_search + cluster_labels',
+                           parallel=bool(self.cluster_info))
+
             with ThreadPoolExecutor(max_workers=2) as pool:
                 # 1. Research agent answer (blocking, streams via callbacks)
                 tutor_future = pool.submit(
@@ -1000,10 +1058,15 @@ class SmartSearchAgentThread(QThread):
                     label_future = pool.submit(self._generate_cluster_labels)
 
                 # Wait for both
-                tutor_future.result()  # raises on error
+                tutor_text = tutor_future.result()  # raises on error
+                _log_state_rag('R5 agent_thread.run', 'RESULT',
+                               tutor_text_chars=len(tutor_text or ''))
 
                 if label_future and not self._cancelled:
                     label_result = label_future.result()
+                    _log_state_rag('R5 agent_thread.run', 'OK',
+                                   cluster_labels=len(label_result.get("clusterLabels", {})),
+                                   cluster_summaries=len(label_result.get("clusterSummaries", {})))
                     self.result_signal.emit(json.dumps({
                         "type": "graph.quickAnswer",
                         "data": {
@@ -1015,9 +1078,14 @@ class SmartSearchAgentThread(QThread):
 
             if not self._cancelled:
                 self.finished_signal.emit(self._request_id)
+                _log_state_rag('R5 agent_thread.run', 'EXIT',
+                               request_id=self._request_id,
+                               next='frontend renders quickAnswer')
 
         except Exception as e:
             if not self._cancelled:
+                _log_state_rag('R5 agent_thread.run', 'FAIL',
+                               error=str(e)[:300], query=self.query[:120])
                 logger.exception("SmartSearchAgentThread failed: %s", self.query)
                 self.error_signal.emit(self._request_id, str(e))
                 # Emit error to frontend so user sees feedback
@@ -3480,18 +3548,30 @@ class ChatbotWidget(QWidget):
         query = data.get("query", "") if isinstance(data, dict) else str(data)
         top_k = int(data.get("topK", 100)) if isinstance(data, dict) else 100
 
+        # ── [STATE R1 widget.search_cards] ───────────────────────────────
+        try:
+            from ..ai.rag_pipeline import _log_state as _log_state_rag
+        except ImportError:
+            from ai.rag_pipeline import _log_state as _log_state_rag
+        _log_state_rag('R1 widget.search_cards', 'ENTER',
+                       query=query[:200], query_len=len(query), top_k=top_k)
+
         try:
             from .. import get_embedding_manager
         except ImportError:
             try:
                 from __init__ import get_embedding_manager
             except ImportError:
+                _log_state_rag('R1 widget.search_cards', 'FAIL',
+                               reason='import_error', action='early_return')
                 self._send_to_js({"type": "graph.searchCards", "data": {
                     "cards": [], "edges": [], "error": "Import fehler"}})
                 return
 
         emb_mgr = get_embedding_manager()
         if not emb_mgr:
+            _log_state_rag('R1 widget.search_cards', 'BRANCH',
+                           reason='no_embedding_manager', action='early_return')
             self._send_to_js({"type": "graph.searchCards", "data": {
                 "cards": [], "edges": [], "error": "Embedding nicht verfügbar"}})
             return
@@ -3502,9 +3582,15 @@ class ChatbotWidget(QWidget):
         thread.pipeline_signal.connect(self.on_pipeline_step)
         self._search_cards_thread = thread  # prevent GC
         thread.start()
+        _log_state_rag('R1 widget.search_cards', 'EXIT',
+                       thread_id=id(thread), next='R2 thread.search_run')
 
     def _on_search_cards_result(self, result_json):
         """Handle SearchCardsThread result — runs on main thread via signal."""
+        try:
+            from ..ai.rag_pipeline import _log_state as _log_state_rag
+        except ImportError:
+            from ai.rag_pipeline import _log_state as _log_state_rag
         try:
             payload = json.loads(result_json)
             self._send_to_js(payload)
@@ -3513,17 +3599,38 @@ class ChatbotWidget(QWidget):
             query = data.get("query", "")
             cards = data.get("cards", [])[:50]
             clusters = data.get("clusters", [])
+            _log_state_rag('R3 widget.cards_received', 'ENTER',
+                           query=query[:120], cards_count=len(cards),
+                           clusters_count=len(clusters),
+                           has_error=bool(data.get("error")))
             if query and cards:
+                _log_state_rag('R3 widget.cards_received', 'EXIT',
+                               next='R4 widget.start_quick_answer')
                 self._start_quick_answer(query, cards, clusters)
-        except Exception:
+            else:
+                _log_state_rag('R3 widget.cards_received', 'BRANCH',
+                               reason='no_query_or_no_cards',
+                               action='no_quick_answer_dispatched')
+        except Exception as e:
+            _log_state_rag('R3 widget.cards_received', 'FAIL',
+                           error=str(e)[:200])
             logger.exception("Failed to send search cards result")
 
     def _start_quick_answer(self, query, cards_data, clusters):
         """Launch SmartSearchAgentThread after search completes (must be called on main thread)."""
+        try:
+            from ..ai.rag_pipeline import _log_state as _log_state_rag
+        except ImportError:
+            from ai.rag_pipeline import _log_state as _log_state_rag
+        _log_state_rag('R4 widget.start_quick_answer', 'ENTER',
+                       query=query[:120], cards_count=len(cards_data),
+                       clusters_count=len(clusters))
         logger.info("Starting smart search agent for: %s (%d cards, %d clusters)", query, len(cards_data), len(clusters))
 
         # Cancel any in-flight search agent thread
         if hasattr(self, '_quick_answer_thread') and self._quick_answer_thread and self._quick_answer_thread.isRunning():
+            _log_state_rag('R4 widget.start_quick_answer', 'BRANCH',
+                           reason='cancelling_inflight_thread')
             self._quick_answer_thread.cancel()
 
         cluster_info = {}
@@ -3536,6 +3643,10 @@ class ChatbotWidget(QWidget):
         except ImportError:
             from ai.handler import get_ai_handler
         ai_handler = get_ai_handler(self)
+        if ai_handler is None:
+            _log_state_rag('R4 widget.start_quick_answer', 'FAIL',
+                           reason='no_ai_handler', action='early_return')
+            return
 
         # Ensure cards have an 'answer' field for Research agent context
         for card in cards_data:
@@ -3552,6 +3663,9 @@ class ChatbotWidget(QWidget):
             lambda req_id, err: logger.error("SmartSearch agent error: %s", err)
         )
         self._quick_answer_thread.start()
+        _log_state_rag('R4 widget.start_quick_answer', 'EXIT',
+                       thread_id=id(self._quick_answer_thread),
+                       next='R5 agent_thread.run')
 
     def _on_quick_answer_result(self, result_json):
         """Handle QuickAnswerThread result."""

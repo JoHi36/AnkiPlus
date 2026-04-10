@@ -307,14 +307,46 @@ def retrieve_rag_context(
             or cfg.max_sources_default
         max_notes = {"low": 10, "medium": 30, "high": 50}.get(max_sources_level, 30)
 
-        _raw_precise = _get('precise_queries', []) or []
-        _raw_broad = _get('broad_queries', []) or []
+        # ── Router output (post-commit 74a7b5c simplification) ───────────
+        # The router no longer returns precise_queries / broad_queries —
+        # those fields were dropped to keep the prompt small. The only
+        # query-shaped output we get is:
+        #   - associated_terms : curated KG-grade domain terms (the
+        #     primary signal — drives BOTH SQL lanes)
+        #   - embedding_queries: semantic search candidates (passed to
+        #     EnrichedRetrieval as additional embed inputs)
+        #   - resolved_intent  : a natural-language restatement (last
+        #     resort, useless for SQL but still fed to semantic search
+        #     and the LLM)
+        _raw_embedding = _get('embedding_queries', []) or []
+        _raw_associated = _get('associated_terms', []) or []
         _raw_resolved = _get('resolved_intent', '') or ''
 
-        precise_queries = [q for q in _raw_precise if q and q.strip()]
-        broad_queries = [q for q in _raw_broad if q and q.strip()]
+        embedding_queries = [q for q in _raw_embedding if q and q.strip()]
+        associated_terms_list = [
+            t for t in _raw_associated if t and isinstance(t, str) and t.strip()
+        ]
 
-        query_source = 'router'
+        precise_queries = []
+        broad_queries = []
+        query_source = 'none'
+
+        # Derive BOTH SQL lanes from associated_terms.
+        #   - precise lane: each term as a single-quoted AND query
+        #   - broad lane:   one OR-concat across all terms
+        # Both go into the rag_pipeline → EnrichedRetrieval SQL search
+        # so multi-lane agreement can lift the top RRF score above the
+        # CONFIDENCE_LOW threshold (0.018).
+        if associated_terms_list:
+            precise_queries = ['"%s"' % t.strip() for t in associated_terms_list[:10]]
+            or_query = ' OR '.join(
+                '"%s"' % t.strip() for t in associated_terms_list[:10]
+            )
+            if or_query:
+                broad_queries = [or_query]
+            query_source = 'associated_terms→both_lanes'
+
+        # Last-resort fallback if router returned no associated_terms
         if not precise_queries and not broad_queries:
             if _raw_resolved and _raw_resolved.strip():
                 precise_queries = [_raw_resolved.strip()]
@@ -331,6 +363,8 @@ def retrieve_rag_context(
             query_source=query_source,
             precise_queries=precise_queries[:5],
             broad_queries=broad_queries[:5],
+            embedding_queries=embedding_queries[:5],
+            associated_terms=associated_terms_list[:10],
             resolved_intent=_raw_resolved[:100],
         )
 

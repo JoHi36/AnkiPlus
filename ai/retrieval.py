@@ -499,6 +499,13 @@ class EnrichedRetrieval:
 
         resolved_intent = _get_rr('resolved_intent', '') or ''
         associated_terms = _get_rr('associated_terms', []) or []
+        # Router-curated semantic search candidates. Each one is embedded
+        # alongside user_message + resolved_intent and gets its own search
+        # pass that contributes to the SEMANTIC_PRIMARY lane.
+        embedding_queries = [
+            q for q in (_get_rr('embedding_queries', []) or [])
+            if q and isinstance(q, str) and q.strip()
+        ]
 
         # ── 1. Load KG term index ────────────────────────────────────────────
         kg_term_index = {}
@@ -531,6 +538,10 @@ class EnrichedRetrieval:
         texts_to_embed = list(all_candidate_terms) + [user_message]
         if resolved_intent:
             texts_to_embed.append(resolved_intent)
+        # Insert router embedding_queries after the two sentence vectors
+        # and before the associated_term vectors so the offset accounting
+        # below stays linear.
+        texts_to_embed.extend(embedding_queries)
         texts_to_embed.extend(at_to_embed)
 
         all_embeddings = []
@@ -540,7 +551,8 @@ class EnrichedRetrieval:
             except Exception as e:
                 logger.warning("EnrichedRetrieval: embed_texts failed: %s", e)
 
-        # Split embeddings: term vectors + semantic vectors + associated_term vectors
+        # Split embeddings: term vectors + semantic vectors + embedding_query
+        # vectors + associated_term vectors
         term_embeddings = {}
         for i, term in enumerate(all_candidate_terms):
             if i < len(all_embeddings) and all_embeddings[i]:
@@ -550,8 +562,16 @@ class EnrichedRetrieval:
         primary_vec = all_embeddings[sem_offset] if sem_offset < len(all_embeddings) else None
         secondary_vec = all_embeddings[sem_offset + 1] if (resolved_intent and sem_offset + 1 < len(all_embeddings)) else None
 
-        # Associated-term vectors live after user_message + optional resolved_intent
-        at_offset = sem_offset + (2 if resolved_intent else 1)
+        # Router embedding_queries live after user_message + optional resolved_intent
+        eq_offset = sem_offset + (2 if resolved_intent else 1)
+        embedding_query_vecs = []  # list of (text, vector) for the search loop below
+        for i, eq_text in enumerate(embedding_queries):
+            idx = eq_offset + i
+            if idx < len(all_embeddings) and all_embeddings[idx]:
+                embedding_query_vecs.append((eq_text, all_embeddings[idx]))
+
+        # Associated-term vectors live after embedding_queries
+        at_offset = eq_offset + len(embedding_queries)
         associated_term_embeddings = {}
         for i, term in enumerate(at_to_embed):
             idx = at_offset + i
@@ -684,9 +704,34 @@ class EnrichedRetrieval:
                             }
                         sec_rank += 1
 
+                # Router embedding_queries — each one gets its own search
+                # pass. Same threshold as secondary (0.55) since these are
+                # router-curated rather than user input.
+                for eq_text, eq_vec in embedding_query_vecs:
+                    if not eq_vec:
+                        continue
+                    eq_rank = 1
+                    eq_results = self.emb.search(eq_vec, top_k=max_notes,
+                                                 exclude_card_ids=exclude) or []
+                    for card_id, score in eq_results:
+                        if score < 0.55:
+                            continue
+                        note_id = self._resolve_note_id(card_id)
+                        if note_id and note_id not in semantic_results:
+                            semantic_results[note_id] = {
+                                'rank': eq_rank,
+                                'tier': 'embedding_query',
+                                'score': score,
+                                'card_id': card_id,
+                            }
+                            eq_rank += 1
+
             self.emit_step("semantic_search", "done", {
                 "total_hits": len(semantic_results),
-                "embedding_queries": [q for q in [emb_primary_text, emb_secondary_text] if q]
+                "embedding_queries": (
+                    [q for q in [emb_primary_text, emb_secondary_text] if q]
+                    + [t for t, _ in embedding_query_vecs]
+                ),
             })
         except Exception as e:
             logger.warning("EnrichedRetrieval: Semantic search failed: %s", e)
