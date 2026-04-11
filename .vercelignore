@@ -1,0 +1,17 @@
+node_modules
+frontend/node_modules
+web
+__pycache__
+*.pyc
+.git
+Assets
+docs
+tests
+scripts
+firebase
+functions
+backend
+remote
+custom_reviewer
+*.sqlite
+*.db

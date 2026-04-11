@@ -243,7 +243,7 @@ export function AccountPage() {
               </div>
             </div>
 
-            {quota && <TokenUsageBar quota={quota} history={history} />}
+            {quota ? <TokenUsageBar quota={quota} history={history} /> : <TokenUsageSkeleton />}
           </div>
         </div>
 
@@ -364,6 +364,43 @@ export function AccountPage() {
       </div>
 
       <DeleteAccountModal open={showDeleteModal} onClose={() => setShowDeleteModal(false)} onConfirm={handleDeleteAccount} />
+    </div>
+  );
+}
+
+/* ─── Skeleton for Token Usage while loading ─── */
+
+function TokenUsageSkeleton() {
+  return (
+    <div className="mt-6 animate-pulse">
+      {/* Label + value row */}
+      <div className="flex justify-between items-baseline mb-2.5">
+        <div className="h-[13px] w-[130px] rounded bg-white/[0.06]" />
+        <div className="h-[13px] w-[100px] rounded bg-white/[0.06]" />
+      </div>
+      {/* Progress bar */}
+      <div className="h-[6px] bg-white/[0.06] rounded-full" />
+      {/* Sub-labels */}
+      <div className="flex justify-between mt-2">
+        <div className="h-[11px] w-[120px] rounded bg-white/[0.04]" />
+        <div className="h-[11px] w-[70px] rounded bg-white/[0.04]" />
+      </div>
+      {/* Weekly row */}
+      <div className="flex justify-between mt-3">
+        <div className="h-[11px] w-[110px] rounded bg-white/[0.04]" />
+        <div className="h-[11px] w-[20px] rounded bg-white/[0.04]" />
+      </div>
+      {/* Week chart */}
+      <div className="flex gap-[6px] mt-4">
+        {[0.3, 0.6, 0.45, 0.15, 0, 0, 0].map((h, i) => (
+          <div key={i} className="flex-1 text-center">
+            <div className="h-[10px] w-[14px] mx-auto rounded bg-white/[0.04] mb-1.5" />
+            <div className="h-8 rounded bg-white/[0.04] relative overflow-hidden">
+              <div className="absolute bottom-0 left-0 right-0 rounded bg-white/[0.06]" style={{ height: `${h * 100}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
