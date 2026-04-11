@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Settings, Copy, LogOut, ChevronRight, Sun, Moon, Monitor } from 'lucide-react';
 import { bridgeAction } from '../actions';
-import { frontendLog } from '../utils/frontendLogger';
 
 const PLAN_MAP = {
   free:  { name: 'Free',  price: 'Kostenlos' },

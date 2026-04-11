@@ -40,6 +40,7 @@ export interface ChatInputProps {
   placeholder?: string; // Custom placeholder text (default: "Stelle eine Frage...")
   onFocus?: () => void; // Called when the textarea gains focus
   onBlur?: () => void;  // Called when the textarea loses focus
+  autoFocus?: boolean; // When true, focus textarea on mount/when becoming true
 }
 
 
@@ -62,6 +63,7 @@ export default function ChatInput({
   placeholder: placeholderProp,
   onFocus: onFocusProp,
   onBlur: onBlurProp,
+  autoFocus = false,
 }: ChatInputProps) {
   const [input, setInput] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -76,6 +78,15 @@ export default function ChatInput({
       textareaRef.current.style.height = `${newHeight}px`;
     }
   }, [input]);
+
+  // Auto-focus when prop becomes true (e.g. Nachfragen sidebar opens)
+  useEffect(() => {
+    if (autoFocus && !hideInput && textareaRef.current) {
+      // Delay matches sidebar slide animation (300ms) so textarea is fully visible
+      const t = setTimeout(() => textareaRef.current?.focus(), 350);
+      return () => clearTimeout(t);
+    }
+  }, [autoFocus, hideInput]);
 
   const handleSubmit = (e?: React.FormEvent | React.MouseEvent) => {
     if (e) e.preventDefault();
@@ -97,6 +108,8 @@ export default function ChatInput({
     const handleClearAndBlur = () => {
       setInput('');
       textareaRef.current?.blur();
+      // If in sidebar mode, also close it (ESC was intercepted by Python)
+      if (onClose) onClose();
     };
     window.addEventListener('ankiSendMessage', handleSend);
     window.addEventListener('ankiClearAndBlur', handleClearAndBlur);
@@ -109,7 +122,14 @@ export default function ChatInput({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Escape') {
       e.preventDefault();
-      if (onClose) onClose();
+      setInput('');
+      textareaRef.current?.blur();
+      // Immediately tell Python focus is gone (don't wait for 200ms poll)
+      window.ankiBridge?.addMessage('textFieldFocus', { focused: false });
+      if (onClose) {
+        // Sidebar/panel mode: ESC always closes (even when focused)
+        onClose();
+      }
       return;
     }
     // Space (when not typing) → advance card
@@ -226,7 +246,7 @@ export default function ChatInput({
             className="ds-split-btn"
           >
             {actionPrimary.label}
-            {actionPrimary.shortcut && (
+            {(actionPrimary.shortcut === 'ESC' || !isFocused) && actionPrimary.shortcut && (
               <span className="ds-kbd">{actionPrimary.shortcut}</span>
             )}
           </button>

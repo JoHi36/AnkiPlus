@@ -3853,6 +3853,9 @@ class ChatbotWidget(QWidget):
                 _orig = rev.web.eval
                 rev.web.eval = lambda js: None
             try:
+                # Ensure answer is shown first (MC flow skips card.flip)
+                if rev.state == 'question':
+                    rev._showAnswer()
                 rev._answerCard(ease)
             finally:
                 if rev.web:

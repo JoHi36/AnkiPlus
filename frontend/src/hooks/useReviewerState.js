@@ -54,6 +54,8 @@ function reducer(state, action) {
     case 'AI_STEP':
       return { ...state, aiSteps: [...state.aiSteps, action.step] };
     case 'EVAL_RESULT': {
+      // Only accept if we're still waiting for evaluation (ignore late arrivals after cancel/reset)
+      if (state.mode !== S.EVALUATING) return state;
       const score = action.data?.score || 0;
       const rating = score >= 90 ? 4 : score >= 70 ? 3 : score >= 40 ? 2 : 1;
       return { ...state, mode: S.EVALUATED, evalResult: action.data, selectedRating: rating };
@@ -61,9 +63,14 @@ function reducer(state, action) {
     case 'START_MC':
       return { ...state, mode: S.MC_LOADING, aiSteps: [], mcAttempts: 0, mcStars: 3, mcOptions: null, mcCorrect: null, mcSelected: {} };
     case 'MC_OPTIONS':
+      // Only accept if we're still waiting for MC (ignore late arrivals after cancel/reset)
+      if (state.mode !== S.MC_LOADING) return state;
       return action.data?.length > 0
         ? { ...state, mode: S.MC_ACTIVE, mcOptions: action.data }
         : { ...state, mode: S.QUESTION, aiSteps: [] };
+    case 'MC_RESOLVE':
+      // "Auflösen" — user gave up on MC, reveal correct answer, rating 1
+      return { ...state, mode: S.MC_RESULT, mcCorrect: false, mcStars: 0, selectedRating: 1 };
     case 'MC_ATTEMPT': {
       const n = state.mcAttempts + 1;
       const sel = { ...state.mcSelected, [action.index]: action.isCorrect ? 'correct' : 'wrong' };
@@ -174,8 +181,20 @@ export default function useReviewerState(cardData, onPulse, onFollowUpKey) {
           const charCount = cardData ? getPlainText(cardData, 'front').length : 50;
           dispatch({ type: 'FLIP', charCount });
           handleFlip();
+        } else if (state.mode === S.MC_ACTIVE) {
+          // "Auflösen" — resolve MC, reveal correct answer
+          dispatch({ type: 'MC_RESOLVE' });
+          handleFlip();
         } else if ([S.ANSWER, S.EVALUATED, S.MC_RESULT].includes(state.mode)) {
           handleRate(state.selectedRating);
+        }
+      }
+
+      if (e.key === 'Escape') {
+        if (state.mode === S.EVALUATING || state.mode === S.MC_LOADING) {
+          e.preventDefault(); e.stopPropagation();
+          dispatch({ type: 'RESET' });
+          bridgeAction('cancelRequest');
         }
       }
 
@@ -189,13 +208,15 @@ export default function useReviewerState(cardData, onPulse, onFollowUpKey) {
         }
       }
 
-      if ([S.ANSWER, S.EVALUATED, S.MC_RESULT].includes(state.mode) && '1234'.includes(e.key))
-        dispatch({ type: 'SET_RATING', rating: +e.key });
-
       if (state.mode === S.MC_ACTIVE && state.mcOptions) {
-        const idx = 'abcd'.indexOf(e.key.toLowerCase());
+        // Number keys 1-4 OR letter keys a-d select MC options
+        let idx = -1;
+        if ('1234'.includes(e.key)) idx = +e.key - 1;
+        else idx = 'abcd'.indexOf(e.key.toLowerCase());
         if (idx >= 0 && idx < state.mcOptions.length && !state.mcSelected[idx])
           handleMCSelect(idx, state.mcOptions[idx].correct || state.mcOptions[idx].isCorrect || false);
+      } else if ([S.ANSWER, S.EVALUATED, S.MC_RESULT].includes(state.mode) && '1234'.includes(e.key)) {
+        dispatch({ type: 'SET_RATING', rating: +e.key });
       }
     };
     window.addEventListener('keydown', handler, true);

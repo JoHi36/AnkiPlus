@@ -152,14 +152,19 @@ class GlobalShortcutFilter(QObject):
             logger.warning("Could not toggle main webview input: %s", e)
 
     def _focus_text_field(self):
-        """Focus the chat input in the visible panel."""
+        """Focus the chat input in the visible panel.
+        If the input is hidden (e.g. reviewer center), dispatches ankiRequestFocus
+        so React can reveal and focus it."""
         try:
             from .setup import get_chatbot_widget
             widget = get_chatbot_widget()
             if widget and widget.web_view:
                 widget.web_view.setFocus()
+                # Try direct focus first; if no element found, dispatch event for React
                 widget.web_view.page().runJavaScript(
-                    "document.querySelector('[data-chat-input]')?.focus();"
+                    "var el = document.querySelector('[data-chat-input]');"
+                    "if (el) { el.focus(); }"
+                    "else { window.dispatchEvent(new CustomEvent('ankiRequestFocus')); }"
                 )
         except (AttributeError, RuntimeError) as e:
             logger.warning("Could not focus text field: %s", e)
@@ -187,16 +192,25 @@ class GlobalShortcutFilter(QObject):
         """Escape handler: dispatch ankiClearAndBlur event so React handles clearing via state."""
         try:
             js = "window.dispatchEvent(new CustomEvent('ankiClearAndBlur'));"
-            if self._focused_webview:
+            # Always dispatch to MainView webview (where React lives)
+            target_webview = None
+            try:
+                from .main_view import get_main_view
+                mv = get_main_view()
+                if mv._chatbot and mv._chatbot.web_view:
+                    target_webview = mv._chatbot.web_view
+            except (ImportError, AttributeError):
+                pass
+            if target_webview:
+                target_webview.page().runJavaScript(js)
+                target_webview.setFocus()  # Keep focus on React webview
+            elif self._focused_webview:
                 self._focused_webview.page().runJavaScript(js)
             else:
                 from .setup import get_chatbot_widget
                 widget = get_chatbot_widget()
                 if widget and widget.web_view:
                     widget.web_view.page().runJavaScript(js)
-            reviewer_web = self._get_reviewer_web()
-            if reviewer_web:
-                reviewer_web.setFocus()
         except (AttributeError, RuntimeError) as e:
             logger.warning("Could not clear text field: %s", e)
         self._text_field_has_focus = False
@@ -276,34 +290,29 @@ class GlobalShortcutFilter(QObject):
             self._dispatch_voice_event('plusiVoiceStart')
             return True
 
-        # --- Cmd+K: Always handle (toggle text field focus) ---
+        # --- Cmd+K: Toggle settings sidebar ---
         if (event.key() == Qt.Key.Key_K and
                 event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier)):
-            self._toggle_text_field_focus()
+            self._dispatch_voice_event('ankiToggleSettings')
             return True
 
-        # --- Cmd+I: Toggle AnkiPlus ON/OFF (show/hide MainViewWidget overlay) ---
+        # --- Cmd+I: Focus input field (same as Cmd+K) ---
         if (event.key() == Qt.Key.Key_I and
                 event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier)):
-            try:
-                from .main_view import get_main_view
-                mv = get_main_view()
-                if mv._visible:
-                    mv._hide()
-                    logger.info("AnkiPlus OFF (Cmd+I)")
-                else:
-                    from aqt import mw
-                    state = mw.state if mw else 'deckBrowser'
-                    mv.show_for_state(state)
-                    logger.info("AnkiPlus ON (Cmd+I)")
-            except (ImportError, AttributeError, RuntimeError) as e:
-                logger.warning("Could not toggle AnkiPlus: %s", e)
+            self._toggle_text_field_focus()
             return True
 
         # When MainViewWidget is active, forward keys directly to React webview
         # (Qt focus might be on mw.web, so we can't rely on normal event dispatch)
         if self._main_view_active:
             qt_key = event.key()
+
+            # ESC with text field focus: clear focus + dispatch ankiClearAndBlur
+            # Must be handled HERE because the text_field_active block below is unreachable
+            if qt_key == Qt.Key.Key_Escape and self._text_field_has_focus:
+                self._clear_and_defocus_text_field()
+                return True
+
             mapping = QT_KEY_TO_JS.get(qt_key)
             if mapping and not self._text_field_has_focus:
                 code, key = mapping
@@ -313,6 +322,8 @@ class GlobalShortcutFilter(QObject):
                     if mv._chatbot and mv._chatbot.web_view:
                         js = "window.dispatchEvent(new KeyboardEvent('keydown', {key: '%s', code: '%s', bubbles: true}));" % (key, code)
                         mv._chatbot.web_view.page().runJavaScript(js)
+                        # Ensure Qt focus stays on React webview so JS focus() calls work
+                        mv._chatbot.web_view.setFocus()
                         return True  # Consume event — don't let mw.web see it
                 except (ImportError, AttributeError, RuntimeError):
                     pass

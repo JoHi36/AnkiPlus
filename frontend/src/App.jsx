@@ -2023,11 +2023,21 @@ function AppInner() {
     setSettingsOpen(prev => !prev);
   }, []);
 
+  // ── Cmd+K: Toggle settings sidebar via Python shortcut filter ──
+  useEffect(() => {
+    const handler = () => setSettingsOpen(prev => !prev);
+    window.addEventListener('ankiToggleSettings', handler);
+    return () => window.removeEventListener('ankiToggleSettings', handler);
+  }, []);
+
   // ── Keyboard shortcuts (merged from MainApp) ──
   useEffect(() => {
     const handler = (e) => {
-      // ESC closes review chat sidebar
+      // ESC closes review chat sidebar — but only when NOT focused in a text field
+      // (first ESC blurs the text field, second ESC closes the sidebar)
       if (e.key === 'Escape' && activeView === 'review' && reviewChatOpen) {
+        const tag = document.activeElement?.tagName;
+        if (tag === 'TEXTAREA' || tag === 'INPUT') return; // let ChatInput handle blur
         e.preventDefault();
         setReviewChatOpen(false);
         return;
@@ -2035,6 +2045,18 @@ function AppInner() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
+  }, [activeView, reviewChatOpen]);
+
+  // ── Cmd+I / Cmd+K focus request — when input is hidden, open sidebar to reveal it ──
+  useEffect(() => {
+    const handler = () => {
+      if (activeView === 'review' && !reviewChatOpen) {
+        // Input is hidden in review center — open sidebar so input becomes visible
+        setReviewChatOpen(true);
+      }
+    };
+    window.addEventListener('ankiRequestFocus', handler);
+    return () => window.removeEventListener('ankiRequestFocus', handler);
   }, [activeView, reviewChatOpen]);
 
   // (handleTrailNavigateLeft/Right defined earlier, before the keyboard useEffect)
@@ -2888,10 +2910,10 @@ function AppInner() {
           actionPrimary = { label: 'Show Answer', shortcut: 'SPACE', onClick: pulse(reviewer.handleFlip) };
           actionSecondary = { label: 'Multiple Choice', shortcut: '\u21b5', onClick: pulse(reviewer.handleStartMC) };
         } else if (reviewer.isLoading) {
-          actionPrimary = { label: 'Abbrechen', shortcut: '', onClick: pulse(() => reviewer.dispatch({ type: 'RESET' })) };
+          actionPrimary = { label: 'Abbrechen', shortcut: 'ESC', onClick: pulse(() => { reviewer.dispatch({ type: 'RESET' }); bridgeAction('cancelRequest'); }) };
           actionSecondary = { label: '', shortcut: '', onClick: () => {} };
         } else if (s.mode === 'mc_active') {
-          actionPrimary = { label: 'Aufl\u00f6sen', shortcut: 'SPACE', onClick: pulse(reviewer.handleFlip) };
+          actionPrimary = { label: 'Aufl\u00f6sen', shortcut: 'SPACE', onClick: pulse(() => { reviewer.dispatch({ type: 'MC_RESOLVE' }); reviewer.handleFlip(); }) };
           actionSecondary = { label: 'Nachfragen', shortcut: '\u21b5', onClick: pulse(() => setReviewChatOpen(true)) };
         } else if (reviewer.isRateable) {
           actionPrimary = { label: 'Weiter', shortcut: 'SPACE', onClick: pulse(() => reviewer.handleRate(s.selectedRating)) };
@@ -2954,13 +2976,14 @@ function AppInner() {
             onShowPaywall={() => setShowPaywall(true)}
             authStatus={authStatus}
             currentAuthToken={currentAuthToken}
-            onClose={handleClose}
+            onClose={isReviewSidebar ? () => setReviewChatOpen(false) : isReviewCenter ? undefined : handleClose}
             plusiEnabled={isReview ? false : mascotEnabled}
             topSlot={topSlot}
             hideInput={hideInput}
             placeholder={placeholder}
             actionPrimary={actionPrimary}
             actionSecondary={actionSecondary}
+            autoFocus={isReviewSidebar}
           />
         </div>
       );
